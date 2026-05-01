@@ -1,0 +1,128 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                     String           @id @default(uuid())
+  discord_id             String?          @unique
+  username               String?
+  email                  String           @unique
+  auth_provider          String?
+  accounting_preferences String?
+  inventories            Inventory[]
+  payment_methods        PaymentMethod[]
+  expenses               Expense[]
+}
+
+model Inventory {
+  id                    String         @id @default(uuid())
+  user_id               String
+  user                  User           @relation(fields: [user_id], references: [id])
+  product_name          String
+  vendor_id             String?
+  vendor                Platform?      @relation(fields: [vendor_id], references: [id])
+  payment_method_id     String?
+  payment_method        PaymentMethod? @relation(fields: [payment_method_id], references: [id])
+  purchase_date         DateTime
+  received_date         DateTime?
+  unit_purchase_cost    Float
+  qty_purchased         Int
+  qty_on_hand           Int
+  status                String         @default("PURCHASED")
+  sales_tax             Float          @default(0)
+  shipping_cost_inbound Float          @default(0)
+  fees                  Float          @default(0)
+  cashback_earned       Float          @default(0)
+  gift_card_amount      Float          @default(0)
+  order_number          String?
+  tracking_number       String?
+  category              String?
+  sales                 Sales[]
+}
+
+model Sales {
+  id             String    @id @default(uuid())
+  inventory_id   String
+  inventory      Inventory @relation(fields: [inventory_id], references: [id], onDelete: Cascade)
+  platform_id    String?
+  platform       Platform? @relation(fields: [platform_id], references: [id])
+  buyer_id       String?
+  buyer          Buyer?    @relation(fields: [buyer_id], references: [id])
+  quantity       Int
+  unit_price     Float
+  commission_fee Float     @default(0)
+  sale_date      DateTime
+  payout_date    DateTime?
+  status         String   @default("SOLD")
+}
+
+model Platform {
+  id          String      @id @default(uuid())
+  name        String
+  type        String      // "Marketplace, Cashout, Vendor"
+  fee_pct     Float       @default(0)
+  address     String?
+  notes       String?
+  inventories Inventory[] // Platforms as vendors
+  sales       Sales[]     // Platforms as marketplaces
+  accounts    Account[]
+}
+
+model Account {
+  id          String   @id @default(uuid())
+  platform_id String
+  platform    Platform @relation(fields: [platform_id], references: [id], onDelete: Cascade)
+  name        String
+  email       String?
+  username    String?
+  status      String   @default("Active")
+  notes       String?
+}
+
+model Buyer {
+  id                 String    @id @default(uuid())
+  name               String
+  avg_days_to_payout Int?
+  sales              Sales[]
+  invoices           Invoice[]
+}
+
+model PaymentMethod {
+  id                    String      @id @default(uuid())
+  user_id               String
+  user                  User        @relation(fields: [user_id], references: [id])
+  name                  String      // "e.g. Amex Blue"
+  type                  String      // "Credit, Debit"
+  default_cashback_rate Float       @default(0)
+  preset_card_id        String?     // matches PRESET_CARDS[].id in presetCards.js
+  category_rates        String?     // JSON array: [{store, rate, expires?}]
+  inventories           Inventory[]
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  user_id     String
+  user        User     @relation(fields: [user_id], references: [id])
+  amount      Float
+  category    String?
+  date        DateTime
+  receipt_url String?
+}
+
+model Invoice {
+  id           String   @id @default(uuid())
+  buyer_id     String
+  buyer        Buyer    @relation(fields: [buyer_id], references: [id])
+  issue_date   DateTime
+  due_date     DateTime
+  total_amount Float
+  status       String   // "Paid, Unpaid"
+}

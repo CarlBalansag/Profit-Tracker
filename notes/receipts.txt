@@ -1,0 +1,17 @@
+# RECEIPTS - DATABASE & LOGIC MAPPING
+
+The Receipts page manages the physical proof of purchase (PDFs, images) essential for tax compliance and warranty claims.
+
+## 1. TABLE SCHEMA
+TABLE: `receipts`
+- `id` (UUID, Primary Key)
+- `user_id` (UUID, Foreign Key)
+- `url` (String) -> AWS S3 or relative blob path.
+- `filename` (String)
+- `uploaded_at` (DateTime)
+- `link_type` (Enum: INVENTORY, EXPENSE) -> Defines what table it attaches to.
+- `linked_record_id` (UUID, Foreign Key) -> The specific ID of the inventory or expense.
+
+## 2. ORPHANED RECEIPTS
+- The system should allow users to upload receipts *before* they enter the transaction.
+- **Logic**: If `linked_record_id` is null, the receipt sits in the "Action Needed" pile on the frontend until a user attaches it to a newly created `inventory` or `expenses` row.

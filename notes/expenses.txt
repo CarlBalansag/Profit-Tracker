@@ -1,0 +1,22 @@
+# EXPENSES - DATABASE & LOGIC MAPPING
+
+Expenses represent business overhead that cannot be directly attributed to a specific unit of inventory. (e.g., Buying shipping tape, a subscription to a repricer tool).
+
+## 1. THE EXPENSES QUERY
+- **DB Logic**: `SELECT * FROM expenses WHERE expense_date BETWEEN [Start] AND [End]`
+
+## 2. TABLE SCHEMA
+TABLE: `expenses`
+- `id` (UUID, Primary Key)
+- `user_id` (UUID, Foreign Key)
+- `name` (String) -> e.g. "Bubble Mailers", "Bqool Subscription"
+- `category` (Enum: Supplies, Software, Fees, Misc)
+- `amount` (Decimal)
+- `expense_date` (DateTime)
+- `payment_method_id` (UUID, Nullable) -> Links to credit cards table to track spend toward SUBs (Sign Up Bonuses).
+- `recurring` (Boolean) -> Flag for monthly hits.
+- `created_at`, `updated_at`
+
+## 3. DASHBOARD IMPACT
+When the Dashboard calculates `Profit (Accounting)`, it usually pulls the pure margin from `Sales`. However, globally, true Net Income must factor in overhead. 
+- The DB must support a global metric: `Net Profit = Gross Margin Profit - SUM(expenses.amount)`.

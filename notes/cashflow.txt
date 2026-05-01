@@ -1,0 +1,24 @@
+# CASH FLOW - DATABASE & LOGIC MAPPING
+
+The Cash Flow page is responsible for tracking liquidity. It answers "Where is my money right now?"
+
+## 1. THE THREE MAIN VECTORS
+- **Spending Out**: Total cash spent on items that have NOT yielded revenue yet.
+  - Current schema SQL: `SUM((unit_purchase_cost * qty_on_hand) + allocated unsold tax/shipping)` from `Inventory` where `qty_on_hand > 0`.
+  - Note: inventory status is not currently stored on `Inventory`; status-like workflow data currently lives mostly on `Sales.status` plus unsold inventory counted as `PURCHASED`.
+- **Coming Back**: Total cash trapped in platforms waiting to hit the bank.
+  - SQL: `SUM(unit_price * quantity)` from `Sales` where `status` is awaiting payout and `payout_date` is in the future.
+- **Total Owed**: Pending `invoices` or split-payment balances.
+  - Current Prisma has `Invoice.total_amount` and `Invoice.status`, but does not yet have `amount_paid`; add that field before calculating partial balances.
+
+## 2. THE PROGRESS BAR MATRIX 
+The "Where Your Money Is" progress UI relies on slicing `Spending Out` and `Coming Back` into smaller, very specific database definitions based entirely on Enum Status counts.
+- `In Transit`: Inventory Status = IN_TRANSIT
+- `Scanned In`: Inventory Status = SCANNED_IN
+- `Listed`: Inventory Status = LISTED
+- `Sold (Pending Payout)`: Sale Status = PENDING_PAYOUT
+
+Current implementation note: these inventory status fields are planned. Today, the dashboard pipeline counts unsold `Inventory.qty_on_hand` as `PURCHASED` and counts sale workflow through `Sales.status`.
+
+## 3. CASH FLOW VELOCITY 
+By tracking the `purchase_date` in `inventory` and the `payout_date` in `sales`, the API can calculate the "Velocity" of money—exactly how many days it took a dollar to leave the user's wallet, buy a product, get sold, and return to the wallet.

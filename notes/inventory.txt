@@ -1,0 +1,31 @@
+# INVENTORY - DATABASE & LOGIC MAPPING
+
+The Inventory view strictly shows items currently held by the user that have not yet been fully depleted by a Sale transaction.
+
+## 1. THE INVENTORY QUERY
+- **DB Logic**: `SELECT * FROM inventory WHERE qty_on_hand > 0`
+- **Frontend Note**: The user specifically requested this to be filtered to "Marketplace" items natively, as "Churning" items are usually instantly routed to BGCs (Buying Groups) and bypass long-term inventory holds.
+
+## 2. FILTERS
+- **Status Enum Filter**: Allows filtering by specific states (`IN_STOCK`, `LISTED`, `SOLD`, `RETURNED`). An inventory item might be `LISTED` on eBay while still having a `qty_on_hand` > 0.
+- **Vendor Filter**: Requires a `JOIN` on the `vendor_id`.
+
+## 3. MASTER INVENTORY TABLE SCHEMA
+TABLE: `inventory`
+- `id` (UUID, Primary Key)
+- `user_id` (UUID, Foreign Key)
+- `product_name` (String)
+- `sku` (String, Indexed)
+- `category` (Enum: Churning, Marketplace) -> Determines if it should appear in long-term holding views.
+- `quantity_purchased` (Integer) -> Original amount bought.
+- `qty_on_hand` (Integer) -> Current amount held. Decreases when a `sale` is linked.
+- `unit_purchase_cost` (Decimal) -> The locked-in cost basis per unit (includes shipping/tax allocations).
+- `vendor_id` (UUID, Foreign Key)
+- `purchase_date` (DateTime)
+- `receipt_url` (String, Nullable)
+- `status` (Enum: IN_TRANSIT, IN_STOCK, LISTED)
+- `created_at`, `updated_at`
+
+## 4. HYBRID WORKFLOW BEHAVIOR
+When a "Record Sale" action occurs, the database triggers:
+`UPDATE inventory SET qty_on_hand = qty_on_hand - [Units Sold] WHERE id = [Selected_Item]`

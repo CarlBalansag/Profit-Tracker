@@ -1,0 +1,66 @@
+PAYMENT METHODS — NOTES & FUTURE TASKS
+========================================
+
+## Completed
+- Added category_rates to all preset cards in presetCards.js
+  - Each card has a categoryRates array: [{ store, rate, expires? }]
+  - Rotating quarterly rates (e.g. Freedom Flex Amazon 5%) have an expires date
+  - Fixed cards (e.g. Dining 3%) have no expires
+- Backend: added category_rates (JSON string) and preset_card_id to PaymentMethod DB
+- Quick Add: saves category_rates when "Apply Preset Store Rates" is checked
+- AddTransaction: auto-applies category rate when selected vendor matches a card's category rates
+  - Rate field turns green and shows label (e.g. "Amazon rate · expires Jun 30, 2026")
+- Transactions table: cashback column now uses category rate when vendor matches
+
+## Known Limitations / Simplifications
+- Category rate matching is name-based (case-insensitive substring match)
+  e.g. vendor "Amazon" matches store "Amazon" on Freedom Flex
+- Rotating quarterly rates (expires field) must be manually updated each quarter
+  until an automated solution is built
+
+## FUTURE TASK: Automated Quarterly Rate Refresh
+-----------------------------------------------------
+Problem:
+  Cards like Chase Freedom Flex and Discover it Cash Back rotate their 5% bonus
+  categories every quarter (Q1: Jan-Mar, Q2: Apr-Jun, Q3: Jul-Sep, Q4: Oct-Dec).
+  Currently these are hardcoded in presetCards.js with an `expires` date.
+  When a quarter expires, the rate silently falls back to base (1%) — correct
+  behavior, but the new quarter's categories are not added automatically.
+
+Goal:
+  Near the expiration of a quarterly rate, check the new quarter's categories
+  and update the preset data automatically.
+
+Possible approaches:
+  A) Cron job (Node.js / cron on Pi) that runs ~1 week before each quarter end:
+     - Scrapes Chase / Discover press release pages for the new quarter's categories
+     - Updates presetCards.js category entries
+     - Sends a notification (Discord webhook / email) to confirm the update
+
+  B) Manual update prompt:
+     - On app startup or quarterly check, if any category rate is expiring within
+       7 days, show a banner in the Payment Methods settings page:
+       "Q2 2026 Freedom Flex categories expire Jun 30. Update rates for Q3?"
+     - User clicks → edit modal opens pre-filled for that card
+
+  C) External data source:
+     - Poll the credit-card-bonuses-api (github.com/andenacitelli/credit-card-bonuses-api)
+       or rewardscc.com API for fresh category data each quarter
+
+Recommended next step:
+  Start with option B (manual update prompt) — lowest complexity, no scraping.
+  Add a "Quarterly Rates Expiring" banner to PaymentMethods.jsx that fires when
+  any category_rate.expires is within 14 days of today.
+
+## FUTURE TASK: Toast Notification for Category Rate Auto-Apply
+---------------------------------------------------------------------
+When AddTransaction detects a category rate match (e.g. Amazon 5% on Freedom Flex),
+currently the rate field turns green with a small label below it.
+
+Future improvement:
+  Show a toast notification when the rate auto-switches:
+  "Freedom Flex: Using 5% Amazon rate instead of 1.5% base"
+  - Use a toast library (react-hot-toast or sonner) already in the project,
+    or add one
+  - Toast should fire in a useEffect watching [formData.vendor_id, formData.payment_method_id]
+  - Only show if categoryRateMatch !== null and rate differs from baseRate

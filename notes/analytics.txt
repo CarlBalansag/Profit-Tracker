@@ -1,0 +1,23 @@
+# ANALYTICS - DATABASE & LOGIC MAPPING
+
+Analytics is the pure visualization engine. It runs massive aggregation queries against the `sales`, `inventory`, and `expenses` tables.
+
+## 1. TIME-SERIES QUERIES
+To power `recharts` graphs (like the Cumulative Profit Area Chart), the API must group data by day/week/month.
+- **Profit Over Time SQL Structure**:
+  `SELECT strftime('%Y-%m', s.sale_date) AS period, SUM((s.unit_price * s.quantity) - s.commission_fee - (i.unit_purchase_cost * s.quantity)) AS net_margin FROM Sales s JOIN Inventory i ON s.inventory_id = i.id GROUP BY period ORDER BY period ASC`
+
+## 2. DISTRIBUTION CHARTS (Pie/Donut)
+Powering the "Usage by Payment Method" donut chart requires intersecting the Payment Methods with the true Inventory costs.
+- **SQL Structure**:
+  `SELECT pm.name, SUM((i.unit_purchase_cost * i.qty_purchased) + i.sales_tax + i.shipping_cost_inbound) AS volume FROM Inventory i JOIN PaymentMethod pm ON i.payment_method_id = pm.id GROUP BY pm.name`
+
+## 3. CARD TRACKING & SUBs (Sign Up Bonuses)
+Since Churning revolves around hitting credit card spend limits, the Analytics engine needs to track SUB progress.
+TABLE: `credit_card_goals`
+- `id` (UUID)
+- `payment_method_id` (UUID)
+- `spend_requirement` (Decimal) (e.g. $4000)
+- `time_limit_days` (Integer) (e.g. 90 days)
+- `start_date` (DateTime)
+- **Logic**: The API calculates `SUM((Inventory.unit_purchase_cost * Inventory.qty_purchased) + Inventory.sales_tax + Inventory.shipping_cost_inbound)` where `payment_method_id = X` and `purchase_date BETWEEN start_date AND (start_date + time_limit_days)`. Does it meet the `spend_requirement`? If so, visually flag it as `COMPLETED`.

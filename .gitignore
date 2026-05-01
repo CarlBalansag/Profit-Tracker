@@ -1,0 +1,5 @@
+.claude/
+*.log
+*.pid
+selvora-api/sessions/
+selvora-api/prisma/dev.db

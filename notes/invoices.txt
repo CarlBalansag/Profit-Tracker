@@ -1,0 +1,19 @@
+# INVOICES - DATABASE & LOGIC MAPPING
+
+Invoices handle scenarios where money is owed to the user but hasn't been collected yet (usually B2B tech/wholesale or direct platform payouts).
+
+## 1. TABLE SCHEMA
+TABLE: `invoices`
+- `id` (UUID, Primary Key)
+- `user_id` (UUID, Foreign Key)
+- `buyer_id` (UUID, Foreign Key) -> The entity who owes the money.
+- `amount_due` (Decimal)
+- `amount_paid` (Decimal)
+- `status` (Enum: DRAFT, SENT, PARTIAL, PAID, OVERDUE)
+- `due_date` (DateTime)
+- `created_at` (DateTime)
+
+## 2. LINKING TO SALES
+- An invoice usually wraps up multiple `sales` rows into one bill.
+- Requires a pivot table: `invoice_sales` (invoice_id, sale_id).
+- **Dashboard Impact**: The `amount_due` minus `amount_paid` calculates directly to the "Total Owed" box on the Cash Flow page.

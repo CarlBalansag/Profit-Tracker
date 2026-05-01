@@ -1,0 +1,78 @@
+# Profit Tracker: System Architecture & Data Guide
+==================================================
+
+This document serves as a comprehensive guide for AI models to understand the structure, data flow, and business logic of the Profit Tracker application.
+
+## 1. PROJECT VISION: "RESELLING, QUANTIFIED"
+The primary goal of Profit Tracker is to provide a high-fidelity, data-driven dashboard for resellers. It focuses on tracking the entire lifecycle of arbitrated goods, managing cash flows, and calculating precise profitability metrics (ROI, Margin, Net Profit) after accounting for fees, taxes, and shipping.
+
+## 2. SYSTEM ARCHITECTURE
+- **Frontend**: React (Vite), Vanilla CSS (premium aesthetics), React Router.
+- **Backend**: Node.js, Express.
+- **Database**: SQLite (via Prisma ORM).
+- **Authentication**: OAuth2 (Discord/Google) with session-based persistent login.
+
+## 3. CORE DATA MODELS (Prisma Schema)
+The application's logic is driven by the relationships between these entities:
+
+### A. Inventory (`Inventory` Model)
+*   **Purpose**: Represents items purchased for resale.
+*   **Key Fields**: `product_name`, `unit_purchase_cost`, `qty_purchased`, `qty_on_hand`, `purchase_date`.
+*   **Connections**: 
+    *   Belongs to a `User`.
+    *   Linked to a `Platform` (as the Vendor/Source).
+    *   Linked to a `PaymentMethod` (the card used for purchase).
+    *   Has many `Sales`.
+
+### B. Sales (`Sales` Model)
+*   **Purpose**: Tracks the depletion of inventory through sales.
+*   **Key Fields**: `quantity`, `unit_price`, `commission_fee`, `sale_date`, `status` (In Transit, Delivered, Reconciled).
+*   **Connections**:
+    *   Belongs to an `Inventory` item (Direct relationship: Sale -> Inventory).
+    *   Linked to a `Platform` (as the Marketplace where sold).
+    *   Linked to a `Buyer` (for direct sales/cashouts).
+
+### C. Platforms & Accounts (`Platform` & `Account` Models)
+*   **Purpose**: Platforms act as both Vendors (where we buy) and Marketplaces (where we sell).
+*   **Multi-Account Logic**: Each `Platform` (e.g., eBay, Amazon) can have multiple `Accounts` (emails/profiles). This allows users to track which specific sub-account was used for a transaction.
+
+### D. Payment Methods (`PaymentMethod` Model)
+*   **Purpose**: Tracks credit/debit cards used for inventory purchases.
+*   **Logic**: Includes a `default_cashback_rate` which is used to calculate "Cashback Earned" on the `Inventory` record, influencing the effective cost basis.
+
+### E. Expenses (`Expense` Model)
+*   **Purpose**: Non-COGS business costs (subscriptions, supplies, shipping materials).
+*   **Logic**: Deducted from Gross Profit to calculate Net Business Profit.
+
+## 4. FRONTEND SITEMAP & PAGE LOGIC
+- **Dashboard (`/`)**: Aggregate KPI view (Total Profit, Active Inventory Value, Monthly Volume).
+- **Add Transaction (`/add-transaction`)**: The "Buy" side. Creates a new `Inventory` entry.
+- **Add Sale (`/add-sale`)**: The "Sell" side. Allows users to select existing inventory and record a sale, reducing `qty_on_hand`.
+- **Inventory (`/inventory`)**: Displays active stock (`qty_on_hand > 0`).
+- **Transactions (`/transactions`)**: A combined ledger of all buy and sell activities.
+- **Analytics (`/analytics`)**: Visualizes ROI, Revenue vs Profit, and Performance by Platform.
+- **Cash Flow (`/cashflow`)**: Tracks "Money Out" (Purchases) vs "Money In" (Payouts) to show liquidity.
+- **Settings (`/settings`)**: Management of Platforms, Accounts, Payment Methods, and User Preferences.
+
+## 5. THE PRODUCT LIFECYCLE (Data Flow)
+1.  **ACQUISITION**: User enters a purchase via `AddTransaction`.
+    *   `Inventory` record created.
+    *   `qty_on_hand` = `qty_purchased`.
+2.  **STAGING**: Item sits in `Inventory`. Displayed on the Inventory page.
+3.  **DISPOSITION**: User records a sale via `AddSale`.
+    *   `Sales` record created.
+    *   `Inventory.qty_on_hand` is decremented.
+4.  **RECONCILIATION**: Once the buyer pays, the Sale status moves to "Reconciled".
+    *   Profit is "Realized" and appears in final Analytics.
+
+## 6. KEY LOGIC & CALCULATIONS
+- **Cost Basis**: `(unit_purchase_cost * qty) + sales_tax + shipping_cost_inbound - cashback_earned`.
+- **Gross Profit**: `(Sales.unit_price * Sales.quantity) - Sales.commission_fee - allocated Inventory Cost Basis`.
+- **ROI**: `(Gross Profit / Cost Basis) * 100`.
+- **Account Mapping**: When adding a transaction/sale, the user selects a `Platform` first, which then filters the available `Accounts` for that platform.
+
+## 7. DEVELOPER NOTES FOR AI MODELS
+- **Visual Consistency**: Use the custom CSS variables defined in `index.css` for all UI components. Maintain the dark, premium "Glassmorphism" aesthetic.
+- **API Pattern**: Backend routes are located in `selvora-api/routes`. Use `prisma` for all DB queries.
+- **State Management**: Use React `useState` and `useEffect` for local UI state. Global Auth state is in `AuthContext`.
+- **Safety**: Ensure `qty_on_hand` never goes below zero. Always validate that a sale quantity does not exceed the available inventory.

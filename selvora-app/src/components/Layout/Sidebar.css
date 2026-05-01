@@ -1,0 +1,235 @@
+.sidebar-shell {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  width: 256px;
+  background: linear-gradient(180deg, var(--sidebar-bg-start) 0%, var(--sidebar-bg-end) 100%);
+  border-right: 1px solid var(--border-default);
+  transition: transform 0.3s ease-in-out;
+  transform: translateX(-100%);
+}
+
+.sidebar-shell.open {
+  transform: translateX(0);
+}
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 40;
+  backdrop-filter: blur(2px);
+}
+
+@media (min-width: 1024px) {
+  .sidebar-shell {
+    position: static;
+    transform: translateX(0);
+  }
+  .sidebar-overlay {
+    display: none;
+  }
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.25rem 1rem;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.selvora-logo-wrap {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+}
+
+.logo-placeholder {
+  color: white;
+  font-weight: bold;
+  font-size: 1.25rem;
+}
+
+.sidebar-subtitle {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.collapse-btn {
+  padding: 0.375rem;
+  border-radius: 8px;
+  color: var(--text-muted);
+}
+.collapse-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.hidden-lg { display: block; }
+.hidden-mobile { display: none; }
+@media (min-width: 1024px) {
+  .hidden-lg { display: none; }
+  .hidden-mobile { display: block; }
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 1rem 0.5rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-muted);
+  transition: color 0.2s;
+}
+.section-toggle:hover { color: var(--text-primary); }
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-radius: 12px;
+  transition: all 0.2s;
+  text-decoration: none;
+  border: 1px solid transparent;
+}
+
+.nav-item:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.nav-item.active {
+  color: white;
+  background: var(--active-gradient);
+  border-color: var(--active-border-color);
+}
+
+.sidebar-footer-icons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  border-top: 1px solid var(--border-default);
+}
+
+.icon-btn {
+  padding: 0.375rem;
+  border-radius: 8px;
+  color: var(--text-muted);
+}
+.icon-btn:hover:not(.disabled) {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+.icon-btn.disabled {
+  color: #475569;
+  cursor: default;
+}
+
+.sidebar-settings, .sidebar-support {
+  padding: 0.5rem;
+  border-top: 1px solid var(--border-default);
+}
+
+.utility-btn, .support-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+.utility-btn:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.04);
+}
+.support-btn:hover {
+  color: var(--color-pink);
+  background: rgba(255, 255, 255, 0.04);
+}
+.support-btn span { font-size: 0.75rem; font-weight: 500; }
+
+.sidebar-profile {
+  padding: 0.5rem;
+  border-top: 1px solid var(--border-default);
+}
+
+.profile-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+.profile-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--brand-500);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: bold;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
+}
+
+.profile-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #e2e8f0;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.profile-status {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}

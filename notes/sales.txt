@@ -1,0 +1,30 @@
+# RECORD SALE - DATABASE ENTRY MAPPING (HYBRID MODEL)
+
+With the introduction of the hybrid model, the `Add Sale` page creates a distinct `Sale` entity that links back to the original `Inventory` (Purchase) record.
+
+## 1. THE INVENTORY SELECTION
+When a user selects an item from the left pane to sell, the system passes the `inventory_id` to the form.
+- **Linked Inventory**: -> `Sales.inventory_id` (Foreign Key pulling from the `Inventory` table).
+
+## 2. MARKETPLACE & BUYER
+- **Platform / Marketplace**: -> `sale.platform_id` (Enum or Foreign Key to Platforms table).
+- **Buyer Alias**: -> `sale.buyer_id` (Foreign Key to Buyers table) or `sale.buyer_alias` (String).
+
+## 3. REVENUE & FEES
+- **Units Selling**: -> `sale.quantity` (Integer). Important: This will subtract from `inventory.qty_on_hand` in the parent table.
+- **Sale Price (per unit)**: -> `sale.unit_price` (Decimal).
+- **Platform Fees / Commission**: -> `sale.commission_fee` (Decimal).
+
+## 4. TIMELINE
+- **Sale Date**: -> `sale.sale_date` (DateTime).
+- **Expected Payout Date**: -> `sale.payout_date` (DateTime).
+
+====================================================
+# SCHEMA TAKEAWAYS
+
+By separating this out, our database now conceptually has:
+1. `inventory` table (Records money going OUT, current holdings, cost basis).
+2. `sales` table (Records money coming IN, linked securely to the cost basis).
+
+Profit calculation for the Dashboard now becomes a relational JOIN:
+`Profit = SUM(Sales.unit_price * Sales.quantity) - SUM(Sales.commission_fee) - SUM(allocated Inventory cost) + derived cashback`

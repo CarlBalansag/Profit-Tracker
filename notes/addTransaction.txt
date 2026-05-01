@@ -1,0 +1,61 @@
+# ADD TRANSACTION - CURRENT DATABASE ENTRY MAPPING
+
+The `AddTransaction` page is the primary purchase-entry point. In the current implementation it creates an `Inventory` row, not a single unified `transactions` row.
+
+If the item is already sold at entry time, the page can also send sale fields in the same request. The backend creates the `Inventory` row first, then creates a linked `Sales` row and decrements `Inventory.qty_on_hand`.
+
+## 1. CORE MODEL
+- **Purchase side**: stored in `Inventory`.
+- **Sale side**: stored in `Sales`, linked through `sales.inventory_id`.
+- **Unified transaction view**: rendered later by joining/folding `Inventory` and nested `Sales` records on the frontend.
+
+## 2. PRODUCT INFORMATION
+- **Product Name (Required)** -> `Inventory.product_name`
+- **Category** -> `Inventory.category`
+- **SKU / UPC** -> not currently represented in Prisma. Add a field before wiring this into the UI.
+
+## 3. PURCHASE DETAILS
+- **Unit Price (Required)** -> `Inventory.unit_purchase_cost`
+- **Quantity Purchased** -> `Inventory.qty_purchased`
+- **Quantity On Hand** -> initialized as `Inventory.qty_on_hand = qty_purchased`
+- **Date** -> `Inventory.purchase_date`
+- **Tax** -> `Inventory.sales_tax`
+- **Shipping Inbound** -> `Inventory.shipping_cost_inbound`
+- **Purchase Fees** -> not currently represented in Prisma. Add a field before storing this separately.
+
+## 4. VENDOR TRACKING
+- **Vendor / Store** -> `Inventory.vendor_id`, which points to `Platform.id`
+- Vendor platforms should use `Platform.type = "Vendor"`
+- **Order Number** -> not currently represented in Prisma.
+- **Tracking Numbers** -> not currently represented in Prisma.
+- **Attached Receipts** -> receipts are planned, but there is no implemented `Receipt` table/API yet.
+
+## 5. PAYMENT & CASHBACK
+- **Payment Method** -> `Inventory.payment_method_id`, which points to `PaymentMethod.id`
+- **Default Cashback Rate** -> stored on `PaymentMethod.default_cashback_rate`
+- **Cashback Earned** -> current API initializes `Inventory.cashback_earned` to `0`; most dashboard calculations derive cashback dynamically from payment method rate and cost.
+- **Gift Card / Store Credit Used** -> not currently represented in Prisma. Add a field before supporting Cashback Wallet mode accurately.
+
+## 6. OPTIONAL IMMEDIATE SALE DETAILS
+If sale fields are submitted with the purchase:
+- **Sale Price Per Unit** -> `Sales.unit_price`
+- **Quantity Sold** -> `Sales.quantity`
+- **Commission / Platform Fee** -> `Sales.commission_fee`
+- **Sale Date** -> `Sales.sale_date`
+- **Payout Date** -> `Sales.payout_date`
+- **Status** -> `Sales.status`
+- **Cashout Platform** -> `Sales.platform_id` when `sale_tab = "cashout"`
+- **Marketplace Platform** -> `Sales.platform_id` when `sale_tab = "marketplace"`
+
+After creating the sale, the backend updates:
+
+`Inventory.qty_on_hand = max(0, qty_purchased - qty_sold)`
+
+## 7. CURRENT TAKEAWAYS
+
+There is no implemented `transactions` table. "Transaction" is a UI/ledger concept built from:
+
+1. `Inventory` rows for money out and current stock.
+2. `Sales` rows for money in and sale status.
+
+Future fields such as SKU, order number, receipts, purchase fees, and store credit should be added to the hybrid schema intentionally rather than reintroducing a single all-purpose transaction table by accident.

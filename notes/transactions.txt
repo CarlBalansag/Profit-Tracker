@@ -1,0 +1,23 @@
+# TRANSACTIONS - DATABASE & LOGIC MAPPING
+
+In the hybrid model, the "Transactions" page acts as the master unified ledger. It merges the reality of the `inventory` table (money out) and the `sales` table (money in) into a single, cohesive view for the user.
+
+## 1. THE UNIFIED VIEW 
+The system needs to render a data table that shows both the purchase data and the sale data side-by-side.
+- **Current frontend logic**: fetches `/api/inventory` with nested `sales`, then expands each inventory row into one unsold purchase row plus one row per sale.
+- **Equivalent DB concept**: join `Sales` back to `Inventory` for sold rows, while also showing unsold inventory rows from `Inventory.qty_on_hand > 0`.
+
+Example sold-row query shape:
+
+`SELECT i.product_name, i.vendor_id, s.platform_id, s.buyer_id, (i.unit_purchase_cost * s.quantity) AS cost, (s.unit_price * s.quantity) AS sale, s.commission_fee, s.status FROM Sales s JOIN Inventory i ON s.inventory_id = i.id`
+
+## 2. CASHOUT VS MARKETPLACE LOGIC
+The unified view inherently understands the difference between the two core strategies.
+- **Cashout Display**: Since cashout items are sold at a deliberate loss, the UI will highlight the `Cashback Earned` column derived from the original `inventory` purchase record to demonstrate profit.
+- **Marketplace Display**: These rows will highlight the `Sale Price` and `Commission` columns to demonstrate the physical margin spread.
+
+## 3. EDIT OBLIGATIONS
+If a user edits a Transaction row from this page, the API must smartly determine whether to:
+- Route purchase-side updates like product name, vendor, payment method, purchase date, unit cost, tax, shipping, category, and purchased quantity to `/api/inventory/:id`.
+- Route sale-side updates like sale price, sale quantity, sale platform, commission, and sale status to `/api/sales/:id`.
+- Preserve quantity integrity: creating a sale decrements `Inventory.qty_on_hand`; future edit/delete flows must also reconcile `qty_on_hand` if sale quantity changes or a sale is removed.

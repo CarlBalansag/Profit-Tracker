@@ -1,0 +1,136 @@
+# DASHBOARD - CURRENT DATABASE & LOGIC MAPPING
+
+The Dashboard aggregates purchase, inventory, and sales data from the current hybrid schema. It does not rely on a `transactions` table.
+
+Implemented endpoint:
+
+`GET /api/analytics/dashboard?mode=All|Cashout|Marketplace&date=7%20Days|30%20Days|YTD|All%20Time`
+
+## 1. GLOBAL FILTERS
+
+Every dashboard request accepts two filters:
+
+[A] **Mode Filter** (`All | Cashout | Marketplace`)
+- `All`: includes all purchases and all sales for the authenticated user.
+- `Cashout`: filters sales through `Sales.platform.type = "Cashout"`.
+- `Marketplace`: filters sales through `Sales.platform.type = "Marketplace"`.
+
+[B] **Date Filter** (`7 Days | 30 Days | YTD | All Time`)
+- Inventory-side metrics filter by `Inventory.purchase_date`.
+- Sale-side metrics filter by `Sales.sale_date`.
+- `All Time` applies no date cutoff.
+
+## 2. PRIMARY STAT CARDS
+
+These cards are calculated from `Inventory`, `Sales`, `PaymentMethod`, and `Platform`.
+
+- **Total Cost**
+  - `All` mode: sum all filtered inventory cost.
+  - Filtered modes: sum cost allocated only to sales matching the selected platform type.
+  - Formula: `(unit_purchase_cost * qty) + sales_tax + shipping_cost_inbound`
+
+- **Sale Revenue**
+  - Sum of sale proceeds after commission.
+  - Formula: `(Sales.unit_price * Sales.quantity) - Sales.commission_fee`
+
+- **Cashback**
+  - Derived from payment method rate.
+  - Formula: `allocated_cost * (PaymentMethod.default_cashback_rate / 100)`
+
+- **Profit**
+  - Formula: `Sale Revenue - Total Cost + Cashback`
+
+- **Avg ROI**
+  - Formula: `(Profit / Total Cost) * 100`
+
+Additional supported dashboard stats include commission fees, total tax, inventory value, sales velocity, net margin, average sale price, and average cost per unit.
+
+## 3. PROFIT CALCULATION MODES
+
+The implemented dashboard currently behaves like an accounting view:
+
+`Profit = Sale Revenue - Cost Basis + Cashback`
+
+The planned "Cashback Wallet" view needs extra schema support before it can be accurate. Specifically, store credit / gift card usage is not currently stored on `Inventory` or `Sales`.
+
+## 4. STATUS PIPELINE GRID
+
+Pipeline counts come from two sources:
+
+- Unsold inventory in `All` mode:
+  - `Inventory.qty_on_hand > 0` contributes to `PURCHASED`.
+- Sold or in-progress sale units:
+  - `Sales.status` contributes to the matching pipeline bucket.
+
+Supported status keys in the frontend registry:
+
+`PURCHASED, SHIPPED, DELIVERED, SCANNED_IN, PAID, LISTED, SOLD, COMPLETED, RETURNED, DISPUTED, CANCELLED, PENDING_PAYMENT, IN_TRANSIT_OUT, AUTHENTICATION`
+
+## 5. TOP CARDS
+
+Top Cards aggregate purchase volume by payment method from filtered inventory:
+
+- Group by `Inventory.payment_method_id`
+- Display `PaymentMethod.name`
+- Count inventory purchase rows
+- Sum `(unit_purchase_cost * qty_purchased) + sales_tax + shipping_cost_inbound`
+
+## 6. RECENT TRANSACTIONS TABLE
+
+The dashboard's recent table is actually recent sales, enriched with purchase context:
+
+- Product -> `Sales.inventory.product_name`
+- Platform -> `Sales.platform.name`, falling back to inventory vendor/direct display
+- Buyer -> `Sales.buyer.name`
+- Cost -> `Inventory.unit_purchase_cost * Sales.quantity`
+- Revenue -> `Sales.unit_price * Sales.quantity`
+- Commission -> `Sales.commission_fee`
+- Status -> `Sales.status`
+- Date -> `Sales.sale_date`
+
+## 7. CURRENT IMPLEMENTED TABLES
+
+### `Inventory`
+- id
+- user_id
+- product_name
+- vendor_id -> `Platform.id`
+- payment_method_id -> `PaymentMethod.id`
+- purchase_date
+- unit_purchase_cost
+- qty_purchased
+- qty_on_hand
+- sales_tax
+- shipping_cost_inbound
+- cashback_earned
+- category
+
+### `Sales`
+- id
+- inventory_id -> `Inventory.id`
+- platform_id -> `Platform.id`
+- buyer_id -> `Buyer.id`
+- quantity
+- unit_price
+- commission_fee
+- sale_date
+- payout_date
+- status
+
+### `PaymentMethod`
+- id
+- user_id
+- name
+- type
+- default_cashback_rate
+
+### `Platform`
+- id
+- name
+- type (`Vendor`, `Marketplace`, `Cashout`)
+- fee_pct
+- address
+- notes
+
+### `Buyer`, `Expense`, and `Invoice`
+These models exist in Prisma, but the dashboard endpoint currently only uses buyers through included sales data. Expenses and invoices are not yet included in dashboard profit or cash-flow calculations.

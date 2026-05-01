@@ -1,0 +1,26 @@
+# FORECAST - DATABASE & LOGIC MAPPING
+
+The Forecast Planner page leverages historical data to algorithmically project future returns.
+
+## 1. HISTORICAL BASELINES
+The planner requires establishing mathematical baselines for both `Churning` and `Marketplace` modes based on the user's past 90 days.
+- **Avg Yield Query**: 
+  - Marketplace: `AVG(((Sales.unit_price * Sales.quantity) - Sales.commission_fee - allocated_inventory_cost) / allocated_inventory_cost)`
+  - Churning: `AVG(derived_cashback / allocated_inventory_cost)` where cashback is based on `PaymentMethod.default_cashback_rate`
+- **Velocity Baseline**: `AVG(Sales.payout_date - Inventory.purchase_date)` in days.
+
+## 2. THE SIMULATION / OFF-DATABASE LOGIC
+When a user targets a future date range (e.g., "Next 30 Days") on the Dashboard, the backend performs a simulation rather than a standard DB query.
+- Uses `Projected Spend Budget` * `Avg Yield` to plot the "Revenue/Profit Stacked Graph".
+- This is purely theoretical math happening in a JS utility function or a backend service. It does not hit core tables other than referencing those original baselines.
+
+## 3. GOAL TRACKING (Linking Forecast to Reality)
+The planner also visualizes preset Goals against actual performance.
+TABLE: `goals`
+- `id` (UUID)
+- `user_id` (UUID)
+- `goal_type` (Enum: WEEKLY_PROFIT, MONTHLY_VOLUME)
+- `target_amount` (Decimal)
+- `start_date` (DateTime)
+- `end_date` (DateTime)
+- **Logic**: Dashboard compares derived profit from joined `Sales` + `Inventory` records against `goals.target_amount` to plot progress circles.
