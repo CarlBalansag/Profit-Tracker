@@ -31,7 +31,7 @@ export const PaymentMethods = () => {
 
   const fetchCards = async () => {
     try {
-      const res = await fetch('http://localhost:3000/api/payment-methods', { credentials: 'include' });
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/payment-methods`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -60,7 +60,7 @@ export const PaymentMethods = () => {
 
   const handleAddCards = async (newCards, includeStoreRates) => {
     for (const card of newCards) {
-      await fetch('http://localhost:3000/api/payment-methods', {
+      await fetch(`${import.meta.env.VITE_API_URL}/api/payment-methods`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -80,8 +80,8 @@ export const PaymentMethods = () => {
   const handleCustomAdd = async (processedCard) => {
     const isEditing = !!editingCard;
     const url = isEditing 
-      ? `http://localhost:3000/api/payment-methods/${processedCard.id}`
-      : 'http://localhost:3000/api/payment-methods';
+      ? `${import.meta.env.VITE_API_URL}/api/payment-methods/${processedCard.id}`
+      : `${import.meta.env.VITE_API_URL}/api/payment-methods`;
     
     const method = isEditing ? 'PUT' : 'POST';
 
@@ -107,7 +107,7 @@ export const PaymentMethods = () => {
   };
 
   const removeCard = async (id) => {
-    await fetch(`http://localhost:3000/api/payment-methods/${id}`, {
+    await fetch(`${import.meta.env.VITE_API_URL}/api/payment-methods/${id}`, {
       method: 'DELETE',
       credentials: 'include'
     });

@@ -102,7 +102,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
   useEffect(() => {
     const fetchDetail = async () => {
       try {
-        const res = await fetch(`http://localhost:3000/api/inventory/${row.rawId}`, { credentials: 'include' });
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/inventory/${row.rawId}`, { credentials: 'include' });
         if (res.ok) {
           const d = await res.json();
           setForm({
@@ -153,7 +153,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
   const handleSave = async () => {
     setSaving(true);
     try {
-      const invRes = await fetch(`http://localhost:3000/api/inventory/${row.rawId}`, {
+      const invRes = await fetch(`${import.meta.env.VITE_API_URL}/api/inventory/${row.rawId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -175,7 +175,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
 
       // If this row is a sale, also save the sale's status
       if (row.isSale && row.saleId) {
-        await fetch(`http://localhost:3000/api/sales/${row.saleId}`, {
+        await fetch(`${import.meta.env.VITE_API_URL}/api/sales/${row.saleId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',

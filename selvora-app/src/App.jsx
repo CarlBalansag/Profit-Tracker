@@ -13,7 +13,6 @@ import Invoices from './pages/Invoices';
 import Transactions from './pages/Transactions';
 import Analytics from './pages/Analytics';
 import CashFlow from './pages/CashFlow';
-import Forecast from './pages/Forecast';
 import Settings from './pages/Settings';
 import AddSale from './pages/AddSale';
 import Login from './pages/Login';
@@ -56,7 +55,6 @@ function App() {
           <Route path="/invoices" element={<Invoices />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/cashflow" element={<CashFlow />} />
-          <Route path="/forecast" element={<Forecast />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

@@ -17,7 +17,7 @@ const Inventory = () => {
   useEffect(() => {
     const fetchInventory = async () => {
       try {
-        const res = await fetch('http://localhost:3000/api/inventory', { credentials: 'include' });
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/inventory`, { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           // Filter to only show items that have quantity on hand

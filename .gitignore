@@ -3,3 +3,12 @@
 *.pid
 selvora-api/sessions/
 selvora-api/prisma/dev.db
+
+# Environment variables — never commit secrets
+.env
+.env.local
+.env.production
+.env.staging
+selvora-api/.env
+selvora-app/.env
+selvora-app/.env.local

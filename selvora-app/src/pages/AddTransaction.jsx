@@ -84,8 +84,8 @@ const AddTransaction = () => {
     const fetchData = async () => {
       try {
         const [payRes, platRes] = await Promise.all([
-          fetch('http://localhost:3000/api/payment-methods', { credentials: 'include' }),
-          fetch('http://localhost:3000/api/platforms', { credentials: 'include' })
+          fetch(`${import.meta.env.VITE_API_URL}/api/payment-methods`, { credentials: 'include' }),
+          fetch(`${import.meta.env.VITE_API_URL}/api/platforms`, { credentials: 'include' })
         ]);
         if (payRes.ok) setPaymentMethods(await payRes.json());
         if (platRes.ok) setPlatforms(await platRes.json());
@@ -126,7 +126,7 @@ const AddTransaction = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const submitPromise = fetch('http://localhost:3000/api/inventory', {
+    const submitPromise = fetch(`${import.meta.env.VITE_API_URL}/api/inventory`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',

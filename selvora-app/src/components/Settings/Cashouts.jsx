@@ -94,7 +94,7 @@ function CustomModal({ onClose, onSave }) {
     if (!form.name.trim()) return;
     setSaving(true);
     try {
-      const res = await fetch('http://localhost:3000/api/platforms', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/platforms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -201,7 +201,7 @@ function QuickAddModal({ existingPlatforms, onClose, onSave }) {
     if (toAdd.length === 0) return;
     setSaving(true);
     try {
-      const res = await fetch('http://localhost:3000/api/platforms/batch', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/platforms/batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -314,7 +314,7 @@ export function Cashouts() {
 
   const fetchPlatforms = useCallback(async () => {
     try {
-      const res = await fetch('http://localhost:3000/api/platforms', { credentials: 'include' });
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/platforms`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setPlatforms(data.filter(p => p.type === 'Cashout'));
@@ -331,7 +331,7 @@ export function Cashouts() {
   const handleDelete = async (id) => {
     if (!window.confirm('Remove this cashout group?')) return;
     try {
-      await fetch(`http://localhost:3000/api/platforms/${id}`, {
+      await fetch(`${import.meta.env.VITE_API_URL}/api/platforms/${id}`, {
         method: 'DELETE',
         credentials: 'include'
       });

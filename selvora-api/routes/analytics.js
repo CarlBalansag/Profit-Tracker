@@ -100,7 +100,7 @@ router.get('/dashboard', isAuthenticated, async (req, res) => {
     // Purchase spend: all inventory purchases in the selected purchase-date window.
     // Cashback is earned at point of purchase, so totalCashback includes all purchases.
     inventories.forEach(inv => {
-      const lineCost = (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound;
+      const lineCost = (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0);
       totalCost += lineCost;
       totalTax += inv.sales_tax;
       const rate = getEffectiveCashbackRate(inv);
@@ -112,7 +112,8 @@ router.get('/dashboard', isAuthenticated, async (req, res) => {
       const inv = sale.inventory;
       const allocatedTax = inv.qty_purchased > 0 ? (inv.sales_tax / inv.qty_purchased) * sale.quantity : 0;
       const allocatedShipping = inv.qty_purchased > 0 ? (inv.shipping_cost_inbound / inv.qty_purchased) * sale.quantity : 0;
-      const saleCost = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping;
+      const allocatedFees = inv.qty_purchased > 0 ? ((inv.fees || 0) / inv.qty_purchased) * sale.quantity : 0;
+      const saleCost = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees;
       const rate = getEffectiveCashbackRate(inv);
       const saleCashback = saleCost * (rate / 100);
 
@@ -142,7 +143,12 @@ router.get('/dashboard', isAuthenticated, async (req, res) => {
       ? await prisma.inventory.findMany({ where: { user_id: userId } })
       : inventories;
     const inventoryValue = allInventories.reduce((sum, inv) => {
-      return sum + (inv.qty_on_hand * inv.unit_purchase_cost);
+      if (!inv.qty_purchased || inv.qty_purchased <= 0) return sum + (inv.qty_on_hand * inv.unit_purchase_cost);
+      const unitTax = inv.sales_tax / inv.qty_purchased;
+      const unitShipping = inv.shipping_cost_inbound / inv.qty_purchased;
+      const unitFees = (inv.fees || 0) / inv.qty_purchased;
+      const unitCost = inv.unit_purchase_cost + unitTax + unitShipping + unitFees;
+      return sum + (inv.qty_on_hand * unitCost);
     }, 0);
 
     let inventoryQty = 0;
@@ -162,7 +168,7 @@ router.get('/dashboard', isAuthenticated, async (req, res) => {
     // Sales velocity: sales count ÷ days in filter window
     const windowDays = dateParam === '7 Days' ? 7
       : dateParam === '30 Days' ? 30
-      : dateParam === 'YTD' ? Math.ceil((now - new Date(now.getFullYear(), 0, 1)) / (24 * 60 * 60 * 1000)) || 1
+      : dateParam === 'YTD' ? Math.ceil((now - new Date(Date.UTC(now.getUTCFullYear(), 0, 1))) / (24 * 60 * 60 * 1000)) || 1
       : null; // All Time: null means no velocity
     const salesVelocity = windowDays ? sales.length / windowDays : 0;
 
@@ -176,7 +182,7 @@ router.get('/dashboard', isAuthenticated, async (req, res) => {
           const id = inv.payment_method.id;
           if (!cardMap[id]) cardMap[id] = { name: inv.payment_method.name, txns: 0, amount: 0 };
           cardMap[id].txns += 1;
-          cardMap[id].amount += (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound;
+          cardMap[id].amount += (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0);
         }
       });
     } else {
@@ -189,7 +195,8 @@ router.get('/dashboard', isAuthenticated, async (req, res) => {
           cardMap[id].txns += 1;
           const allocatedTax = inv.qty_purchased > 0 ? (inv.sales_tax / inv.qty_purchased) * sale.quantity : 0;
           const allocatedShipping = inv.qty_purchased > 0 ? (inv.shipping_cost_inbound / inv.qty_purchased) * sale.quantity : 0;
-          cardMap[id].amount += (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping;
+          const allocatedFees = inv.qty_purchased > 0 ? ((inv.fees || 0) / inv.qty_purchased) * sale.quantity : 0;
+          cardMap[id].amount += (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees;
         }
       });
     }
@@ -238,7 +245,7 @@ router.get('/dashboard', isAuthenticated, async (req, res) => {
 
     // For sales, we count by status
     sales.forEach(sale => {
-      let st = sale.status.toUpperCase();
+      let st = (sale.status || '').toUpperCase();
       if (st === 'PRE ORDER') st = 'Pre Order';
       if (st === 'ON HAND') st = 'On Hand';
       
@@ -273,7 +280,7 @@ router.get('/dashboard', isAuthenticated, async (req, res) => {
       inventories.forEach(inv => {
         const key = dateKey(inv.purchase_date);
         const point = ensureTrendPoint(key);
-        const lineCost = (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound;
+        const lineCost = (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0);
         const rate = getEffectiveCashbackRate(inv);
         point.purchaseCostDelta += lineCost;
         point.taxDelta += inv.sales_tax;
@@ -287,7 +294,8 @@ router.get('/dashboard', isAuthenticated, async (req, res) => {
         const point = ensureTrendPoint(key);
         const allocatedTax = inv.qty_purchased > 0 ? (inv.sales_tax / inv.qty_purchased) * sale.quantity : 0;
         const allocatedShipping = inv.qty_purchased > 0 ? (inv.shipping_cost_inbound / inv.qty_purchased) * sale.quantity : 0;
-        const proportionalCost = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping;
+        const allocatedFees = inv.qty_purchased > 0 ? ((inv.fees || 0) / inv.qty_purchased) * sale.quantity : 0;
+        const proportionalCost = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees;
         const rate = getEffectiveCashbackRate(inv);
         point.purchaseCostDelta += proportionalCost;
         point.taxDelta += allocatedTax;
@@ -301,7 +309,8 @@ router.get('/dashboard', isAuthenticated, async (req, res) => {
       const point = ensureTrendPoint(key);
       const allocatedTax = inv.qty_purchased > 0 ? (inv.sales_tax / inv.qty_purchased) * sale.quantity : 0;
       const allocatedShipping = inv.qty_purchased > 0 ? (inv.shipping_cost_inbound / inv.qty_purchased) * sale.quantity : 0;
-      const saleCost = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping;
+      const allocatedFees = inv.qty_purchased > 0 ? ((inv.fees || 0) / inv.qty_purchased) * sale.quantity : 0;
+      const saleCost = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees;
       const saleRevenue = (sale.unit_price * sale.quantity) - sale.commission_fee;
       const saleCashback = saleCost * (getEffectiveCashbackRate(inv) / 100);
       const saleGrossProfit = saleRevenue - saleCost;
@@ -368,19 +377,29 @@ router.get('/dashboard', isAuthenticated, async (req, res) => {
       topCards,
       pipelineCounts,
       trend,
-      recentTransactions: sales.slice(0, 10).map(s => ({
-        id: s.id,
-        product: s.inventory.product_name,
-        platform: s.platform?.name || s.inventory.vendor?.name || 'Direct',
-        buyer: s.buyer?.name || 'Unknown',
-        cost: (s.inventory.unit_purchase_cost * s.quantity)
-          + (s.inventory.qty_purchased > 0 ? (s.inventory.sales_tax / s.inventory.qty_purchased) * s.quantity : 0)
-          + (s.inventory.qty_purchased > 0 ? (s.inventory.shipping_cost_inbound / s.inventory.qty_purchased) * s.quantity : 0),
-        revenue: (s.unit_price * s.quantity) - s.commission_fee,
-        commission: s.commission_fee,
-        status: s.status,
-        date: s.sale_date
-      }))
+      recentTransactions: sales.slice(0, 10).map(s => {
+        const inv = s.inventory;
+        const allocatedTax = inv.qty_purchased > 0 ? (inv.sales_tax / inv.qty_purchased) * s.quantity : 0;
+        const allocatedShipping = inv.qty_purchased > 0 ? (inv.shipping_cost_inbound / inv.qty_purchased) * s.quantity : 0;
+        const allocatedFees = inv.qty_purchased > 0 ? ((inv.fees || 0) / inv.qty_purchased) * s.quantity : 0;
+        const saleCost = (inv.unit_purchase_cost * s.quantity) + allocatedTax + allocatedShipping + allocatedFees;
+        const saleRevenue = (s.unit_price * s.quantity) - s.commission_fee;
+        const cashbackRate = getEffectiveCashbackRate(inv);
+        const saleCashback = saleCost * (cashbackRate / 100);
+        return {
+          id: s.id,
+          product: inv.product_name,
+          platform: s.platform?.name || inv.vendor?.name || 'Direct',
+          buyer: s.buyer?.name || 'Unknown',
+          cost: saleCost,
+          revenue: saleRevenue,
+          commission: s.commission_fee,
+          cashback: saleCashback,
+          profit: saleRevenue - saleCost + saleCashback,
+          status: s.status,
+          date: s.sale_date,
+        };
+      })
     });
 
   } catch (err) {

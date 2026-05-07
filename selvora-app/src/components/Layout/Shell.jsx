@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import Sidebar from './Sidebar';
 import { Menu } from 'lucide-react';
 import clsx from 'clsx';
+import { useUiPreferences } from '../../hooks/useUiPreferences';
+import { useLocation } from 'react-router-dom';
 
 const Header = ({ onMenuClick }) => {
   return (
@@ -10,7 +12,7 @@ const Header = ({ onMenuClick }) => {
         <Menu size={24} />
       </button>
       <div className="flex items-center gap-2">
-        <div className="w-7 h-7 rounded bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs">P</div>
+        <div className="w-7 h-7 rounded bg-[var(--accent)] flex items-center justify-center text-white font-bold text-xs">P</div>
         <span className="font-bold text-white">Profit Tracker</span>
       </div>
     </header>
@@ -20,19 +22,37 @@ const Header = ({ onMenuClick }) => {
 const Shell = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const { preferences } = useUiPreferences();
+  const location = useLocation();
+  const isGlass = preferences.style === 'glassmorphism-brown';
+  const excludedCarbonRoutes = ['/analytics', '/cashflow'];
+  const isCarbonWorkspace = !isGlass && !excludedCarbonRoutes.some(route => location.pathname.startsWith(route));
 
   return (
-    <div className="flex h-full w-full">
+    <div className={clsx(
+      "flex h-full w-full",
+      isGlass && "bg-[#111315] text-[#e8e2d6]"
+    )}>
       <Sidebar 
         isOpen={isSidebarOpen} 
         setIsOpen={setIsSidebarOpen} 
         isCollapsed={isSidebarCollapsed} 
         setIsCollapsed={setIsSidebarCollapsed} 
+        uiStyle={preferences.style}
       />
       
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[radial-gradient(circle_at_top_right,rgba(20,20,30,0.4)_0%,transparent_40%)]">
+        <main className={clsx(
+          "flex-1 flex flex-col min-w-0 overflow-hidden",
+          isGlass
+            ? "relative bg-[radial-gradient(ellipse_at_20%_20%,rgba(216,166,90,0.035)_0%,transparent_42%),radial-gradient(ellipse_at_80%_80%,rgba(125,140,160,0.035)_0%,transparent_42%),#111315] lg:pl-[76px]"
+            : "bg-[var(--bg-base)]"
+        )}>
         <Header onMenuClick={() => setIsSidebarOpen(true)} />
-        <div className="flex-1 overflow-y-auto theme-scrollbar p-3 sm:p-4 lg:p-6">
+        <div className={clsx(
+          "flex-1 overflow-y-auto theme-scrollbar",
+          isGlass ? "p-4 sm:p-6 lg:p-7" : "p-3 sm:p-4 lg:p-6",
+          isCarbonWorkspace && "carbon-workspace"
+        )}>
           {children}
         </div>
       </main>

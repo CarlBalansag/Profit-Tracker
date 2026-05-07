@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { 
-  User, Database, Target, FileJson, Mail, Code, Bell, Palette, Shield, ExternalLink, Download, ArrowLeft, DollarSign
+import {
+  User, Database, FileJson, Bell, Palette, ExternalLink, Download, ArrowLeft
 } from 'lucide-react';
 import { PaymentMethods } from '../components/Settings/PaymentMethods';
 import { Vendors } from '../components/Settings/Vendors';
 import { Cashouts } from '../components/Settings/Cashouts';
 import { Marketplaces } from '../components/Settings/Marketplaces';
 import { Accounts } from '../components/Settings/Accounts';
+import { UiPreferences } from '../components/Settings/UiPreferences';
+import { useAuth } from '../context/AuthContext';
 
 function Settings() {
   const location = useLocation();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState(location.state?.tab || 'profile');
   const [activeDataSetupView, setActiveDataSetupView] = useState(location.state?.view || null);
 
@@ -19,45 +22,14 @@ function Settings() {
     if (location.state?.view) setActiveDataSetupView(location.state.view);
   }, [location.state]);
 
-  // Goals internal state
-  const [goals, setGoals] = useState({
-    profit: { active: true, type: 'Weekly', value: '0.00' },
-    revenue: { active: true, type: 'Weekly', value: '0.00' },
-    cashback: { active: true, type: 'Weekly', value: '0.00' },
-    transactions: { active: true, type: 'Weekly', value: '0' }
-  });
-
-  const toggleGoalType = (goalKey) => {
-    setGoals(prev => ({
-      ...prev,
-      [goalKey]: { 
-        ...prev[goalKey], 
-        type: prev[goalKey].type === 'Weekly' ? 'Monthly' : 'Weekly' 
-      }
-    }));
-  };
-
-  const toggleGoalActive = (goalKey) => {
-    setGoals(prev => ({
-      ...prev,
-      [goalKey]: { ...prev[goalKey], active: !prev[goalKey].active }
-    }));
-  };
-
   const navItems = [
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'datasetup', label: 'Data Setup', icon: Database },
-    { id: 'goals', label: 'Goals', icon: Target },
     { id: 'data', label: 'Data', icon: FileJson },
-    { id: 'emailsetup', label: 'Email Setup', icon: Mail },
-    { id: 'apikeys', label: 'API Keys', icon: Code },
     { id: 'notifications', label: 'Notifications', icon: Bell, disabled: true, tag: 'Soon' },
     { id: 'appearance', label: 'Appearance', icon: Palette },
-    { id: 'security', label: 'Security', icon: Shield },
   ];
 
-  // When showing a full-page sub-view, render it outside the narrow layout
-  // Sub-view rendering for Data Setup sections
   const dataSetupViews = {
     'Payment Methods': <PaymentMethods />,
     'Vendors': <Vendors />,
@@ -97,8 +69,8 @@ function Settings() {
               disabled={item.disabled}
               onClick={() => { setActiveTab(item.id); setActiveDataSetupView(null); }}
               className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === item.id 
-                  ? 'bg-gray-800 text-white shadow-sm border border-gray-700/50' 
+                activeTab === item.id
+                  ? 'bg-gray-800 text-white shadow-sm border border-gray-700/50'
                   : (item.disabled ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-white hover:bg-white/5')
               }`}
             >
@@ -119,14 +91,15 @@ function Settings() {
           {activeTab === 'profile' && (
             <div className="rounded-xl border border-gray-800 bg-[#12121A] p-6 space-y-6">
               <h2 className="text-sm font-bold text-white">Profile</h2>
-              
+
               <div className="flex items-center gap-4">
                  <div className="w-12 h-12 rounded-full bg-purple-500 border-2 border-white/10 flex items-center justify-center font-bold text-white overflow-hidden">
-                    {/* Placeholder Avatar Image based on mockup */}
-                    <div className="w-full h-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-xs">👶</div>
+                    <div className="w-full h-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-sm font-bold">
+                      {(user?.username?.[0] || '?').toUpperCase()}
+                    </div>
                  </div>
                  <div>
-                    <h3 className="font-bold text-white">CarlBBB</h3>
+                    <h3 className="font-bold text-white">{user?.username || 'Unknown'}</h3>
                     <p className="text-xs text-gray-500">Connected via Discord</p>
                  </div>
               </div>
@@ -134,14 +107,14 @@ function Settings() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <div className="space-y-1.5">
                     <label className="text-xs text-gray-400">Username</label>
-                    <input type="text" readOnly defaultValue="CarlBBB" className="w-full bg-[#0A0A0F] border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none" />
+                    <input type="text" readOnly value={user?.username || ''} className="w-full bg-[#0A0A0F] border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none" />
                  </div>
                  <div className="space-y-1.5">
                     <label className="text-xs text-gray-400">Discord User ID</label>
-                    <input type="text" readOnly defaultValue="764650086244155413" className="w-full bg-[#0A0A0F] border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none" />
+                    <input type="text" readOnly value={user?.discord_id || ''} className="w-full bg-[#0A0A0F] border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none" />
                  </div>
               </div>
-              
+
               <p className="text-xs text-gray-600 pt-2">Profile information is managed through your Discord account.</p>
             </div>
           )}
@@ -168,88 +141,6 @@ function Settings() {
             </div>
           )}
 
-
-          {/* GOALS TAB */}
-          {activeTab === 'goals' && (
-            <div className="rounded-xl border border-gray-800 bg-[#12121A] p-6 space-y-6">
-              <div>
-                <h2 className="text-sm font-bold text-white flex items-center gap-2 mb-2">
-                  <Target size={16} /> Goal Tracking
-                </h2>
-                <p className="text-xs text-gray-500">Set profit, revenue, cashback, or volume targets. Active goals appear on your Dashboard.</p>
-              </div>
-
-              <div className="space-y-6">
-                {/* Profit Goal */}
-                <div className="flex items-center gap-6 border-b border-gray-800/50 pb-6">
-                  <div className="w-24 text-sm font-bold text-green-400">Profit</div>
-                  <div className="flex bg-[#0f0f13] border border-gray-800 rounded p-0.5">
-                    <button onClick={() => toggleGoalType('profit')} className={`px-2 py-0.5 text-xs rounded transition-colors ${goals.profit.type === 'Weekly' ? 'bg-purple-900/40 text-purple-300' : 'text-gray-500'}`}>Weekly</button>
-                    <button onClick={() => toggleGoalType('profit')} className={`px-2 py-0.5 text-xs rounded transition-colors ${goals.profit.type === 'Monthly' ? 'bg-purple-900/40 text-purple-300' : 'text-gray-500'}`}>Monthly</button>
-                  </div>
-                  <div className="relative">
-                     <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
-                     <input type="text" defaultValue={goals.profit.value} className="w-28 bg-[#0A0A0F] border border-gray-800 rounded pl-6 pr-2 py-1 text-sm text-gray-300 focus:outline-none focus:border-gray-600" />
-                  </div>
-                  <button onClick={() => toggleGoalActive('profit')} className={`ml-auto w-5 h-5 rounded border flex items-center justify-center ${goals.profit.active ? 'bg-white border-white' : 'border-gray-600'}`}>
-                    {goals.profit.active && <div className="w-2.5 h-2.5 rounded-sm bg-[#12121A]"></div>}
-                  </button>
-                </div>
-
-                {/* Revenue Goal */}
-                <div className="flex items-center gap-6 border-b border-gray-800/50 pb-6">
-                  <div className="w-24 text-sm font-bold text-green-400">Revenue</div>
-                  <div className="flex bg-[#0f0f13] border border-gray-800 rounded p-0.5">
-                    <button onClick={() => toggleGoalType('revenue')} className={`px-2 py-0.5 text-xs rounded transition-colors ${goals.revenue.type === 'Weekly' ? 'bg-purple-900/40 text-purple-300' : 'text-gray-500'}`}>Weekly</button>
-                    <button onClick={() => toggleGoalType('revenue')} className={`px-2 py-0.5 text-xs rounded transition-colors ${goals.revenue.type === 'Monthly' ? 'bg-purple-900/40 text-purple-300' : 'text-gray-500'}`}>Monthly</button>
-                  </div>
-                  <div className="relative">
-                     <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
-                     <input type="text" defaultValue={goals.revenue.value} className="w-28 bg-[#0A0A0F] border border-gray-800 rounded pl-6 pr-2 py-1 text-sm text-gray-300 focus:outline-none focus:border-gray-600" />
-                  </div>
-                  <button onClick={() => toggleGoalActive('revenue')} className={`ml-auto w-5 h-5 rounded border flex items-center justify-center ${goals.revenue.active ? 'bg-white border-white' : 'border-gray-600'}`}>
-                    {goals.revenue.active && <div className="w-2.5 h-2.5 rounded-sm bg-[#12121A]"></div>}
-                  </button>
-                </div>
-                
-                {/* Cashback Goal */}
-                <div className="flex items-center gap-6 border-b border-gray-800/50 pb-6">
-                  <div className="w-24 text-sm font-bold text-pink-400">Cashback</div>
-                  <div className="flex bg-[#0f0f13] border border-gray-800 rounded p-0.5">
-                    <button onClick={() => toggleGoalType('cashback')} className={`px-2 py-0.5 text-xs rounded transition-colors ${goals.cashback.type === 'Weekly' ? 'bg-purple-900/40 text-purple-300' : 'text-gray-500'}`}>Weekly</button>
-                    <button onClick={() => toggleGoalType('cashback')} className={`px-2 py-0.5 text-xs rounded transition-colors ${goals.cashback.type === 'Monthly' ? 'bg-purple-900/40 text-purple-300' : 'text-gray-500'}`}>Monthly</button>
-                  </div>
-                  <div className="relative">
-                     <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
-                     <input type="text" defaultValue={goals.cashback.value} className="w-28 bg-[#0A0A0F] border border-gray-800 rounded pl-6 pr-2 py-1 text-sm text-gray-300 focus:outline-none focus:border-gray-600" />
-                  </div>
-                  <button onClick={() => toggleGoalActive('cashback')} className={`ml-auto w-5 h-5 rounded border flex items-center justify-center ${goals.cashback.active ? 'bg-white border-white' : 'border-gray-600'}`}>
-                    {goals.cashback.active && <div className="w-2.5 h-2.5 rounded-sm bg-[#12121A]"></div>}
-                  </button>
-                </div>
-
-                {/* Transactions Goal */}
-                <div className="flex items-center gap-6 pb-2">
-                  <div className="w-24 text-sm font-bold text-purple-400">Transactions</div>
-                  <div className="flex bg-[#0f0f13] border border-gray-800 rounded p-0.5">
-                    <button onClick={() => toggleGoalType('transactions')} className={`px-2 py-0.5 text-xs rounded transition-colors ${goals.transactions.type === 'Weekly' ? 'bg-purple-900/40 text-purple-300' : 'text-gray-500'}`}>Weekly</button>
-                    <button onClick={() => toggleGoalType('transactions')} className={`px-2 py-0.5 text-xs rounded transition-colors ${goals.transactions.type === 'Monthly' ? 'bg-purple-900/40 text-purple-300' : 'text-gray-500'}`}>Monthly</button>
-                  </div>
-                  <div className="relative">
-                     <input type="text" defaultValue={goals.transactions.value} className="w-28 bg-[#0A0A0F] border border-gray-800 rounded px-2 py-1 text-sm text-gray-300 focus:outline-none focus:border-gray-600" />
-                  </div>
-                  <button onClick={() => toggleGoalActive('transactions')} className={`ml-auto w-5 h-5 rounded border flex items-center justify-center ${goals.transactions.active ? 'bg-white border-white' : 'border-gray-600'}`}>
-                    {goals.transactions.active && <div className="w-2.5 h-2.5 rounded-sm bg-[#12121A]"></div>}
-                  </button>
-                </div>
-                
-                <button className="px-4 py-2 mt-4 bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium rounded-lg transition-colors border border-gray-600/50">
-                  Save Goals
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* DATA TAB */}
           {activeTab === 'data' && (
             <div className="rounded-xl border border-gray-800 bg-[#12121A] p-6 space-y-6">
@@ -269,7 +160,6 @@ function Settings() {
                    { label: 'Accounts', desc: 'Store accounts' },
                    { label: 'Payment Methods', desc: 'Credit cards & payment info' },
                    { label: 'Card-Store Rates', desc: 'Cashback rules per card/store' },
-                   { label: 'Goals', desc: 'Weekly/monthly targets and active metrics' },
                    { label: 'Expenses', desc: 'Recurring and one-time business expenses' },
                    { label: 'Tax Rules & Scenarios', desc: 'Tax calculator scenarios and custom deduction rules' },
                    { label: 'Transactions', desc: 'All purchase & sale records' },
@@ -299,6 +189,13 @@ function Settings() {
                    Transactions CSV
                  </button>
               </div>
+            </div>
+          )}
+
+          {/* APPEARANCE TAB */}
+          {activeTab === 'appearance' && (
+            <div className="rounded-xl border border-gray-800 bg-[#12121A] p-6">
+              <UiPreferences />
             </div>
           )}
         </div>

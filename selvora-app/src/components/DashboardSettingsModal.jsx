@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Eye, EyeOff, ChevronUp, ChevronDown, Info } from 'lucide-react';
+import { X, Eye, EyeOff, ChevronUp, ChevronDown, Info, Plus, Minus } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   STAT_CARD_REGISTRY,
   PIPELINE_CARD_REGISTRY,
@@ -10,6 +11,39 @@ import {
 } from '../data/dashboardRegistry';
 
 const DATE_OPTIONS = ['7 Days', '30 Days', 'YTD', 'All Time'];
+const GLASS_METRIC_OPTIONS = [
+  { id: 'items', label: 'Items' },
+  { id: 'margin', label: 'Margin' },
+  { id: 'avgCost', label: 'Avg Cost' },
+  { id: 'roi', label: 'ROI' },
+  { id: 'revenue', label: 'Revenue' },
+  { id: 'cashback', label: 'Cashback' },
+  { id: 'sold', label: 'Sold' },
+  { id: 'tax', label: 'Tax' },
+  { id: 'inventory', label: 'Inventory' },
+  { id: 'qty', label: 'Qty' },
+  { id: 'avgSale', label: 'Avg Sale' },
+  { id: 'netProfit', label: 'Net Profit' },
+];
+const DEFAULT_GLASS_METRIC_PANEL = ['items', 'margin', 'avgCost', 'roi'];
+const GLASS_BASE_LAYOUT_ITEMS = ['statCards', 'radarGraph', 'trendChart', 'paymentMethods', 'recentSales'];
+const GLASS_LAYOUT_LABELS = {
+  statCards: 'Summary Cards',
+  radarGraph: 'Radar Graph',
+  trendChart: 'Middle Graph',
+  paymentMethods: 'Payment Methods',
+  recentSales: 'Recent Sales',
+};
+
+function normalizeGlassLayoutOrder(glass = {}) {
+  const count = Math.max(1, Math.min(4, glass.metricPanelCount || 1));
+  const metricIds = Array.from({ length: count }, (_, index) => `metric-${index}`);
+  const valid = new Set([...GLASS_BASE_LAYOUT_ITEMS, ...metricIds]);
+  const existing = (glass.layoutOrder || [])
+    .map(id => id === 'pipeline' ? 'radarGraph' : id)
+    .filter(id => valid.has(id));
+  return [...existing, ...[...valid].filter(id => !existing.includes(id))];
+}
 
 function getMetricMeaning(label) {
   const meanings = {
@@ -314,7 +348,8 @@ function reorder(list, index, dir) {
   return next.map((item, i) => ({ ...item, order: i }));
 }
 
-export default function DashboardSettingsModal({ settings, onClose, onSave }) {
+export default function DashboardSettingsModal({ settings, onClose, onSave, uiStyle = 'neon-dark' }) {
+  const isGlass = uiStyle === 'glassmorphism-brown';
   const [local, setLocal] = useState(() => ({
     defaultDateFilter: settings.defaultDateFilter,
     dashboardSections: [
@@ -324,6 +359,12 @@ export default function DashboardSettingsModal({ settings, onClose, onSave }) {
     pipelineCards: [...settings.pipelineCards].sort((a, b) => a.order - b.order),
     chartSeries: [...(settings.chartSeries || [])].sort((a, b) => a.order - b.order),
     recentSalesColumns: [...(settings.recentSalesColumns || DEFAULT_DASHBOARD_SETTINGS.recentSalesColumns)].sort((a, b) => a.order - b.order),
+    glass: {
+      metricPanelCount: 1,
+      metricPanels: [DEFAULT_GLASS_METRIC_PANEL],
+      ...(settings.glass || {}),
+      layoutOrder: normalizeGlassLayoutOrder(settings.glass || {}),
+    },
   }));
 
   const visibleStatCount = local.statCards.filter(c => c.visible).length;
@@ -366,6 +407,83 @@ export default function DashboardSettingsModal({ settings, onClose, onSave }) {
     setLocal(prev => ({ ...prev, dashboardSections: reorder(prev.dashboardSections, index, dir) }));
   }
 
+  function updateGlassMetricPanelCount(delta) {
+    setLocal(prev => {
+      const current = prev.glass?.metricPanelCount || 1;
+      const nextCount = Math.max(1, Math.min(4, current + delta));
+      const currentPanels = prev.glass?.metricPanels || [DEFAULT_GLASS_METRIC_PANEL];
+      const metricPanels = Array.from({ length: nextCount }, (_, index) => (
+        currentPanels[index] || DEFAULT_GLASS_METRIC_PANEL
+      ));
+      const nextGlass = {
+        ...(prev.glass || {}),
+        metricPanelCount: nextCount,
+        metricPanels,
+      };
+      return {
+        ...prev,
+        glass: {
+          ...nextGlass,
+          layoutOrder: normalizeGlassLayoutOrder(nextGlass),
+        },
+      };
+    });
+  }
+
+  function moveGlassLayoutItem(itemId, dir) {
+    setLocal(prev => {
+      const layoutOrder = normalizeGlassLayoutOrder(prev.glass || {});
+      const index = layoutOrder.indexOf(itemId);
+      const target = index + dir;
+      if (index < 0 || target < 0 || target >= layoutOrder.length) return prev;
+      const next = [...layoutOrder];
+      [next[index], next[target]] = [next[target], next[index]];
+      return {
+        ...prev,
+        glass: {
+          ...(prev.glass || {}),
+          layoutOrder: next,
+        },
+      };
+    });
+  }
+
+  function dashboardSectionIdFromGlassItem(itemId) {
+    return itemId === 'radarGraph' ? 'pipeline' : itemId;
+  }
+
+  function isGlassBaseItemVisible(itemId) {
+    const sectionId = dashboardSectionIdFromGlassItem(itemId);
+    const section = local.dashboardSections.find(s => s.id === sectionId);
+    return section ? section.visible !== false : true;
+  }
+
+  function updateGlassMetric(panelIndex, metricIndex, metricId) {
+    setLocal(prev => {
+      const count = prev.glass?.metricPanelCount || 1;
+      const panels = Array.from({ length: count }, (_, index) => [
+        ...(prev.glass?.metricPanels?.[index] || DEFAULT_GLASS_METRIC_PANEL),
+      ]);
+      const selectedElsewhere = panels.some((panel, pIndex) =>
+        panel.some((id, mIndex) => id === metricId && (pIndex !== panelIndex || mIndex !== metricIndex))
+      );
+
+      if (selectedElsewhere) {
+        toast.message('That metric is already selected in another Glass Metric tile.');
+      }
+
+      panels[panelIndex][metricIndex] = metricId;
+      return {
+        ...prev,
+        glass: {
+          ...(prev.glass || {}),
+          metricPanelCount: count,
+          metricPanels: panels,
+        },
+      };
+    });
+  }
+
   function renderRows(items, registry, listName) {
     return items.map((item, i) => {
       const def = registry[item.id];
@@ -393,17 +511,16 @@ export default function DashboardSettingsModal({ settings, onClose, onSave }) {
         <SectionPanel
           key={section.id}
           title={DASHBOARD_SECTION_REGISTRY.statCards.label}
-          meta={`${visibleStatCount}/5 visible`}
+          meta={`${visibleStatCount} visible`}
           collapsed={collapsedSections.summaryCards}
           onToggle={() => toggleSection('summaryCards')}
           onMoveUp={() => moveSection(index, -1)}
           onMoveDown={() => moveSection(index, 1)}
           isFirst={index === 0}
           isLast={index === sectionCount - 1}
+          visible={section.visible !== false}
+          onToggleVisible={() => toggleSectionVisible(section.id)}
         >
-          {visibleStatCount > 5 && (
-            <p className="mb-3 text-[11px] text-amber-400">Max 5 shown on dashboard. First 5 in order will display.</p>
-          )}
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {renderRows(local.statCards, STAT_CARD_REGISTRY, 'statCards')}
           </div>
@@ -415,7 +532,7 @@ export default function DashboardSettingsModal({ settings, onClose, onSave }) {
       return (
         <SectionPanel
           key={section.id}
-          title={DASHBOARD_SECTION_REGISTRY.pipeline.label}
+          title={isGlass ? 'Radar Graph Statuses' : DASHBOARD_SECTION_REGISTRY.pipeline.label}
           meta="Toggle and reorder"
           collapsed={collapsedSections.pipeline}
           onToggle={() => toggleSection('pipeline')}
@@ -423,6 +540,8 @@ export default function DashboardSettingsModal({ settings, onClose, onSave }) {
           onMoveDown={() => moveSection(index, 1)}
           isFirst={index === 0}
           isLast={index === sectionCount - 1}
+          visible={section.visible !== false}
+          onToggleVisible={() => toggleSectionVisible(section.id)}
         >
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {renderRows(local.pipelineCards, PIPELINE_CARD_REGISTRY, 'pipelineCards')}
@@ -443,6 +562,8 @@ export default function DashboardSettingsModal({ settings, onClose, onSave }) {
           onMoveDown={() => moveSection(index, 1)}
           isFirst={index === 0}
           isLast={index === sectionCount - 1}
+          visible={section.visible !== false}
+          onToggleVisible={() => toggleSectionVisible(section.id)}
         >
           <p className="mb-3 text-[11px] text-gray-600">Choose which lines appear in the Profit & Cost Trend chart.</p>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
@@ -467,6 +588,166 @@ export default function DashboardSettingsModal({ settings, onClose, onSave }) {
           onMoveDown={() => moveSection(index, 1)}
           isFirst={index === 0}
           isLast={index === sectionCount - 1}
+          visible={section.visible !== false}
+          onToggleVisible={() => toggleSectionVisible(section.id)}
+        >
+          <p className="mb-3 text-[11px] text-gray-600">Choose which columns appear in the Recent Sales table.</p>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {renderRows(local.recentSalesColumns, RECENT_SALES_COLUMN_REGISTRY, 'recentSalesColumns')}
+          </div>
+        </SectionPanel>
+      );
+    }
+
+    return null;
+  }
+
+  function renderGlassLayoutPanel(itemId, index, layoutOrder) {
+    const isFirst = index === 0;
+    const isLast = index === layoutOrder.length - 1;
+
+    if (itemId.startsWith('metric-')) {
+      const panelIndex = Number(itemId.replace('metric-', ''));
+      if (!Number.isInteger(panelIndex) || panelIndex < 0 || panelIndex >= (local.glass?.metricPanelCount || 1)) return null;
+      const panel = local.glass?.metricPanels?.[panelIndex] || DEFAULT_GLASS_METRIC_PANEL;
+
+      return (
+        <SectionPanel
+          key={itemId}
+          title={`Glass Metric Group ${panelIndex + 1}`}
+          meta="2x2 tile group"
+          collapsed={collapsedSections[itemId]}
+          onToggle={() => toggleSection(itemId)}
+          onMoveUp={() => moveGlassLayoutItem(itemId, -1)}
+          onMoveDown={() => moveGlassLayoutItem(itemId, 1)}
+          isFirst={isFirst}
+          isLast={isLast}
+          visible
+        >
+          <p className="mb-3 text-[11px] text-gray-600">Choose the four metrics shown in this separate 2x2 group.</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {Array.from({ length: 4 }).map((__, metricIndex) => (
+              <select
+                key={metricIndex}
+                value={panel[metricIndex] || DEFAULT_GLASS_METRIC_PANEL[metricIndex]}
+                onChange={(event) => updateGlassMetric(panelIndex, metricIndex, event.target.value)}
+                className="w-full appearance-none rounded-lg border border-white/[0.08] bg-[#0d0d10] px-3 py-2 text-xs text-gray-300 transition-colors focus:border-purple-500/50 focus:outline-none"
+              >
+                {GLASS_METRIC_OPTIONS.map(option => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
+              </select>
+            ))}
+          </div>
+        </SectionPanel>
+      );
+    }
+
+    const sectionId = dashboardSectionIdFromGlassItem(itemId);
+    const visible = isGlassBaseItemVisible(itemId);
+    const title = GLASS_LAYOUT_LABELS[itemId] || itemId;
+
+    if (itemId === 'statCards') {
+      return (
+        <SectionPanel
+          key={itemId}
+          title={title}
+          meta={`${visibleStatCount} visible`}
+          collapsed={collapsedSections[itemId]}
+          onToggle={() => toggleSection(itemId)}
+          onMoveUp={() => moveGlassLayoutItem(itemId, -1)}
+          onMoveDown={() => moveGlassLayoutItem(itemId, 1)}
+          isFirst={isFirst}
+          isLast={isLast}
+          visible={visible}
+          onToggleVisible={() => toggleSectionVisible(sectionId)}
+        >
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {renderRows(local.statCards, STAT_CARD_REGISTRY, 'statCards')}
+          </div>
+        </SectionPanel>
+      );
+    }
+
+    if (itemId === 'radarGraph') {
+      return (
+        <SectionPanel
+          key={itemId}
+          title={title}
+          meta="Toggle statuses"
+          collapsed={collapsedSections[itemId]}
+          onToggle={() => toggleSection(itemId)}
+          onMoveUp={() => moveGlassLayoutItem(itemId, -1)}
+          onMoveDown={() => moveGlassLayoutItem(itemId, 1)}
+          isFirst={isFirst}
+          isLast={isLast}
+          visible={visible}
+          onToggleVisible={() => toggleSectionVisible(sectionId)}
+        >
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {renderRows(local.pipelineCards, PIPELINE_CARD_REGISTRY, 'pipelineCards')}
+          </div>
+        </SectionPanel>
+      );
+    }
+
+    if (itemId === 'trendChart') {
+      return (
+        <SectionPanel
+          key={itemId}
+          title={title}
+          meta={`${visibleChartCount} active`}
+          collapsed={collapsedSections[itemId]}
+          onToggle={() => toggleSection(itemId)}
+          onMoveUp={() => moveGlassLayoutItem(itemId, -1)}
+          onMoveDown={() => moveGlassLayoutItem(itemId, 1)}
+          isFirst={isFirst}
+          isLast={isLast}
+          visible={visible}
+          onToggleVisible={() => toggleSectionVisible(sectionId)}
+        >
+          <p className="mb-3 text-[11px] text-gray-600">Choose which lines appear in the Profit & Cost Trend chart.</p>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {renderRows(local.chartSeries, CHART_SERIES_REGISTRY, 'chartSeries')}
+          </div>
+        </SectionPanel>
+      );
+    }
+
+    if (itemId === 'paymentMethods') {
+      return (
+        <SectionPanel
+          key={itemId}
+          title={title}
+          meta={visible ? 'Visible on dashboard' : 'Hidden from dashboard'}
+          collapsed={collapsedSections[itemId]}
+          onToggle={() => toggleSection(itemId)}
+          onMoveUp={() => moveGlassLayoutItem(itemId, -1)}
+          onMoveDown={() => moveGlassLayoutItem(itemId, 1)}
+          isFirst={isFirst}
+          isLast={isLast}
+          visible={visible}
+          onToggleVisible={() => toggleSectionVisible(sectionId)}
+        >
+          <p className="text-[11px] text-gray-600">Payment Methods uses the live payment-card totals from dashboard analytics.</p>
+        </SectionPanel>
+      );
+    }
+
+    if (itemId === 'recentSales') {
+      return (
+        <SectionPanel
+          key={itemId}
+          title={title}
+          meta={`${visibleRecentSalesColumnCount}/7 visible`}
+          collapsed={collapsedSections[itemId]}
+          onToggle={() => toggleSection(itemId)}
+          onMoveUp={() => moveGlassLayoutItem(itemId, -1)}
+          onMoveDown={() => moveGlassLayoutItem(itemId, 1)}
+          isFirst={isFirst}
+          isLast={isLast}
+          visible={visible}
+          onToggleVisible={() => toggleSectionVisible(sectionId)}
         >
           <p className="mb-3 text-[11px] text-gray-600">Choose which columns appear in the Recent Sales table.</p>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
@@ -513,7 +794,7 @@ export default function DashboardSettingsModal({ settings, onClose, onSave }) {
               </div>
 
               {/* Payment Methods — compact inline toggle */}
-              {(() => {
+              {!isGlass && (() => {
                 const pmSection = local.dashboardSections.find(s => s.id === 'paymentMethods');
                 const isVisible = pmSection ? pmSection.visible !== false : true;
                 return (
@@ -537,9 +818,46 @@ export default function DashboardSettingsModal({ settings, onClose, onSave }) {
                   </div>
                 );
               })()}
+
+              {isGlass && (() => {
+                const count = local.glass?.metricPanelCount || 1;
+                return (
+                  <div className="flex items-center justify-between gap-4 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-4 self-stretch min-w-[280px]">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Glass Metric</p>
+                      <p className="mt-0.5 text-[11px] text-gray-600">{count} tile group{count > 1 ? 's' : ''}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => updateGlassMetricPanelCount(-1)}
+                        disabled={count <= 1}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white/[0.04] hover:text-gray-300 disabled:cursor-not-allowed disabled:opacity-40"
+                        title="Remove metric tile group"
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                      </button>
+                      <span className="min-w-5 text-center text-xs font-semibold text-gray-300">{count}</span>
+                      <button
+                        type="button"
+                        onClick={() => updateGlassMetricPanelCount(1)}
+                        disabled={count >= 4}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white/[0.04] hover:text-gray-300 disabled:cursor-not-allowed disabled:opacity-40"
+                        title="Add metric tile group"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
-            {local.dashboardSections.map((section, index) => renderSection(section, index))}
+            {isGlass
+              ? normalizeGlassLayoutOrder(local.glass || {}).map((itemId, index, layoutOrder) =>
+                  renderGlassLayoutPanel(itemId, index, layoutOrder)
+                )
+              : local.dashboardSections.map((section, index) => renderSection(section, index))}
 
             <SectionPanel
               title="Future Dashboard Areas"

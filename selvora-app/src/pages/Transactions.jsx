@@ -190,7 +190,7 @@ const Transactions = () => {
 
   const fetchTransactions = useCallback(async () => {
     try {
-      const res = await fetch('http://localhost:3000/api/inventory', { credentials: 'include' });
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/inventory`, { credentials: 'include' });
       if (res.ok) setTransactions(await res.json());
     } catch (err) {
       console.error(err);
@@ -201,14 +201,14 @@ const Transactions = () => {
 
   const fetchPlatforms = useCallback(async () => {
     try {
-      const res = await fetch('http://localhost:3000/api/platforms', { credentials: 'include' });
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/platforms`, { credentials: 'include' });
       if (res.ok) setPlatforms(await res.json());
     } catch (err) { console.error(err); }
   }, []);
 
   const fetchPaymentMethods = useCallback(async () => {
     try {
-      const res = await fetch('http://localhost:3000/api/payment-methods', { credentials: 'include' });
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/payment-methods`, { credentials: 'include' });
       if (res.ok) setPaymentMethods(await res.json());
     } catch (err) { console.error(err); }
   }, []);
@@ -254,7 +254,7 @@ const Transactions = () => {
 
   const removeTxn = async (rawId) => {
     try {
-      const res = await fetch(`http://localhost:3000/api/inventory/${rawId}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/inventory/${rawId}`, {
         method: 'DELETE',
         credentials: 'include'
       });
@@ -314,7 +314,7 @@ const Transactions = () => {
           payout_date: editData.payout_date ? new Date(editData.payout_date).toISOString() : null,
         };
         // payment method and tracking live on inventory, update them separately
-        await fetch(`http://localhost:3000/api/inventory/${editData.rawId}`, {
+        await fetch(`${import.meta.env.VITE_API_URL}/api/inventory/${editData.rawId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -324,7 +324,7 @@ const Transactions = () => {
             tracking_number: editData.tracking_number || null,
           })
         });
-        res = await fetch(`http://localhost:3000/api/sales/${editData.saleId}`, {
+        res = await fetch(`${import.meta.env.VITE_API_URL}/api/sales/${editData.saleId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -347,7 +347,7 @@ const Transactions = () => {
           payment_method_id: editData.paymentMethodId || null,
           tracking_number: editData.tracking_number || null,
         };
-        res = await fetch(`http://localhost:3000/api/inventory/${editData.rawId}`, {
+        res = await fetch(`${import.meta.env.VITE_API_URL}/api/inventory/${editData.rawId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -360,7 +360,7 @@ const Transactions = () => {
         }
         // If user entered a sale price, create a sale record (POST deducts qty_on_hand)
         if (hasSalePrice) {
-          const saleRes = await fetch(`http://localhost:3000/api/sales`, {
+          const saleRes = await fetch(`${import.meta.env.VITE_API_URL}/api/sales`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -442,23 +442,25 @@ const Transactions = () => {
   };
 
   transactions.forEach(inv => {
-    const cost = (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound;
+    const cost = (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0);
     const unitTax = inv.qty_purchased > 0 ? inv.sales_tax / inv.qty_purchased : 0;
     const unitInboundShipping = inv.qty_purchased > 0 ? inv.shipping_cost_inbound / inv.qty_purchased : 0;
+    const unitFees = inv.qty_purchased > 0 ? (inv.fees || 0) / inv.qty_purchased : 0;
 
     // Always show a purchase row if there is unsold stock on hand, OR if the
     // item has no sales at all (qty_on_hand may be 0 due to a data issue — we
     // never want to silently hide a transaction the user recorded).
     if (inv.qty_on_hand > 0 || !inv.sales?.length) {
       const displayQty = inv.qty_on_hand > 0 ? inv.qty_on_hand : inv.qty_purchased;
-      const unsoldCost = (inv.unit_purchase_cost + unitTax + unitInboundShipping) * displayQty;
+      const unsoldCost = (inv.unit_purchase_cost + unitTax + unitInboundShipping + unitFees) * displayQty;
       const effectiveRate = getEffectiveCashbackRate(inv);
       rows.push({
         id: inv.id + '_unsold',
         rawId: inv.id,
         saleId: null,
         isSale: false,
-        date: new Date(inv.purchase_date).toLocaleDateString(),
+        date: inv.purchase_date ? new Date(inv.purchase_date).toLocaleDateString() : '—',
+        rawDate: inv.purchase_date || null,
         product: inv.product_name,
         vendor: inv.vendor?.name || 'Direct',
         vendorId: inv.vendor_id || '',
@@ -484,10 +486,11 @@ const Transactions = () => {
 
     if (inv.sales?.length > 0) {
       inv.sales.forEach(sale => {
-        // Proportionally allocate tax & shipping based on qty sold vs qty purchased
+        // Proportionally allocate tax, shipping, and fees based on qty sold vs qty purchased
         const allocatedTax = unitTax * sale.quantity;
         const allocatedShipping = unitInboundShipping * sale.quantity;
-        const totalUnitCost = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping;
+        const allocatedFees = unitFees * sale.quantity;
+        const totalUnitCost = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees;
         const effectiveRate = getEffectiveCashbackRate(inv);
         const saleCashback = totalUnitCost * (effectiveRate / 100);
         const profit = (sale.unit_price * sale.quantity) - sale.commission_fee - totalUnitCost + saleCashback;
@@ -496,7 +499,8 @@ const Transactions = () => {
           rawId: inv.id,
           saleId: sale.id,
           isSale: true,
-          date: new Date(sale.sale_date).toLocaleDateString(),
+          date: sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : '—',
+          rawDate: sale.sale_date || null,
           product: inv.product_name,
           vendor: inv.vendor?.name || 'Direct',
           vendorId: inv.vendor_id || '',
@@ -559,7 +563,7 @@ const Transactions = () => {
     if (filterPlatformId && row.platformId !== filterPlatformId) return false;
     if (filterPaymentId && row.paymentMethodId !== filterPaymentId) return false;
     if (dashDateFrom) {
-      const rowDate = new Date(row.date);
+      const rowDate = new Date(row.rawDate || row.date);
       if (rowDate < dashDateFrom) return false;
     }
     if (dashCardScope === 'sold' && !row.isSale) return false;
@@ -849,7 +853,7 @@ const Transactions = () => {
                   const row = filteredRows.find(r => r.id === id);
                   if (!row) continue;
                   try {
-                    const res = await fetch(`http://localhost:3000/api/inventory/${row.rawId}`, {
+                    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/inventory/${row.rawId}`, {
                       method: 'DELETE',
                       credentials: 'include'
                     });
@@ -1023,7 +1027,7 @@ const Transactions = () => {
                               <p className="text-[10px] text-gray-600 mt-0.5">per unit</p>
                             </div>
                           ) : (
-                            <span className="text-sm font-semibold text-blue-400">${row.cost?.toFixed(2) || '0.00'}</span>
+                            <span className="text-sm font-semibold text-blue-400">${Number.isFinite(row.cost) ? row.cost.toFixed(2) : '0.00'}</span>
                           )}
                         </td>
                       );
@@ -1050,7 +1054,7 @@ const Transactions = () => {
                       );
                       case 'profit': return (
                         <td key="profit" className="px-4 py-3.5">
-                          {row.profit != null ? (
+                          {Number.isFinite(row.profit) ? (
                             <span className={`text-sm font-bold ${row.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                               {row.profit >= 0 ? '+' : ''}${row.profit.toFixed(2)}
                             </span>
@@ -1059,7 +1063,7 @@ const Transactions = () => {
                       );
                       case 'cashback': return (
                         <td key="cashback" className="px-4 py-3.5">
-                          <span className="text-xs font-medium text-pink-400">${row.cashback?.toFixed(2) || '0.00'}</span>
+                          <span className="text-xs font-medium text-pink-400">${Number.isFinite(row.cashback) ? row.cashback.toFixed(2) : '0.00'}</span>
                         </td>
                       );
                       case 'payment': return (
@@ -1098,12 +1102,12 @@ const Transactions = () => {
                       );
                       case 'tax': return (
                         <td key="tax" className="px-4 py-3.5">
-                          <span className="text-xs font-medium text-amber-400">${(row.tax ?? 0).toFixed(2)}</span>
+                          <span className="text-xs font-medium text-amber-400">${(Number.isFinite(row.tax) ? row.tax : 0).toFixed(2)}</span>
                         </td>
                       );
                       case 'shipping': return (
                         <td key="shipping" className="px-4 py-3.5">
-                          <span className="text-xs font-medium text-sky-400">${(row.shipping ?? 0).toFixed(2)}</span>
+                          <span className="text-xs font-medium text-sky-400">${(Number.isFinite(row.shipping) ? row.shipping : 0).toFixed(2)}</span>
                         </td>
                       );
                       case 'category': return (

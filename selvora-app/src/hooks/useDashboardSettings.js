@@ -1,8 +1,19 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { DEFAULT_DASHBOARD_SETTINGS } from '../data/dashboardRegistry';
 
-const STORAGE_KEY = 'dashboard_settings';
-const SETTINGS_VERSION = 5;
+const STORAGE_KEY_PREFIX = 'dashboard_settings';
+const SETTINGS_VERSION = 6;
+const DEFAULT_GLASS_SETTINGS = {
+  metricPanelCount: 1,
+  metricPanels: [
+    ['items', 'margin', 'avgCost', 'roi'],
+  ],
+  layoutOrder: ['statCards', 'radarGraph', 'trendChart', 'paymentMethods', 'metric-0', 'recentSales'],
+};
+
+function getStorageKey(uiStyle = 'neon-dark') {
+  return `${STORAGE_KEY_PREFIX}:${uiStyle || 'neon-dark'}`;
+}
 
 const DEFAULT_STAT_CARD_ORDER = {
   totalCost: 0,
@@ -31,6 +42,11 @@ function mergeWithDefaults(stored, defaults) {
     pipelineCards: mergeList(stored.pipelineCards ?? [], defaults.pipelineCards),
     chartSeries: mergeList(stored.chartSeries ?? [], defaults.chartSeries),
     recentSalesColumns: mergeList(stored.recentSalesColumns ?? [], defaults.recentSalesColumns),
+    glass: {
+      ...DEFAULT_GLASS_SETTINGS,
+      ...(stored.glass || {}),
+      metricPanelCount: stored.glass?.metricPanelCount || stored.glass?.pipelinePanelCount || DEFAULT_GLASS_SETTINGS.metricPanelCount,
+    },
   };
 
   if ((stored.version ?? 1) < SETTINGS_VERSION) {
@@ -50,10 +66,12 @@ function mergeWithDefaults(stored, defaults) {
   return merged;
 }
 
-export function useDashboardSettings() {
+export function useDashboardSettings(uiStyle = 'neon-dark') {
+  const storageKey = getStorageKey(uiStyle);
   const [settings, setSettings] = useState(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(storageKey)
+        || (uiStyle === 'neon-dark' ? localStorage.getItem(STORAGE_KEY_PREFIX) : null);
       if (!raw) return { ...DEFAULT_DASHBOARD_SETTINGS, version: SETTINGS_VERSION };
       return mergeWithDefaults(JSON.parse(raw), DEFAULT_DASHBOARD_SETTINGS);
     } catch {
@@ -61,14 +79,57 @@ export function useDashboardSettings() {
     }
   });
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const fallbackSettings = () => {
+      try {
+        const raw = localStorage.getItem(storageKey)
+          || (uiStyle === 'neon-dark' ? localStorage.getItem(STORAGE_KEY_PREFIX) : null);
+        return raw
+          ? mergeWithDefaults(JSON.parse(raw), DEFAULT_DASHBOARD_SETTINGS)
+          : { ...DEFAULT_DASHBOARD_SETTINGS, version: SETTINGS_VERSION };
+      } catch {
+        return { ...DEFAULT_DASHBOARD_SETTINGS, version: SETTINGS_VERSION };
+      }
+    };
+
+    const fallbackTimer = window.setTimeout(() => {
+      if (!cancelled) setSettings(fallbackSettings());
+    }, 0);
+
+    fetch(`${import.meta.env.VITE_API_URL}/api/preferences/dashboard-settings/${encodeURIComponent(uiStyle)}`, {
+      credentials: 'include',
+    })
+      .then(res => (res.ok ? res.json() : null))
+      .then(payload => {
+        if (cancelled || !payload?.settings) return;
+        const merged = mergeWithDefaults(payload.settings, DEFAULT_DASHBOARD_SETTINGS);
+        setSettings(merged);
+        localStorage.setItem(storageKey, JSON.stringify(merged));
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(fallbackTimer);
+    };
+  }, [storageKey, uiStyle]);
+
   const saveSettings = useCallback((newSettings) => {
     const versionedSettings = {
       ...mergeWithDefaults({ ...newSettings, version: SETTINGS_VERSION }, DEFAULT_DASHBOARD_SETTINGS),
       version: SETTINGS_VERSION,
     };
     setSettings(versionedSettings);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(versionedSettings));
-  }, []);
+    localStorage.setItem(storageKey, JSON.stringify(versionedSettings));
+    fetch(`${import.meta.env.VITE_API_URL}/api/preferences/dashboard-settings/${encodeURIComponent(uiStyle)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ settings: versionedSettings }),
+    }).catch(() => {});
+  }, [storageKey, uiStyle]);
 
   return { settings, saveSettings };
 }

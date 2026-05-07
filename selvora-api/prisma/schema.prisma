@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -20,6 +20,7 @@ model User {
   inventories            Inventory[]
   payment_methods        PaymentMethod[]
   expenses               Expense[]
+  recurring_expenses     RecurringExpense[]
 }
 
 model Inventory {
@@ -45,6 +46,7 @@ model Inventory {
   order_number          String?
   tracking_number       String?
   category              String?
+  receipt_url           String?
   sales                 Sales[]
 }
 
@@ -108,13 +110,33 @@ model PaymentMethod {
 }
 
 model Expense {
-  id          String   @id @default(uuid())
-  user_id     String
-  user        User     @relation(fields: [user_id], references: [id])
-  amount      Float
-  category    String?
-  date        DateTime
-  receipt_url String?
+  id                   String            @id @default(uuid())
+  user_id              String
+  user                 User              @relation(fields: [user_id], references: [id])
+  name                 String
+  amount               Float
+  category             String?
+  date                 DateTime
+  notes                String?
+  receipt_url          String?
+  recurring_expense_id String?
+  recurring_expense    RecurringExpense? @relation(fields: [recurring_expense_id], references: [id], onDelete: SetNull)
+}
+
+model RecurringExpense {
+  id               String    @id @default(uuid())
+  user_id          String
+  user             User      @relation(fields: [user_id], references: [id])
+  name             String
+  amount           Float
+  category         String?
+  frequency        String    // "weekly" | "biweekly" | "monthly"
+  start_date       DateTime
+  end_date         DateTime?
+  active           Boolean   @default(true)
+  notes            String?
+  last_generated   DateTime?
+  generated_entries Expense[]
 }
 
 model Invoice {

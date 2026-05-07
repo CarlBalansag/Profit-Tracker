@@ -28,8 +28,8 @@ const AddSale = () => {
     const fetchData = async () => {
       try {
         const [invRes, platRes] = await Promise.all([
-          fetch('http://localhost:3000/api/inventory', { credentials: 'include' }),
-          fetch('http://localhost:3000/api/platforms', { credentials: 'include' })
+          fetch(`${import.meta.env.VITE_API_URL}/api/inventory`, { credentials: 'include' }),
+          fetch(`${import.meta.env.VITE_API_URL}/api/platforms`, { credentials: 'include' })
         ]);
         if (invRes.ok) {
           const invData = await invRes.json();
@@ -88,7 +88,7 @@ const AddSale = () => {
       inventory_id: selectedItem.id,
     };
 
-    const submitPromise = fetch('http://localhost:3000/api/sales', {
+    const submitPromise = fetch(`${import.meta.env.VITE_API_URL}/api/sales`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',

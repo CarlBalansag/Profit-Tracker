@@ -124,7 +124,7 @@ function AddAccountModal({ vendor, platformList, onClose, onSave }) {
     if (!form.name.trim() || !form.platform_id) return;
     setSaving(true);
     try {
-      const res = await fetch('http://localhost:3000/api/accounts', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/accounts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -250,7 +250,7 @@ export function Accounts() {
 
   const fetchPlatforms = useCallback(async () => {
     try {
-      const res = await fetch('http://localhost:3000/api/platforms', { credentials: 'include' });
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/platforms`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setPlatforms(data.filter(p => p.type === 'Vendor'));
@@ -277,7 +277,7 @@ export function Accounts() {
   const handleAccountDeleted = async (accountId, platformId) => {
     if (!window.confirm("Remove this account permanently?")) return;
     try {
-      await fetch(`http://localhost:3000/api/accounts/${accountId}`, {
+      await fetch(`${import.meta.env.VITE_API_URL}/api/accounts/${accountId}`, {
         method: 'DELETE',
         credentials: 'include'
       });

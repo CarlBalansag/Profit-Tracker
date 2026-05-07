@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { PrismaClient } = require('@prisma/client');
 const session = require('express-session');
-const FileStore = require('session-file-store')(session);
+const pgSession = require('connect-pg-simple')(session);
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 const paymentMethodsRouter = require('./routes/paymentMethods');
@@ -11,34 +11,45 @@ const salesRouter = require('./routes/sales');
 const platformsRouter = require('./routes/platforms');
 const analyticsRouter = require('./routes/analytics');
 const accountsRouter = require('./routes/accounts');
+const preferencesRouter = require('./routes/preferences');
+const expensesRouter = require('./routes/expenses');
+const recurringExpensesRouter = require('./routes/recurringExpenses');
+const receiptsRouter = require('./routes/receipts');
 require('dotenv').config();
 
 const app = express();
 const prisma = new PrismaClient();
+const isProd = process.env.NODE_ENV === 'production';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+// Guard: refuse to start in production without a proper session secret
+if (isProd && (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32)) {
+  console.error('FATAL: SESSION_SECRET must be set to a string of at least 32 characters in production.');
+  process.exit(1);
+}
+
+// Trust Render's reverse proxy so secure cookies work over HTTPS
+if (isProd) app.set('trust proxy', 1);
 
 // Allow frontend connection with credentials
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: FRONTEND_URL,
   credentials: true
 }));
 app.use(express.json());
 
-// Session Middleware — persisted to disk so logins survive server restarts
+// Session Middleware — stored in PostgreSQL so logins survive server restarts/redeploys
 app.use(session({
-  store: new FileStore({
-    path: './sessions',
-    ttl: 60 * 60 * 24 * 30,
-    retries: 5,
-    retryDelay: 200,
-    reapInterval: -1,       // disable background cleanup (avoids EPERM on Windows)
-    reapSyncFallback: false, // don't attempt sync rename fallback
-    logFn: () => {}         // suppress file-store noise
+  store: new pgSession({
+    conString: process.env.DATABASE_URL,
+    tableName: 'user_sessions',
+    createTableIfMissing: true,
   }),
   secret: process.env.SESSION_SECRET || 'profit_tracker_secret_key',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false,     // localhost HTTP
+    secure: isProd,    // HTTPS only in production
     httpOnly: true,
     maxAge: 1000 * 60 * 60 * 24 * 30  // 30 days in ms
   }
@@ -103,6 +114,10 @@ app.use('/api/sales', salesRouter);
 app.use('/api/platforms', platformsRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/accounts', accountsRouter);
+app.use('/api/preferences', preferencesRouter);
+app.use('/api/expenses', expensesRouter);
+app.use('/api/recurring-expenses', recurringExpensesRouter);
+app.use('/api/receipts', receiptsRouter);
 
 // Health Check
 app.get('/health', (req, res) => {
@@ -113,10 +128,9 @@ app.get('/health', (req, res) => {
 app.get('/auth/discord', passport.authenticate('discord'));
 
 app.get('/auth/discord/callback',
-  passport.authenticate('discord', { failureRedirect: 'http://localhost:5173/login?error=true' }),
+  passport.authenticate('discord', { failureRedirect: `${FRONTEND_URL}/login?error=true` }),
   (req, res) => {
-    // Successful authentication, redirect to frontend dashboard
-    res.redirect('http://localhost:5173/');
+    res.redirect(`${FRONTEND_URL}/`);
   }
 );
 
@@ -141,5 +155,5 @@ app.get('/auth/logout', (req, res, next) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-console.log(`Profit Tracker API server running on port ${PORT}`);
+  console.log(`Profit Tracker API server running on port ${PORT}`);
 });
