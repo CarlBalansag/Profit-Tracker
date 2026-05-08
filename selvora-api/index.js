@@ -49,9 +49,10 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: isProd,    // HTTPS only in production
+    secure: isProd,        // HTTPS only in production
     httpOnly: true,
-    maxAge: 1000 * 60 * 60 * 24 * 30  // 30 days in ms
+    sameSite: isProd ? 'none' : 'lax',  // cross-origin cookies in production
+    maxAge: 1000 * 60 * 60 * 24 * 30   // 30 days in ms
   }
 }));
 
