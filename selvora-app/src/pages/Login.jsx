@@ -18,7 +18,7 @@ const Login = () => {
         )}
 
         <button 
-          onClick={() => window.location.href = `${import.meta.env.VITE_API_URL}/auth/discord`}
+          onClick={() => window.location.href = `${import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL}/auth/discord`}
           className="w-full flex items-center justify-center space-x-3 bg-[#5865F2] hover:bg-[#4752C4] text-white px-6 py-3.5 rounded-xl transition-all duration-200 shadow-lg shadow-[#5865F2]/20 font-medium"
         >
           <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 127.14 96.36">
