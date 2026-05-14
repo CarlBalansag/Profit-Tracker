@@ -50,7 +50,7 @@ app.use((req, res, next) => {
 // Session Middleware — stored in PostgreSQL so logins survive server restarts/redeploys
 app.use(session({
   store: new pgSession({
-    conString: process.env.DATABASE_URL,
+    conString: process.env.DIRECT_URL || process.env.DATABASE_URL,
     tableName: 'user_sessions',
     createTableIfMissing: true,
   }),
