@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../prisma');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -36,7 +35,7 @@ const getEffectiveCashbackRate = (inv) => {
   return pm.default_cashback_rate || 0;
 };
 
-router.get('/dashboard', isAuthenticated, async (req, res) => {
+router.get('/dashboard', isAuthenticated, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const mode = req.query.mode || 'All'; // 'All' | 'Cashout' | 'Marketplace'
@@ -403,7 +402,7 @@ router.get('/dashboard', isAuthenticated, async (req, res) => {
     });
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

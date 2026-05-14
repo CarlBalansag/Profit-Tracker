@@ -15,6 +15,7 @@ import Analytics from './pages/Analytics';
 import CashFlow from './pages/CashFlow';
 import Settings from './pages/Settings';
 import AddSale from './pages/AddSale';
+import TaxExempt from './pages/TaxExempt';
 import Login from './pages/Login';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
@@ -56,6 +57,7 @@ function App() {
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/cashflow" element={<CashFlow />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/tax-exempt" element={<TaxExempt />} />
           <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Shell>

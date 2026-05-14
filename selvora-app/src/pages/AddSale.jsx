@@ -1,16 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { 
+import {
   Package, DollarSign, Search, Check, Store, Globe, Calendar, CreditCard
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useNavigate } from 'react-router-dom';
+import { useInventory, usePlatforms, useInvalidate, apiFetch} from '../hooks/useApi';
 
 const AddSale = () => {
   const navigate = useNavigate();
-  const [inventory, setInventory] = useState([]);
-  const [platforms, setPlatforms] = useState([]);
-  
+  const { data: rawInventory = [] } = useInventory();
+  const { data: platforms = [] } = usePlatforms();
+  const invalidate = useInvalidate();
+  // Only items with stock available
+  const inventory = rawInventory.filter(i => i.qty_on_hand > 0);
+
   const [selectedItem, setSelectedItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [saleTab, setSaleTab] = useState('cashout');
@@ -20,29 +24,16 @@ const AddSale = () => {
     quantity: 1,
     unit_price: '',
     commission_fee: '',
+    sale_shipping: '',
+    sale_fees: '',
     sale_date: new Date().toISOString().split('T')[0],
     payout_date: '',
+    taxable: true,
+    sale_tax_collected: '',
+    customer_tax_exempt: false,
+    exemption_type: '',
   });
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [invRes, platRes] = await Promise.all([
-          fetch(`${import.meta.env.VITE_API_URL}/api/inventory`, { credentials: 'include' }),
-          fetch(`${import.meta.env.VITE_API_URL}/api/platforms`, { credentials: 'include' })
-        ]);
-        if (invRes.ok) {
-          const invData = await invRes.json();
-          // Only show items with stock
-          setInventory(invData.filter(i => i.qty_on_hand > 0));
-        }
-        if (platRes.ok) setPlatforms(await platRes.json());
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    fetchData();
-  }, []);
 
   // Update selected item resets form quantity defaults
   const handleSelect = (item) => {
@@ -88,7 +79,7 @@ const AddSale = () => {
       inventory_id: selectedItem.id,
     };
 
-    const submitPromise = fetch(`${import.meta.env.VITE_API_URL}/api/sales`, {
+    const submitPromise = apiFetch(`/api/sales`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -104,6 +95,8 @@ const AddSale = () => {
     toast.promise(submitPromise, {
       loading: 'Recording sale...',
       success: () => {
+        invalidate.inventory();
+        invalidate.dashboard();
         setTimeout(() => navigate('/transactions'), 800);
         return `Sale recorded for ${selectedItem.product_name}!`;
       },
@@ -286,6 +279,20 @@ const AddSale = () => {
                         <input name="commission_fee" type="number" step="0.01" value={formData.commission_fee} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-green-500/50" placeholder="0.00" />
                       </div>
                     </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1.5">Sale Shipping</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                        <input name="sale_shipping" type="number" step="0.01" value={formData.sale_shipping} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-green-500/50" placeholder="0.00" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1.5">Sale Fees</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                        <input name="sale_fees" type="number" step="0.01" value={formData.sale_fees} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-green-500/50" placeholder="0.00" />
+                      </div>
+                    </div>
                   </div>
 
                   {/* Per-unit note + mini summary */}
@@ -300,14 +307,9 @@ const AddSale = () => {
                     const purchaseCost = unitCost * qs;
                     const saleTotal = sp * qs;
                     const commission = parseFloat(formData.commission_fee) || 0;
-                    // Cashback rate: check category_rates JSON string for vendor match, fall back to default
-                    const vendorName = (selectedItem.vendor?.name || '').toLowerCase();
-                    let cbRates = [];
-                    try { cbRates = JSON.parse(selectedItem.payment_method?.category_rates || '[]'); } catch { cbRates = []; }
-                    const cbMatch = cbRates.find(cr => vendorName && (!cr.expires || new Date(cr.expires) >= new Date()) && (vendorName.includes(cr.store.toLowerCase()) || cr.store.toLowerCase().includes(vendorName)));
-                    const cbRate = cbMatch ? cbMatch.rate : (selectedItem.payment_method?.default_cashback_rate || 0);
-                    const saleCashback = purchaseCost * (cbRate / 100);
-                    const profit = saleTotal - purchaseCost - commission + saleCashback;
+                    const saleShipping = parseFloat(formData.sale_shipping) || 0;
+                    const saleFees = parseFloat(formData.sale_fees) || 0;
+                    const profit = saleTotal - purchaseCost - commission - saleShipping - saleFees;
                     return (
                       <>
                         <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -333,16 +335,22 @@ const AddSale = () => {
                                 <span className="text-red-400">-${commission.toFixed(2)}</span>
                               </div>
                             )}
+                            {saleShipping > 0 && (
+                              <div className="flex justify-between px-4 py-2.5">
+                                <span className="text-gray-400">Sale shipping</span>
+                                <span className="text-red-400">-${saleShipping.toFixed(2)}</span>
+                              </div>
+                            )}
+                            {saleFees > 0 && (
+                              <div className="flex justify-between px-4 py-2.5">
+                                <span className="text-gray-400">Sale fees</span>
+                                <span className="text-red-400">-${saleFees.toFixed(2)}</span>
+                              </div>
+                            )}
                             {sp > 0 && (
                               <div className="flex justify-between px-4 py-2.5">
                                 <span className="text-gray-400">Sale total ({qs} × ${sp.toFixed(2)})</span>
                                 <span className="text-green-400">${saleTotal.toFixed(2)}</span>
-                              </div>
-                            )}
-                            {sp > 0 && saleCashback > 0 && (
-                              <div className="flex justify-between px-4 py-2.5">
-                                <span className="text-gray-400">Cashback ({cbRate}%)</span>
-                                <span className="text-emerald-400">+${saleCashback.toFixed(2)}</span>
                               </div>
                             )}
                             {sp > 0 && (
@@ -379,8 +387,39 @@ const AddSale = () => {
                   </div>
                 </div>
 
+                <hr className="border-white/5" />
+
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-blue-400">Tax Info</h3>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1.5">Sale Tax Collected</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                        <input name="sale_tax_collected" type="number" step="0.01" value={formData.sale_tax_collected} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50" placeholder="0.00" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1.5">Exemption Type</label>
+                      <input name="exemption_type" type="text" value={formData.exemption_type} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50" placeholder="e.g. Resale, Nonprofit..." disabled={!formData.customer_tax_exempt} />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-6">
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <input type="checkbox" checked={formData.taxable} onChange={e => setFormData(p => ({ ...p, taxable: e.target.checked }))} className="w-4 h-4 rounded border-gray-600 accent-blue-500" />
+                      <span className="text-sm text-gray-300">Taxable Sale</span>
+                    </label>
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <input type="checkbox" checked={formData.customer_tax_exempt} onChange={e => setFormData(p => ({ ...p, customer_tax_exempt: e.target.checked, exemption_type: e.target.checked ? p.exemption_type : '' }))} className="w-4 h-4 rounded border-gray-600 accent-blue-500" />
+                      <span className="text-sm text-gray-300">Customer Tax Exempt</span>
+                    </label>
+                  </div>
+                </div>
+
               </div>
-              
+
               <div className="flex items-center justify-between px-2 pt-2">
                 <button 
                   type="button" 

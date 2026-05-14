@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Crown, Zap, Plus, LogOut, ChevronDown, PenSquare, Trash2 } from 'lucide-react';
+import { useInvalidate, apiFetch} from '../../hooks/useApi';
 import { QuickAddModal } from './QuickAddModal';
 import { CustomCardModal } from './CustomCardModal';
 import { IssuerLogo } from './IssuerLogo';
@@ -8,6 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 
 export const PaymentMethods = () => {
   const { user } = useAuth();
+  const invalidate = useInvalidate();
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [editingCard, setEditingCard] = useState(null);
@@ -31,7 +33,7 @@ export const PaymentMethods = () => {
 
   const fetchCards = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/payment-methods`, { credentials: 'include' });
+      const res = await apiFetch(`/api/payment-methods`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -60,7 +62,7 @@ export const PaymentMethods = () => {
 
   const handleAddCards = async (newCards, includeStoreRates) => {
     for (const card of newCards) {
-      await fetch(`${import.meta.env.VITE_API_URL}/api/payment-methods`, {
+      await apiFetch(`/api/payment-methods`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -73,16 +75,16 @@ export const PaymentMethods = () => {
         })
       });
     }
-    fetchCards();
+    invalidate.paymentMethods();
     setIsQuickAddOpen(false);
   };
 
   const handleCustomAdd = async (processedCard) => {
     const isEditing = !!editingCard;
-    const url = isEditing 
+    const url = isEditing
       ? `${import.meta.env.VITE_API_URL}/api/payment-methods/${processedCard.id}`
       : `${import.meta.env.VITE_API_URL}/api/payment-methods`;
-    
+
     const method = isEditing ? 'PUT' : 'POST';
 
     await fetch(url, {
@@ -95,8 +97,8 @@ export const PaymentMethods = () => {
         default_cashback_rate: processedCard.baseRate
       })
     });
-    
-    fetchCards();
+
+    invalidate.paymentMethods();
     setIsCustomModalOpen(false);
     setEditingCard(null);
   };
@@ -107,11 +109,11 @@ export const PaymentMethods = () => {
   };
 
   const removeCard = async (id) => {
-    await fetch(`${import.meta.env.VITE_API_URL}/api/payment-methods/${id}`, {
+    await apiFetch(`/api/payment-methods/${id}`, {
       method: 'DELETE',
       credentials: 'include'
     });
-    fetchCards();
+    invalidate.paymentMethods();
   };
 
   const totalCreditLimit = savedCards.reduce((sum, c) => sum + (Number(c.creditLimit) || 0), 0);

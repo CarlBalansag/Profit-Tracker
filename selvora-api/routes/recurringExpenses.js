@@ -1,11 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../prisma');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
   res.status(401).json({ message: 'Unauthorized' });
+};
+
+const parseLocalDate = (str) => {
+  if (!str) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return new Date(str + 'T12:00:00.000Z');
+  return new Date(str);
 };
 
 // ── Generate occurrence dates from start up to today ────────────────────────
@@ -68,7 +73,7 @@ async function generateEntries(rec) {
 }
 
 // ── GET all — also runs generation for active records ────────────────────────
-router.get('/', isAuthenticated, async (req, res) => {
+router.get('/', isAuthenticated, async (req, res, next) => {
   try {
     const items = await prisma.recurringExpense.findMany({
       where: { user_id: req.user.id },
@@ -82,12 +87,12 @@ router.get('/', isAuthenticated, async (req, res) => {
 
     res.json(items);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // ── POST new recurring expense ────────────────────────────────────────────────
-router.post('/', isAuthenticated, async (req, res) => {
+router.post('/', isAuthenticated, async (req, res, next) => {
   try {
     const { name, amount, category, frequency, start_date, end_date, notes } = req.body;
     if (!name || !amount || !frequency || !start_date) {
@@ -101,8 +106,8 @@ router.post('/', isAuthenticated, async (req, res) => {
         amount:     parseFloat(amount),
         category:   category  || null,
         frequency,
-        start_date: new Date(start_date),
-        end_date:   end_date  ? new Date(end_date) : null,
+        start_date: parseLocalDate(start_date),
+        end_date:   end_date  ? parseLocalDate(end_date) : null,
         notes:      notes     || null,
         active:     true,
       },
@@ -113,12 +118,12 @@ router.post('/', isAuthenticated, async (req, res) => {
 
     res.json(rec);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // ── PUT update (also handles pause/resume via active field) ──────────────────
-router.put('/:id', isAuthenticated, async (req, res) => {
+router.put('/:id', isAuthenticated, async (req, res, next) => {
   try {
     const existing = await prisma.recurringExpense.findUnique({ where: { id: req.params.id } });
     if (!existing || existing.user_id !== req.user.id) {
@@ -131,8 +136,8 @@ router.put('/:id', isAuthenticated, async (req, res) => {
     if (amount     !== undefined) data.amount     = parseFloat(amount);
     if (category   !== undefined) data.category   = category || null;
     if (frequency  !== undefined) data.frequency  = frequency;
-    if (start_date !== undefined) data.start_date = new Date(start_date);
-    if (end_date   !== undefined) data.end_date   = end_date ? new Date(end_date) : null;
+    if (start_date !== undefined) data.start_date = parseLocalDate(start_date);
+    if (end_date   !== undefined) data.end_date   = end_date ? parseLocalDate(end_date) : null;
     if (notes      !== undefined) data.notes      = notes || null;
 
     // Resuming from paused: reset last_generated so new entries get picked up
@@ -150,12 +155,12 @@ router.put('/:id', isAuthenticated, async (req, res) => {
 
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // ── DELETE recurring expense and all its generated entries ───────────────────
-router.delete('/:id', isAuthenticated, async (req, res) => {
+router.delete('/:id', isAuthenticated, async (req, res, next) => {
   try {
     const existing = await prisma.recurringExpense.findUnique({ where: { id: req.params.id } });
     if (!existing || existing.user_id !== req.user.id) {
@@ -168,7 +173,7 @@ router.delete('/:id', isAuthenticated, async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

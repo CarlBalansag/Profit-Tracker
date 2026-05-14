@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Database, Plus, Search, X, Edit2, Trash2, 
+import {
+  Database, Plus, Search, X, Edit2, Trash2,
   Check
 } from 'lucide-react';
+import { useInvalidate, apiFetch} from '../../hooks/useApi';
 
 // ─── Quick Add Store Directory ────────────────────────────────────────────────
 const QUICK_ADD_STORES = [
@@ -94,7 +95,7 @@ function CustomModal({ onClose, onSave }) {
     if (!form.name.trim()) return;
     setSaving(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/platforms`, {
+      const res = await apiFetch(`/api/platforms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -201,7 +202,7 @@ function QuickAddModal({ existingPlatforms, onClose, onSave }) {
     if (toAdd.length === 0) return;
     setSaving(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/platforms/batch`, {
+      const res = await apiFetch(`/api/platforms/batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -311,10 +312,11 @@ export function Marketplaces() {
   const [showCustom, setShowCustom] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const invalidate = useInvalidate();
 
   const fetchPlatforms = useCallback(async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/platforms`, { credentials: 'include' });
+      const res = await apiFetch(`/api/platforms`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setPlatforms(data.filter(p => p.type === 'Marketplace'));
@@ -331,11 +333,12 @@ export function Marketplaces() {
   const handleDelete = async (id) => {
     if (!window.confirm('Remove this marketplace?')) return;
     try {
-      await fetch(`${import.meta.env.VITE_API_URL}/api/platforms/${id}`, {
+      await apiFetch(`/api/platforms/${id}`, {
         method: 'DELETE',
         credentials: 'include'
       });
       setPlatforms(v => v.filter(x => x.id !== id));
+      invalidate.platforms();
     } catch (err) {
       console.error(err);
     }
@@ -343,10 +346,12 @@ export function Marketplaces() {
 
   const handleSaveNew = (platform) => {
     setPlatforms(v => [...v, platform]);
+    invalidate.platforms();
   };
 
   const handleBatchSave = (newPlatforms) => {
     setPlatforms(v => [...v, ...newPlatforms]);
+    invalidate.platforms();
   };
 
   return (

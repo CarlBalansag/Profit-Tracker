@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useDashboard } from '../hooks/useApi';
+import { PageLoader } from '../components/PageLoader';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -127,28 +129,11 @@ const Dashboard = () => {
   const isGlass = preferences.style === 'glassmorphism-brown';
   const [dateFilter, setDateFilter] = useState(settings.defaultDateFilter || '30 Days');
   const [modeFilter, setModeFilter] = useState('All');
-  const [data, setData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
 
-  useEffect(() => {
-    const fetchAnalytics = async () => {
-      setIsLoading(true);
-      try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/analytics/dashboard?mode=${modeFilter}&date=${encodeURIComponent(dateFilter)}`, { credentials: 'include' });
-        if (res.ok) {
-          setData(await res.json());
-          setLastUpdated(new Date());
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchAnalytics();
-  }, [user, modeFilter, dateFilter]);
+  const { data, isLoading } = useDashboard(modeFilter, dateFilter);
+  useEffect(() => { if (data) setLastUpdated(new Date()); }, [data]);
 
   const recent = data?.recentTransactions || [];
   const stats = normalizeDashboardStats(data?.stats, recent);
@@ -396,25 +381,24 @@ const Dashboard = () => {
                         if (column.id === 'sale') return <td key={column.id} className={isGlass ? "py-3 px-4 text-green-400" : "py-3 px-4 tabular-nums text-[var(--text-primary)]"}>${(txn.revenue ?? 0).toFixed(2)}</td>;
                         if (column.id === 'status') {
                           const statusColorMap = {
-                            PURCHASED: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-                            'ON HAND': 'bg-teal-500/10 text-teal-400 border-teal-500/20',
-                            SHIPPED: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-                            DELIVERED: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
-                            SCANNED_IN: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
-                            LISTED: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-                            SOLD: 'bg-green-500/10 text-green-400 border-green-500/20',
-                            PAID: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-                            COMPLETED: 'bg-teal-500/10 text-teal-400 border-teal-500/20',
-                            RETURNED: 'bg-red-500/10 text-red-400 border-red-500/20',
-                            DISPUTED: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-                            CANCELLED: 'bg-gray-500/10 text-gray-400 border-gray-500/20',
-                            PENDING_PAYMENT: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-                            IN_TRANSIT_OUT: 'bg-sky-500/10 text-sky-400 border-sky-500/20',
+                            PURCHASED:      'bg-blue-500/10 text-blue-400 border-blue-500/20',
+                            'ON HAND':      'bg-teal-500/10 text-teal-400 border-teal-500/20',
+                            SHIPPED_IN:     'bg-purple-500/10 text-purple-400 border-purple-500/20',
+                            SHIPPED_OUT:    'bg-sky-500/10 text-sky-400 border-sky-500/20',
+                            DELIVERED:      'bg-orange-500/10 text-orange-400 border-orange-500/20',
+                            SCANNED_IN:     'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+                            LISTED:         'bg-amber-500/10 text-amber-400 border-amber-500/20',
+                            SOLD:           'bg-green-500/10 text-green-400 border-green-500/20',
                             AUTHENTICATION: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
+                            PAID:           'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+                            COMPLETED:      'bg-teal-500/10 text-teal-400 border-teal-500/20',
+                            RETURNED:       'bg-red-500/10 text-red-400 border-red-500/20',
+                            DISPUTED:       'bg-rose-500/10 text-rose-400 border-rose-500/20',
+                            CANCELLED:      'bg-gray-500/10 text-gray-400 border-gray-500/20',
                           };
                           const st = (txn.status || 'SOLD').toUpperCase();
                           const cls = statusColorMap[st] || statusColorMap.SOLD;
-                          const carbonStatusClass = st === 'SHIPPED'
+                          const carbonStatusClass = st === 'SHIPPED_IN'
                             ? 'bg-[var(--accent-bg)] text-[var(--accent-soft)]'
                             : 'bg-[var(--green-bg)] text-[var(--green-soft)]';
                           return (
@@ -757,6 +741,8 @@ const Dashboard = () => {
       </div>
     );
   }
+
+  if (isLoading) return <PageLoader variant="dashboard" />;
 
   return (
     <div className={isGlass
@@ -1104,7 +1090,7 @@ function PipelineCard({ icon, count, label, statusKey, modeFilter, dateFilter, o
   const isGlass = uiStyle === 'glassmorphism-brown';
   const IconComponent = icon;
   const isEmpty = Number(count) === 0;
-  const isAccentStatus = ['PURCHASED', 'SHIPPED', 'On Hand'].includes(statusKey);
+  const isAccentStatus = ['PURCHASED', 'SHIPPED_IN', 'On Hand'].includes(statusKey);
   const isYellowStatus = statusKey === 'Pre Order';
   const isCompleted = statusKey === 'COMPLETED';
   const carbonBorder = isCompleted

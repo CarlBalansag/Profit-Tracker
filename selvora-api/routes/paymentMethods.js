@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../prisma');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -15,19 +14,19 @@ const parseRates = (method) => ({
 });
 
 // GET all payment methods for the authenticated user
-router.get('/', isAuthenticated, async (req, res) => {
+router.get('/', isAuthenticated, async (req, res, next) => {
   try {
     const methods = await prisma.paymentMethod.findMany({
       where: { user_id: req.user.id }
     });
     res.json(methods.map(parseRates));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST new payment method
-router.post('/', isAuthenticated, async (req, res) => {
+router.post('/', isAuthenticated, async (req, res, next) => {
   try {
     const { name, type, default_cashback_rate, preset_card_id, category_rates } = req.body;
     const method = await prisma.paymentMethod.create({
@@ -42,12 +41,12 @@ router.post('/', isAuthenticated, async (req, res) => {
     });
     res.json(parseRates(method));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // UPDATE payment method
-router.put('/:id', isAuthenticated, async (req, res) => {
+router.put('/:id', isAuthenticated, async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name, type, default_cashback_rate, preset_card_id, category_rates } = req.body;
@@ -71,12 +70,12 @@ router.put('/:id', isAuthenticated, async (req, res) => {
     });
     res.json(parseRates(updated));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // DELETE payment method
-router.delete('/:id', isAuthenticated, async (req, res) => {
+router.delete('/:id', isAuthenticated, async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -88,7 +87,7 @@ router.delete('/:id', isAuthenticated, async (req, res) => {
     await prisma.paymentMethod.delete({ where: { id } });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

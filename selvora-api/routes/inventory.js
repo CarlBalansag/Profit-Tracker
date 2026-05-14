@@ -1,35 +1,54 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../prisma');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
   res.status(401).json({ message: 'Unauthorized' });
 };
 
+// Parse a YYYY-MM-DD string as local noon to avoid UTC midnight timezone shifts
+const parseLocalDate = (str) => {
+  if (!str) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return new Date(str + 'T12:00:00.000Z');
+  return new Date(str);
+};
+
 // GET all inventory items for current user
-router.get('/', isAuthenticated, async (req, res) => {
+router.get('/', isAuthenticated, async (req, res, next) => {
   try {
     const items = await prisma.inventory.findMany({
       where: { user_id: req.user.id },
-      include: { 
-        vendor: true, 
-        payment_method: true,
+      select: {
+        id: true, product_name: true, category: true, status: true,
+        purchase_date: true, received_date: true,
+        unit_purchase_cost: true, qty_purchased: true, qty_on_hand: true,
+        sales_tax: true, shipping_cost_inbound: true, fees: true,
+        cashback_earned: true, gift_card_amount: true,
+        order_number: true, tracking_number: true, receipt_url: true,
+        tax_exempt: true,
+        vendor: { select: { id: true, name: true, type: true } },
+        payment_method: { select: { id: true, name: true, type: true, default_cashback_rate: true, preset_card_id: true, category_rates: true } },
         sales: {
-          include: { platform: true, buyer: true }
-        }
+          select: {
+            id: true, quantity: true, unit_price: true, commission_fee: true,
+            sale_shipping: true, sale_date: true, payout_date: true, status: true,
+            taxable: true, sale_tax_collected: true, customer_tax_exempt: true, exemption_type: true,
+            platform: { select: { id: true, name: true, type: true, tax_exempt_place: true } },
+            buyer: { select: { id: true, name: true } },
+          }
+        },
       },
       orderBy: { purchase_date: 'desc' }
     });
     res.json(items);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST new inventory explicitly
-router.post('/', isAuthenticated, async (req, res) => {
+router.post('/', isAuthenticated, async (req, res, next) => {
   try {
     const {
       product_name,
@@ -45,6 +64,7 @@ router.post('/', isAuthenticated, async (req, res) => {
       order_number,
       tracking_number,
       category,
+      tax_exempt,
       // optional direct sale posting
       sale_price,
       payout_date,
@@ -70,7 +90,7 @@ router.post('/', isAuthenticated, async (req, res) => {
         product_name,
         vendor_id: vendor_id || null,
         payment_method_id: payment_method_id || null,
-        purchase_date: new Date(purchase_date || Date.now()),
+        purchase_date: parseLocalDate(purchase_date) || new Date(),
         unit_purchase_cost: parseFloat(unit_purchase_cost) || 0,
         qty_purchased: qty,
         qty_on_hand: qty, // Initialize to purchased qty
@@ -81,7 +101,8 @@ router.post('/', isAuthenticated, async (req, res) => {
         order_number: order_number || null,
         tracking_number: tracking_number || null,
         cashback_earned: 0, // Calculated at query time from payment method rates
-        category: category || null
+        category: category || null,
+        tax_exempt: tax_exempt === true || tax_exempt === 'true'
       }
     });
 
@@ -98,8 +119,8 @@ router.post('/', isAuthenticated, async (req, res) => {
                 quantity: saleQty,
                 unit_price: parseFloat(sale_price),
                 commission_fee: parseFloat(commission_fee) || 0,
-                sale_date: new Date(sale_date || purchase_date || Date.now()),
-                payout_date: payout_date ? new Date(payout_date) : null,
+                sale_date: parseLocalDate(sale_date || purchase_date) || new Date(),
+                payout_date: payout_date ? parseLocalDate(payout_date) : null,
                 status: status || 'SOLD'
             }
         });
@@ -111,12 +132,12 @@ router.post('/', isAuthenticated, async (req, res) => {
 
     res.json(inventory);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET single inventory item by id
-router.get('/:id', isAuthenticated, async (req, res) => {
+router.get('/:id', isAuthenticated, async (req, res, next) => {
   try {
     const item = await prisma.inventory.findUnique({
       where: { id: req.params.id },
@@ -131,12 +152,12 @@ router.get('/:id', isAuthenticated, async (req, res) => {
     if (!item || item.user_id !== req.user.id) return res.status(404).json({ error: 'Not found' });
     res.json(item);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PUT - update an inventory record
-router.put('/:id', isAuthenticated, async (req, res) => {
+router.put('/:id', isAuthenticated, async (req, res, next) => {
   try {
     const existing = await prisma.inventory.findUnique({ where: { id: req.params.id } });
     if (!existing || existing.user_id !== req.user.id) return res.status(404).json({ error: 'Not found' });
@@ -158,6 +179,7 @@ router.put('/:id', isAuthenticated, async (req, res) => {
       vendor_id,
       payment_method_id,
       purchase_date,
+      tax_exempt,
     } = req.body;
 
     const data = {};
@@ -181,7 +203,8 @@ router.put('/:id', isAuthenticated, async (req, res) => {
     if (category !== undefined)              data.category = category || null;
     if (vendor_id !== undefined)             data.vendor_id = vendor_id || null;
     if (payment_method_id !== undefined)     data.payment_method_id = payment_method_id || null;
-    if (purchase_date !== undefined)         data.purchase_date = new Date(purchase_date);
+    if (purchase_date !== undefined)         data.purchase_date = parseLocalDate(purchase_date);
+    if (tax_exempt !== undefined)            data.tax_exempt = tax_exempt === true || tax_exempt === 'true';
 
     const updated = await prisma.inventory.update({
       where: { id: req.params.id },
@@ -190,12 +213,12 @@ router.put('/:id', isAuthenticated, async (req, res) => {
     });
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // DELETE an inventory item (and cascade-delete any linked sales)
-router.delete('/:id', isAuthenticated, async (req, res) => {
+router.delete('/:id', isAuthenticated, async (req, res, next) => {
   try {
     const existing = await prisma.inventory.findUnique({ where: { id: req.params.id } });
     if (!existing || existing.user_id !== req.user.id) {
@@ -211,7 +234,7 @@ router.delete('/:id', isAuthenticated, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('DELETE inventory error:', err);
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

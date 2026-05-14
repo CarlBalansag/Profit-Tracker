@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { apiFetch } from '../hooks/useApi';
 import {
   DollarSign, ShoppingCart, TrendingUp, Percent, Gift,
   CreditCard, Store, Package, BarChart2, Download, RotateCcw,
@@ -49,7 +50,7 @@ function Analytics() {
     setLoading(true);
     try {
       const params = new URLSearchParams({ mode, date: dateRange });
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/analytics/dashboard?${params}`, { credentials: 'include' });
+      const res = await apiFetch(`/api/analytics/dashboard?${params}`, { credentials: 'include' });
       if (res.ok) setData(await res.json());
     } catch (err) {
       console.error(err);

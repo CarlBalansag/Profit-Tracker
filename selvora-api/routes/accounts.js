@@ -1,75 +1,93 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../prisma');
 
-const prisma = new PrismaClient();
+const isAuthenticated = (req, res, next) => {
+  if (req.isAuthenticated()) return next();
+  res.status(401).json({ message: 'Unauthorized' });
+};
 
 // CREATE: Add a new account
-router.post('/', async (req, res) => {
+router.post('/', isAuthenticated, async (req, res, next) => {
   try {
     const { platform_id, name, email, username, status, notes } = req.body;
-    
+
     if (!platform_id || !name) {
-      return res.status(400).send('Platform ID and Account Name are required');
+      return res.status(400).json({ error: 'Platform ID and Account Name are required' });
     }
 
     const account = await prisma.account.create({
       data: {
+        user_id: req.user.id,
         platform_id,
         name,
-        email,
-        username,
-        status,
-        notes
+        email:    email    || null,
+        username: username || null,
+        status:   status   || 'Active',
+        notes:    notes    || null,
       }
     });
 
     res.status(201).json(account);
   } catch (error) {
     console.error('Error creating account:', error);
-    res.status(500).send('Internal Server Error');
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
-// READ: Get all accounts (mostly for debugging, normally you'd fetch via platform)
-router.get('/', async (req, res) => {
+// READ: Get all accounts for the authenticated user
+router.get('/', isAuthenticated, async (req, res, next) => {
   try {
     const accounts = await prisma.account.findMany({
-      include: {
-        platform: true
-      }
+      where: { user_id: req.user.id },
+      include: { platform: true },
     });
     res.json(accounts);
   } catch (error) {
     console.error('Error fetching accounts:', error);
-    res.status(500).send('Internal Server Error');
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
 // UPDATE: Edit an account
-router.put('/:id', async (req, res) => {
+router.put('/:id', isAuthenticated, async (req, res, next) => {
   try {
+    const existing = await prisma.account.findUnique({ where: { id: req.params.id } });
+    if (!existing || existing.user_id !== req.user.id) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    const { name, email, username, status, notes } = req.body;
     const account = await prisma.account.update({
       where: { id: req.params.id },
-      data: req.body
+      data: {
+        name:     name     ?? existing.name,
+        email:    email    ?? existing.email,
+        username: username ?? existing.username,
+        status:   status   ?? existing.status,
+        notes:    notes    ?? existing.notes,
+      }
     });
     res.json(account);
   } catch (error) {
     console.error('Error updating account:', error);
-    res.status(500).send('Internal Server Error');
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
 // DELETE: Remove an account
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', isAuthenticated, async (req, res, next) => {
   try {
-    await prisma.account.delete({
-      where: { id: req.params.id }
-    });
+    const existing = await prisma.account.findUnique({ where: { id: req.params.id } });
+    if (!existing || existing.user_id !== req.user.id) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    await prisma.account.delete({ where: { id: req.params.id } });
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting account:', error);
-    res.status(500).send('Internal Server Error');
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 

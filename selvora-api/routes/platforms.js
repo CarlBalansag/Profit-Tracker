@@ -1,32 +1,33 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../prisma');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
   res.status(401).json({ message: 'Unauthorized' });
 };
 
-// GET /api/platforms
-router.get('/', isAuthenticated, async (req, res) => {
+// GET /api/platforms — only returns platforms belonging to the authenticated user
+router.get('/', isAuthenticated, async (req, res, next) => {
   try {
-    const platforms = await prisma.platform.findMany({ 
+    const platforms = await prisma.platform.findMany({
+      where: { user_id: req.user.id },
       orderBy: { name: 'asc' },
       include: { accounts: true }
     });
     res.json(platforms);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /api/platforms - single create
-router.post('/', isAuthenticated, async (req, res) => {
+router.post('/', isAuthenticated, async (req, res, next) => {
   try {
     const { name, type, fee_pct, address, notes } = req.body;
     const platform = await prisma.platform.create({
       data: {
+        user_id: req.user.id,
         name,
         type: type || 'retail',
         fee_pct: parseFloat(fee_pct) || 0,
@@ -36,14 +37,14 @@ router.post('/', isAuthenticated, async (req, res) => {
     });
     res.json(platform);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /api/platforms/batch - bulk create
-router.post('/batch', isAuthenticated, async (req, res) => {
+router.post('/batch', isAuthenticated, async (req, res, next) => {
   try {
-    const { vendors } = req.body; // array of { name, type, category }
+    const { vendors } = req.body;
     if (!Array.isArray(vendors) || vendors.length === 0) {
       return res.status(400).json({ error: 'vendors array required' });
     }
@@ -53,6 +54,7 @@ router.post('/batch', isAuthenticated, async (req, res) => {
           where: { id: v.id || '' },
           update: {},
           create: {
+            user_id: req.user.id,
             name: v.name,
             type: v.type || 'retail',
             fee_pct: 0,
@@ -63,37 +65,69 @@ router.post('/batch', isAuthenticated, async (req, res) => {
     );
     res.json(created);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-// PUT /api/platforms/:id - update vendor
-router.put('/:id', isAuthenticated, async (req, res) => {
+// PUT /api/platforms/:id - update (ownership enforced)
+router.put('/:id', isAuthenticated, async (req, res, next) => {
   try {
-    const { name, type, fee_pct, address, notes } = req.body;
-    const updated = await prisma.platform.update({
-      where: { id: req.params.id },
-      data: {
-        name,
-        type,
-        fee_pct: parseFloat(fee_pct) || 0,
-        address: address || null,
-        notes: notes || null
+    const existing = await prisma.platform.findUnique({ where: { id: req.params.id } });
+    if (!existing || existing.user_id !== req.user.id) {
+      return res.status(404).json({ error: 'Platform not found' });
+    }
+
+    const { name, type, fee_pct, address, notes, tax_exempt_place } = req.body;
+
+    const newTaxExempt = tax_exempt_place !== undefined
+      ? (tax_exempt_place === true || tax_exempt_place === 'true')
+      : existing.tax_exempt_place;
+
+    const [updated, bulkResult] = await prisma.$transaction(async (tx) => {
+      const p = await tx.platform.update({
+        where: { id: req.params.id },
+        data: {
+          name,
+          type,
+          fee_pct: parseFloat(fee_pct) || 0,
+          address: address || null,
+          notes: notes || null,
+          tax_exempt_place: newTaxExempt,
+        }
+      });
+
+      // Bulk-update all sales for this platform when tax_exempt_place changes
+      let bulk = { count: 0 };
+      if (tax_exempt_place !== undefined && newTaxExempt !== existing.tax_exempt_place) {
+        bulk = await tx.sales.updateMany({
+          where: { platform_id: req.params.id },
+          data: newTaxExempt
+            ? { taxable: false, customer_tax_exempt: true, exemption_type: 'Resale' }
+            : { taxable: true, customer_tax_exempt: false, exemption_type: null },
+        });
       }
+
+      return [p, bulk];
     });
-    res.json(updated);
+
+    res.json({ ...updated, _salesUpdated: bulkResult.count });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-// DELETE /api/platforms/:id
-router.delete('/:id', isAuthenticated, async (req, res) => {
+// DELETE /api/platforms/:id (ownership enforced)
+router.delete('/:id', isAuthenticated, async (req, res, next) => {
   try {
+    const existing = await prisma.platform.findUnique({ where: { id: req.params.id } });
+    if (!existing || existing.user_id !== req.user.id) {
+      return res.status(404).json({ error: 'Platform not found' });
+    }
+
     await prisma.platform.delete({ where: { id: req.params.id } });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

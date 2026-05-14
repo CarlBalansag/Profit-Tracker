@@ -1,32 +1,21 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
+import { useDashboard, useInvalidate } from '../hooks/useApi';
+import { PageLoader } from '../components/PageLoader';
 import { DollarSign, ArrowRight, Bell, ChevronRight, ChevronDown, RotateCcw } from 'lucide-react';
 
 function fmt(n) {
   return (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-const UNPAID_STATUSES = new Set(['SOLD', 'IN_TRANSIT_OUT', 'AUTHENTICATION', 'PENDING_PAYMENT', 'DELIVERED', 'SCANNED_IN']);
+const UNPAID_STATUSES = new Set(['SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'DELIVERED', 'SCANNED_IN']);
 const PAID_STATUSES   = new Set(['PAID', 'COMPLETED']);
 
 function CashFlow() {
   const [includeCashback, setIncludeCashback] = useState(false);
   const [expandedBuyer, setExpandedBuyer]     = useState(null);
-  const [data, setData]                       = useState(null);
-  const [loading, setLoading]                 = useState(true);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/analytics/dashboard?mode=All&date=All Time`, { credentials: 'include' });
-      if (res.ok) setData(await res.json());
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const { data, isLoading: loading, refetch } = useDashboard('All', 'All Time');
+  const invalidate = useInvalidate();
 
   const s      = data?.stats ?? {};
   const txns   = data?.recentTransactions ?? [];
@@ -47,10 +36,10 @@ function CashFlow() {
   const comingBack = soldRevenue + (includeCashback ? (s.totalCashback ?? 0) : 0);
 
   // Pipeline counts for the progress bar
-  const inTransitCount = (pipeline['PURCHASED'] ?? 0) + (pipeline['SHIPPED'] ?? 0) +
+  const inTransitCount = (pipeline['PURCHASED'] ?? 0) + (pipeline['SHIPPED_IN'] ?? 0) +
     (pipeline['DELIVERED'] ?? 0) + (pipeline['SCANNED_IN'] ?? 0) +
-    (pipeline['LISTED'] ?? 0) + (pipeline['In Transit Out'] ?? 0) +
-    (pipeline['IN_TRANSIT_OUT'] ?? 0) + (pipeline['AUTHENTICATION'] ?? 0);
+    (pipeline['LISTED'] ?? 0) + (pipeline['SHIPPED_OUT'] ?? 0) +
+    (pipeline['AUTHENTICATION'] ?? 0);
   const soldCount = (pipeline['SOLD'] ?? 0) + (pipeline['PAID'] ?? 0) + (pipeline['COMPLETED'] ?? 0);
   const totalPipelineUnits = inTransitCount + soldCount || 1;
   const inTransitPct = Math.round((inTransitCount / totalPipelineUnits) * 100);
@@ -74,6 +63,8 @@ function CashFlow() {
 
   const toggleBuyer = (name) => setExpandedBuyer(expandedBuyer === name ? null : name);
 
+  if (loading) return <PageLoader variant="generic" />;
+
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-10 px-4 py-6">
       {/* Header */}
@@ -83,7 +74,7 @@ function CashFlow() {
           <p className="text-sm text-gray-400 mt-1">See where your money is and what's coming back</p>
         </div>
         <button
-          onClick={fetchData}
+          onClick={refetch}
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-800 text-white hover:bg-gray-700 text-sm font-medium transition-colors"
         >
           <RotateCcw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
@@ -183,15 +174,11 @@ function CashFlow() {
       <div className="space-y-4">
         <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">By Buyer</h3>
 
-        {loading && (
-          <div className="rounded-xl border border-gray-800 bg-[#12121A] p-6 text-center text-gray-600 text-sm">Loading…</div>
-        )}
-
-        {!loading && buyers.length === 0 && (
+        {buyers.length === 0 && (
           <div className="rounded-xl border border-gray-800 bg-[#12121A] p-6 text-center text-gray-600 text-sm">No sales data yet.</div>
         )}
 
-        {!loading && buyers.length > 0 && (
+        {buyers.length > 0 && (
           <div className="border border-gray-800 bg-[#12121A] rounded-xl overflow-hidden divide-y divide-gray-800">
             {buyers.map(buyer => (
               <div key={buyer.name} className="group">

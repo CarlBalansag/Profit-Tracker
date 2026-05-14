@@ -1,9 +1,9 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { 
+import {
   LayoutDashboard, CirclePlus, ArrowLeftRight, Package,
   Receipt, FileText, ChartColumn, Wallet,
-  Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, DollarSign
+  Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, DollarSign, ShieldCheck
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useState } from 'react';
@@ -106,6 +106,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <NavItem icon={Package} label="Inventory On Hand" to="/inventory" isCollapsed={isCollapsed} />
             <NavItem icon={Receipt} label="Expenses" to="/expenses" isCollapsed={isCollapsed} />
             <NavItem icon={FileText} label="Receipts" to="/receipts" isCollapsed={isCollapsed} />
+            <NavItem icon={ShieldCheck} label="Tax Exempt" to="/tax-exempt" isCollapsed={isCollapsed} />
           </SidebarSection>
 
           <SidebarSection title="Insights" isCollapsed={isCollapsed}>

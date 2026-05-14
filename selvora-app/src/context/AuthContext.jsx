@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { apiFetch } from '../hooks/useApi';
 
 const AuthContext = createContext();
 
@@ -11,9 +12,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/me`, {
-          credentials: 'include'
-        });
+        const response = await apiFetch('/auth/me');
         if (response.ok) {
           const userData = await response.json();
           setUser(userData);
