@@ -1,0 +1,69 @@
+Option 3: Just tell me at the start of next session
+Say "we added X yesterday, log it in Changes.txt first". I can read the recent git log (git log --oneline) and the diff to reconstruct what changed and write the entry. This is the most practical approach since git already tracks everything.
+
+Option 4: Use git commit messages as the source of truth
+Keep the commit messages detailed (we already do this) and treat Changes.txt as a human-readable summary you update periodically rather than after every change. Run git log --oneline to see what's been done and I'll translate it into a Changes.txt entry on demand.
+
+# CHANGES LOG
+# Format: [DATE] - [FILE(S)] - [WHAT WAS DONE] - [WHY]
+# Use this to track every meaningful addition or change for debugging and git reference.
+
+---
+
+## 2026-05-07 — Security Hardening + Auth Fix
+
+### selvora-api/index.js
+- Removed hardcoded session secret fallback (`|| 'profit_tracker_secret_key'`). Server now exits on startup if SESSION_SECRET is not set.
+- Added CSRF middleware using custom header pattern (`X-Requested-With: XMLHttpRequest`). All non-GET/HEAD/OPTIONS requests must include this header or receive 403.
+- Added central Express error handler at bottom. Returns sanitized "Internal Server Error" in production, full error message in dev only.
+
+### selvora-api/routes/accounts.js
+- Added `isAuthenticated` middleware to all 4 routes (GET, POST, PUT, DELETE). Previously completely unprotected.
+- Scoped all queries to `req.user.id`.
+- PUT and DELETE now verify ownership (`existing.user_id !== req.user.id`) before acting to prevent IDOR.
+- Replaced `data: req.body` with explicit field destructuring to prevent mass-assignment.
+
+### selvora-api/routes/platforms.js
+- Scoped GET to `where: { user_id: req.user.id }`.
+- POST and batch import set `user_id: req.user.id` on create.
+- PUT and DELETE verify ownership before acting to prevent IDOR.
+
+### selvora-api/routes/receipts.js
+- Added server-side MIME type validation against allowlist (jpeg, png, webp, gif, pdf) before Cloudinary upload.
+- Added server-side 5MB size check from base64 string length.
+
+### selvora-api/routes/*.js (all 10 route files)
+- All async handlers changed from `(req, res)` to `(req, res, next)`.
+- All `res.status(500).json({ error: err.message })` replaced with `next(err)` to use central error handler.
+
+### selvora-api/prisma/schema.prisma
+- Added `user_id` field, `User` relation, and `@@index([user_id])` to both `Platform` and `Account` models.
+- Added `accounts` and `platforms` back-relations to `User` model.
+
+### selvora-api/prisma/migrations/
+- `20260507090000_reconcile_drift` — baseline migration reconciling columns added outside migration history (tax_exempt, taxable, sale_shipping, etc.). Marked applied via `migrate resolve --applied` without running.
+- `20260507090001_add_user_id_to_platform_and_account` — adds user_id FK to Platform and Account with safe backfill, NOT NULL enforcement, FK constraint, and index. Applied to production Neon DB via `migrate deploy`.
+
+### selvora-api/prisma.js (NEW FILE)
+- Prisma singleton — single shared PrismaClient instance via require() cache to avoid 11 separate connection pools.
+
+### selvora-app/src/hooks/useApi.js (NEW FILE)
+- Central fetch helper `apiFetch` that auto-injects `X-Requested-With: XMLHttpRequest` header and `credentials: 'include'` on every request.
+- React Query hooks: `useInventory`, `useSales`, `usePlatforms`, `usePaymentMethods`, `useDashboard`, `useExpenses`.
+- `useInvalidate()` hook for cache invalidation after mutations.
+
+### selvora-app/src/context/AuthContext.jsx
+- Fixed double-URL bug: `apiFetch('/auth/me')` instead of passing the full VITE_API_URL as argument. This was causing login redirect loop for new users.
+
+### selvora-app/src/pages/*.jsx + components/*.jsx (15 files)
+- All `fetch(\`` calls replaced with `apiFetch(\``.
+- All `${import.meta.env.VITE_API_URL}` prefixes stripped from inside apiFetch call arguments (43 total replacements).
+- Files: Analytics.jsx, AddTransaction.jsx, Receipts.jsx, AddSale.jsx, Expenses.jsx, Transactions.jsx, TaxExempt.jsx, TransactionDetailModal.jsx, Accounts.jsx, Cashouts.jsx, PaymentMethods.jsx, Marketplaces.jsx, Vendors.jsx, AuthContext.jsx, useDashboardSettings.js
+
+---
+
+## [DATE] — [FEATURE/FIX NAME]
+
+### [file or folder]
+- [what changed]
+- [why it was changed]
