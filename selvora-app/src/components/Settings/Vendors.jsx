@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Store, Plus, Search, X, Edit2, Trash2, 
+import {
+  Store, Plus, Search, X, Edit2, Trash2,
   ChevronDown, Check
 } from 'lucide-react';
+import { useInvalidate, apiFetch} from '../../hooks/useApi';
 
 // ─── Quick Add Store Directory ────────────────────────────────────────────────
 const QUICK_ADD_STORES = [
@@ -179,7 +180,7 @@ function CustomModal({ onClose, onSave }) {
     if (!form.name.trim()) return;
     setSaving(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/platforms`, {
+      const res = await apiFetch(`/api/platforms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -297,7 +298,7 @@ function QuickAddModal({ existingVendors, onClose, onSave }) {
     if (toAdd.length === 0) return;
     setSaving(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/platforms/batch`, {
+      const res = await apiFetch(`/api/platforms/batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -407,10 +408,11 @@ export function Vendors() {
   const [showCustom, setShowCustom] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const invalidate = useInvalidate();
 
   const fetchVendors = useCallback(async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/platforms`, { credentials: 'include' });
+      const res = await apiFetch(`/api/platforms`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setVendors(data.filter(p => p.type === 'Vendor'));
@@ -427,11 +429,12 @@ export function Vendors() {
   const handleDelete = async (id) => {
     if (!window.confirm('Remove this vendor?')) return;
     try {
-      await fetch(`${import.meta.env.VITE_API_URL}/api/platforms/${id}`, {
+      await apiFetch(`/api/platforms/${id}`, {
         method: 'DELETE',
         credentials: 'include'
       });
       setVendors(v => v.filter(x => x.id !== id));
+      invalidate.platforms();
     } catch (err) {
       console.error(err);
     }
@@ -439,10 +442,12 @@ export function Vendors() {
 
   const handleSaveNew = (vendor) => {
     setVendors(v => [...v, vendor]);
+    invalidate.platforms();
   };
 
   const handleBatchSave = (newVendors) => {
     setVendors(v => [...v, ...newVendors]);
+    invalidate.platforms();
   };
 
   return (

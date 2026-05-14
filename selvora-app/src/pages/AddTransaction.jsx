@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import { 
+import {
   Package, ShoppingCart, Truck, CreditCard, DollarSign, Plus,
   Paperclip, X, Hash, MapPin, ChevronDown, CheckCircle2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { usePaymentMethods, usePlatforms, useInvalidate, apiFetch} from '../hooks/useApi';
 
 // ── Stable module-level components (MUST be outside the component to avoid focus loss) ──
 const Field = ({ label, children }) => (
@@ -34,6 +35,7 @@ const AddTransaction = () => {
     sales_tax: '',
     shipping_cost_inbound: '',
     fees: '',
+    tax_exempt: false,
     vendor_id: '',
     payment_method_id: '',
     status: 'PURCHASED',
@@ -41,6 +43,12 @@ const AddTransaction = () => {
     tracking_number: '',
     sale_price: '',
     payout_date: '',
+    sale_shipping: '',
+    sale_fees: '',
+    taxable: true,
+    sale_tax_collected: '',
+    customer_tax_exempt: false,
+    exemption_type: '',
     gift_card_amount: '',
     cashback_include_tax: true,
     cashback_include_shipping: true,
@@ -68,10 +76,10 @@ const AddTransaction = () => {
   const [formData, setFormData] = useState(saved?.form ?? defaultForm);
   const [itemSold, setItemSold] = useState(false);
 
-  const [paymentMethods, setPaymentMethods] = useState([]);
-  const [platforms, setPlatforms] = useState([]);
+  const { data: paymentMethods = [] } = usePaymentMethods();
+  const { data: platforms = [] } = usePlatforms();
+  const invalidate = useInvalidate();
   const [attachedFiles, setAttachedFiles] = useState([]);
-  const [showCashbackProfit, setShowCashbackProfit] = useState(false);
 
   // Auto-save draft to localStorage on every change
   useEffect(() => {
@@ -79,22 +87,6 @@ const AddTransaction = () => {
       localStorage.setItem(DRAFT_KEY, JSON.stringify({ data: formData, ts: Date.now() }));
     } catch { /* ignore */ }
   }, [formData]);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [payRes, platRes] = await Promise.all([
-          fetch(`${import.meta.env.VITE_API_URL}/api/payment-methods`, { credentials: 'include' }),
-          fetch(`${import.meta.env.VITE_API_URL}/api/platforms`, { credentials: 'include' })
-        ]);
-        if (payRes.ok) setPaymentMethods(await payRes.json());
-        if (platRes.ok) setPlatforms(await platRes.json());
-      } catch (err) {
-        console.error('Error fetching form data:', err);
-      }
-    };
-    fetchData();
-  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -126,7 +118,7 @@ const AddTransaction = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const submitPromise = fetch(`${import.meta.env.VITE_API_URL}/api/inventory`, {
+    const submitPromise = apiFetch(`/api/inventory`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -143,6 +135,8 @@ const AddTransaction = () => {
       loading: 'Saving transaction...',
       success: () => {
         localStorage.removeItem(DRAFT_KEY);
+        invalidate.inventory();
+        invalidate.dashboard();
         setTimeout(() => navigate('/transactions'), 800);
         return 'Transaction added successfully!';
       },
@@ -360,6 +354,16 @@ const AddTransaction = () => {
                 <Field label="Shipping Cost">{dollarInput('shipping_cost_inbound', '0.00', 'blue')}</Field>
                 <Field label="Fees">{dollarInput('fees', '0.00', 'blue')}</Field>
               </div>
+
+              <label className="flex items-center gap-2.5 cursor-pointer select-none w-fit">
+                <input
+                  type="checkbox"
+                  checked={formData.tax_exempt}
+                  onChange={e => setFormData(p => ({ ...p, tax_exempt: e.target.checked }))}
+                  className="w-4 h-4 rounded border-gray-600 accent-blue-500"
+                />
+                <span className="text-sm text-gray-300">Tax Exempt</span>
+              </label>
             </div>
 
             {/* ── Purchase Location ──────────────────────────────────── */}
@@ -388,8 +392,18 @@ const AddTransaction = () => {
                   >
                     <option value="Pre Order">Pre Order</option>
                     <option value="PURCHASED">Purchased</option>
-                    <option value="SHIPPED">Shipped</option>
+                    <option value="SHIPPED_IN">Shipped In</option>
                     <option value="DELIVERED">Delivered</option>
+                    <option value="SCANNED_IN">Scanned In</option>
+                    <option value="LISTED">Listed</option>
+                    <option value="SOLD">Sold</option>
+                    <option value="SHIPPED_OUT">Shipped Out</option>
+                    <option value="AUTHENTICATION">Authentication</option>
+                    <option value="PAID">Paid</option>
+                    <option value="COMPLETED">Completed</option>
+                    <option value="RETURNED">Returned</option>
+                    <option value="DISPUTED">Disputed</option>
+                    <option value="CANCELLED">Cancelled</option>
                   </select>
                 </Field>
               </div>
@@ -678,7 +692,33 @@ const AddTransaction = () => {
                   </Field>
                 </div>
 
-                {/* Sale Date, Payout Date — row 2 */}
+                {/* Sale Shipping, Sale Fees — row 2 */}
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Sale Shipping">
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                      <input
+                        type="number" step="0.01" name="sale_shipping"
+                        value={formData.sale_shipping} onChange={handleChange}
+                        className={`${inputCls('green')} pl-7`}
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </Field>
+                  <Field label="Sale Fees">
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                      <input
+                        type="number" step="0.01" name="sale_fees"
+                        value={formData.sale_fees} onChange={handleChange}
+                        className={`${inputCls('green')} pl-7`}
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </Field>
+                </div>
+
+                {/* Sale Date, Payout Date — row 3 */}
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Sale Date">
                     <input
@@ -695,6 +735,50 @@ const AddTransaction = () => {
                       className={`${inputCls('green')} [color-scheme:dark]`}
                     />
                   </Field>
+                </div>
+
+                {/* Tax Info */}
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Sale Tax Collected">
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                      <input
+                        type="number" step="0.01" name="sale_tax_collected"
+                        value={formData.sale_tax_collected} onChange={handleChange}
+                        className={`${inputCls('green')} pl-7`}
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </Field>
+                  <Field label="Exemption Type">
+                    <input
+                      type="text" name="exemption_type"
+                      value={formData.exemption_type} onChange={handleChange}
+                      className={inputCls('green')}
+                      placeholder="e.g. Resale, Nonprofit..."
+                      disabled={!formData.customer_tax_exempt}
+                    />
+                  </Field>
+                </div>
+                <div className="flex items-center gap-6">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={formData.taxable}
+                      onChange={e => setFormData(p => ({ ...p, taxable: e.target.checked }))}
+                      className="w-4 h-4 rounded border-gray-600 accent-green-500"
+                    />
+                    <span className="text-sm text-gray-300">Taxable Sale</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={formData.customer_tax_exempt}
+                      onChange={e => setFormData(p => ({ ...p, customer_tax_exempt: e.target.checked, exemption_type: e.target.checked ? p.exemption_type : '' }))}
+                      className="w-4 h-4 rounded border-gray-600 accent-green-500"
+                    />
+                    <span className="text-sm text-gray-300">Customer Tax Exempt</span>
+                  </label>
                 </div>
 
                 {/* Per-unit note + mini summary */}
@@ -763,9 +847,9 @@ const AddTransaction = () => {
                   const allocatedShipping = (shipping / qtyPurchased) * qtySold;
                   const allocatedGiftCard = (giftCard / qtyPurchased) * qtySold;
                   const totalUnitCost = (unitCost * qtySold) + allocatedTax + allocatedShipping - allocatedGiftCard;
-                  const profit            = totalSale - totalUnitCost;
-                  const profitWithCB      = profit + cashbackAmount;
-                  const displayProfit     = showCashbackProfit ? profitWithCB : profit;
+                  const saleShipping = parseFloat(formData.sale_shipping) || 0;
+                  const saleFees = parseFloat(formData.sale_fees) || 0;
+                  const profit = totalSale - totalUnitCost - saleShipping - saleFees;
 
                   const Row = ({ label, value, color = 'text-gray-200' }) => (
                     <div className="flex justify-between items-center">
@@ -780,9 +864,6 @@ const AddTransaction = () => {
                       {tax      > 0 && <Row label="Tax"      value={`$${tax.toFixed(2)}`} />}
                       {shipping > 0 && <Row label="Shipping" value={`$${shipping.toFixed(2)}`} />}
                       {fees     > 0 && <Row label="Fees"     value={`$${fees.toFixed(2)}`} />}
-                      {cashbackAmount > 0 && (
-                        <Row label="Cashback" value={`+$${cashbackAmount.toFixed(2)}`} color="text-emerald-400" />
-                      )}
                       {giftCard > 0 && (
                         <Row label="Gift Card" value={`-$${giftCard.toFixed(2)}`} color="text-blue-400" />
                       )}
@@ -798,48 +879,18 @@ const AddTransaction = () => {
                           </div>
 
                           <div className="border-t border-white/[0.06] pt-2 space-y-2">
-                            {/* Profit with cashback toggle button */}
-                            {cashbackAmount > 0 && (
-                              <div className="flex gap-1 p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
-                                <button
-                                  type="button"
-                                  onClick={() => setShowCashbackProfit(false)}
-                                  className={`flex-1 py-1 text-[11px] font-medium rounded transition-colors ${
-                                    !showCashbackProfit
-                                      ? 'bg-white/10 text-white'
-                                      : 'text-gray-500 hover:text-gray-300'
-                                  }`}
-                                >
-                                  Profit
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setShowCashbackProfit(true)}
-                                  className={`flex-1 py-1 text-[11px] font-medium rounded transition-colors ${
-                                    showCashbackProfit
-                                      ? 'bg-emerald-500/20 text-emerald-400'
-                                      : 'text-gray-500 hover:text-gray-300'
-                                  }`}
-                                >
-                                  Profit with Cashback
-                                </button>
-                              </div>
+                            {saleShipping > 0 && (
+                              <Row label="Sale shipping" value={`-$${saleShipping.toFixed(2)}`} color="text-red-400" />
                             )}
-
+                            {saleFees > 0 && (
+                              <Row label="Sale fees" value={`-$${saleFees.toFixed(2)}`} color="text-red-400" />
+                            )}
                             <div className="flex justify-between items-center">
-                              <span className="font-medium text-gray-200">
-                                {showCashbackProfit ? 'Est. Profit + Cashback' : 'Est. Profit'}
-                              </span>
-                              <span className={`font-bold text-base ${displayProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                {displayProfit >= 0 ? '+' : ''}${displayProfit.toFixed(2)}
+                              <span className="font-medium text-gray-200">Est. Profit</span>
+                              <span className={`font-bold text-base ${profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
                               </span>
                             </div>
-
-                            {showCashbackProfit && cashbackAmount > 0 && (
-                              <p className="text-[10px] text-gray-600">
-                                Includes ${cashbackAmount.toFixed(2)} cashback ({cashbackRate}% on ${(cashbackBase).toFixed(2)})
-                              </p>
-                            )}
                           </div>
                         </>
                       )}

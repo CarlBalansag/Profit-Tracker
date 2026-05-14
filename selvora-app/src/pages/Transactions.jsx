@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useInventory, usePlatforms, usePaymentMethods, useInvalidate, apiFetch} from '../hooks/useApi';
+import { PageLoader } from '../components/PageLoader';
 import { toast } from 'sonner';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -28,19 +30,18 @@ export const STATUS_COLORS = {
   'PRE ORDER':     'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
   'ON HAND':       'bg-teal-500/10 text-teal-400 border-teal-500/20',
   PURCHASED:       'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  SHIPPED:         'bg-purple-500/10 text-purple-400 border-purple-500/20',
+  SHIPPED_IN:      'bg-purple-500/10 text-purple-400 border-purple-500/20',
+  SHIPPED_OUT:     'bg-sky-500/10 text-sky-400 border-sky-500/20',
   DELIVERED:       'bg-orange-500/10 text-orange-400 border-orange-500/20',
   SCANNED_IN:      'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
   LISTED:          'bg-amber-500/10 text-amber-400 border-amber-500/20',
   SOLD:            'bg-green-500/10 text-green-400 border-green-500/20',
   PAID:            'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
   COMPLETED:       'bg-teal-500/10 text-teal-400 border-teal-500/20',
+  AUTHENTICATION:  'bg-violet-500/10 text-violet-400 border-violet-500/20',
   RETURNED:        'bg-red-500/10 text-red-400 border-red-500/20',
   DISPUTED:        'bg-rose-500/10 text-rose-400 border-rose-500/20',
   CANCELLED:       'bg-gray-500/10 text-gray-400 border-gray-500/20',
-  PENDING_PAYMENT: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-  IN_TRANSIT_OUT:  'bg-sky-500/10 text-sky-400 border-sky-500/20',
-  AUTHENTICATION:  'bg-violet-500/10 text-violet-400 border-violet-500/20',
 };
 
 function StatusBadge({ status }) {
@@ -68,7 +69,7 @@ function EditSelect({ value, onChange, options, placeholder = 'Select...' }) {
   );
 }
 
-const STATUSES = ['Pre Order', 'On Hand', 'PURCHASED', 'SHIPPED', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'PAID', 'COMPLETED'];
+const STATUSES = ['Pre Order', 'On Hand', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
 
 // ─── Carrier detection ────────────────────────────────────────────────────────
 function detectCarrier(trackingNumber) {
@@ -119,10 +120,10 @@ const Transactions = () => {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [transactions, setTransactions] = useState([]);
-  const [platforms, setPlatforms] = useState([]);
-  const [paymentMethods, setPaymentMethods] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { data: transactions = [], isLoading, refetch: refetchTransactions } = useInventory();
+  const { data: platforms = [] } = usePlatforms();
+  const { data: paymentMethods = [] } = usePaymentMethods();
+  const invalidate = useInvalidate();
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
   const [saving, setSaving] = useState(false);
@@ -188,32 +189,6 @@ const Transactions = () => {
     navMode === 'Cashout' ? 'Cashout' : navMode === 'Marketplace' ? 'Marketplace' : 'All'
   );
 
-  const fetchTransactions = useCallback(async () => {
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/inventory`, { credentials: 'include' });
-      if (res.ok) setTransactions(await res.json());
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const fetchPlatforms = useCallback(async () => {
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/platforms`, { credentials: 'include' });
-      if (res.ok) setPlatforms(await res.json());
-    } catch (err) { console.error(err); }
-  }, []);
-
-  const fetchPaymentMethods = useCallback(async () => {
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/payment-methods`, { credentials: 'include' });
-      if (res.ok) setPaymentMethods(await res.json());
-    } catch (err) { console.error(err); }
-  }, []);
-
-  useEffect(() => { fetchTransactions(); fetchPlatforms(); fetchPaymentMethods(); }, [user, fetchTransactions, fetchPlatforms, fetchPaymentMethods]);
 
   // ─── Dashboard filter toast ───────────────────────────────────────────────────
   // Fires once on mount when the page is opened from a dashboard click with
@@ -254,14 +229,14 @@ const Transactions = () => {
 
   const removeTxn = async (rawId) => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/inventory/${rawId}`, {
+      const res = await apiFetch(`/api/inventory/${rawId}`, {
         method: 'DELETE',
         credentials: 'include'
       });
       if (res.ok) {
         setConfirmDeleteId(null);
         toast.success('Transaction deleted.');
-        await fetchTransactions();
+        await invalidate.inventory();
       } else {
         const err = await res.json();
         console.error('Delete failed:', err);
@@ -314,7 +289,7 @@ const Transactions = () => {
           payout_date: editData.payout_date ? new Date(editData.payout_date).toISOString() : null,
         };
         // payment method and tracking live on inventory, update them separately
-        await fetch(`${import.meta.env.VITE_API_URL}/api/inventory/${editData.rawId}`, {
+        await apiFetch(`/api/inventory/${editData.rawId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -324,7 +299,7 @@ const Transactions = () => {
             tracking_number: editData.tracking_number || null,
           })
         });
-        res = await fetch(`${import.meta.env.VITE_API_URL}/api/sales/${editData.saleId}`, {
+        res = await apiFetch(`/api/sales/${editData.saleId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -347,7 +322,7 @@ const Transactions = () => {
           payment_method_id: editData.paymentMethodId || null,
           tracking_number: editData.tracking_number || null,
         };
-        res = await fetch(`${import.meta.env.VITE_API_URL}/api/inventory/${editData.rawId}`, {
+        res = await apiFetch(`/api/inventory/${editData.rawId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -360,7 +335,7 @@ const Transactions = () => {
         }
         // If user entered a sale price, create a sale record (POST deducts qty_on_hand)
         if (hasSalePrice) {
-          const saleRes = await fetch(`${import.meta.env.VITE_API_URL}/api/sales`, {
+          const saleRes = await apiFetch(`/api/sales`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -380,7 +355,7 @@ const Transactions = () => {
             return;
           }
         }
-        await fetchTransactions();
+        await invalidate.inventory();
         toast.success('Transaction saved.');
         setEditingId(null);
         return;
@@ -390,7 +365,7 @@ const Transactions = () => {
         toast.error('Save failed: ' + (resJson.error || res.status));
         return;
       }
-      await fetchTransactions();
+      await invalidate.inventory();
       toast.success('Transaction saved.');
       setEditingId(null);
     } catch (err) {
@@ -595,6 +570,8 @@ const Transactions = () => {
   ).values()];
 
   // ─── Render ─────────────────────────────────────────────────────────────────
+  if (isLoading) return <PageLoader variant="table" />;
+
   return (
     <>
     <div className="container max-w-full mx-auto px-4 py-6 lg:px-8 lg:py-8 h-full overflow-y-auto">
@@ -853,7 +830,7 @@ const Transactions = () => {
                   const row = filteredRows.find(r => r.id === id);
                   if (!row) continue;
                   try {
-                    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/inventory/${row.rawId}`, {
+                    const res = await apiFetch(`/api/inventory/${row.rawId}`, {
                       method: 'DELETE',
                       credentials: 'include'
                     });
@@ -865,7 +842,7 @@ const Transactions = () => {
                 if (errors > 0) toast.error(`Failed to delete ${errors} items.`);
                 else toast.success(`Successfully deleted ${selectedIds.length} items.`);
                 setSelectedIds([]);
-                await fetchTransactions();
+                await invalidate.inventory();
               }}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium transition-colors border border-red-500/20"
             >
@@ -895,6 +872,7 @@ const Transactions = () => {
                 />
               </th>
               <th className="px-2 py-3.5 w-8"></th>
+              <th className="px-2 py-3.5 w-16"></th>
               {columnOrder.map((colKey, index) => {
                 if (!visibleCols[colKey]) return null;
                 const colDef = ALL_COLUMNS.find(c => c.key === colKey);
@@ -956,6 +934,12 @@ const Transactions = () => {
                       onClick={() => setExpandedRow(row)}
                     />
                   </td>
+                  <td className="px-2 py-3.5">
+                    {row.isSale
+                      ? <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border bg-green-500/10 text-green-400 border-green-500/20">SALE</span>
+                      : <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border bg-blue-500/10 text-blue-400 border-blue-500/20">BUY</span>
+                    }
+                  </td>
 
                   {/* Dynamic Columns */}
                   {columnOrder.map(colKey => {
@@ -964,10 +948,7 @@ const Transactions = () => {
                       case 'date': return (
                         <td key="date" className="px-4 py-3.5">
                           {isEditing && editData.isSale ? (
-                            <div className="flex flex-col gap-1.5">
-                              <input type="date" value={editData.sale_date || ''} onChange={e => setEditData(d => ({ ...d, sale_date: e.target.value }))} className="bg-[#0d0d18] border border-indigo-500/40 rounded px-1.5 py-0.5 text-xs text-white [color-scheme:dark]" title="Sale Date" />
-                              <input type="date" value={editData.payout_date || ''} onChange={e => setEditData(d => ({ ...d, payout_date: e.target.value }))} className="bg-[#0d0d18] border border-indigo-500/40 rounded px-1.5 py-0.5 text-xs text-white [color-scheme:dark]" title="Payout Date" />
-                            </div>
+                            <input type="date" value={editData.sale_date || ''} onChange={e => setEditData(d => ({ ...d, sale_date: e.target.value }))} className="bg-[#0d0d18] border border-indigo-500/40 rounded px-1.5 py-0.5 text-xs text-white [color-scheme:dark]" title="Sale Date" />
                           ) : (
                             <span className="text-xs text-gray-400 bg-white/[0.04] px-2 py-1 rounded-md whitespace-nowrap">{row.date}</span>
                           )}

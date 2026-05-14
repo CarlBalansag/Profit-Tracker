@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  DollarSign, Plus, Search, X, Edit2, Trash2, 
+import {
+  DollarSign, Plus, Search, X, Edit2, Trash2,
   Check
 } from 'lucide-react';
+import { useInvalidate, apiFetch} from '../../hooks/useApi';
 
 // ─── Quick Add Store Directory ────────────────────────────────────────────────
 const QUICK_ADD_STORES = [
@@ -94,7 +95,7 @@ function CustomModal({ onClose, onSave }) {
     if (!form.name.trim()) return;
     setSaving(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/platforms`, {
+      const res = await apiFetch(`/api/platforms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -173,6 +174,122 @@ function CustomModal({ onClose, onSave }) {
   );
 }
 
+// ─── Edit Modal ────────────────────────────────────────────────────────────────
+function EditModal({ platform, onClose, onSave }) {
+  const [form, setForm] = useState({
+    name: platform.name,
+    tax_exempt_place: platform.tax_exempt_place || false,
+  });
+  const [saving, setSaving] = useState(false);
+
+  const taxExemptChanged = form.tax_exempt_place !== (platform.tax_exempt_place || false);
+
+  const handleSubmit = async () => {
+    if (!form.name.trim()) return;
+    setSaving(true);
+    try {
+      const res = await apiFetch(`/api/platforms/${platform.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: form.name,
+          type: platform.type,
+          fee_pct: platform.fee_pct,
+          address: platform.address,
+          notes: platform.notes,
+          tax_exempt_place: form.tax_exempt_place,
+        })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        onSave(updated);
+        onClose();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-[#12121e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+          <h3 className="text-base font-semibold text-white">Edit Cashout Group</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">Group Name <span className="text-red-400">*</span></label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              className="w-full bg-[#0d0d18] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition-colors"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-2">Tax Exempt Place</label>
+            <button
+              type="button"
+              onClick={() => setForm(f => ({ ...f, tax_exempt_place: !f.tax_exempt_place }))}
+              className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border transition-all text-left ${
+                form.tax_exempt_place
+                  ? 'bg-white/[0.02] border-green-500/50'
+                  : 'bg-white/[0.02] border-white/10 hover:border-white/20'
+              }`}
+            >
+              <div className={`w-9 h-5 rounded-full relative transition-colors flex-shrink-0 ${form.tax_exempt_place ? 'bg-green-500' : 'bg-gray-700'}`}>
+                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${form.tax_exempt_place ? 'left-4' : 'left-0.5'}`} />
+              </div>
+              <div>
+                <p className={`text-sm font-medium ${form.tax_exempt_place ? 'text-green-300' : 'text-gray-300'}`}>
+                  {form.tax_exempt_place ? 'Tax Exempt Place' : 'Not Tax Exempt'}
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {form.tax_exempt_place
+                    ? 'Sales to this group will auto-fill as non-taxable and customer exempt'
+                    : 'Toggle on if sales to this cashout are tax exempt'}
+                </p>
+              </div>
+            </button>
+          </div>
+          {taxExemptChanged && (
+            <div className={`px-3 py-2.5 rounded-lg border text-xs ${
+              form.tax_exempt_place
+                ? 'bg-green-500/5 border-green-500/20 text-green-400'
+                : 'bg-amber-500/5 border-amber-500/20 text-amber-400'
+            }`}>
+              {form.tax_exempt_place
+                ? 'All existing sales to this cashout will be updated: taxable off, customer exempt on, exemption type set to Resale.'
+                : 'All existing sales to this cashout will be reset: taxable on, customer exempt off, exemption type cleared.'}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/10">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={saving || !form.name.trim()}
+            className="px-5 py-2 rounded-lg bg-green-600 hover:bg-green-500 disabled:opacity-50 text-sm font-semibold text-white transition-colors"
+          >
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Quick Add Modal ──────────────────────────────────────────────────────────
 function QuickAddModal({ existingPlatforms, onClose, onSave }) {
   const [search, setSearch] = useState('');
@@ -201,7 +318,7 @@ function QuickAddModal({ existingPlatforms, onClose, onSave }) {
     if (toAdd.length === 0) return;
     setSaving(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/platforms/batch`, {
+      const res = await apiFetch(`/api/platforms/batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -310,11 +427,13 @@ export function Cashouts() {
   const [platforms, setPlatforms] = useState([]);
   const [showCustom, setShowCustom] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [editPlatform, setEditPlatform] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const invalidate = useInvalidate();
 
   const fetchPlatforms = useCallback(async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/platforms`, { credentials: 'include' });
+      const res = await apiFetch(`/api/platforms`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setPlatforms(data.filter(p => p.type === 'Cashout'));
@@ -331,11 +450,12 @@ export function Cashouts() {
   const handleDelete = async (id) => {
     if (!window.confirm('Remove this cashout group?')) return;
     try {
-      await fetch(`${import.meta.env.VITE_API_URL}/api/platforms/${id}`, {
+      await apiFetch(`/api/platforms/${id}`, {
         method: 'DELETE',
         credentials: 'include'
       });
       setPlatforms(v => v.filter(x => x.id !== id));
+      invalidate.platforms();
     } catch (err) {
       console.error(err);
     }
@@ -343,10 +463,17 @@ export function Cashouts() {
 
   const handleSaveNew = (platform) => {
     setPlatforms(v => [...v, platform]);
+    invalidate.platforms();
+  };
+
+  const handleSaveEdit = (updated) => {
+    setPlatforms(v => v.map(p => p.id === updated.id ? updated : p));
+    invalidate.platforms();
   };
 
   const handleBatchSave = (newPlatforms) => {
     setPlatforms(v => [...v, ...newPlatforms]);
+    invalidate.platforms();
   };
 
   return (
@@ -399,7 +526,10 @@ export function Cashouts() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="p-1 text-gray-500 hover:text-white transition-colors">
+                    <button
+                      onClick={() => setEditPlatform(platform)}
+                      className="p-1 text-gray-500 hover:text-white transition-colors"
+                    >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
@@ -410,6 +540,11 @@ export function Cashouts() {
                     </button>
                   </div>
                 </div>
+                {platform.tax_exempt_place && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border bg-green-500/10 text-green-400 border-green-500/20">
+                    Tax Exempt
+                  </span>
+                )}
                 {platform.notes && (
                   <p className="text-xs text-gray-500 mt-2 italic">{platform.notes}</p>
                 )}
@@ -428,6 +563,13 @@ export function Cashouts() {
           existingPlatforms={platforms}
           onClose={() => setShowQuickAdd(false)}
           onSave={handleBatchSave}
+        />
+      )}
+      {editPlatform && (
+        <EditModal
+          platform={editPlatform}
+          onClose={() => setEditPlatform(null)}
+          onSave={handleSaveEdit}
         />
       )}
     </div>

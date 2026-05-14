@@ -6,8 +6,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -21,6 +22,8 @@ model User {
   payment_methods        PaymentMethod[]
   expenses               Expense[]
   recurring_expenses     RecurringExpense[]
+  accounts               Account[]
+  platforms              Platform[]
 }
 
 model Inventory {
@@ -47,39 +50,60 @@ model Inventory {
   tracking_number       String?
   category              String?
   receipt_url           String?
+  tax_exempt            Boolean        @default(false)
   sales                 Sales[]
+
+  @@index([user_id])
+  @@index([user_id, purchase_date])
+  @@index([tax_exempt])
 }
 
 model Sales {
-  id             String    @id @default(uuid())
-  inventory_id   String
-  inventory      Inventory @relation(fields: [inventory_id], references: [id], onDelete: Cascade)
-  platform_id    String?
-  platform       Platform? @relation(fields: [platform_id], references: [id])
-  buyer_id       String?
-  buyer          Buyer?    @relation(fields: [buyer_id], references: [id])
-  quantity       Int
-  unit_price     Float
-  commission_fee Float     @default(0)
-  sale_date      DateTime
-  payout_date    DateTime?
-  status         String   @default("SOLD")
+  id                  String    @id @default(uuid())
+  inventory_id        String
+  inventory           Inventory @relation(fields: [inventory_id], references: [id], onDelete: Cascade)
+  platform_id         String?
+  platform            Platform? @relation(fields: [platform_id], references: [id])
+  buyer_id            String?
+  buyer               Buyer?    @relation(fields: [buyer_id], references: [id])
+  quantity            Int
+  unit_price          Float
+  commission_fee      Float     @default(0)
+  sale_shipping       Float     @default(0)
+  sale_date           DateTime
+  payout_date         DateTime?
+  status              String    @default("SOLD")
+  taxable             Boolean   @default(true)
+  sale_tax_collected  Float     @default(0)
+  customer_tax_exempt Boolean   @default(false)
+  exemption_type      String?
+
+  @@index([inventory_id])
+  @@index([platform_id])
+  @@index([sale_date])
 }
 
 model Platform {
-  id          String      @id @default(uuid())
-  name        String
-  type        String      // "Marketplace, Cashout, Vendor"
-  fee_pct     Float       @default(0)
-  address     String?
-  notes       String?
-  inventories Inventory[] // Platforms as vendors
-  sales       Sales[]     // Platforms as marketplaces
-  accounts    Account[]
+  id               String      @id @default(uuid())
+  user_id          String
+  user             User        @relation(fields: [user_id], references: [id])
+  name             String
+  type             String      // "Marketplace, Cashout, Vendor"
+  fee_pct          Float       @default(0)
+  address          String?
+  notes            String?
+  tax_exempt_place Boolean     @default(false)
+  inventories      Inventory[] // Platforms as vendors
+  sales            Sales[]     // Platforms as marketplaces
+  accounts         Account[]
+
+  @@index([user_id])
 }
 
 model Account {
   id          String   @id @default(uuid())
+  user_id     String
+  user        User     @relation(fields: [user_id], references: [id])
   platform_id String
   platform    Platform @relation(fields: [platform_id], references: [id], onDelete: Cascade)
   name        String
@@ -87,6 +111,8 @@ model Account {
   username    String?
   status      String   @default("Active")
   notes       String?
+
+  @@index([user_id])
 }
 
 model Buyer {
@@ -121,6 +147,9 @@ model Expense {
   receipt_url          String?
   recurring_expense_id String?
   recurring_expense    RecurringExpense? @relation(fields: [recurring_expense_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([user_id, date])
 }
 
 model RecurringExpense {
@@ -147,4 +176,13 @@ model Invoice {
   due_date     DateTime
   total_amount Float
   status       String   // "Paid, Unpaid"
+}
+
+/// Managed by connect-pg-simple — Prisma should not touch this table
+model user_sessions {
+  sid    String   @id @db.VarChar
+  sess   Json     @db.Json
+  expire DateTime @db.Timestamp(6)
+
+  @@ignore
 }

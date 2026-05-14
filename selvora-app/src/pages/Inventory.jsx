@@ -1,36 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useInventory } from '../hooks/useApi';
+import { PageLoader } from '../components/PageLoader';
 import { Columns3, Plus, Search, Package, AlertTriangle, TrendingUp, DollarSign, Clock, MoreVertical, ExternalLink, ListChecks } from 'lucide-react';
 
 const STATUS_COLORS = {
-  IN_STOCK: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  'On Hand': 'bg-teal-500/10 text-teal-400 border-teal-500/20',
-  LISTED: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  'Pre Order':    'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+  'On Hand':      'bg-teal-500/10 text-teal-400 border-teal-500/20',
+  PURCHASED:      'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  SHIPPED_IN:     'bg-purple-500/10 text-purple-400 border-purple-500/20',
+  DELIVERED:      'bg-orange-500/10 text-orange-400 border-orange-500/20',
+  SCANNED_IN:     'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+  LISTED:         'bg-amber-500/10 text-amber-400 border-amber-500/20',
+  SOLD:           'bg-green-500/10 text-green-400 border-green-500/20',
+  SHIPPED_OUT:    'bg-sky-500/10 text-sky-400 border-sky-500/20',
   AUTHENTICATION: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
-  IN_TRANSIT_IN: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-  PURCHASED: 'bg-gray-500/10 text-gray-400 border-gray-500/20',
+  PAID:           'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  COMPLETED:      'bg-teal-500/10 text-teal-400 border-teal-500/20',
+  RETURNED:       'bg-red-500/10 text-red-400 border-red-500/20',
+  DISPUTED:       'bg-rose-500/10 text-rose-400 border-rose-500/20',
+  CANCELLED:      'bg-gray-500/10 text-gray-400 border-gray-500/20',
 };
 
 const Inventory = () => {
-  const [inventory, setInventory] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchInventory = async () => {
-      try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/inventory`, { credentials: 'include' });
-        if (res.ok) {
-          const data = await res.json();
-          // Filter to only show items that have quantity on hand
-          setInventory(data.filter(item => item.qty_on_hand > 0));
-        }
-      } catch (err) {
-        console.error('Failed to load inventory', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchInventory();
-  }, []);
+  const { data: rawInventory = [], isLoading } = useInventory();
+  const inventory = rawInventory.filter(item => item.qty_on_hand > 0);
 
   const today = new Date();
   const processedInventory = inventory.map(item => {
@@ -52,13 +45,7 @@ const Inventory = () => {
   const agingUnits = processedInventory.filter(i => i.daysInInv > 30).reduce((sum, item) => sum + item.qty_on_hand, 0);
   const activeListings = processedInventory.filter(i => i.status === 'LISTED').reduce((sum, item) => sum + item.qty_on_hand, 0);
 
-  if (isLoading) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
-      </div>
-    );
-  }
+  if (isLoading) return <PageLoader variant="table" />;
 
   return (
     <div className="h-full overflow-auto px-4 py-6 sm:px-6 space-y-6">
@@ -157,8 +144,20 @@ const Inventory = () => {
             </select>
             <select className="w-40 bg-[#0a0a0f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/50 appearance-none">
               <option value="">Status: All</option>
-              <option value="IN_STOCK">In Stock</option>
+              <option value="Pre Order">Pre Order</option>
+              <option value="PURCHASED">Purchased</option>
+              <option value="SHIPPED_IN">Shipped In</option>
+              <option value="DELIVERED">Delivered</option>
+              <option value="SCANNED_IN">Scanned In</option>
               <option value="LISTED">Listed</option>
+              <option value="SOLD">Sold</option>
+              <option value="SHIPPED_OUT">Shipped Out</option>
+              <option value="AUTHENTICATION">Authentication</option>
+              <option value="PAID">Paid</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="RETURNED">Returned</option>
+              <option value="DISPUTED">Disputed</option>
+              <option value="CANCELLED">Cancelled</option>
             </select>
           </div>
         </div>

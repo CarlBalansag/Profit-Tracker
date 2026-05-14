@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('./prisma');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const passport = require('passport');
@@ -18,13 +18,12 @@ const receiptsRouter = require('./routes/receipts');
 require('dotenv').config();
 
 const app = express();
-const prisma = new PrismaClient();
 const isProd = process.env.NODE_ENV === 'production';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
-// Guard: refuse to start in production without a proper session secret
-if (isProd && (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32)) {
-  console.error('FATAL: SESSION_SECRET must be set to a string of at least 32 characters in production.');
+// Guard: refuse to start without a proper session secret (all environments)
+if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
+  console.error('FATAL: SESSION_SECRET must be set to a string of at least 32 characters.');
   process.exit(1);
 }
 
@@ -38,6 +37,16 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// CSRF protection: every state-changing request from the SPA must include this header.
+// Browsers never attach custom headers to cross-origin simple requests, so its presence
+// proves the request came from JavaScript running on our frontend, not a forged form.
+app.use((req, res, next) => {
+  const safeMethods = ['GET', 'HEAD', 'OPTIONS'];
+  if (safeMethods.includes(req.method)) return next();
+  if (req.headers['x-requested-with'] === 'XMLHttpRequest') return next();
+  return res.status(403).json({ error: 'CSRF check failed' });
+});
+
 // Session Middleware — stored in PostgreSQL so logins survive server restarts/redeploys
 app.use(session({
   store: new pgSession({
@@ -45,7 +54,7 @@ app.use(session({
     tableName: 'user_sessions',
     createTableIfMissing: true,
   }),
-  secret: process.env.SESSION_SECRET || 'profit_tracker_secret_key',
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -150,6 +159,14 @@ app.get('/auth/logout', (req, res, next) => {
     if (err) { return next(err); }
     res.json({ success: true });
   });
+});
+
+// Central error handler — never expose raw error messages in production
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error(err);
+  const message = isProd ? 'Internal Server Error' : err.message;
+  res.status(err.status || 500).json({ error: message });
 });
 
 // Default Port

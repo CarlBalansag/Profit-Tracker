@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../prisma');
 const cloudinary = require('cloudinary').v2;
-const prisma = new PrismaClient();
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -16,7 +15,7 @@ const isAuthenticated = (req, res, next) => {
 };
 
 // GET /api/receipts — returns all inventory + expense items split by receipt status
-router.get('/', isAuthenticated, async (req, res) => {
+router.get('/', isAuthenticated, async (req, res, next) => {
   try {
     const [inventories, expenses] = await Promise.all([
       prisma.inventory.findMany({
@@ -68,16 +67,44 @@ router.get('/', isAuthenticated, async (req, res) => {
 
     res.json({ withReceipts, withoutReceipts });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
+// Allowed MIME types for receipt uploads
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'application/pdf',
+]);
+
+const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+
 // POST /api/receipts/attach — upload receipt to Cloudinary, store URL in DB
-router.post('/attach', isAuthenticated, async (req, res) => {
+router.post('/attach', isAuthenticated, async (req, res, next) => {
   try {
     const { itemType, itemId, fileData, fileName } = req.body;
     if (!itemType || !itemId || !fileData) {
       return res.status(400).json({ error: 'itemType, itemId, and fileData are required' });
+    }
+
+    // Validate that fileData is a data URL with an allowed MIME type
+    const dataUrlMatch = fileData.match(/^data:([^;]+);base64,/);
+    if (!dataUrlMatch) {
+      return res.status(400).json({ error: 'fileData must be a base64 data URL' });
+    }
+    const mimeType = dataUrlMatch[1];
+    if (!ALLOWED_MIME_TYPES.has(mimeType)) {
+      return res.status(400).json({ error: 'File type not allowed. Use JPEG, PNG, WebP, GIF, or PDF.' });
+    }
+
+    // Validate decoded file size server-side
+    const base64Data = fileData.slice(dataUrlMatch[0].length);
+    const byteLength = Math.ceil(base64Data.length * 0.75);
+    if (byteLength > MAX_BYTES) {
+      return res.status(400).json({ error: 'File exceeds the 5 MB size limit.' });
     }
 
     // Upload base64 dataURL to Cloudinary
@@ -113,12 +140,12 @@ router.post('/attach', isAuthenticated, async (req, res) => {
 
     res.json({ success: true, receipt_url: receiptUrl });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // DELETE /api/receipts/detach — remove receipt from DB (Cloudinary file stays for now)
-router.delete('/detach', isAuthenticated, async (req, res) => {
+router.delete('/detach', isAuthenticated, async (req, res, next) => {
   try {
     const { itemType, itemId } = req.body;
     if (!itemType || !itemId) {
@@ -143,7 +170,7 @@ router.delete('/detach', isAuthenticated, async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

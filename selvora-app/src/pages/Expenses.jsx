@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { apiFetch } from '../hooks/useApi';
 import {
   Receipt, Download, Plus, DollarSign, TrendingUp,
   Search, X, Trash2, Pencil, RefreshCw, Pause, Play,
@@ -284,8 +285,8 @@ const Expenses = () => {
   const fetchAll = async () => {
     try {
       const [expRes, recRes] = await Promise.all([
-        fetch(`${import.meta.env.VITE_API_URL}/api/expenses`,           { credentials: 'include' }),
-        fetch(`${import.meta.env.VITE_API_URL}/api/recurring-expenses`, { credentials: 'include' }),
+        apiFetch(`/api/expenses`,           { credentials: 'include' }),
+        apiFetch(`/api/recurring-expenses`, { credentials: 'include' }),
       ]);
       if (expRes.ok) setExpenses(await expRes.json());
       if (recRes.ok) setRecurring(await recRes.json());
@@ -320,13 +321,13 @@ const Expenses = () => {
   };
 
   const handleDeleteExp = async (id) => {
-    await fetch(`${import.meta.env.VITE_API_URL}/api/expenses/${id}`, { method: 'DELETE', credentials: 'include' });
+    await apiFetch(`/api/expenses/${id}`, { method: 'DELETE', credentials: 'include' });
     setExpenses(p => p.filter(e => e.id !== id));
     setDeleteExpId(null);
   };
 
   const handleToggleActive = async (rec) => {
-    await fetch(`${import.meta.env.VITE_API_URL}/api/recurring-expenses/${rec.id}`, {
+    await apiFetch(`/api/recurring-expenses/${rec.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
       body: JSON.stringify({ active: !rec.active }),
     });
@@ -334,7 +335,7 @@ const Expenses = () => {
   };
 
   const handleDeleteRec = async (id) => {
-    await fetch(`${import.meta.env.VITE_API_URL}/api/recurring-expenses/${id}`, { method: 'DELETE', credentials: 'include' });
+    await apiFetch(`/api/recurring-expenses/${id}`, { method: 'DELETE', credentials: 'include' });
     setRecurring(p => p.filter(r => r.id !== id));
     setDeleteRecId(null);
   };

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Plus, DollarSign, Package, Calendar, CreditCard, Truck, Tag } from 'lucide-react';
+import { useInvalidate, apiFetch} from '../hooks/useApi';
 
-const STATUSES = ['Pre Order', 'PURCHASED', 'SHIPPED', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'PAID', 'COMPLETED'];
+const STATUSES = ['Pre Order', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
 
 // ─── Reusable field wrapper ────────────────────────────────────────────────────
 function Field({ label, children, className = '' }) {
@@ -69,15 +70,20 @@ function SectionHeader({ icon: Icon, children }) {
 // ─── Status badge for modal ────────────────────────────────────────────────────
 function StatusOption({ status, selected, onClick }) {
   const map = {
-    'Pre Order': 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
-    PURCHASED:  'bg-blue-500/10 text-blue-400 border-blue-500/30',
-    SHIPPED:    'bg-purple-500/10 text-purple-400 border-purple-500/30',
-    DELIVERED:  'bg-orange-500/10 text-orange-400 border-orange-500/30',
-    SCANNED_IN: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
-    LISTED:     'bg-amber-500/10 text-amber-400 border-amber-500/30',
-    SOLD:       'bg-green-500/10 text-green-400 border-green-500/30',
-    PAID:       'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-    COMPLETED:  'bg-teal-500/10 text-teal-400 border-teal-500/30',
+    'Pre Order':    'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
+    PURCHASED:      'bg-blue-500/10 text-blue-400 border-blue-500/30',
+    SHIPPED_IN:     'bg-purple-500/10 text-purple-400 border-purple-500/30',
+    SHIPPED_OUT:    'bg-sky-500/10 text-sky-400 border-sky-500/30',
+    DELIVERED:      'bg-orange-500/10 text-orange-400 border-orange-500/30',
+    SCANNED_IN:     'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
+    LISTED:         'bg-amber-500/10 text-amber-400 border-amber-500/30',
+    SOLD:           'bg-green-500/10 text-green-400 border-green-500/30',
+    AUTHENTICATION: 'bg-violet-500/10 text-violet-400 border-violet-500/30',
+    PAID:           'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+    COMPLETED:      'bg-teal-500/10 text-teal-400 border-teal-500/30',
+    RETURNED:       'bg-red-500/10 text-red-400 border-red-500/30',
+    DISPUTED:       'bg-rose-500/10 text-rose-400 border-rose-500/30',
+    CANCELLED:      'bg-gray-500/10 text-gray-400 border-gray-500/30',
   };
   const cls = map[status] || map.PURCHASED;
   return (
@@ -98,11 +104,12 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
   const [form, setForm] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const invalidate = useInvalidate();
 
   useEffect(() => {
     const fetchDetail = async () => {
       try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/inventory/${row.rawId}`, { credentials: 'include' });
+        const res = await apiFetch(`/api/inventory/${row.rawId}`, { credentials: 'include' });
         if (res.ok) {
           const d = await res.json();
           setForm({
@@ -121,6 +128,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             cashback_earned:         d.cashback_earned ?? 0,
             include_tax_in_cashback:    true,
             include_shipping_in_cashback: true,
+            tax_exempt:                  d.tax_exempt ?? false,
             // sale info from the row for display
             _sales: d.sales || [],
             _vendorName: d.vendor?.name || '',
@@ -153,7 +161,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
   const handleSave = async () => {
     setSaving(true);
     try {
-      const invRes = await fetch(`${import.meta.env.VITE_API_URL}/api/inventory/${row.rawId}`, {
+      const invRes = await apiFetch(`/api/inventory/${row.rawId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -169,13 +177,14 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
           category:              form.category || null,
           vendor_id:             form.vendor_id || null,
           payment_method_id:     form.payment_method_id || null,
+          tax_exempt:            form.tax_exempt ?? false,
         }),
       });
       if (!invRes.ok) return;
 
       // If this row is a sale, also save the sale's status
       if (row.isSale && row.saleId) {
-        await fetch(`${import.meta.env.VITE_API_URL}/api/sales/${row.saleId}`, {
+        await apiFetch(`/api/sales/${row.saleId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -183,6 +192,8 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
         });
       }
 
+      invalidate.inventory();
+      invalidate.dashboard();
       onSaved();
       onClose();
     } catch (err) {
@@ -288,6 +299,15 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                   <ReadBox value={`$${totalCost.toFixed(2)}`} className="text-white font-semibold" />
                 </Field>
               </div>
+              <label className="flex items-center gap-2.5 cursor-pointer select-none w-fit mt-3">
+                <input
+                  type="checkbox"
+                  checked={form.tax_exempt ?? false}
+                  onChange={e => set('tax_exempt', e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-600 accent-blue-500"
+                />
+                <span className="text-sm text-gray-300">Tax Exempt</span>
+              </label>
             </div>
 
             <div className="border-t border-white/[0.04]" />

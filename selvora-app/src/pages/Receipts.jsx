@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { apiFetch } from '../hooks/useApi';
 import { Search, Paperclip, Eye, Trash2, FileText, Package, Receipt, X, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -72,7 +73,7 @@ const Receipts = () => {
 
   const fetchAll = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/receipts`, { credentials: 'include' });
+      const res = await apiFetch(`/api/receipts`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setWith(data.withReceipts || []);
@@ -104,7 +105,7 @@ const Receipts = () => {
         reader.readAsDataURL(file);
       });
 
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/receipts/attach`, {
+      const res = await apiFetch(`/api/receipts/attach`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -126,7 +127,7 @@ const Receipts = () => {
 
   const handleDetach = async (item) => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/receipts/detach`, {
+      const res = await apiFetch(`/api/receipts/detach`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

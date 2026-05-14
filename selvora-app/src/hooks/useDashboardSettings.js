@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { apiFetch } from './useApi';
 import { DEFAULT_DASHBOARD_SETTINGS } from '../data/dashboardRegistry';
 
 const STORAGE_KEY_PREFIX = 'dashboard_settings';
@@ -98,7 +99,7 @@ export function useDashboardSettings(uiStyle = 'neon-dark') {
       if (!cancelled) setSettings(fallbackSettings());
     }, 0);
 
-    fetch(`${import.meta.env.VITE_API_URL}/api/preferences/dashboard-settings/${encodeURIComponent(uiStyle)}`, {
+    apiFetch(`/api/preferences/dashboard-settings/${encodeURIComponent(uiStyle)}`, {
       credentials: 'include',
     })
       .then(res => (res.ok ? res.json() : null))
@@ -123,7 +124,7 @@ export function useDashboardSettings(uiStyle = 'neon-dark') {
     };
     setSettings(versionedSettings);
     localStorage.setItem(storageKey, JSON.stringify(versionedSettings));
-    fetch(`${import.meta.env.VITE_API_URL}/api/preferences/dashboard-settings/${encodeURIComponent(uiStyle)}`, {
+    apiFetch(`/api/preferences/dashboard-settings/${encodeURIComponent(uiStyle)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
