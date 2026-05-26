@@ -59,6 +59,13 @@ export const useExpenses = () =>
     queryFn: () => fetcher('/api/expenses'),
   });
 
+// ─── Credit Card tracker ───────────────────────────────────────────────────────
+export const useCreditCard = (month) =>
+  useQuery({
+    queryKey: ['creditcard', month],
+    queryFn: () => fetcher(`/api/creditcard/dashboard${month ? `?month=${month}` : ''}`),
+  });
+
 // ─── Invalidation helpers (call after mutations to refresh cache) ─────────────
 export const useInvalidate = () => {
   const qc = useQueryClient();
@@ -69,6 +76,7 @@ export const useInvalidate = () => {
     dashboard:      () => qc.invalidateQueries({ queryKey: ['dashboard'] }),
     expenses:       () => qc.invalidateQueries({ queryKey: ['expenses'] }),
     paymentMethods: () => qc.invalidateQueries({ queryKey: ['payment-methods'] }),
+    creditCard:     () => qc.invalidateQueries({ queryKey: ['creditcard'], exact: false }),
     all:            () => qc.invalidateQueries(),
   };
 };

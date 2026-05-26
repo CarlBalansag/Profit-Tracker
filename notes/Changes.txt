@@ -62,6 +62,42 @@ Keep the commit messages detailed (we already do this) and treat Changes.txt as 
 
 ---
 
+## 2026-05-14 — Login Fix + Vercel Proxy for Cross-Origin Cookie
+
+### Root Cause
+Chrome's Storage Access API blocks cross-origin cookies (SameSite=None) between
+Vercel (frontend) and Render (backend). Session cookie set by Render was never
+sent by the browser to Vercel, causing /auth/me to always return 401 after OAuth.
+
+### selvora-api/index.js
+- Changed session store `conString` from `DATABASE_URL` (pooled, pgbouncer) to
+  `DIRECT_URL || DATABASE_URL`. connect-pg-simple is incompatible with pgbouncer —
+  sessions were silently failing to save, which was also causing login failures.
+
+### selvora-app/vercel.json
+- Added Vercel proxy rules: `/api/:path*` and `/auth/:path*` now forward to Render.
+- This makes all API and auth traffic same-origin (profit-tracker-dusky.vercel.app)
+  so the session cookie is first-party and Chrome sends it correctly.
+
+### selvora-app/src/pages/Login.jsx
+- Changed Discord login button to use `VITE_API_DIRECT_URL` for the OAuth start URL.
+- OAuth initiation must go directly to Render (not through Vercel proxy) because
+  it involves a browser redirect chain that Vercel's proxy can't handle.
+
+### Render environment variables added
+- `DIRECT_URL` — non-pooler Neon connection string for session store and migrations.
+- `DISCORD_CALLBACK_URL` — changed to `https://profit-tracker-dusky.vercel.app/auth/discord/callback`
+  so the callback goes through the Vercel proxy and the cookie is set on the Vercel domain.
+
+### Vercel environment variables added/changed
+- `VITE_API_URL` — set to empty string so all API calls use relative paths (proxied).
+- `VITE_API_DIRECT_URL` — set to `https://profit-tracker-tcqo.onrender.com` for OAuth button only.
+
+### Discord Developer Portal
+- Added `https://profit-tracker-dusky.vercel.app/auth/discord/callback` to OAuth2 redirects.
+
+---
+
 ## [DATE] — [FEATURE/FIX NAME]
 
 ### [file or folder]

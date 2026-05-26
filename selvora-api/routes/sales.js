@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { validateBody } = require('../middleware/validate');
+const { createSale, updateSale } = require('../validation/schemas');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -28,7 +30,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 });
 
 // POST /api/sales
-router.post('/', isAuthenticated, async (req, res, next) => {
+router.post('/', isAuthenticated, validateBody(createSale), async (req, res, next) => {
   try {
     const {
       inventory_id,
@@ -91,7 +93,7 @@ router.post('/', isAuthenticated, async (req, res, next) => {
 });
 
 // PUT /api/sales/:id - update a sale record inline
-router.put('/:id', isAuthenticated, async (req, res, next) => {
+router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, next) => {
   try {
     const {
       unit_price, quantity, status, commission_fee, platform_id,
@@ -145,4 +147,3 @@ router.put('/:id', isAuthenticated, async (req, res, next) => {
 });
 
 module.exports = router;
-

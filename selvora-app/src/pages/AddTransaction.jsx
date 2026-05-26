@@ -75,6 +75,7 @@ const AddTransaction = () => {
   const saved = loadDraft();
   const [formData, setFormData] = useState(saved?.form ?? defaultForm);
   const [itemSold, setItemSold] = useState(false);
+  const [showCashbackProfit, setShowCashbackProfit] = useState(false);
 
   const { data: paymentMethods = [] } = usePaymentMethods();
   const { data: platforms = [] } = usePlatforms();
@@ -872,6 +873,10 @@ const AddTransaction = () => {
                         <Row label="Net Cost" value={`$${Math.max(0, totalCost - giftCard).toFixed(2)}`} color="text-white font-semibold" />
                       </div>
 
+                      {cashbackAmount > 0 && (
+                        <Row label="Cashback earned" value={`+$${cashbackAmount.toFixed(2)}`} color="text-emerald-400" />
+                      )}
+
                       {itemSold && salePrice > 0 && (
                         <>
                           <div className="border-t border-white/[0.06] pt-2 space-y-2">
@@ -885,12 +890,41 @@ const AddTransaction = () => {
                             {saleFees > 0 && (
                               <Row label="Sale fees" value={`-$${saleFees.toFixed(2)}`} color="text-red-400" />
                             )}
+
+                            {/* Profit / Profit+Cashback toggle — only shown when cashback exists */}
+                            {cashbackAmount > 0 && (
+                              <div className="flex items-center gap-1 p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-[10px] font-semibold">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowCashbackProfit(false)}
+                                  className={`flex-1 py-1 rounded-md transition-colors ${!showCashbackProfit ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                                >
+                                  Profit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowCashbackProfit(true)}
+                                  className={`flex-1 py-1 rounded-md transition-colors ${showCashbackProfit ? 'bg-emerald-500/20 text-emerald-400' : 'text-gray-500 hover:text-gray-300'}`}
+                                >
+                                  + Cashback
+                                </button>
+                              </div>
+                            )}
+
                             <div className="flex justify-between items-center">
-                              <span className="font-medium text-gray-200">Est. Profit</span>
-                              <span className={`font-bold text-base ${profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
+                              <span className="font-medium text-gray-200">
+                                {showCashbackProfit && cashbackAmount > 0 ? 'Est. Profit + Cashback' : 'Est. Profit'}
+                              </span>
+                              <span className={`font-bold text-base ${(showCashbackProfit ? profit + cashbackAmount : profit) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {(showCashbackProfit ? profit + cashbackAmount : profit) >= 0 ? '+' : ''}${(showCashbackProfit ? profit + cashbackAmount : profit).toFixed(2)}
                               </span>
                             </div>
+
+                            {showCashbackProfit && cashbackAmount > 0 && (
+                              <p className="text-[10px] text-gray-600">
+                                Includes ${cashbackAmount.toFixed(2)} cashback ({cashbackRate}% on ${cashbackBase.toFixed(2)})
+                              </p>
+                            )}
                           </div>
                         </>
                       )}

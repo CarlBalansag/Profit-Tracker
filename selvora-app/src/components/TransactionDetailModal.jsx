@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, DollarSign, Package, Calendar, CreditCard, Truck, Tag } from 'lucide-react';
+import { X, DollarSign, Package, CreditCard, Tag, ChevronDown, ChevronUp } from 'lucide-react';
 import { useInvalidate, apiFetch} from '../hooks/useApi';
 
 const STATUSES = ['Pre Order', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
+const SALE_STATUSES = ['SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
 
 // ─── Reusable field wrapper ────────────────────────────────────────────────────
 function Field({ label, children, className = '' }) {
@@ -27,6 +28,23 @@ function Input({ value, onChange, type = 'text', placeholder = '', className = '
       readOnly={readOnly}
       className={`w-full bg-[#0f1014] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500/60 transition-colors ${readOnly ? 'opacity-60 cursor-default' : ''} ${className}`}
     />
+  );
+}
+
+// ─── Dollar input ──────────────────────────────────────────────────────────────
+function DollarInput({ value, onChange, placeholder = '0.00', accentClass = 'focus:border-green-500/60' }) {
+  return (
+    <div className="relative">
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+      <input
+        type="number"
+        step="0.01"
+        value={value ?? ''}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={`w-full bg-[#0f1014] border border-white/[0.08] rounded-lg pl-7 pr-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none transition-colors ${accentClass}`}
+      />
+    </div>
   );
 }
 
@@ -67,36 +85,10 @@ function SectionHeader({ icon: Icon, children }) {
   );
 }
 
-// ─── Status badge for modal ────────────────────────────────────────────────────
-function StatusOption({ status, selected, onClick }) {
-  const map = {
-    'Pre Order':    'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
-    PURCHASED:      'bg-blue-500/10 text-blue-400 border-blue-500/30',
-    SHIPPED_IN:     'bg-purple-500/10 text-purple-400 border-purple-500/30',
-    SHIPPED_OUT:    'bg-sky-500/10 text-sky-400 border-sky-500/30',
-    DELIVERED:      'bg-orange-500/10 text-orange-400 border-orange-500/30',
-    SCANNED_IN:     'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
-    LISTED:         'bg-amber-500/10 text-amber-400 border-amber-500/30',
-    SOLD:           'bg-green-500/10 text-green-400 border-green-500/30',
-    AUTHENTICATION: 'bg-violet-500/10 text-violet-400 border-violet-500/30',
-    PAID:           'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-    COMPLETED:      'bg-teal-500/10 text-teal-400 border-teal-500/30',
-    RETURNED:       'bg-red-500/10 text-red-400 border-red-500/30',
-    DISPUTED:       'bg-rose-500/10 text-rose-400 border-rose-500/30',
-    CANCELLED:      'bg-gray-500/10 text-gray-400 border-gray-500/30',
-  };
-  const cls = map[status] || map.PURCHASED;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider border transition-all ${
-        selected ? cls + ' ring-1 ring-white/20 scale-105' : 'border-transparent text-gray-500 hover:text-gray-300'
-      }`}
-    >
-      {status}
-    </button>
-  );
+// ─── Normalise a date from the API (ISO string → YYYY-MM-DD) ─────────────────
+function toDateInput(val) {
+  if (!val) return '';
+  return val.split('T')[0];
 }
 
 // ─── Main Modal ────────────────────────────────────────────────────────────────
@@ -104,7 +96,13 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
   const [form, setForm] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // track which sale card is expanded (index)
+  const [expandedSale, setExpandedSale] = useState(0);
   const invalidate = useInvalidate();
+
+  const marketplaces = platforms.filter(p => p.type === 'Marketplace');
+  const cashoutPlatforms = platforms.filter(p => p.type === 'Cashout');
+  const vendors = platforms.filter(p => p.type === 'Vendor');
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -116,7 +114,6 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             product_name:            d.product_name ?? '',
             status:                  row.status ?? d.status ?? 'PURCHASED',
             vendor_id:               d.vendor_id ?? '',
-            platform_id:             d.platform_id ?? '',
             purchase_date:           d.purchase_date ? d.purchase_date.split('T')[0] : '',
             category:                d.category ?? '',
             unit_purchase_cost:      d.unit_purchase_cost ?? 0,
@@ -128,11 +125,23 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             cashback_earned:         d.cashback_earned ?? 0,
             include_tax_in_cashback:    true,
             include_shipping_in_cashback: true,
-            tax_exempt:                  d.tax_exempt ?? false,
-            // sale info from the row for display
-            _sales: d.sales || [],
-            _vendorName: d.vendor?.name || '',
-            _paymentName: d.payment_method?.name || '',
+            tax_exempt:              d.tax_exempt ?? false,
+            // editable sales array
+            _sales: (d.sales || []).map(s => ({
+              id:              s.id,
+              unit_price:      s.unit_price ?? 0,
+              quantity:        s.quantity ?? 1,
+              commission_fee:  s.commission_fee ?? 0,
+              sale_shipping:   s.sale_shipping ?? 0,
+              platform_id:     s.platform_id ?? '',
+              status:          s.status ?? 'SOLD',
+              sale_date:       toDateInput(s.sale_date),
+              payout_date:     toDateInput(s.payout_date),
+              taxable:         s.taxable ?? true,
+              sale_tax_collected: s.sale_tax_collected ?? 0,
+              // for display
+              _platformName: s.platform?.name || '',
+            })),
           });
         }
       } catch (err) {
@@ -146,16 +155,22 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
 
   const set = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
+  const setSale = (i, key, val) => setForm(prev => {
+    const sales = [...prev._sales];
+    sales[i] = { ...sales[i], [key]: val };
+    return { ...prev, _sales: sales };
+  });
+
   // ── Live calculations ────────────────────────────────────────────────────────
-  const subtotal     = Number(form?.unit_purchase_cost ?? 0) * Number(form?.qty_purchased ?? 1);
-  const taxAmt       = Number(form?.sales_tax ?? 0);
-  const shippingAmt  = Number(form?.shipping_cost_inbound ?? 0);
-  const totalCost    = subtotal + taxAmt + shippingAmt;
-  const cbBase       = subtotal
+  const subtotal    = Number(form?.unit_purchase_cost ?? 0) * Number(form?.qty_purchased ?? 1);
+  const taxAmt      = Number(form?.sales_tax ?? 0);
+  const shippingAmt = Number(form?.shipping_cost_inbound ?? 0);
+  const totalCost   = subtotal + taxAmt + shippingAmt;
+  const cbBase      = subtotal
     + (form?.include_tax_in_cashback     ? taxAmt     : 0)
     + (form?.include_shipping_in_cashback ? shippingAmt : 0);
-  const cbRate       = Number(form?.cashback_rate ?? 0);
-  const cbEarned     = cbBase * (cbRate / 100);
+  const cbRate      = Number(form?.cashback_rate ?? 0);
+  const cbEarned    = cbBase * (cbRate / 100);
 
   // ── Save ─────────────────────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -182,18 +197,31 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
       });
       if (!invRes.ok) return;
 
-      // If this row is a sale, also save the sale's status
-      if (row.isSale && row.saleId) {
-        await apiFetch(`/api/sales/${row.saleId}`, {
+      // Save every sale's editable fields
+      await Promise.all(form._sales.map(s =>
+        apiFetch(`/api/sales/${s.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ status: form.status }),
-        });
-      }
+          body: JSON.stringify({
+            unit_price:         Number(s.unit_price),
+            quantity:           Number(s.quantity),
+            commission_fee:     Number(s.commission_fee),
+            sale_shipping:      Number(s.sale_shipping),
+            platform_id:        s.platform_id || null,
+            status:             s.status,
+            sale_date:          s.sale_date || null,
+            payout_date:        s.payout_date || null,
+            taxable:            s.taxable,
+            sale_tax_collected: Number(s.sale_tax_collected),
+          }),
+        })
+      ));
 
       invalidate.inventory();
+      invalidate.sales();
       invalidate.dashboard();
+      invalidate.creditCard();
       onSaved();
       onClose();
     } catch (err) {
@@ -207,14 +235,11 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
       {/* Panel */}
       <div
-        className="relative w-full max-w-[600px] max-h-[90vh] bg-[#15171d] border border-white/[0.08] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        className="relative w-full max-w-[640px] max-h-[90vh] sm:max-h-[90vh] h-full sm:h-auto bg-[#15171d] border border-white/[0.08] sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
         style={{ animation: 'fadeInScale 0.2s ease-out' }}
       >
         <style>{`
@@ -225,7 +250,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
         `}</style>
 
         {/* ── Header ── */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/[0.06] shrink-0">
           <div>
             <h2 className="text-base font-semibold text-white">Edit Transaction</h2>
             <p className="text-[11px] text-gray-500 mt-0.5">Make changes and click Update to save.</p>
@@ -247,10 +272,10 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             </div>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 scrollbar-thin">
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-5">
 
             {/* Product Name + Status */}
-            <div className="grid grid-cols-[1fr_170px] gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-3">
               <Field label="Product Name *">
                 <Input value={form.product_name} onChange={v => set('product_name', v)} placeholder="Product name" />
               </Field>
@@ -260,12 +285,12 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             </div>
 
             {/* Vendor / Date / Category */}
-            <div className="grid grid-cols-3 gap-3">
-              <Field label="Vendor">
-                <Sel value={form.vendor_id} onChange={v => set('vendor_id', v)} options={platforms} placeholder="Select vendor…" />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Field label="Store / Vendor">
+                <Sel value={form.vendor_id} onChange={v => set('vendor_id', v)} options={vendors} placeholder="Select vendor…" />
               </Field>
-              <Field label="Date">
-                <Input type="date" value={form.purchase_date} onChange={v => set('purchase_date', v)} />
+              <Field label="Purchase Date">
+                <Input type="date" value={form.purchase_date} onChange={v => set('purchase_date', v)} className="[color-scheme:dark]" />
               </Field>
               <Field label="Category">
                 <Input value={form.category} onChange={v => set('category', v)} placeholder="e.g. Electronics" />
@@ -277,23 +302,23 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             {/* Purchase Details */}
             <div>
               <SectionHeader icon={Package}>Purchase Details</SectionHeader>
-              <div className="grid grid-cols-4 gap-3 mb-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                 <Field label="Unit Price">
-                  <Input type="number" value={form.unit_purchase_cost} onChange={v => set('unit_purchase_cost', v)} />
+                  <DollarInput value={form.unit_purchase_cost} onChange={v => set('unit_purchase_cost', v)} accentClass="focus:border-blue-500/60" />
                 </Field>
                 <Field label="Qty">
                   <Input type="number" value={form.qty_purchased} onChange={v => set('qty_purchased', v)} />
                 </Field>
-                <Field label="Total">
+                <Field label="Subtotal">
                   <ReadBox value={`$${subtotal.toFixed(2)}`} className="text-gray-400" />
                 </Field>
                 <Field label="Tax">
-                  <Input type="number" value={form.sales_tax} onChange={v => set('sales_tax', v)} />
+                  <DollarInput value={form.sales_tax} onChange={v => set('sales_tax', v)} accentClass="focus:border-blue-500/60" />
                 </Field>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Shipping Cost">
-                  <Input type="number" value={form.shipping_cost_inbound} onChange={v => set('shipping_cost_inbound', v)} />
+                <Field label="Inbound Shipping">
+                  <DollarInput value={form.shipping_cost_inbound} onChange={v => set('shipping_cost_inbound', v)} accentClass="focus:border-blue-500/60" />
                 </Field>
                 <Field label="Total Cost">
                   <ReadBox value={`$${totalCost.toFixed(2)}`} className="text-white font-semibold" />
@@ -315,7 +340,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             {/* Payment / Cashback */}
             <div>
               <SectionHeader icon={CreditCard}>Payment & Cashback</SectionHeader>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Field label="Payment Method">
                   <Sel
                     value={form.payment_method_id}
@@ -333,11 +358,9 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                 </Field>
                 <Field label="Cashback $">
                   <ReadBox value={`$${cbEarned.toFixed(2)}`} className="text-emerald-400 font-semibold" />
-                  <p className="text-[10px] text-gray-600 mt-1">Auto-calculated from % & base</p>
+                  <p className="text-[10px] text-gray-600 mt-1">Auto-calculated</p>
                 </Field>
               </div>
-
-              {/* Cashback Checkboxes */}
               <div className="flex gap-6 mt-3">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
@@ -362,57 +385,202 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
 
             <div className="border-t border-white/[0.04]" />
 
-            {/* Sale Events */}
+            {/* ── Sale Events (editable) ── */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <SectionHeader icon={Tag}>Sale Events</SectionHeader>
-                <button
-                  type="button"
-                  className="text-[10px] text-indigo-400 hover:text-indigo-300 border border-indigo-500/30 px-2.5 py-1 rounded-lg hover:bg-indigo-500/10 transition-colors -mt-1"
-                >
-                  + Record Sale
-                </button>
-              </div>
-              {form._sales.length > 0 ? (
-                <div className="space-y-2">
+              <SectionHeader icon={Tag}>
+                Sale{form._sales.length > 1 ? 's' : ''} ({form._sales.length === 0 ? 'none' : form._sales.length})
+              </SectionHeader>
+
+              {form._sales.length === 0 ? (
+                <p className="text-xs text-gray-600">No sales recorded for this item yet.</p>
+              ) : (
+                <div className="space-y-3">
                   {form._sales.map((sale, i) => {
-                    const saleTotal = sale.unit_price * sale.quantity;
-                    const allocatedTax = (Number(form.sales_tax) / Number(form.qty_purchased)) * sale.quantity;
-                    const allocatedShipping = (Number(form.shipping_cost_inbound) / Number(form.qty_purchased)) * sale.quantity;
-                    const totalCostForSale = (Number(form.unit_purchase_cost) * sale.quantity) + allocatedTax + allocatedShipping;
-                    const profit = saleTotal - sale.commission_fee - totalCostForSale;
+                    const unitPrice = Number(sale.unit_price) || 0;
+                    const qty = Number(sale.quantity) || 1;
+                    const commission = Number(sale.commission_fee) || 0;
+                    const saleShipping = Number(sale.sale_shipping) || 0;
+                    const saleTotal = unitPrice * qty;
+                    const allocatedTax = (Number(form.sales_tax) / Number(form.qty_purchased)) * qty;
+                    const allocatedShipping = (Number(form.shipping_cost_inbound) / Number(form.qty_purchased)) * qty;
+                    const totalCostForSale = (Number(form.unit_purchase_cost) * qty) + allocatedTax + allocatedShipping;
+                    const saleCashback = totalCostForSale * (cbRate / 100);
+                    const profit = saleTotal - commission - saleShipping - totalCostForSale + saleCashback;
+                    const isOpen = expandedSale === i;
+
                     return (
-                      <div key={sale.id} className="bg-white/[0.02] border border-white/[0.05] rounded-lg p-3 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center gap-2">
-                            <DollarSign className="w-3.5 h-3.5 text-green-400" />
-                            <span className="text-sm text-white font-medium">${sale.unit_price.toFixed(2)}</span>
-                            <span className="text-[10px] text-gray-500">× {sale.quantity}</span>
-                          </div>
-                          {sale.platform && (
-                            <span className="text-[10px] text-gray-500 bg-white/[0.04] px-2 py-0.5 rounded">
-                              {sale.platform.name}
+                      <div key={sale.id} className="rounded-xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
+                        {/* Sale card header — always visible, click to expand */}
+                        <button
+                          type="button"
+                          onClick={() => setExpandedSale(isOpen ? null : i)}
+                          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <DollarSign className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                            <span className="text-sm font-semibold text-white">
+                              ${unitPrice.toFixed(2)} × {qty}
+                              {sale.sale_date && (
+                                <span className="text-xs text-gray-500 font-normal ml-2">
+                                  · {new Date(sale.sale_date + 'T12:00:00').toLocaleDateString()}
+                                </span>
+                              )}
                             </span>
-                          )}
-                          <span className="text-xs text-gray-500">
-                            {new Date(sale.sale_date).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <span className={`text-sm font-bold ${profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
-                        </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className={`text-sm font-bold ${profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
+                            </span>
+                            {isOpen
+                              ? <ChevronUp className="w-3.5 h-3.5 text-gray-500" />
+                              : <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+                            }
+                          </div>
+                        </button>
+
+                        {/* Expanded edit fields */}
+                        {isOpen && (
+                          <div className="border-t border-white/[0.06] px-4 py-4 space-y-3">
+
+                            {/* Row 1: Sale Price, Qty, Commission, Sale Shipping */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                              <Field label="Sale Price">
+                                <DollarInput
+                                  value={sale.unit_price}
+                                  onChange={v => setSale(i, 'unit_price', v)}
+                                  accentClass="focus:border-green-500/60"
+                                />
+                              </Field>
+                              <Field label="Qty Sold">
+                                <Input
+                                  type="number"
+                                  value={sale.quantity}
+                                  onChange={v => setSale(i, 'quantity', v)}
+                                  className="focus:border-green-500/60"
+                                />
+                              </Field>
+                              <Field label="Commission">
+                                <DollarInput
+                                  value={sale.commission_fee}
+                                  onChange={v => setSale(i, 'commission_fee', v)}
+                                  accentClass="focus:border-green-500/60"
+                                />
+                              </Field>
+                              <Field label="Sale Shipping">
+                                <DollarInput
+                                  value={sale.sale_shipping}
+                                  onChange={v => setSale(i, 'sale_shipping', v)}
+                                  accentClass="focus:border-green-500/60"
+                                />
+                              </Field>
+                            </div>
+
+                            {/* Row 2: Platform, Status */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <Field label="Platform">
+                                <Sel
+                                  value={sale.platform_id}
+                                  onChange={v => setSale(i, 'platform_id', v)}
+                                  options={[...marketplaces, ...cashoutPlatforms]}
+                                  placeholder="Select platform…"
+                                />
+                              </Field>
+                              <Field label="Sale Status">
+                                <Sel
+                                  value={sale.status}
+                                  onChange={v => setSale(i, 'status', v)}
+                                  options={SALE_STATUSES.map(s => ({ id: s, name: s }))}
+                                />
+                              </Field>
+                            </div>
+
+                            {/* Row 3: Sale Date, Payout Date */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <Field label="Sale Date">
+                                <Input
+                                  type="date"
+                                  value={sale.sale_date}
+                                  onChange={v => setSale(i, 'sale_date', v)}
+                                  className="[color-scheme:dark] focus:border-green-500/60"
+                                />
+                              </Field>
+                              <Field label="Payout Date">
+                                <Input
+                                  type="date"
+                                  value={sale.payout_date}
+                                  onChange={v => setSale(i, 'payout_date', v)}
+                                  className="[color-scheme:dark] focus:border-green-500/60"
+                                />
+                              </Field>
+                            </div>
+
+                            {/* Row 4: Tax Collected + Taxable toggle */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                              <Field label="Sale Tax Collected">
+                                <DollarInput
+                                  value={sale.sale_tax_collected}
+                                  onChange={v => setSale(i, 'sale_tax_collected', v)}
+                                  accentClass="focus:border-green-500/60"
+                                />
+                              </Field>
+                              <label className="flex items-center gap-2.5 cursor-pointer select-none pb-2">
+                                <input
+                                  type="checkbox"
+                                  checked={sale.taxable ?? true}
+                                  onChange={e => setSale(i, 'taxable', e.target.checked)}
+                                  className="w-4 h-4 rounded border-gray-600 accent-green-500"
+                                />
+                                <span className="text-sm text-gray-300">Taxable Sale</span>
+                              </label>
+                            </div>
+
+                            {/* Mini profit breakdown */}
+                            <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] divide-y divide-white/[0.04] text-xs mt-1">
+                              <div className="flex justify-between px-3 py-2">
+                                <span className="text-gray-500">Revenue</span>
+                                <span className="text-green-400">${saleTotal.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between px-3 py-2">
+                                <span className="text-gray-500">Cost basis</span>
+                                <span className="text-red-400">-${totalCostForSale.toFixed(2)}</span>
+                              </div>
+                              {commission > 0 && (
+                                <div className="flex justify-between px-3 py-2">
+                                  <span className="text-gray-500">Commission</span>
+                                  <span className="text-red-400">-${commission.toFixed(2)}</span>
+                                </div>
+                              )}
+                              {saleShipping > 0 && (
+                                <div className="flex justify-between px-3 py-2">
+                                  <span className="text-gray-500">Sale shipping</span>
+                                  <span className="text-red-400">-${saleShipping.toFixed(2)}</span>
+                                </div>
+                              )}
+                              {saleCashback > 0 && (
+                                <div className="flex justify-between px-3 py-2">
+                                  <span className="text-gray-500">Cashback</span>
+                                  <span className="text-emerald-400">+${saleCashback.toFixed(2)}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between px-3 py-2 font-semibold">
+                                <span className="text-gray-300">Net Profit</span>
+                                <span className={profit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                                  {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
-              ) : (
-                <p className="text-xs text-gray-600">No sales recorded yet. Click "Record Sale" to add one.</p>
               )}
             </div>
 
             <div className="border-t border-white/[0.04]" />
 
-            {/* Summary */}
+            {/* ── Summary ── */}
             <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-4">
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">Summary</p>
               <div className="space-y-2">
@@ -443,9 +611,11 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                   </div>
                 )}
                 {form._sales.length > 0 && (() => {
-                  const totalSaleRevenue = form._sales.reduce((sum, s) => sum + (s.unit_price * s.quantity), 0);
-                  const totalCommissions = form._sales.reduce((sum, s) => sum + s.commission_fee, 0);
-                  const totalProfit = totalSaleRevenue - totalCommissions - totalCost;
+                  const totalSaleRevenue = form._sales.reduce((sum, s) => sum + ((Number(s.unit_price) || 0) * (Number(s.quantity) || 1)), 0);
+                  const totalCommissions = form._sales.reduce((sum, s) => sum + (Number(s.commission_fee) || 0), 0);
+                  const totalSaleShipping = form._sales.reduce((sum, s) => sum + (Number(s.sale_shipping) || 0), 0);
+                  const grossProfit = totalSaleRevenue - totalCommissions - totalSaleShipping - totalCost;
+                  const netProfit = grossProfit + cbEarned;
                   return (
                     <>
                       <div className="flex justify-between text-sm border-t border-white/[0.06] pt-2">
@@ -458,19 +628,22 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                           <span className="text-red-400 font-medium">-${totalCommissions.toFixed(2)}</span>
                         </div>
                       )}
+                      {totalSaleShipping > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">Sale Shipping</span>
+                          <span className="text-red-400 font-medium">-${totalSaleShipping.toFixed(2)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-200 font-semibold">Profit</span>
-                        <span className={`font-bold ${totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {totalProfit >= 0 ? '+' : ''}${totalProfit.toFixed(2)}
+                        <span className="text-gray-200 font-semibold">Net Profit</span>
+                        <span className={`font-bold ${netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {netProfit >= 0 ? '+' : ''}${netProfit.toFixed(2)}
                         </span>
                       </div>
                       {cbEarned > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-400">Profit w/ Cashback</span>
-                          <span className={`font-bold ${(totalProfit + cbEarned) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {(totalProfit + cbEarned) >= 0 ? '+' : ''}${(totalProfit + cbEarned).toFixed(2)}
-                          </span>
-                        </div>
+                        <p className="text-[10px] text-gray-600">
+                          Includes ${cbEarned.toFixed(2)} cashback ({cbRate}%)
+                        </p>
                       )}
                     </>
                   );
@@ -482,7 +655,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
         )}
 
         {/* ── Footer ── */}
-        <div className="px-6 py-4 border-t border-white/[0.06] flex items-center justify-end gap-3 shrink-0">
+        <div className="px-4 sm:px-6 py-4 border-t border-white/[0.06] flex items-center justify-end gap-3 shrink-0">
           <button
             onClick={onClose}
             className="px-5 py-2 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-white/[0.05] border border-white/[0.08] transition-colors"

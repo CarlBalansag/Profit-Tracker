@@ -181,6 +181,7 @@ const Transactions = () => {
   const [filterPlatformId, setFilterPlatformId] = useState('');
   const [filterPaymentId, setFilterPaymentId] = useState('');
   const [filterDateRange, setFilterDateRange] = useState(location.state?.dateFilter || '');
+  const [filterTxnType, setFilterTxnType] = useState(''); // '' | 'sale' | 'buy'
   const [dashCardScope] = useState(location.state?.cardScope || '');
   // Unified mode: 'All' | 'Cashout' | 'Marketplace'
   // Dashboard sends platformMode as 'Cashout'.
@@ -542,6 +543,8 @@ const Transactions = () => {
       if (rowDate < dashDateFrom) return false;
     }
     if (dashCardScope === 'sold' && !row.isSale) return false;
+    if (filterTxnType === 'sale' && !row.isSale) return false;
+    if (filterTxnType === 'buy' && row.isSale) return false;
     // Toolbar mode filter (All / Cashout / Marketplace)
     if (txnMode === 'Cashout') {
       if (!row.isSale) return false;
@@ -710,7 +713,7 @@ const Transactions = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-6">
         <div className="rounded-xl border border-white/10 bg-[#16181d] p-3 pl-4 flex flex-col justify-between">
           <div className="flex items-center gap-2 text-gray-400 text-xs font-medium mb-2"><Package className="w-3.5 h-3.5" /> Total Items</div>
           <div className="text-xl font-bold text-white">{filteredRows.length}</div>
@@ -736,19 +739,42 @@ const Transactions = () => {
       {/* Search and Filters */}
       <div className="card p-3 mb-6 bg-[#0f1115]">
         <div className="flex flex-col md:flex-row gap-3">
-          {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search products, stores, platforms..."
-              className="w-full bg-[#16181d] border border-white/5 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-white/20 transition-colors"
-            />
+          {/* Search + Sale/Buy toggle */}
+          <div className="flex items-center gap-2 flex-1">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search products, stores, platforms..."
+                className="w-full bg-[#16181d] border border-white/5 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-white/20 transition-colors"
+              />
+            </div>
+            {/* Sale / Buy type filter */}
+            <div className="flex gap-0.5 p-0.5 rounded-lg bg-[#16181d] border border-white/5 shrink-0">
+              {[['', 'All'], ['sale', 'Sale'], ['buy', 'Buy']].map(([val, label]) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setFilterTxnType(val)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    filterTxnType === val
+                      ? val === 'sale'
+                        ? 'bg-green-500/15 text-green-400 border border-green-500/20'
+                        : val === 'buy'
+                        ? 'bg-blue-500/15 text-blue-400 border border-blue-500/20'
+                        : 'bg-white/[0.08] text-white border border-white/10'
+                      : 'text-gray-500 hover:text-gray-300 border border-transparent'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           {/* Dropdowns */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 [&>select]:flex-1 [&>select]:min-w-[130px] sm:[&>select]:flex-none sm:[&>select]:min-w-0">
             <select
               value={filterStatus}
               onChange={e => setFilterStatus(e.target.value)}
@@ -796,9 +822,9 @@ const Transactions = () => {
               <option value="30 Days">Last 30 Days</option>
               <option value="YTD">Year to Date</option>
             </select>
-            {(search || filterStatus || filterVendorId || filterPlatformId || filterPaymentId || filterDateRange) && (
+            {(search || filterStatus || filterVendorId || filterPlatformId || filterPaymentId || filterDateRange || filterTxnType) && (
               <button
-                onClick={() => { setSearch(''); setFilterStatus(''); setFilterVendorId(''); setFilterPlatformId(''); setFilterPaymentId(''); setFilterDateRange(''); }}
+                onClick={() => { setSearch(''); setFilterStatus(''); setFilterVendorId(''); setFilterPlatformId(''); setFilterPaymentId(''); setFilterDateRange(''); setFilterTxnType(''); }}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-colors"
               >
                 <X className="w-3.5 h-3.5" /> Clear
@@ -824,7 +850,7 @@ const Transactions = () => {
             <button
               onClick={async () => {
                 if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} items?`)) return;
-                setIsLoading(true);
+                setSaving(true);
                 let errors = 0;
                 for (const id of selectedIds) {
                   const row = filteredRows.find(r => r.id === id);
@@ -839,6 +865,7 @@ const Transactions = () => {
                     errors++;
                   }
                 }
+                setSaving(false);
                 if (errors > 0) toast.error(`Failed to delete ${errors} items.`);
                 else toast.success(`Successfully deleted ${selectedIds.length} items.`);
                 setSelectedIds([]);
@@ -852,8 +879,97 @@ const Transactions = () => {
         </div>
       )}
 
-      {/* Table */}
-      <div className="card overflow-x-auto bg-[#0f1115] table-scrollbar">
+      {/* Mobile card list — shown only on small screens */}
+      <div className="md:hidden space-y-2 mb-4">
+        {filteredRows.length === 0 && (
+          <div className="text-center text-gray-500 text-sm py-8">
+            {isLoading ? 'Loading transactions...' : rows.length === 0 ? 'No transactions recorded yet.' : 'No results match your filters.'}
+          </div>
+        )}
+        {filteredRows.map(row => (
+          <div
+            key={row.id}
+            className="card bg-[#0f1115] p-4 rounded-xl border border-white/[0.06] flex flex-col gap-2"
+          >
+            {/* Top row: type badge + product + expand */}
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                {row.isSale
+                  ? <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border bg-green-500/10 text-green-400 border-green-500/20">SALE</span>
+                  : <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border bg-blue-500/10 text-blue-400 border-blue-500/20">BUY</span>
+                }
+                <p className="text-sm font-semibold text-gray-100 truncate">{row.product}</p>
+              </div>
+              <button
+                onClick={() => setExpandedRow(row)}
+                className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 text-gray-500 hover:text-white transition-colors"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Middle row: date · vendor · platform · status */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+              {row.date && <span>{row.date}</span>}
+              {row.vendor && <span>{row.vendor}</span>}
+              {row.platform && <span className="text-gray-400">{row.platform}</span>}
+              <StatusBadge status={row.status} />
+            </div>
+
+            {/* Bottom row: cost → sale → profit */}
+            <div className="flex items-center gap-4 pt-1 border-t border-white/[0.04]">
+              <div>
+                <p className="text-[10px] text-gray-600 uppercase tracking-wider mb-0.5">Cost</p>
+                <p className="text-sm font-semibold text-blue-400">${Number.isFinite(row.cost) ? row.cost.toFixed(2) : '0.00'}</p>
+              </div>
+              {row.sale != null && (
+                <div>
+                  <p className="text-[10px] text-gray-600 uppercase tracking-wider mb-0.5">Sale</p>
+                  <p className="text-sm font-semibold text-green-400">${row.sale.toFixed(2)}</p>
+                </div>
+              )}
+              {Number.isFinite(row.profit) && (
+                <div className="ml-auto">
+                  <p className="text-[10px] text-gray-600 uppercase tracking-wider mb-0.5 text-right">Profit</p>
+                  <p className={`text-sm font-bold ${row.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {row.profit >= 0 ? '+' : ''}${row.profit.toFixed(2)}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={() => startEdit(row)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/10 transition-colors"
+              >
+                <Edit2 className="w-3 h-3" /> Edit
+              </button>
+              <button
+                onClick={() => {
+                  if (confirmDeleteId === row.rawId) {
+                    removeTxn(row.rawId);
+                  } else {
+                    setConfirmDeleteId(row.rawId);
+                  }
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                  confirmDeleteId === row.rawId
+                    ? 'bg-red-600 hover:bg-red-500 text-white border-red-600'
+                    : 'bg-white/5 hover:bg-red-500/10 text-gray-500 hover:text-red-400 border-white/10'
+                }`}
+              >
+                <Trash2 className="w-3 h-3" />
+                {confirmDeleteId === row.rawId ? 'Confirm' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Table — hidden on mobile, shown md+ */}
+      <div className="hidden md:block card overflow-x-auto bg-[#0f1115] table-scrollbar">
         <table className="w-full text-left whitespace-nowrap">
           <thead>
             <tr className="border-b border-white/[0.06] text-[10px] uppercase font-semibold text-gray-500 tracking-widest">
@@ -1210,7 +1326,7 @@ const Transactions = () => {
         platforms={platforms}
         paymentMethods={paymentMethods}
         onClose={() => setExpandedRow(null)}
-        onSaved={fetchTransactions}
+        onSaved={refetchTransactions}
       />
     )}
     </>
