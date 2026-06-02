@@ -9,9 +9,10 @@ import { useInventory, usePlatforms, useInvalidate, apiFetch} from '../hooks/use
 
 const AddSale = () => {
   const navigate = useNavigate();
-  const { data: rawInventory = [] } = useInventory();
-  const { data: platforms = [] } = usePlatforms();
+  const { data: rawInventory = [], isLoading: inventoryLoading } = useInventory();
+  const { data: platforms = [], isLoading: platformsLoading } = usePlatforms();
   const invalidate = useInvalidate();
+  const isLoading = inventoryLoading || platformsLoading;
   // Only items with stock available
   const inventory = rawInventory.filter(i => i.qty_on_hand > 0);
 
@@ -129,39 +130,58 @@ const AddSale = () => {
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-3 pb-8 scrollbar-thin">
-            {filteredInventory.map(item => (
-              <button
-                key={item.id}
-                onClick={() => handleSelect(item)}
-                className={clsx(
-                  "w-full text-left p-4 rounded-xl border transition-all relative overflow-hidden group",
-                  selectedItem?.id === item.id 
-                    ? "bg-purple-500/10 border-purple-500/50 shadow-[0_0_15px_rgba(139,92,246,0.15)]" 
-                    : "bg-[#12121A] border-white/10 hover:border-white/20 hover:bg-[#16161E]"
-                )}
-              >
-                {selectedItem?.id === item.id && (
-                  <div className="absolute top-3 right-3 w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
-                    <Check className="w-3 h-3 text-white" />
+            {isLoading ? (
+              // Skeleton cards while inventory loads
+              Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="w-full p-4 rounded-xl border border-white/10 bg-[#12121A] animate-pulse">
+                  <div className="h-3.5 bg-white/10 rounded w-3/4 mb-3" />
+                  <div className="flex gap-4 mb-3">
+                    <div className="h-3 bg-white/6 rounded w-16" />
+                    <div className="h-3 bg-white/6 rounded w-20" />
+                  </div>
+                  <div className="pt-3 border-t border-white/5 flex gap-2">
+                    <div className="h-3 bg-white/6 rounded w-8" />
+                    <div className="h-3 bg-white/6 rounded w-28" />
+                  </div>
+                </div>
+              ))
+            ) : (
+              <>
+                {filteredInventory.map(item => (
+                  <button
+                    key={item.id}
+                    onClick={() => handleSelect(item)}
+                    className={clsx(
+                      "w-full text-left p-4 rounded-xl border transition-all relative overflow-hidden group",
+                      selectedItem?.id === item.id
+                        ? "bg-purple-500/10 border-purple-500/50 shadow-[0_0_15px_rgba(139,92,246,0.15)]"
+                        : "bg-[#12121A] border-white/10 hover:border-white/20 hover:bg-[#16161E]"
+                    )}
+                  >
+                    {selectedItem?.id === item.id && (
+                      <div className="absolute top-3 right-3 w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
+                        <Check className="w-3 h-3 text-white" />
+                      </div>
+                    )}
+                    <div className="flex justify-between items-start mb-2 pr-6">
+                      <h3 className="text-sm font-semibold text-white max-w-[90%] truncate">{item.product_name}</h3>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs">
+                      <div className="text-gray-400 font-medium">Stock: <span className="text-gray-200">{item.qty_on_hand}</span></div>
+                      <div className="text-gray-400 font-medium">Cost: <span className="text-blue-400">${item.unit_purchase_cost.toFixed(2)}</span></div>
+                    </div>
+                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/5">
+                      <Store className="w-3.5 h-3.5 text-gray-500" />
+                      <span className="text-xs text-gray-500">{item.vendor?.name || 'Unknown'} • {new Date(item.purchase_date).toLocaleDateString()}</span>
+                    </div>
+                  </button>
+                ))}
+                {filteredInventory.length === 0 && (
+                  <div className="p-8 text-center text-gray-500 text-sm border border-dashed border-white/10 rounded-xl">
+                    No inventory matches your search.
                   </div>
                 )}
-                <div className="flex justify-between items-start mb-2 pr-6">
-                  <h3 className="text-sm font-semibold text-white max-w-[90%] truncate">{item.product_name}</h3>
-                </div>
-                <div className="flex items-center gap-4 text-xs">
-                  <div className="text-gray-400 font-medium">Stock: <span className="text-gray-200">{item.qty_on_hand}</span></div>
-                  <div className="text-gray-400 font-medium">Cost: <span className="text-blue-400">${item.unit_purchase_cost.toFixed(2)}</span></div>
-                </div>
-                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/5">
-                  <Store className="w-3.5 h-3.5 text-gray-500" />
-                  <span className="text-xs text-gray-500">{item.vendor?.name || 'Unknown'} • {new Date(item.purchase_date).toLocaleDateString()}</span>
-                </div>
-              </button>
-            ))}
-            {filteredInventory.length === 0 && (
-              <div className="p-8 text-center text-gray-500 text-sm border border-dashed border-white/10 rounded-xl">
-                No inventory matches your search.
-              </div>
+              </>
             )}
           </div>
         </div>

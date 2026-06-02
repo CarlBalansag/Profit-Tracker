@@ -2,15 +2,17 @@ import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, CirclePlus, ArrowLeftRight, Package,
-  Receipt, FileText, ChartColumn, Wallet,
-  Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, DollarSign, ShieldCheck
+  Receipt, FileText, ChartColumn, Wallet, CreditCard as CreditCardIcon,
+  Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, DollarSign, ShieldCheck, BookOpen
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
 
 const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'neon-dark' }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   if (uiStyle === 'glassmorphism-brown') {
     return (
@@ -43,9 +45,11 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <GlassNavItem icon={Receipt} label="Expenses" to="/expenses" />
             <GlassNavItem icon={ChartColumn} label="Analytics" to="/analytics" />
             <GlassNavItem icon={Wallet} label="Cash Flow" to="/cashflow" />
+            <GlassNavItem icon={CreditCardIcon} label="Credit Card" to="/creditcard" />
 
             <div className="my-2 h-px w-7 bg-white/[0.07]" />
 
+            <GlassNavItem icon={BookOpen} label="Guide" to="/guide" />
             <GlassNavButton icon={Settings} label="Settings" onClick={() => navigate('/settings')} />
           </div>
         </aside>
@@ -95,34 +99,37 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
         </div>
 
         <nav className="flex-1 py-4 px-2 space-y-4 overflow-y-auto overflow-x-hidden">
-          <SidebarSection title="Core" isCollapsed={isCollapsed}>
+          <SidebarSection title="Core" isCollapsed={isCollapsed} tutorialId="sidebar-section-core">
             <NavItem icon={LayoutDashboard} label="Dashboard" to="/" isCollapsed={isCollapsed} />
-            <NavItem icon={CirclePlus} label="Add Transaction" to="/add-transaction" isCollapsed={isCollapsed} />
-            <NavItem icon={DollarSign} label="Record Sale" to="/add-sale" isCollapsed={isCollapsed} />
-            <NavItem icon={ArrowLeftRight} label="Transactions" to="/transactions" isCollapsed={isCollapsed} />
-          </SidebarSection>
-          
-          <SidebarSection title="Operations" isCollapsed={isCollapsed}>
-            <NavItem icon={Package} label="Inventory On Hand" to="/inventory" isCollapsed={isCollapsed} />
-            <NavItem icon={Receipt} label="Expenses" to="/expenses" isCollapsed={isCollapsed} />
-            <NavItem icon={FileText} label="Receipts" to="/receipts" isCollapsed={isCollapsed} />
-            <NavItem icon={ShieldCheck} label="Tax Exempt" to="/tax-exempt" isCollapsed={isCollapsed} />
+            <NavItem icon={CirclePlus} label="Add Transaction" to="/add-transaction" isCollapsed={isCollapsed} tutorialId="sidebar-add-transaction" />
+            <NavItem icon={DollarSign} label="Record Sale" to="/add-sale" isCollapsed={isCollapsed} tutorialId="sidebar-record-sale" />
+            <NavItem icon={ArrowLeftRight} label="Transactions" to="/transactions" isCollapsed={isCollapsed} tutorialId="sidebar-transactions" />
           </SidebarSection>
 
-          <SidebarSection title="Insights" isCollapsed={isCollapsed}>
-            <NavItem icon={ChartColumn} label="Analytics & Insights" to="/analytics" isCollapsed={isCollapsed} />
-            <NavItem icon={Wallet} label="Cash Flow" to="/cashflow" isCollapsed={isCollapsed} />
+          <SidebarSection title="Operations" isCollapsed={isCollapsed} tutorialId="sidebar-section-operations">
+            <NavItem icon={Package} label="Inventory On Hand" to="/inventory" isCollapsed={isCollapsed} tutorialId="sidebar-inventory" />
+            <NavItem icon={Receipt} label="Expenses" to="/expenses" isCollapsed={isCollapsed} tutorialId="sidebar-expenses" />
+            <NavItem icon={FileText} label="Receipts" to="/receipts" isCollapsed={isCollapsed} tutorialId="sidebar-receipts" />
+            <NavItem icon={ShieldCheck} label="Tax Exempt" to="/tax-exempt" isCollapsed={isCollapsed} tutorialId="sidebar-tax-exempt" />
+          </SidebarSection>
+
+          <SidebarSection title="Insights" isCollapsed={isCollapsed} tutorialId="sidebar-section-insights">
+            <NavItem icon={ChartColumn} label="Analytics & Insights" to="/analytics" isCollapsed={isCollapsed} tutorialId="sidebar-analytics" />
+            <NavItem icon={Wallet} label="Cash Flow" to="/cashflow" isCollapsed={isCollapsed} tutorialId="sidebar-cashflow" />
+            <NavItem icon={CreditCardIcon} label="Credit Card" to="/creditcard" isCollapsed={isCollapsed} tutorialId="sidebar-creditcard" />
           </SidebarSection>
 
         </nav>
 
         <div className="p-2 border-t border-[color:var(--border-default)]">
-          <button 
+          <button
+            data-tutorial-id="sidebar-datasetup"
             onClick={() => navigate('/settings', { state: { tab: 'datasetup' } })}
             className={clsx("flex items-center rounded-md border-l-2 border-transparent text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-2.5 py-2 px-3")}>
             <Settings size={16} />
             {!isCollapsed && <span className="truncate">Data Setup</span>}
           </button>
+          <NavItem icon={BookOpen} label="Guide" to="/guide" isCollapsed={isCollapsed} tutorialId="sidebar-guide" />
         </div>
 
         <div className="p-2 border-t border-[color:var(--border-default)] relative">
@@ -148,7 +155,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
                  <Settings size={16} className="text-[var(--text-secondary)]" /> Settings
                </NavLink>
                <div className="h-px w-full bg-[var(--border-default)] my-1"></div>
-               <button className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[var(--red)] hover:bg-[var(--red-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
+               <button className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[var(--red)] hover:bg-[var(--red-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); logout(); }}>
                  <PanelLeftClose size={16} className="rotate-180 text-[var(--red)] opacity-80" /> Sign Out
                </button>
             </div>
@@ -159,11 +166,11 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
   );
 };
 
-const SidebarSection = ({ title, children, isCollapsed }) => {
+const SidebarSection = ({ title, children, isCollapsed, tutorialId }) => {
   const [isSectionOpen, setIsSectionOpen] = useState(true);
-  
+
   return (
-    <div className={clsx("space-y-1", isCollapsed ? "mt-4 first:mt-0" : "")}>
+    <div data-tutorial-id={tutorialId} className={clsx("space-y-1", isCollapsed ? "mt-4 first:mt-0" : "")}>
       {!isCollapsed && (
         <button 
           onClick={() => setIsSectionOpen(!isSectionOpen)}
@@ -180,10 +187,11 @@ const SidebarSection = ({ title, children, isCollapsed }) => {
   );
 };
 
-const NavItem = ({ icon: Icon, label, to, isCollapsed }) => (
+const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId }) => (
   <NavLink
     to={to}
     title={isCollapsed ? label : undefined}
+    data-tutorial-id={tutorialId}
     className={({ isActive }) =>
       clsx(
         "flex items-center rounded-md border-l-2 transition-colors",

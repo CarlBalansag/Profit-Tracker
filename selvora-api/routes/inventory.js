@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { validateBody } = require('../middleware/validate');
+const { createInventory, updateInventory } = require('../validation/schemas');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -48,7 +50,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 });
 
 // POST new inventory explicitly
-router.post('/', isAuthenticated, async (req, res, next) => {
+router.post('/', isAuthenticated, validateBody(createInventory), async (req, res, next) => {
   try {
     const {
       product_name,
@@ -157,7 +159,7 @@ router.get('/:id', isAuthenticated, async (req, res, next) => {
 });
 
 // PUT - update an inventory record
-router.put('/:id', isAuthenticated, async (req, res, next) => {
+router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, res, next) => {
   try {
     const existing = await prisma.inventory.findUnique({ where: { id: req.params.id } });
     if (!existing || existing.user_id !== req.user.id) return res.status(404).json({ error: 'Not found' });
@@ -239,4 +241,3 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
 });
 
 module.exports = router;
-

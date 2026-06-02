@@ -1,5 +1,8 @@
+require('dotenv').config();
+const monitoring = require('./monitoring');
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const prisma = require('./prisma');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
@@ -15,7 +18,8 @@ const preferencesRouter = require('./routes/preferences');
 const expensesRouter = require('./routes/expenses');
 const recurringExpensesRouter = require('./routes/recurringExpenses');
 const receiptsRouter = require('./routes/receipts');
-require('dotenv').config();
+const creditCardRouter = require('./routes/creditcard');
+const ebayPriceRouter = require('./routes/ebayPrice');
 
 const app = express();
 const isProd = process.env.NODE_ENV === 'production';
@@ -29,6 +33,9 @@ if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
 
 // Trust Render's reverse proxy so secure cookies work over HTTPS
 if (isProd) app.set('trust proxy', 1);
+
+// Compress all responses — cuts JSON payload size by ~65-75%
+app.use(compression());
 
 // Allow frontend connection with credentials
 app.use(cors({
@@ -107,10 +114,23 @@ passport.serializeUser((user, done) => {
   done(null, user.id);
 });
 
-// Deserialization to attach user info to req.user
+// Deserialization to attach user info to req.user.
+// Cache user records in memory for 5 minutes to avoid a DB round-trip on every
+// single API request. The cache is busted automatically on expiry, and any
+// mutation that changes user fields (e.g. tutorial_seen) clears it explicitly.
+const userCache = new Map(); // Map<id, { user, expiresAt }>
+const USER_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+const clearUserCache = (id) => userCache.delete(id);
+
 passport.deserializeUser(async (id, done) => {
   try {
-    const user = await prisma.user.findUnique({ where: { id: id } });
+    const cached = userCache.get(id);
+    if (cached && cached.expiresAt > Date.now()) {
+      return done(null, cached.user);
+    }
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (user) userCache.set(id, { user, expiresAt: Date.now() + USER_CACHE_TTL });
     done(null, user);
   } catch (error) {
     done(error, null);
@@ -128,6 +148,8 @@ app.use('/api/preferences', preferencesRouter);
 app.use('/api/expenses', expensesRouter);
 app.use('/api/recurring-expenses', recurringExpensesRouter);
 app.use('/api/receipts', receiptsRouter);
+app.use('/api/creditcard', creditCardRouter);
+app.use('/api/ebay-price', ebayPriceRouter);
 
 // Health Check
 app.get('/health', (req, res) => {
@@ -153,6 +175,19 @@ app.get('/auth/me', (req, res) => {
   }
 });
 
+// Mark tutorial as seen
+app.patch('/auth/me', async (req, res) => {
+  if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+  const { tutorial_seen } = req.body;
+  if (typeof tutorial_seen !== 'boolean') return res.status(400).json({ message: 'Invalid payload' });
+  const updated = await prisma.user.update({
+    where: { id: req.user.id },
+    data: { tutorial_seen },
+  });
+  clearUserCache(req.user.id);
+  res.json(updated);
+});
+
 // Logout Route
 app.get('/auth/logout', (req, res, next) => {
   req.logout((err) => {
@@ -165,6 +200,13 @@ app.get('/auth/logout', (req, res, next) => {
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   console.error(err);
+  monitoring.captureException(err, {
+    request: {
+      method: req.method,
+      path: req.path,
+      userId: req.user?.id,
+    },
+  });
   const message = isProd ? 'Internal Server Error' : err.message;
   res.status(err.status || 500).json({ error: message });
 });

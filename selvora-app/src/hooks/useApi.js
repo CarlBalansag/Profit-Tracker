@@ -32,24 +32,31 @@ export const useSales = () =>
   });
 
 // ─── Platforms ────────────────────────────────────────────────────────────────
+// Platforms rarely change — 30-minute cache is safe. Invalidated on settings save.
 export const usePlatforms = () =>
   useQuery({
     queryKey: ['platforms'],
     queryFn: () => fetcher('/api/platforms'),
+    staleTime: 1000 * 60 * 30,
   });
 
 // ─── Payment Methods ──────────────────────────────────────────────────────────
+// Payment methods rarely change — 30-minute cache is safe. Invalidated on settings save.
 export const usePaymentMethods = () =>
   useQuery({
     queryKey: ['payment-methods'],
     queryFn: () => fetcher('/api/payment-methods'),
+    staleTime: 1000 * 60 * 30,
   });
 
 // ─── Dashboard analytics ──────────────────────────────────────────────────────
+// Longer staleTime: this is the heaviest endpoint and data doesn't change mid-session
+// unless the user explicitly adds a transaction (which calls invalidate.dashboard()).
 export const useDashboard = (mode, date) =>
   useQuery({
     queryKey: ['dashboard', mode, date],
     queryFn: () => fetcher(`/api/analytics/dashboard?mode=${mode}&date=${encodeURIComponent(date)}`),
+    staleTime: 1000 * 60 * 10, // 10 minutes — overrides the global 5-minute default
   });
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────
@@ -57,6 +64,13 @@ export const useExpenses = () =>
   useQuery({
     queryKey: ['expenses'],
     queryFn: () => fetcher('/api/expenses'),
+  });
+
+// ─── Credit Card tracker ───────────────────────────────────────────────────────
+export const useCreditCard = (month) =>
+  useQuery({
+    queryKey: ['creditcard', month],
+    queryFn: () => fetcher(`/api/creditcard/dashboard${month ? `?month=${month}` : ''}`),
   });
 
 // ─── Invalidation helpers (call after mutations to refresh cache) ─────────────
@@ -69,6 +83,7 @@ export const useInvalidate = () => {
     dashboard:      () => qc.invalidateQueries({ queryKey: ['dashboard'] }),
     expenses:       () => qc.invalidateQueries({ queryKey: ['expenses'] }),
     paymentMethods: () => qc.invalidateQueries({ queryKey: ['payment-methods'] }),
+    creditCard:     () => qc.invalidateQueries({ queryKey: ['creditcard'], exact: false }),
     all:            () => qc.invalidateQueries(),
   };
 };
