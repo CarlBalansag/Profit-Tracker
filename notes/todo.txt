@@ -1,1 +1,120 @@
-(all security items completed)
+
+════════════════════════════════════════════════════════════════
+ IMPROVEMENTS — PORTFOLIO / TIER 4
+════════════════════════════════════════════════════════════════
+
+── HIGHEST IMPACT (do these first) ────────────────────────────
+
+[ ] Write a proper README at project root
+      - Project description, live demo URL, screenshot/GIF
+      - Tech stack badges
+      - Architecture diagram (simple box diagram)
+      - Local setup instructions (env vars, npm install, prisma migrate)
+      - Feature list with screenshots
+
+[ ] GitHub Actions CI pipeline
+      - Run `vitest` on every push / PR
+      - Lint check (ESLint)
+      - Fail PR if tests break
+      - Add a passing CI badge to README
+
+── FEATURES ────────────────────────────────────────────────────
+
+[ ] CSV / Excel export
+      - GET /api/export?format=csv&from=YYYY-MM-DD&to=YYYY-MM-DD
+      - Exports all transactions with cost, revenue, profit, cashback, platform
+      - Frontend "Export" button on Transactions/Analytics pages
+      - Useful for tax time; very practical for resellers
+
+[ ] AI price suggestions (Claude / Anthropic API)
+      - When adding inventory, send product name to Claude
+      - Returns suggested resale price range + estimated sell time
+      - Replace / augment fragile eBay Cheerio scraper
+      - Streaming response for polished UX
+
+[ ] AI monthly business summary
+      - "Generate Report" button on Dashboard or Analytics
+      - Feeds month's P&L data to Claude
+      - Returns plain-English summary ("You turned $X into $Y with 14% ROI...")
+      - Low API cost, high wow factor for demo
+
+[ ] Real eBay API integration
+      - Replace Cheerio scraping with eBay Browse API (free tier)
+      - More reliable, won't break on HTML changes
+      - Shows ability to integrate OAuth third-party APIs professionally
+
+[ ] Bulk CSV import
+      - Import historical purchases from a spreadsheet
+      - Field mapping UI (map CSV columns to inventory fields)
+      - Big quality-of-life feature for new users onboarding
+
+[ ] Email / push notifications
+      - Payout overdue alerts (sale_date + avg_days_to_payout exceeded)
+      - Recurring expense reminders
+      - Use Resend or SendGrid; low cost
+
+── BACKEND / INFRASTRUCTURE ───────────────────────────────────
+
+[ ] Rate limiting
+      - express-rate-limit on all /api/* routes
+      - Stricter limit on /auth/* (brute force protection)
+
+[ ] Structured request logging
+      - Add Morgan middleware for request logs
+      - Log method, path, status, response time
+      - Helps with debugging on Render
+
+[ ] Background job for recurring expenses
+      - Move generateEntries() out of GET handler
+      - Use node-cron on Render (or Render cron job)
+      - Avoids slow GET on first load of Expenses page
+
+[ ] Paginate inventory / transactions / sales endpoints
+      - GET /api/inventory?page=1&limit=50
+      - Analytics endpoint fetches ALL records — will slow at scale
+      - Add SQL-level aggregation to analytics.js (avoid JS reduce loops)
+
+[ ] Docker Compose for local dev
+      - postgres + node api + vite frontend
+      - Eliminates manual env setup for new contributors
+
+── FRONTEND / CODE QUALITY ────────────────────────────────────
+
+[ ] TypeScript migration (gradual)
+      - Start with useApi.js, shared types, Zod inferred types
+      - Prevents financial calculation bugs across files
+      - Strong signal for recruiters
+
+[ ] Split monolithic page components
+      - Transactions.jsx (~1200 lines) → split into hooks + sub-components
+      - AddTransaction.jsx (~900 lines) → same
+      - Extract reusable form field components
+
+[ ] Expand test coverage
+      - Backend: Supertest integration tests on analytics + creditcard routes
+      - Frontend: React Testing Library tests for AddTransaction, Dashboard
+      - Target: cover all financial calculation paths
+      - Even 50% coverage on analytics route is impressive
+
+[ ] Open registration (optional — for real users)
+      - Add Google OAuth as alternative to Discord
+      - Or add email/password via Passport local strategy
+      - Currently Discord-only limits your audience
+
+── METRICS TO TRACK ───────────────────────────────────────────
+
+[ ] Add analytics_events table or Sentry performance tracking
+      - Track: page views, feature usage (which pages get used most)
+      - Track: analytics endpoint P50/P95 response time
+      - Track: error rate per endpoint
+      - Numbers to put on resume: "$X revenue tracked, Y transactions, Z users"
+
+════════════════════════════════════════════════════════════════
+ BUGS / POLISH
+════════════════════════════════════════════════════════════════
+
+[ ] Invoices page — currently exists as route but appears minimally implemented
+[ ] Tailwind dynamic class interpolation in AddTransaction.jsx (inputCls helper)
+      - focus:border-${accent}-500/50 won't generate CSS — use literal strings
+[ ] Analytics endpoint does full JS reduce on all records — add SQL aggregation
+[ ] No pagination on any list endpoint — add before user count grows

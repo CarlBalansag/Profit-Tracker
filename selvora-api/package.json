@@ -6,14 +6,17 @@
   "scripts": {
     "start": "node index.js",
     "postinstall": "prisma generate",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "@sentry/node": "^10.53.1",
+    "cheerio": "^1.2.0",
     "cloudinary": "^2.10.0",
+    "compression": "^1.8.1",
     "connect-pg-simple": "^10.0.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
@@ -21,9 +24,11 @@
     "express-session": "^1.19.0",
     "passport": "^0.7.0",
     "passport-discord": "^0.1.4",
-    "session-file-store": "^1.5.0"
+    "session-file-store": "^1.5.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "prisma": "^5.22.0"
+    "prisma": "^5.22.0",
+    "vitest": "^2.1.9"
   }
 }
