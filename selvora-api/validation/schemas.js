@@ -114,12 +114,21 @@ const createExpense = z.object({
 
 const updateExpense = createExpense.partial();
 
+const optionalDay = z.preprocess(
+  emptyToUndefined,
+  z.coerce.number().int().min(1).max(28).optional()
+);
+
 const paymentMethod = z.object({
   name: requiredString('name'),
   type: requiredString('type'),
   default_cashback_rate: optionalMoney.default(0),
   preset_card_id: optionalString,
   category_rates: z.array(categoryRate).optional(),
+  statement_close_day: optionalDay,
+  due_day: optionalDay,
+  credit_limit: optionalMoney,
+  min_payment_pct: optionalMoney,
 }).passthrough();
 
 const platform = z.object({

@@ -44,9 +44,12 @@ export const PaymentMethods = () => {
             type: (card.type || '').toLowerCase().includes('debit') ? 'debit' : 'credit',
             baseRate: card.default_cashback_rate || 0,
             categoryRates: Array.isArray(card.category_rates) ? card.category_rates : [],
-            creditLimit: 0,
+            creditLimit: card.credit_limit || 0,
             totalSpend: 0,
-            availableSpend: 0
+            availableSpend: 0,
+            statement_close_day: card.statement_close_day ?? null,
+            due_day: card.due_day ?? null,
+            min_payment_pct: card.min_payment_pct ?? null,
           }));
           setSavedCards(mapped);
         } else {
@@ -89,12 +92,16 @@ export const PaymentMethods = () => {
 
     await fetch(url, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
       credentials: 'include',
       body: JSON.stringify({
         name: processedCard.name,
         type: processedCard.type,
-        default_cashback_rate: processedCard.baseRate
+        default_cashback_rate: processedCard.baseRate,
+        statement_close_day: processedCard.statement_close_day ?? null,
+        due_day: processedCard.due_day ?? null,
+        credit_limit: processedCard.credit_limit ?? null,
+        min_payment_pct: processedCard.min_payment_pct ?? null,
       })
     });
 
@@ -151,15 +158,15 @@ export const PaymentMethods = () => {
             <p className="text-sm text-gray-400 mt-1">Track utilization, available spend, and centralize every perk you can exploit.</p>
          </div>
          <div className="flex gap-4">
-            <div className="bg-[#0A0A0F] border border-gray-800 rounded-lg p-3 min-w-[120px]">
+            <div className="bg-[#0A0A0F] border border-gray-800 rounded-lg p-3 min-w-30">
                <div className="text-xs text-gray-500 font-medium">Total Credit Limit</div>
                <div className="text-lg font-bold text-white mt-1">${totalCreditLimit.toFixed(2)}</div>
             </div>
-            <div className="bg-[#0A0A0F] border border-gray-800 rounded-lg p-3 min-w-[120px]">
+            <div className="bg-[#0A0A0F] border border-gray-800 rounded-lg p-3 min-w-30">
                <div className="text-xs text-gray-500 font-medium">Total Tracked Spend</div>
                <div className="text-lg font-bold text-[#6DDBA9] mt-1">${totalTrackedSpend.toFixed(2)}</div>
             </div>
-            <div className="bg-[#0A0A0F] border border-gray-800 rounded-lg p-3 min-w-[120px]">
+            <div className="bg-[#0A0A0F] border border-gray-800 rounded-lg p-3 min-w-30">
                <div className="text-xs text-gray-500 font-medium">Perks · Active</div>
                <div className="text-sm font-bold text-yellow-500 mt-1">0 perks · {savedCards.length} cards</div>
             </div>
@@ -271,7 +278,7 @@ export const PaymentMethods = () => {
                       return (
                         <>
                           {active.map((r, i) => (
-                            <div key={i} className="flex items-center justify-between px-2 py-1 rounded-lg bg-white/[0.03]">
+                            <div key={i} className="flex items-center justify-between px-2 py-1 rounded-lg bg-white/3">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-xs text-gray-300">{r.store}</span>
                                 {r.expires && (
@@ -287,7 +294,7 @@ export const PaymentMethods = () => {
                             <div className="pt-1">
                               <p className="text-[10px] uppercase font-bold text-gray-600 tracking-wider mb-1">Expired</p>
                               {expired.map((r, i) => (
-                                <div key={i} className="flex items-center justify-between px-2 py-1 rounded-lg bg-white/[0.02] opacity-50">
+                                <div key={i} className="flex items-center justify-between px-2 py-1 rounded-lg bg-white/2 opacity-50">
                                   <span className="text-xs text-gray-500 line-through">{r.store}</span>
                                   <span className="text-xs font-bold text-gray-600">{r.rate}%</span>
                                 </div>
@@ -319,7 +326,7 @@ export const PaymentMethods = () => {
 
           <button
              onClick={() => setIsQuickAddOpen(true)}
-             className="bg-[#12121A]/50 border-2 border-dashed border-gray-800 rounded-xl p-5 hover:border-gray-600 transition-colors flex flex-col items-center justify-center text-gray-500 hover:text-gray-300 min-h-[300px]"
+             className="bg-[#12121A]/50 border-2 border-dashed border-gray-800 rounded-xl p-5 hover:border-gray-600 transition-colors flex flex-col items-center justify-center text-gray-500 hover:text-gray-300 min-h-75"
           >
              <div className="w-12 h-12 rounded-full border border-gray-700 flex items-center justify-center mb-4 bg-[#1a1a24]">
                 <Plus size={24} />

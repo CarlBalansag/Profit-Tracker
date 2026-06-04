@@ -88,6 +88,11 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
           soldCount: 0,
           pendingCount: 0,
           items: [],
+          // Billing fields (optional — null if not set by user)
+          statement_close_day: pm.statement_close_day ?? null,
+          due_day: pm.due_day ?? null,
+          credit_limit: pm.credit_limit ?? null,
+          min_payment_pct: pm.min_payment_pct ?? null,
         };
       }
 

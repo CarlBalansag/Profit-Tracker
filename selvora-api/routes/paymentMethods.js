@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { validateBody } = require('../middleware/validate');
+const { paymentMethod } = require('../validation/schemas');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -26,9 +28,10 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 });
 
 // POST new payment method
-router.post('/', isAuthenticated, async (req, res, next) => {
+router.post('/', isAuthenticated, validateBody(paymentMethod), async (req, res, next) => {
   try {
-    const { name, type, default_cashback_rate, preset_card_id, category_rates } = req.body;
+    const { name, type, default_cashback_rate, preset_card_id, category_rates,
+            statement_close_day, due_day, credit_limit, min_payment_pct } = req.body;
     const method = await prisma.paymentMethod.create({
       data: {
         user_id: req.user.id,
@@ -36,7 +39,11 @@ router.post('/', isAuthenticated, async (req, res, next) => {
         type,
         default_cashback_rate: parseFloat(default_cashback_rate) || 0,
         preset_card_id: preset_card_id || null,
-        category_rates: category_rates ? JSON.stringify(category_rates) : null
+        category_rates: category_rates ? JSON.stringify(category_rates) : null,
+        statement_close_day: statement_close_day ? parseInt(statement_close_day) : null,
+        due_day: due_day ? parseInt(due_day) : null,
+        credit_limit: credit_limit ? parseFloat(credit_limit) : null,
+        min_payment_pct: min_payment_pct ? parseFloat(min_payment_pct) : null,
       }
     });
     res.json(parseRates(method));
@@ -46,10 +53,11 @@ router.post('/', isAuthenticated, async (req, res, next) => {
 });
 
 // UPDATE payment method
-router.put('/:id', isAuthenticated, async (req, res, next) => {
+router.put('/:id', isAuthenticated, validateBody(paymentMethod), async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, type, default_cashback_rate, preset_card_id, category_rates } = req.body;
+    const { name, type, default_cashback_rate, preset_card_id, category_rates,
+            statement_close_day, due_day, credit_limit, min_payment_pct } = req.body;
 
     const existing = await prisma.paymentMethod.findUnique({ where: { id } });
     if (!existing || existing.user_id !== req.user.id) {
@@ -65,7 +73,11 @@ router.put('/:id', isAuthenticated, async (req, res, next) => {
         preset_card_id: preset_card_id ?? existing.preset_card_id,
         category_rates: category_rates !== undefined
           ? JSON.stringify(category_rates)
-          : existing.category_rates
+          : existing.category_rates,
+        statement_close_day: statement_close_day !== undefined ? (statement_close_day ? parseInt(statement_close_day) : null) : existing.statement_close_day,
+        due_day: due_day !== undefined ? (due_day ? parseInt(due_day) : null) : existing.due_day,
+        credit_limit: credit_limit !== undefined ? (credit_limit ? parseFloat(credit_limit) : null) : existing.credit_limit,
+        min_payment_pct: min_payment_pct !== undefined ? (min_payment_pct ? parseFloat(min_payment_pct) : null) : existing.min_payment_pct,
       }
     });
     res.json(parseRates(updated));

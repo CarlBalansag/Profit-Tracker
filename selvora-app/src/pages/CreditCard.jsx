@@ -57,6 +57,58 @@ function StatusBadge({ status }) {
   );
 }
 
+// Returns days until next occurrence of dueDay from today (local time)
+function daysUntilDue(dueDay) {
+  const now = new Date();
+  const thisMonth = new Date(now.getFullYear(), now.getMonth(), dueDay);
+  const target = thisMonth > now ? thisMonth : new Date(now.getFullYear(), now.getMonth() + 1, dueDay);
+  return Math.ceil((target - now) / (1000 * 60 * 60 * 24));
+}
+
+function DueBadge({ dueDay }) {
+  if (!dueDay) return null;
+  const days = daysUntilDue(dueDay);
+  const now = new Date();
+  const target = new Date(now.getFullYear(), now.getMonth(), dueDay) > now
+    ? new Date(now.getFullYear(), now.getMonth(), dueDay)
+    : new Date(now.getFullYear(), now.getMonth() + 1, dueDay);
+  const label = target.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  const color = days > 14
+    ? 'border-green-500/30 bg-green-500/5 text-green-400'
+    : days > 7
+    ? 'border-amber-500/30 bg-amber-500/5 text-amber-400'
+    : 'border-red-500/40 bg-red-500/10 text-red-400';
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full border ${color}`}>
+      <Wallet size={10} />
+      {days === 0 ? 'Due today' : `${days}d until due`} · Due {label}
+    </span>
+  );
+}
+
+function UtilizationBar({ totalSpend, creditLimit }) {
+  if (!creditLimit || creditLimit <= 0) return null;
+  const pct = Math.min((totalSpend / creditLimit) * 100, 100);
+  const barColor = pct < 30 ? 'bg-green-500' : pct < 50 ? 'bg-amber-500' : 'bg-red-500';
+  const textColor = pct < 30 ? 'text-green-400' : pct < 50 ? 'text-amber-400' : 'text-red-400';
+
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden min-w-12">
+        <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className={`text-[10px] font-semibold tabular-nums whitespace-nowrap ${textColor}`}>
+        {pct.toFixed(0)}% utilized
+      </span>
+      <span className="text-[10px] text-gray-600 whitespace-nowrap hidden sm:inline">
+        ${fmt(totalSpend)} / ${fmt(creditLimit)}
+      </span>
+    </div>
+  );
+}
+
 function CardRow({ card }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -153,6 +205,31 @@ function CardRow({ card }) {
                 ${fmt(card.uncoveredLoss)} loss uncovered
               </span>
             )}
+
+            <DueBadge dueDay={card.due_day} />
+          </div>
+        )}
+
+        {/* Billing info row — only shown when no chips row already rendered the due badge */}
+        {!(card.cashbackEarned > 0 || hasLosses) && card.due_day && (
+          <div className="flex flex-wrap items-center gap-3 mt-3">
+            <DueBadge dueDay={card.due_day} />
+          </div>
+        )}
+
+        {/* Utilization bar */}
+        {card.credit_limit > 0 && (
+          <div className="mt-3">
+            <UtilizationBar totalSpend={card.totalSpend} creditLimit={card.credit_limit} />
+          </div>
+        )}
+
+        {/* Min payment hint */}
+        {card.min_payment_pct > 0 && (
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-[10px] text-gray-600 uppercase tracking-wider font-semibold">Min payment:</span>
+            <span className="text-[10px] font-bold text-gray-400">${fmt(card.totalSpend * card.min_payment_pct / 100)}</span>
+            <span className="text-[10px] text-gray-700">({card.min_payment_pct}% of spend)</span>
           </div>
         )}
       </button>
