@@ -118,3 +118,35 @@
       - focus:border-${accent}-500/50 won't generate CSS — use literal strings
 [ ] Analytics endpoint does full JS reduce on all records — add SQL aggregation
 [ ] No pagination on any list endpoint — add before user count grows
+
+════════════════════════════════════════════════════════════════
+ CREDIT CARD SECTION — FUTURE IDEAS
+════════════════════════════════════════════════════════════════
+
+[ ] Statement balance snapshot
+      - On statement close day, snapshot the balance so you can see
+        what was owed at close vs. what's owed now (current balance)
+
+[ ] Auto-pay reminder banner
+      - Show a prominent alert in the last 3 days before due date
+      - E.g. red banner: "Chase Sapphire due in 2 days — pay $432.10"
+
+[ ] Cashback redemption planner
+      - Show exactly which items to redeem against to maximize coverage
+      - E.g. "Redeem $12.40 on item X to fully cover your $12.40 loss"
+
+[ ] Monthly utilization history chart
+      - Line chart per card showing utilization % across past 6 months
+      - Good for credit score awareness
+
+[ ] Signup bonus spend tracker
+      - Progress bar toward spend requirement (e.g. "Spend $500 more to unlock $200 bonus")
+      - Fields already exist in CustomCardModal as signupBonus/signupBonusReq
+
+[ ] Annual fee ROI calculator
+      - "Your $95 annual fee is covered once cashback hits $95"
+      - Progress bar showing cashback earned vs. annual fee
+
+[ ] Multi-card optimization tips
+      - "You bought X at Amazon — your Amex gives 5% there vs. Chase at 1.5%"
+      - Requires category tagging on inventory
