@@ -157,7 +157,10 @@ app.get('/health', (req, res) => {
 });
 
 // Auth Routes
-app.get('/auth/discord', passport.authenticate('discord'));
+app.get('/auth/discord', (req, res, next) => {
+  console.log('[Discord Auth] DISCORD_CALLBACK_URL =', process.env.DISCORD_CALLBACK_URL);
+  passport.authenticate('discord')(req, res, next);
+});
 
 app.get('/auth/discord/callback',
   passport.authenticate('discord', { failureRedirect: `${FRONTEND_URL}/login?error=true` }),
