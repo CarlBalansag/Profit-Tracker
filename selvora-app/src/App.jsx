@@ -13,17 +13,21 @@ import Invoices from './pages/Invoices';
 import Transactions from './pages/Transactions';
 import Analytics from './pages/Analytics';
 import CashFlow from './pages/CashFlow';
+import CreditCard from './pages/CreditCard';
 import Settings from './pages/Settings';
 import AddSale from './pages/AddSale';
 import TaxExempt from './pages/TaxExempt';
+import Guide from './pages/Guide';
 import Login from './pages/Login';
 import { AuthProvider } from './context/AuthContext';
+import { TutorialProvider } from './context/TutorialContext';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 
 
 function App() {
   return (
     <AuthProvider>
+      <TutorialProvider>
       <Toaster
         position="bottom-right"
         theme="dark"
@@ -32,10 +36,11 @@ function App() {
         duration={3500}
         toastOptions={{
           style: {
-            background: 'rgba(18, 18, 26, 0.95)',
-            border: '1px solid rgba(255,255,255,0.08)',
+            background: 'var(--toast-bg)',
+            border: '1px solid var(--toast-border)',
             backdropFilter: 'blur(12px)',
-            color: '#fff',
+            color: 'var(--toast-text)',
+            boxShadow: 'var(--toast-shadow)',
           },
         }}
       />
@@ -56,8 +61,10 @@ function App() {
           <Route path="/invoices" element={<Invoices />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/cashflow" element={<CashFlow />} />
+          <Route path="/creditcard" element={<CreditCard />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/tax-exempt" element={<TaxExempt />} />
+          <Route path="/guide" element={<Guide />} />
           <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Shell>
@@ -65,6 +72,7 @@ function App() {
         } />
       </Routes>
     </Router>
+      </TutorialProvider>
     </AuthProvider>
   );
 }

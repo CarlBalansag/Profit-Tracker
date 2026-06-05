@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { validateBody } = require('../middleware/validate');
+const { createExpense, updateExpense } = require('../validation/schemas');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -27,7 +29,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 });
 
 // POST new expense
-router.post('/', isAuthenticated, async (req, res, next) => {
+router.post('/', isAuthenticated, validateBody(createExpense), async (req, res, next) => {
   try {
     const { name, amount, category, date, notes, receipt_url } = req.body;
     if (!name || !amount || !date) {
@@ -51,7 +53,7 @@ router.post('/', isAuthenticated, async (req, res, next) => {
 });
 
 // PUT update expense
-router.put('/:id', isAuthenticated, async (req, res, next) => {
+router.put('/:id', isAuthenticated, validateBody(updateExpense), async (req, res, next) => {
   try {
     const existing = await prisma.expense.findUnique({ where: { id: req.params.id } });
     if (!existing || existing.user_id !== req.user.id) {

@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { validateBody } = require('../middleware/validate');
+const { dashboardPreferences } = require('../validation/schemas');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -32,7 +34,7 @@ router.get('/dashboard-settings/:style', isAuthenticated, async (req, res, next)
   }
 });
 
-router.put('/dashboard-settings/:style', isAuthenticated, async (req, res, next) => {
+router.put('/dashboard-settings/:style', isAuthenticated, validateBody(dashboardPreferences), async (req, res, next) => {
   try {
     const style = normalizeStyle(req.params.style);
     const { settings } = req.body;

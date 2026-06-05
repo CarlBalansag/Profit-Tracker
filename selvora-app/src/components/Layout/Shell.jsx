@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import { Menu } from 'lucide-react';
 import clsx from 'clsx';
 import { useUiPreferences } from '../../hooks/useUiPreferences';
-import { useLocation } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { useTutorial } from '../../context/TutorialContext';
+import { SpotlightOverlay } from '../Tutorial/SpotlightOverlay';
 
 const Header = ({ onMenuClick }) => {
   return (
@@ -23,10 +25,18 @@ const Shell = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const { preferences } = useUiPreferences();
-  const location = useLocation();
+  const { user } = useAuth();
+  const { start } = useTutorial();
   const isGlass = preferences.style === 'glassmorphism-brown';
-  const excludedCarbonRoutes = ['/analytics', '/cashflow'];
-  const isCarbonWorkspace = !isGlass && !excludedCarbonRoutes.some(route => location.pathname.startsWith(route));
+  const isCarbonWorkspace = !isGlass;
+
+  // Auto-start tutorial on first login
+  useEffect(() => {
+    if (user && user.tutorial_seen === false) {
+      const timer = setTimeout(() => start(), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [user, start]);
 
   return (
     <div className={clsx(
@@ -51,11 +61,13 @@ const Shell = ({ children }) => {
         <div className={clsx(
           "flex-1 overflow-y-auto theme-scrollbar",
           isGlass ? "p-4 sm:p-6 lg:p-7" : "p-3 sm:p-4 lg:p-6",
+          isGlass && "glass-workspace",
           isCarbonWorkspace && "carbon-workspace"
         )}>
           {children}
         </div>
       </main>
+      <SpotlightOverlay />
     </div>
   );
 };

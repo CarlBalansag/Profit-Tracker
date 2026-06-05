@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { validateQuery } = require('../middleware/validate');
+const { analyticsDashboardQuery } = require('../validation/schemas');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -35,7 +37,7 @@ const getEffectiveCashbackRate = (inv) => {
   return pm.default_cashback_rate || 0;
 };
 
-router.get('/dashboard', isAuthenticated, async (req, res, next) => {
+router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery), async (req, res, next) => {
   try {
     const userId = req.user.id;
     const mode = req.query.mode || 'All'; // 'All' | 'Cashout' | 'Marketplace'
@@ -58,31 +60,53 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
       dateFrom = new Date(`${now.getUTCFullYear()}-01-01T00:00:00.000Z`);
     }
 
-    // Fetch all inventory items (purchases), filtered by date
+    // Fetch inventory (purchase-date filtered) and sales (sale-date/platform filtered)
+    // in parallel. When date filtering is active we also need *all* inventories for
+    // inventory value and pipeline counts — run that third query concurrently too.
     const inventoryWhere = { user_id: userId };
     if (dateFrom) inventoryWhere.purchase_date = { gte: dateFrom };
 
-    const inventories = await prisma.inventory.findMany({
-      where: inventoryWhere,
-      include: { payment_method: true, vendor: true }
-    });
-
-    // Fetch all sales, filtered by platform type and date
     const salesWhere = { inventory: { user_id: userId } };
     if (dateFrom) salesWhere.sale_date = { gte: dateFrom };
     if (mode === 'Cashout') salesWhere.platform = { type: 'Cashout' };
     else if (mode === 'Marketplace') salesWhere.platform = { type: 'Marketplace' };
 
-    const sales = await prisma.sales.findMany({
-      where: salesWhere,
-      include: {
-        inventory: {
-          include: { payment_method: true, vendor: true }
+    // Only fetch allInventories separately when we know we'll need it (date filter or non-All mode)
+    const needsAllInventories = mode !== 'All' || dateFrom;
+
+    const [inventories, sales, allInventoriesFetched] = await Promise.all([
+      prisma.inventory.findMany({
+        where: inventoryWhere,
+        include: { payment_method: true, vendor: true },
+      }),
+      prisma.sales.findMany({
+        where: salesWhere,
+        include: {
+          inventory: { include: { payment_method: true, vendor: true } },
+          platform: true,
+          buyer: true,
         },
-        platform: true,
-        buyer: true
-      },
-      orderBy: { sale_date: 'desc' }
+        orderBy: { sale_date: 'desc' },
+      }),
+      needsAllInventories
+        ? prisma.inventory.findMany({ where: { user_id: userId } })
+        : Promise.resolve(null),
+    ]);
+
+    // Precompute per-sale cost allocation once — avoids repeating the same
+    // arithmetic 4× (stats, cardMap, trend, recentTransactions).
+    const saleAlloc = sales.map(sale => {
+      const inv = sale.inventory;
+      const perUnit = inv.qty_purchased > 0 ? 1 / inv.qty_purchased : 0;
+      const allocatedTax      = inv.sales_tax              * perUnit * sale.quantity;
+      const allocatedShipping = inv.shipping_cost_inbound  * perUnit * sale.quantity;
+      const allocatedFees     = (inv.fees || 0)            * perUnit * sale.quantity;
+      const saleCost          = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees;
+      const rate              = getEffectiveCashbackRate(inv);
+      const saleCashback      = saleCost * (rate / 100);
+      const saleRevenue       = (sale.unit_price * sale.quantity) - sale.commission_fee;
+      const grossProfit       = saleRevenue - saleCost;
+      return { sale, inv, allocatedTax, allocatedShipping, allocatedFees, saleCost, saleCashback, saleRevenue, grossProfit, rate };
     });
 
     // Calculate Primary Stats
@@ -107,19 +131,11 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
     });
 
     // Sold metrics: only sales in the selected sale-date/platform window.
-    sales.forEach(sale => {
-      const inv = sale.inventory;
-      const allocatedTax = inv.qty_purchased > 0 ? (inv.sales_tax / inv.qty_purchased) * sale.quantity : 0;
-      const allocatedShipping = inv.qty_purchased > 0 ? (inv.shipping_cost_inbound / inv.qty_purchased) * sale.quantity : 0;
-      const allocatedFees = inv.qty_purchased > 0 ? ((inv.fees || 0) / inv.qty_purchased) * sale.quantity : 0;
-      const saleCost = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees;
-      const rate = getEffectiveCashbackRate(inv);
-      const saleCashback = saleCost * (rate / 100);
-
+    saleAlloc.forEach(({ sale, saleCost, saleCashback, allocatedTax, saleRevenue }) => {
       soldCost += saleCost;
       soldCashback += saleCashback;
       soldTax += allocatedTax;
-      totalRevenue += (sale.unit_price * sale.quantity) - sale.commission_fee;
+      totalRevenue += saleRevenue;
       commissionFees += sale.commission_fee;
     });
 
@@ -138,9 +154,7 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
     const roi = soldCost > 0 ? (profit / soldCost) * 100 : 0;
 
     // Inventory value: cost of unsold units on hand (always from all inventory regardless of mode/date)
-    const allInventories = mode !== 'All' || dateFrom
-      ? await prisma.inventory.findMany({ where: { user_id: userId } })
-      : inventories;
+    const allInventories = allInventoriesFetched ?? inventories;
     const inventoryValue = allInventories.reduce((sum, inv) => {
       if (!inv.qty_purchased || inv.qty_purchased <= 0) return sum + (inv.qty_on_hand * inv.unit_purchase_cost);
       const unitTax = inv.sales_tax / inv.qty_purchased;
@@ -160,9 +174,7 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
     });
 
     let unitsSold = 0;
-    sales.forEach(sale => {
-      unitsSold += sale.quantity;
-    });
+    saleAlloc.forEach(({ sale }) => { unitsSold += sale.quantity; });
 
     // Sales velocity: sales count ÷ days in filter window
     const windowDays = dateParam === '7 Days' ? 7
@@ -186,16 +198,12 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
       });
     } else {
       // Filtered mode: accumulate proportional spend per payment card from filtered sales only
-      sales.forEach(sale => {
-        const inv = sale.inventory;
+      saleAlloc.forEach(({ sale, inv, saleCost }) => {
         if (inv.payment_method) {
           const id = inv.payment_method.id;
           if (!cardMap[id]) cardMap[id] = { name: inv.payment_method.name, txns: 0, amount: 0 };
           cardMap[id].txns += 1;
-          const allocatedTax = inv.qty_purchased > 0 ? (inv.sales_tax / inv.qty_purchased) * sale.quantity : 0;
-          const allocatedShipping = inv.qty_purchased > 0 ? (inv.shipping_cost_inbound / inv.qty_purchased) * sale.quantity : 0;
-          const allocatedFees = inv.qty_purchased > 0 ? ((inv.fees || 0) / inv.qty_purchased) * sale.quantity : 0;
-          cardMap[id].amount += (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees;
+          cardMap[id].amount += saleCost;
         }
       });
     }
@@ -253,103 +261,68 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
       }
     });
 
-    // Trend data: one cumulative point per actual purchase/sale date.
-    const trendByDate = new Map();
-    const ensureTrendPoint = (key) => {
-      if (!trendByDate.has(key)) {
-        trendByDate.set(key, {
+    // Trend data — per-period deltas, not cumulative running totals.
+    // Group key: YYYY-MM for YTD / All Time (monthly buckets), YYYY-MM-DD for 7/30 Days (daily).
+    const useMonthly = dateParam === 'YTD' || dateParam === 'All Time';
+    const bucketKey = (isoDate) => useMonthly ? isoDate.slice(0, 7) : isoDate.slice(0, 10);
+
+    const trendByBucket = new Map();
+    const ensureBucket = (key) => {
+      if (!trendByBucket.has(key)) {
+        trendByBucket.set(key, {
           date: key,
-          purchaseCostDelta: 0,
-          taxDelta: 0,
-          purchaseCashbackDelta: 0, // cashback on ALL purchases (earned at buy time)
-          revenueDelta: 0,
-          soldCostDelta: 0,
-          grossProfitDelta: 0,
-          netProfitDelta: 0,
+          totalCost: 0,
+          totalTax: 0,
+          cashback: 0,
+          totalRevenue: 0,
+          soldCost: 0,
+          grossProfit: 0,
+          netProfit: 0,
         });
       }
-      return trendByDate.get(key);
+      return trendByBucket.get(key);
     };
 
-    // Trend chart — purchase cost side.
-    // All mode: plot full purchase cost at purchase date for every inventory item.
-    // Cashout/Marketplace mode: plot only the proportional cost for items in filtered sales,
-    // still anchored at purchase date so the chart reflects when money left your pocket.
+    // Purchase cost side (anchored at purchase date).
     if (mode === 'All') {
       inventories.forEach(inv => {
-        const key = dateKey(inv.purchase_date);
-        const point = ensureTrendPoint(key);
+        const key = bucketKey(dateKey(inv.purchase_date));
+        const pt = ensureBucket(key);
         const lineCost = (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0);
         const rate = getEffectiveCashbackRate(inv);
-        point.purchaseCostDelta += lineCost;
-        point.taxDelta += inv.sales_tax;
-        point.purchaseCashbackDelta += lineCost * (rate / 100);
+        pt.totalCost += lineCost;
+        pt.totalTax += inv.sales_tax;
+        pt.cashback += lineCost * (rate / 100);
       });
     } else {
-      // Use proportional allocation from filtered sales — consistent with totalCost override
-      sales.forEach(sale => {
-        const inv = sale.inventory;
-        const key = dateKey(inv.purchase_date);
-        const point = ensureTrendPoint(key);
-        const allocatedTax = inv.qty_purchased > 0 ? (inv.sales_tax / inv.qty_purchased) * sale.quantity : 0;
-        const allocatedShipping = inv.qty_purchased > 0 ? (inv.shipping_cost_inbound / inv.qty_purchased) * sale.quantity : 0;
-        const allocatedFees = inv.qty_purchased > 0 ? ((inv.fees || 0) / inv.qty_purchased) * sale.quantity : 0;
-        const proportionalCost = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees;
-        const rate = getEffectiveCashbackRate(inv);
-        point.purchaseCostDelta += proportionalCost;
-        point.taxDelta += allocatedTax;
-        point.purchaseCashbackDelta += proportionalCost * (rate / 100);
+      saleAlloc.forEach(({ inv, saleCost, allocatedTax, rate }) => {
+        const key = bucketKey(dateKey(inv.purchase_date));
+        const pt = ensureBucket(key);
+        pt.totalCost += saleCost;
+        pt.totalTax += allocatedTax;
+        pt.cashback += saleCost * (rate / 100);
       });
     }
 
-    sales.forEach(sale => {
-      const inv = sale.inventory;
-      const key = dateKey(sale.sale_date);
-      const point = ensureTrendPoint(key);
-      const allocatedTax = inv.qty_purchased > 0 ? (inv.sales_tax / inv.qty_purchased) * sale.quantity : 0;
-      const allocatedShipping = inv.qty_purchased > 0 ? (inv.shipping_cost_inbound / inv.qty_purchased) * sale.quantity : 0;
-      const allocatedFees = inv.qty_purchased > 0 ? ((inv.fees || 0) / inv.qty_purchased) * sale.quantity : 0;
-      const saleCost = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees;
-      const saleRevenue = (sale.unit_price * sale.quantity) - sale.commission_fee;
-      const saleCashback = saleCost * (getEffectiveCashbackRate(inv) / 100);
-      const saleGrossProfit = saleRevenue - saleCost;
-
-      point.revenueDelta += saleRevenue;
-      point.soldCostDelta += saleCost;
-      point.grossProfitDelta += saleGrossProfit;
-      // netProfit on graph = gross profit + sold cashback (consistent with profit stat card)
-      point.netProfitDelta += saleGrossProfit + saleCashback;
+    // Sale side (anchored at sale date).
+    saleAlloc.forEach(({ sale, saleCost, saleRevenue, grossProfit, saleCashback }) => {
+      const key = bucketKey(dateKey(sale.sale_date));
+      const pt = ensureBucket(key);
+      pt.totalRevenue += saleRevenue;
+      pt.soldCost += saleCost;
+      pt.grossProfit += grossProfit;
+      pt.netProfit += grossProfit + saleCashback;
     });
 
-    let runningTotalCost = 0;
-    let runningTotalTax = 0;
-    let runningCashback = 0;   // all-purchases cashback
-    let runningTotalRevenue = 0;
-    let runningSoldCost = 0;
-    let runningGrossProfit = 0;
-    let runningNetProfit = 0;
-    const trend = Array.from(trendByDate.values())
-      .sort((a, b) => new Date(a.date) - new Date(b.date))
-      .map(point => {
-        runningTotalCost += point.purchaseCostDelta;
-        runningTotalTax += point.taxDelta;
-        runningCashback += point.purchaseCashbackDelta;  // all purchases
-        runningTotalRevenue += point.revenueDelta;
-        runningSoldCost += point.soldCostDelta;
-        runningGrossProfit += point.grossProfitDelta;
-        runningNetProfit += point.netProfitDelta;
+    const trend = Array.from(trendByBucket.values())
+      .sort((a, b) => a.date.localeCompare(b.date));
 
-        return {
-          date: point.date,
-          totalCost: runningTotalCost,
-          totalTax: runningTotalTax,
-          cashback: runningCashback,       // all purchases
-          totalRevenue: runningTotalRevenue,
-          soldCost: runningSoldCost,
-          grossProfit: runningGrossProfit,
-          netProfit: runningNetProfit,
-        };
-      });
+    // For daily views, tell the frontend the window boundaries so it can fill
+    // zero-points for inactive days in period mode without needing to know the
+    // date range itself.
+    const trendMeta = !useMonthly && dateFrom
+      ? { windowStart: dateFrom.toISOString().slice(0, 10), windowEnd: todayUTC }
+      : null;
 
     res.json({
       stats: {
@@ -368,37 +341,28 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
         unitsSold,
         salesVelocity,
         transactionCount: mode !== 'All'
-          ? new Set(sales.map(s => s.inventory_id)).size
+          ? new Set(saleAlloc.map(({ sale }) => sale.inventory_id)).size
           : inventories.length,
-        salesCount: sales.length,
+        salesCount: saleAlloc.length,
         avgCashbackRate: totalCost > 0 ? (totalCashback / totalCost) * 100 : 0
       },
       topCards,
       pipelineCounts,
       trend,
-      recentTransactions: sales.slice(0, 10).map(s => {
-        const inv = s.inventory;
-        const allocatedTax = inv.qty_purchased > 0 ? (inv.sales_tax / inv.qty_purchased) * s.quantity : 0;
-        const allocatedShipping = inv.qty_purchased > 0 ? (inv.shipping_cost_inbound / inv.qty_purchased) * s.quantity : 0;
-        const allocatedFees = inv.qty_purchased > 0 ? ((inv.fees || 0) / inv.qty_purchased) * s.quantity : 0;
-        const saleCost = (inv.unit_purchase_cost * s.quantity) + allocatedTax + allocatedShipping + allocatedFees;
-        const saleRevenue = (s.unit_price * s.quantity) - s.commission_fee;
-        const cashbackRate = getEffectiveCashbackRate(inv);
-        const saleCashback = saleCost * (cashbackRate / 100);
-        return {
-          id: s.id,
-          product: inv.product_name,
-          platform: s.platform?.name || inv.vendor?.name || 'Direct',
-          buyer: s.buyer?.name || 'Unknown',
-          cost: saleCost,
-          revenue: saleRevenue,
-          commission: s.commission_fee,
-          cashback: saleCashback,
-          profit: saleRevenue - saleCost + saleCashback,
-          status: s.status,
-          date: s.sale_date,
-        };
-      })
+      trendMeta,
+      recentTransactions: saleAlloc.slice(0, 10).map(({ sale: s, inv, saleCost, saleRevenue, saleCashback }) => ({
+        id: s.id,
+        product: inv.product_name,
+        platform: s.platform?.name || inv.vendor?.name || 'Direct',
+        buyer: s.buyer?.name || 'Unknown',
+        cost: saleCost,
+        revenue: saleRevenue,
+        commission: s.commission_fee,
+        cashback: saleCashback,
+        profit: saleRevenue - saleCost + saleCashback,
+        status: s.status,
+        date: s.sale_date,
+      }))
     });
 
   } catch (err) {

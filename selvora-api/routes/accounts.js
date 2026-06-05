@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { validateBody } = require('../middleware/validate');
+const { account, updateAccount } = require('../validation/schemas');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -8,7 +10,7 @@ const isAuthenticated = (req, res, next) => {
 };
 
 // CREATE: Add a new account
-router.post('/', isAuthenticated, async (req, res, next) => {
+router.post('/', isAuthenticated, validateBody(account), async (req, res, next) => {
   try {
     const { platform_id, name, email, username, status, notes } = req.body;
 
@@ -50,7 +52,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 });
 
 // UPDATE: Edit an account
-router.put('/:id', isAuthenticated, async (req, res, next) => {
+router.put('/:id', isAuthenticated, validateBody(updateAccount), async (req, res, next) => {
   try {
     const existing = await prisma.account.findUnique({ where: { id: req.params.id } });
     if (!existing || existing.user_id !== req.user.id) {

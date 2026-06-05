@@ -48,139 +48,67 @@ function readThemeVar(name, fallback) {
   return value || fallback;
 }
 
-function fallbackTrend(stats, dateFilter) {
-  const end = new Date();
-  const start = new Date(end);
-  const days = dateFilter === '7 Days' ? 7 : dateFilter === 'YTD' ? Math.max(30, Math.ceil((end - new Date(end.getFullYear(), 0, 1)) / 86400000)) : 30;
-  start.setDate(end.getDate() - days);
+const TREND_FIELDS = ['totalCost', 'grossProfit', 'netProfit', 'cashback', 'totalTax', 'totalRevenue', 'soldCost'];
 
-  const revenue = stats.totalRevenue || 0;
-  const totalCost = stats.totalCost || 0;
-  const grossProfit = stats.grossProfit ?? (revenue - (stats.soldCost || 0));
-  const netProfit = stats.profit || 0;
-  const cashback = stats.totalCashback || 0;
-  const totalTax = stats.totalTax || 0;
-  const soldCost = stats.soldCost || 0;
+const ZERO_VALUES = Object.fromEntries(TREND_FIELDS.map(f => [f, 0]));
 
-  return [
-    { date: formatDateKey(start), totalCost: 0, grossProfit: 0, netProfit: 0, cashback: 0, totalTax: 0, totalRevenue: 0, soldCost: 0 },
-    { date: formatDateKey(end), totalCost, grossProfit, netProfit, cashback, totalTax, totalRevenue: revenue, soldCost },
-  ];
-}
-
-function hydrateLegacyTrend(points, stats) {
-  const last = points[points.length - 1] || {};
-  const finalTotalCost = Number(last.totalCost) || Number(stats.totalCost) || 0;
-  const finalGrossProfit = Number(last.grossProfit) || Number(stats.grossProfit) || 0;
-  const finalNetProfit = Number(last.netProfit) || Number(stats.profit) || 0;
-
-  return points.map((point, index) => {
-    const indexProgress = points.length > 1 ? index / (points.length - 1) : 1;
-    const costProgress = finalTotalCost ? (Number(point.totalCost) || 0) / finalTotalCost : indexProgress;
-    const soldProgress = finalGrossProfit || finalNetProfit
-      ? Math.max(
-        Math.abs(finalGrossProfit) ? Math.abs(Number(point.grossProfit) || 0) / Math.abs(finalGrossProfit) : 0,
-        Math.abs(finalNetProfit) ? Math.abs(Number(point.netProfit) || 0) / Math.abs(finalNetProfit) : 0,
-      )
-      : indexProgress;
-
-    return {
-      ...point,
-      totalTax: Object.prototype.hasOwnProperty.call(point, 'totalTax')
-        ? Number(point.totalTax) || 0
-        : (Number(stats.totalTax) || 0) * Math.max(0, Math.min(1, costProgress)),
-      totalRevenue: Object.prototype.hasOwnProperty.call(point, 'totalRevenue')
-        ? Number(point.totalRevenue) || 0
-        : (Number(stats.totalRevenue) || 0) * Math.max(0, Math.min(1, soldProgress)),
-      soldCost: Object.prototype.hasOwnProperty.call(point, 'soldCost')
-        ? Number(point.soldCost) || 0
-        : (Number(stats.soldCost) || 0) * Math.max(0, Math.min(1, soldProgress)),
-    };
-  });
-}
-
-const ZERO_POINT = { totalCost: 0, grossProfit: 0, netProfit: 0, cashback: 0, totalTax: 0, totalRevenue: 0, soldCost: 0 };
-
-function buildTrendData(stats, recent, dateFilter) {
-  if (Array.isArray(stats.trend) && stats.trend.length > 0) {
-    const points = stats.trend.map(point => ({
-      date: point.date,
-      totalCost: Number(point.totalCost) || 0,
-      grossProfit: Number(point.grossProfit) || 0,
-      netProfit: Number(point.netProfit) || 0,
-      cashback: Number(point.cashback) || 0,
-      ...(Object.prototype.hasOwnProperty.call(point, 'totalTax') ? { totalTax: Number(point.totalTax) || 0 } : {}),
-      ...(Object.prototype.hasOwnProperty.call(point, 'totalRevenue') ? { totalRevenue: Number(point.totalRevenue) || 0 } : {}),
-      ...(Object.prototype.hasOwnProperty.call(point, 'soldCost') ? { soldCost: Number(point.soldCost) || 0 } : {}),
-    }));
-
-    // Prepend a zero-origin point one day before the first real point so the
-    // line always starts at $0 and visibly rises, even with a single data point.
-    const firstDate = new Date(points[0].date);
-    firstDate.setDate(firstDate.getDate() - 1);
-    const originPoint = { ...ZERO_POINT, date: formatDateKey(firstDate) };
-
-    return hydrateLegacyTrend([originPoint, ...points], stats);
-  }
-
-  if (!recent?.length) return fallbackTrend(stats, dateFilter);
-
-  const rows = [...recent]
-    .filter(row => row.date)
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-  if (rows.length < 2) return fallbackTrend(stats, dateFilter);
-
-  let rawRevenue = 0;
-  let rawGrossProfit = 0;
-  let rawNetProfit = 0;
-  let rawCashback = 0;
-  let rawSoldCost = 0;
-  const grouped = new Map();
-
-  rows.forEach(row => {
-    const key = formatDateKey(new Date(row.date));
-    const rowRevenue = Number(row.revenue) || 0;
-    const rowCost = Number(row.cost) || 0;
-    const rowCashback = rowCost * ((stats.avgCashbackRate || 0) / 100);
-
-    rawRevenue += rowRevenue;
-    rawCashback += rowCashback;
-    rawGrossProfit += rowRevenue - rowCost;
-    rawNetProfit += rowRevenue - rowCost + rowCashback;
-    rawSoldCost += rowCost;
-
-    grouped.set(key, {
-      date: key,
-      totalCost: 0,
-      grossProfit: rawGrossProfit,
-      netProfit: rawNetProfit,
-      cashback: rawCashback,
-      totalTax: 0,
-      totalRevenue: rawRevenue,
-      soldCost: rawSoldCost,
-    });
-  });
-
-  const points = Array.from(grouped.values());
-  const last = points[points.length - 1];
-  if (!last) return fallbackTrend(stats, dateFilter);
-
-  const scale = (value, rawTotal, statTotal) => {
-    if (!rawTotal) return statTotal || 0;
-    return value * ((statTotal || 0) / rawTotal);
-  };
-
-  return points.map((point, index) => ({
+// Normalize the backend trend array (per-period deltas) into chart-ready points.
+// The backend sends YYYY-MM keys for YTD/All Time and YYYY-MM-DD for 7/30 Days.
+function normalizeTrendPoints(trend) {
+  if (!Array.isArray(trend) || trend.length === 0) return [];
+  return trend.map(point => ({
     date: point.date,
-    totalCost: (stats.totalCost || 0) * ((index + 1) / points.length),
-    grossProfit: scale(point.grossProfit, last.grossProfit, stats.grossProfit ?? ((stats.totalRevenue || 0) - (stats.soldCost || 0))),
-    netProfit: scale(point.netProfit, last.netProfit, stats.profit),
-    cashback: scale(point.cashback, last.cashback, stats.totalCashback),
-    totalTax: (stats.totalTax || 0) * ((index + 1) / points.length),
-    totalRevenue: scale(point.totalRevenue, last.totalRevenue, stats.totalRevenue),
-    soldCost: scale(point.soldCost, last.soldCost, stats.soldCost),
+    totalCost:    Number(point.totalCost)    || 0,
+    grossProfit:  Number(point.grossProfit)  || 0,
+    netProfit:    Number(point.netProfit)    || 0,
+    cashback:     Number(point.cashback)     || 0,
+    totalTax:     Number(point.totalTax)     || 0,
+    totalRevenue: Number(point.totalRevenue) || 0,
+    soldCost:     Number(point.soldCost)     || 0,
   }));
+}
+
+// Fill every day in the window with a $0 point (for period mode daily views).
+// Sparse active-only points are used in cumulative mode.
+function fillDailyWindow(points, trendMeta) {
+  if (!trendMeta?.windowStart || !trendMeta?.windowEnd) return points;
+  const byDate = new Map(points.map(p => [p.date, p]));
+  const result = [];
+  const cursor = new Date(trendMeta.windowStart + 'T00:00:00.000Z');
+  const end    = new Date(trendMeta.windowEnd   + 'T00:00:00.000Z');
+  while (cursor <= end) {
+    const key = cursor.toISOString().slice(0, 10);
+    result.push(byDate.get(key) ?? { date: key, ...ZERO_VALUES });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return result;
+}
+
+// Convert per-period delta points into cumulative running totals.
+function toCumulative(points) {
+  const running = {};
+  TREND_FIELDS.forEach(f => { running[f] = 0; });
+  return points.map(point => {
+    const out = { date: point.date };
+    TREND_FIELDS.forEach(f => {
+      running[f] += point[f] || 0;
+      out[f] = running[f];
+    });
+    return out;
+  });
+}
+
+// Format a date key (YYYY-MM or YYYY-MM-DD) into a human-readable label.
+function formatTrendLabel(dateKey) {
+  if (dateKey.length === 7) {
+    // Monthly bucket: "Jan 2025"
+    const [year, month] = dateKey.split('-');
+    return new Date(Number(year), Number(month) - 1, 1)
+      .toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  }
+  // Daily bucket: "1/5/2025"
+  const [year, month, day] = dateKey.split('-');
+  return `${Number(month)}/${Number(day)}/${year}`;
 }
 
 function normalizeSeriesConfig(chartSeries) {
@@ -195,13 +123,12 @@ function normalizeSeriesConfig(chartSeries) {
   return visible.length ? visible : DEFAULT_DASHBOARD_SETTINGS.chartSeries.filter(item => item.visible);
 }
 
-function buildOptions(points, chartSeries, uiStyle = 'neon-dark') {
+function buildOptions(points, chartSeries, uiStyle = 'neon-dark', containerWidth = 600) {
   const isGlass = uiStyle === 'glassmorphism-brown';
+  const isMobile = containerWidth < 500;
   const dates = points.map(point => point.date);
-  const displayDates = points.map(point => {
-    const [year, month, day] = point.date.split('-');
-    return `${Number(month)}/${Number(day)}/${year}`;
-  });
+  const displayDates = points.map(point => formatTrendLabel(point.date));
+  const isMonthly = points.length > 0 && points[0].date.length === 7;
   const activeSeries = normalizeSeriesConfig(chartSeries);
   const legendData = activeSeries.map(item => {
     const label = CHART_SERIES_REGISTRY[item.id].label;
@@ -285,11 +212,11 @@ function buildOptions(points, chartSeries, uiStyle = 'neon-dark') {
     animationEasing: 'cubicOut',
     color: colors,
     grid: {
-      left: 52,
-      right: 16,
-      top: 28,
-      bottom: 34,
-      containLabel: false,
+      left: isMobile ? 4 : 52,
+      right: isMobile ? 4 : 16,
+      top: isMobile ? 8 : 28,
+      bottom: isMobile ? 60 : 34,
+      containLabel: isMobile ? true : false,
     },
     tooltip: {
       trigger: 'axis',
@@ -316,7 +243,21 @@ function buildOptions(points, chartSeries, uiStyle = 'neon-dark') {
         return title + lines.join('');
       },
     },
-    legend: {
+    legend: isMobile ? {
+      bottom: 0,
+      left: 'center',
+      orient: 'horizontal',
+      itemWidth: 8,
+      itemHeight: 8,
+      itemGap: 8,
+      icon: 'circle',
+      textStyle: {
+        color: isGlass ? 'rgba(232,226,214,0.38)' : readThemeVar('--text-secondary', '#6e6e6e'),
+        fontSize: 9,
+        fontWeight: 500,
+      },
+      data: legendData,
+    } : {
       right: 4,
       top: 0,
       itemWidth: isGlass ? 9 : 18,
@@ -365,6 +306,12 @@ function buildOptions(points, chartSeries, uiStyle = 'neon-dark') {
         fontFamily: isGlass ? 'Inter, ui-sans-serif, system-ui' : undefined,
         margin: 8,
         formatter: value => {
+          if (value.length === 7) {
+            // Monthly: "Jan"
+            const [year, month] = value.split('-');
+            return new Date(Number(year), Number(month) - 1, 1)
+              .toLocaleDateString('en-US', { month: 'short' });
+          }
           const [, month, day] = value.split('-');
           return `${Number(month)}/${Number(day)}`;
         },
@@ -390,12 +337,14 @@ function buildOptions(points, chartSeries, uiStyle = 'neon-dark') {
   };
 }
 
-export default function ProfitRevenueTrendChart({ stats, trend, recent, dateFilter, chartSeries, uiStyle = 'neon-dark', colorTheme = 'copper' }) {
+export default function ProfitRevenueTrendChart({ stats, trend, trendMeta = null, recent, dateFilter, chartSeries, uiStyle = 'neon-dark', colorTheme = 'copper', trendMode = 'period', onTrendModeChange }) {
   const chartRef = useRef(null);
   const instanceRef = useRef(null);
   const [failed, setFailed] = useState(false);
-  const chartStats = useMemo(() => ({ ...stats, trend }), [stats, trend]);
-  const points = useMemo(() => buildTrendData(chartStats, recent, dateFilter), [chartStats, recent, dateFilter]);
+  const [containerWidth, setContainerWidth] = useState(600);
+  const rawPoints = useMemo(() => normalizeTrendPoints(trend), [trend]);
+  const periodPoints = useMemo(() => fillDailyWindow(rawPoints, trendMeta), [rawPoints, trendMeta]);
+  const points = useMemo(() => trendMode === 'cumulative' ? toCumulative(rawPoints) : periodPoints, [rawPoints, periodPoints, trendMode]);
   const activeSeries = useMemo(() => normalizeSeriesConfig(chartSeries), [chartSeries]);
   const isEmpty = points.every(point => activeSeries.every(item => !Number(point[item.id])));
 
@@ -407,7 +356,7 @@ export default function ProfitRevenueTrendChart({ stats, trend, recent, dateFilt
         if (cancelled || !chartRef.current) return;
         const chart = instanceRef.current || echarts.init(chartRef.current, null, { renderer: 'canvas' });
         instanceRef.current = chart;
-        chart.setOption(buildOptions(points, chartSeries, uiStyle), true);
+        chart.setOption(buildOptions(points, chartSeries, uiStyle, containerWidth), true);
         chart.resize();
         requestAnimationFrame(() => {
           if (!cancelled) chart.resize();
@@ -418,19 +367,29 @@ export default function ProfitRevenueTrendChart({ stats, trend, recent, dateFilt
     return () => {
       cancelled = true;
     };
-  }, [points, chartSeries, uiStyle, colorTheme]);
+  }, [points, chartSeries, uiStyle, colorTheme, containerWidth]);
 
   useEffect(() => {
-    const resize = () => instanceRef.current?.resize();
-    const observer = chartRef.current && 'ResizeObserver' in window
-      ? new ResizeObserver(resize)
-      : null;
+    const el = chartRef.current;
+    if (!el) return;
 
-    if (chartRef.current && observer) observer.observe(chartRef.current);
-    window.addEventListener('resize', resize);
+    const handleResize = (entries) => {
+      const width = entries?.[0]?.contentRect?.width ?? el.offsetWidth;
+      setContainerWidth(width);
+      instanceRef.current?.resize();
+    };
+
+    const observer = 'ResizeObserver' in window ? new ResizeObserver(handleResize) : null;
+    if (observer) observer.observe(el);
+
+    // Set initial width
+    setContainerWidth(el.offsetWidth);
+
+    const windowResize = () => instanceRef.current?.resize();
+    window.addEventListener('resize', windowResize);
     return () => {
       observer?.disconnect();
-      window.removeEventListener('resize', resize);
+      window.removeEventListener('resize', windowResize);
     };
   }, []);
 
@@ -444,9 +403,36 @@ export default function ProfitRevenueTrendChart({ stats, trend, recent, dateFilt
     );
   }
 
+  const isGlassStyle = uiStyle === 'glassmorphism-brown';
+
   return (
-    <div className="relative h-full min-h-[280px] w-full">
-      <div ref={chartRef} className="h-full min-h-[280px] w-full" />
+    <div className="relative h-full min-h-[280px] w-full flex flex-col">
+      {/* Period / Cumulative tab toggle */}
+      {onTrendModeChange && (
+        <div className="flex justify-end px-1 pb-1 shrink-0">
+          <div className={`flex gap-0.5 p-0.5 rounded-lg ${isGlassStyle ? 'bg-white/[0.04] border border-white/[0.06]' : 'bg-[var(--bg-elevated)] border border-[color:var(--border-default)]'}`}>
+            {[['period', 'Period'], ['cumulative', 'Cumulative']].map(([val, label]) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => onTrendModeChange(val)}
+                className={`px-2.5 py-1 rounded-md text-[10px] font-medium transition-all ${
+                  trendMode === val
+                    ? isGlassStyle
+                      ? 'bg-white/[0.08] text-[#e8e2d6] border border-white/[0.10]'
+                      : 'bg-[var(--accent-bg)] text-[var(--accent)] border border-[color:var(--accent)]/30'
+                    : isGlassStyle
+                      ? 'text-white/25 hover:text-white/50 border border-transparent'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] border border-transparent'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <div ref={chartRef} className="flex-1 min-h-[280px] w-full" />
       {isEmpty && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="rounded-lg border border-white/10 bg-[#0d1118]/85 px-4 py-2 text-xs text-gray-500 shadow-xl">

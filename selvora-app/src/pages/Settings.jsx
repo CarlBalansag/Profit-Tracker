@@ -130,6 +130,7 @@ function Settings() {
                 {['Payment Methods', 'Vendors', 'Accounts', 'Marketplaces', 'Cashouts'].map((title) => (
                   <button
                     key={title}
+                    data-tutorial-id={title === 'Vendors' || title === 'Marketplaces' || title === 'Cashouts' ? 'datasetup-platforms-tab' : title === 'Payment Methods' ? 'datasetup-payment-tab' : undefined}
                     onClick={() => setActiveDataSetupView(title)}
                     className="flex justify-between items-center p-3 rounded border border-gray-800 bg-[#16161E] hover:bg-gray-800 transition-colors text-sm text-gray-300 text-left"
                   >

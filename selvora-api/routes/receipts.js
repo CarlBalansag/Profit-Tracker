@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
 const cloudinary = require('cloudinary').v2;
+const { validateBody } = require('../middleware/validate');
+const { attachReceipt, detachReceipt } = require('../validation/schemas');
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -83,7 +85,7 @@ const ALLOWED_MIME_TYPES = new Set([
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 
 // POST /api/receipts/attach — upload receipt to Cloudinary, store URL in DB
-router.post('/attach', isAuthenticated, async (req, res, next) => {
+router.post('/attach', isAuthenticated, validateBody(attachReceipt), async (req, res, next) => {
   try {
     const { itemType, itemId, fileData, fileName } = req.body;
     if (!itemType || !itemId || !fileData) {
@@ -145,7 +147,7 @@ router.post('/attach', isAuthenticated, async (req, res, next) => {
 });
 
 // DELETE /api/receipts/detach — remove receipt from DB (Cloudinary file stays for now)
-router.delete('/detach', isAuthenticated, async (req, res, next) => {
+router.delete('/detach', isAuthenticated, validateBody(detachReceipt), async (req, res, next) => {
   try {
     const { itemType, itemId } = req.body;
     if (!itemType || !itemId) {

@@ -38,8 +38,17 @@ export const AuthProvider = ({ children }) => {
     );
   }
 
+  const logout = async () => {
+    try {
+      await apiFetch('/auth/logout');
+    } catch {
+      // ignore network errors — we clear local state regardless
+    }
+    setUser(null);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, setUser, loading }}>
+    <AuthContext.Provider value={{ user, setUser, loading, logout }}>
       {children}
     </AuthContext.Provider>
   );

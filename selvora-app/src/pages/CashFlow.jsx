@@ -83,7 +83,7 @@ function CashFlow() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-xl p-5 border border-gray-800 flex justify-between items-start" style={{ backgroundColor: '#1a2235' }}>
+        <div className="rounded-xl p-5 border border-gray-800 flex justify-between items-start" style={{ backgroundColor: 'var(--accent-bg)' }}>
           <div>
             <h3 className="text-[10px] font-bold text-[#60a5fa] uppercase tracking-wider mb-2">Spending Out</h3>
             <div className="text-xl font-bold text-blue-400 mb-1">{loading ? '…' : `$${fmt(spendingOut)}`}</div>
@@ -94,7 +94,7 @@ function CashFlow() {
           </div>
         </div>
 
-        <div className="rounded-xl p-5 border border-gray-800 flex justify-between items-start" style={{ backgroundColor: '#102d24' }}>
+        <div className="rounded-xl p-5 border border-gray-800 flex justify-between items-start" style={{ backgroundColor: 'var(--green-bg)' }}>
           <div>
             <h3 className="text-[10px] font-bold text-[#4ade80] uppercase tracking-wider mb-2">Coming Back</h3>
             <div className="text-xl font-bold text-green-400 mb-1">{loading ? '…' : `$${fmt(comingBack)}`}</div>
@@ -105,7 +105,7 @@ function CashFlow() {
           </div>
         </div>
 
-        <div className="rounded-xl p-5 border border-gray-800 flex justify-between items-start" style={{ backgroundColor: '#261935' }}>
+        <div className="rounded-xl p-5 border border-gray-800 flex justify-between items-start" style={{ backgroundColor: 'var(--accent-bg)' }}>
           <div>
             <h3 className="text-[10px] font-bold text-[#c084fc] uppercase tracking-wider mb-2">Owed To You</h3>
             <div className="text-xl font-bold text-purple-400 mb-1">{loading ? '…' : `$${fmt(owedRevenue)}`}</div>
@@ -123,7 +123,7 @@ function CashFlow() {
           <span className="text-xs text-gray-500">Include cashback</span>
           <button
             onClick={() => setIncludeCashback(!includeCashback)}
-            className={`w-9 h-5 rounded-full relative transition-colors ${includeCashback ? 'bg-green-500' : 'bg-gray-700'}`}
+            className={`w-9 h-5 rounded-full relative transition-colors ${includeCashback ? 'bg-[var(--green)]' : 'bg-gray-700'}`}
           >
             <div className={`absolute top-0.5 bottom-0.5 left-0.5 w-4 rounded-full transition-transform ${includeCashback ? 'translate-x-4 bg-white' : 'bg-gray-300'}`} />
           </button>

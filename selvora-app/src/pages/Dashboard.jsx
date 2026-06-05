@@ -131,6 +131,7 @@ const Dashboard = () => {
   const [modeFilter, setModeFilter] = useState('All');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [trendMode, setTrendMode] = useState('period'); // 'period' | 'cumulative'
 
   const { data, isLoading } = useDashboard(modeFilter, dateFilter);
   useEffect(() => { if (data) setLastUpdated(new Date()); }, [data]);
@@ -140,6 +141,7 @@ const Dashboard = () => {
   const pipeline = data?.pipelineCounts || {};
   const topCards = data?.topCards || [];
   const trend = data?.trend || [];
+  const trendMeta = data?.trendMeta ?? null;
 
   // Derive visible cards from settings
   const configuredStatCards = settings.statCards
@@ -203,7 +205,7 @@ const Dashboard = () => {
         ? `sold via ${modeFilter}`
         : null;
       return (
-        <div key="statCards" className={isGlass
+        <div key="statCards" data-tutorial-id="dashboard-stats" className={isGlass
           ? `grid grid-cols-1 sm:grid-cols-2 ${statColClass} gap-3 3xl:gap-4 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both`
           : "grid min-w-0 grid-cols-1 gap-3 overflow-x-auto pb-1 sm:grid-cols-2 lg:grid-cols-none animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both"
         } style={!isGlass ? {
@@ -238,7 +240,7 @@ const Dashboard = () => {
     if (sectionId === 'pipeline') {
       if (!showPipeline || visiblePipelineCards.length === 0) return null;
       return (
-        <div key="pipeline" className={isGlass
+        <div key="pipeline" data-tutorial-id="dashboard-pipeline" className={isGlass
           ? "rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.22)] animate-in fade-in duration-300 fill-mode-both"
           : "rounded-[9px] p-4 bg-[var(--bg-surface)] border border-[color:var(--border-default)] animate-in slide-in-from-bottom-4 duration-500 fade-in delay-300 fill-mode-both"
         }>
@@ -269,7 +271,7 @@ const Dashboard = () => {
 
     if (sectionId === 'trendChart') {
       return (
-        <div key="trendChart" className={`grid grid-cols-1 ${dashboardMiddleGridClass} gap-4 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-500 fill-mode-both`}>
+        <div key="trendChart" data-tutorial-id="dashboard-chart" className={`grid grid-cols-1 ${dashboardMiddleGridClass} gap-4 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-500 fill-mode-both`}>
           {showTrendChart && (
             <div className={isGlass
               ? "lg:col-span-2 rounded-[20px] p-5 bg-[#181a1c]/72 border border-white/[0.06] shadow-[0_10px_30px_rgba(0,0,0,0.22)] min-h-[360px] flex flex-col overflow-hidden"
@@ -292,11 +294,14 @@ const Dashboard = () => {
                   <ProfitRevenueTrendChart
                     stats={stats}
                     trend={trend}
+                    trendMeta={trendMeta}
                     recent={recent}
                     dateFilter={dateFilter}
                     chartSeries={visibleChartSeries}
                     uiStyle={preferences.style}
                     colorTheme={preferences.colorTheme}
+                    trendMode={trendMode}
+                    onTrendModeChange={setTrendMode}
                   />
                 )}
               </div>
@@ -491,10 +496,13 @@ const Dashboard = () => {
               <ProfitRevenueTrendChart
                 stats={stats}
                 trend={trend}
+                trendMeta={trendMeta}
                 recent={recent}
                 dateFilter={dateFilter}
                 chartSeries={visibleChartSeries}
                 uiStyle={preferences.style}
+                trendMode={trendMode}
+                onTrendModeChange={setTrendMode}
               />
             )}
           </div>
@@ -761,8 +769,23 @@ const Dashboard = () => {
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
 
+          {/* Share Card + Settings — shown first on mobile (order-first), normal order on desktop */}
+          <div className="flex items-center gap-2 order-first sm:order-last">
+            <button className={isGlass ? "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all text-[#d8a65a] hover:text-[#e8e2d6] hover:bg-white/[0.05] border border-[#d8a65a]/20" : "flex items-center gap-2 px-3 py-2 rounded-md text-[10px] font-medium transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"}>
+              <Share2 className="w-3.5 h-3.5" /> Generate Share Card
+            </button>
+            <button
+              data-tutorial-id="dashboard-settings-btn"
+              onClick={() => setSettingsOpen(true)}
+              className={isGlass ? "flex items-center justify-center w-9 h-9 rounded-xl text-white/30 hover:text-[#d8a65a] hover:bg-white/[0.06] border border-white/[0.06] transition-all" : "flex items-center justify-center w-9 h-9 rounded-md text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"}
+              title="Dashboard Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
+
           {/* Mode Filters */}
-          <div className={isGlass ? "flex items-center gap-1 p-1 rounded-xl bg-[#181a1c]/78 border border-white/[0.05]" : "flex items-center gap-1 rounded bg-[var(--bg-surface)] p-1"}>
+          <div data-tutorial-id="dashboard-filters" className={isGlass ? "flex items-center gap-1 p-1 rounded-xl bg-[#181a1c]/78 border border-white/[0.05]" : "flex items-center gap-1 rounded bg-[var(--bg-surface)] p-1"}>
             {['All', 'Cashout', 'Marketplace'].map((mode) => (
               <button
                 key={mode}
@@ -792,18 +815,6 @@ const Dashboard = () => {
               </button>
             ))}
           </div>
-
-          <button className={isGlass ? "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all text-[#d8a65a] hover:text-[#e8e2d6] hover:bg-white/[0.05] border border-[#d8a65a]/20" : "flex items-center gap-2 px-3 py-2 rounded-md text-[10px] font-medium transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"}>
-            <Share2 className="w-3.5 h-3.5" /> Generate Share Card
-          </button>
-
-          <button
-            onClick={() => setSettingsOpen(true)}
-            className={isGlass ? "flex items-center justify-center w-9 h-9 rounded-xl text-white/30 hover:text-[#d8a65a] hover:bg-white/[0.06] border border-white/[0.06] transition-all" : "flex items-center justify-center w-9 h-9 rounded-md text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"}
-            title="Dashboard Settings"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
 
         </div>
       </div>
