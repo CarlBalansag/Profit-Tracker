@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { validateBody } = require('../middleware/validate');
+const { platform, platformBatch } = require('../validation/schemas');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -22,7 +24,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 });
 
 // POST /api/platforms - single create
-router.post('/', isAuthenticated, async (req, res, next) => {
+router.post('/', isAuthenticated, validateBody(platform), async (req, res, next) => {
   try {
     const { name, type, fee_pct, address, notes } = req.body;
     const platform = await prisma.platform.create({
@@ -42,7 +44,7 @@ router.post('/', isAuthenticated, async (req, res, next) => {
 });
 
 // POST /api/platforms/batch - bulk create
-router.post('/batch', isAuthenticated, async (req, res, next) => {
+router.post('/batch', isAuthenticated, validateBody(platformBatch), async (req, res, next) => {
   try {
     const { vendors } = req.body;
     if (!Array.isArray(vendors) || vendors.length === 0) {
@@ -70,7 +72,7 @@ router.post('/batch', isAuthenticated, async (req, res, next) => {
 });
 
 // PUT /api/platforms/:id - update (ownership enforced)
-router.put('/:id', isAuthenticated, async (req, res, next) => {
+router.put('/:id', isAuthenticated, validateBody(platform.partial()), async (req, res, next) => {
   try {
     const existing = await prisma.platform.findUnique({ where: { id: req.params.id } });
     if (!existing || existing.user_id !== req.user.id) {

@@ -764,8 +764,8 @@ export default function DashboardSettingsModal({ settings, onClose, onSave, uiSt
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative flex h-[80vh] w-[min(1180px,80vw)] min-w-[min(94vw,720px)] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0a0a0b] shadow-2xl">
-        <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-6 py-4">
+      <div className="relative flex h-[90vh] sm:h-[80vh] w-full sm:w-[min(1180px,92vw)] flex-col overflow-hidden sm:rounded-2xl border border-white/[0.08] bg-[#0a0a0b] shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-4 sm:px-6 py-4">
           <div>
             <h2 className="text-base font-semibold text-white">Dashboard Settings</h2>
             <p className="mt-0.5 text-[11px] text-gray-500">Customize dashboard layout, cards, and chart visibility.</p>
@@ -779,7 +779,7 @@ export default function DashboardSettingsModal({ settings, onClose, onSave, uiSt
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 theme-scrollbar">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 theme-scrollbar">
           <div className="space-y-5">
             <div className="flex flex-wrap gap-3">
               <div className="w-full max-w-xs rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
@@ -883,7 +883,7 @@ export default function DashboardSettingsModal({ settings, onClose, onSave, uiSt
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-white/[0.06] px-6 py-4">
+        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-white/[0.06] px-4 sm:px-6 py-4">
           <button
             onClick={onClose}
             className="rounded-xl border border-white/[0.08] px-5 py-2 text-sm font-medium text-gray-400 transition-colors hover:bg-white/[0.05] hover:text-white"

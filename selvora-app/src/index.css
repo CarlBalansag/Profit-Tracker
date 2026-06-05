@@ -31,6 +31,27 @@
     --chart-4: #505050;
     --sidebar-bg-start: #121212;
     --sidebar-bg-end: #0b0b0b;
+    --toast-bg: var(--bg-surface);
+    --toast-border: var(--border-hover);
+    --toast-text: var(--text-primary);
+    --toast-shadow: none;
+    --glass-bg-base: #111315;
+    --glass-bg-surface: rgba(24, 26, 28, 0.78);
+    --glass-bg-elevated: rgba(255, 255, 255, 0.035);
+    --glass-bg-hover: rgba(255, 255, 255, 0.055);
+    --glass-border: rgba(255, 255, 255, 0.07);
+    --glass-border-hover: rgba(216, 166, 90, 0.22);
+    --glass-text-primary: #e8e2d6;
+    --glass-text-secondary: rgba(232, 226, 214, 0.52);
+    --glass-text-muted: rgba(232, 226, 214, 0.26);
+    --glass-accent: #d8a65a;
+    --glass-accent-soft: rgba(216, 166, 90, 0.12);
+    --glass-green: #8faf82;
+    --glass-green-soft: rgba(143, 175, 130, 0.12);
+    --glass-red: #c98374;
+    --glass-red-soft: rgba(201, 131, 116, 0.12);
+    --glass-yellow: #c9a85f;
+    --glass-yellow-soft: rgba(201, 168, 95, 0.12);
   }
 
   :root[data-theme="copper"] {
@@ -177,6 +198,33 @@
     --sidebar-bg-start: #131212;
     --sidebar-bg-end: #0b0a0a;
   }
+
+  :root[data-ui-style="glassmorphism-brown"] {
+    --bg-base: var(--glass-bg-base);
+    --bg-surface: var(--glass-bg-surface);
+    --bg-elevated: var(--glass-bg-elevated);
+    --bg-hover: var(--glass-bg-hover);
+    --border-default: var(--glass-border);
+    --border-hover: var(--glass-border-hover);
+    --text-primary: var(--glass-text-primary);
+    --text-secondary: var(--glass-text-secondary);
+    --text-muted: var(--glass-text-muted);
+    --accent: var(--glass-accent);
+    --accent-bg: var(--glass-accent-soft);
+    --green: var(--glass-green);
+    --green-bg: var(--glass-green-soft);
+    --red: var(--glass-red);
+    --red-bg: var(--glass-red-soft);
+    --yellow: var(--glass-yellow);
+    --chart-1: var(--glass-accent);
+    --chart-2: var(--glass-green);
+    --chart-3: var(--glass-yellow);
+    --chart-4: var(--glass-red);
+    --toast-bg: rgba(24, 26, 28, 0.94);
+    --toast-border: rgba(216, 166, 90, 0.2);
+    --toast-text: var(--glass-text-primary);
+    --toast-shadow: 0 18px 44px rgba(0, 0, 0, 0.32);
+  }
   
   html, body, #root {
     height: 100%;
@@ -191,8 +239,8 @@
   
   /* Override default OS styling for dropdown options to match dark theme */
   option {
-    background-color: #12121e;
-    color: #f8fafc;
+    background-color: var(--bg-surface);
+    color: var(--text-primary);
   }
 }
 
@@ -275,6 +323,11 @@
     color: var(--text-primary) !important;
     border-radius: 6px !important;
     box-shadow: none !important;
+  }
+
+  .carbon-workspace input[type="checkbox"],
+  .carbon-workspace input[type="radio"] {
+    accent-color: var(--accent);
   }
 
   .carbon-workspace input:focus,
@@ -360,6 +413,11 @@
     background-color: var(--accent-bg) !important;
   }
 
+  .carbon-workspace [class*="bg-[#1a2235]"],
+  .carbon-workspace [class*="bg-[#261935]"] {
+    background-color: var(--accent-bg) !important;
+  }
+
   .carbon-workspace [class*="border-purple"],
   .carbon-workspace [class*="border-indigo"],
   .carbon-workspace [class*="border-blue"],
@@ -377,6 +435,11 @@
   .carbon-workspace [class*="text-pink"],
   .carbon-workspace [class*="text-violet"],
   .carbon-workspace [class*="text-sky"] {
+    color: var(--accent) !important;
+  }
+
+  .carbon-workspace [class*="text-[#60a5fa]"],
+  .carbon-workspace [class*="text-[#c084fc]"] {
     color: var(--accent) !important;
   }
 
@@ -474,6 +537,140 @@
   .carbon-workspace tbody tr:hover {
     background: var(--border-hover) !important;
   }
+
+  .glass-workspace {
+    color: var(--glass-text-primary);
+  }
+
+  .glass-workspace .card,
+  .glass-workspace .card-glow,
+  .glass-workspace .card-hover,
+  .glass-workspace [class*="bg-[#12121A]"],
+  .glass-workspace [class*="bg-[#12121e]"],
+  .glass-workspace [class*="bg-[#0f1115]"],
+  .glass-workspace [class*="bg-[#111318]"],
+  .glass-workspace [class*="bg-[#16161E]"],
+  .glass-workspace [class*="bg-gray-800"] {
+    background: var(--glass-bg-surface) !important;
+    border-color: var(--glass-border) !important;
+    box-shadow: none !important;
+    backdrop-filter: blur(14px);
+  }
+
+  .glass-workspace [class*="hover:bg-white/5"]:hover,
+  .glass-workspace [class*="hover:bg-gray-700"]:hover,
+  .glass-workspace [class*="hover:bg-gray-800"]:hover {
+    background: var(--glass-bg-hover) !important;
+    border-color: var(--glass-border-hover) !important;
+  }
+
+  .glass-workspace input,
+  .glass-workspace select,
+  .glass-workspace textarea {
+    background-color: rgba(17, 19, 21, 0.72) !important;
+    border-color: var(--glass-border) !important;
+    color: var(--glass-text-primary) !important;
+    accent-color: var(--glass-accent);
+  }
+
+  .glass-workspace [class*="text-white"],
+  .glass-workspace [class*="text-gray-100"],
+  .glass-workspace [class*="text-gray-200"],
+  .glass-workspace [class*="text-gray-300"] {
+    color: var(--glass-text-primary) !important;
+  }
+
+  .glass-workspace [class*="text-gray-400"],
+  .glass-workspace [class*="text-slate-400"] {
+    color: var(--glass-text-secondary) !important;
+  }
+
+  .glass-workspace [class*="text-gray-500"],
+  .glass-workspace [class*="text-gray-600"],
+  .glass-workspace [class*="text-slate-500"] {
+    color: var(--glass-text-muted) !important;
+  }
+
+  .glass-workspace [class*="border-gray-"],
+  .glass-workspace [class*="border-white/"],
+  .glass-workspace [class*="divide-gray-"] > * + *,
+  .glass-workspace [class*="divide-white/"] > * + * {
+    border-color: var(--glass-border) !important;
+  }
+
+  .glass-workspace [class*="bg-blue"],
+  .glass-workspace [class*="bg-purple"],
+  .glass-workspace [class*="bg-indigo"],
+  .glass-workspace [class*="bg-cyan"],
+  .glass-workspace [class*="bg-pink"],
+  .glass-workspace [class*="bg-violet"],
+  .glass-workspace [class*="bg-sky"] {
+    background-color: var(--glass-accent-soft) !important;
+  }
+
+  .glass-workspace [class*="border-blue"],
+  .glass-workspace [class*="border-purple"],
+  .glass-workspace [class*="border-indigo"],
+  .glass-workspace [class*="border-cyan"],
+  .glass-workspace [class*="border-pink"],
+  .glass-workspace [class*="border-violet"],
+  .glass-workspace [class*="border-sky"] {
+    border-color: var(--glass-border-hover) !important;
+  }
+
+  .glass-workspace [class*="text-blue"],
+  .glass-workspace [class*="text-purple"],
+  .glass-workspace [class*="text-indigo"],
+  .glass-workspace [class*="text-cyan"],
+  .glass-workspace [class*="text-pink"],
+  .glass-workspace [class*="text-violet"],
+  .glass-workspace [class*="text-sky"],
+  .glass-workspace [class*="text-[#60a5fa]"],
+  .glass-workspace [class*="text-[#c084fc]"] {
+    color: var(--glass-accent) !important;
+  }
+
+  .glass-workspace [class*="bg-green"],
+  .glass-workspace [class*="bg-emerald"],
+  .glass-workspace [class*="bg-teal"] {
+    background-color: var(--glass-green-soft) !important;
+  }
+
+  .glass-workspace [class*="text-green"],
+  .glass-workspace [class*="text-emerald"],
+  .glass-workspace [class*="text-teal"] {
+    color: var(--glass-green) !important;
+  }
+
+  .glass-workspace [class*="bg-yellow"],
+  .glass-workspace [class*="bg-amber"],
+  .glass-workspace [class*="bg-orange"] {
+    background-color: var(--glass-yellow-soft) !important;
+  }
+
+  .glass-workspace [class*="text-yellow"],
+  .glass-workspace [class*="text-amber"],
+  .glass-workspace [class*="text-orange"] {
+    color: var(--glass-yellow) !important;
+  }
+
+  .glass-workspace [class*="bg-red"],
+  .glass-workspace [class*="bg-rose"] {
+    background-color: var(--glass-red-soft) !important;
+  }
+
+  .glass-workspace [class*="text-red"],
+  .glass-workspace [class*="text-rose"] {
+    color: var(--glass-red) !important;
+  }
+
+  .glass-workspace button[class*="bg-indigo"],
+  .glass-workspace button[class*="bg-purple"],
+  .glass-workspace button[class*="bg-blue"] {
+    background-color: var(--glass-accent) !important;
+    border-color: var(--glass-accent) !important;
+    color: #111315 !important;
+  }
 }
 
 @layer utilities {
@@ -497,7 +694,7 @@
 /* Shared themed scrollbar for page-level vertical scrolling */
 .theme-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #2a2a35 #0a0a0f;
+  scrollbar-color: var(--bg-hover) var(--bg-base);
 }
 
 .theme-scrollbar::-webkit-scrollbar {
@@ -506,23 +703,23 @@
 }
 
 .theme-scrollbar::-webkit-scrollbar-track {
-  background: #0a0a0f;
+  background: var(--bg-base);
   border-radius: 10px;
 }
 
 .theme-scrollbar::-webkit-scrollbar-thumb {
-  background: #2a2a35;
+  background: var(--bg-hover);
   border-radius: 10px;
 }
 
 .theme-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #3a3a45;
+  background: var(--border-hover);
 }
 
 /* Modal Scrollbar Optimization */
 .modal-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #2a2a35 #12121A;
+  scrollbar-color: var(--bg-hover) var(--bg-surface);
 }
 
 .modal-scrollbar::-webkit-scrollbar {
@@ -530,22 +727,22 @@
 }
 
 .modal-scrollbar::-webkit-scrollbar-track {
-  background: #12121A;
+  background: var(--bg-surface);
 }
 
 .modal-scrollbar::-webkit-scrollbar-thumb {
-  background: #2a2a35;
+  background: var(--bg-hover);
   border-radius: 10px;
 }
 
 .modal-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #3a3a45;
+  background: var(--border-hover);
 }
 
 /* Themed horizontal scrollbar for tables */
 .table-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #2a2a35 #0f1115;
+  scrollbar-color: var(--bg-hover) var(--bg-elevated);
 }
 
 .table-scrollbar::-webkit-scrollbar {
@@ -553,17 +750,34 @@
 }
 
 .table-scrollbar::-webkit-scrollbar-track {
-  background: #0f1115;
+  background: var(--bg-elevated);
   border-radius: 10px;
 }
 
 .table-scrollbar::-webkit-scrollbar-thumb {
-  background: #2a2a35;
+  background: var(--bg-hover);
   border-radius: 10px;
 }
 
 .table-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #3a3a45;
+  background: var(--border-hover);
+}
+
+/* Thicker horizontal scrollbar on mobile touch screens */
+@media (max-width: 767px) {
+  .table-scrollbar::-webkit-scrollbar {
+    height: 10px;
+  }
+
+  .table-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--bg-hover);
+    border-radius: 10px;
+    border: 2px solid var(--bg-elevated);
+  }
+
+  .table-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--border-hover);
+  }
 }
 
 /* Force hardware acceleration for smoother scrolling */

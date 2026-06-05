@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { validateBody } = require('../middleware/validate');
+const { recurringExpense, updateRecurringExpense } = require('../validation/schemas');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -92,7 +94,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 });
 
 // ── POST new recurring expense ────────────────────────────────────────────────
-router.post('/', isAuthenticated, async (req, res, next) => {
+router.post('/', isAuthenticated, validateBody(recurringExpense), async (req, res, next) => {
   try {
     const { name, amount, category, frequency, start_date, end_date, notes } = req.body;
     if (!name || !amount || !frequency || !start_date) {
@@ -123,7 +125,7 @@ router.post('/', isAuthenticated, async (req, res, next) => {
 });
 
 // ── PUT update (also handles pause/resume via active field) ──────────────────
-router.put('/:id', isAuthenticated, async (req, res, next) => {
+router.put('/:id', isAuthenticated, validateBody(updateRecurringExpense), async (req, res, next) => {
   try {
     const existing = await prisma.recurringExpense.findUnique({ where: { id: req.params.id } });
     if (!existing || existing.user_id !== req.user.id) {

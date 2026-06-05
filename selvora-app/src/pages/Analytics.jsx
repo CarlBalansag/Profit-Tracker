@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { apiFetch } from '../hooks/useApi';
+import React, { useState } from 'react';
+import { useDashboard } from '../hooks/useApi';
 import {
   DollarSign, ShoppingCart, TrendingUp, Percent, Gift,
   CreditCard, Store, Package, BarChart2, Download, RotateCcw,
@@ -20,11 +20,26 @@ const MODE_OPTIONS = [
 function fmt(n) { return (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtPct(n) { return (n ?? 0).toFixed(2) + '%'; }
 
-const MetricCard = ({ icon: Icon, title, value, subtitle, color, titleColor, valueColor, subtitleColor, bgGlow, topRightIcon: TopRightIcon }) => (
+const THEME = {
+  accent: 'var(--accent)',
+  accentBg: 'var(--accent-bg)',
+  green: 'var(--green)',
+  red: 'var(--red)',
+  yellow: 'var(--yellow)',
+  chart1: 'var(--chart-1)',
+  chart2: 'var(--chart-2)',
+  chart3: 'var(--chart-3)',
+  surface: 'var(--bg-surface)',
+  elevated: 'var(--bg-elevated)',
+  border: 'var(--border-default)',
+  borderHover: 'var(--border-hover)',
+  textPrimary: 'var(--text-primary)',
+  textSecondary: 'var(--text-secondary)',
+  textMuted: 'var(--text-muted)',
+};
+
+const MetricCard = ({ icon: Icon, title, value, subtitle, color, titleColor, valueColor, subtitleColor, topRightIcon: TopRightIcon }) => (
   <div className="relative p-4 rounded-xl border border-gray-800 bg-[#16161E] overflow-hidden group hover:border-gray-700 transition-colors">
-    {bgGlow && (
-      <div className="absolute inset-0 pointer-events-none opacity-20" style={{ background: `radial-gradient(circle at top left, ${color}, transparent 60%)` }} />
-    )}
     {TopRightIcon && (
       <div className="absolute top-4 right-4"><TopRightIcon size={14} style={{ color }} /></div>
     )}
@@ -43,71 +58,55 @@ function Analytics() {
   const [activeTab, setActiveTab] = useState('overview');
   const [mode, setMode]           = useState('All');
   const [dateRange, setDateRange] = useState('All Time');
-  const [data, setData]           = useState(null);
-  const [loading, setLoading]     = useState(true);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ mode, date: dateRange });
-      const res = await apiFetch(`/api/analytics/dashboard?${params}`, { credentials: 'include' });
-      if (res.ok) setData(await res.json());
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [mode, dateRange]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const { data, isLoading: loading, refetch: fetchData } = useDashboard(mode, dateRange);
 
   const s = data?.stats ?? {};
   const trend = data?.trend ?? [];
   const topCards = data?.topCards ?? [];
 
-  // Build monthly-bucketed chart data from daily cumulative trend points
+  // Backend now returns per-period deltas, keyed YYYY-MM (monthly) or YYYY-MM-DD (daily).
+  // Group/aggregate by month for charts that need monthly granularity.
   const monthlyTrend = (() => {
     if (!trend.length) return [];
     const byMonth = new Map();
     trend.forEach(pt => {
       const month = pt.date.slice(0, 7); // YYYY-MM
-      byMonth.set(month, { name: month, revenue: pt.totalRevenue, profit: pt.netProfit, cashback: pt.cashback });
+      const existing = byMonth.get(month) || { name: month, revenue: 0, profit: 0, cashback: 0 };
+      byMonth.set(month, {
+        name: month,
+        revenue:  existing.revenue  + (pt.totalRevenue || 0),
+        profit:   existing.profit   + (pt.netProfit    || 0),
+        cashback: existing.cashback + (pt.cashback     || 0),
+      });
     });
     return Array.from(byMonth.values());
   })();
 
   // Expense breakdown pie: COGS vs tax vs commission
   const expenseData = [
-    { name: 'COGS',       value: s.soldCost       || 0, color: '#ef4444' },
-    { name: 'Tax',        value: s.totalTax        || 0, color: '#eab308' },
-    { name: 'Commission', value: s.commissionFees  || 0, color: '#6366f1' },
+    { name: 'COGS',       value: s.soldCost       || 0, color: THEME.red },
+    { name: 'Tax',        value: s.totalTax        || 0, color: THEME.yellow },
+    { name: 'Commission', value: s.commissionFees  || 0, color: THEME.accent },
   ].filter(e => e.value > 0);
 
   const expenseTotal = expenseData.reduce((sum, e) => sum + e.value, 0);
 
-  // Cumulative profit area chart — use the trend directly
-  const cumulativeData = trend.map(pt => ({ name: pt.date.slice(0, 7), profit: pt.netProfit }));
-  // Deduplicate by month — keep last entry per month
+  // Cumulative profit area chart — accumulate monthly deltas into running totals.
   const cumulativeByMonth = (() => {
-    const map = new Map();
-    cumulativeData.forEach(pt => map.set(pt.name, pt));
-    return Array.from(map.values());
+    let running = 0;
+    return monthlyTrend.map(pt => {
+      running += pt.profit;
+      return { name: pt.name, profit: running };
+    });
   })();
 
-  // Period P&L — net profit delta per month
-  const periodPLData = (() => {
-    const map = new Map();
-    trend.forEach(pt => {
-      const month = pt.date.slice(0, 7);
-      map.set(month, pt.netProfit);
-    });
-    const months = Array.from(map.keys()).sort();
-    return months.map((m, i) => {
-      const prev = i > 0 ? map.get(months[i - 1]) : 0;
-      const val = map.get(m) - prev;
-      return { name: m, value: val, fill: val >= 0 ? '#22c55e' : '#ef4444' };
-    });
-  })();
+  // Period P&L — each point already IS the period delta, show directly.
+  const periodPLData = monthlyTrend.map(pt => ({
+    name: pt.name,
+    value: pt.profit,
+    fill: pt.profit >= 0 ? THEME.green : THEME.red,
+  }));
 
   const topStore = topCards[0];
 
@@ -126,7 +125,7 @@ function Analytics() {
               onClick={() => setMode(key)}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
                 mode === key
-                  ? 'bg-purple-800/60 text-white border-purple-500/30'
+                  ? 'bg-[var(--accent-bg)] text-[var(--accent)] border-[color:var(--accent)]'
                   : 'bg-transparent text-gray-400 hover:text-white hover:bg-white/5 border-transparent'
               }`}
             >
@@ -166,49 +165,49 @@ function Analytics() {
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
-          icon={DollarSign} title="REVENUE" color="#3b82f6"
+          icon={DollarSign} title="REVENUE" color={THEME.accent}
           value={loading ? '…' : `$${fmt(s.totalRevenue)}`}
           subtitle={`${s.salesCount ?? 0} sale${s.salesCount !== 1 ? 's' : ''}`}
           valueColor="text-white" titleColor="text-gray-500"
         />
         <MetricCard
-          icon={ShoppingCart} title="COST" color="#ec4899" bgGlow
+          icon={ShoppingCart} title="COST" color={THEME.chart3}
           value={loading ? '…' : `$${fmt(s.totalCost)}`}
           subtitle={`${s.transactionCount ?? 0} buys (incl. tax & shipping)`}
           valueColor="text-white" titleColor="text-[#71465d]" subtitleColor="text-[#71465d]"
         />
         <MetricCard
-          icon={TrendingUp} title="PROFIT" color="#22c55e" bgGlow topRightIcon={TrendingUp}
+          icon={TrendingUp} title="PROFIT" color={THEME.green} topRightIcon={TrendingUp}
           value={loading ? '…' : `$${fmt(s.profit)}`}
           subtitle={`CB $${fmt(s.totalCashback)} · Fees -$${fmt(s.commissionFees)}`}
           titleColor="text-green-500/70" valueColor="text-green-400" subtitleColor="text-green-500/50"
         />
         <MetricCard
-          icon={Percent} title="ROI" color="#22c55e" bgGlow topRightIcon={TrendingUp}
+          icon={Percent} title="ROI" color={THEME.green} topRightIcon={TrendingUp}
           value={loading ? '…' : fmtPct(s.roi)}
           subtitle="Return on invested cost"
           titleColor="text-green-500/70" valueColor="text-green-400" subtitleColor="text-green-500/50"
         />
         <MetricCard
-          icon={Gift} title="CASHBACK" color="#a855f7" bgGlow
+          icon={Gift} title="CASHBACK" color={THEME.accent}
           value={loading ? '…' : `$${fmt(s.totalCashback)}`}
           subtitle={`Avg ${fmtPct(s.avgCashbackRate)} rate`}
           titleColor="text-purple-500/70" valueColor="text-purple-400" subtitleColor="text-purple-500/50"
         />
         <MetricCard
-          icon={CreditCard} title="COMMISSION" color="#eab308" bgGlow
+          icon={CreditCard} title="COMMISSION" color={THEME.yellow}
           value={loading ? '…' : `$${fmt(s.commissionFees)}`}
           subtitle="Platform fees on sales"
           titleColor="text-yellow-500/70" valueColor="text-yellow-400" subtitleColor="text-yellow-500/50"
         />
         <MetricCard
-          icon={Store} title="TOP CARD" color="#14b8a6" bgGlow
+          icon={Store} title="TOP CARD" color={THEME.chart2}
           value={loading ? '…' : (topStore?.name || '—')}
           subtitle={topStore ? `$${fmt(topStore.amount)} · ${topStore.txns} txn${topStore.txns !== 1 ? 's' : ''}` : 'No payment data'}
           titleColor="text-teal-500/70" valueColor="text-white" subtitleColor="text-teal-500/50"
         />
         <MetricCard
-          icon={Package} title="INVENTORY" color="#6366f1" bgGlow
+          icon={Package} title="INVENTORY" color={THEME.chart1}
           value={loading ? '…' : s.inventoryQty ?? 0}
           subtitle={`$${fmt(s.inventoryValue)} on hand`}
           titleColor="text-indigo-500/70" valueColor="text-white" subtitleColor="text-indigo-500/50"
@@ -271,14 +270,14 @@ function Analytics() {
               {monthlyTrend.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={monthlyTrend} margin={{ top: 5, right: 20, left: 0, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                    <XAxis dataKey="name" stroke="#52525b" tick={{ fill: '#71717a', fontSize: 10 }} tickLine={false} axisLine={false} dy={10} />
-                    <YAxis stroke="#52525b" tick={{ fill: '#71717a', fontSize: 10 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
-                    <Tooltip contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }} itemStyle={{ fontSize: '12px' }} labelStyle={{ color: '#a1a1aa', fontSize: '12px', marginBottom: '4px' }} formatter={v => `$${fmt(v)}`} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={THEME.borderHover} vertical={false} />
+                    <XAxis dataKey="name" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dy={10} />
+                    <YAxis stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
+                    <Tooltip contentStyle={{ backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`, borderRadius: '8px' }} itemStyle={{ fontSize: '12px' }} labelStyle={{ color: THEME.textSecondary, fontSize: '12px', marginBottom: '4px' }} formatter={v => `$${fmt(v)}`} />
                     <Legend wrapperStyle={{ bottom: 0, fontSize: '12px' }} iconType="circle" />
-                    <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                    <Line type="monotone" dataKey="profit"  name="Profit"  stroke="#22c55e" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="cashback" name="Cashback" stroke="#a855f7" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="revenue" name="Revenue" stroke={THEME.accent} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                    <Line type="monotone" dataKey="profit"  name="Profit"  stroke={THEME.green} strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="cashback" name="Cashback" stroke={THEME.chart3} strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
@@ -298,7 +297,7 @@ function Analytics() {
                       <Pie data={expenseData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} stroke="none" paddingAngle={2} dataKey="value">
                         {expenseData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                       </Pie>
-                      <Tooltip contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff' }} formatter={v => `$${fmt(v)}`} />
+                      <Tooltip contentStyle={{ backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`, borderRadius: '8px', color: THEME.textPrimary }} formatter={v => `$${fmt(v)}`} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -331,15 +330,15 @@ function Analytics() {
                   <AreaChart data={cumulativeByMonth} margin={{ top: 5, right: 20, left: 0, bottom: 20 }}>
                     <defs>
                       <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#a855f7" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#a855f7" stopOpacity={0} />
+                        <stop offset="5%" stopColor={THEME.accent} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={THEME.accent} stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                    <XAxis dataKey="name" stroke="#52525b" tick={{ fill: '#71717a', fontSize: 10 }} tickLine={false} axisLine={false} dy={10} />
-                    <YAxis stroke="#52525b" tick={{ fill: '#71717a', fontSize: 10 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
-                    <Tooltip contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} formatter={v => `$${fmt(v)}`} />
-                    <Area type="monotone" dataKey="profit" name="Net Profit" stroke="#a855f7" fillOpacity={1} fill="url(#colorProfit)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={THEME.borderHover} vertical={false} />
+                    <XAxis dataKey="name" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dy={10} />
+                    <YAxis stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
+                    <Tooltip contentStyle={{ backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`, borderRadius: '8px' }} itemStyle={{ color: THEME.textPrimary }} formatter={v => `$${fmt(v)}`} />
+                    <Area type="monotone" dataKey="profit" name="Net Profit" stroke={THEME.accent} fillOpacity={1} fill="url(#colorProfit)" />
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
@@ -355,10 +354,10 @@ function Analytics() {
               {periodPLData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={periodPLData} margin={{ top: 5, right: 20, left: 0, bottom: 20 }} barSize={40}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                    <XAxis dataKey="name" stroke="#52525b" tick={{ fill: '#71717a', fontSize: 10 }} tickLine={false} axisLine={false} dy={10} />
-                    <YAxis stroke="#52525b" tick={{ fill: '#71717a', fontSize: 10 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
-                    <Tooltip contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} cursor={{ fill: '#27272a', opacity: 0.4 }} formatter={v => `$${fmt(v)}`} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={THEME.borderHover} vertical={false} />
+                    <XAxis dataKey="name" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dy={10} />
+                    <YAxis stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
+                    <Tooltip contentStyle={{ backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`, borderRadius: '8px' }} itemStyle={{ color: THEME.textPrimary }} cursor={{ fill: THEME.borderHover, opacity: 0.4 }} formatter={v => `$${fmt(v)}`} />
                     <Bar dataKey="value" name="P&L" radius={[4, 4, 0, 0]}>
                       {periodPLData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
                     </Bar>
@@ -411,7 +410,7 @@ function Analytics() {
                       <span className="text-gray-500">{card.txns} txns · <span className="text-white font-medium">${fmt(card.amount)}</span></span>
                     </div>
                     <div className="h-2 w-full rounded-full bg-gray-800 overflow-hidden">
-                      <div className="h-full rounded-full bg-indigo-500" style={{ width: `${(card.amount / maxAmt) * 100}%` }} />
+                      <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${(card.amount / maxAmt) * 100}%` }} />
                     </div>
                   </div>
                 );
