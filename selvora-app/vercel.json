@@ -2,15 +2,15 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://profit-tracker-tcqo.onrender.com/api/:path*"
+      "destination": "https://profit-tracker-aoi6.onrender.com/api/:path*"
     },
     {
       "source": "/auth/:path*",
-      "destination": "https://profit-tracker-tcqo.onrender.com/auth/:path*"
+      "destination": "https://profit-tracker-aoi6.onrender.com/auth/:path*"
     },
     {
       "source": "/health",
-      "destination": "https://profit-tracker-tcqo.onrender.com/health"
+      "destination": "https://profit-tracker-aoi6.onrender.com/health"
     },
     {
       "source": "/(.*)",
