@@ -25,6 +25,12 @@ const app = express();
 const isProd = process.env.NODE_ENV === 'production';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
+// Startup env dump — remove after debugging
+console.log('[ENV CHECK] NODE_ENV =', process.env.NODE_ENV);
+console.log('[ENV CHECK] FRONTEND_URL =', process.env.FRONTEND_URL);
+console.log('[ENV CHECK] DISCORD_CALLBACK_URL =', process.env.DISCORD_CALLBACK_URL);
+console.log('[ENV CHECK] DISCORD_CLIENT_ID =', process.env.DISCORD_CLIENT_ID);
+
 // Guard: refuse to start without a proper session secret (all environments)
 if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
   console.error('FATAL: SESSION_SECRET must be set to a string of at least 32 characters.');
