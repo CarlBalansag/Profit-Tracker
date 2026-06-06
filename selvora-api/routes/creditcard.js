@@ -53,6 +53,11 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
     const monthEnd   = new Date(Date.UTC(year, month + 1, 1)); // exclusive upper bound
     const monthLabel = `${year}-${String(month + 1).padStart(2, '0')}`;
 
+    // Fetch all credit-card payment methods so they always appear even with no activity
+    const creditPaymentMethods = await prisma.paymentMethod.findMany({
+      where: { user_id: userId, type: 'Credit' },
+    });
+
     // Fetch all credit-card inventory purchases in the selected month
     const inventories = await prisma.inventory.findMany({
       where: {
@@ -69,32 +74,33 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
       },
     });
 
-    // Group by payment method
+    // Seed cardMap with all credit cards so they show even with $0 spend this month
     const cardMap = {};
+    for (const pm of creditPaymentMethods) {
+      cardMap[pm.id] = {
+        id: pm.id,
+        name: pm.name,
+        cashbackRate: 0,
+        totalSpend: 0,
+        cashbackEarned: 0,
+        totalLosses: 0,
+        txnCount: 0,
+        soldCount: 0,
+        pendingCount: 0,
+        items: [],
+        statement_close_day: pm.statement_close_day ?? null,
+        due_day: pm.due_day ?? null,
+        credit_limit: pm.credit_limit ?? null,
+        min_payment_pct: pm.min_payment_pct ?? null,
+      };
+    }
 
     for (const inv of inventories) {
       const pm = inv.payment_method;
       if (!pm) continue;
 
-      if (!cardMap[pm.id]) {
-        cardMap[pm.id] = {
-          id: pm.id,
-          name: pm.name,
-          cashbackRate: 0, // will be set per-item (may vary by vendor)
-          totalSpend: 0,
-          cashbackEarned: 0,
-          totalLosses: 0,
-          txnCount: 0,
-          soldCount: 0,
-          pendingCount: 0,
-          items: [],
-          // Billing fields (optional — null if not set by user)
-          statement_close_day: pm.statement_close_day ?? null,
-          due_day: pm.due_day ?? null,
-          credit_limit: pm.credit_limit ?? null,
-          min_payment_pct: pm.min_payment_pct ?? null,
-        };
-      }
+      // Card is already seeded from creditPaymentMethods; skip if somehow missing
+      if (!cardMap[pm.id]) continue;
 
       const card = cardMap[pm.id];
       const rate = getEffectiveCashbackRate(inv);

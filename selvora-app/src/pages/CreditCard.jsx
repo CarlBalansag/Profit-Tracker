@@ -3,17 +3,14 @@ import { useCreditCard } from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
 import {
   CreditCard as CreditCardIcon,
-  RotateCcw,
-  ChevronDown,
-  ChevronRight,
   ChevronLeft,
-  DollarSign,
-  TrendingDown,
-  Gift,
+  ChevronRight,
+  ChevronDown,
   AlertTriangle,
-  CheckCircle2,
-  Wallet,
+  Sparkles,
 } from 'lucide-react';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(n) {
   return (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -34,454 +31,511 @@ function offsetMonth(key, delta) {
   return toMonthKey(d);
 }
 
-function StatusBadge({ status }) {
-  const s = (status || '').toUpperCase();
-  const isPending = ['PURCHASED', 'LISTED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'ON HAND', 'PRE ORDER'].includes(s);
-  const isSold = ['SOLD', 'PAID', 'COMPLETED', 'SHIPPED_OUT', 'AUTHENTICATION', 'PENDING_PAYMENT', 'IN_TRANSIT_OUT'].includes(s);
-  const isReturn = ['RETURNED', 'DISPUTED', 'CANCELLED'].includes(s);
-
-  const color = isPending
-    ? 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30'
-    : isSold
-    ? 'text-green-400 bg-green-500/10 border-green-500/30'
-    : isReturn
-    ? 'text-red-400 bg-red-500/10 border-red-500/30'
-    : 'text-gray-400 bg-gray-500/10 border-gray-500/30';
-
-  const label = isPending ? (status || 'Pending') : (status || 'Unknown');
-
-  return (
-    <span className={`inline-block text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded border ${color}`}>
-      {label}
-    </span>
-  );
-}
-
-// Returns days until next occurrence of dueDay from today (local time)
 function daysUntilDue(dueDay) {
+  if (!dueDay) return null;
   const now = new Date();
   const thisMonth = new Date(now.getFullYear(), now.getMonth(), dueDay);
   const target = thisMonth > now ? thisMonth : new Date(now.getFullYear(), now.getMonth() + 1, dueDay);
   return Math.ceil((target - now) / (1000 * 60 * 60 * 24));
 }
 
-function DueBadge({ dueDay }) {
+function dueDateLabel(dueDay) {
   if (!dueDay) return null;
-  const days = daysUntilDue(dueDay);
   const now = new Date();
-  const target = new Date(now.getFullYear(), now.getMonth(), dueDay) > now
-    ? new Date(now.getFullYear(), now.getMonth(), dueDay)
-    : new Date(now.getFullYear(), now.getMonth() + 1, dueDay);
-  const label = target.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const thisMonth = new Date(now.getFullYear(), now.getMonth(), dueDay);
+  const target = thisMonth > now ? thisMonth : new Date(now.getFullYear(), now.getMonth() + 1, dueDay);
+  return target.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
-  const color = days > 14
-    ? 'border-green-500/30 bg-green-500/5 text-green-400'
-    : days > 7
-    ? 'border-amber-500/30 bg-amber-500/5 text-amber-400'
-    : 'border-red-500/40 bg-red-500/10 text-red-400';
+const STATUS_SOLD = ['SOLD', 'PAID', 'COMPLETED', 'SHIPPED_OUT', 'AUTHENTICATION', 'PENDING_PAYMENT', 'IN_TRANSIT_OUT'];
+const STATUS_RETURN = ['RETURNED', 'DISPUTED', 'CANCELLED'];
 
+function statusStyle(status) {
+  const s = (status || '').toUpperCase();
+  if (STATUS_SOLD.includes(s)) return { color: 'var(--green)', bg: 'var(--green-bg)', border: 'var(--green-soft)' };
+  if (STATUS_RETURN.includes(s)) return { color: 'var(--red)', bg: 'var(--red-bg)', border: 'var(--red)' };
+  return { color: 'var(--yellow)', bg: 'var(--accent-bg)', border: 'var(--accent-soft)' };
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function StatusBadge({ status }) {
+  const { color, bg, border } = statusStyle(status);
   return (
-    <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full border ${color}`}>
-      <Wallet size={10} />
-      {days === 0 ? 'Due today' : `${days}d until due`} · Due {label}
+    <span style={{
+      color, background: bg, border: `1px solid ${border}`,
+      fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em',
+      textTransform: 'uppercase', padding: '2px 7px', borderRadius: '4px',
+      whiteSpace: 'nowrap',
+    }}>
+      {status || 'Pending'}
     </span>
   );
 }
 
-function UtilizationBar({ totalSpend, creditLimit }) {
-  if (!creditLimit || creditLimit <= 0) return null;
-  const pct = Math.min((totalSpend / creditLimit) * 100, 100);
-  const barColor = pct < 30 ? 'bg-green-500' : pct < 50 ? 'bg-amber-500' : 'bg-red-500';
-  const textColor = pct < 30 ? 'text-green-400' : pct < 50 ? 'text-amber-400' : 'text-red-400';
-
-  return (
-    <div className="flex items-center gap-2 min-w-0">
-      <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden min-w-12">
-        <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className={`text-[10px] font-semibold tabular-nums whitespace-nowrap ${textColor}`}>
-        {pct.toFixed(0)}% utilized
-      </span>
-      <span className="text-[10px] text-gray-600 whitespace-nowrap hidden sm:inline">
-        ${fmt(totalSpend)} / ${fmt(creditLimit)}
-      </span>
-    </div>
-  );
-}
-
-function CardRow({ card }) {
+function ItemRow({ item }) {
   const [expanded, setExpanded] = useState(false);
-
-  const hasLosses = card.totalLosses > 0;
-  const hasUncovered = card.uncoveredLoss > 0;
+  const isLoss = item.netPnl !== null && item.netPnl < 0;
+  const isProfit = item.netPnl !== null && item.netPnl >= 0;
+  const isPending = item.revenue === null;
 
   return (
-    <div className="rounded-xl border border-gray-800 overflow-hidden" style={{ backgroundColor: 'var(--accent-bg)' }}>
-      {/* Card Header */}
-      <button
-        className="w-full text-left px-5 py-4 hover:bg-white/[0.02] transition-colors"
-        onClick={() => setExpanded(!expanded)}
+    <>
+      <tr
+        onClick={() => setExpanded(e => !e)}
+        style={{ borderBottom: '1px solid var(--border-default)', cursor: 'pointer' }}
+        className="hover:bg-(--bg-hover) transition-colors"
       >
-        <div className="flex items-start justify-between gap-4">
-          {/* Left: card name + counts */}
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center flex-shrink-0">
-              <CreditCardIcon size={16} className="text-blue-400" />
-            </div>
-            <div className="min-w-0">
-              <div className="font-semibold text-white text-sm truncate">{card.name}</div>
-              <div className="text-[10px] text-gray-500 mt-0.5">
-                {card.txnCount} purchase{card.txnCount !== 1 ? 's' : ''}
-                {card.soldCount > 0 && ` · ${card.soldCount} sold`}
-                {card.pendingCount > 0 && ` · ${card.pendingCount} pending`}
-              </div>
-            </div>
+        <td style={{ padding: '10px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: 'var(--text-primary)', fontSize: 13, fontWeight: 500, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {item.product}
+            </span>
+            <StatusBadge status={item.status} />
           </div>
+        </td>
+        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, color: 'var(--text-secondary)' }}>
+          ${fmt(item.cost)}
+        </td>
+        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, color: 'var(--text-secondary)' }}>
+          {isPending ? <span style={{ color: 'var(--text-muted)' }}>—</span> : `$${fmt(item.revenue)}`}
+        </td>
+        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 600 }}>
+          {isPending
+            ? <span style={{ color: 'var(--text-muted)' }}>—</span>
+            : isLoss
+            ? <span style={{ color: 'var(--red)' }}>-${fmt(Math.abs(item.netPnl))}</span>
+            : <span style={{ color: 'var(--green)' }}>+${fmt(item.netPnl)}</span>
+          }
+        </td>
+        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, color: 'var(--green)' }}>
+          +${fmt(item.cashback)}
+        </td>
+        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+          {item.lossToRedeem > 0
+            ? <span style={{ color: 'var(--red)' }}>${fmt(item.lossToRedeem)}</span>
+            : <span style={{ color: 'var(--text-muted)' }}>—</span>
+          }
+        </td>
+        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+          <ChevronDown
+            size={13}
+            style={{
+              color: 'var(--text-muted)',
+              transform: expanded ? 'rotate(180deg)' : 'none',
+              transition: 'transform 0.15s',
+            }}
+          />
+        </td>
+      </tr>
 
-          {/* Right: key figures */}
-          <div className="flex items-center gap-6 flex-shrink-0">
-            {/* Spend */}
-            <div className="text-right hidden sm:block">
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">Spent</div>
-              <div className="text-sm font-bold text-blue-400">${fmt(card.totalSpend)}</div>
-            </div>
-
-            {/* Cashback earned */}
-            {card.cashbackEarned > 0 && (
-              <div className="text-right hidden md:block">
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">Cashback</div>
-                <div className="text-sm font-bold text-green-400">+${fmt(card.cashbackEarned)}</div>
-              </div>
-            )}
-
-            {/* Losses */}
-            {hasLosses && (
-              <div className="text-right hidden md:block">
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">Losses</div>
-                <div className="text-sm font-bold text-red-400">-${fmt(card.totalLosses)}</div>
-              </div>
-            )}
-
-            {/* Net to pay — always prominent */}
-            <div className="text-right">
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">Pay Card</div>
-              <div className="text-base font-bold text-white">${fmt(card.amountToPay)}</div>
-            </div>
-
-            {/* Expand chevron */}
-            <div className="text-gray-500">
-              {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-            </div>
-          </div>
-        </div>
-
-        {/* Cashback breakdown chips — always visible */}
-        {(card.cashbackEarned > 0 || hasLosses) && (
-          <div className="flex flex-wrap gap-2 mt-3">
-            {card.cashbackEarned > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full border border-green-500/30 bg-green-500/5 text-green-400">
-                <Gift size={10} />
-                ${fmt(card.cashbackEarned)} earned
-              </span>
-            )}
-
-            {card.cashbackToRedeem > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full border border-orange-500/30 bg-orange-500/5 text-orange-400">
-                <TrendingDown size={10} />
-                Redeem ${fmt(card.cashbackToRedeem)} to cover loss
-              </span>
-            )}
-
-            {card.cashbackToKeep > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full border border-purple-500/30 bg-purple-500/5 text-purple-400">
-                <CheckCircle2 size={10} />
-                Keep ${fmt(card.cashbackToKeep)} as points
-              </span>
-            )}
-
-            {hasUncovered && (
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full border border-red-500/40 bg-red-500/10 text-red-400">
-                <AlertTriangle size={10} />
-                ${fmt(card.uncoveredLoss)} loss uncovered
-              </span>
-            )}
-
-            <DueBadge dueDay={card.due_day} />
-          </div>
-        )}
-
-        {/* Billing info row — only shown when no chips row already rendered the due badge */}
-        {!(card.cashbackEarned > 0 || hasLosses) && card.due_day && (
-          <div className="flex flex-wrap items-center gap-3 mt-3">
-            <DueBadge dueDay={card.due_day} />
-          </div>
-        )}
-
-        {/* Utilization bar */}
-        {card.credit_limit > 0 && (
-          <div className="mt-3">
-            <UtilizationBar totalSpend={card.totalSpend} creditLimit={card.credit_limit} />
-          </div>
-        )}
-
-        {/* Min payment hint */}
-        {card.min_payment_pct > 0 && (
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-[10px] text-gray-600 uppercase tracking-wider font-semibold">Min payment:</span>
-            <span className="text-[10px] font-bold text-gray-400">${fmt(card.totalSpend * card.min_payment_pct / 100)}</span>
-            <span className="text-[10px] text-gray-700">({card.min_payment_pct}% of spend)</span>
-          </div>
-        )}
-      </button>
-
-      {/* Expanded item table */}
       {expanded && (
-        <div className="border-t border-gray-800">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-gray-800/60">
-                  <th className="text-left px-5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Product</th>
-                  <th className="text-right px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Cost</th>
-                  <th className="text-right px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Revenue</th>
-                  <th className="text-right px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Net P&L</th>
-                  <th className="text-right px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Cashback</th>
-                  <th className="text-right px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Redeem</th>
-                  <th className="text-left px-5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {card.items.map((item, i) => {
-                  const isLoss = item.netPnl !== null && item.netPnl < 0;
-                  const isProfit = item.netPnl !== null && item.netPnl >= 0;
-                  const isPending = item.revenue === null;
-
-                  return (
-                    <tr key={`${item.id}-${item.saleId ?? i}`} className="border-b border-gray-800/40 hover:bg-white/[0.015] transition-colors">
-                      <td className="px-5 py-3 text-gray-300 font-medium max-w-[200px] truncate">{item.product}</td>
-                      <td className="px-3 py-3 text-right text-gray-400">${fmt(item.cost)}</td>
-                      <td className="px-3 py-3 text-right">
-                        {isPending
-                          ? <span className="text-gray-600">—</span>
-                          : <span className="text-gray-300">${fmt(item.revenue)}</span>
-                        }
-                      </td>
-                      <td className="px-3 py-3 text-right font-semibold">
-                        {isPending
-                          ? <span className="text-gray-600">—</span>
-                          : isLoss
-                          ? <span className="text-red-400">-${fmt(Math.abs(item.netPnl))}</span>
-                          : <span className="text-green-400">+${fmt(item.netPnl)}</span>
-                        }
-                      </td>
-                      <td className="px-3 py-3 text-right text-green-400">+${fmt(item.cashback)}</td>
-                      <td className="px-3 py-3 text-right">
-                        {item.lossToRedeem > 0
-                          ? <span className="text-orange-400">${fmt(item.lossToRedeem)}</span>
-                          : <span className="text-gray-600">—</span>
-                        }
-                      </td>
-                      <td className="px-5 py-3">
-                        <StatusBadge status={item.status} />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-
-              {/* Card totals footer */}
-              <tfoot>
-                <tr className="border-t border-gray-700/60 bg-white/[0.02]">
-                  <td className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">Card Total</td>
-                  <td className="px-3 py-3 text-right text-sm font-bold text-blue-400">${fmt(card.totalSpend)}</td>
-                  <td className="px-3 py-3" />
-                  <td className="px-3 py-3 text-right text-sm font-bold">
-                    {card.totalLosses > 0
-                      ? <span className="text-red-400">-${fmt(card.totalLosses)}</span>
-                      : <span className="text-green-400/50">No losses</span>
-                    }
-                  </td>
-                  <td className="px-3 py-3 text-right text-sm font-bold text-green-400">+${fmt(card.cashbackEarned)}</td>
-                  <td className="px-3 py-3 text-right text-sm font-bold text-orange-400">
-                    {card.cashbackToRedeem > 0 ? `$${fmt(card.cashbackToRedeem)}` : '—'}
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <span className="text-sm font-bold text-white">Pay: ${fmt(card.amountToPay)}</span>
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
+        <tr style={{ borderBottom: '1px solid var(--border-default)' }}>
+          <td colSpan={7} style={{ padding: '0' }}>
+            <div style={{
+              background: 'var(--bg-elevated)',
+              borderTop: '1px solid var(--border-default)',
+              padding: '14px 16px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '12px 24px',
+            }}>
+              {[
+                { label: 'Cost Basis', value: `$${fmt(item.cost)}`, color: 'var(--text-primary)' },
+                { label: 'Sale Revenue', value: isPending ? '—' : `$${fmt(item.revenue)}`, color: 'var(--text-primary)' },
+                { label: 'Net P&L', value: isPending ? '—' : isLoss ? `-$${fmt(Math.abs(item.netPnl))}` : `+$${fmt(item.netPnl)}`, color: isPending ? 'var(--text-muted)' : isLoss ? 'var(--red)' : 'var(--green)' },
+                { label: 'Cashback Rate', value: `${item.cashbackRate ?? 0}%`, color: 'var(--text-secondary)' },
+                { label: 'Cashback Earned', value: `+$${fmt(item.cashback)}`, color: 'var(--green)' },
+                { label: 'Cashback Redeemed', value: item.lossToRedeem > 0 ? `$${fmt(item.lossToRedeem)}` : '—', color: item.lossToRedeem > 0 ? 'var(--red)' : 'var(--text-muted)' },
+              ].map(({ label, value, color }) => (
+                <div key={label}>
+                  <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 3 }}>
+                    {label}
+                  </div>
+                  <div style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color }}>
+                    {value}
+                  </div>
+                </div>
+              ))}
+              <div style={{ gridColumn: '1 / -1', marginTop: 6, paddingTop: 10, borderTop: '1px solid var(--border-default)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                <strong style={{ color: 'var(--text-secondary)' }}>How the math works:</strong> Cost × cashback rate = earned. When sold at a loss, cashback covers the minimum needed. Remaining cashback stays as points.
+              </div>
+            </div>
+          </td>
+        </tr>
       )}
-    </div>
+    </>
   );
 }
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 function CreditCard() {
   const [selectedMonth, setSelectedMonth] = useState(() => toMonthKey(new Date()));
-  const { data, isLoading: loading, refetch } = useCreditCard(selectedMonth);
+  const [activeCardId, setActiveCardId] = useState(null);
+  const { data, isLoading } = useCreditCard(selectedMonth);
+
   const monthLabel = monthKeyToLabel(selectedMonth);
   const isCurrentMonth = selectedMonth === toMonthKey(new Date());
 
   const cards = data?.cards ?? [];
   const summary = data?.summary ?? {};
 
-  if (loading) return <PageLoader variant="generic" />;
+  // Pick active card — default to first card with spend, else first card
+  const activeCard = (() => {
+    if (!cards.length) return null;
+    if (activeCardId) {
+      const found = cards.find(c => c.id === activeCardId);
+      if (found) return found;
+    }
+    return cards.find(c => c.totalSpend > 0) ?? cards[0];
+  })();
+
+  if (isLoading) return <PageLoader variant="generic" />;
+
+  // ── Derived values for active card ──
+  const days = activeCard?.due_day ? daysUntilDue(activeCard.due_day) : null;
+  const dueLabel = activeCard?.due_day ? dueDateLabel(activeCard.due_day) : null;
+  const dueColor = days === null ? null : days <= 5 ? 'var(--red)' : days <= 10 ? 'var(--yellow)' : 'var(--green)';
+  const dueBg = days === null ? null : days <= 5 ? 'var(--red-bg)' : days <= 10 ? 'rgba(var(--yellow),0.08)' : 'var(--green-bg)';
+  const dueBorder = days === null ? null : days <= 5 ? 'var(--red)' : days <= 10 ? 'var(--yellow)' : 'var(--green-soft)';
+
+  const creditLimit = activeCard?.credit_limit ?? 0;
+  const totalSpend = activeCard?.totalSpend ?? 0;
+  const utilPct = creditLimit > 0 ? Math.min((totalSpend / creditLimit) * 100, 100) : 0;
+  const utilColor = utilPct < 40 ? 'var(--accent)' : utilPct < 70 ? 'var(--yellow)' : 'var(--red)';
+  const utilTextColor = utilPct < 40 ? 'var(--accent)' : utilPct < 70 ? 'var(--yellow)' : 'var(--red)';
+
+  const activeItems = activeCard?.items ?? [];
+  const cashbackToRedeem = activeCard?.cashbackToRedeem ?? 0;
+  const cashbackToKeep = activeCard?.cashbackToKeep ?? 0;
+  const uncoveredLoss = activeCard?.uncoveredLoss ?? 0;
+  const amountToPay = activeCard?.amountToPay ?? 0;
+  const cashbackEarned = activeCard?.cashbackEarned ?? 0;
+  const minPayment = activeCard?.min_payment_pct > 0 ? totalSpend * activeCard.min_payment_pct / 100 : null;
+
+  // Topbar badge: pick the most urgent due date across all cards
+  const urgentCard = cards.reduce((worst, c) => {
+    if (!c.due_day) return worst;
+    const d = daysUntilDue(c.due_day);
+    if (!worst || d < daysUntilDue(worst.due_day)) return c;
+    return worst;
+  }, null);
+  const urgentDays = urgentCard?.due_day ? daysUntilDue(urgentCard.due_day) : null;
+  const urgentColor = urgentDays !== null ? (urgentDays <= 5 ? 'var(--red)' : urgentDays <= 10 ? 'var(--yellow)' : 'var(--green)') : null;
+  const urgentBg = urgentDays !== null ? (urgentDays <= 5 ? 'var(--red-bg)' : urgentDays <= 10 ? 'rgba(255,200,50,0.06)' : 'var(--green-bg)') : null;
+  const urgentBorder = urgentDays !== null ? (urgentDays <= 5 ? 'var(--red)' : urgentDays <= 10 ? 'var(--yellow)' : 'var(--green-soft)') : null;
+
+  const totalKeep = summary.totalCashbackToKeep ?? 0;
+  const totalUncovered = summary.totalUncoveredLoss ?? 0;
+
+  const pill = (label, color, bg, border) => (
+    <span key={label} style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '3px 10px', borderRadius: 20, border: `1px solid ${border}`,
+      background: bg, color, fontSize: 10, fontWeight: 700,
+      letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+    }}>
+      {label}
+    </span>
+  );
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-10 px-4 py-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Credit Card Tracker</h1>
-          <p className="text-sm text-gray-400 mt-1">
-            Monthly spending &amp; cashback breakdown
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Month navigation */}
-          <div className="flex items-center gap-1 bg-gray-800/60 border border-gray-700/60 rounded-lg p-1">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+
+      {/* ── Topbar ── */}
+      <div style={{
+        height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 20px', borderBottom: '1px solid var(--border-default)',
+        background: 'var(--bg-surface)', flexShrink: 0, gap: 16,
+      }}>
+        {/* Left: title + month nav */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>
+            Card Tracker
+          </span>
+          <span style={{ width: 1, height: 16, background: 'var(--border-hover)', flexShrink: 0 }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <button
               onClick={() => setSelectedMonth(prev => offsetMonth(prev, -1))}
-              className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
-              title="Previous month"
+              style={{ width: 24, height: 24, borderRadius: 6, background: 'transparent', border: '1px solid var(--border-hover)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
             >
-              <ChevronLeft size={14} />
+              <ChevronLeft size={12} />
             </button>
-            <span className="px-2 text-sm font-medium text-white min-w-[120px] text-center">
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', minWidth: 108, textAlign: 'center' }}>
               {monthLabel}
             </span>
             <button
               onClick={() => setSelectedMonth(prev => offsetMonth(prev, 1))}
               disabled={isCurrentMonth}
-              className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Next month"
+              style={{ width: 24, height: 24, borderRadius: 6, background: 'transparent', border: '1px solid var(--border-hover)', color: isCurrentMonth ? 'var(--text-muted)' : 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: isCurrentMonth ? 'not-allowed' : 'pointer', opacity: isCurrentMonth ? 0.4 : 1 }}
             >
-              <ChevronRight size={14} />
+              <ChevronRight size={12} />
             </button>
           </div>
-          <button
-            onClick={refetch}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-800 text-white hover:bg-gray-700 text-sm font-medium transition-colors"
-          >
-            <RotateCcw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
-          </button>
+        </div>
+
+        {/* Right: dynamic badge pills */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {totalKeep > 0 && pill(`Keep $${fmt(totalKeep)}`, 'var(--green)', 'var(--green-bg)', 'var(--green-soft)')}
+          {urgentDays !== null && pill(`Due in ${urgentDays}d`, urgentColor, urgentBg, urgentBorder)}
+          {totalUncovered > 0 && pill(`Loss $${fmt(totalUncovered)}`, 'var(--red)', 'var(--red-bg)', 'var(--red)')}
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Spend */}
-        <div className="rounded-xl p-5 border border-gray-800 flex justify-between items-start" style={{ backgroundColor: 'var(--accent-bg)' }}>
-          <div>
-            <h3 className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-2">Total Spend</h3>
-            <div className="text-xl font-bold text-blue-400">${fmt(summary.totalSpend)}</div>
-            <p className="text-[10px] text-blue-400/60 mt-1">{cards.length} card{cards.length !== 1 ? 's' : ''} used</p>
-          </div>
-          <div className="w-8 h-8 rounded-full border border-blue-500/30 flex items-center justify-center bg-blue-500/10">
-            <CreditCardIcon size={14} className="text-blue-400" />
-          </div>
-        </div>
-
-        {/* Cashback Earned */}
-        <div className="rounded-xl p-5 border border-gray-800 flex justify-between items-start" style={{ backgroundColor: 'var(--green-bg, var(--accent-bg))' }}>
-          <div>
-            <h3 className="text-[10px] font-bold text-green-400 uppercase tracking-wider mb-2">Cashback Earned</h3>
-            <div className="text-xl font-bold text-green-400">${fmt(summary.totalCashbackEarned)}</div>
-            <p className="text-[10px] text-green-400/60 mt-1">across all cards</p>
-          </div>
-          <div className="w-8 h-8 rounded-full border border-green-500/30 flex items-center justify-center bg-green-500/10">
-            <Gift size={14} className="text-green-400" />
-          </div>
-        </div>
-
-        {/* Cashback to Redeem */}
-        <div className="rounded-xl p-5 border border-gray-800 flex justify-between items-start" style={{ backgroundColor: 'var(--accent-bg)' }}>
-          <div>
-            <h3 className="text-[10px] font-bold text-orange-400 uppercase tracking-wider mb-2">Redeem</h3>
-            <div className="text-xl font-bold text-orange-400">${fmt(summary.totalCashbackToRedeem)}</div>
-            <p className="text-[10px] text-orange-400/60 mt-1">to cover losses</p>
-          </div>
-          <div className="w-8 h-8 rounded-full border border-orange-500/30 flex items-center justify-center bg-orange-500/10">
-            <TrendingDown size={14} className="text-orange-400" />
-          </div>
-        </div>
-
-        {/* Net to Pay */}
-        <div className="rounded-xl p-5 border border-gray-800 flex justify-between items-start" style={{ backgroundColor: 'var(--accent-bg)' }}>
-          <div>
-            <h3 className="text-[10px] font-bold text-white uppercase tracking-wider mb-2">Net to Pay</h3>
-            <div className="text-xl font-bold text-white">${fmt(summary.totalAmountToPay)}</div>
-            <p className="text-[10px] text-gray-500 mt-1">after redeeming cashback</p>
-          </div>
-          <div className="w-8 h-8 rounded-full border border-gray-600/30 flex items-center justify-center bg-gray-600/10">
-            <Wallet size={14} className="text-gray-300" />
-          </div>
-        </div>
-      </div>
-
-      {/* Uncovered loss alert */}
-      {(summary.totalUncoveredLoss ?? 0) > 0 && (
-        <div className="flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/5 px-5 py-4">
-          <AlertTriangle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-red-400">Uncovered Loss: ${fmt(summary.totalUncoveredLoss)}</p>
-            <p className="text-xs text-red-400/70 mt-0.5">
-              Your cashback wasn&apos;t enough to fully cover your losses this month. This remaining amount comes out of pocket.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Keep as points note */}
-      {(summary.totalCashbackToKeep ?? 0) > 0 && (
-        <div className="flex items-start gap-3 rounded-xl border border-purple-500/30 bg-purple-500/5 px-5 py-4">
-          <CheckCircle2 size={16} className="text-purple-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-purple-400">Keep ${fmt(summary.totalCashbackToKeep)} as Points</p>
-            <p className="text-xs text-purple-400/70 mt-0.5">
-              After covering your losses, this cashback stays in your rewards balance. No need to redeem it.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Per-card breakdown */}
-      <div className="space-y-3">
-        <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">By Card</h2>
+      {/* ── Scrollable body ── */}
+      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
 
         {cards.length === 0 ? (
-          <div className="rounded-xl border border-gray-800 bg-[var(--accent-bg)] p-12 text-center">
-            <CreditCardIcon size={32} className="text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-400 font-medium">No credit card purchases in {monthLabel}</p>
-            <p className="text-gray-600 text-sm mt-1">
-              Add transactions with a credit card payment method to see your spending breakdown here.
-            </p>
+          /* Empty state */
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 48, color: 'var(--text-muted)' }}>
+            <CreditCardIcon size={36} style={{ opacity: 0.3 }} />
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>No credit cards set up</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', maxWidth: 300 }}>
+              Add a credit card payment method in Settings to start tracking spending and cashback.
+            </div>
           </div>
         ) : (
-          cards.map(card => <CardRow key={card.id} card={card} />)
+          <>
+            {/* ── Hero ── */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr',
+              borderBottom: '1px solid var(--border-default)',
+            }}>
+              {/* Left: net to pay */}
+              <div style={{ padding: '28px 24px', borderRight: '1px solid var(--border-default)' }}>
+                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
+                  Net to Pay · {activeCard?.name ?? 'All Cards'}
+                </div>
+                <div style={{ fontFamily: 'monospace', fontSize: 42, fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--text-primary)', lineHeight: 1 }}>
+                  ${fmt(amountToPay)}
+                </div>
+                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
+                  {cashbackToRedeem > 0 && (
+                    <span>Redeem <span style={{ color: 'var(--red)', fontWeight: 600, fontFamily: 'monospace' }}>${fmt(cashbackToRedeem)}</span> to cover losses</span>
+                  )}
+                  <span style={{ color: 'var(--text-muted)' }}>{cards.length} card{cards.length !== 1 ? 's' : ''} active</span>
+                </div>
+              </div>
+
+              {/* Right: mini stats */}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ flex: 1, padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-default)' }}>
+                  <div>
+                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Total Spend</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 700, color: 'var(--accent)' }}>${fmt(totalSpend)}</div>
+                  </div>
+                  <CreditCardIcon size={18} style={{ color: 'var(--accent)', opacity: 0.5 }} />
+                </div>
+                <div style={{ flex: 1, padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Cashback Earned</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 700, color: 'var(--green)' }}>${fmt(cashbackEarned)}</div>
+                  </div>
+                  <Sparkles size={18} style={{ color: 'var(--green)', opacity: 0.5 }} />
+                </div>
+              </div>
+            </div>
+
+            {/* ── Card tabs ── */}
+            <div style={{
+              display: 'flex', gap: 0, overflowX: 'auto', borderBottom: '1px solid var(--border-default)',
+              background: 'var(--bg-surface)', flexShrink: 0,
+            }}>
+              {cards.map(card => {
+                const isActive = activeCard?.id === card.id;
+                const cardDays = card.due_day ? daysUntilDue(card.due_day) : null;
+                const cardDueLabel = card.due_day ? dueDateLabel(card.due_day) : null;
+                return (
+                  <button
+                    key={card.id}
+                    onClick={() => setActiveCardId(card.id)}
+                    style={{
+                      flex: '0 0 auto', minWidth: 160, padding: '10px 16px',
+                      background: isActive ? 'var(--bg-elevated)' : 'transparent',
+                      border: 'none', borderBottom: isActive ? '2px solid var(--accent)' : '2px solid transparent',
+                      cursor: 'pointer', textAlign: 'left', transition: 'all 0.12s',
+                      borderRight: '1px solid var(--border-default)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                      <div style={{
+                        width: 22, height: 22, borderRadius: 5, flexShrink: 0,
+                        background: 'var(--accent-bg)', border: '1px solid var(--border-hover)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <CreditCardIcon size={11} style={{ color: 'var(--accent)' }} />
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 100 }}>
+                        {card.name}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>
+                        {card.txnCount} item{card.txnCount !== 1 ? 's' : ''}
+                        {cardDays !== null ? ` · Due ${cardDueLabel}` : ''}
+                      </span>
+                      <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: isActive ? 'var(--text-primary)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                        ${fmt(card.amountToPay)}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* ── Utilization bar ── */}
+            {activeCard && (creditLimit > 0 || days !== null || minPayment !== null) && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 16, padding: '10px 20px',
+                borderBottom: '1px solid var(--border-default)', background: 'var(--bg-surface)',
+                flexWrap: 'wrap', flexShrink: 0,
+              }}>
+                {creditLimit > 0 && (
+                  <>
+                    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      Utilization
+                    </span>
+                    <div style={{ flex: '1 1 80px', maxWidth: 160, height: 4, background: 'var(--border-hover)', borderRadius: 2, overflow: 'hidden', minWidth: 60 }}>
+                      <div style={{ width: `${utilPct}%`, height: '100%', background: utilColor, borderRadius: 2, transition: 'width 0.3s' }} />
+                    </div>
+                    <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: utilTextColor, whiteSpace: 'nowrap' }}>
+                      {utilPct.toFixed(0)}%
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontFamily: 'monospace' }}>${fmt(totalSpend)}</span>
+                      <span style={{ color: 'var(--text-muted)', margin: '0 3px' }}>/</span>
+                      <span style={{ fontFamily: 'monospace' }}>${fmt(creditLimit)}</span>
+                    </span>
+                    <span style={{ width: 1, height: 12, background: 'var(--border-hover)', flexShrink: 0 }} />
+                  </>
+                )}
+                {minPayment !== null && (
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    Min payment <span style={{ fontFamily: 'monospace', color: 'var(--text-secondary)', fontWeight: 600 }}>${fmt(minPayment)}</span>
+                  </span>
+                )}
+                {days !== null && minPayment !== null && (
+                  <span style={{ width: 1, height: 12, background: 'var(--border-hover)', flexShrink: 0 }} />
+                )}
+                {days !== null && (
+                  <span style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Due </span>
+                    <span style={{ fontFamily: 'monospace', color: dueColor, fontWeight: 700 }}>
+                      {days === 0 ? 'today' : `${days}d`}
+                    </span>
+                    <span style={{ color: 'var(--text-muted)' }}> · {dueLabel}</span>
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* ── Alert banners ── */}
+            {uncoveredLoss > 0 && (
+              <div style={{
+                display: 'flex', alignItems: 'flex-start', gap: 10,
+                padding: '10px 20px', background: 'var(--red-bg)',
+                borderBottom: '1px solid var(--red)', flexShrink: 0,
+              }}>
+                <AlertTriangle size={14} style={{ color: 'var(--red)', flexShrink: 0, marginTop: 1 }} />
+                <span style={{ fontSize: 12, color: 'var(--red)', fontWeight: 600 }}>
+                  Uncovered Loss: <span style={{ fontFamily: 'monospace' }}>${fmt(uncoveredLoss)}</span>
+                  <span style={{ fontWeight: 400, marginLeft: 8, opacity: 0.8 }}>— cashback wasn't enough to cover all losses on this card.</span>
+                </span>
+              </div>
+            )}
+            {cashbackToKeep > 0 && (
+              <div style={{
+                display: 'flex', alignItems: 'flex-start', gap: 10,
+                padding: '10px 20px', background: 'var(--accent-bg)',
+                borderBottom: '1px solid var(--border-hover)', flexShrink: 0,
+              }}>
+                <Sparkles size={14} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 1 }} />
+                <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
+                  Keep <span style={{ fontFamily: 'monospace' }}>${fmt(cashbackToKeep)}</span> as Points
+                  <span style={{ fontWeight: 400, marginLeft: 8, color: 'var(--text-secondary)' }}>— this cashback stays in your rewards balance after covering losses.</span>
+                </span>
+              </div>
+            )}
+
+            {/* ── Item table ── */}
+            <div style={{ flex: 1, overflowX: 'auto' }}>
+              {activeItems.length === 0 ? (
+                <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <CreditCardIcon size={28} style={{ margin: '0 auto 12px', opacity: 0.25 }} />
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>No purchases this month</div>
+                  <div style={{ fontSize: 12 }}>Transactions made with this card will appear here.</div>
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-hover)' }}>
+                      {['Item', 'Cost', 'Revenue', 'P&L', 'Cashback', 'Redeem', ''].map((h, i) => (
+                        <th key={i} style={{
+                          padding: '8px 12px', textAlign: i === 0 ? 'left' : i === 6 ? 'center' : 'right',
+                          fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+                          color: 'var(--text-muted)', background: 'var(--bg-surface)',
+                          ...(i === 0 && { paddingLeft: 16 }),
+                        }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeItems.map((item, i) => (
+                      <ItemRow key={`${item.id}-${item.saleId ?? i}`} item={item} />
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: '1px solid var(--border-hover)', background: 'var(--bg-elevated)' }}>
+                      <td style={{ padding: '10px 16px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>Card Total</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>${fmt(totalSpend)}</td>
+                      <td style={{ padding: '10px 12px' }} />
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: activeCard?.totalLosses > 0 ? 'var(--red)' : 'var(--text-muted)' }}>
+                        {activeCard?.totalLosses > 0 ? `-$${fmt(activeCard.totalLosses)}` : '—'}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: 'var(--green)' }}>${fmt(cashbackEarned)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: cashbackToRedeem > 0 ? 'var(--red)' : 'var(--text-muted)' }}>
+                        {cashbackToRedeem > 0 ? `$${fmt(cashbackToRedeem)}` : '—'}
+                      </td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
+            </div>
+          </>
         )}
       </div>
 
-      {/* How this works explanation */}
-      <div className="rounded-xl border border-gray-800/60 bg-[var(--accent-bg)] p-5">
-        <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-3">How the math works</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-500">
-          <div>
-            <p className="text-gray-400 font-semibold mb-1">Net to Pay</p>
-            <p>Total spend on the card minus any cashback you redeem to cover losses. This is what you actually owe.</p>
+      {/* ── Bottom bar ── */}
+      {cards.length > 0 && (
+        <div style={{
+          height: 44, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0 16px', borderTop: '1px solid var(--border-default)',
+          background: 'var(--bg-surface)', flexShrink: 0, gap: 8,
+        }}>
+          {/* Left: summary pills */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflow: 'hidden' }}>
+            {cashbackEarned > 0 && pill(`Earned $${fmt(cashbackEarned)}`, 'var(--green)', 'var(--green-bg)', 'var(--green-soft)')}
+            {cashbackToRedeem > 0 && pill(`Redeem $${fmt(cashbackToRedeem)}`, 'var(--red)', 'var(--red-bg)', 'var(--red)')}
+            {cashbackToKeep > 0 && pill(`Keep $${fmt(cashbackToKeep)}`, 'var(--accent)', 'var(--accent-bg)', 'var(--accent-soft)')}
+            {uncoveredLoss > 0 && pill(`Uncovered $${fmt(uncoveredLoss)}`, 'var(--red)', 'var(--red-bg)', 'var(--red)')}
           </div>
-          <div>
-            <p className="text-gray-400 font-semibold mb-1">Redeem</p>
-            <p>When a sold item has a full P&amp;L loss (cost + fees &gt; revenue), cashback is applied first to cover it. Only the minimum needed is redeemed.</p>
-          </div>
-          <div>
-            <p className="text-gray-400 font-semibold mb-1">Keep as Points</p>
-            <p>Any cashback left over after covering losses stays in your rewards balance — no need to redeem. Pending items show cashback but no P&amp;L until sold.</p>
+
+          {/* Right: pay pill */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '5px 14px', borderRadius: 20,
+            background: 'var(--accent-bg)', border: '1px solid var(--accent-soft)',
+            flexShrink: 0,
+          }}>
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Pay</span>
+            <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>${fmt(amountToPay)}</span>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
