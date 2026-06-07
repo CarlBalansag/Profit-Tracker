@@ -171,7 +171,15 @@ app.get('/auth/discord', (req, res, next) => {
 app.get('/auth/discord/callback',
   passport.authenticate('discord', { failureRedirect: `${FRONTEND_URL}/login?error=true` }),
   (req, res) => {
-    res.redirect(`${FRONTEND_URL}/`);
+    // Use an HTML meta-refresh redirect instead of res.redirect() so that Vercel's
+    // proxy forwards the Set-Cookie header back to the browser before navigating.
+    // A 302 redirect response gets followed by Vercel internally without passing
+    // cookies through to the client.
+    res.send(`<!DOCTYPE html><html><head>
+<meta http-equiv="refresh" content="0;url=${FRONTEND_URL}/">
+</head><body>
+<script>window.location.replace(${JSON.stringify(FRONTEND_URL + '/')});</script>
+</body></html>`);
   }
 );
 
