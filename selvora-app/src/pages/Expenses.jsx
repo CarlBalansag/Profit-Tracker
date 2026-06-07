@@ -305,7 +305,8 @@ const Expenses = () => {
   };
 
   const handleSaveOneOff = async (data) => {
-    const url    = editingItem && !editingIsRec ? `${import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || ""}/api/expenses/${editingItem.id}` : `${import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || ""}/api/expenses`;
+    const apiBase = (import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+    const url    = editingItem && !editingIsRec ? `${apiBase}/api/expenses/${editingItem.id}` : `${apiBase}/api/expenses`;
     const method = editingItem && !editingIsRec ? 'PUT' : 'POST';
     const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(data) });
     if (!res.ok) throw new Error(await safeErrMsg(res, 'Save failed'));
@@ -313,7 +314,8 @@ const Expenses = () => {
   };
 
   const handleSaveRecurring = async (data) => {
-    const url    = editingItem && editingIsRec ? `${import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || ""}/api/recurring-expenses/${editingItem.id}` : `${import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || ""}/api/recurring-expenses`;
+    const apiBase = (import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+    const url    = editingItem && editingIsRec ? `${apiBase}/api/recurring-expenses/${editingItem.id}` : `${apiBase}/api/recurring-expenses`;
     const method = editingItem && editingIsRec ? 'PUT' : 'POST';
     const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(data) });
     if (!res.ok) throw new Error(await safeErrMsg(res, 'Save failed'));

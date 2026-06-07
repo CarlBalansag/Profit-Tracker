@@ -84,9 +84,10 @@ export const PaymentMethods = () => {
 
   const handleCustomAdd = async (processedCard) => {
     const isEditing = !!editingCard;
+    const apiBase = (import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
     const url = isEditing
-      ? `${import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || ""}/api/payment-methods/${processedCard.id}`
-      : `${import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || ""}/api/payment-methods`;
+      ? `${apiBase}/api/payment-methods/${processedCard.id}`
+      : `${apiBase}/api/payment-methods`;
 
     const method = isEditing ? 'PUT' : 'POST';
 
