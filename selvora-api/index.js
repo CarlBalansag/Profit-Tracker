@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const compression = require('compression');
 const prisma = require('./prisma');
+const { Pool } = require('pg');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const passport = require('passport');
@@ -60,12 +61,32 @@ app.use((req, res, next) => {
   return res.status(403).json({ error: 'CSRF check failed' });
 });
 
+// Session pool — uses DIRECT_URL (non-pooled Neon) so connect-pg-simple can
+// use persistent connections. Strip channel_binding param which node-postgres
+// does not support as a query string parameter.
+const rawSessionUrl = process.env.DIRECT_URL || process.env.DATABASE_URL || '';
+const sessionDbUrl = rawSessionUrl.replace(/([?&])channel_binding=[^&]*/g, (_, sep) => sep);
+const sessionPool = new Pool({
+  connectionString: sessionDbUrl,
+  ssl: isProd ? { rejectUnauthorized: false } : false,
+  max: 3,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+});
+sessionPool.on('error', (err) => {
+  console.error('[session-pool] idle client error:', err.message);
+});
+sessionPool.query('SELECT 1')
+  .then(() => console.log('[session-pool] Neon DB reachable'))
+  .catch((err) => console.error('[session-pool] Neon DB NOT reachable:', err.message));
+
 // Session Middleware — stored in PostgreSQL so logins survive server restarts/redeploys
 app.use(session({
   store: new pgSession({
-    conString: process.env.DIRECT_URL || process.env.DATABASE_URL,
+    pool: sessionPool,
     tableName: 'user_sessions',
     createTableIfMissing: true,
+    errorLog: (...args) => console.error('[pg-session-store]', ...args),
   }),
   secret: process.env.SESSION_SECRET,
   resave: false,
@@ -170,16 +191,24 @@ app.get('/auth/discord', (req, res, next) => {
 
 app.get('/auth/discord/callback',
   passport.authenticate('discord', { failureRedirect: `${FRONTEND_URL}/login?error=true` }),
-  (req, res) => {
-    // Use an HTML meta-refresh redirect instead of res.redirect() so that Vercel's
-    // proxy forwards the Set-Cookie header back to the browser before navigating.
-    // A 302 redirect response gets followed by Vercel internally without passing
-    // cookies through to the client.
-    res.send(`<!DOCTYPE html><html><head>
+  (req, res, next) => {
+    // Explicitly wait for the session to be persisted to PostgreSQL before
+    // sending the response. Without this there is a race condition where the
+    // browser hits /auth/me before the INSERT into user_sessions completes.
+    req.session.save((err) => {
+      if (err) {
+        console.error('[auth/callback] session.save() failed:', err);
+        return next(err);
+      }
+      console.log('[auth/callback] session saved, sid:', req.sessionID, 'user:', req.user?.id);
+      // Use HTML redirect (not res.redirect) so Vercel proxy forwards the
+      // Set-Cookie header to the browser before navigation occurs.
+      res.send(`<!DOCTYPE html><html><head>
 <meta http-equiv="refresh" content="0;url=${FRONTEND_URL}/">
 </head><body>
 <script>window.location.replace(${JSON.stringify(FRONTEND_URL + '/')});</script>
 </body></html>`);
+    });
   }
 );
 
