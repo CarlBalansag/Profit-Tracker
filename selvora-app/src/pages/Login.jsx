@@ -83,8 +83,8 @@ const Login = () => {
   const [faqOpen, setFaqOpen] = useState(null);
 
   const handleLogin = () => {
-    const base = (import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
-    window.location.href = `${base}/auth/discord`;
+    // Use Vercel's /auth rewrite proxy — no env var URL construction needed
+    window.location.href = '/auth/discord';
   };
 
   const faqs = [
