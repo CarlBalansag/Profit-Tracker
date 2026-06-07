@@ -138,28 +138,29 @@ passport.use(new DiscordStrategy({
 
 // Serialization to save user in session
 passport.serializeUser((user, done) => {
+  console.log('[serializeUser] serializing user id:', user.id);
   done(null, user.id);
 });
 
 // Deserialization to attach user info to req.user.
-// Cache user records in memory for 5 minutes to avoid a DB round-trip on every
-// single API request. The cache is busted automatically on expiry, and any
-// mutation that changes user fields (e.g. tutorial_seen) clears it explicitly.
-const userCache = new Map(); // Map<id, { user, expiresAt }>
-const USER_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
+const userCache = new Map();
+const USER_CACHE_TTL = 5 * 60 * 1000;
 const clearUserCache = (id) => userCache.delete(id);
 
 passport.deserializeUser(async (id, done) => {
+  console.log('[deserializeUser] deserializing id:', id);
   try {
     const cached = userCache.get(id);
     if (cached && cached.expiresAt > Date.now()) {
+      console.log('[deserializeUser] cache hit for id:', id);
       return done(null, cached.user);
     }
     const user = await prisma.user.findUnique({ where: { id } });
+    console.log('[deserializeUser] DB lookup result:', user ? `found user ${user.id}` : 'NOT FOUND');
     if (user) userCache.set(id, { user, expiresAt: Date.now() + USER_CACHE_TTL });
     done(null, user);
   } catch (error) {
+    console.error('[deserializeUser] error:', error.message);
     done(error, null);
   }
 });
@@ -214,6 +215,7 @@ app.get('/auth/discord/callback',
 
 // Current Session Route
 app.get('/auth/me', (req, res) => {
+  console.log('[/auth/me] sessionID:', req.sessionID, '| session:', JSON.stringify(req.session?.passport), '| user:', req.user?.id ?? 'none', '| cookie:', req.headers.cookie ? 'present' : 'MISSING');
   if (req.user) {
     res.json(req.user);
   } else {
