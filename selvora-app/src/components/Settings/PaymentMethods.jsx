@@ -85,15 +85,14 @@ export const PaymentMethods = () => {
   const handleCustomAdd = async (processedCard) => {
     const isEditing = !!editingCard;
     const url = isEditing
-      ? `${import.meta.env.VITE_API_URL}/api/payment-methods/${processedCard.id}`
-      : `${import.meta.env.VITE_API_URL}/api/payment-methods`;
+      ? `/api/payment-methods/${processedCard.id}`
+      : `/api/payment-methods`;
 
     const method = isEditing ? 'PUT' : 'POST';
 
-    await fetch(url, {
+    await apiFetch(url, {
       method,
-      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: processedCard.name,
         type: processedCard.type,
