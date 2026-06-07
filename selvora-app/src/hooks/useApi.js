@@ -1,6 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-const API = (import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+// All API calls go through Vercel's rewrite proxy (/api/* and /auth/* → Render).
+// Using a relative base ('') means requests go to the same origin as the page,
+// so the session cookie is always same-origin and never blocked by browsers.
+const API = '';
 
 // All requests to the API must include X-Requested-With to satisfy the CSRF check.
 export const apiFetch = (path, options = {}) => {

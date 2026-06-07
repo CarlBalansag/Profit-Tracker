@@ -305,19 +305,17 @@ const Expenses = () => {
   };
 
   const handleSaveOneOff = async (data) => {
-    const apiBase = (import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
-    const url    = editingItem && !editingIsRec ? `${apiBase}/api/expenses/${editingItem.id}` : `${apiBase}/api/expenses`;
+    const url    = editingItem && !editingIsRec ? `/api/expenses/${editingItem.id}` : `/api/expenses`;
     const method = editingItem && !editingIsRec ? 'PUT' : 'POST';
-    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(data) });
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'include', body: JSON.stringify(data) });
     if (!res.ok) throw new Error(await safeErrMsg(res, 'Save failed'));
     await fetchAll();
   };
 
   const handleSaveRecurring = async (data) => {
-    const apiBase = (import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
-    const url    = editingItem && editingIsRec ? `${apiBase}/api/recurring-expenses/${editingItem.id}` : `${apiBase}/api/recurring-expenses`;
+    const url    = editingItem && editingIsRec ? `/api/recurring-expenses/${editingItem.id}` : `/api/recurring-expenses`;
     const method = editingItem && editingIsRec ? 'PUT' : 'POST';
-    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(data) });
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'include', body: JSON.stringify(data) });
     if (!res.ok) throw new Error(await safeErrMsg(res, 'Save failed'));
     await fetchAll();
   };
