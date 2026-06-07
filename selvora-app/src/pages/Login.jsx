@@ -83,7 +83,8 @@ const Login = () => {
   const [faqOpen, setFaqOpen] = useState(null);
 
   const handleLogin = () => {
-    window.location.href = `${import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL}/auth/discord`;
+    const base = (import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+    window.location.href = `${base}/auth/discord`;
   };
 
   const faqs = [

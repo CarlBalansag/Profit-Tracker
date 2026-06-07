@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-const API = import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || '';
+const API = (import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 // All requests to the API must include X-Requested-With to satisfy the CSRF check.
 export const apiFetch = (path, options = {}) => {
