@@ -1,6 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-const API = import.meta.env.VITE_API_URL;
+// Empty string = relative URLs. All /api/* and /auth/* requests go to the same
+// origin as the page (vercel.app), which Vercel proxies to Render. This keeps
+// the session cookie same-origin so Chrome's third-party cookie blocking
+// (sec-fetch-storage-access: none) never applies.
+const API = '';
 
 // All requests to the API must include X-Requested-With to satisfy the CSRF check.
 export const apiFetch = (path, options = {}) => {
