@@ -1,10 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-// Empty string = relative URLs. All /api/* and /auth/* requests go to the same
-// origin as the page (vercel.app), which Vercel proxies to Render. This keeps
-// the session cookie same-origin so Chrome's third-party cookie blocking
-// (sec-fetch-storage-access: none) never applies.
-const API = '';
+// All API calls go directly to Render. OAuth also goes direct to Render so the
+// session cookie is consistently scoped to onrender.com — never split across domains.
+const API = 'https://profit-tracker-aoi6.onrender.com';
 
 // All requests to the API must include X-Requested-With to satisfy the CSRF check.
 export const apiFetch = (path, options = {}) => {

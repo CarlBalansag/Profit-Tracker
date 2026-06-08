@@ -83,9 +83,10 @@ const Login = () => {
   const [faqOpen, setFaqOpen] = useState(null);
 
   const handleLogin = () => {
-    // Relative URL — Vercel proxies /auth/* to Render so the cookie is
-    // set on vercel.app (same origin as the page, not cross-origin).
-    window.location.href = '/auth/discord';
+    // Go directly to Render for OAuth initiation so the state cookie is set
+    // directly on onrender.com (not through Vercel's proxy which can drop cookies).
+    // DISCORD_CALLBACK_URL on Render must also point back to onrender.com.
+    window.location.href = 'https://profit-tracker-aoi6.onrender.com/auth/discord';
   };
 
   const faqs = [
