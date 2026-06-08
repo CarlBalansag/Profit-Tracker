@@ -1,8 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-// All API calls go directly to Render. OAuth also goes direct to Render so the
-// session cookie is consistently scoped to onrender.com — never split across domains.
-const API = 'https://profit-tracker-aoi6.onrender.com';
+// All API calls go to the custom subdomain. Both profittracker.carltechs.com
+// (frontend) and api.profittracker.carltechs.com (backend) share carltechs.com
+// as their registrable domain, so Chrome treats the cookie as first-party.
+const API = 'https://api.profittracker.carltechs.com';
 
 // All requests to the API must include X-Requested-With to satisfy the CSRF check.
 export const apiFetch = (path, options = {}) => {
