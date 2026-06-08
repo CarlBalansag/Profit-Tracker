@@ -83,7 +83,9 @@ const Login = () => {
   const [faqOpen, setFaqOpen] = useState(null);
 
   const handleLogin = () => {
-    window.location.href = `${import.meta.env.VITE_API_URL}/auth/discord`;
+    // Relative URL — Vercel proxies /auth/* to Render so the cookie is
+    // set on vercel.app (same origin as the page, not cross-origin).
+    window.location.href = '/auth/discord';
   };
 
   const faqs = [
