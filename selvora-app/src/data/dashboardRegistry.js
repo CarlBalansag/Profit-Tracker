@@ -202,6 +202,7 @@ export const CHART_SERIES_REGISTRY = {
 export const DASHBOARD_SECTION_REGISTRY = {
   statCards: { label: 'Summary Cards' },
   pipeline: { label: 'Status Pipeline' },
+  goals: { label: 'Goals' },
   trendChart: { label: 'Middle Graph' },
   paymentMethods: { label: 'Payment Methods' },
   recentSales: { label: 'Recent Sales' },
@@ -223,9 +224,10 @@ export const DEFAULT_DASHBOARD_SETTINGS = {
   dashboardSections: [
     { id: 'statCards', visible: true, order: 0 },
     { id: 'pipeline', visible: true, order: 1 },
-    { id: 'trendChart', visible: true, order: 2 },
-    { id: 'paymentMethods', visible: true, order: 3 },
-    { id: 'recentSales', visible: true, order: 4 },
+    { id: 'goals', visible: true, order: 2 },
+    { id: 'trendChart', visible: true, order: 3 },
+    { id: 'paymentMethods', visible: true, order: 4 },
+    { id: 'recentSales', visible: true, order: 5 },
   ],
   statCards: [
     { id: 'totalCost',      visible: true,  order: 0 },

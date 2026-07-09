@@ -550,6 +550,8 @@ export default function DashboardSettingsModal({ settings, onClose, onSave, uiSt
       );
     }
 
+    if (section.id === 'goals') return null; // handled by inline toggle above
+
     if (section.id === 'trendChart') {
       return (
         <SectionPanel
@@ -812,6 +814,32 @@ export default function DashboardSettingsModal({ settings, onClose, onSave, uiSt
                           : 'text-gray-500 hover:bg-white/[0.04] hover:text-gray-300'
                       }`}
                       title={isVisible ? 'Hide Payment Methods' : 'Show Payment Methods'}
+                    >
+                      {isVisible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* Goals — compact inline toggle */}
+              {!isGlass && (() => {
+                const goalsSection = local.dashboardSections.find(s => s.id === 'goals');
+                const isVisible = goalsSection ? goalsSection.visible !== false : true;
+                return (
+                  <div className="flex items-center justify-between gap-4 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-4 self-stretch min-w-[200px]">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Goals</p>
+                      <p className="mt-0.5 text-[11px] text-gray-600">{isVisible ? 'Visible on dashboard' : 'Hidden from dashboard'}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => toggleSectionVisible('goals')}
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                        isVisible
+                          ? 'text-purple-400 hover:bg-purple-500/10'
+                          : 'text-gray-500 hover:bg-white/[0.04] hover:text-gray-300'
+                      }`}
+                      title={isVisible ? 'Hide Goals' : 'Show Goals'}
                     >
                       {isVisible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
                     </button>

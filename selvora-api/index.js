@@ -21,6 +21,7 @@ const recurringExpensesRouter = require('./routes/recurringExpenses');
 const receiptsRouter = require('./routes/receipts');
 const creditCardRouter = require('./routes/creditcard');
 const ebayPriceRouter = require('./routes/ebayPrice');
+const goalsRouter = require('./routes/goals');
 
 const app = express();
 const isProd = process.env.NODE_ENV === 'production';
@@ -178,6 +179,7 @@ app.use('/api/recurring-expenses', recurringExpensesRouter);
 app.use('/api/receipts', receiptsRouter);
 app.use('/api/creditcard', creditCardRouter);
 app.use('/api/ebay-price', ebayPriceRouter);
+app.use('/api/goals', goalsRouter);
 
 // Health Check
 app.get('/health', (req, res) => {

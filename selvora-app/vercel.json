@@ -2,15 +2,15 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://api.profittracker.carltechs.com/api/:path*"
+      "destination": "https://profit-tracker-tcqo.onrender.com/api/:path*"
     },
     {
       "source": "/auth/:path*",
-      "destination": "https://api.profittracker.carltechs.com/auth/:path*"
+      "destination": "https://profit-tracker-tcqo.onrender.com/auth/:path*"
     },
     {
       "source": "/health",
-      "destination": "https://api.profittracker.carltechs.com/health"
+      "destination": "https://profit-tracker-tcqo.onrender.com/health"
     },
     {
       "source": "/(.*)",

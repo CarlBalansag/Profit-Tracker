@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useDashboard } from '../hooks/useApi';
+import { useDashboard, useGoals } from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   Clock, Layers, Zap, Store, Calendar, Share2, Settings,
-  CreditCard, Info, TrendingUp
+  CreditCard, Info, TrendingUp, Target, DollarSign, ShoppingBag, Flame
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useDashboardSettings } from '../hooks/useDashboardSettings';
@@ -17,6 +17,7 @@ import {
 } from '../data/dashboardRegistry';
 import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import ProfitRevenueTrendChart from '../components/Dashboard/ProfitRevenueTrendChart';
+import MonthlyProfitSpendChart from '../components/Dashboard/MonthlyProfitSpendChart';
 
 const GLASS_BASE_LAYOUT_ITEMS = ['statCards', 'radarGraph', 'trendChart', 'paymentMethods', 'recentSales'];
 
@@ -132,8 +133,10 @@ const Dashboard = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [trendMode, setTrendMode] = useState('period'); // 'period' | 'cumulative'
+  const [chartView, setChartView] = useState('line'); // 'line' | 'bar'
 
   const { data, isLoading } = useDashboard(modeFilter, dateFilter);
+  const { data: goals = [] } = useGoals();
   useEffect(() => { if (data) setLastUpdated(new Date()); }, [data]);
 
   const recent = data?.recentTransactions || [];
@@ -175,9 +178,13 @@ const Dashboard = () => {
     .filter(section => section.visible !== false)
     .sort((a, b) => a.order - b.order);
   const showPaymentMethods = dashboardSections.some(s => s.id === 'paymentMethods');
+  const showGoals = dashboardSections.some(s => s.id === 'goals');
+  const activeGoals = goals.filter(g => g.active);
+  const showGoalsWidget = showGoals && activeGoals.length > 0;
+  const hasRightColumn = showTrendChart && (showPaymentMethods || showGoalsWidget);
   const dashboardMiddleGridClass = isGlass
-    ? ((showTrendChart && showPaymentMethods) ? 'lg:grid-cols-3' : 'lg:grid-cols-1')
-    : ((showTrendChart && showPaymentMethods) ? 'lg:grid-cols-[minmax(0,1fr)_300px]' : 'lg:grid-cols-1');
+    ? (hasRightColumn ? 'lg:grid-cols-3' : 'lg:grid-cols-1')
+    : (hasRightColumn ? 'lg:grid-cols-[minmax(0,1fr)_300px]' : 'lg:grid-cols-1');
   const showPipeline = dashboardSections.some(s => s.id === 'pipeline') && visiblePipelineCards.length > 0;
   const showStatCards = dashboardSections.some(s => s.id === 'statCards') && visibleStatCards.length > 0;
   const glassMetricPanelCount = Math.max(1, Math.min(4, settings.glass?.metricPanelCount || 1));
@@ -269,6 +276,8 @@ const Dashboard = () => {
       );
     }
 
+    if (sectionId === 'goals') return null; // rendered inside trendChart right column
+
     if (sectionId === 'trendChart') {
       return (
         <div key="trendChart" data-tutorial-id="dashboard-chart" className={`grid grid-cols-1 ${dashboardMiddleGridClass} gap-4 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-500 fill-mode-both`}>
@@ -279,17 +288,49 @@ const Dashboard = () => {
             }>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-3">
                 <div>
-                  <h3 className={isGlass ? "text-lg font-normal tracking-tight text-[#e8e2d6]" : "text-[12px] font-medium uppercase tracking-[0.8px] text-[var(--text-primary)]"}>Profit & Cost Trend</h3>
-                  <p className={isGlass ? "text-[11px] text-white/20 mt-1" : "text-[10px] text-[var(--text-secondary)] mt-1"}>Cumulative movement across selected dashboard metrics</p>
+                  <h3 className={isGlass ? "text-lg font-normal tracking-tight text-[#e8e2d6]" : "text-[12px] font-medium uppercase tracking-[0.8px] text-[var(--text-primary)]"}>
+                    {chartView === 'bar' ? 'Monthly Profit vs Spending' : 'Profit & Cost Trend'}
+                  </h3>
+                  <p className={isGlass ? "text-[11px] text-white/20 mt-1" : "text-[10px] text-[var(--text-secondary)] mt-1"}>
+                    {chartView === 'bar' ? 'Net profit and total spending grouped by month' : 'Cumulative movement across selected dashboard metrics'}
+                  </p>
                 </div>
-                <div className={isGlass ? "flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-white/25" : "flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.6px] text-[var(--text-muted)]"}>
-                  <span className={isGlass ? "rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-1" : "rounded px-2 py-1 bg-[var(--bg-elevated)]"}>{modeFilter}</span>
-                  <span className={isGlass ? "rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-1" : "rounded px-2 py-1 bg-[var(--bg-elevated)]"}>{dateFilter}</span>
+                <div className="flex items-center gap-2">
+                  {/* Line / Bar tab switcher */}
+                  <div className={`flex gap-0.5 p-0.5 rounded-lg ${isGlass ? 'bg-white/[0.04] border border-white/[0.06]' : 'bg-[var(--bg-elevated)] border border-[color:var(--border-default)]'}`}>
+                    {[['line', 'Line'], ['bar', 'Bar']].map(([val, label]) => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setChartView(val)}
+                        className={`px-2.5 py-1 rounded-md text-[10px] font-medium transition-all ${
+                          chartView === val
+                            ? isGlass
+                              ? 'bg-white/[0.08] text-[#e8e2d6] border border-white/[0.10]'
+                              : 'bg-[var(--accent-bg)] text-[var(--accent)] border border-[color:var(--accent)]/30'
+                            : isGlass
+                              ? 'text-white/25 hover:text-white/50 border border-transparent'
+                              : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] border border-transparent'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className={isGlass ? "flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-white/25" : "flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.6px] text-[var(--text-muted)]"}>
+                    <span className={isGlass ? "rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-1" : "rounded px-2 py-1 bg-[var(--bg-elevated)]"}>{modeFilter}</span>
+                    <span className={isGlass ? "rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-1" : "rounded px-2 py-1 bg-[var(--bg-elevated)]"}>{dateFilter}</span>
+                  </div>
                 </div>
               </div>
               <div className={isGlass ? "flex-1 rounded-2xl bg-black/10" : "flex-1 rounded-md bg-[var(--bg-base)]"}>
                 {isLoading ? (
                   <div className="flex h-full min-h-[280px] items-center justify-center text-sm text-gray-500">Loading trend...</div>
+                ) : chartView === 'bar' ? (
+                  <MonthlyProfitSpendChart
+                    trend={trend}
+                    uiStyle={preferences.style}
+                  />
                 ) : (
                   <ProfitRevenueTrendChart
                     stats={stats}
@@ -308,30 +349,41 @@ const Dashboard = () => {
             </div>
           )}
 
-          {showPaymentMethods && (
-            <div className="space-y-5">
-              <div className={isGlass
-                ? "rounded-[20px] p-5 bg-[#181a1c]/72 border border-white/[0.06] shadow-[0_10px_30px_rgba(0,0,0,0.22)]"
-                : "rounded-[9px] p-4 bg-[var(--bg-surface)] border border-[color:var(--border-default)]"
-              }>
-                <h3 className={isGlass ? "mb-4 text-[10px] font-medium uppercase tracking-[0.22em] text-white/25" : "text-[11px] font-medium uppercase tracking-[0.8px] text-[var(--text-muted)] mb-3"}>{isGlass ? 'Payment Methods' : 'Top Cards'}</h3>
-                <div className="space-y-3">
-                  {topCards.length === 0 ? (
-                    <p className={isGlass ? "text-xs text-white/20" : "text-xs text-[var(--text-muted)]"}>No payment data yet.</p>
-                  ) : (isGlass ? topCards.slice(0, 5) : topCards).map((card, i) => (
-                    <div key={i} className={isGlass ? "flex items-center justify-between rounded-2xl border border-white/[0.045] bg-white/[0.02] px-4 py-3" : "flex items-center justify-between gap-3 rounded-md bg-[var(--bg-elevated)] px-3 py-2.5"}>
-                      <div className="flex items-center gap-3">
-                        <CreditCard className={isGlass ? "w-4 h-4 text-[#d8a65a]" : "w-4 h-4 text-[var(--text-secondary)]"} />
-                        <div className="min-w-0">
-                          <p className={isGlass ? "text-sm text-[#e8e2d6]" : `text-[11px] truncate max-w-[160px] ${i === 0 ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{card.name}</p>
-                          <p className={isGlass ? "text-xs text-white/20" : "text-[9px] text-[var(--text-muted)]"}>{card.txns} txns</p>
+          {(showGoalsWidget || showPaymentMethods) && (
+            <div className="flex flex-col gap-4 h-full">
+              {showGoalsWidget && (
+                <DashboardGoalsWidget
+                  goals={activeGoals}
+                  stats={stats}
+                  isGlass={isGlass}
+                  dateFilter={dateFilter}
+                  onNavigate={() => navigate('/goals')}
+                />
+              )}
+              {showPaymentMethods && (
+                <div className={isGlass
+                  ? "rounded-[20px] p-5 bg-[#181a1c]/72 border border-white/[0.06] shadow-[0_10px_30px_rgba(0,0,0,0.22)]"
+                  : "rounded-[9px] p-4 bg-[var(--bg-surface)] border border-[color:var(--border-default)]"
+                }>
+                  <h3 className={isGlass ? "mb-4 text-[10px] font-medium uppercase tracking-[0.22em] text-white/25" : "text-[11px] font-medium uppercase tracking-[0.8px] text-[var(--text-muted)] mb-3"}>{isGlass ? 'Payment Methods' : 'Top Cards'}</h3>
+                  <div className="space-y-3">
+                    {topCards.length === 0 ? (
+                      <p className={isGlass ? "text-xs text-white/20" : "text-xs text-[var(--text-muted)]"}>No payment data yet.</p>
+                    ) : (isGlass ? topCards.slice(0, 5) : topCards).map((card, i) => (
+                      <div key={i} className={isGlass ? "flex items-center justify-between rounded-2xl border border-white/[0.045] bg-white/[0.02] px-4 py-3" : "flex items-center justify-between gap-3 rounded-md bg-[var(--bg-elevated)] px-3 py-2.5"}>
+                        <div className="flex items-center gap-3">
+                          <CreditCard className={isGlass ? "w-4 h-4 text-[#d8a65a]" : "w-4 h-4 text-[var(--text-secondary)]"} />
+                          <div className="min-w-0">
+                            <p className={isGlass ? "text-sm text-[#e8e2d6]" : `text-[11px] truncate max-w-[160px] ${i === 0 ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{card.name}</p>
+                            <p className={isGlass ? "text-xs text-white/20" : "text-[9px] text-[var(--text-muted)]"}>{card.txns} txns</p>
+                          </div>
                         </div>
+                        <p className={isGlass ? "text-sm font-medium text-[#d8a65a]" : `text-[11px] font-semibold tabular-nums ${i === 0 ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>${card.amount.toFixed(0)}</p>
                       </div>
-                      <p className={isGlass ? "text-sm font-medium text-[#d8a65a]" : `text-[11px] font-semibold tabular-nums ${i === 0 ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>${card.amount.toFixed(0)}</p>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
@@ -485,13 +537,39 @@ const Dashboard = () => {
         <div key="trendChart" className="flex h-full min-h-[298px] flex-col rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-6 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
           <div className="mb-3 flex items-start justify-between gap-4">
             <div>
-              <h3 className="font-serif text-xl font-semibold text-[#fff4dc]">Profit & Cost Trend</h3>
-              <p className="mt-1 text-[11px] text-white/22">Cumulative metrics over time</p>
+              <h3 className="font-serif text-xl font-semibold text-[#fff4dc]">
+                {chartView === 'bar' ? 'Monthly Profit vs Spending' : 'Profit & Cost Trend'}
+              </h3>
+              <p className="mt-1 text-[11px] text-white/22">
+                {chartView === 'bar' ? 'Net profit and total spending grouped by month' : 'Cumulative metrics over time'}
+              </p>
+            </div>
+            {/* Line / Bar tab switcher */}
+            <div className="flex gap-0.5 p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
+              {[['line', 'Line'], ['bar', 'Bar']].map(([val, label]) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setChartView(val)}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-medium transition-all ${
+                    chartView === val
+                      ? 'bg-white/[0.08] text-[#e8e2d6] border border-white/[0.10]'
+                      : 'text-white/25 hover:text-white/50 border border-transparent'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
           <div className="min-h-[260px] flex-1 rounded-2xl bg-[#151719]/42 border border-white/[0.025] px-2 pt-2 shadow-[inset_0_1px_24px_rgba(0,0,0,0.18)]">
             {isLoading ? (
               <div className="flex h-full items-center justify-center text-sm text-white/25">Loading trend...</div>
+            ) : chartView === 'bar' ? (
+              <MonthlyProfitSpendChart
+                trend={trend}
+                uiStyle={preferences.style}
+              />
             ) : (
               <ProfitRevenueTrendChart
                 stats={stats}
@@ -722,6 +800,16 @@ const Dashboard = () => {
           </div>
         </div>
 
+        {dashboardSections.some(s => s.id === 'goals') && goals.filter(g => g.active).length > 0 && (
+          <DashboardGoalsWidget
+            goals={goals.filter(g => g.active)}
+            stats={stats}
+            isGlass={isGlass}
+            dateFilter={dateFilter}
+            onNavigate={() => navigate('/goals')}
+          />
+        )}
+
         <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-12">
           {glassLayoutOrder.map((itemId, index) => {
             const node = renderGlassLayoutItem(itemId);
@@ -844,6 +932,216 @@ const Dashboard = () => {
 export default Dashboard;
 
 // ── Helper Components ──────────────────────────────────────────────────────────
+
+const GOAL_METRIC_META = {
+  netProfit:    { label: 'Net Profit',  icon: TrendingUp,  prefix: '$' },
+  totalRevenue: { label: 'Revenue',     icon: DollarSign,  prefix: '$' },
+  unitsSold:    { label: 'Units Sold',  icon: ShoppingBag, prefix: ''  },
+};
+
+function getTargetForFilter(goal, dateFilter) {
+  if (dateFilter === '7 Days')  return goal.target_7d  ?? null;
+  if (dateFilter === '30 Days') return goal.target_30d ?? null;
+  if (dateFilter === 'YTD')     return goal.target_ytd ?? null;
+  // All Time: show the largest set target as a best-effort reference
+  const candidates = [goal.target_7d, goal.target_30d, goal.target_ytd].filter(v => v != null);
+  return candidates.length > 0 ? Math.max(...candidates) : null;
+}
+
+function getCurrentGoalValue(stats, metric) {
+  if (metric === 'netProfit')    return Number(stats?.profit)       || 0;
+  if (metric === 'totalRevenue') return Number(stats?.totalRevenue) || 0;
+  if (metric === 'unitsSold')    return Number(stats?.unitsSold)    || 0;
+  return 0;
+}
+
+function MiniProgressRing({ pct, size = 56, stroke = 5, color, isGlass }) {
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (Math.min(100, Math.max(0, pct)) / 100) * circ;
+  return (
+    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)', flexShrink: 0 }}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none"
+        stroke={isGlass ? 'rgba(255,255,255,0.07)' : 'var(--bg-elevated)'}
+        strokeWidth={stroke} />
+      <circle
+        cx={size / 2} cy={size / 2} r={r} fill="none"
+        stroke={color} strokeWidth={stroke}
+        strokeDasharray={circ} strokeDashoffset={offset}
+        strokeLinecap="round"
+        style={{ transition: 'stroke-dashoffset 0.6s ease' }}
+      />
+    </svg>
+  );
+}
+
+function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate }) {
+  const [idx, setIdx] = useState(0);
+  const goalsWithTarget = goals.filter(g => getTargetForFilter(g, dateFilter) != null);
+  const allGoals = goalsWithTarget.length > 0 ? goalsWithTarget : goals;
+  const count = allGoals.length;
+  const safeIdx = count > 0 ? ((idx % count) + count) % count : 0;
+  const goal = count > 0 ? allGoals[safeIdx] : null;
+
+  if (!goal) return null;
+
+  const meta = GOAL_METRIC_META[goal.metric] || GOAL_METRIC_META.netProfit;
+  const IconComp = meta.icon;
+  const current = getCurrentGoalValue(stats, goal.metric);
+  const target = getTargetForFilter(goal, dateFilter);
+  const hasTarget = target != null && target > 0;
+  const progressPct = hasTarget ? Math.min(100, (current / target) * 100) : 0;
+
+  const ringColor = !hasTarget
+    ? (isGlass ? 'rgba(255,255,255,0.12)' : 'var(--border-default)')
+    : progressPct >= 100 ? '#4ade80'
+    : progressPct >= 60  ? (isGlass ? '#6aaa8e' : '#4ade80')
+    : progressPct >= 35  ? '#fbbf24'
+    : '#f87171';
+
+  const paceLabel = !hasTarget ? null
+    : progressPct >= 100 ? 'Achieved'
+    : progressPct >= 60  ? 'On track'
+    : progressPct >= 35  ? 'Behind'
+    : 'Off track';
+
+  const paceColor = !hasTarget ? null
+    : progressPct >= 100 ? (isGlass ? 'text-[#4ade80]' : 'text-[var(--green)]')
+    : progressPct >= 60  ? (isGlass ? 'text-[#6aaa8e]' : 'text-[var(--green)]')
+    : progressPct >= 35  ? 'text-amber-400'
+    : 'text-red-400';
+
+  const filterLabel = dateFilter === 'All Time' ? 'best target' : dateFilter;
+
+  const fmt = (v) => goal.metric === 'unitsSold'
+    ? Math.round(v).toLocaleString()
+    : `$${Math.round(v).toLocaleString()}`;
+
+  return (
+    <div className={`flex flex-col animate-in slide-in-from-bottom-4 duration-500 fade-in fill-mode-both h-full ${
+      isGlass
+        ? 'rounded-[20px] p-5 bg-[#181a1c]/72 border border-white/[0.06] shadow-[0_10px_30px_rgba(0,0,0,0.22)]'
+        : 'rounded-[9px] p-4 bg-[var(--bg-surface)] border border-[color:var(--border-default)]'
+    }`}>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Target size={13} className={isGlass ? 'text-[#d8a65a]' : 'text-[var(--accent)]'} />
+          <h3 className={isGlass
+            ? 'text-[10px] font-medium uppercase tracking-[0.22em] text-white/25'
+            : 'text-[11px] font-medium uppercase tracking-[0.8px] text-[var(--text-muted)]'
+          }>Goals</h3>
+        </div>
+        <button
+          onClick={onNavigate}
+          className={`text-[10px] transition-colors ${isGlass ? 'text-white/20 hover:text-[#d8a65a]' : 'text-[var(--text-muted)] hover:text-[var(--accent)]'}`}
+        >
+          View all →
+        </button>
+      </div>
+
+      {/* Carousel — grows to fill remaining height */}
+      <div className="flex flex-col flex-1 min-h-0">
+        {/* Big ring + label centred */}
+        <div className="flex flex-col items-center justify-center flex-1 gap-3">
+          {/* Ring */}
+          <div className="relative">
+            <MiniProgressRing pct={progressPct} size={96} stroke={7} color={ringColor} isGlass={isGlass} />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <IconComp size={20} className={isGlass ? 'text-white/30' : 'text-[var(--text-secondary)]'} />
+            </div>
+          </div>
+
+          {/* Metric name + pace */}
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-2 mb-1">
+              <p className={`text-[10px] font-medium uppercase tracking-[0.6px] ${isGlass ? 'text-white/30' : 'text-[var(--text-muted)]'}`}>
+                {meta.label}
+              </p>
+              {paceLabel && (
+                <span className={`text-[9px] font-semibold ${paceColor}`}>{paceLabel}</span>
+              )}
+            </div>
+
+            {/* Current value */}
+            <p className={`text-[22px] font-semibold tabular-nums leading-tight ${isGlass ? 'text-[#e8e2d6]' : 'text-[var(--text-primary)]'}`}>
+              {fmt(current)}
+            </p>
+
+            {/* Target */}
+            {hasTarget ? (
+              <p className={`text-[11px] mt-0.5 ${isGlass ? 'text-white/25' : 'text-[var(--text-muted)]'}`}>
+                of {fmt(target)} goal
+              </p>
+            ) : (
+              <p className={`text-[11px] mt-0.5 ${isGlass ? 'text-white/20' : 'text-[var(--text-muted)]'}`}>
+                no target for {filterLabel}
+              </p>
+            )}
+
+            {/* Percentage */}
+            {hasTarget && (
+              <p className={`text-[28px] font-bold tabular-nums leading-none mt-3 ${
+                progressPct >= 100 ? 'text-[#4ade80]'
+                : progressPct >= 60  ? (isGlass ? 'text-[#6aaa8e]' : 'text-[var(--green)]')
+                : progressPct >= 35  ? 'text-amber-400'
+                : 'text-red-400'
+              }`}>{Math.round(progressPct)}%</p>
+            )}
+          </div>
+
+          {/* Progress bar */}
+          <div className={`w-full h-1.5 rounded-full overflow-hidden ${isGlass ? 'bg-white/[0.06]' : 'bg-[var(--bg-base)]'}`}>
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${progressPct}%`, background: ringColor }}
+            />
+          </div>
+        </div>
+
+        {/* Nav arrows + dot indicators */}
+        {count > 1 && (
+          <div className="flex items-center justify-between mt-4">
+            <button
+              onClick={() => setIdx(i => ((i - 1) + count) % count)}
+              className={`w-7 h-7 flex items-center justify-center rounded-full text-lg transition-colors ${
+                isGlass
+                  ? 'text-white/20 hover:text-white/50 hover:bg-white/[0.06]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
+              }`}
+              aria-label="Previous goal"
+            >‹</button>
+
+            <div className="flex items-center gap-1.5">
+              {allGoals.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setIdx(i)}
+                  className={`rounded-full transition-all ${
+                    i === safeIdx
+                      ? `w-4 h-1.5 ${isGlass ? 'bg-[#d8a65a]' : 'bg-[var(--accent)]'}`
+                      : `w-1.5 h-1.5 ${isGlass ? 'bg-white/[0.15]' : 'bg-[var(--border-default)]'}`
+                  }`}
+                  aria-label={`Go to goal ${i + 1}`}
+                />
+              ))}
+            </div>
+
+            <button
+              onClick={() => setIdx(i => (i + 1) % count)}
+              className={`w-7 h-7 flex items-center justify-center rounded-full text-lg transition-colors ${
+                isGlass
+                  ? 'text-white/20 hover:text-white/50 hover:bg-white/[0.06]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
+              }`}
+              aria-label="Next goal"
+            >›</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function GlassTopMetricCard({ title, value, subtext, highlight, large, onClick }) {
   return (
