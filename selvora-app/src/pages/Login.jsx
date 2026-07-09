@@ -83,7 +83,8 @@ const Login = () => {
   const [faqOpen, setFaqOpen] = useState(null);
 
   const handleLogin = () => {
-    window.location.href = 'https://api.profittracker.carltechs.com/auth/discord';
+    const apiBase = import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || '';
+    window.location.href = `${apiBase}/auth/discord`;
   };
 
   const faqs = [

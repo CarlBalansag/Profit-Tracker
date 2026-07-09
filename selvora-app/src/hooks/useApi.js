@@ -1,9 +1,8 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-// All API calls go to the custom subdomain. Both profittracker.carltechs.com
-// (frontend) and api.profittracker.carltechs.com (backend) share carltechs.com
-// as their registrable domain, so Chrome treats the cookie as first-party.
-const API = 'https://api.profittracker.carltechs.com';
+// Leave VITE_API_URL empty in production when Vercel rewrites proxy /api and /auth.
+// Set it locally to the API dev server, e.g. http://localhost:3000.
+const API = import.meta.env.VITE_API_URL || '';
 
 // All requests to the API must include X-Requested-With to satisfy the CSRF check.
 export const apiFetch = (path, options = {}) => {
@@ -75,6 +74,44 @@ export const useCreditCard = (month) =>
     queryKey: ['creditcard', month],
     queryFn: () => fetcher(`/api/creditcard/dashboard${month ? `?month=${month}` : ''}`),
   });
+
+// ─── Goals ────────────────────────────────────────────────────────────────────
+export const useGoals = () =>
+  useQuery({
+    queryKey: ['goals'],
+    queryFn: () => fetcher('/api/goals'),
+  });
+
+export const useGoalsMutations = () => {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['goals'] });
+
+  const create = useMutation({
+    mutationFn: (data) => apiFetch('/api/goals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then(r => { if (!r.ok) return r.json().then(e => { throw new Error(e.error || 'Failed'); }); return r.json(); }),
+    onSuccess: invalidate,
+  });
+
+  const update = useMutation({
+    mutationFn: ({ id, ...data }) => apiFetch(`/api/goals/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then(r => { if (!r.ok) return r.json().then(e => { throw new Error(e.error || 'Failed'); }); return r.json(); }),
+    onSuccess: invalidate,
+  });
+
+  const remove = useMutation({
+    mutationFn: (id) => apiFetch(`/api/goals/${id}`, { method: 'DELETE' })
+      .then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); }),
+    onSuccess: invalidate,
+  });
+
+  return { create, update, remove };
+};
 
 // ─── Invalidation helpers (call after mutations to refresh cache) ─────────────
 export const useInvalidate = () => {

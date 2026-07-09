@@ -25,6 +25,7 @@ model User {
   recurring_expenses     RecurringExpense[]
   accounts               Account[]
   platforms              Platform[]
+  goals                  Goal[]
 }
 
 model Inventory {
@@ -182,6 +183,20 @@ model Invoice {
   due_date     DateTime
   total_amount Float
   status       String   // "Paid, Unpaid"
+}
+
+model Goal {
+  id           String   @id @default(uuid())
+  user_id      String
+  user         User     @relation(fields: [user_id], references: [id])
+  metric       String            // 'netProfit' | 'totalRevenue' | 'unitsSold'
+  target_7d    Float?            // target for 7-day period
+  target_30d   Float?            // target for 30-day period
+  target_ytd   Float?            // target for year-to-date period
+  active       Boolean  @default(true)
+  created_at   DateTime @default(now())
+
+  @@index([user_id])
 }
 
 model EbayPriceCache {
