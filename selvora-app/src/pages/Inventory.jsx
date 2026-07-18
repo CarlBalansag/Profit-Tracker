@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useInventory } from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
 import { Columns3, Plus, Search, Package, AlertTriangle, TrendingUp, DollarSign, Clock, MoreVertical, ListChecks, ChevronRight, ChevronDown, ExternalLink } from 'lucide-react';
+import ProductNoteButton from '../components/ProductNoteButton';
 
 const STATUS_COLORS = {
   'Pre Order':    'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
@@ -196,9 +197,12 @@ const Inventory = () => {
                 return (
                   <tr key={item.id} className="hover:bg-white/[0.02] transition-colors group">
                     <td className="px-4 py-5">
-                      <div>
-                        <p className="text-sm font-semibold text-gray-200">{item.product_name}</p>
-                        <span className="text-[10px] text-gray-400">{item.category || 'Uncategorized'}</span>
+                      <div className="flex items-center gap-1">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-200">{item.product_name}</p>
+                          <span className="text-[10px] text-gray-400">{item.category || 'Uncategorized'}</span>
+                        </div>
+                        <ProductNoteButton productName={item.product_name} />
                       </div>
                     </td>
                     <td className="px-4 py-5 text-center">
@@ -257,6 +261,9 @@ const Inventory = () => {
                         <div>
                           <p className="text-sm font-semibold text-gray-200">{group.product_name}</p>
                           <span className="text-[10px] text-gray-500">{group.entries.length} purchase entries</span>
+                        </div>
+                        <div onClick={e => e.stopPropagation()}>
+                          <ProductNoteButton productName={group.product_name} />
                         </div>
                       </div>
                     </td>

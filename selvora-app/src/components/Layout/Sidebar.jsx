@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, CirclePlus, ArrowLeftRight, Package,
   Receipt, FileText, ChartColumn, Wallet, CreditCard as CreditCardIcon,
-  Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, DollarSign, ShieldCheck, BookOpen, Target
+  Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, DollarSign, ShieldCheck, BookOpen, Target, CalendarDays
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useState } from 'react';
@@ -47,6 +47,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <GlassNavItem icon={Wallet} label="Cash Flow" to="/cashflow" />
             <GlassNavItem icon={CreditCardIcon} label="Credit Card" to="/creditcard" />
             <GlassNavItem icon={Target} label="Goals" to="/goals" />
+            <GlassNavItem icon={CalendarDays} label="Calendar" to="/calendar" />
 
             <div className="my-2 h-px w-7 bg-white/[0.07]" />
 
@@ -119,6 +120,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <NavItem icon={Wallet} label="Cash Flow" to="/cashflow" isCollapsed={isCollapsed} tutorialId="sidebar-cashflow" />
             <NavItem icon={CreditCardIcon} label="Credit Card" to="/creditcard" isCollapsed={isCollapsed} tutorialId="sidebar-creditcard" />
             <NavItem icon={Target} label="Goals" to="/goals" isCollapsed={isCollapsed} />
+            <NavItem icon={CalendarDays} label="Calendar" to="/calendar" isCollapsed={isCollapsed} />
           </SidebarSection>
 
         </nav>

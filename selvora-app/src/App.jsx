@@ -20,6 +20,7 @@ import TaxExempt from './pages/TaxExempt';
 import Guide from './pages/Guide';
 import Login from './pages/Login';
 import Goals from './pages/Goals';
+import Calendar from './pages/Calendar';
 import { AuthProvider } from './context/AuthContext';
 import { TutorialProvider } from './context/TutorialContext';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
@@ -67,6 +68,7 @@ function App() {
           <Route path="/tax-exempt" element={<TaxExempt />} />
           <Route path="/guide" element={<Guide />} />
           <Route path="/goals" element={<Goals />} />
+          <Route path="/calendar" element={<Calendar />} />
           <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Shell>

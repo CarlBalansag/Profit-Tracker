@@ -26,6 +26,9 @@ model User {
   accounts               Account[]
   platforms              Platform[]
   goals                  Goal[]
+  product_notes          ProductNote[]
+  calendar_events        CalendarEvent[]
+  calendar_token         String?          @unique
 }
 
 model Inventory {
@@ -197,6 +200,34 @@ model Goal {
   created_at   DateTime @default(now())
 
   @@index([user_id])
+}
+
+model ProductNote {
+  id           String   @id @default(uuid())
+  user_id      String
+  user         User     @relation(fields: [user_id], references: [id])
+  product_name String   // stored lowercase-trimmed for case-insensitive matching
+  note         String
+  updated_at   DateTime @updatedAt
+
+  @@unique([user_id, product_name])
+  @@index([user_id])
+}
+
+model CalendarEvent {
+  id          String   @id @default(uuid())
+  user_id     String
+  user        User     @relation(fields: [user_id], references: [id])
+  title       String
+  date        String   // YYYY-MM-DD (local date, no TZ shift)
+  end_date    String?  // optional multi-day end (YYYY-MM-DD)
+  type        String   @default("manual")
+  color       String?  // "purple"|"blue"|"green"|"amber"|"red"
+  notes       String?
+  created_at  DateTime @default(now())
+
+  @@index([user_id])
+  @@index([user_id, date])
 }
 
 model EbayPriceCache {

@@ -22,6 +22,8 @@ const receiptsRouter = require('./routes/receipts');
 const creditCardRouter = require('./routes/creditcard');
 const ebayPriceRouter = require('./routes/ebayPrice');
 const goalsRouter = require('./routes/goals');
+const productNotesRouter = require('./routes/productNotes');
+const calendarEventsRouter = require('./routes/calendarEvents');
 
 const app = express();
 const isProd = process.env.NODE_ENV === 'production';
@@ -180,6 +182,8 @@ app.use('/api/receipts', receiptsRouter);
 app.use('/api/creditcard', creditCardRouter);
 app.use('/api/ebay-price', ebayPriceRouter);
 app.use('/api/goals', goalsRouter);
+app.use('/api/product-notes', productNotesRouter);
+app.use('/api/calendar-events', calendarEventsRouter);
 
 // Health Check
 app.get('/health', (req, res) => {

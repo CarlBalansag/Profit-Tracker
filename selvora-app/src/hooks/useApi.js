@@ -113,17 +113,109 @@ export const useGoalsMutations = () => {
   return { create, update, remove };
 };
 
+// ─── Product Notes ────────────────────────────────────────────────────────────
+export const useProductNote = (productName) => {
+  const key = productName?.trim().toLowerCase();
+  return useQuery({
+    queryKey: ['product-note', key],
+    queryFn: () => fetcher(`/api/product-notes?product_name=${encodeURIComponent(key)}`),
+    enabled: !!key,
+  });
+};
+
+export const useProductNoteMutations = (productName) => {
+  const qc = useQueryClient();
+  const key = productName?.trim().toLowerCase();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['product-note', key] });
+
+  const upsert = useMutation({
+    mutationFn: ({ note }) => apiFetch('/api/product-notes', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_name: key, note }),
+    }).then(r => { if (!r.ok) return r.json().then(e => { throw new Error(e.error || 'Failed'); }); return r.json(); }),
+    onSuccess: invalidate,
+  });
+
+  const remove = useMutation({
+    mutationFn: () => apiFetch(`/api/product-notes?product_name=${encodeURIComponent(key)}`, { method: 'DELETE' })
+      .then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); }),
+    onSuccess: invalidate,
+  });
+
+  return { upsert, remove };
+};
+
+// ─── Calendar Events ──────────────────────────────────────────────────────────
+export const useCalendarEvents = (month) =>
+  useQuery({
+    queryKey: ['calendar-events', month],
+    queryFn: () => fetcher(`/api/calendar-events?month=${month}`),
+    enabled: !!month,
+  });
+
+export const useCalendarAutoEvents = (month) =>
+  useQuery({
+    queryKey: ['calendar-auto-events', month],
+    queryFn: () => fetcher(`/api/calendar-events/auto?month=${month}`),
+    enabled: !!month,
+    staleTime: 1000 * 60 * 5,
+  });
+
+export const useCalendarToken = () =>
+  useQuery({
+    queryKey: ['calendar-token'],
+    queryFn: () => apiFetch('/api/calendar-events/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    }).then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); }),
+    staleTime: Infinity, // token doesn't change
+  });
+
+export const useCalendarMutations = () => {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['calendar-events'] });
+
+  const create = useMutation({
+    mutationFn: (data) => apiFetch('/api/calendar-events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then(r => { if (!r.ok) return r.json().then(e => { throw new Error(e.error || 'Failed'); }); return r.json(); }),
+    onSuccess: invalidate,
+  });
+
+  const update = useMutation({
+    mutationFn: ({ id, ...data }) => apiFetch(`/api/calendar-events/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then(r => { if (!r.ok) return r.json().then(e => { throw new Error(e.error || 'Failed'); }); return r.json(); }),
+    onSuccess: invalidate,
+  });
+
+  const remove = useMutation({
+    mutationFn: (id) => apiFetch(`/api/calendar-events/${id}`, { method: 'DELETE' })
+      .then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); }),
+    onSuccess: invalidate,
+  });
+
+  return { create, update, remove };
+};
+
 // ─── Invalidation helpers (call after mutations to refresh cache) ─────────────
 export const useInvalidate = () => {
   const qc = useQueryClient();
   return {
-    inventory:      () => qc.invalidateQueries({ queryKey: ['inventory'] }),
-    sales:          () => qc.invalidateQueries({ queryKey: ['sales'] }),
-    platforms:      () => qc.invalidateQueries({ queryKey: ['platforms'] }),
-    dashboard:      () => qc.invalidateQueries({ queryKey: ['dashboard'] }),
-    expenses:       () => qc.invalidateQueries({ queryKey: ['expenses'] }),
-    paymentMethods: () => qc.invalidateQueries({ queryKey: ['payment-methods'] }),
-    creditCard:     () => qc.invalidateQueries({ queryKey: ['creditcard'], exact: false }),
-    all:            () => qc.invalidateQueries(),
+    inventory:       () => qc.invalidateQueries({ queryKey: ['inventory'] }),
+    sales:           () => qc.invalidateQueries({ queryKey: ['sales'] }),
+    platforms:       () => qc.invalidateQueries({ queryKey: ['platforms'] }),
+    dashboard:       () => qc.invalidateQueries({ queryKey: ['dashboard'] }),
+    expenses:        () => qc.invalidateQueries({ queryKey: ['expenses'] }),
+    paymentMethods:  () => qc.invalidateQueries({ queryKey: ['payment-methods'] }),
+    creditCard:      () => qc.invalidateQueries({ queryKey: ['creditcard'], exact: false }),
+    productNote:     (name) => qc.invalidateQueries({ queryKey: ['product-note', name?.trim().toLowerCase()] }),
+    calendarEvents:  () => qc.invalidateQueries({ queryKey: ['calendar-events'] }),
+    all:             () => qc.invalidateQueries(),
   };
 };

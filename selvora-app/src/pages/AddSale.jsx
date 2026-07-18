@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import {
-  Package, DollarSign, Search, Check, Store, Globe, Calendar, CreditCard
+  Package, DollarSign, Search, Check, Store, Globe, Calendar, CreditCard, StickyNote
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useNavigate } from 'react-router-dom';
-import { useInventory, usePlatforms, useInvalidate, apiFetch} from '../hooks/useApi';
+import { useInventory, usePlatforms, useInvalidate, apiFetch, useProductNote, useProductNoteMutations } from '../hooks/useApi';
 
 const AddSale = () => {
   const navigate = useNavigate();
@@ -33,13 +33,36 @@ const AddSale = () => {
     sale_tax_collected: '',
     customer_tax_exempt: false,
     exemption_type: '',
+    note: '',
   });
 
+  const noteAutoFilledRef = useRef(false);
 
-  // Update selected item resets form quantity defaults
+  // Note hooks — keyed to the selected item's product name
+  const { data: noteData } = useProductNote(selectedItem?.product_name);
+  const { upsert: upsertNote, remove: removeNote } = useProductNoteMutations(selectedItem?.product_name);
+
+  // Auto-populate note field when a selected item has an existing note
+  useEffect(() => {
+    if (!selectedItem) {
+      noteAutoFilledRef.current = false;
+      return;
+    }
+    if (noteData?.note && !noteAutoFilledRef.current) {
+      setFormData(prev => ({ ...prev, note: noteData.note }));
+      noteAutoFilledRef.current = true;
+    }
+    if (!noteData?.note) {
+      noteAutoFilledRef.current = false;
+    }
+  }, [noteData, selectedItem]);
+
+
+  // Update selected item resets form quantity defaults and note auto-fill
   const handleSelect = (item) => {
     setSelectedItem(item);
-    setFormData(prev => ({ ...prev, quantity: 1, unit_price: '' }));
+    noteAutoFilledRef.current = false;
+    setFormData(prev => ({ ...prev, quantity: 1, unit_price: '', note: '' }));
   };
 
   const filteredInventory = inventory.filter(item => 
@@ -98,6 +121,13 @@ const AddSale = () => {
       success: () => {
         invalidate.inventory();
         invalidate.dashboard();
+        // Save or clear the product note independently (fire-and-forget)
+        const noteText = formData.note?.trim();
+        if (noteText) {
+          upsertNote.mutate({ note: noteText });
+        } else if (noteData?.note) {
+          removeNote.mutate();
+        }
         setTimeout(() => navigate('/transactions'), 800);
         return `Sale recorded for ${selectedItem.product_name}!`;
       },
@@ -437,6 +467,33 @@ const AddSale = () => {
                     </label>
                   </div>
                 </div>
+
+              <hr className="border-white/5" />
+
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <StickyNote className="w-4 h-4 text-gray-400" />
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Product Note</h3>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                    Note <span className="text-gray-600 normal-case font-normal">(shared across all items with this product name)</span>
+                  </label>
+                  <textarea
+                    name="note"
+                    value={formData.note}
+                    onChange={(e) => {
+                      noteAutoFilledRef.current = true;
+                      handleChange(e);
+                    }}
+                    rows={3}
+                    maxLength={2000}
+                    placeholder="e.g. 'Check eBay comps before listing', 'Bought during outlet drop'..."
+                    className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-gray-500/50 transition-colors resize-none"
+                  />
+                  <p className="text-[10px] text-gray-600 mt-1 text-right">{(formData.note || '').length}/2000</p>
+                </div>
+              </div>
 
               </div>
 

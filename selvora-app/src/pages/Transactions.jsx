@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import TransactionDetailModal from '../components/TransactionDetailModal';
+import ProductNoteButton from '../components/ProductNoteButton';
 import { PRESET_CARDS } from '../data/presetCards';
 
 // ─── Inline editable cell input ───────────────────────────────────────────────
@@ -899,6 +900,7 @@ const Transactions = () => {
                   : <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border bg-blue-500/10 text-blue-400 border-blue-500/20">BUY</span>
                 }
                 <p className="text-sm font-semibold text-gray-100 truncate">{row.product}</p>
+                <ProductNoteButton productName={row.product} />
               </div>
               <button
                 onClick={() => setExpandedRow(row)}
@@ -1075,7 +1077,10 @@ const Transactions = () => {
                           {isEditing ? (
                             <EditInput value={editData.product} onChange={v => setEditData(d => ({ ...d, product: v }))} className="min-w-[180px]" />
                           ) : (
-                            <p className="text-sm font-semibold text-gray-100 leading-tight">{row.product}</p>
+                            <div className="flex items-center gap-1">
+                              <p className="text-sm font-semibold text-gray-100 leading-tight">{row.product}</p>
+                              <ProductNoteButton productName={row.product} />
+                            </div>
                           )}
                         </td>
                       );

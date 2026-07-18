@@ -201,6 +201,21 @@ const analyticsDashboardQuery = z.object({
   date: z.enum(['All Time', '7 Days', '30 Days', 'YTD']).optional(),
 });
 
+const productNote = z.object({
+  product_name: requiredString('product_name'),
+  note: z.string().trim().max(2000),
+});
+
+const calendarEvent = z.object({
+  title: requiredString('title').max(200),
+  date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+  end_date: z.preprocess(emptyToNull, z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()),
+  color: z.enum(['purple', 'blue', 'green', 'amber', 'red']).nullable().optional(),
+  notes: z.preprocess(emptyToNull, z.string().trim().max(1000).nullable().optional()),
+});
+
+const updateCalendarEvent = calendarEvent.partial();
+
 module.exports = {
   createInventory,
   updateInventory,
@@ -221,4 +236,7 @@ module.exports = {
   ebayPrice,
   dashboardPreferences,
   analyticsDashboardQuery,
+  productNote,
+  calendarEvent,
+  updateCalendarEvent,
 };

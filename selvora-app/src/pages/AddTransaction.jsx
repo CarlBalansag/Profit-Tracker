@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import {
   Package, ShoppingCart, Truck, CreditCard, DollarSign, Plus,
-  Paperclip, X, Hash, MapPin, ChevronDown, CheckCircle2
+  Paperclip, X, Hash, MapPin, ChevronDown, CheckCircle2, StickyNote
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { usePaymentMethods, usePlatforms, useInvalidate, apiFetch} from '../hooks/useApi';
+import { usePaymentMethods, usePlatforms, useInvalidate, apiFetch, useProductNote, useProductNoteMutations } from '../hooks/useApi';
 
 // ── Stable module-level components (MUST be outside the component to avoid focus loss) ──
 const Field = ({ label, children }) => (
@@ -22,6 +22,9 @@ const AddTransaction = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
   const prevCashbackKeyRef = useRef(null);
+  const noteAutoFilledRef = useRef(false);
+  const noteDebounceRef = useRef(null);
+  const [debouncedProductName, setDebouncedProductName] = useState('');
 
   const DRAFT_KEY = 'add_transaction_draft';
   const DRAFT_TTL = 30 * 60 * 1000;
@@ -58,6 +61,7 @@ const AddTransaction = () => {
     commission_fee: '',
     sale_date: '',
     qty_sold: 1,
+    note: '',
   };
 
   const loadDraft = () => {
@@ -81,6 +85,35 @@ const AddTransaction = () => {
   const { data: platforms = [] } = usePlatforms();
   const invalidate = useInvalidate();
   const [attachedFiles, setAttachedFiles] = useState([]);
+
+  // Note hooks — query uses debounced product name to avoid firing on every keystroke
+  const { data: noteData, isLoading: noteLoading } = useProductNote(debouncedProductName);
+  const { upsert: upsertNote, remove: removeNote } = useProductNoteMutations(debouncedProductName);
+
+  // Debounce product_name changes before querying for existing note
+  useEffect(() => {
+    clearTimeout(noteDebounceRef.current);
+    noteDebounceRef.current = setTimeout(() => {
+      setDebouncedProductName(formData.product_name);
+    }, 500);
+    return () => clearTimeout(noteDebounceRef.current);
+  }, [formData.product_name]);
+
+  // Auto-populate note field when an existing note is found (only if user hasn't typed their own)
+  useEffect(() => {
+    if (noteData?.note && !noteAutoFilledRef.current) {
+      setFormData(prev => ({ ...prev, note: noteData.note }));
+      noteAutoFilledRef.current = true;
+    }
+    if (!noteData?.note) {
+      noteAutoFilledRef.current = false;
+    }
+  }, [noteData]);
+
+  // Reset auto-fill flag when product name changes so new product gets auto-populated
+  useEffect(() => {
+    noteAutoFilledRef.current = false;
+  }, [formData.product_name]);
 
   // Auto-save draft to localStorage on every change
   useEffect(() => {
@@ -138,6 +171,16 @@ const AddTransaction = () => {
         localStorage.removeItem(DRAFT_KEY);
         invalidate.inventory();
         invalidate.dashboard();
+        // Save or clear the product note independently (fire-and-forget)
+        const noteText = formData.note?.trim();
+        const productKey = formData.product_name?.trim();
+        if (productKey) {
+          if (noteText) {
+            upsertNote.mutate({ note: noteText });
+          } else if (noteData?.note) {
+            removeNote.mutate();
+          }
+        }
         setTimeout(() => navigate('/transactions'), 800);
         return 'Transaction added successfully!';
       },
@@ -822,6 +865,34 @@ const AddTransaction = () => {
             </div>
             )}
 
+            {/* ── Product Note ───────────────────────────────────── */}
+            <div className="card p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <StickyNote className="w-4 h-4 text-gray-400" />
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Product Note</h3>
+                {noteLoading && debouncedProductName && (
+                  <span className="text-[10px] text-gray-600 ml-1">Loading...</span>
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                  Note <span className="text-gray-600 normal-case font-normal">(shared across all items with this product name)</span>
+                </label>
+                <textarea
+                  name="note"
+                  value={formData.note}
+                  onChange={(e) => {
+                    noteAutoFilledRef.current = true; // user is editing, stop auto-fill
+                    handleChange(e);
+                  }}
+                  rows={3}
+                  maxLength={2000}
+                  placeholder="e.g. 'Check eBay comps before listing', 'Bought during outlet drop'..."
+                  className={`${inputCls('gray')} resize-none`}
+                />
+                <p className="text-[10px] text-gray-600 mt-1 text-right">{(formData.note || '').length}/2000</p>
+              </div>
+            </div>
 
           </div>
 
