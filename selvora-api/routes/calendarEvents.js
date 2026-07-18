@@ -202,7 +202,7 @@ router.post('/token', isAuthenticated, async (req, res, next) => {
       });
     }
 
-    const baseUrl = process.env.BACKEND_URL || process.env.FRONTEND_URL?.replace('5173', '3000') || 'http://localhost:3000';
+    const baseUrl = process.env.BACKEND_URL || 'http://localhost:3000';
     const feedUrl = `${baseUrl}/api/calendar-events/feed.ics?token=${token}`;
 
     res.json({ token, feedUrl });
