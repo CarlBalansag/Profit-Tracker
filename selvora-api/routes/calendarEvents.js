@@ -226,7 +226,7 @@ router.get('/feed.ics', async (req, res, next) => {
     if (!user) return res.status(401).send('Invalid token');
 
     // Fetch all data (no date limit — full history for the feed)
-    const [manualEvents, inventories, sales] = await Promise.all([
+    const [manualEvents, inventories, sales, creditPurchases] = await Promise.all([
       prisma.calendarEvent.findMany({
         where: { user_id: user.id },
         orderBy: { date: 'asc' },
@@ -248,6 +248,18 @@ router.get('/feed.ics', async (req, res, next) => {
           sale_date: true,
           payout_date: true,
           inventory: { select: { product_name: true } },
+        },
+      }),
+      prisma.inventory.findMany({
+        where: {
+          user_id: user.id,
+          payment_method: { type: 'Credit' },
+        },
+        select: {
+          id: true, product_name: true, purchase_date: true,
+          qty_purchased: true, unit_purchase_cost: true,
+          sales_tax: true, shipping_cost_inbound: true,
+          payment_method: { select: { due_day: true } },
         },
       }),
     ]);
@@ -300,6 +312,22 @@ router.get('/feed.ics', async (req, res, next) => {
       if (sale.payout_date) {
         addEvent(`payout_${sale.id}`, toDateStr(sale.payout_date), `Payout: ${name}`, '');
       }
+    }
+
+    // Credit card due events
+    for (const inv of creditPurchases) {
+      const purchaseDate = new Date(inv.purchase_date);
+      let dueDate;
+      if (inv.payment_method?.due_day) {
+        const dueMonth = purchaseDate.getMonth() + 1;
+        const dueYear = purchaseDate.getFullYear() + (dueMonth > 11 ? 1 : 0);
+        dueDate = new Date(dueYear, dueMonth % 12, inv.payment_method.due_day);
+      } else {
+        dueDate = new Date(purchaseDate);
+        dueDate.setDate(dueDate.getDate() + 30);
+      }
+      const costBasis = (inv.unit_purchase_cost * inv.qty_purchased) + (inv.sales_tax || 0) + (inv.shipping_cost_inbound || 0);
+      addEvent(`cc_due_${inv.id}`, toDateStr(dueDate), `CC Due: ${inv.product_name} ($${costBasis.toFixed(2)})`, '');
     }
 
     lines.push('END:VCALENDAR');
