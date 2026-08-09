@@ -26,6 +26,21 @@ export const useInventory = () =>
     queryFn: () => fetcher('/api/inventory'),
   });
 
+export const useProductNames = () =>
+  useQuery({
+    queryKey: ['product-names'],
+    queryFn: () => fetcher('/api/inventory/product-names'),
+    staleTime: 60_000,
+  });
+
+export const useRecentTransaction = (productName) =>
+  useQuery({
+    queryKey: ['recent-transaction', productName],
+    queryFn: () => fetcher(`/api/inventory/recent-by-name?product_name=${encodeURIComponent(productName)}`),
+    enabled: !!productName,
+    staleTime: 0,
+  });
+
 // ─── Sales ────────────────────────────────────────────────────────────────────
 export const useSales = () =>
   useQuery({

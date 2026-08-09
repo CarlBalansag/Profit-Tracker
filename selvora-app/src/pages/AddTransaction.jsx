@@ -5,7 +5,7 @@ import {
   Paperclip, X, Hash, MapPin, ChevronDown, CheckCircle2, StickyNote
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { usePaymentMethods, usePlatforms, useInvalidate, apiFetch, useProductNote, useProductNoteMutations } from '../hooks/useApi';
+import { usePaymentMethods, usePlatforms, useInvalidate, apiFetch, useProductNote, useProductNoteMutations, useProductNames, useRecentTransaction } from '../hooks/useApi';
 
 // ── Stable module-level components (MUST be outside the component to avoid focus loss) ──
 const Field = ({ label, children }) => (
@@ -83,8 +83,37 @@ const AddTransaction = () => {
 
   const { data: paymentMethods = [] } = usePaymentMethods();
   const { data: platforms = [] } = usePlatforms();
+  const { data: productNames = [] } = useProductNames();
   const invalidate = useInvalidate();
   const [attachedFiles, setAttachedFiles] = useState([]);
+
+  // Autocomplete state for product name field
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+
+  // Recent transaction suggestion panel
+  const [recentQueryName, setRecentQueryName] = useState('');
+  const [suggestionDismissed, setSuggestionDismissed] = useState(false);
+  const { data: recentTxn } = useRecentTransaction(recentQueryName);
+  const showSuggestionPanel = !!recentTxn && !suggestionDismissed;
+
+  const acceptSuggestion = () => {
+    setFormData(prev => ({
+      ...prev,
+      unit_purchase_cost: recentTxn.unit_purchase_cost ?? prev.unit_purchase_cost,
+      qty_purchased: recentTxn.qty_purchased ?? prev.qty_purchased,
+      sales_tax: recentTxn.sales_tax ?? prev.sales_tax,
+      shipping_cost_inbound: recentTxn.shipping_cost_inbound ?? prev.shipping_cost_inbound,
+      fees: recentTxn.fees ?? prev.fees,
+      gift_card_amount: recentTxn.gift_card_amount ?? prev.gift_card_amount,
+      tax_exempt: recentTxn.tax_exempt ?? prev.tax_exempt,
+      category: recentTxn.category ?? prev.category,
+      vendor_id: recentTxn.vendor_id ?? prev.vendor_id,
+      payment_method_id: recentTxn.payment_method_id ?? prev.payment_method_id,
+      purchase_date: new Date().toISOString().split('T')[0],
+    }));
+    setSuggestionDismissed(true);
+  };
 
   // Note hooks — query uses debounced product name to avoid firing on every keystroke
   const { data: noteData, isLoading: noteLoading } = useProductNote(debouncedProductName);
@@ -293,7 +322,7 @@ const AddTransaction = () => {
 
 
   return (
-    <div className="container max-w-5xl mx-auto px-4 py-6 lg:px-8 lg:py-10">
+    <div className="container max-w-7xl mx-auto px-4 py-6 lg:px-8 lg:py-10">
 
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
@@ -304,8 +333,91 @@ const AddTransaction = () => {
       </div>
 
       <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-5">
+        <div className={`grid grid-cols-1 gap-6 ${showSuggestionPanel ? 'lg:grid-cols-5' : 'lg:grid-cols-3'}`}>
+
+          {/* ── Recent Transaction Suggestion Panel ──────────────── */}
+          {showSuggestionPanel && (
+            <div className="lg:col-span-1 order-first">
+              <div className="lg:sticky lg:top-6">
+                <div className="rounded-xl p-4 space-y-3 bg-[#16181d] border border-white/6 border-l-2 border-l-indigo-500/40">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                      <p className="text-xs font-semibold text-gray-200">Recent match found</p>
+                    </div>
+                    <button type="button" onClick={() => setSuggestionDismissed(true)} className="text-gray-600 hover:text-gray-400 transition-colors">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-gray-500">Same product added 1hr ago — use these details?</p>
+
+                  <div className="space-y-1.5 text-[11px]">
+                    {recentTxn.vendor?.name && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-gray-500">Store</span>
+                        <span className="text-gray-300 truncate text-right">{recentTxn.vendor.name}</span>
+                      </div>
+                    )}
+                    {recentTxn.payment_method?.name && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-gray-500">Pay</span>
+                        <span className="text-gray-300 truncate text-right">{recentTxn.payment_method.name}</span>
+                      </div>
+                    )}
+                    {recentTxn.category && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-gray-500">Category</span>
+                        <span className="text-gray-300">{recentTxn.category}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between gap-2">
+                      <span className="text-gray-500">Cost</span>
+                      <span className="text-gray-300">${Number(recentTxn.unit_purchase_cost || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <span className="text-gray-500">Qty</span>
+                      <span className="text-gray-300">{recentTxn.qty_purchased}</span>
+                    </div>
+                    {Number(recentTxn.sales_tax) > 0 && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-gray-500">Tax</span>
+                        <span className="text-gray-300">${Number(recentTxn.sales_tax).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {Number(recentTxn.shipping_cost_inbound) > 0 && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-gray-500">Ship</span>
+                        <span className="text-gray-300">${Number(recentTxn.shipping_cost_inbound).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {Number(recentTxn.fees) > 0 && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-gray-500">Fees</span>
+                        <span className="text-gray-300">${Number(recentTxn.fees).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {Number(recentTxn.gift_card_amount) > 0 && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-gray-500">Gift Card</span>
+                        <span className="text-gray-300">${Number(recentTxn.gift_card_amount).toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between gap-2">
+                      <span className="text-gray-500">Date</span>
+                      <span className="text-gray-400 italic">Today</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 pt-1 border-t border-white/[0.06]">
+                    <button type="button" onClick={acceptSuggestion} className="w-full py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-semibold transition-colors">✓ Accept</button>
+                    <button type="button" onClick={() => setSuggestionDismissed(true)} className="w-full py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 text-[11px] transition-colors">✗ Reject</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className={`${showSuggestionPanel ? 'lg:col-span-3' : 'lg:col-span-2'} space-y-5`}>
 
             {/* ── Product Information ────────────────────────────────── */}
             <div className="card p-5 space-y-4">
@@ -316,13 +428,49 @@ const AddTransaction = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
                   <Field label="Product Name *">
-                    <input
-                      name="product_name" value={formData.product_name} onChange={handleChange}
-                      className={inputCls('purple')}
-                      placeholder="e.g. Apple AirPods Pro 2nd Gen"
-                      autoComplete="off"
-                      required
-                    />
+                    {(() => {
+                      const suggestions = formData.product_name.trim().length > 0
+                        ? productNames.filter(n => n.toLowerCase().includes(formData.product_name.toLowerCase().trim())).slice(0, 3)
+                        : [];
+                      return (
+                        <div className="relative">
+                          <input
+                            name="product_name"
+                            value={formData.product_name}
+                            onChange={(e) => { handleChange(e); setShowSuggestions(true); setHighlightedIndex(-1); setRecentQueryName(''); setSuggestionDismissed(false); }}
+                            onFocus={() => setShowSuggestions(true)}
+                            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                            onKeyDown={(e) => {
+                              if (!showSuggestions || suggestions.length === 0) return;
+                              if (e.key === 'ArrowDown') { e.preventDefault(); setHighlightedIndex(i => Math.min(i + 1, suggestions.length - 1)); }
+                              else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlightedIndex(i => Math.max(i - 1, 0)); }
+                              else if (e.key === 'Tab' || e.key === 'Enter') {
+                                const pick = highlightedIndex >= 0 ? suggestions[highlightedIndex] : suggestions[0];
+                                if (pick) { e.preventDefault(); setFormData(prev => ({ ...prev, product_name: pick })); setShowSuggestions(false); setRecentQueryName(pick); setSuggestionDismissed(false); }
+                              }
+                              else if (e.key === 'Escape') setShowSuggestions(false);
+                            }}
+                            className={inputCls('purple')}
+                            placeholder="e.g. Apple AirPods Pro 2nd Gen"
+                            autoComplete="off"
+                            required
+                          />
+                          {showSuggestions && suggestions.length > 0 && (
+                            <ul className="absolute z-50 top-full left-0 right-0 mt-1 bg-[#1a1d21] border border-white/10 rounded-lg shadow-xl overflow-hidden">
+                              {suggestions.map((name, i) => (
+                                <li
+                                  key={name}
+                                  onMouseDown={() => { setFormData(prev => ({ ...prev, product_name: name })); setShowSuggestions(false); setRecentQueryName(name); setSuggestionDismissed(false); }}
+                                  className={`px-3 py-2 text-sm cursor-pointer transition-colors ${i === highlightedIndex ? 'bg-purple-500/20 text-white' : 'text-gray-300 hover:bg-white/5'}`}
+                                >
+                                  {name}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </Field>
                 </div>
                 <Field label="Category">

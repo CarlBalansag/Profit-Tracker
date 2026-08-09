@@ -138,6 +138,45 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
   }
 });
 
+// GET distinct product names for autocomplete
+router.get('/product-names', isAuthenticated, async (req, res, next) => {
+  try {
+    const items = await prisma.inventory.findMany({
+      where: { user_id: req.user.id },
+      select: { product_name: true },
+      distinct: ['product_name'],
+      orderBy: { product_name: 'asc' },
+    });
+    res.json(items.map(i => i.product_name));
+  } catch (err) { next(err); }
+});
+
+// GET most recent inventory item matching a product name added within the last hour
+router.get('/recent-by-name', isAuthenticated, async (req, res, next) => {
+  try {
+    const { product_name } = req.query;
+    if (!product_name) return res.json(null);
+    const since = new Date(Date.now() - 60 * 60 * 1000);
+    const item = await prisma.inventory.findFirst({
+      where: {
+        user_id: req.user.id,
+        product_name: { equals: product_name, mode: 'insensitive' },
+        created_at: { gte: since },
+      },
+      select: {
+        unit_purchase_cost: true, qty_purchased: true,
+        sales_tax: true, shipping_cost_inbound: true, fees: true,
+        gift_card_amount: true, tax_exempt: true, category: true,
+        vendor_id: true, payment_method_id: true,
+        vendor: { select: { id: true, name: true } },
+        payment_method: { select: { id: true, name: true } },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+    res.json(item || null);
+  } catch (err) { next(err); }
+});
+
 // GET single inventory item by id
 router.get('/:id', isAuthenticated, async (req, res, next) => {
   try {
