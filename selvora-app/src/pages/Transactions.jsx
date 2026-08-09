@@ -288,7 +288,7 @@ const Transactions = () => {
           unit_price: !isNaN(parsedSale) ? parsedSale : undefined,
           commission_fee: parseFloat(editData.commission_fee) || 0,
           sale_date: editData.sale_date ? new Date(editData.sale_date).toISOString() : undefined,
-          payout_date: editData.payout_date ? new Date(editData.payout_date).toISOString() : undefined,
+          payout_date: editData.payout_date ? new Date(editData.payout_date).toISOString() : null,
         };
         // payment method and tracking live on inventory, update them separately
         await apiFetch(`/api/inventory/${editData.rawId}`, {
@@ -364,8 +364,7 @@ const Transactions = () => {
       }
       if (!res.ok) {
         const resJson = await res.json().catch(() => ({}));
-        const detail = resJson.details?.map(d => `${d.path}: ${d.message}`).join(', ');
-        toast.error('Save failed: ' + (detail || resJson.error || res.status));
+        toast.error('Save failed: ' + (resJson.error || res.status));
         return;
       }
       await invalidate.inventory();
