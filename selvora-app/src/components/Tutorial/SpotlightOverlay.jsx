@@ -148,22 +148,32 @@ export const SpotlightOverlay = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const rafRef = useRef(null);
+  const navigatingRef = useRef(false);
+  const navTimerRef = useRef(null);
 
   // Navigate to the step's page if needed
   useEffect(() => {
-    if (!active || !currentStep) return;
-    if (currentStep.navigate) {
-      const [path, search] = currentStep.navigate.split('?');
-      const targetPath = path + (search ? `?${search}` : '');
-      if (location.pathname + location.search !== targetPath) {
-        navigate(currentStep.navigate.replace('?', '?'));
-      }
-    }
-  }, [active, currentStep, navigate, location]);
+    if (!active || !currentStep?.navigate) return;
+
+    const [path, qs] = currentStep.navigate.split('?');
+    const targetPath = path + (qs ? `?${qs}` : '');
+    const currentPath = location.pathname + (location.search || '');
+
+    if (currentPath === targetPath) return;
+
+    navigatingRef.current = true;
+    clearTimeout(navTimerRef.current);
+    navigate(targetPath, { replace: false });
+    navTimerRef.current = setTimeout(() => {
+      navigatingRef.current = false;
+    }, 400);
+
+    // Do NOT cancel the timer on cleanup — let it fire after navigation settles
+  }, [active, currentStep, navigate, location.pathname, location.search]);
 
   // Track target element position with rAF
   const updateRect = useCallback(() => {
-    if (!active || !currentStep) return;
+    if (!active || !currentStep || navigatingRef.current) return;
     const r = getRect(currentStep.target);
     setRect(r);
     rafRef.current = requestAnimationFrame(updateRect);
