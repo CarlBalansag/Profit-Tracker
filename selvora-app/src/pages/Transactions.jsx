@@ -288,7 +288,7 @@ const Transactions = () => {
           unit_price: !isNaN(parsedSale) ? parsedSale : undefined,
           commission_fee: parseFloat(editData.commission_fee) || 0,
           sale_date: editData.sale_date ? new Date(editData.sale_date).toISOString() : undefined,
-          payout_date: editData.payout_date ? new Date(editData.payout_date).toISOString() : null,
+          payout_date: editData.payout_date ? new Date(editData.payout_date).toISOString() : undefined,
         };
         // payment method and tracking live on inventory, update them separately
         await apiFetch(`/api/inventory/${editData.rawId}`, {
