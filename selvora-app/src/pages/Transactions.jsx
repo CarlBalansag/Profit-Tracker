@@ -364,7 +364,8 @@ const Transactions = () => {
       }
       if (!res.ok) {
         const resJson = await res.json().catch(() => ({}));
-        toast.error('Save failed: ' + (resJson.error || res.status));
+        const detail = resJson.details?.map(d => `${d.path}: ${d.message}`).join(', ');
+        toast.error('Save failed: ' + (detail || resJson.error || res.status));
         return;
       }
       await invalidate.inventory();
