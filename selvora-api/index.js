@@ -107,6 +107,21 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // Passport Discord Strategy setup
+// Retry helper for transient Neon cold-start errors (P1001, P2024)
+const NEON_RETRYABLE = new Set(['P1001', 'P2024']);
+async function withDbRetry(fn, retries = 3, delayMs = 2000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isRetryable = NEON_RETRYABLE.has(err.code);
+      console.warn(`[db-retry] attempt ${i + 1} failed (code=${err.code}):`, err.message);
+      if (!isRetryable || i === retries - 1) throw err;
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+}
+
 passport.use(new DiscordStrategy({
     clientID: process.env.DISCORD_CLIENT_ID,
     clientSecret: process.env.DISCORD_CLIENT_SECRET,
@@ -115,25 +130,25 @@ passport.use(new DiscordStrategy({
   },
   async function(accessToken, refreshToken, profile, done) {
     try {
-      // Find or Create user in our DB
-      let user = await prisma.user.findUnique({
+      // Find or Create user in our DB — retry on Neon cold-start errors
+      let user = await withDbRetry(() => prisma.user.findUnique({
         where: { discord_id: profile.id }
-      });
+      }));
 
       if (!user) {
-        user = await prisma.user.create({
+        user = await withDbRetry(() => prisma.user.create({
           data: {
             discord_id: profile.id,
             username: profile.username,
             email: profile.email || `${profile.id}@discord.com`, // Fallback
             auth_provider: 'discord'
           }
-        });
+        }));
       }
 
       return done(null, user);
     } catch (error) {
-      console.error(error);
+      console.error('[discord-strategy] error after retries:', error.message);
       return done(error, null);
     }
   }
@@ -158,12 +173,12 @@ passport.deserializeUser(async (id, done) => {
       console.log('[deserializeUser] cache hit for id:', id);
       return done(null, cached.user);
     }
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await withDbRetry(() => prisma.user.findUnique({ where: { id } }));
     console.log('[deserializeUser] DB lookup result:', user ? `found user ${user.id}` : 'NOT FOUND');
     if (user) userCache.set(id, { user, expiresAt: Date.now() + USER_CACHE_TTL });
     done(null, user);
   } catch (error) {
-    console.error('[deserializeUser] error:', error.message);
+    console.error('[deserializeUser] error after retries:', error.message);
     done(error, null);
   }
 });
