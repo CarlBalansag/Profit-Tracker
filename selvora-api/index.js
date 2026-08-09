@@ -265,6 +265,17 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: message });
 });
 
+// Keep Neon DB warm — ping every 4 min so it never hits the 5-min suspend threshold
+const KEEPALIVE_INTERVAL = 4 * 60 * 1000;
+setInterval(async () => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    console.log('[keepalive] Neon ping OK');
+  } catch (err) {
+    console.warn('[keepalive] Neon ping failed:', err.message);
+  }
+}, KEEPALIVE_INTERVAL);
+
 // Default Port
 const PORT = process.env.PORT || 3000;
 

@@ -5,22 +5,35 @@ const AuthContext = createContext();
 
 export const useAuth = () => useContext(AuthContext);
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchUser = async () => {
+      // Retry up to 3 times on 5xx (Neon cold-start can cause transient 500s)
+      const MAX_RETRIES = 3;
+      const DELAYS = [1500, 3000, 5000];
+      let response;
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        try {
+          response = await apiFetch('/auth/me');
+          if (response.status < 500) break; // success or 401 — stop retrying
+        } catch (error) {
+          console.error('Failed to fetch user (attempt', attempt + 1, '):', error);
+        }
+        if (attempt < MAX_RETRIES - 1) await sleep(DELAYS[attempt]);
+      }
       try {
-        const response = await apiFetch('/auth/me');
-        if (response.ok) {
+        if (response?.ok) {
           const userData = await response.json();
           setUser(userData);
         } else {
           setUser(null);
         }
-      } catch (error) {
-        console.error('Failed to fetch user:', error);
+      } catch {
         setUser(null);
       } finally {
         setLoading(false);
