@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { useInventory, usePlatforms, usePaymentMethods, useInvalidate, apiFetch} from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
 import { toast } from 'sonner';
@@ -147,6 +147,40 @@ const Transactions = () => {
   });
   const [colsOpen, setColsOpen] = useState(false);
   const colsRef = useRef(null);
+  const tableScrollRef = useRef(null);
+  const topScrollRef = useRef(null);
+  const [tableScrollWidth, setTableScrollWidth] = useState(0);
+
+  // Keep the top phantom scroll div width in sync with the actual scroll content
+  useLayoutEffect(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+    const update = () => setTableScrollWidth(el.scrollWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Sync scroll position between top scrollbar and table
+  const syncFromTop = useRef(false);
+  const syncFromTable = useRef(false);
+  const handleTopScroll = () => {
+    if (syncFromTable.current) return;
+    syncFromTop.current = true;
+    if (tableScrollRef.current && topScrollRef.current) {
+      tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    }
+    syncFromTop.current = false;
+  };
+  const handleTableScroll = () => {
+    if (syncFromTop.current) return;
+    syncFromTable.current = true;
+    if (topScrollRef.current && tableScrollRef.current) {
+      topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+    }
+    syncFromTable.current = false;
+  };
 
   useEffect(() => {
     localStorage.setItem('txn_visible_cols', JSON.stringify(visibleCols));
@@ -970,8 +1004,18 @@ const Transactions = () => {
         ))}
       </div>
 
+      {/* Top scrollbar mirror — hidden on mobile, shown md+ */}
+      <div
+        ref={topScrollRef}
+        onScroll={handleTopScroll}
+        className="hidden md:block overflow-x-auto mb-1 table-scrollbar"
+        style={{ height: '12px' }}
+      >
+        <div style={{ width: tableScrollWidth, height: '1px' }} />
+      </div>
+
       {/* Table — hidden on mobile, shown md+ */}
-      <div className="hidden md:block card overflow-x-auto bg-[#0f1115] table-scrollbar">
+      <div ref={tableScrollRef} onScroll={handleTableScroll} className="hidden md:block card overflow-x-auto bg-[#0f1115] table-scrollbar">
         <table className="w-full text-left whitespace-nowrap">
           <thead>
             <tr className="border-b border-white/[0.06] text-[10px] uppercase font-semibold text-gray-500 tracking-widest">
