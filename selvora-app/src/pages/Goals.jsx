@@ -51,7 +51,7 @@ function calcStreak(trend, metric, target, period) {
     return `${thu.getFullYear()}-W${String(week).padStart(2, '0')}`;
   };
 
-  const field = metric === 'netProfit' ? 'netProfit' : metric === 'totalRevenue' ? 'totalRevenue' : 'soldCost';
+  const field = metric === 'netProfit' ? 'netProfit' : metric === 'totalRevenue' ? 'totalRevenue' : 'unitsSold';
   const buckets = new Map();
   for (const pt of trend) {
     const k = getBucketKey(pt.date);

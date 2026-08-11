@@ -101,12 +101,13 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       const allocatedTax      = inv.sales_tax              * perUnit * sale.quantity;
       const allocatedShipping = inv.shipping_cost_inbound  * perUnit * sale.quantity;
       const allocatedFees     = (inv.fees || 0)            * perUnit * sale.quantity;
-      const saleCost          = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees;
+      const allocatedGiftCard = (inv.gift_card_amount || 0) * perUnit * sale.quantity;
+      const saleCost          = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees - allocatedGiftCard;
       const rate              = getEffectiveCashbackRate(inv);
       const saleCashback      = saleCost * (rate / 100);
       const saleRevenue       = (sale.unit_price * sale.quantity) - sale.commission_fee;
       const grossProfit       = saleRevenue - saleCost;
-      return { sale, inv, allocatedTax, allocatedShipping, allocatedFees, saleCost, saleCashback, saleRevenue, grossProfit, rate };
+      return { sale, inv, allocatedTax, allocatedShipping, allocatedFees, allocatedGiftCard, saleCost, saleCashback, saleRevenue, grossProfit, rate };
     });
 
     // Calculate Primary Stats
@@ -123,7 +124,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     // Purchase spend: all inventory purchases in the selected purchase-date window.
     // Cashback is earned at point of purchase, so totalCashback includes all purchases.
     inventories.forEach(inv => {
-      const lineCost = (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0);
+      const lineCost = (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0) - (inv.gift_card_amount || 0);
       totalCost += lineCost;
       totalTax += inv.sales_tax;
       const rate = getEffectiveCashbackRate(inv);
@@ -160,7 +161,8 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       const unitTax = inv.sales_tax / inv.qty_purchased;
       const unitShipping = inv.shipping_cost_inbound / inv.qty_purchased;
       const unitFees = (inv.fees || 0) / inv.qty_purchased;
-      const unitCost = inv.unit_purchase_cost + unitTax + unitShipping + unitFees;
+      const unitGiftCard = (inv.gift_card_amount || 0) / inv.qty_purchased;
+      const unitCost = inv.unit_purchase_cost + unitTax + unitShipping + unitFees - unitGiftCard;
       return sum + (inv.qty_on_hand * unitCost);
     }, 0);
 
@@ -193,7 +195,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
           const id = inv.payment_method.id;
           if (!cardMap[id]) cardMap[id] = { name: inv.payment_method.name, txns: 0, amount: 0 };
           cardMap[id].txns += 1;
-          cardMap[id].amount += (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0);
+          cardMap[id].amount += (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0) - (inv.gift_card_amount || 0);
         }
       });
     } else {
@@ -278,6 +280,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
           soldCost: 0,
           grossProfit: 0,
           netProfit: 0,
+          unitsSold: 0,
         });
       }
       return trendByBucket.get(key);
@@ -288,7 +291,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       inventories.forEach(inv => {
         const key = bucketKey(dateKey(inv.purchase_date));
         const pt = ensureBucket(key);
-        const lineCost = (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0);
+        const lineCost = (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0) - (inv.gift_card_amount || 0);
         const rate = getEffectiveCashbackRate(inv);
         pt.totalCost += lineCost;
         pt.totalTax += inv.sales_tax;
@@ -312,6 +315,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       pt.soldCost += saleCost;
       pt.grossProfit += grossProfit;
       pt.netProfit += grossProfit + saleCashback;
+      pt.unitsSold += sale.quantity;
     });
 
     const trend = Array.from(trendByBucket.values())

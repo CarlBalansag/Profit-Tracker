@@ -105,7 +105,7 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
       const card = cardMap[pm.id];
       const rate = getEffectiveCashbackRate(inv);
       const qty = inv.qty_purchased || 1;
-      const itemCost = (inv.unit_purchase_cost * qty) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0);
+      const itemCost = (inv.unit_purchase_cost * qty) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0) - (inv.gift_card_amount || 0);
       const itemCashback = itemCost * (rate / 100);
 
       card.totalSpend += itemCost;
@@ -123,7 +123,8 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
           const allocatedCost = (inv.unit_purchase_cost * sale.quantity)
             + (inv.sales_tax * perUnit * sale.quantity)
             + (inv.shipping_cost_inbound * perUnit * sale.quantity)
-            + ((inv.fees || 0) * perUnit * sale.quantity);
+            + ((inv.fees || 0) * perUnit * sale.quantity)
+            - ((inv.gift_card_amount || 0) * perUnit * sale.quantity);
           const allocatedCashback = allocatedCost * (rate / 100);
           const saleRevenue = (sale.unit_price * sale.quantity) - sale.commission_fee;
           const netPnl = saleRevenue - allocatedCost;
@@ -156,7 +157,8 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
           const unsoldCost = (inv.unit_purchase_cost * unsoldQty)
             + (inv.sales_tax * (unsoldQty / qty))
             + (inv.shipping_cost_inbound * (unsoldQty / qty))
-            + ((inv.fees || 0) * (unsoldQty / qty));
+            + ((inv.fees || 0) * (unsoldQty / qty))
+            - ((inv.gift_card_amount || 0) * (unsoldQty / qty));
           const unsoldCashback = unsoldCost * (rate / 100);
           card.pendingCount += unsoldQty;
           card.items.push({

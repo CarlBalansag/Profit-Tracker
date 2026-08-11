@@ -74,9 +74,14 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
       cashout_platform_id,
       marketplace_platform_id,
       commission_fee,
+      sale_shipping,
       sale_date,
       qty_sold,
-      status
+      status,
+      taxable,
+      sale_tax_collected,
+      customer_tax_exempt,
+      exemption_type,
     } = req.body;
 
     console.log('POST inventory body:', JSON.stringify(req.body));
@@ -121,9 +126,14 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
                 quantity: saleQty,
                 unit_price: parseFloat(sale_price),
                 commission_fee: parseFloat(commission_fee) || 0,
+                sale_shipping: parseFloat(sale_shipping) || 0,
                 sale_date: parseLocalDate(sale_date || purchase_date) || new Date(),
                 payout_date: payout_date ? parseLocalDate(payout_date) : null,
-                status: status || 'SOLD'
+                status: status || 'SOLD',
+                taxable: taxable !== undefined ? (taxable === true || taxable === 'true') : true,
+                sale_tax_collected: parseFloat(sale_tax_collected) || 0,
+                customer_tax_exempt: customer_tax_exempt === true || customer_tax_exempt === 'true',
+                exemption_type: exemption_type || null,
             }
         });
         await prisma.inventory.update({

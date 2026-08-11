@@ -309,6 +309,20 @@ const Transactions = () => {
 
   const cancelEdit = () => { setEditingId(null); setEditData({}); };
 
+  // Helper: parse error response and show an informative toast, logging full detail to console
+  const handleSaveError = (label, status, resJson) => {
+    const details = resJson?.details;
+    const summary = resJson?.error || `HTTP ${status}`;
+    if (details?.length) {
+      const fieldErrors = details.map(d => `${d.path}: ${d.message}`).join(' · ');
+      console.error(`[saveEdit] ${label} failed (${status}):`, resJson);
+      toast.error(`${label} failed — ${fieldErrors}`, { duration: 8000 });
+    } else {
+      console.error(`[saveEdit] ${label} failed (${status}):`, resJson);
+      toast.error(`${label} failed: ${summary}`);
+    }
+  };
+
   const saveEdit = async () => {
     setSaving(true);
     try {
@@ -322,10 +336,10 @@ const Transactions = () => {
           unit_price: !isNaN(parsedSale) ? parsedSale : undefined,
           commission_fee: parseFloat(editData.commission_fee) || 0,
           sale_date: editData.sale_date ? new Date(editData.sale_date).toISOString() : undefined,
-          payout_date: editData.payout_date ? new Date(editData.payout_date).toISOString() : null,
+          payout_date: editData.payout_date ? new Date(editData.payout_date).toISOString() : undefined,
         };
         // payment method and tracking live on inventory, update them separately
-        await apiFetch(`/api/inventory/${editData.rawId}`, {
+        const invRes = await apiFetch(`/api/inventory/${editData.rawId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -335,6 +349,11 @@ const Transactions = () => {
             tracking_number: editData.tracking_number || null,
           })
         });
+        if (!invRes.ok) {
+          const resJson = await invRes.json().catch(() => ({}));
+          handleSaveError('Inventory update', invRes.status, resJson);
+          return;
+        }
         res = await apiFetch(`/api/sales/${editData.saleId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -366,7 +385,7 @@ const Transactions = () => {
         });
         if (!res.ok) {
           const resJson = await res.json().catch(() => ({}));
-          toast.error('Save failed: ' + (resJson.error || res.status));
+          handleSaveError('Inventory update', res.status, resJson);
           return;
         }
         // If user entered a sale price, create a sale record (POST deducts qty_on_hand)
@@ -387,7 +406,7 @@ const Transactions = () => {
           });
           if (!saleRes.ok) {
             const errJson = await saleRes.json().catch(() => ({}));
-            toast.error('Sale creation failed: ' + (errJson.error || saleRes.status));
+            handleSaveError('Sale creation', saleRes.status, errJson);
             return;
           }
         }
@@ -398,13 +417,14 @@ const Transactions = () => {
       }
       if (!res.ok) {
         const resJson = await res.json().catch(() => ({}));
-        toast.error('Save failed: ' + (resJson.error || res.status));
+        handleSaveError('Sale update', res.status, resJson);
         return;
       }
       await invalidate.inventory();
       toast.success('Transaction saved.');
       setEditingId(null);
     } catch (err) {
+      console.error('[saveEdit] unexpected error:', err);
       toast.error('Save error: ' + err.message);
     } finally {
       setSaving(false);

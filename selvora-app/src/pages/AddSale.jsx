@@ -26,7 +26,6 @@ const AddSale = () => {
     unit_price: '',
     commission_fee: '',
     sale_shipping: '',
-    sale_fees: '',
     sale_date: new Date().toISOString().split('T')[0],
     payout_date: '',
     taxable: true,
@@ -336,13 +335,6 @@ const AddSale = () => {
                         <input name="sale_shipping" type="number" step="0.01" value={formData.sale_shipping} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-green-500/50" placeholder="0.00" />
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-400 mb-1.5">Sale Fees</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
-                        <input name="sale_fees" type="number" step="0.01" value={formData.sale_fees} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-green-500/50" placeholder="0.00" />
-                      </div>
-                    </div>
                   </div>
 
                   {/* Per-unit note + mini summary */}
@@ -358,8 +350,7 @@ const AddSale = () => {
                     const saleTotal = sp * qs;
                     const commission = parseFloat(formData.commission_fee) || 0;
                     const saleShipping = parseFloat(formData.sale_shipping) || 0;
-                    const saleFees = parseFloat(formData.sale_fees) || 0;
-                    const profit = saleTotal - purchaseCost - commission - saleShipping - saleFees;
+                    const profit = saleTotal - purchaseCost - commission - saleShipping;
                     return (
                       <>
                         <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -389,12 +380,6 @@ const AddSale = () => {
                               <div className="flex justify-between px-4 py-2.5">
                                 <span className="text-gray-400">Sale shipping</span>
                                 <span className="text-red-400">-${saleShipping.toFixed(2)}</span>
-                              </div>
-                            )}
-                            {saleFees > 0 && (
-                              <div className="flex justify-between px-4 py-2.5">
-                                <span className="text-gray-400">Sale fees</span>
-                                <span className="text-red-400">-${saleFees.toFixed(2)}</span>
                               </div>
                             )}
                             {sp > 0 && (

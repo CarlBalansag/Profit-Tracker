@@ -47,7 +47,7 @@ const AddTransaction = () => {
     sale_price: '',
     payout_date: '',
     sale_shipping: '',
-    sale_fees: '',
+    commission_fee: '',
     taxable: true,
     sale_tax_collected: '',
     customer_tax_exempt: false,
@@ -901,8 +901,8 @@ const AddTransaction = () => {
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                       <input
-                        type="number" step="0.01" name="sale_fees"
-                        value={formData.sale_fees} onChange={handleChange}
+                        type="number" step="0.01" name="commission_fee"
+                        value={formData.commission_fee} onChange={handleChange}
                         className={`${inputCls('green')} pl-7`}
                         placeholder="0.00"
                       />
@@ -1068,7 +1068,7 @@ const AddTransaction = () => {
                   const allocatedGiftCard = (giftCard / qtyPurchased) * qtySold;
                   const totalUnitCost = (unitCost * qtySold) + allocatedTax + allocatedShipping - allocatedGiftCard;
                   const saleShipping = parseFloat(formData.sale_shipping) || 0;
-                  const saleFees = parseFloat(formData.sale_fees) || 0;
+                  const saleFees = parseFloat(formData.commission_fee) || 0;
                   const profit = totalSale - totalUnitCost - saleShipping - saleFees;
 
                   const Row = ({ label, value, color = 'text-gray-200' }) => (

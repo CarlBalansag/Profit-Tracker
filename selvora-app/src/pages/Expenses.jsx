@@ -307,7 +307,7 @@ const Expenses = () => {
   const handleSaveOneOff = async (data) => {
     const url    = editingItem && !editingIsRec ? `/api/expenses/${editingItem.id}` : `/api/expenses`;
     const method = editingItem && !editingIsRec ? 'PUT' : 'POST';
-    const res = await apiFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    const res = await apiFetch(url, { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(data) });
     if (!res.ok) throw new Error(await safeErrMsg(res, 'Save failed'));
     await fetchAll();
   };
@@ -315,7 +315,7 @@ const Expenses = () => {
   const handleSaveRecurring = async (data) => {
     const url    = editingItem && editingIsRec ? `/api/recurring-expenses/${editingItem.id}` : `/api/recurring-expenses`;
     const method = editingItem && editingIsRec ? 'PUT' : 'POST';
-    const res = await apiFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    const res = await apiFetch(url, { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(data) });
     if (!res.ok) throw new Error(await safeErrMsg(res, 'Save failed'));
     await fetchAll();
   };
