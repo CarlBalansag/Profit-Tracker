@@ -211,28 +211,48 @@ app.get('/auth/discord', (req, res, next) => {
   passport.authenticate('discord')(req, res, next);
 });
 
-app.get('/auth/discord/callback',
-  passport.authenticate('discord', { failureRedirect: `${FRONTEND_URL}/login?error=true` }),
-  (req, res, next) => {
-    // Explicitly wait for the session to be persisted to PostgreSQL before
-    // sending the response. Without this there is a race condition where the
-    // browser hits /auth/me before the INSERT into user_sessions completes.
-    req.session.save((err) => {
-      if (err) {
-        console.error('[auth/callback] session.save() failed:', err);
-        return next(err);
+app.get('/auth/discord/callback', (req, res, next) => {
+  // Use the custom-callback form so that OAuth token-exchange errors, profile
+  // fetch errors, and verify-function errors (all of which passport-oauth2
+  // routes through self.error → next(err)) are caught here instead of
+  // falling through to the global error handler and producing a 500.
+  passport.authenticate('discord', (err, user, info) => {
+    if (err) {
+      console.error('[auth/callback] OAuth/DB error:', err.message || err);
+      return res.redirect(`${FRONTEND_URL}/login?error=true`);
+    }
+    if (!user) {
+      console.warn('[auth/callback] authentication failed (no user):', info);
+      return res.redirect(`${FRONTEND_URL}/login?error=true`);
+    }
+
+    // Establish the login session (writes passport.user to req.session).
+    req.logIn(user, (loginErr) => {
+      if (loginErr) {
+        console.error('[auth/callback] req.logIn() error:', loginErr);
+        return res.redirect(`${FRONTEND_URL}/login?error=true`);
       }
-      console.log('[auth/callback] session saved, sid:', req.sessionID, 'user:', req.user?.id);
-      // Use HTML redirect (not res.redirect) so Vercel proxy forwards the
-      // Set-Cookie header to the browser before navigation occurs.
-      res.send(`<!DOCTYPE html><html><head>
+
+      // Explicitly wait for the session to be persisted to PostgreSQL before
+      // sending the response. Without this there is a race condition where the
+      // browser hits /auth/me before the INSERT into user_sessions completes.
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          console.error('[auth/callback] session.save() failed:', saveErr);
+          return res.redirect(`${FRONTEND_URL}/login?error=true`);
+        }
+        console.log('[auth/callback] session saved, sid:', req.sessionID, 'user:', req.user?.id);
+        // Use HTML redirect (not res.redirect) so Render/Vercel proxy forwards
+        // the Set-Cookie header to the browser before navigation occurs.
+        res.send(`<!DOCTYPE html><html><head>
 <meta http-equiv="refresh" content="0;url=${FRONTEND_URL}/">
 </head><body>
 <script>window.location.replace(${JSON.stringify(FRONTEND_URL + '/')});</script>
 </body></html>`);
+      });
     });
-  }
-);
+  })(req, res, next);
+});
 
 // Current Session Route
 app.get('/auth/me', (req, res) => {
