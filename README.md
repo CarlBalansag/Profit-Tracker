@@ -139,7 +139,7 @@ Invoice (buyer invoices)
 
 | Domain | Endpoints |
 |--------|-----------|
-| Auth | `GET /auth/discord`, `GET /auth/discord/callback`, `GET /auth/me`, `GET /auth/logout` |
+| Auth | `GET /auth/discord`, `GET /auth/discord/callback`, `GET /auth/me`, `POST /auth/logout` |
 | Inventory | `GET/POST /api/inventory`, `GET/PUT/DELETE /api/inventory/:id` |
 | Sales | `GET/POST /api/sales`, `PUT /api/sales/:id` |
 | Analytics | `GET /api/analytics/dashboard?mode&date` |

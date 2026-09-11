@@ -81,6 +81,10 @@ function Pill({ status }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const Login = () => {
   const [faqOpen, setFaqOpen] = useState(null);
+  const loginError = new URLSearchParams(window.location.search).get('error');
+  const loginErrorMessage = loginError === 'server-waking'
+    ? 'The server is waking up. Please wait a moment, then try Discord again.'
+    : loginError ? 'Discord sign-in could not finish. Please try again.' : null;
 
   const handleLogin = () => {
     const apiBase = import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || '';
@@ -503,9 +507,9 @@ const Login = () => {
         </div>
       </footer>
 
-      {window.location.search.includes('error') && (
+      {loginErrorMessage && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-red-950/90 border border-red-900/60 text-red-300 px-5 py-3 rounded-xl text-sm shadow-xl backdrop-blur-sm whitespace-nowrap">
-          Login failed — please try again.
+          {loginErrorMessage}
         </div>
       )}
     </div>

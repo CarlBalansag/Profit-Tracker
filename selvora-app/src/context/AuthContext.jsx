@@ -74,9 +74,10 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await apiFetch('/auth/logout');
+      const response = await apiFetch('/auth/logout', { method: 'POST' });
+      if (!response.ok) throw new Error(`Logout failed: ${response.status}`);
     } catch {
-      // ignore network errors — we clear local state regardless
+      // Clear local state even when a sleeping server cannot confirm logout.
     }
     setUser(null);
   };

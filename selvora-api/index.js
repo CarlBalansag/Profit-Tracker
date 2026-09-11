@@ -5,6 +5,7 @@ const cors = require('cors');
 const compression = require('compression');
 const prisma = require('./prisma');
 const { Pool } = require('pg');
+const { randomUUID } = require('crypto');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const passport = require('passport');
@@ -217,20 +218,23 @@ app.get('/auth/discord/callback', (req, res, next) => {
   // routes through self.error → next(err)) are caught here instead of
   // falling through to the global error handler and producing a 500.
   passport.authenticate('discord', (err, user, info) => {
+    const attemptId = randomUUID();
+    const redirectWithError = (reason) => res.redirect(`${FRONTEND_URL}/login?error=${reason}`);
     if (err) {
-      console.error('[auth/callback] OAuth/DB error:', err.message || err);
-      return res.redirect(`${FRONTEND_URL}/login?error=true`);
+      const reason = NEON_RETRYABLE.has(err.code) ? 'server-waking' : 'login-failed';
+      console.error(`[auth/callback][${attemptId}] OAuth/DB error:`, err.message || err);
+      return redirectWithError(reason);
     }
     if (!user) {
-      console.warn('[auth/callback] authentication failed (no user):', info);
-      return res.redirect(`${FRONTEND_URL}/login?error=true`);
+      console.warn(`[auth/callback][${attemptId}] authentication failed (no user):`, info);
+      return redirectWithError('login-failed');
     }
 
     // Establish the login session (writes passport.user to req.session).
     req.logIn(user, (loginErr) => {
       if (loginErr) {
-        console.error('[auth/callback] req.logIn() error:', loginErr);
-        return res.redirect(`${FRONTEND_URL}/login?error=true`);
+        console.error(`[auth/callback][${attemptId}] req.logIn() error:`, loginErr);
+        return redirectWithError('login-failed');
       }
 
       // Explicitly wait for the session to be persisted to PostgreSQL before
@@ -238,8 +242,8 @@ app.get('/auth/discord/callback', (req, res, next) => {
       // browser hits /auth/me before the INSERT into user_sessions completes.
       req.session.save((saveErr) => {
         if (saveErr) {
-          console.error('[auth/callback] session.save() failed:', saveErr);
-          return res.redirect(`${FRONTEND_URL}/login?error=true`);
+          console.error(`[auth/callback][${attemptId}] session.save() failed:`, saveErr);
+          return redirectWithError('login-failed');
         }
         console.log('[auth/callback] session saved, sid:', req.sessionID, 'user:', req.user?.id);
         // Use HTML redirect (not res.redirect) so Render/Vercel proxy forwards
@@ -277,11 +281,23 @@ app.patch('/auth/me', async (req, res) => {
   res.json(updated);
 });
 
-// Logout Route
-app.get('/auth/logout', (req, res, next) => {
+// Logout Route — remove Passport state, the persisted server session, and the browser cookie.
+app.post('/auth/logout', (req, res, next) => {
+  const userId = req.user?.id;
   req.logout((err) => {
     if (err) { return next(err); }
-    res.json({ success: true });
+    const cookieOptions = {
+      path: '/',
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+    };
+    res.clearCookie('connect.sid', cookieOptions);
+    req.session.destroy((destroyErr) => {
+      if (destroyErr) return next(destroyErr);
+      if (userId) clearUserCache(userId);
+      res.json({ success: true });
+    });
   });
 });
 
