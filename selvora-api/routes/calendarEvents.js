@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
 const { randomUUID } = require('crypto');
+const { getCalendarFeedUrl, publishCalendarFeed } = require('../services/calendarFeed');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -202,8 +203,8 @@ router.post('/token', isAuthenticated, async (req, res, next) => {
       });
     }
 
-    const baseUrl = process.env.BACKEND_URL || 'http://localhost:3000';
-    const feedUrl = `${baseUrl}/api/calendar-events/feed.ics?token=${token}`;
+    const feedUrl = await publishCalendarFeed(req.user.id, token);
+    if (!feedUrl) return res.status(503).json({ error: 'Calendar feed is temporarily unavailable' });
 
     res.json({ token, feedUrl });
   } catch (err) {
@@ -211,19 +212,16 @@ router.post('/token', isAuthenticated, async (req, res, next) => {
   }
 });
 
-// GET /api/calendar-events/feed.ics?token=XXX
-// Live .ics feed — NO session auth, token-based only.
-// Google/Apple Calendar subscribes to this URL and polls periodically.
+// Legacy live-feed URL. Existing subscribers receive a stable redirect to the CDN-hosted feed.
 router.get('/feed.ics', async (req, res, next) => {
   try {
     const { token } = req.query;
     if (!token) return res.status(401).send('Missing token');
+    const feedUrl = getCalendarFeedUrl(token);
+    if (!feedUrl) return res.status(503).send('Calendar feed is temporarily unavailable');
+    return res.redirect(308, feedUrl);
 
-    const user = await prisma.user.findUnique({
-      where: { calendar_token: token },
-      select: { id: true },
-    });
-    if (!user) return res.status(401).send('Invalid token');
+    /* Legacy dynamic feed implementation retained below for source-history reference.
 
     // Fetch all data (no date limit — full history for the feed)
     const [manualEvents, inventories, sales, creditPurchases] = await Promise.all([
@@ -336,7 +334,7 @@ router.get('/feed.ics', async (req, res, next) => {
     // No Content-Disposition — subscribe feeds must not force a download
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-store');
-    res.send(body);
+    res.send(body); */
   } catch (err) {
     next(err);
   }
@@ -396,6 +394,7 @@ router.post('/', isAuthenticated, async (req, res, next) => {
       },
     });
 
+    await publishCalendarFeed(req.user.id);
     res.status(201).json(event);
   } catch (err) {
     next(err);
@@ -424,6 +423,7 @@ router.put('/:id', isAuthenticated, async (req, res, next) => {
       },
     });
 
+    await publishCalendarFeed(req.user.id);
     res.json(updated);
   } catch (err) {
     next(err);
@@ -441,6 +441,7 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
     }
 
     await prisma.calendarEvent.delete({ where: { id: req.params.id } });
+    await publishCalendarFeed(req.user.id);
     res.json({ success: true });
   } catch (err) {
     next(err);

@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { createSale, updateSale } = require('../validation/schemas');
+const { publishCalendarFeed } = require('../services/calendarFeed');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -86,6 +87,7 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
       data: { qty_on_hand: inv.qty_on_hand - saleQty }
     });
 
+    await publishCalendarFeed(req.user.id);
     res.json(sale);
   } catch (err) {
     next(err);
@@ -140,6 +142,7 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
       });
     }
 
+    await publishCalendarFeed(req.user.id);
     res.json(updated);
   } catch (err) {
     next(err);

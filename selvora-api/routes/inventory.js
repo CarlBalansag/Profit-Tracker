@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { createInventory, updateInventory } = require('../validation/schemas');
+const { publishCalendarFeed } = require('../services/calendarFeed');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -142,6 +143,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
         });
     }
 
+    await publishCalendarFeed(req.user.id);
     res.json(inventory);
   } catch (err) {
     next(err);
@@ -262,6 +264,7 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
       data,
       include: { vendor: true, payment_method: true }
     });
+    await publishCalendarFeed(req.user.id);
     res.json(updated);
   } catch (err) {
     next(err);
@@ -282,6 +285,7 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
     // Now delete the inventory record itself
     await prisma.inventory.delete({ where: { id: req.params.id } });
 
+    await publishCalendarFeed(req.user.id);
     res.json({ success: true });
   } catch (err) {
     console.error('DELETE inventory error:', err);

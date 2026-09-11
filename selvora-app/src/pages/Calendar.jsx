@@ -129,9 +129,9 @@ function SubscribePanel({ onClose }) {
           <Link2 size={16} className="text-[var(--accent)]" />
           Subscribe to Calendar
         </h2>
-        <p className="text-sm text-gray-400">
-          Add your Selvora calendar to Google Calendar, Apple Calendar, or Outlook.
-          It updates automatically whenever you record sales, purchases, or payouts.
+          <p className="text-sm text-gray-400">
+            Add your Selvora calendar to Google Calendar, Apple Calendar, or Outlook.
+            It updates automatically whenever you record sales, purchases, payouts, or calendar events.
         </p>
 
         {isLoading ? (
@@ -157,7 +157,7 @@ function SubscribePanel({ onClose }) {
         </div>
 
         <p className="text-[10px] text-gray-600">
-          Keep this link private — anyone with it can view your calendar events.
+          Keep this link private — anyone with it can view your calendar events. If you subscribed before this update, replace the old link with this one.
         </p>
 
         <div className="flex justify-end">

@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { paymentMethod } = require('../validation/schemas');
+const { publishCalendarFeed } = require('../services/calendarFeed');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -46,6 +47,7 @@ router.post('/', isAuthenticated, validateBody(paymentMethod), async (req, res, 
         min_payment_pct: min_payment_pct ? parseFloat(min_payment_pct) : null,
       }
     });
+    await publishCalendarFeed(req.user.id);
     res.json(parseRates(method));
   } catch (err) {
     next(err);
@@ -80,6 +82,7 @@ router.put('/:id', isAuthenticated, validateBody(paymentMethod), async (req, res
         min_payment_pct: min_payment_pct !== undefined ? (min_payment_pct ? parseFloat(min_payment_pct) : null) : existing.min_payment_pct,
       }
     });
+    await publishCalendarFeed(req.user.id);
     res.json(parseRates(updated));
   } catch (err) {
     next(err);
@@ -97,6 +100,7 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
     }
 
     await prisma.paymentMethod.delete({ where: { id } });
+    await publishCalendarFeed(req.user.id);
     res.json({ success: true });
   } catch (err) {
     next(err);

@@ -1,33 +1,44 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../hooks/useApi';
+import ServerWakeUpScreen from '../components/Auth/ServerWakeUpScreen';
 
 const AuthContext = createContext();
 
 export const useAuth = () => useContext(AuthContext);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const WARMUP_RETRY_DELAYS = [0, 2_000, 4_000, 6_000, 8_000, 10_000, 10_000, 10_000, 10_000, 10_000];
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [serverError, setServerError] = useState(false);
+  const [attempt, setAttempt] = useState(1);
+  const [startedAt, setStartedAt] = useState(() => Date.now());
+  const requestSequence = useRef(0);
 
   const fetchUser = async () => {
+    const requestId = ++requestSequence.current;
+    const isCurrentRequest = () => requestId === requestSequence.current;
     setLoading(true);
     setServerError(false);
-    // Retry up to 3 times on 5xx (Neon cold-start can cause transient 500s)
-    const MAX_RETRIES = 3;
-    const DELAYS = [1500, 3000, 5000];
+    setAttempt(1);
+    setStartedAt(Date.now());
     let response;
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    for (let retryIndex = 0; retryIndex < WARMUP_RETRY_DELAYS.length; retryIndex++) {
+      if (retryIndex > 0) await sleep(WARMUP_RETRY_DELAYS[retryIndex]);
+      if (!isCurrentRequest()) return;
+
+      setAttempt(retryIndex + 1);
       try {
         response = await apiFetch('/auth/me');
         if (response.status < 500) break; // success or 401 — stop retrying
       } catch (error) {
-        console.error('Failed to fetch user (attempt', attempt + 1, '):', error);
+        console.error('Failed to fetch user (attempt', retryIndex + 1, '):', error);
       }
-      if (attempt < MAX_RETRIES - 1) await sleep(DELAYS[attempt]);
     }
+    if (!isCurrentRequest()) return;
+
     try {
       if (response?.ok) {
         const userData = await response.json();
@@ -48,31 +59,17 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     fetchUser();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      requestSequence.current += 1;
+    };
   }, []);
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-gray-800 border-t-indigo-500 rounded-full animate-spin"></div>
-      </div>
-    );
+    return <ServerWakeUpScreen key={startedAt} startedAt={startedAt} attempt={attempt} />;
   }
 
   if (serverError) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <p className="text-gray-400 text-sm">Server is warming up. Please wait a moment.</p>
-          <button
-            onClick={fetchUser}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
+    return <ServerWakeUpScreen key={startedAt} startedAt={startedAt} attempt={attempt} failed onRetry={fetchUser} />;
   }
 
   const logout = async () => {
