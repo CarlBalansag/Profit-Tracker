@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { account, updateAccount } = require('../validation/schemas');
+const { requireOwned } = require('../services/ownership');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -17,6 +18,7 @@ router.post('/', isAuthenticated, validateBody(account), async (req, res, next) 
     if (!platform_id || !name) {
       return res.status(400).json({ error: 'Platform ID and Account Name are required' });
     }
+    await requireOwned('platform', platform_id, req.user.id, 'Platform');
 
     const account = await prisma.account.create({
       data: {
@@ -33,7 +35,7 @@ router.post('/', isAuthenticated, validateBody(account), async (req, res, next) 
     res.status(201).json(account);
   } catch (error) {
     console.error('Error creating account:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
+    next(error);
   }
 });
 

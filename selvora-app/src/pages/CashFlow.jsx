@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useDashboard, useInvalidate } from '../hooks/useApi';
+import { useDashboard } from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
 import { DollarSign, ArrowRight, Bell, ChevronRight, ChevronDown, RotateCcw } from 'lucide-react';
 
@@ -15,10 +15,9 @@ function CashFlow() {
   const [expandedBuyer, setExpandedBuyer]     = useState(null);
 
   const { data, isLoading: loading, refetch } = useDashboard('All', 'All Time');
-  const invalidate = useInvalidate();
 
   const s      = data?.stats ?? {};
-  const txns   = data?.recentTransactions ?? [];
+  const txns   = data?.cashFlowTransactions ?? data?.recentTransactions ?? [];
   const pipeline = data?.pipelineCounts ?? {};
 
   // Money still in transit (unsold inventory value)

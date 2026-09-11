@@ -56,7 +56,7 @@ const QUARTERS = [
 
 const TaxExempt = () => {
   const [items, setItems] = useState([]);
-  const [totalSalesCount, setTotalSalesCount] = useState(0);
+  const [sales, setSales] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('purchases');
@@ -76,7 +76,7 @@ const TaxExempt = () => {
         }
         if (salesRes.ok) {
           const salesData = await salesRes.json();
-          setTotalSalesCount(salesData.length);
+          setSales(salesData);
         }
       } catch (err) {
         console.error(err);
@@ -92,7 +92,7 @@ const TaxExempt = () => {
   // Derive available years from purchase dates + sale dates
   const allYears = [...new Set([
     ...items.map(i => new Date(i.purchase_date).getFullYear()),
-    ...items.flatMap(i => (i.sales || []).map(s => new Date(s.sale_date).getFullYear())),
+    ...sales.map(s => new Date(s.sale_date).getFullYear()),
   ])].sort((a, b) => b - a);
 
   // Helper: does a date pass the year/quarter filter?
@@ -113,11 +113,11 @@ const TaxExempt = () => {
     )
   );
 
-  // Flatten all sales from tax-exempt inventory items
-  const allSales = items.flatMap(i =>
-    (i.sales || []).map(s => ({ ...s, _inv: i }))
-  );
-  const filteredSales = allSales.filter(s =>
+  // Sales are relevant when either the purchase or the customer sale is exempt.
+  const taxRelatedSales = sales
+    .filter(s => s.inventory?.tax_exempt || !s.taxable || s.customer_tax_exempt)
+    .map(s => ({ ...s, _inv: s.inventory }));
+  const filteredSales = taxRelatedSales.filter(s =>
     inPeriod(s.sale_date) && (
       s._inv.product_name.toLowerCase().includes(q) ||
       (s._inv.category || '').toLowerCase().includes(q) ||
@@ -127,15 +127,13 @@ const TaxExempt = () => {
   );
 
   // Stats use period-filtered data too
-  const periodSales = allSales.filter(s => inPeriod(s.sale_date));
+  const periodSales = taxRelatedSales.filter(s => inPeriod(s.sale_date));
+  const periodAllSales = sales.filter(s => inPeriod(s.sale_date));
   const periodItems = items.filter(i => inPeriod(i.purchase_date));
-
-  const totalTaxRecorded = filteredPurchases.reduce((sum, i) => sum + (i.sales_tax || 0), 0);
-  const totalSaleRevenue = filteredSales.reduce((sum, s) => sum + (s.unit_price * s.quantity), 0);
 
   // Stats scoped to the selected period
   const nonTaxableSales = periodSales.filter(s => !s.taxable);
-  const exemptSalesPct = totalSalesCount > 0 ? ((nonTaxableSales.length / totalSalesCount) * 100) : 0;
+  const exemptSalesPct = periodAllSales.length > 0 ? ((nonTaxableSales.length / periodAllSales.length) * 100) : 0;
   const useTaxDue = periodItems.reduce((sum, i) => sum + (i.sales_tax || 0), 0);
   const exemptCOGS = periodSales.reduce((sum, s) => sum + (s._inv.unit_purchase_cost * s.quantity), 0);
   const exemptInventorySpend = periodItems.reduce((sum, i) => sum + (i.unit_purchase_cost * i.qty_purchased) + (i.sales_tax || 0) + (i.shipping_cost_inbound || 0), 0);
@@ -260,7 +258,7 @@ const TaxExempt = () => {
       <div className="flex items-end justify-between gap-4">
         {/* Tabs */}
         <div className="flex gap-1 p-1 rounded-xl bg-[#111318] border border-white/5 w-max">
-          {tabs.map(({ id, label, icon: Icon, count }) => {
+          {tabs.map(({ id, label, icon, count }) => {
             const active = tab === id;
             return (
               <button
@@ -272,7 +270,7 @@ const TaxExempt = () => {
                     : 'text-gray-400 hover:text-gray-200 border border-transparent hover:bg-white/5'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${active ? 'text-blue-400' : ''}`} />
+                {React.createElement(icon, { className: `w-4 h-4 ${active ? 'text-blue-400' : ''}` })}
                 {label}
                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                   active ? 'bg-blue-500/20 text-blue-300' : 'bg-white/5 text-gray-500'

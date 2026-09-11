@@ -473,17 +473,18 @@ const Transactions = () => {
   };
 
   transactions.forEach(inv => {
-    const cost = (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0);
+    const cost = (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0) - (inv.gift_card_amount || 0);
     const unitTax = inv.qty_purchased > 0 ? inv.sales_tax / inv.qty_purchased : 0;
     const unitInboundShipping = inv.qty_purchased > 0 ? inv.shipping_cost_inbound / inv.qty_purchased : 0;
     const unitFees = inv.qty_purchased > 0 ? (inv.fees || 0) / inv.qty_purchased : 0;
+    const unitGiftCard = inv.qty_purchased > 0 ? (inv.gift_card_amount || 0) / inv.qty_purchased : 0;
 
     // Always show a purchase row if there is unsold stock on hand, OR if the
     // item has no sales at all (qty_on_hand may be 0 due to a data issue — we
     // never want to silently hide a transaction the user recorded).
     if (inv.qty_on_hand > 0 || !inv.sales?.length) {
       const displayQty = inv.qty_on_hand > 0 ? inv.qty_on_hand : inv.qty_purchased;
-      const unsoldCost = (inv.unit_purchase_cost + unitTax + unitInboundShipping + unitFees) * displayQty;
+      const unsoldCost = (inv.unit_purchase_cost + unitTax + unitInboundShipping + unitFees - unitGiftCard) * displayQty;
       const effectiveRate = getEffectiveCashbackRate(inv);
       rows.push({
         id: inv.id + '_unsold',
@@ -521,10 +522,11 @@ const Transactions = () => {
         const allocatedTax = unitTax * sale.quantity;
         const allocatedShipping = unitInboundShipping * sale.quantity;
         const allocatedFees = unitFees * sale.quantity;
-        const totalUnitCost = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees;
+        const allocatedGiftCard = unitGiftCard * sale.quantity;
+        const totalUnitCost = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees - allocatedGiftCard;
         const effectiveRate = getEffectiveCashbackRate(inv);
         const saleCashback = totalUnitCost * (effectiveRate / 100);
-        const profit = (sale.unit_price * sale.quantity) - sale.commission_fee - totalUnitCost + saleCashback;
+        const profit = (sale.unit_price * sale.quantity) - sale.commission_fee - sale.sale_shipping - totalUnitCost + saleCashback;
         rows.push({
           id: sale.id,
           rawId: inv.id,

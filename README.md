@@ -177,6 +177,8 @@ SENTRY_DSN=            # optional
 SENTRY_TRACES_SAMPLE_RATE=  # optional, e.g. 0.1
 ```
 
+Calendar subscriptions use the configured Cloudinary account to publish a private, stable ICS feed. No `BACKEND_URL` variable is required. Keep the generated subscription link private because anyone with it can read that calendar.
+
 **Frontend (`selvora-app/.env`)**
 ```
 VITE_API_URL=          # Leave empty if using Vercel proxy rewrites

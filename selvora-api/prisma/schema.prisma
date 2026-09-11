@@ -161,6 +161,7 @@ model Expense {
 
   @@index([user_id])
   @@index([user_id, date])
+  @@unique([recurring_expense_id, date])
 }
 
 model RecurringExpense {

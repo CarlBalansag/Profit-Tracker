@@ -4,6 +4,8 @@ import {
   Check
 } from 'lucide-react';
 import { useInvalidate, apiFetch} from '../../hooks/useApi';
+import { requireSuccessfulResponse } from '../../hooks/apiResponse';
+import { toast } from 'sonner';
 
 // ─── Quick Add Store Directory ────────────────────────────────────────────────
 const QUICK_ADD_STORES = [
@@ -333,14 +335,17 @@ export function Marketplaces() {
   const handleDelete = async (id) => {
     if (!window.confirm('Remove this marketplace?')) return;
     try {
-      await apiFetch(`/api/platforms/${id}`, {
+      const res = await apiFetch(`/api/platforms/${id}`, {
         method: 'DELETE',
         credentials: 'include'
       });
+      await requireSuccessfulResponse(res, 'Could not remove marketplace');
       setPlatforms(v => v.filter(x => x.id !== id));
       invalidate.platforms();
+      toast.success('Marketplace removed.');
     } catch (err) {
       console.error(err);
+      toast.error(`Could not remove marketplace: ${err.message}`);
     }
   };
 

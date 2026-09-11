@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
+import { requireSuccessfulResponse } from '../hooks/apiResponse';
+import { toast } from 'sonner';
 import {
   Receipt, Download, Plus, DollarSign, TrendingUp,
   Search, X, Trash2, Pencil, RefreshCw, Pause, Play,
@@ -321,23 +323,41 @@ const Expenses = () => {
   };
 
   const handleDeleteExp = async (id) => {
-    await apiFetch(`/api/expenses/${id}`, { method: 'DELETE', credentials: 'include' });
-    setExpenses(p => p.filter(e => e.id !== id));
-    setDeleteExpId(null);
+    try {
+      const res = await apiFetch(`/api/expenses/${id}`, { method: 'DELETE', credentials: 'include' });
+      await requireSuccessfulResponse(res, 'Could not delete expense');
+      setExpenses(p => p.filter(e => e.id !== id));
+      setDeleteExpId(null);
+      toast.success('Expense deleted.');
+    } catch (err) {
+      toast.error(`Could not delete expense: ${err.message}`);
+    }
   };
 
   const handleToggleActive = async (rec) => {
-    await apiFetch(`/api/recurring-expenses/${rec.id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-      body: JSON.stringify({ active: !rec.active }),
-    });
-    setRecurring(p => p.map(r => r.id === rec.id ? { ...r, active: !r.active } : r));
+    try {
+      const res = await apiFetch(`/api/recurring-expenses/${rec.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ active: !rec.active }),
+      });
+      await requireSuccessfulResponse(res, `Could not ${rec.active ? 'pause' : 'resume'} recurring expense`);
+      setRecurring(p => p.map(r => r.id === rec.id ? { ...r, active: !r.active } : r));
+      toast.success(rec.active ? 'Recurring expense paused.' : 'Recurring expense resumed.');
+    } catch (err) {
+      toast.error(`Could not update recurring expense: ${err.message}`);
+    }
   };
 
   const handleDeleteRec = async (id) => {
-    await apiFetch(`/api/recurring-expenses/${id}`, { method: 'DELETE', credentials: 'include' });
-    setRecurring(p => p.filter(r => r.id !== id));
-    setDeleteRecId(null);
+    try {
+      const res = await apiFetch(`/api/recurring-expenses/${id}`, { method: 'DELETE', credentials: 'include' });
+      await requireSuccessfulResponse(res, 'Could not delete recurring expense');
+      setRecurring(p => p.filter(r => r.id !== id));
+      setDeleteRecId(null);
+      toast.success('Recurring expense deleted.');
+    } catch (err) {
+      toast.error(`Could not delete recurring expense: ${err.message}`);
+    }
   };
 
   // ── Stats ─────────────────────────────────────────────────────────────────

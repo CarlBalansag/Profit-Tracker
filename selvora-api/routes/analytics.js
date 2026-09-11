@@ -95,7 +95,10 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
 
     // Precompute per-sale cost allocation once — avoids repeating the same
     // arithmetic 4× (stats, cardMap, trend, recentTransactions).
-    const saleAlloc = sales.map(sale => {
+    // Cancelled, returned, and disputed records remain visible in the pipeline,
+    // but are not realized revenue, profit, or units sold.
+    const realizedSales = sales.filter((sale) => !['CANCELLED', 'RETURNED', 'DISPUTED'].includes((sale.status || '').toUpperCase()));
+    const saleAlloc = realizedSales.map(sale => {
       const inv = sale.inventory;
       const perUnit = inv.qty_purchased > 0 ? 1 / inv.qty_purchased : 0;
       const allocatedTax      = inv.sales_tax              * perUnit * sale.quantity;
@@ -105,7 +108,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       const saleCost          = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees - allocatedGiftCard;
       const rate              = getEffectiveCashbackRate(inv);
       const saleCashback      = saleCost * (rate / 100);
-      const saleRevenue       = (sale.unit_price * sale.quantity) - sale.commission_fee;
+      const saleRevenue       = (sale.unit_price * sale.quantity) - sale.commission_fee - sale.sale_shipping;
       const grossProfit       = saleRevenue - saleCost;
       return { sale, inv, allocatedTax, allocatedShipping, allocatedFees, allocatedGiftCard, saleCost, saleCashback, saleRevenue, grossProfit, rate };
     });
@@ -183,7 +186,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       : dateParam === '30 Days' ? 30
       : dateParam === 'YTD' ? Math.ceil((now - new Date(Date.UTC(now.getUTCFullYear(), 0, 1))) / (24 * 60 * 60 * 1000)) || 1
       : null; // All Time: null means no velocity
-    const salesVelocity = windowDays ? sales.length / windowDays : 0;
+    const salesVelocity = windowDays ? saleAlloc.length / windowDays : 0;
 
     // Top Cards (Payment Methods)
     // In All mode: rank all payment cards by total purchase spend.
@@ -328,6 +331,20 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       ? { windowStart: dateFrom.toISOString().slice(0, 10), windowEnd: todayUTC }
       : null;
 
+    const cashFlowTransactions = saleAlloc.map(({ sale: s, inv, saleCost, saleRevenue, saleCashback }) => ({
+      id: s.id,
+      product: inv.product_name,
+      platform: s.platform?.name || inv.vendor?.name || 'Direct',
+      buyer: s.buyer?.name || 'Unknown',
+      cost: saleCost,
+      revenue: saleRevenue,
+      commission: s.commission_fee,
+      cashback: saleCashback,
+      profit: saleRevenue - saleCost + saleCashback,
+      status: s.status,
+      date: s.sale_date,
+    }));
+
     res.json({
       stats: {
         totalCost,
@@ -354,19 +371,8 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       pipelineCounts,
       trend,
       trendMeta,
-      recentTransactions: saleAlloc.slice(0, 10).map(({ sale: s, inv, saleCost, saleRevenue, saleCashback }) => ({
-        id: s.id,
-        product: inv.product_name,
-        platform: s.platform?.name || inv.vendor?.name || 'Direct',
-        buyer: s.buyer?.name || 'Unknown',
-        cost: saleCost,
-        revenue: saleRevenue,
-        commission: s.commission_fee,
-        cashback: saleCashback,
-        profit: saleRevenue - saleCost + saleCashback,
-        status: s.status,
-        date: s.sale_date,
-      }))
+      recentTransactions: cashFlowTransactions.slice(0, 10),
+      cashFlowTransactions,
     });
 
   } catch (err) {

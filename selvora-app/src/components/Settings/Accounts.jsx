@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../hooks/useApi';
+import { requireSuccessfulResponse } from '../../hooks/apiResponse';
+import { toast } from 'sonner';
 import { 
   User, Database, Plus, Search, X, Edit2, Trash2, 
   ArrowLeft, Check, Store
@@ -278,18 +280,21 @@ export function Accounts() {
   const handleAccountDeleted = async (accountId, platformId) => {
     if (!window.confirm("Remove this account permanently?")) return;
     try {
-      await apiFetch(`/api/accounts/${accountId}`, {
+      const res = await apiFetch(`/api/accounts/${accountId}`, {
         method: 'DELETE',
         credentials: 'include'
       });
+      await requireSuccessfulResponse(res, 'Could not remove account');
       setPlatforms(prev => prev.map(p => {
         if (p.id === platformId) {
           return { ...p, accounts: p.accounts.filter(a => a.id !== accountId) };
         }
         return p;
       }));
+      toast.success('Account removed.');
     } catch (err) {
       console.error(err);
+      toast.error(`Could not remove account: ${err.message}`);
     }
   }
 

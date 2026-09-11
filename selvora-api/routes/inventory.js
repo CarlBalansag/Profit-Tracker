@@ -4,6 +4,7 @@ const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { createInventory, updateInventory } = require('../validation/schemas');
 const { publishCalendarFeed } = require('../services/calendarFeed');
+const { requireOwned } = require('../services/ownership');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -24,6 +25,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       where: { user_id: req.user.id },
       select: {
         id: true, product_name: true, category: true, status: true,
+        vendor_id: true, payment_method_id: true,
         purchase_date: true, received_date: true,
         unit_purchase_cost: true, qty_purchased: true, qty_on_hand: true,
         sales_tax: true, shipping_cost_inbound: true, fees: true,
@@ -34,7 +36,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
         payment_method: { select: { id: true, name: true, type: true, default_cashback_rate: true, preset_card_id: true, category_rates: true } },
         sales: {
           select: {
-            id: true, quantity: true, unit_price: true, commission_fee: true,
+            id: true, platform_id: true, quantity: true, unit_price: true, commission_fee: true,
             sale_shipping: true, sale_date: true, payout_date: true, status: true,
             taxable: true, sale_tax_collected: true, customer_tax_exempt: true, exemption_type: true,
             platform: { select: { id: true, name: true, type: true, tax_exempt_place: true } },
@@ -87,13 +89,21 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
 
     console.log('POST inventory body:', JSON.stringify(req.body));
     const qty = parseInt(qty_purchased, 10) || 1;
+    await requireOwned('platform', vendor_id, req.user.id, 'Vendor');
+    await requireOwned('paymentMethod', payment_method_id, req.user.id, 'Payment method');
 
-    // Optional: if a sale is provided inline, we can create the sale here simultaneously if quantity matches. 
-    // Wait, the specification says Phase 2 is Inventory & Sales API. Let's just create the inventory here.
-    
-    // Create Inventory
-    const inventory = await prisma.inventory.create({
-      data: {
+    const saleQty = sale_price ? (parseInt(qty_sold, 10) || qty) : 0;
+    if (saleQty > qty) {
+      return res.status(400).json({ error: 'Quantity sold cannot exceed quantity purchased' });
+    }
+    const platform_id = sale_price
+      ? (sale_tab === 'marketplace' ? (marketplace_platform_id || null) : (cashout_platform_id || null))
+      : null;
+    await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
+
+    const inventory = await prisma.$transaction(async (tx) => {
+      const created = await tx.inventory.create({
+        data: {
         user_id: req.user.id,
         product_name,
         vendor_id: vendor_id || null,
@@ -110,19 +120,15 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
         tracking_number: tracking_number || null,
         cashback_earned: 0, // Calculated at query time from payment method rates
         category: category || null,
-        tax_exempt: tax_exempt === true || tax_exempt === 'true'
-      }
-    });
+        tax_exempt: tax_exempt === true || tax_exempt === 'true',
+        status: status || 'PURCHASED',
+        }
+      });
 
-    // If there was an immediate sale attached from the AddTransaction form
-    if (sale_price) {
-        const saleQty = parseInt(qty_sold, 10) || qty;
-        const platform_id = sale_tab === 'marketplace'
-            ? (marketplace_platform_id || null)
-            : (cashout_platform_id || null);
-        await prisma.sales.create({
+      if (sale_price) {
+        await tx.sales.create({
             data: {
-                inventory_id: inventory.id,
+                inventory_id: created.id,
                 platform_id,
                 quantity: saleQty,
                 unit_price: parseFloat(sale_price),
@@ -130,18 +136,20 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
                 sale_shipping: parseFloat(sale_shipping) || 0,
                 sale_date: parseLocalDate(sale_date || purchase_date) || new Date(),
                 payout_date: payout_date ? parseLocalDate(payout_date) : null,
-                status: status || 'SOLD',
+                status: 'SOLD',
                 taxable: taxable !== undefined ? (taxable === true || taxable === 'true') : true,
                 sale_tax_collected: parseFloat(sale_tax_collected) || 0,
                 customer_tax_exempt: customer_tax_exempt === true || customer_tax_exempt === 'true',
                 exemption_type: exemption_type || null,
             }
         });
-        await prisma.inventory.update({
-            where: { id: inventory.id },
-            data: { qty_on_hand: Math.max(0, qty - saleQty) }
+        await tx.inventory.update({
+            where: { id: created.id },
+            data: { qty_on_hand: qty - saleQty }
         });
-    }
+      }
+      return created;
+    });
 
     await publishCalendarFeed(req.user.id);
     res.json(inventory);
@@ -212,7 +220,10 @@ router.get('/:id', isAuthenticated, async (req, res, next) => {
 // PUT - update an inventory record
 router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, res, next) => {
   try {
-    const existing = await prisma.inventory.findUnique({ where: { id: req.params.id } });
+    const existing = await prisma.inventory.findUnique({
+      where: { id: req.params.id },
+      include: { sales: { select: { quantity: true } } },
+    });
     if (!existing || existing.user_id !== req.user.id) return res.status(404).json({ error: 'Not found' });
 
     const {
@@ -236,10 +247,22 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
     } = req.body;
 
     const data = {};
+    await requireOwned('platform', vendor_id, req.user.id, 'Vendor');
+    await requireOwned('paymentMethod', payment_method_id, req.user.id, 'Payment method');
+    const soldQty = existing.sales.reduce((sum, sale) => sum + sale.quantity, 0);
+    if (qty_purchased !== undefined) {
+      const requestedQty = parseInt(qty_purchased, 10);
+      if (requestedQty < soldQty) {
+        return res.status(400).json({ error: 'Quantity purchased cannot be lower than units already sold' });
+      }
+      data.qty_purchased = requestedQty;
+      data.qty_on_hand = requestedQty - soldQty;
+    } else if (qty_on_hand !== undefined && parseInt(qty_on_hand, 10) + soldQty !== existing.qty_purchased) {
+      return res.status(400).json({ error: 'On-hand quantity must equal purchased quantity minus sold quantity' });
+    }
     if (product_name !== undefined)          data.product_name = product_name;
     if (unit_purchase_cost !== undefined)    data.unit_purchase_cost = parseFloat(unit_purchase_cost);
-    if (qty_purchased !== undefined)         data.qty_purchased = parseInt(qty_purchased) ?? existing.qty_purchased;
-    if (qty_on_hand !== undefined)           data.qty_on_hand = parseInt(qty_on_hand) ?? existing.qty_on_hand;
+    if (qty_on_hand !== undefined && qty_purchased === undefined) data.qty_on_hand = parseInt(qty_on_hand);
     if (status !== undefined) {
       data.status = status;
       if (existing.status?.toUpperCase().includes('PRE') && status === 'On Hand') {

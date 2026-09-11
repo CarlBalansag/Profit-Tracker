@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePaymentMethods, usePlatforms, useInvalidate, apiFetch, useProductNote, useProductNoteMutations, useProductNames, useRecentTransaction } from '../hooks/useApi';
+import { MAX_RECEIPT_BYTES, RECEIPT_ACCEPT, saveInventoryWithReceipt, validateReceiptFile } from '../hooks/receiptUpload';
 
 // ── Stable module-level components (MUST be outside the component to avoid focus loss) ──
 const Field = ({ label, children }) => (
@@ -58,7 +59,6 @@ const AddTransaction = () => {
     sale_tab: 'cashout',
     cashout_platform_id: '',
     marketplace_platform_id: '',
-    commission_fee: '',
     sale_date: '',
     qty_sold: 1,
     note: '',
@@ -86,6 +86,7 @@ const AddTransaction = () => {
   const { data: productNames = [] } = useProductNames();
   const invalidate = useInvalidate();
   const [attachedFiles, setAttachedFiles] = useState([]);
+  const [pendingReceiptInventoryId, setPendingReceiptInventoryId] = useState(null);
 
   // Autocomplete state for product name field
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -171,8 +172,16 @@ const AddTransaction = () => {
   };
 
   const handleFileChange = (e) => {
-    const files = Array.from(e.target.files);
-    setAttachedFiles(prev => [...prev, ...files]);
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    if (files.length > 1) toast.info('One receipt can be attached to each transaction. The first file was selected.');
+    try {
+      validateReceiptFile(files[0]);
+      setAttachedFiles([files[0]]);
+    } catch (err) {
+      toast.error(err.message);
+    }
   };
 
   const removeFile = (idx) => {
@@ -181,25 +190,32 @@ const AddTransaction = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const submitPromise = apiFetch(`/api/inventory`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(formData)
-    }).then(async (res) => {
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `HTTP ${res.status}`);
+    const submitPromise = (async () => {
+      const receipt = attachedFiles[0] || null;
+      try {
+        return await saveInventoryWithReceipt({
+          apiFetch,
+          formData,
+          existingInventoryId: pendingReceiptInventoryId,
+          receipt,
+        });
+      } catch (err) {
+        if (err.transactionSaved) {
+          setPendingReceiptInventoryId(err.inventoryId);
+          throw new Error(`Transaction was saved, but the receipt was not attached. ${err.message}`);
+        }
+        throw err;
       }
-      return res;
-    });
+    })();
 
     toast.promise(submitPromise, {
-      loading: 'Saving transaction...',
-      success: () => {
+      loading: pendingReceiptInventoryId ? 'Attaching receipt...' : 'Saving transaction...',
+      success: ({ attachedReceipt }) => {
         localStorage.removeItem(DRAFT_KEY);
         invalidate.inventory();
         invalidate.dashboard();
+        setPendingReceiptInventoryId(null);
+        setAttachedFiles([]);
         // Save or clear the product note independently (fire-and-forget)
         const noteText = formData.note?.trim();
         const productKey = formData.product_name?.trim();
@@ -211,7 +227,7 @@ const AddTransaction = () => {
           }
         }
         setTimeout(() => navigate('/transactions'), 800);
-        return 'Transaction added successfully!';
+        return attachedReceipt ? 'Transaction and receipt added successfully!' : 'Transaction added successfully!';
       },
       error: (err) => `Failed: ${err.message}`,
     });
@@ -628,7 +644,7 @@ const AddTransaction = () => {
               {/* Attach Receipt */}
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                  Attach Receipts <span className="text-gray-600">(optional)</span>
+                  Attach Receipt <span className="text-gray-600">(optional)</span>
                 </label>
                 <div
                   className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/10 border-dashed cursor-pointer hover:border-amber-500/30 transition-colors"
@@ -637,14 +653,13 @@ const AddTransaction = () => {
                   <Paperclip className="w-4 h-4 text-gray-500 flex-shrink-0" />
                   <span className="text-xs text-gray-500">
                     {attachedFiles.length === 0
-                      ? 'Click to choose files...'
-                      : `${attachedFiles.length} file${attachedFiles.length > 1 ? 's' : ''} selected`}
+                      ? 'Click to choose a receipt...'
+                      : '1 receipt selected'}
                   </span>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    multiple
-                    accept="image/*,.pdf"
+                    accept={RECEIPT_ACCEPT}
                     onChange={handleFileChange}
                     className="hidden"
                   />
@@ -672,8 +687,13 @@ const AddTransaction = () => {
                   </div>
                 )}
                 <p className="text-[10px] text-gray-600 mt-1.5">
-                  Uses the same receipts upload endpoint and links by transaction/order.
+                  JPEG, PNG, WebP, GIF, or PDF up to {MAX_RECEIPT_BYTES / (1024 * 1024)} MB. One receipt is stored per transaction.
                 </p>
+                {pendingReceiptInventoryId && (
+                  <p className="text-[10px] text-amber-400 mt-1.5">
+                    Transaction saved. Select a receipt and submit again to finish the attachment.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -872,12 +892,13 @@ const AddTransaction = () => {
                         type="number"
                         value={formData.qty_sold}
                         min="1"
-                        onChange={e => setFormData(p => ({ ...p, qty_sold: e.target.value === '' ? '' : parseInt(e.target.value) || 1 }))}
+                        max={formData.qty_purchased || 1}
+                        onChange={e => setFormData(p => ({ ...p, qty_sold: e.target.value === '' ? '' : Math.min(parseInt(e.target.value) || 1, parseInt(p.qty_purchased) || 1) }))}
                         className="w-full bg-transparent px-2 py-1.5 text-sm text-white text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                       <button
                         type="button"
-                        onClick={() => setFormData(p => ({ ...p, qty_sold: (parseInt(p.qty_sold) || 1) + 1 }))}
+                        onClick={() => setFormData(p => ({ ...p, qty_sold: Math.min((parseInt(p.qty_sold) || 1) + 1, parseInt(p.qty_purchased) || 1) }))}
                         className="px-3 py-1.5 text-gray-400 hover:text-white transition-colors border-l border-white/10 flex-shrink-0"
                       >+</button>
                     </div>

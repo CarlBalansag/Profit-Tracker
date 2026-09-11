@@ -24,6 +24,7 @@ function getOccurrences(frequency, start, end) {
   const dates = [];
   const cursor = new Date(start);
   cursor.setHours(0, 0, 0, 0);
+  const monthlyAnchorDay = cursor.getDate();
 
   // Don't generate future dates
   if (cursor > cutoff) return dates;
@@ -35,8 +36,13 @@ function getOccurrences(frequency, start, end) {
     } else if (frequency === 'biweekly') {
       cursor.setDate(cursor.getDate() + 14);
     } else {
-      // monthly: advance by one month
-      cursor.setMonth(cursor.getMonth() + 1);
+      // Clamp to the last day of the next month instead of letting Date overflow
+      // Jan 31 into March when February has fewer days.
+      const nextMonth = cursor.getMonth() + 1;
+      const nextYear = cursor.getFullYear() + Math.floor(nextMonth / 12);
+      const normalizedMonth = nextMonth % 12;
+      const lastDay = new Date(nextYear, normalizedMonth + 1, 0).getDate();
+      cursor.setFullYear(nextYear, normalizedMonth, Math.min(monthlyAnchorDay, lastDay));
     }
   }
   return dates;
@@ -64,6 +70,7 @@ async function generateEntries(rec) {
       notes:               rec.notes || null,
       recurring_expense_id: rec.id,
     })),
+    skipDuplicates: true,
   });
 
   // Update last_generated to the most recent occurrence created

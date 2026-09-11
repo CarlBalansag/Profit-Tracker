@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
-const { platform, platformBatch } = require('../validation/schemas');
+const { platform, updatePlatform, platformBatch } = require('../validation/schemas');
+const { requireOwned } = require('../services/ownership');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -26,7 +27,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 // POST /api/platforms - single create
 router.post('/', isAuthenticated, validateBody(platform), async (req, res, next) => {
   try {
-    const { name, type, fee_pct, address, notes } = req.body;
+    const { name, type, fee_pct, address, notes, tax_exempt_place } = req.body;
     const platform = await prisma.platform.create({
       data: {
         user_id: req.user.id,
@@ -34,7 +35,8 @@ router.post('/', isAuthenticated, validateBody(platform), async (req, res, next)
         type: type || 'retail',
         fee_pct: parseFloat(fee_pct) || 0,
         address: address || null,
-        notes: notes || null
+        notes: notes || null,
+        tax_exempt_place: tax_exempt_place === true || tax_exempt_place === 'true',
       }
     });
     res.json(platform);
@@ -50,6 +52,9 @@ router.post('/batch', isAuthenticated, validateBody(platformBatch), async (req, 
     if (!Array.isArray(vendors) || vendors.length === 0) {
       return res.status(400).json({ error: 'vendors array required' });
     }
+    await Promise.all(vendors.map((vendor) =>
+      requireOwned('platform', vendor.id, req.user.id, 'Platform')
+    ));
     const created = await prisma.$transaction(
       vendors.map(v =>
         prisma.platform.upsert({
@@ -72,7 +77,7 @@ router.post('/batch', isAuthenticated, validateBody(platformBatch), async (req, 
 });
 
 // PUT /api/platforms/:id - update (ownership enforced)
-router.put('/:id', isAuthenticated, validateBody(platform.partial()), async (req, res, next) => {
+router.put('/:id', isAuthenticated, validateBody(updatePlatform), async (req, res, next) => {
   try {
     const existing = await prisma.platform.findUnique({ where: { id: req.params.id } });
     if (!existing || existing.user_id !== req.user.id) {
@@ -89,11 +94,11 @@ router.put('/:id', isAuthenticated, validateBody(platform.partial()), async (req
       const p = await tx.platform.update({
         where: { id: req.params.id },
         data: {
-          name,
-          type,
-          fee_pct: parseFloat(fee_pct) || 0,
-          address: address || null,
-          notes: notes || null,
+          name: name ?? existing.name,
+          type: type ?? existing.type,
+          fee_pct: fee_pct !== undefined ? parseFloat(fee_pct) : existing.fee_pct,
+          address: address !== undefined ? address : existing.address,
+          notes: notes !== undefined ? notes : existing.notes,
           tax_exempt_place: newTaxExempt,
         }
       });

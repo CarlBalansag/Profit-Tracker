@@ -42,9 +42,24 @@ const dateString = z.string().trim().min(1).refine(
   'Invalid date'
 );
 
+const calendarDate = z.string().trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD')
+  .refine((value) => {
+    const [year, month, day] = value.split('-').map(Number);
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+    return parsed.getUTCFullYear() === year
+      && parsed.getUTCMonth() === month - 1
+      && parsed.getUTCDate() === day;
+  }, 'date must be a real calendar date');
+
 const optionalDateString = z.preprocess(
   emptyToUndefined,
   dateString.optional()
+);
+
+const nullableOptionalDateString = z.preprocess(
+  emptyToNull,
+  dateString.nullable().optional()
 );
 
 const categoryRate = z.object({
@@ -79,10 +94,28 @@ const createInventory = z.object({
   status: optionalString,
 }).passthrough();
 
-const updateInventory = createInventory.partial().extend({
+// Update schemas must not be derived from create schemas with .partial().
+// Defaults in a create schema are still applied by Zod after .partial(), which
+// would turn omitted fields into updates that overwrite stored values.
+const updateInventory = z.object({
+  product_name: requiredString('product_name').optional(),
+  vendor_id: id,
+  payment_method_id: id,
+  purchase_date: optionalDateString,
+  unit_purchase_cost: optionalMoney,
+  qty_purchased: positiveInt.optional(),
   qty_on_hand: optionalNonNegativeInt,
   cashback_earned: optionalMoney,
-});
+  sales_tax: optionalMoney,
+  shipping_cost_inbound: optionalMoney,
+  fees: optionalMoney,
+  gift_card_amount: optionalMoney,
+  order_number: optionalString,
+  tracking_number: optionalString,
+  category: optionalString,
+  tax_exempt: optionalBoolish,
+  status: optionalString,
+}).passthrough();
 
 const createSale = z.object({
   inventory_id: requiredId,
@@ -101,7 +134,21 @@ const createSale = z.object({
   exemption_type: optionalString,
 }).passthrough();
 
-const updateSale = createSale.omit({ inventory_id: true }).partial();
+const updateSale = z.object({
+  platform_id: id,
+  buyer_id: id,
+  quantity: positiveInt.optional(),
+  unit_price: optionalMoney,
+  commission_fee: optionalMoney,
+  sale_shipping: optionalMoney,
+  sale_date: optionalDateString,
+  payout_date: nullableOptionalDateString,
+  status: optionalString,
+  taxable: optionalBoolish,
+  sale_tax_collected: optionalMoney,
+  customer_tax_exempt: optionalBoolish,
+  exemption_type: optionalString,
+}).passthrough();
 
 const createExpense = z.object({
   name: requiredString('name'),
@@ -135,6 +182,15 @@ const platform = z.object({
   name: requiredString('name'),
   type: optionalString,
   fee_pct: optionalMoney.default(0),
+  address: optionalString,
+  notes: optionalString,
+  tax_exempt_place: optionalBoolish,
+}).passthrough();
+
+const updatePlatform = z.object({
+  name: requiredString('name').optional(),
+  type: optionalString,
+  fee_pct: optionalMoney,
   address: optionalString,
   notes: optionalString,
   tax_exempt_place: optionalBoolish,
@@ -206,15 +262,51 @@ const productNote = z.object({
   note: z.string().trim().max(2000),
 });
 
-const calendarEvent = z.object({
+const calendarEventFields = {
   title: requiredString('title').max(200),
-  date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
-  end_date: z.preprocess(emptyToNull, z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()),
+  date: calendarDate,
+  end_date: z.preprocess(emptyToNull, calendarDate.nullable().optional()),
   color: z.enum(['purple', 'blue', 'green', 'amber', 'red']).nullable().optional(),
   notes: z.preprocess(emptyToNull, z.string().trim().max(1000).nullable().optional()),
-});
+};
 
-const updateCalendarEvent = calendarEvent.partial();
+const validateCalendarDateRange = (event, context) => {
+  if (event.date && event.end_date && event.end_date < event.date) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['end_date'], message: 'end_date cannot be before date' });
+  }
+};
+
+const calendarEvent = z.object(calendarEventFields).superRefine(validateCalendarDateRange);
+
+const updateCalendarEvent = z.object({
+  title: calendarEventFields.title.optional(),
+  date: calendarDate.optional(),
+  end_date: z.preprocess(emptyToNull, calendarDate.nullable().optional()),
+  color: calendarEventFields.color,
+  notes: calendarEventFields.notes,
+}).superRefine(validateCalendarDateRange);
+
+const goalTarget = z.preprocess(
+  emptyToNull,
+  z.coerce.number().finite().min(0).nullable().optional()
+);
+const goalActive = z.union([z.boolean(), z.enum(['true', 'false'])])
+  .transform((value) => value === true || value === 'true');
+const goalMetric = z.enum(['netProfit', 'totalRevenue', 'unitsSold']);
+const goal = z.object({
+  metric: goalMetric,
+  target_7d: goalTarget,
+  target_30d: goalTarget,
+  target_ytd: goalTarget,
+  active: goalActive.optional(),
+});
+const updateGoal = z.object({
+  metric: goalMetric.optional(),
+  target_7d: goalTarget,
+  target_30d: goalTarget,
+  target_ytd: goalTarget,
+  active: goalActive.optional(),
+});
 
 module.exports = {
   createInventory,
@@ -225,6 +317,7 @@ module.exports = {
   updateExpense,
   paymentMethod,
   platform,
+  updatePlatform,
   platformBatch,
   account,
   updateAccount,
@@ -239,4 +332,6 @@ module.exports = {
   productNote,
   calendarEvent,
   updateCalendarEvent,
+  goal,
+  updateGoal,
 };

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Crown, Zap, Plus, LogOut, ChevronDown, PenSquare, Trash2 } from 'lucide-react';
 import { useInvalidate, apiFetch} from '../../hooks/useApi';
+import { requireSuccessfulResponse } from '../../hooks/apiResponse';
+import { toast } from 'sonner';
 import { QuickAddModal } from './QuickAddModal';
 import { CustomCardModal } from './CustomCardModal';
 import { IssuerLogo } from './IssuerLogo';
@@ -115,11 +117,17 @@ export const PaymentMethods = () => {
   };
 
   const removeCard = async (id) => {
-    await apiFetch(`/api/payment-methods/${id}`, {
-      method: 'DELETE',
-      credentials: 'include'
-    });
-    invalidate.paymentMethods();
+    try {
+      const res = await apiFetch(`/api/payment-methods/${id}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      await requireSuccessfulResponse(res, 'Could not remove payment method');
+      invalidate.paymentMethods();
+      toast.success('Payment method removed.');
+    } catch (err) {
+      toast.error(`Could not remove payment method: ${err.message}`);
+    }
   };
 
   const totalCreditLimit = savedCards.reduce((sum, c) => sum + (Number(c.creditLimit) || 0), 0);

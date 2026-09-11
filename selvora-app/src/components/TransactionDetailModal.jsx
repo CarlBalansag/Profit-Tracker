@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, DollarSign, Package, CreditCard, Tag, ChevronDown, ChevronUp } from 'lucide-react';
 import { useInvalidate, apiFetch} from '../hooks/useApi';
+import { toast } from 'sonner';
 
 const STATUSES = ['Pre Order', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
 const SALE_STATUSES = ['SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
@@ -112,7 +113,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
           const d = await res.json();
           setForm({
             product_name:            d.product_name ?? '',
-            status:                  row.status ?? d.status ?? 'PURCHASED',
+            status:                  d.status ?? 'PURCHASED',
             vendor_id:               d.vendor_id ?? '',
             purchase_date:           d.purchase_date ? d.purchase_date.split('T')[0] : '',
             category:                d.category ?? '',
@@ -120,6 +121,8 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             qty_purchased:           d.qty_purchased ?? 1,
             sales_tax:               d.sales_tax ?? 0,
             shipping_cost_inbound:   d.shipping_cost_inbound ?? 0,
+            fees:                    d.fees ?? 0,
+            gift_card_amount:        d.gift_card_amount ?? 0,
             payment_method_id:       d.payment_method_id ?? '',
             cashback_rate:           d.payment_method?.default_cashback_rate ?? 0,
             cashback_earned:         d.cashback_earned ?? 0,
@@ -165,7 +168,9 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
   const subtotal    = Number(form?.unit_purchase_cost ?? 0) * Number(form?.qty_purchased ?? 1);
   const taxAmt      = Number(form?.sales_tax ?? 0);
   const shippingAmt = Number(form?.shipping_cost_inbound ?? 0);
-  const totalCost   = subtotal + taxAmt + shippingAmt;
+  const feesAmt     = Number(form?.fees ?? 0);
+  const giftCardAmt = Number(form?.gift_card_amount ?? 0);
+  const totalCost   = subtotal + taxAmt + shippingAmt + feesAmt - giftCardAmt;
   const cbBase      = subtotal
     + (form?.include_tax_in_cashback     ? taxAmt     : 0)
     + (form?.include_shipping_in_cashback ? shippingAmt : 0);
@@ -188,6 +193,8 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
           qty_purchased:         Number(form.qty_purchased),
           sales_tax:             Number(form.sales_tax),
           shipping_cost_inbound: Number(form.shipping_cost_inbound),
+          fees:                  Number(form.fees),
+          gift_card_amount:      Number(form.gift_card_amount),
           cashback_earned:       cbEarned,
           category:              form.category || null,
           vendor_id:             form.vendor_id || null,
@@ -195,10 +202,13 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
           tax_exempt:            form.tax_exempt ?? false,
         }),
       });
-      if (!invRes.ok) return;
+      if (!invRes.ok) {
+        toast.error('Inventory update failed. No sale changes were saved.');
+        return;
+      }
 
       // Save every sale's editable fields
-      await Promise.all(form._sales.map(s =>
+      const saleResponses = await Promise.all(form._sales.map(s =>
         apiFetch(`/api/sales/${s.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -217,6 +227,10 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
           }),
         })
       ));
+      if (saleResponses.some(response => !response.ok)) {
+        toast.error('One or more sale updates failed. Review the transaction and try again.');
+        return;
+      }
 
       invalidate.inventory();
       invalidate.sales();
@@ -316,9 +330,15 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                   <DollarInput value={form.sales_tax} onChange={v => set('sales_tax', v)} accentClass="focus:border-blue-500/60" />
                 </Field>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <Field label="Inbound Shipping">
                   <DollarInput value={form.shipping_cost_inbound} onChange={v => set('shipping_cost_inbound', v)} accentClass="focus:border-blue-500/60" />
+                </Field>
+                <Field label="Fees">
+                  <DollarInput value={form.fees} onChange={v => set('fees', v)} accentClass="focus:border-blue-500/60" />
+                </Field>
+                <Field label="Gift Card">
+                  <DollarInput value={form.gift_card_amount} onChange={v => set('gift_card_amount', v)} accentClass="focus:border-blue-500/60" />
                 </Field>
                 <Field label="Total Cost">
                   <ReadBox value={`$${totalCost.toFixed(2)}`} className="text-white font-semibold" />
@@ -403,7 +423,9 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                     const saleTotal = unitPrice * qty;
                     const allocatedTax = (Number(form.sales_tax) / Number(form.qty_purchased)) * qty;
                     const allocatedShipping = (Number(form.shipping_cost_inbound) / Number(form.qty_purchased)) * qty;
-                    const totalCostForSale = (Number(form.unit_purchase_cost) * qty) + allocatedTax + allocatedShipping;
+                    const allocatedFees = (Number(form.fees) / Number(form.qty_purchased)) * qty;
+                    const allocatedGiftCard = (Number(form.gift_card_amount) / Number(form.qty_purchased)) * qty;
+                    const totalCostForSale = (Number(form.unit_purchase_cost) * qty) + allocatedTax + allocatedShipping + allocatedFees - allocatedGiftCard;
                     const saleCashback = totalCostForSale * (cbRate / 100);
                     const profit = saleTotal - commission - saleShipping - totalCostForSale + saleCashback;
                     const isOpen = expandedSale === i;
@@ -598,6 +620,18 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Shipping</span>
                     <span className="text-red-400 font-medium">+${shippingAmt.toFixed(2)}</span>
+                  </div>
+                )}
+                {feesAmt > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Fees</span>
+                    <span className="text-red-400 font-medium">+${feesAmt.toFixed(2)}</span>
+                  </div>
+                )}
+                {giftCardAmt > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Gift Card</span>
+                    <span className="text-emerald-400 font-medium">-${giftCardAmt.toFixed(2)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm border-t border-white/[0.06] pt-2">

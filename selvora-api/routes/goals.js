@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
-
-const VALID_METRICS = ['netProfit', 'totalRevenue', 'unitsSold'];
+const { validateBody } = require('../middleware/validate');
+const { goal, updateGoal } = require('../validation/schemas');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -23,22 +23,18 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 });
 
 // POST create a goal
-router.post('/', isAuthenticated, async (req, res, next) => {
+router.post('/', isAuthenticated, validateBody(goal), async (req, res, next) => {
   try {
     const { metric, target_7d, target_30d, target_ytd, active } = req.body;
-
-    if (!metric || !VALID_METRICS.includes(metric)) {
-      return res.status(400).json({ error: `metric must be one of: ${VALID_METRICS.join(', ')}` });
-    }
 
     const goal = await prisma.goal.create({
       data: {
         user_id:    req.user.id,
         metric,
-        target_7d:  target_7d  != null ? parseFloat(target_7d)  : null,
-        target_30d: target_30d != null ? parseFloat(target_30d) : null,
-        target_ytd: target_ytd != null ? parseFloat(target_ytd) : null,
-        active:     active !== undefined ? Boolean(active) : true,
+        target_7d,
+        target_30d,
+        target_ytd,
+        active:     active ?? true,
       },
     });
     res.json(goal);
@@ -48,7 +44,7 @@ router.post('/', isAuthenticated, async (req, res, next) => {
 });
 
 // PUT update a goal
-router.put('/:id', isAuthenticated, async (req, res, next) => {
+router.put('/:id', isAuthenticated, validateBody(updateGoal), async (req, res, next) => {
   try {
     const existing = await prisma.goal.findUnique({ where: { id: req.params.id } });
     if (!existing || existing.user_id !== req.user.id) {
@@ -57,18 +53,14 @@ router.put('/:id', isAuthenticated, async (req, res, next) => {
 
     const { metric, target_7d, target_30d, target_ytd, active } = req.body;
 
-    if (metric !== undefined && !VALID_METRICS.includes(metric)) {
-      return res.status(400).json({ error: `metric must be one of: ${VALID_METRICS.join(', ')}` });
-    }
-
     const updated = await prisma.goal.update({
       where: { id: req.params.id },
       data: {
         ...(metric     !== undefined && { metric }),
-        ...(target_7d  !== undefined && { target_7d:  target_7d  != null ? parseFloat(target_7d)  : null }),
-        ...(target_30d !== undefined && { target_30d: target_30d != null ? parseFloat(target_30d) : null }),
-        ...(target_ytd !== undefined && { target_ytd: target_ytd != null ? parseFloat(target_ytd) : null }),
-        ...(active     !== undefined && { active: Boolean(active) }),
+        ...(target_7d  !== undefined && { target_7d }),
+        ...(target_30d !== undefined && { target_30d }),
+        ...(target_ytd !== undefined && { target_ytd }),
+        ...(active     !== undefined && { active }),
       },
     });
     res.json(updated);

@@ -3,6 +3,8 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { randomUUID } = require('crypto');
 const { getCalendarFeedUrl, publishCalendarFeed } = require('../services/calendarFeed');
+const { validateBody } = require('../middleware/validate');
+const { calendarEvent, updateCalendarEvent } = require('../validation/schemas');
 
 const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
@@ -372,16 +374,9 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 });
 
 // POST /api/calendar-events
-router.post('/', isAuthenticated, async (req, res, next) => {
+router.post('/', isAuthenticated, validateBody(calendarEvent), async (req, res, next) => {
   try {
     const { title, date, end_date, color, notes } = req.body;
-
-    if (!title || !title.trim()) {
-      return res.status(400).json({ error: 'title is required' });
-    }
-    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
-    }
 
     const event = await prisma.calendarEvent.create({
       data: {
@@ -402,7 +397,7 @@ router.post('/', isAuthenticated, async (req, res, next) => {
 });
 
 // PUT /api/calendar-events/:id
-router.put('/:id', isAuthenticated, async (req, res, next) => {
+router.put('/:id', isAuthenticated, validateBody(updateCalendarEvent), async (req, res, next) => {
   try {
     const existing = await prisma.calendarEvent.findUnique({
       where: { id: req.params.id },
@@ -412,6 +407,14 @@ router.put('/:id', isAuthenticated, async (req, res, next) => {
     }
 
     const { title, date, end_date, color, notes } = req.body;
+    const finalDate = date ?? existing.date;
+    const finalEndDate = end_date !== undefined ? end_date : existing.end_date;
+    if (finalEndDate && finalEndDate < finalDate) {
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: [{ path: 'end_date', message: 'end_date cannot be before date' }],
+      });
+    }
     const updated = await prisma.calendarEvent.update({
       where: { id: req.params.id },
       data: {

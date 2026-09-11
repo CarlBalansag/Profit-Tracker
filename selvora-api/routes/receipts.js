@@ -29,6 +29,10 @@ router.get('/', isAuthenticated, async (req, res, next) => {
           purchase_date: true,
           unit_purchase_cost: true,
           qty_purchased: true,
+          sales_tax: true,
+          shipping_cost_inbound: true,
+          fees: true,
+          gift_card_amount: true,
           receipt_url: true,
         },
       }),
@@ -51,7 +55,11 @@ router.get('/', isAuthenticated, async (req, res, next) => {
         itemType: 'inventory',
         name: inv.product_name,
         date: inv.purchase_date,
-        amount: inv.unit_purchase_cost * inv.qty_purchased,
+        amount: (inv.unit_purchase_cost * inv.qty_purchased)
+          + (inv.sales_tax || 0)
+          + (inv.shipping_cost_inbound || 0)
+          + (inv.fees || 0)
+          - (inv.gift_card_amount || 0),
         receipt_url: inv.receipt_url || null,
       })),
       ...expenses.map(exp => ({
@@ -92,6 +100,13 @@ router.post('/attach', isAuthenticated, validateBody(attachReceipt), async (req,
       return res.status(400).json({ error: 'itemType, itemId, and fileData are required' });
     }
 
+    const target = itemType === 'inventory'
+      ? await prisma.inventory.findUnique({ where: { id: itemId } })
+      : await prisma.expense.findUnique({ where: { id: itemId } });
+    if (!target || target.user_id !== req.user.id) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
     // Validate that fileData is a data URL with an allowed MIME type
     const dataUrlMatch = fileData.match(/^data:([^;]+);base64,/);
     if (!dataUrlMatch) {
@@ -119,19 +134,11 @@ router.post('/attach', isAuthenticated, validateBody(attachReceipt), async (req,
     const receiptUrl = uploadResult.secure_url;
 
     if (itemType === 'inventory') {
-      const existing = await prisma.inventory.findUnique({ where: { id: itemId } });
-      if (!existing || existing.user_id !== req.user.id) {
-        return res.status(404).json({ error: 'Not found' });
-      }
       await prisma.inventory.update({
         where: { id: itemId },
         data: { receipt_url: receiptUrl },
       });
     } else if (itemType === 'expense') {
-      const existing = await prisma.expense.findUnique({ where: { id: itemId } });
-      if (!existing || existing.user_id !== req.user.id) {
-        return res.status(404).json({ error: 'Not found' });
-      }
       await prisma.expense.update({
         where: { id: itemId },
         data: { receipt_url: receiptUrl },

@@ -60,7 +60,11 @@ for(const model of Object.keys(db)) {
       db[model].push(...created);return op==='createMany'?{count:created.length}:project(model,created[0],args);
     }
     if(op==='update'||op==='updateMany'||op==='upsert'){
-      for(const row of (op==='updateMany'?rows:rows.slice(0,1)))for(const[k,v]of Object.entries(op==='upsert'?args.update:args.data))if(v!==undefined)row[k]=v;
+      for(const row of (op==='updateMany'?rows:rows.slice(0,1)))for(const[k,v]of Object.entries(op==='upsert'?args.update:args.data))if(v!==undefined){
+        if(v&&typeof v==='object'&&'increment' in v)row[k]+=v.increment;
+        else if(v&&typeof v==='object'&&'decrement' in v)row[k]-=v.decrement;
+        else row[k]=v;
+      }
       return op==='updateMany'?{count:rows.length}:project(model,rows[0],args);
     }
     db[model]=db[model].filter(x=>!rows.includes(x));
@@ -68,7 +72,11 @@ for(const model of Object.keys(db)) {
     return op==='deleteMany'?{count:rows.length}:rows[0];
   };
 }
-prisma.$transaction=async fn=>typeof fn==='function'?fn(prisma):Promise.all(fn);
+prisma.$transaction=async fn=>{
+  if(typeof fn!=='function')return Promise.all(fn);
+  const snapshot=structuredClone(db);
+  try{return await fn(prisma);}catch(error){db=snapshot;throw error;}
+};
 require.cache[requireApi.resolve('./prisma.js')]={id:requireApi.resolve('./prisma.js'),filename:requireApi.resolve('./prisma.js'),loaded:true,exports:prisma};
 requireApi('cloudinary').v2.uploader.upload=async(data,options)=>{calls.push({model:'cloudinary',op:'upload',options});return {secure_url:'https://example.invalid/qa-receipt.png'};};
 function app() {

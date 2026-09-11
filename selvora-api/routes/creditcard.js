@@ -120,13 +120,14 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
         const perUnit = qty > 0 ? 1 / qty : 0;
 
         for (const sale of inv.sales) {
+          if (['CANCELLED', 'RETURNED', 'DISPUTED'].includes((sale.status || '').toUpperCase())) continue;
           const allocatedCost = (inv.unit_purchase_cost * sale.quantity)
             + (inv.sales_tax * perUnit * sale.quantity)
             + (inv.shipping_cost_inbound * perUnit * sale.quantity)
             + ((inv.fees || 0) * perUnit * sale.quantity)
             - ((inv.gift_card_amount || 0) * perUnit * sale.quantity);
           const allocatedCashback = allocatedCost * (rate / 100);
-          const saleRevenue = (sale.unit_price * sale.quantity) - sale.commission_fee;
+          const saleRevenue = (sale.unit_price * sale.quantity) - sale.commission_fee - sale.sale_shipping;
           const netPnl = saleRevenue - allocatedCost;
           const isLoss = netPnl < 0;
           const lossAmount = isLoss ? Math.abs(netPnl) : 0;
