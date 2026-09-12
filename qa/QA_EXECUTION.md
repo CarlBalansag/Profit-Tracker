@@ -22,7 +22,7 @@ Commit each completed task separately and record precise coverage and remaining 
 | Order | Finding | Status |
 |---|---|---|
 | 1 | QA-22: intentional clearing of optional account fields | Fixed; focused API regression passed |
-| 2 | QA-21: Vendor/Marketplace editing | Pending |
+| 2 | QA-21: Vendor/Marketplace editing | Fixed; focused browser/frontend/API QA passed |
 | 3 | QA-06: consistent financial calculations | Pending |
 | 4 | QA-19: Buyer/Invoice ownership | Pending |
 | 5 | QA-20: inactive controls and unfinished workflows | Pending |
@@ -46,3 +46,14 @@ Ownership, platform association and required-name validation are preserved.
 - The existing Accounts browser screen has create/delete only, so no browser edit/cancel flow was changed. Cancel has no update request to exercise for this API-only fix.
 - Database concurrency is not relevant to independent optional field assignments; real PostgreSQL execution was not tested for this change.
 - Git checkpoint 54c4721 was pushed to origin/codex/qa-checkpoint after the user confirmed the branch is excluded from hosting.
+
+## QA-21 completed
+
+Connected Vendor and Marketplace pencil buttons to a shared edit form for name/address/notes and marketplace fee percentage. Existing IDs, tax flags and historical sale commissions are preserved. Successful edits refresh local lists and affected queries. Failed saves retain drafts; pending saves reject duplicate submit/dismissal.
+
+- 13 frontend regression cases passed: existing values, optional-field clearing, Cancel/close/Escape, invalid names/fees, HTTP failure and retry, duplicate submissions, Vendor fee preservation and both parent pencil/list refresh flows.
+- 9 API regression cases passed: linked inventory/accounts and historical sale preservation, partial/empty/repeated edits, invalid input, foreign/missing/unauthenticated records, database failure and retry.
+- Full API suite: 59 tests passed. Full frontend suite: 28 tests passed.
+- Browser fixture: Vendor rename/notes save and reopen; cancelled draft did not replace saved name. Marketplace fee updated to 7.5 and notes cleared successfully.
+- Targeted lint on all changed components/tests passed. Production/PWA build passed with existing large-chunk warning. git diff --check passed.
+- QA used disposable in-memory records; no live database or external-service writes. Real PostgreSQL and cross-tab browser refresh are not verified by this fixture.

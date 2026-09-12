@@ -6,6 +6,7 @@ import {
 import { useInvalidate, apiFetch} from '../../hooks/useApi';
 import { requireSuccessfulResponse } from '../../hooks/apiResponse';
 import { toast } from 'sonner';
+import PlatformEditModal from './PlatformEditModal';
 
 // ─── Quick Add Store Directory ────────────────────────────────────────────────
 const QUICK_ADD_STORES = [
@@ -310,6 +311,7 @@ function QuickAddModal({ existingPlatforms, onClose, onSave }) {
 
 // ─── Main Marketplaces Component ───────────────────────────────────────────────────
 export function Marketplaces() {
+  const [editing, setEditing] = useState(null);
   const [platforms, setPlatforms] = useState([]);
   const [showCustom, setShowCustom] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -409,7 +411,7 @@ export function Marketplaces() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="p-1 text-gray-500 hover:text-white transition-colors">
+                    <button aria-label={`Edit ${platform.name}`} onClick={() => setEditing(platform)} className="p-1 text-gray-500 hover:text-white transition-colors">
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
@@ -430,6 +432,11 @@ export function Marketplaces() {
       </div>
 
       {/* Modals */}
+      {editing && <PlatformEditModal key={editing.id} platform={editing} onClose={() => setEditing(null)} onSave={updated => {
+        setPlatforms(previous => previous.map(platform => platform.id === updated.id ? updated : platform));
+        invalidate.all();
+        toast.success('Marketplace updated.');
+      }} />}
       {showCustom && (
         <CustomModal onClose={() => setShowCustom(false)} onSave={handleSaveNew} />
       )}
