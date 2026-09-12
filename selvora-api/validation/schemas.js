@@ -1,5 +1,5 @@
 const { z } = require('zod');
-const { optionalCurrency } = require('./currency');
+const { optionalCurrency, exactValue } = require('./currency');
 const exactOptionalMoney = optionalCurrency();
 
 const emptyToUndefined = (value) => (value === '' ? undefined : value);
@@ -126,14 +126,14 @@ const createSale = z.object({
   platform_id: id,
   buyer_id: id,
   quantity: positiveInt.default(1),
-  unit_price: money,
-  commission_fee: optionalMoney.default(0),
-  sale_shipping: optionalMoney.default(0),
+  unit_price: exactValue(2),
+  commission_fee: exactOptionalMoney.default(0),
+  sale_shipping: exactOptionalMoney.default(0),
   sale_date: optionalDateString,
   payout_date: optionalDateString,
   status: optionalString,
   taxable: optionalBoolish,
-  sale_tax_collected: optionalMoney.default(0),
+  sale_tax_collected: exactOptionalMoney.default(0),
   customer_tax_exempt: optionalBoolish,
   exemption_type: optionalString,
 }).passthrough();
@@ -142,14 +142,14 @@ const updateSale = z.object({
   platform_id: id,
   buyer_id: id,
   quantity: positiveInt.optional(),
-  unit_price: optionalMoney,
-  commission_fee: optionalMoney,
-  sale_shipping: optionalMoney,
+  unit_price: exactOptionalMoney,
+  commission_fee: exactOptionalMoney,
+  sale_shipping: exactOptionalMoney,
   sale_date: optionalDateString,
   payout_date: nullableOptionalDateString,
   status: optionalString,
   taxable: optionalBoolish,
-  sale_tax_collected: optionalMoney,
+  sale_tax_collected: exactOptionalMoney,
   customer_tax_exempt: optionalBoolish,
   exemption_type: optionalString,
 }).passthrough();

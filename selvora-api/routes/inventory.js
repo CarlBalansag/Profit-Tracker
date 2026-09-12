@@ -128,7 +128,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
 
       if (sale_price) {
         await tx.sales.create({
-            data: {
+            data: currencyWrite('Sales', {
                 inventory_id: created.id,
                 platform_id,
                 quantity: saleQty,
@@ -142,8 +142,8 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
                 sale_tax_collected: parseFloat(sale_tax_collected) || 0,
                 customer_tax_exempt: customer_tax_exempt === true || customer_tax_exempt === 'true',
                 exemption_type: exemption_type || null,
-            }
-        });
+            })
+      });
         await tx.inventory.update({
             where: { id: created.id },
             data: { qty_on_hand: qty - saleQty }

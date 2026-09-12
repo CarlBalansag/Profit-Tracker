@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { currencyWrite } = require('../services/currencyWrite');
 const { validateBody } = require('../middleware/validate');
 const { createSale, updateSale } = require('../validation/schemas');
 const { publishCalendarFeed } = require('../services/calendarFeed');
@@ -77,7 +78,7 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
       }
 
       return tx.sales.create({
-        data: {
+        data: currencyWrite('Sales', {
           inventory_id,
           platform_id: platform_id || null,
           buyer_id: buyer_id || null,
@@ -92,7 +93,7 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
           sale_tax_collected: parseFloat(sale_tax_collected) || 0,
           customer_tax_exempt: customer_tax_exempt === true || customer_tax_exempt === 'true',
           exemption_type: exemption_type || null,
-        }
+        })
       });
     });
 
@@ -140,7 +141,7 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
 
       return tx.sales.update({
         where: { id: req.params.id },
-        data: {
+        data: currencyWrite('Sales', {
         unit_price: unit_price !== undefined ? parseFloat(unit_price) : existing.unit_price,
         quantity: newQty,
         status: status !== undefined ? status : existing.status,
@@ -154,7 +155,7 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
         sale_tax_collected: sale_tax_collected !== undefined ? parseFloat(sale_tax_collected) : existing.sale_tax_collected,
         customer_tax_exempt: customer_tax_exempt !== undefined ? (customer_tax_exempt === true || customer_tax_exempt === 'true') : existing.customer_tax_exempt,
         exemption_type: exemption_type !== undefined ? (exemption_type || null) : existing.exemption_type,
-        }
+        })
       });
     });
 
