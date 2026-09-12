@@ -283,11 +283,21 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
     if (purchase_date !== undefined)         data.purchase_date = parseLocalDate(purchase_date);
     if (tax_exempt !== undefined)            data.tax_exempt = tax_exempt === true || tax_exempt === 'true';
 
-    const updated = await prisma.inventory.update({
-      where: { id: req.params.id },
-      data: currencyWrite('Inventory', data),
-      include: { vendor: true, payment_method: true }
-    });
+    const updated = qty_purchased !== undefined || qty_on_hand !== undefined
+      ? await prisma.$transaction(async tx => {
+        const claim = await tx.inventory.updateMany({
+          where: { id: req.params.id, user_id: req.user.id,
+            qty_purchased: existing.qty_purchased, qty_on_hand: existing.qty_on_hand },
+          data: currencyWrite('Inventory', data),
+        });
+        if (claim.count !== 1) throw Object.assign(new Error('Inventory changed while saving. Reload and retry.'), { status: 409 });
+        return tx.inventory.findUnique({ where: { id: req.params.id }, include: { vendor: true, payment_method: true } });
+      })
+      : await prisma.inventory.update({
+        where: { id: req.params.id },
+        data: currencyWrite('Inventory', data),
+        include: { vendor: true, payment_method: true }
+      });
     await publishCalendarFeed(req.user.id);
     res.json(updated);
   } catch (err) {

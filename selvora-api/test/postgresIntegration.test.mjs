@@ -26,7 +26,7 @@ describe.skipIf(!databaseUrl)('native PostgreSQL API integration', () => {
   beforeAll(async () => {
     process.env.DATABASE_URL = databaseUrl;
     process.env.DIRECT_URL = databaseUrl;
-    for (const module of ['../prisma', '../services/calendarFeed', '../services/ownership', '../routes/sales']) {
+    for (const module of ['../prisma', '../services/calendarFeed', '../services/ownership', '../routes/sales', '../routes/inventory']) {
       const modulePath = require.resolve(module);
       originalModules.set(modulePath, require.cache[modulePath]);
       delete require.cache[modulePath];
@@ -39,6 +39,7 @@ describe.skipIf(!databaseUrl)('native PostgreSQL API integration', () => {
     app.use(express.json());
     app.use((req, res, next) => { req.user = { id: owner }; req.isAuthenticated = () => req.headers['x-qa-authenticated'] !== 'false'; next(); });
     app.use('/api/sales', require('../routes/sales'));
+    app.use('/api/inventory', require('../routes/inventory'));
     app.use((err, req, res, next) => res.status(err.status || 500).json({ error: err.message }));
     server = app.listen(0, '127.0.0.1');
     await new Promise(resolve => server.once('listening', resolve));
@@ -106,5 +107,26 @@ describe.skipIf(!databaseUrl)('native PostgreSQL API integration', () => {
     expect((await request('POST', '/api/sales', { inventory_id: foreign.id, quantity: 1, unit_price: 2 })).status).toBe(404);
     expect((await request('POST', '/api/sales', { inventory_id: inventory.id, quantity: 1, unit_price: 2 }, false)).status).toBe(401);
     expect(await prisma.sales.count({ where: { inventory_id: { in: [inventory.id, foreign.id] } } })).toBe(0);
+  });
+  it('preserves a sale committed after a purchase-quantity edit read and supports a fresh retry', async () => {
+    const originalRead = prisma.inventory.findUnique;
+    let readDone; let resume;
+    const read = new Promise(resolve => { readDone = resolve; });
+    const paused = new Promise(resolve => { resume = resolve; });
+    prisma.inventory.findUnique = async args => {
+      const result = await originalRead.call(prisma.inventory, args);
+      if (args.include?.sales?.select) { readDone(); await paused; }
+      return result;
+    };
+    try {
+      const pending = request('PUT', `/api/inventory/${inventory.id}`, { qty_purchased: 2 });
+      await read;
+      expect((await request('POST', '/api/sales', { inventory_id: inventory.id, quantity: 1, unit_price: 1 })).status).toBe(200);
+      resume();
+      expect((await pending).status).toBe(409);
+    } finally { resume(); prisma.inventory.findUnique = originalRead; }
+    expect((await prisma.inventory.findUnique({ where: { id: inventory.id } })).qty_on_hand).toBe(0);
+    expect((await request('PUT', `/api/inventory/${inventory.id}`, { qty_purchased: 2 })).status).toBe(200);
+    expect((await prisma.inventory.findUnique({ where: { id: inventory.id } })).qty_on_hand).toBe(1);
   });
 });

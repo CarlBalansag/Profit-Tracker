@@ -123,3 +123,11 @@ Reproduced the stale sale quantity read using a barrier before two concurrent ed
 - Focused API checks: 20 tests passed including decimal sales, report consistency and tenant ownership. Full API suite before the deletion case: 117 passed; no frontend behavior changed.
 - Fixture transactions serialize snapshots so a failed request cannot overwrite another fixture transaction's committed result. This tests application decisions, not native PostgreSQL isolation. Added native concurrent-edit coverage; four native cases remain skipped locally until a disposable PostgreSQL service is available.
 - No hosted writes or deployment. QA-10 concurrent inventory quantity updates remain a separate next task.
+
+## QA-10 reconciliation: concurrent purchase quantity changes
+
+Purchase-quantity edits now conditionally match the purchased/on-hand quantities used by their validation read, then update and return the record inside one transaction. A sale committed after that read causes a 409 instead of being overwritten. Money-only edits remain partial writes.
+
+- 20 focused API tests passed: purchased quantity below sold units, recalculation, a sale between read/write, reload/retry, failure preservation, repeated edits, exact purchase fields, immediate-sale rollback, partial preservation and report consistency.
+- Added the same paused-read/new-sale/retry case to native PostgreSQL integration coverage; the new case awaits the next CI run.
+- The earlier QA-25 CI run 34708368309 passed every gate, including all migrations and the initial three native database tests. Current sale/inventory concurrency additions require a new run. No live/hosted database changes.
