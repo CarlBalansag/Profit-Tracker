@@ -34,6 +34,13 @@ model User {
 }
 
 model Inventory {
+  unit_purchase_cost_decimal Decimal? @db.Decimal(19, 2)
+  sales_tax_decimal Decimal? @db.Decimal(19, 2)
+  shipping_cost_inbound_decimal Decimal? @db.Decimal(19, 2)
+  fees_decimal Decimal? @db.Decimal(19, 2)
+  cashback_earned_decimal Decimal? @db.Decimal(19, 2)
+  gift_card_amount_decimal Decimal? @db.Decimal(19, 2)
+
   id                    String         @id @default(uuid())
   user_id               String
   user                  User           @relation(fields: [user_id], references: [id])
@@ -67,6 +74,11 @@ model Inventory {
 }
 
 model Sales {
+  unit_price_decimal Decimal? @db.Decimal(19, 2)
+  commission_fee_decimal Decimal? @db.Decimal(19, 2)
+  sale_shipping_decimal Decimal? @db.Decimal(19, 2)
+  sale_tax_collected_decimal Decimal? @db.Decimal(19, 2)
+
   id                  String    @id @default(uuid())
   inventory_id        String
   inventory           Inventory @relation(fields: [inventory_id], references: [id], onDelete: Cascade)
@@ -93,6 +105,8 @@ model Sales {
 }
 
 model Platform {
+  fee_pct_decimal Decimal? @db.Decimal(9, 6)
+
   id               String      @id @default(uuid())
   user_id          String
   user             User        @relation(fields: [user_id], references: [id])
@@ -137,6 +151,10 @@ model Buyer {
 }
 
 model PaymentMethod {
+  credit_limit_decimal Decimal? @db.Decimal(19, 2)
+  default_cashback_rate_decimal Decimal? @db.Decimal(9, 6)
+  min_payment_pct_decimal Decimal? @db.Decimal(9, 6)
+
   id                    String      @id @default(uuid())
   user_id               String
   user                  User        @relation(fields: [user_id], references: [id])
@@ -153,6 +171,8 @@ model PaymentMethod {
 }
 
 model Expense {
+  amount_decimal Decimal? @db.Decimal(19, 2)
+
   id                   String            @id @default(uuid())
   user_id              String
   user                 User              @relation(fields: [user_id], references: [id])
@@ -171,6 +191,8 @@ model Expense {
 }
 
 model RecurringExpense {
+  amount_decimal Decimal? @db.Decimal(19, 2)
+
   id               String    @id @default(uuid())
   user_id          String
   user             User      @relation(fields: [user_id], references: [id])
@@ -187,6 +209,8 @@ model RecurringExpense {
 }
 
 model Invoice {
+  total_amount_decimal Decimal? @db.Decimal(19, 2)
+
   id           String   @id @default(uuid())
   user_id      String
   user         User     @relation(fields: [user_id], references: [id])
@@ -200,6 +224,10 @@ model Invoice {
 }
 
 model Goal {
+  target_7d_decimal Decimal? @db.Decimal(19, 2)
+  target_30d_decimal Decimal? @db.Decimal(19, 2)
+  target_ytd_decimal Decimal? @db.Decimal(19, 2)
+
   id           String   @id @default(uuid())
   user_id      String
   user         User     @relation(fields: [user_id], references: [id])
@@ -242,6 +270,8 @@ model CalendarEvent {
 }
 
 model EbayPriceCache {
+  last_sold_price_decimal Decimal? @db.Decimal(19, 2)
+
   product_name   String   @id
   last_sold_price Float?
   currency       String   @default("USD")
