@@ -1,3 +1,4 @@
+import { allocatedCost } from '../../../shared/finance.mjs';
 import React, { useState } from 'react';
 import { useInventory } from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
@@ -56,7 +57,7 @@ const Inventory = () => {
       }
       acc[key].entries.push(item);
       acc[key].totalQty += item.qty_on_hand;
-      acc[key].totalCost += item.unit_purchase_cost * item.qty_on_hand;
+      acc[key].totalCost += allocatedCost(item, item.qty_on_hand);
       return acc;
     }, {})
   ).sort((a, b) =>
@@ -64,7 +65,7 @@ const Inventory = () => {
   );
 
   // Summary card totals stay on the flat list so numbers are always correct
-  const totalCapital = processedInventory.reduce((sum, item) => sum + (item.unit_purchase_cost * item.qty_on_hand), 0);
+  const totalCapital = processedInventory.reduce((sum, item) => sum + allocatedCost(item, item.qty_on_hand), 0);
   const totalUnits = processedInventory.reduce((sum, item) => sum + item.qty_on_hand, 0);
   const agingUnits = processedInventory.filter(i => i.daysInInv > 30).reduce((sum, item) => sum + item.qty_on_hand, 0);
   const activeListings = processedInventory.filter(i => i.status === 'LISTED').reduce((sum, item) => sum + item.qty_on_hand, 0);
@@ -220,8 +221,8 @@ const Inventory = () => {
                     </td>
                     <td className="px-4 py-5">
                       <div className="flex flex-col">
-                        <span className="text-sm font-medium text-gray-300">${(item.unit_purchase_cost * item.qty_on_hand).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                        <span className="text-[10px] text-gray-500">${item.unit_purchase_cost.toFixed(2)} / unit</span>
+                        <span className="text-sm font-medium text-gray-300">${allocatedCost(item, item.qty_on_hand).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                        <span className="text-[10px] text-gray-500">${allocatedCost(item, 1).toFixed(2)} / unit</span>
                       </div>
                     </td>
                     <td className="px-4 py-5">
@@ -326,8 +327,8 @@ const Inventory = () => {
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex flex-col">
-                            <span className="text-sm font-medium text-gray-400">${(item.unit_purchase_cost * item.qty_on_hand).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                            <span className="text-[10px] text-gray-600">${item.unit_purchase_cost.toFixed(2)} / unit</span>
+                            <span className="text-sm font-medium text-gray-400">${allocatedCost(item, item.qty_on_hand).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            <span className="text-[10px] text-gray-600">${allocatedCost(item, 1).toFixed(2)} / unit</span>
                           </div>
                         </td>
                         {/* eBay column — empty on child rows */}
@@ -357,5 +358,3 @@ const Inventory = () => {
 };
 
 export default Inventory;
-
-

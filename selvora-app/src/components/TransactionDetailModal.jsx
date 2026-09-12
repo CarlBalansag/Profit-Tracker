@@ -1,3 +1,4 @@
+import { batchCost, effectiveCashbackRate, saleEconomics, realizedSummary, isRealizedSale } from '../../../shared/finance.mjs';
 import React, { useState, useEffect } from 'react';
 import { X, DollarSign, Package, CreditCard, Tag, ChevronDown, ChevronUp } from 'lucide-react';
 import { useInvalidate, apiFetch} from '../hooks/useApi';
@@ -170,12 +171,9 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
   const shippingAmt = Number(form?.shipping_cost_inbound ?? 0);
   const feesAmt     = Number(form?.fees ?? 0);
   const giftCardAmt = Number(form?.gift_card_amount ?? 0);
-  const totalCost   = subtotal + taxAmt + shippingAmt + feesAmt - giftCardAmt;
-  const cbBase      = subtotal
-    + (form?.include_tax_in_cashback     ? taxAmt     : 0)
-    + (form?.include_shipping_in_cashback ? shippingAmt : 0);
-  const cbRate      = Number(form?.cashback_rate ?? 0);
-  const cbEarned    = cbBase * (cbRate / 100);
+  const totalCost = batchCost(form ?? {});
+  const cbRate = effectiveCashbackRate({ payment_method: paymentMethods.find(method => method.id === form?.payment_method_id), vendor: platforms.find(platform => platform.id === form?.vendor_id) });
+  const cbEarned = totalCost * cbRate / 100;
 
   // ── Save ─────────────────────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -231,11 +229,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
         toast.error('One or more sale updates failed. Review the transaction and try again.');
         return;
       }
-
-      invalidate.inventory();
-      invalidate.sales();
-      invalidate.dashboard();
-      invalidate.creditCard();
+      invalidate.all();
       onSaved();
       onClose();
     } catch (err) {
@@ -374,33 +368,14 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                   />
                 </Field>
                 <Field label="Cashback %">
-                  <Input type="number" value={form.cashback_rate} onChange={v => set('cashback_rate', v)} />
+                  <ReadBox value={`${cbRate}%`} />
                 </Field>
                 <Field label="Cashback $">
                   <ReadBox value={`$${cbEarned.toFixed(2)}`} className="text-emerald-400 font-semibold" />
                   <p className="text-[10px] text-gray-600 mt-1">Auto-calculated</p>
                 </Field>
               </div>
-              <div className="flex gap-6 mt-3">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={form.include_tax_in_cashback}
-                    onChange={e => set('include_tax_in_cashback', e.target.checked)}
-                    className="w-3.5 h-3.5 rounded accent-indigo-500"
-                  />
-                  <span className="text-xs text-gray-400">Include tax in cashback</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={form.include_shipping_in_cashback}
-                    onChange={e => set('include_shipping_in_cashback', e.target.checked)}
-                    className="w-3.5 h-3.5 rounded accent-indigo-500"
-                  />
-                  <span className="text-xs text-gray-400">Include shipping in cashback</span>
-                </label>
-              </div>
+              <p className="text-xs text-gray-400 mt-3">Cashback uses the selected payment method and vendor. Update rates in Payment Methods settings.</p>
             </div>
 
             <div className="border-t border-white/[0.04]" />
@@ -421,13 +396,10 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                     const commission = Number(sale.commission_fee) || 0;
                     const saleShipping = Number(sale.sale_shipping) || 0;
                     const saleTotal = unitPrice * qty;
-                    const allocatedTax = (Number(form.sales_tax) / Number(form.qty_purchased)) * qty;
-                    const allocatedShipping = (Number(form.shipping_cost_inbound) / Number(form.qty_purchased)) * qty;
-                    const allocatedFees = (Number(form.fees) / Number(form.qty_purchased)) * qty;
-                    const allocatedGiftCard = (Number(form.gift_card_amount) / Number(form.qty_purchased)) * qty;
-                    const totalCostForSale = (Number(form.unit_purchase_cost) * qty) + allocatedTax + allocatedShipping + allocatedFees - allocatedGiftCard;
-                    const saleCashback = totalCostForSale * (cbRate / 100);
-                    const profit = saleTotal - commission - saleShipping - totalCostForSale + saleCashback;
+                    const economics = saleEconomics(form, sale, cbRate);
+                    const totalCostForSale = economics.cost;
+                    const saleCashback = economics.cashback;
+                    const profit = isRealizedSale(sale) ? economics.netProfit : 0;
                     const isOpen = expandedSale === i;
 
                     return (
@@ -645,11 +617,12 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                   </div>
                 )}
                 {form._sales.length > 0 && (() => {
-                  const totalSaleRevenue = form._sales.reduce((sum, s) => sum + ((Number(s.unit_price) || 0) * (Number(s.quantity) || 1)), 0);
-                  const totalCommissions = form._sales.reduce((sum, s) => sum + (Number(s.commission_fee) || 0), 0);
-                  const totalSaleShipping = form._sales.reduce((sum, s) => sum + (Number(s.sale_shipping) || 0), 0);
-                  const grossProfit = totalSaleRevenue - totalCommissions - totalSaleShipping - totalCost;
-                  const netProfit = grossProfit + cbEarned;
+                  const realizedSales = form._sales.filter(isRealizedSale);
+                  const totalSaleRevenue = realizedSales.reduce((sum, s) => sum + ((Number(s.unit_price) || 0) * (Number(s.quantity) || 0)), 0);
+                  const totalCommissions = realizedSales.reduce((sum, s) => sum + (Number(s.commission_fee) || 0), 0);
+                  const totalSaleShipping = realizedSales.reduce((sum, s) => sum + (Number(s.sale_shipping) || 0), 0);
+                  const summary = realizedSummary(form, realizedSales, cbRate);
+                  const netProfit = summary.netProfit;
                   return (
                     <>
                       <div className="flex justify-between text-sm border-t border-white/[0.06] pt-2">
@@ -669,14 +642,14 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                         </div>
                       )}
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-200 font-semibold">Net Profit</span>
+                        <span className="text-gray-200 font-semibold">Realized Profit + Cashback</span>
                         <span className={`font-bold ${netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                           {netProfit >= 0 ? '+' : ''}${netProfit.toFixed(2)}
                         </span>
                       </div>
                       {cbEarned > 0 && (
                         <p className="text-[10px] text-gray-600">
-                          Includes ${cbEarned.toFixed(2)} cashback ({cbRate}%)
+                          Includes ${summary.cashback.toFixed(2)} sold-unit cashback ({cbRate}%)
                         </p>
                       )}
                     </>

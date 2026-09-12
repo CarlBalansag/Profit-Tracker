@@ -9,34 +9,14 @@ const isAuthenticated = (req, res, next) => {
 
 // Same cashback rate logic as analytics.js — applies category rate overrides
 // (e.g. Amazon 5% on Chase Freedom Flex) with expiry support.
-const getEffectiveCashbackRate = (inv) => {
-  const pm = inv.payment_method;
-  if (!pm) return 0;
-
-  const vendorName = (inv.vendor?.name || '').toLowerCase();
-
-  let rates = [];
-  if (pm.category_rates) {
-    try { rates = JSON.parse(pm.category_rates); } catch { rates = []; }
-  }
-
-  if (vendorName && rates.length > 0) {
-    const today = new Date();
-    const match = rates.find(cr => {
-      if (cr.expires && new Date(cr.expires) < today) return false;
-      return vendorName.includes(cr.store.toLowerCase()) || cr.store.toLowerCase().includes(vendorName);
-    });
-    if (match) return match.rate;
-  }
-
-  return pm.default_cashback_rate || 0;
-};
+const finance = import('../../shared/finance.mjs');
 
 // GET /dashboard
 // Returns credit-card spending breakdown for the current calendar month.
 // Only includes inventory purchased with PaymentMethod.type = 'Credit'.
 router.get('/dashboard', isAuthenticated, async (req, res, next) => {
   try {
+    const { batchCost, saleEconomics, effectiveCashbackRate: getEffectiveCashbackRate, isRealizedSale } = await finance;
     const userId = req.user.id;
     const now = new Date();
 
@@ -105,7 +85,7 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
       const card = cardMap[pm.id];
       const rate = getEffectiveCashbackRate(inv);
       const qty = inv.qty_purchased || 1;
-      const itemCost = (inv.unit_purchase_cost * qty) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0) - (inv.gift_card_amount || 0);
+      const itemCost = batchCost(inv);
       const itemCashback = itemCost * (rate / 100);
 
       card.totalSpend += itemCost;
@@ -117,18 +97,10 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
 
       if (hasSales) {
         // Allocate cost proportionally across sold quantities
-        const perUnit = qty > 0 ? 1 / qty : 0;
 
         for (const sale of inv.sales) {
-          if (['CANCELLED', 'RETURNED', 'DISPUTED'].includes((sale.status || '').toUpperCase())) continue;
-          const allocatedCost = (inv.unit_purchase_cost * sale.quantity)
-            + (inv.sales_tax * perUnit * sale.quantity)
-            + (inv.shipping_cost_inbound * perUnit * sale.quantity)
-            + ((inv.fees || 0) * perUnit * sale.quantity)
-            - ((inv.gift_card_amount || 0) * perUnit * sale.quantity);
-          const allocatedCashback = allocatedCost * (rate / 100);
-          const saleRevenue = (sale.unit_price * sale.quantity) - sale.commission_fee - sale.sale_shipping;
-          const netPnl = saleRevenue - allocatedCost;
+          if (!isRealizedSale(sale)) continue;
+          const { cost: allocatedCost, cashback: allocatedCashback, revenue: saleRevenue, grossProfit: netPnl } = saleEconomics(inv, sale, rate);
           const isLoss = netPnl < 0;
           const lossAmount = isLoss ? Math.abs(netPnl) : 0;
           const lossToRedeem = Math.min(allocatedCashback, lossAmount);

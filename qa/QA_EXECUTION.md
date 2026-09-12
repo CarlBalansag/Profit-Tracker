@@ -23,7 +23,7 @@ Commit each completed task separately and record precise coverage and remaining 
 |---|---|---|
 | 1 | QA-22: intentional clearing of optional account fields | Fixed; focused API regression passed |
 | 2 | QA-21: Vendor/Marketplace editing | Fixed; focused browser/frontend/API QA passed |
-| 3 | QA-06: consistent financial calculations | Pending |
+| 3 | QA-06: consistent financial calculations | Fixed core calculations; focused regression passed |
 | 4 | QA-19: Buyer/Invoice ownership | Pending |
 | 5 | QA-20: inactive controls and unfinished workflows | Pending |
 | 6 | QA-15: staged currency precision migration | Pending |
@@ -57,3 +57,16 @@ Connected Vendor and Marketplace pencil buttons to a shared edit form for name/a
 - Browser fixture: Vendor rename/notes save and reopen; cancelled draft did not replace saved name. Marketplace fee updated to 7.5 and notes cleared successfully.
 - Targeted lint on all changed components/tests passed. Production/PWA build passed with existing large-chunk warning. git diff --check passed.
 - QA used disposable in-memory records; no live database or external-service writes. Real PostgreSQL and cross-tab browser refresh are not verified by this fixture.
+
+## QA-06 completed for current implemented financial flows
+
+Added shared/finance.mjs for batch/allocated costs, stored-rate cashback, sale economics and realized summaries. Express reporting imports the same module as React. Removed preset-only cashback fallback in the ledger and preview-only tax/shipping switches. Expanded editor rate now derives from the selected stored payment method/vendor instead of an unpersisted custom rate. Partial-sale previews include fees and allocate cashback; editor realized summaries exclude unsold batch cost and cancelled/returned/disputed sales. Inventory totals/rows use allocated full cost. Analytics cost breakdown does not count purchase tax twice and includes outbound shipping. Purchase/sale saves refresh related queries.
+
+- 5 shared-helper fixtures passed: overhead/gifts, partial and split sales, excluded statuses, numeric/empty inputs, stored raw/parsed rates, expiry, malformed data and immutability.
+- 4 API report consistency fixtures passed: analytics/Cash Flow/credit-card/receipt totals, multiple purchases/split sales, repeated reads, stored overrides and empty records.
+- 5 frontend screen regressions passed: Inventory allocated value, Add Sale fees, Add Transaction partial-sale/cashback preview, editor partial-sale and cancelled summaries.
+- Full backend suite: 68 tests passed; full frontend suite: 33 tests passed. Production/PWA build passed with existing bundle warning.
+- Browser fixture confirmed ledger batch cost 520, sold cost 208, remaining cost 312 and realized profit 69.16; Inventory matched remaining 312.
+- Changed Add Transaction/Inventory/detail and new screen tests pass targeted lint; old Add Sale/Transactions/Analytics lint failures remain QA-25 work.
+- Form validation, attachment failure/retry, ownership and write rollback coverage remains in the passing baseline suites. This task changes calculations/cache refresh, not database money types or concurrent write contracts.
+- No live database, OAuth or Cloudinary calls were exercised. Tax reporting definitions and business overhead remain separate metrics; fixed-precision migration is QA-15.

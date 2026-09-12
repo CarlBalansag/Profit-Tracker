@@ -14,31 +14,11 @@ const dateKey = (date) => new Date(date).toISOString().slice(0, 10);
 // Returns the effective cashback rate for an inventory item, applying category
 // rate overrides (e.g. Amazon 5% on Chase Freedom Flex) the same way the
 // frontend does.  category_rates is stored as a JSON string in the DB.
-const getEffectiveCashbackRate = (inv) => {
-  const pm = inv.payment_method;
-  if (!pm) return 0;
-
-  const vendorName = (inv.vendor?.name || '').toLowerCase();
-
-  let rates = [];
-  if (pm.category_rates) {
-    try { rates = JSON.parse(pm.category_rates); } catch { rates = []; }
-  }
-
-  if (vendorName && rates.length > 0) {
-    const today = new Date();
-    const match = rates.find(cr => {
-      if (cr.expires && new Date(cr.expires) < today) return false;
-      return vendorName.includes(cr.store.toLowerCase()) || cr.store.toLowerCase().includes(vendorName);
-    });
-    if (match) return match.rate;
-  }
-
-  return pm.default_cashback_rate || 0;
-};
+const finance = import('../../shared/finance.mjs');
 
 router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery), async (req, res, next) => {
   try {
+    const { batchCost, saleEconomics, effectiveCashbackRate: getEffectiveCashbackRate, allocatedCost, isRealizedSale } = await finance;
     const userId = req.user.id;
     const mode = req.query.mode || 'All'; // 'All' | 'Cashout' | 'Marketplace'
     const dateParam = req.query.date || 'All Time';
@@ -97,19 +77,16 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     // arithmetic 4× (stats, cardMap, trend, recentTransactions).
     // Cancelled, returned, and disputed records remain visible in the pipeline,
     // but are not realized revenue, profit, or units sold.
-    const realizedSales = sales.filter((sale) => !['CANCELLED', 'RETURNED', 'DISPUTED'].includes((sale.status || '').toUpperCase()));
+    const realizedSales = sales.filter(isRealizedSale);
     const saleAlloc = realizedSales.map(sale => {
       const inv = sale.inventory;
       const perUnit = inv.qty_purchased > 0 ? 1 / inv.qty_purchased : 0;
       const allocatedTax      = inv.sales_tax              * perUnit * sale.quantity;
       const allocatedShipping = inv.shipping_cost_inbound  * perUnit * sale.quantity;
-      const allocatedFees     = (inv.fees || 0)            * perUnit * sale.quantity;
+      const rate = getEffectiveCashbackRate(inv);
+      const { cost: saleCost, cashback: saleCashback, revenue: saleRevenue, grossProfit } = saleEconomics(inv, sale, rate);
+      const allocatedFees = (inv.fees || 0) * perUnit * sale.quantity;
       const allocatedGiftCard = (inv.gift_card_amount || 0) * perUnit * sale.quantity;
-      const saleCost          = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees - allocatedGiftCard;
-      const rate              = getEffectiveCashbackRate(inv);
-      const saleCashback      = saleCost * (rate / 100);
-      const saleRevenue       = (sale.unit_price * sale.quantity) - sale.commission_fee - sale.sale_shipping;
-      const grossProfit       = saleRevenue - saleCost;
       return { sale, inv, allocatedTax, allocatedShipping, allocatedFees, allocatedGiftCard, saleCost, saleCashback, saleRevenue, grossProfit, rate };
     });
 
@@ -121,13 +98,14 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     let totalCashback = 0;  // ALL purchases cashback
     let soldCashback = 0;   // sold-only cashback (used for profit calcs)
     let commissionFees = 0;
+    let saleShipping = 0;
     let totalTax = 0;
     let soldTax = 0;        // tax allocated to sold items only
 
     // Purchase spend: all inventory purchases in the selected purchase-date window.
     // Cashback is earned at point of purchase, so totalCashback includes all purchases.
     inventories.forEach(inv => {
-      const lineCost = (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0) - (inv.gift_card_amount || 0);
+      const lineCost = batchCost(inv);
       totalCost += lineCost;
       totalTax += inv.sales_tax;
       const rate = getEffectiveCashbackRate(inv);
@@ -141,6 +119,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       soldTax += allocatedTax;
       totalRevenue += saleRevenue;
       commissionFees += sale.commission_fee;
+      saleShipping += Number(sale.sale_shipping) || 0;
     });
 
     // When scoped to Cashout or Marketplace: all summary numbers reflect only
@@ -159,15 +138,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
 
     // Inventory value: cost of unsold units on hand (always from all inventory regardless of mode/date)
     const allInventories = allInventoriesFetched ?? inventories;
-    const inventoryValue = allInventories.reduce((sum, inv) => {
-      if (!inv.qty_purchased || inv.qty_purchased <= 0) return sum + (inv.qty_on_hand * inv.unit_purchase_cost);
-      const unitTax = inv.sales_tax / inv.qty_purchased;
-      const unitShipping = inv.shipping_cost_inbound / inv.qty_purchased;
-      const unitFees = (inv.fees || 0) / inv.qty_purchased;
-      const unitGiftCard = (inv.gift_card_amount || 0) / inv.qty_purchased;
-      const unitCost = inv.unit_purchase_cost + unitTax + unitShipping + unitFees - unitGiftCard;
-      return sum + (inv.qty_on_hand * unitCost);
-    }, 0);
+    const inventoryValue = allInventories.reduce((sum, inv) => sum + allocatedCost(inv, inv.qty_on_hand), 0);
 
     let inventoryQty = 0;
     let listedQty = 0;
@@ -294,7 +265,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       inventories.forEach(inv => {
         const key = bucketKey(dateKey(inv.purchase_date));
         const pt = ensureBucket(key);
-        const lineCost = (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0) - (inv.gift_card_amount || 0);
+        const lineCost = batchCost(inv);
         const rate = getEffectiveCashbackRate(inv);
         pt.totalCost += lineCost;
         pt.totalTax += inv.sales_tax;
@@ -355,6 +326,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
         profit,
         roi,
         commissionFees,
+        saleShipping,
         totalTax,
         inventoryValue,
         inventoryQty,

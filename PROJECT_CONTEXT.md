@@ -181,7 +181,7 @@ Cashback uses current stored payment-method rates with vendor-name substring ove
 Some frontend calculations also use preset fallback data. There is no universal historical rate snapshot or reward-cap engine.
 Static presets need periodic review. Credit Card estimates spend/loss coverage; it does not record bank payments or statement balances.
 
-Financial formulas are duplicated across screens. Verify preview, editor, ledger, dashboard, card and tax totals together when changing money.
+Core batch allocation, sale economics and stored-rate cashback are shared in `shared/finance.mjs`. Verify preview, editor, ledger, dashboard, card and tax totals together when changing money.
 Product decisions still needed include overhead treatment, historical cashback, cancellation/return stock rules, payout recognition and cashout accounting.
 
 React Query coexists with local-state fetching in Expenses, Receipts and Settings components.

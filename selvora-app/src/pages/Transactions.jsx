@@ -1,3 +1,4 @@
+import { allocatedCost, effectiveCashbackRate, saleEconomics, isRealizedSale } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { useInventory, usePlatforms, usePaymentMethods, useInvalidate, apiFetch} from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
@@ -12,7 +13,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import TransactionDetailModal from '../components/TransactionDetailModal';
 import ProductNoteButton from '../components/ProductNoteButton';
-import { PRESET_CARDS } from '../data/presetCards';
+
 
 // ─── Inline editable cell input ───────────────────────────────────────────────
 function EditInput({ value, onChange, type = 'text', className = '' }) {
@@ -434,57 +435,19 @@ const Transactions = () => {
   // Build rows
   const rows = [];
 
-  // Returns the effective cashback rate for an inventory item.
-  // 1. Parse category_rates (comes as JSON string from inventory API).
-  // 2. If no stored rates, fall back to preset card data via preset_card_id.
-  // 3. Match vendor name against category rates (case-insensitive substring).
-  // 4. If no match, use the card's base rate.
-  const getEffectiveCashbackRate = (inv) => {
-    const pm = inv.payment_method;
-    if (!pm) return 0;
-
-    const vendorName = inv.vendor?.name || '';
-
-    // Parse stored rates — inventory API returns raw JSON string, not parsed array
-    let rates = [];
-    if (Array.isArray(pm.category_rates)) {
-      rates = pm.category_rates;
-    } else if (typeof pm.category_rates === 'string' && pm.category_rates) {
-      try { rates = JSON.parse(pm.category_rates); } catch { rates = []; }
-    }
-
-    // If no stored rates but card has a preset_card_id, pull from PRESET_CARDS
-    if (rates.length === 0 && pm.preset_card_id) {
-      const preset = PRESET_CARDS.find(c => c.id === pm.preset_card_id);
-      if (preset?.categoryRates?.length) rates = preset.categoryRates;
-    }
-
-    if (vendorName && rates.length > 0) {
-      const today = new Date();
-      const name = vendorName.toLowerCase();
-      const match = rates.find(cr => {
-        if (cr.expires && new Date(cr.expires) < today) return false;
-        return name.includes(cr.store.toLowerCase()) || cr.store.toLowerCase().includes(name);
-      });
-      if (match) return match.rate;
-    }
-
-    return pm.default_cashback_rate || 0;
-  };
+  const getEffectiveCashbackRate = effectiveCashbackRate;
 
   transactions.forEach(inv => {
-    const cost = (inv.unit_purchase_cost * inv.qty_purchased) + inv.sales_tax + inv.shipping_cost_inbound + (inv.fees || 0) - (inv.gift_card_amount || 0);
+
     const unitTax = inv.qty_purchased > 0 ? inv.sales_tax / inv.qty_purchased : 0;
     const unitInboundShipping = inv.qty_purchased > 0 ? inv.shipping_cost_inbound / inv.qty_purchased : 0;
-    const unitFees = inv.qty_purchased > 0 ? (inv.fees || 0) / inv.qty_purchased : 0;
-    const unitGiftCard = inv.qty_purchased > 0 ? (inv.gift_card_amount || 0) / inv.qty_purchased : 0;
 
     // Always show a purchase row if there is unsold stock on hand, OR if the
     // item has no sales at all (qty_on_hand may be 0 due to a data issue — we
     // never want to silently hide a transaction the user recorded).
     if (inv.qty_on_hand > 0 || !inv.sales?.length) {
       const displayQty = inv.qty_on_hand > 0 ? inv.qty_on_hand : inv.qty_purchased;
-      const unsoldCost = (inv.unit_purchase_cost + unitTax + unitInboundShipping + unitFees - unitGiftCard) * displayQty;
+      const unsoldCost = allocatedCost(inv, displayQty);
       const effectiveRate = getEffectiveCashbackRate(inv);
       rows.push({
         id: inv.id + '_unsold',
@@ -521,12 +484,9 @@ const Transactions = () => {
         // Proportionally allocate tax, shipping, and fees based on qty sold vs qty purchased
         const allocatedTax = unitTax * sale.quantity;
         const allocatedShipping = unitInboundShipping * sale.quantity;
-        const allocatedFees = unitFees * sale.quantity;
-        const allocatedGiftCard = unitGiftCard * sale.quantity;
-        const totalUnitCost = (inv.unit_purchase_cost * sale.quantity) + allocatedTax + allocatedShipping + allocatedFees - allocatedGiftCard;
-        const effectiveRate = getEffectiveCashbackRate(inv);
-        const saleCashback = totalUnitCost * (effectiveRate / 100);
-        const profit = (sale.unit_price * sale.quantity) - sale.commission_fee - sale.sale_shipping - totalUnitCost + saleCashback;
+        const economics = saleEconomics(inv, sale);
+        const totalUnitCost = economics.cost;
+        const profit = isRealizedSale(sale) ? economics.netProfit : 0;
         rows.push({
           id: sale.id,
           rawId: inv.id,
@@ -546,7 +506,7 @@ const Transactions = () => {
           rawSale: sale.unit_price,
           sale: sale.unit_price * sale.quantity,
           profit,
-          cashback: totalUnitCost * (effectiveRate / 100),
+          cashback: economics.cashback,
           payment: inv.payment_method?.name || '',
           paymentMethodId: inv.payment_method_id || '',
           status: sale.status || 'SOLD',

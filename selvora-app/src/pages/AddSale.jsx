@@ -1,3 +1,4 @@
+import { saleEconomics } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import {
@@ -118,8 +119,6 @@ const AddSale = () => {
     toast.promise(submitPromise, {
       loading: 'Recording sale...',
       success: () => {
-        invalidate.inventory();
-        invalidate.dashboard();
         // Save or clear the product note independently (fire-and-forget)
         const noteText = formData.note?.trim();
         if (noteText) {
@@ -127,6 +126,7 @@ const AddSale = () => {
         } else if (noteData?.note) {
           removeNote.mutate();
         }
+        invalidate.all();
         setTimeout(() => navigate('/transactions'), 800);
         return `Sale recorded for ${selectedItem.product_name}!`;
       },
@@ -341,16 +341,13 @@ const AddSale = () => {
                   {(() => {
                     const sp = parseFloat(formData.unit_price) || 0;
                     const qs = parseInt(formData.quantity) || 1;
-                    const qtyPurchased = selectedItem.qty_purchased || 1;
-                    const unitTax = (selectedItem.sales_tax || 0) / qtyPurchased;
-                    const unitShipping = (selectedItem.shipping_cost_inbound || 0) / qtyPurchased;
-                    const unitGiftCard = (selectedItem.gift_card_amount || 0) / qtyPurchased;
-                    const unitCost = selectedItem.unit_purchase_cost + unitTax + unitShipping - unitGiftCard;
-                    const purchaseCost = unitCost * qs;
+                    const economics = saleEconomics(selectedItem, { ...formData, quantity: qs, unit_price: sp });
+                    const purchaseCost = economics.cost;
+                    const unitCost = qs > 0 ? purchaseCost / qs : 0;
                     const saleTotal = sp * qs;
                     const commission = parseFloat(formData.commission_fee) || 0;
                     const saleShipping = parseFloat(formData.sale_shipping) || 0;
-                    const profit = saleTotal - purchaseCost - commission - saleShipping;
+                    const profit = economics.grossProfit;
                     return (
                       <>
                         <label className="flex items-center gap-2 cursor-pointer select-none">
