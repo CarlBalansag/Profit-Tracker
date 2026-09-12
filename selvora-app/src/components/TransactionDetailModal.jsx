@@ -1,7 +1,8 @@
 import { batchCost, effectiveCashbackRate, saleEconomics, realizedSummary, isRealizedSale, sumMoney, multiplyMoney, batchCashback } from '../utils/finance';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, DollarSign, Package, CreditCard, Tag, ChevronDown, ChevronUp } from 'lucide-react';
 import { useInvalidate, apiFetch} from '../hooks/useApi';
+import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { toast } from 'sonner';
 
 const STATUSES = ['Pre Order', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
@@ -98,6 +99,8 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
   const [form, setForm] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const dismiss = () => { if (!savingRef.current) onClose(); };
   // track which sale card is expanded (index)
   const [expandedSale, setExpandedSale] = useState(0);
   const invalidate = useInvalidate();
@@ -177,13 +180,15 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
 
   // ── Save ─────────────────────────────────────────────────────────────────────
   const handleSave = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
-      const invRes = await apiFetch(`/api/inventory/${row.rawId}`, {
+      const invRes = await apiFetch(`/api/inventory/${row.rawId}/transaction`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
+        body: JSON.stringify({ inventory: {
           product_name:          form.product_name,
           status:                form.status,
           purchase_date:         form.purchase_date,
@@ -198,43 +203,29 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
           vendor_id:             form.vendor_id || null,
           payment_method_id:     form.payment_method_id || null,
           tax_exempt:            form.tax_exempt ?? false,
-        }),
-      });
-      if (!invRes.ok) {
-        toast.error('Inventory update failed. No sale changes were saved.');
-        return;
-      }
-
-      // Save every sale's editable fields
-      const saleResponses = await Promise.all(form._sales.map(s =>
-        apiFetch(`/api/sales/${s.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
+        }, sales: form._sales.map(s => ({
+            id: s.id,
             unit_price:         Number(s.unit_price),
             quantity:           Number(s.quantity),
             commission_fee:     Number(s.commission_fee),
             sale_shipping:      Number(s.sale_shipping),
             platform_id:        s.platform_id || null,
             status:             s.status,
-            sale_date:          s.sale_date || null,
+            sale_date:          s.sale_date || undefined,
             payout_date:        s.payout_date || null,
             taxable:            s.taxable,
             sale_tax_collected: Number(s.sale_tax_collected),
-          }),
-        })
-      ));
-      if (saleResponses.some(response => !response.ok)) {
-        toast.error('One or more sale updates failed. Review the transaction and try again.');
-        return;
-      }
+          })) }),
+      });
+      await requireSuccessfulResponse(invRes, 'Transaction update failed. No changes were saved.');
       invalidate.all();
       onSaved();
       onClose();
     } catch (err) {
       console.error(err);
+      toast.error(err.message || 'Transaction update failed. No changes were saved.');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -243,7 +234,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={dismiss} />
 
       {/* Panel */}
       <div
@@ -264,7 +255,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             <p className="text-[11px] text-gray-500 mt-0.5">Make changes and click Update to save.</p>
           </div>
           <button
-            onClick={onClose}
+            onClick={dismiss}
             className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 text-gray-500 hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
@@ -664,7 +655,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
         {/* ── Footer ── */}
         <div className="px-4 sm:px-6 py-4 border-t border-white/[0.06] flex items-center justify-end gap-3 shrink-0">
           <button
-            onClick={onClose}
+            onClick={dismiss}
             className="px-5 py-2 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-white/[0.05] border border-white/[0.08] transition-colors"
           >
             Cancel

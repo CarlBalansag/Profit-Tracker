@@ -26,7 +26,7 @@ describe.skipIf(!databaseUrl)('native PostgreSQL API integration', () => {
   beforeAll(async () => {
     process.env.DATABASE_URL = databaseUrl;
     process.env.DIRECT_URL = databaseUrl;
-    for (const module of ['../prisma', '../services/calendarFeed', '../services/ownership', '../routes/sales', '../routes/inventory']) {
+    for (const module of ['../prisma', '../services/calendarFeed', '../services/ownership', '../services/transactionEdit', '../routes/sales', '../routes/inventory']) {
       const modulePath = require.resolve(module);
       originalModules.set(modulePath, require.cache[modulePath]);
       delete require.cache[modulePath];
@@ -128,5 +128,15 @@ describe.skipIf(!databaseUrl)('native PostgreSQL API integration', () => {
     expect((await prisma.inventory.findUnique({ where: { id: inventory.id } })).qty_on_hand).toBe(0);
     expect((await request('PUT', `/api/inventory/${inventory.id}`, { qty_purchased: 2 })).status).toBe(200);
     expect((await prisma.inventory.findUnique({ where: { id: inventory.id } })).qty_on_hand).toBe(1);
+  });
+  it('rolls back an expanded edit when a later sale violates the database contract', async () => {
+    const created = await request('POST', '/api/sales', { inventory_id: inventory.id, quantity: 1, unit_price: 1 });
+    expect(created.status).toBe(200);
+    const body = { inventory: { unit_purchase_cost: '0.50' }, sales: [{ id: created.body.id, status: null }] };
+    expect((await request('PUT', `/api/inventory/${inventory.id}/transaction`, body)).status).toBe(500);
+    expect((await prisma.inventory.findUnique({ where: { id: inventory.id } })).unit_purchase_cost_decimal.toFixed(2)).toBe('0.29');
+    body.sales[0].status = 'PAID';
+    expect((await request('PUT', `/api/inventory/${inventory.id}/transaction`, body)).status).toBe(200);
+    expect((await prisma.inventory.findUnique({ where: { id: inventory.id } })).unit_purchase_cost_decimal.toFixed(2)).toBe('0.50');
   });
 });

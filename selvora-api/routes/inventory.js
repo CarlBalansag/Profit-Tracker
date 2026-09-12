@@ -219,6 +219,17 @@ router.get('/:id', isAuthenticated, async (req, res, next) => {
 });
 
 // PUT - update an inventory record
+router.put('/:id/transaction', isAuthenticated, validateBody(require('zod').z.object({
+  inventory: updateInventory,
+  sales: require('../validation/schemas').updateSale.extend({ id: require('zod').z.string().uuid() }).array().max(500),
+})), async (req, res, next) => {
+  try {
+    const result = await require('../services/transactionEdit').editTransaction(prisma, req.params.id, req.user.id, req.body);
+    await publishCalendarFeed(req.user.id);
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
 router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, res, next) => {
   try {
     const existing = await prisma.inventory.findUnique({

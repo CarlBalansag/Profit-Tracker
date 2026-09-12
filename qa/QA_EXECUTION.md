@@ -131,3 +131,13 @@ Purchase-quantity edits now conditionally match the purchased/on-hand quantities
 - 20 focused API tests passed: purchased quantity below sold units, recalculation, a sale between read/write, reload/retry, failure preservation, repeated edits, exact purchase fields, immediate-sale rollback, partial preservation and report consistency.
 - Added the same paused-read/new-sale/retry case to native PostgreSQL integration coverage; the new case awaits the next CI run.
 - The earlier QA-25 CI run 34708368309 passed every gate, including all migrations and the initial three native database tests. Current sale/inventory concurrency additions require a new run. No live/hosted database changes.
+
+## QA-03 reconciliation: expanded editor saves one atomic transaction
+
+Added a validated transaction-wide inventory edit endpoint. It checks ownership of the purchase, every linked sale and every supplied related ID; validates final combined quantities; serializes against stock changes; and saves purchase plus sales in one database transaction. The expanded editor sends one request, checks failure responses and keeps its draft for retry. Pending saves block duplicate submission and dismissal. The expand icon is now an accessible button.
+
+- Eight API cases passed: combined purchase/multiple-sale quantity reductions, exact writes, omitted/empty fields, repeated save, later-sale rollback/retry, overselling/precision/duplicate IDs/inconsistent stock, ownership and authentication.
+- Two UI cases passed: one combined request, preserved draft on failure/retry, purchase fields/optional dates, pending duplicate/dismissal protection. Browser fixture unchanged save preserved $520 total cost, $69.16 realized profit, vendor/card/status and closed successfully.
+- Full local API: 128 passed, six native cases skipped locally. Full frontend: 59 passed. Zero-warning lint and production/PWA build passed. Added native transaction-wide rollback/retry coverage for the next CI run.
+- CI run 34708538284 on the previous checkpoint passed all gates, including five native PostgreSQL cases for sale and inventory concurrent edits. No hosted migrations, live data writes or deployment.
+- Reconciliation separately found inline BUY editing sends remaining units as total purchased units, and inline sale saves still use separate requests. Those are the next focused QA-02 task; they are not changed in this expanded-editor task.

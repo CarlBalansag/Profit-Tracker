@@ -1077,10 +1077,9 @@ const Transactions = () => {
                     />
                   </td>
                   <td className="px-2 py-3.5 text-gray-600">
-                    <Maximize2
-                      className="w-3.5 h-3.5 cursor-pointer hover:text-gray-300 transition-colors"
-                      onClick={() => setExpandedRow(row)}
-                    />
+                    <button aria-label="Expand transaction" className="hover:text-gray-300 transition-colors" onClick={() => setExpandedRow(row)}>
+                      <Maximize2 className="w-3.5 h-3.5" />
+                    </button>
                   </td>
                   <td className="px-2 py-3.5">
                     {row.isSale

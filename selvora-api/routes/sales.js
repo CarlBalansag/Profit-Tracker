@@ -137,6 +137,12 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
     if (customer_tax_exempt !== undefined) data.customer_tax_exempt = customer_tax_exempt === true || customer_tax_exempt === 'true';
     if (exemption_type !== undefined) data.exemption_type = exemption_type || null;
     const updated = await prisma.$transaction(async (tx) => {
+      // Use the same inventory-first lock order as transaction-wide edits.
+      const inventoryClaim = await tx.inventory.updateMany({
+        where: { id: existing.inventory_id, user_id: req.user.id },
+        data: { qty_on_hand: { increment: 0 } },
+      });
+      if (inventoryClaim.count !== 1) throw requestError(404, 'Inventory not found or access denied');
       // Claim the version used to calculate the stock delta. A concurrent edit
       // must not apply that delta again or overwrite fields omitted here.
       const claim = await tx.sales.updateMany({
