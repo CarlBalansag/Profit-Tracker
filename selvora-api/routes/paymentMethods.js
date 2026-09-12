@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { currencyWrite } = require('../services/currencyWrite');
 const { validateBody } = require('../middleware/validate');
-const { paymentMethod } = require('../validation/schemas');
+const { paymentMethod, updatePaymentMethod } = require('../validation/schemas');
 const { publishCalendarFeed } = require('../services/calendarFeed');
 
 const isAuthenticated = (req, res, next) => {
@@ -34,7 +35,7 @@ router.post('/', isAuthenticated, validateBody(paymentMethod), async (req, res, 
     const { name, type, default_cashback_rate, preset_card_id, category_rates,
             statement_close_day, due_day, credit_limit, min_payment_pct } = req.body;
     const method = await prisma.paymentMethod.create({
-      data: {
+      data: currencyWrite('PaymentMethod', {
         user_id: req.user.id,
         name,
         type,
@@ -43,9 +44,9 @@ router.post('/', isAuthenticated, validateBody(paymentMethod), async (req, res, 
         category_rates: category_rates ? JSON.stringify(category_rates) : null,
         statement_close_day: statement_close_day ? parseInt(statement_close_day) : null,
         due_day: due_day ? parseInt(due_day) : null,
-        credit_limit: credit_limit ? parseFloat(credit_limit) : null,
-        min_payment_pct: min_payment_pct ? parseFloat(min_payment_pct) : null,
-      }
+        credit_limit: credit_limit ?? null,
+        min_payment_pct: min_payment_pct ?? null,
+      })
     });
     await publishCalendarFeed(req.user.id);
     res.json(parseRates(method));
@@ -55,7 +56,7 @@ router.post('/', isAuthenticated, validateBody(paymentMethod), async (req, res, 
 });
 
 // UPDATE payment method
-router.put('/:id', isAuthenticated, validateBody(paymentMethod), async (req, res, next) => {
+router.put('/:id', isAuthenticated, validateBody(updatePaymentMethod), async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name, type, default_cashback_rate, preset_card_id, category_rates,
@@ -68,19 +69,19 @@ router.put('/:id', isAuthenticated, validateBody(paymentMethod), async (req, res
 
     const updated = await prisma.paymentMethod.update({
       where: { id },
-      data: {
+      data: currencyWrite('PaymentMethod', {
         name,
         type,
-        default_cashback_rate: parseFloat(default_cashback_rate) || 0,
+        default_cashback_rate: default_cashback_rate !== undefined ? default_cashback_rate : existing.default_cashback_rate,
         preset_card_id: preset_card_id ?? existing.preset_card_id,
         category_rates: category_rates !== undefined
           ? JSON.stringify(category_rates)
           : existing.category_rates,
         statement_close_day: statement_close_day !== undefined ? (statement_close_day ? parseInt(statement_close_day) : null) : existing.statement_close_day,
         due_day: due_day !== undefined ? (due_day ? parseInt(due_day) : null) : existing.due_day,
-        credit_limit: credit_limit !== undefined ? (credit_limit ? parseFloat(credit_limit) : null) : existing.credit_limit,
-        min_payment_pct: min_payment_pct !== undefined ? (min_payment_pct ? parseFloat(min_payment_pct) : null) : existing.min_payment_pct,
-      }
+        credit_limit: credit_limit !== undefined ? (credit_limit ?? null) : existing.credit_limit,
+        min_payment_pct: min_payment_pct !== undefined ? (min_payment_pct ?? null) : existing.min_payment_pct,
+      })
     });
     await publishCalendarFeed(req.user.id);
     res.json(parseRates(updated));

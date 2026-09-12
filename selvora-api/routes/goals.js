@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { currencyWrite } = require('../services/currencyWrite');
 const { validateBody } = require('../middleware/validate');
 const { goal, updateGoal } = require('../validation/schemas');
 
@@ -8,6 +9,14 @@ const isAuthenticated = (req, res, next) => {
   if (req.isAuthenticated()) return next();
   res.status(401).json({ message: 'Unauthorized' });
 };
+
+function validateTargets(metric, targets) {
+  if (metric === 'unitsSold' && Object.entries(targets).some(([key, value]) => key.startsWith('target_') && value != null && !Number.isSafeInteger(value))) {
+    const error = new Error('Unit goals require whole numbers.');
+    error.status = 400;
+    throw error;
+  }
+}
 
 // GET all goals for current user
 router.get('/', isAuthenticated, async (req, res, next) => {
@@ -26,16 +35,17 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 router.post('/', isAuthenticated, validateBody(goal), async (req, res, next) => {
   try {
     const { metric, target_7d, target_30d, target_ytd, active } = req.body;
+    validateTargets(metric, { target_7d, target_30d, target_ytd });
 
     const goal = await prisma.goal.create({
-      data: {
+      data: currencyWrite('Goal', {
         user_id:    req.user.id,
         metric,
         target_7d,
         target_30d,
         target_ytd,
         active:     active ?? true,
-      },
+      })
     });
     res.json(goal);
   } catch (err) {
@@ -52,16 +62,17 @@ router.put('/:id', isAuthenticated, validateBody(updateGoal), async (req, res, n
     }
 
     const { metric, target_7d, target_30d, target_ytd, active } = req.body;
+    validateTargets(metric ?? existing.metric, { ...existing, ...req.body });
 
     const updated = await prisma.goal.update({
       where: { id: req.params.id },
-      data: {
-        ...(metric     !== undefined && { metric }),
+      data: currencyWrite('Goal', {
+        metric: metric ?? existing.metric,
         ...(target_7d  !== undefined && { target_7d }),
         ...(target_30d !== undefined && { target_30d }),
         ...(target_ytd !== undefined && { target_ytd }),
         ...(active     !== undefined && { active }),
-      },
+      })
     });
     res.json(updated);
   } catch (err) {

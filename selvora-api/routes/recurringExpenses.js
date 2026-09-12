@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { currencyWrite } = require('../services/currencyWrite');
 const { validateBody } = require('../middleware/validate');
 const { recurringExpense, updateRecurringExpense } = require('../validation/schemas');
 
@@ -61,7 +62,7 @@ async function generateEntries(rec) {
   if (toCreate.length === 0) return;
 
   await prisma.expense.createMany({
-    data: toCreate.map(date => ({
+    data: toCreate.map(date => currencyWrite('Expense', ({
       user_id:             rec.user_id,
       name:                rec.name,
       amount:              rec.amount,
@@ -69,7 +70,7 @@ async function generateEntries(rec) {
       date,
       notes:               rec.notes || null,
       recurring_expense_id: rec.id,
-    })),
+    }))),
     skipDuplicates: true,
   });
 
@@ -106,12 +107,12 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 router.post('/', isAuthenticated, validateBody(recurringExpense), async (req, res, next) => {
   try {
     const { name, amount, category, frequency, start_date, end_date, notes } = req.body;
-    if (!name || !amount || !frequency || !start_date) {
+    if (!name || amount === undefined || !frequency || !start_date) {
       return res.status(400).json({ error: 'name, amount, frequency, and start_date are required' });
     }
 
     const rec = await prisma.recurringExpense.create({
-      data: {
+      data: currencyWrite('RecurringExpense', {
         user_id:    req.user.id,
         name,
         amount:     parseFloat(amount),
@@ -121,7 +122,7 @@ router.post('/', isAuthenticated, validateBody(recurringExpense), async (req, re
         end_date:   end_date  ? parseLocalDate(end_date) : null,
         notes:      notes     || null,
         active:     true,
-      },
+      })
     });
 
     // Immediately generate all past occurrences
@@ -157,7 +158,7 @@ router.put('/:id', isAuthenticated, validateBody(updateRecurringExpense), async 
     if (active !== undefined) data.active = Boolean(active);
     if (wasInactive && nowActive) data.last_generated = existing.last_generated; // keep, generateEntries handles gaps
 
-    const updated = await prisma.recurringExpense.update({ where: { id: req.params.id }, data });
+    const updated = await prisma.recurringExpense.update({ where: { id: req.params.id }, data: currencyWrite('RecurringExpense', data) });
 
     // If still active after update, generate any new entries
     if (updated.active) {

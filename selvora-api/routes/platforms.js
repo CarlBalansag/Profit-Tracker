@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { currencyWrite } = require('../services/currencyWrite');
 const { validateBody } = require('../middleware/validate');
 const { platform, updatePlatform, platformBatch } = require('../validation/schemas');
 const { requireOwned } = require('../services/ownership');
@@ -29,7 +30,7 @@ router.post('/', isAuthenticated, validateBody(platform), async (req, res, next)
   try {
     const { name, type, fee_pct, address, notes, tax_exempt_place } = req.body;
     const platform = await prisma.platform.create({
-      data: {
+      data: currencyWrite('Platform', {
         user_id: req.user.id,
         name,
         type: type || 'retail',
@@ -37,7 +38,7 @@ router.post('/', isAuthenticated, validateBody(platform), async (req, res, next)
         address: address || null,
         notes: notes || null,
         tax_exempt_place: tax_exempt_place === true || tax_exempt_place === 'true',
-      }
+      })
     });
     res.json(platform);
   } catch (err) {

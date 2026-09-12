@@ -1,6 +1,7 @@
 const { z } = require('zod');
 const { optionalCurrency, exactValue } = require('./currency');
 const exactOptionalMoney = optionalCurrency();
+const exactOptionalRate = optionalCurrency(6);
 
 const emptyToUndefined = (value) => (value === '' ? undefined : value);
 const emptyToNull = (value) => (value === '' ? null : value);
@@ -66,7 +67,7 @@ const nullableOptionalDateString = z.preprocess(
 
 const categoryRate = z.object({
   store: requiredString('store'),
-  rate: z.coerce.number().finite().min(0),
+  rate: exactValue(6),
   expires: optionalDateString,
 }).passthrough();
 
@@ -156,7 +157,7 @@ const updateSale = z.object({
 
 const createExpense = z.object({
   name: requiredString('name'),
-  amount: money,
+  amount: exactValue(2),
   category: optionalString,
   date: dateString,
   notes: optionalString,
@@ -173,19 +174,21 @@ const optionalDay = z.preprocess(
 const paymentMethod = z.object({
   name: requiredString('name'),
   type: requiredString('type'),
-  default_cashback_rate: optionalMoney.default(0),
+  default_cashback_rate: exactOptionalRate.default(0),
   preset_card_id: optionalString,
   category_rates: z.array(categoryRate).optional(),
   statement_close_day: optionalDay,
   due_day: optionalDay,
-  credit_limit: optionalMoney,
-  min_payment_pct: optionalMoney,
+  credit_limit: exactOptionalMoney.nullable(),
+  min_payment_pct: exactOptionalRate.nullable(),
 }).passthrough();
+
+const updatePaymentMethod = paymentMethod.omit({ default_cashback_rate: true }).partial().extend({ default_cashback_rate: exactOptionalRate });
 
 const platform = z.object({
   name: requiredString('name'),
   type: optionalString,
-  fee_pct: optionalMoney.default(0),
+  fee_pct: exactOptionalRate.default(0),
   address: optionalString,
   notes: optionalString,
   tax_exempt_place: optionalBoolish,
@@ -194,7 +197,7 @@ const platform = z.object({
 const updatePlatform = z.object({
   name: requiredString('name').optional(),
   type: optionalString,
-  fee_pct: optionalMoney,
+  fee_pct: exactOptionalRate,
   address: optionalString,
   notes: optionalString,
   tax_exempt_place: optionalBoolish,
@@ -222,7 +225,7 @@ const updateAccount = account.omit({ platform_id: true }).partial();
 
 const recurringExpense = z.object({
   name: requiredString('name'),
-  amount: money,
+  amount: exactValue(2),
   category: optionalString,
   frequency: z.enum(['weekly', 'biweekly', 'monthly']),
   start_date: dateString,
@@ -249,7 +252,7 @@ const ebayPriceQuery = z.object({
 
 const ebayPrice = z.object({
   product_name: requiredString('product_name').max(200),
-  last_sold_price: optionalMoney.nullable(),
+  last_sold_price: exactOptionalMoney.nullable(),
 });
 
 const dashboardPreferences = z.object({
@@ -292,7 +295,7 @@ const updateCalendarEvent = z.object({
 
 const goalTarget = z.preprocess(
   emptyToNull,
-  z.coerce.number().finite().min(0).nullable().optional()
+  exactValue(2).nullable().optional()
 );
 const goalActive = z.union([z.boolean(), z.enum(['true', 'false'])])
   .transform((value) => value === true || value === 'true');
@@ -320,6 +323,7 @@ module.exports = {
   createExpense,
   updateExpense,
   paymentMethod,
+  updatePaymentMethod,
   platform,
   updatePlatform,
   platformBatch,

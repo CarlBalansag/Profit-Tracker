@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { currencyWrite } = require('../services/currencyWrite');
 const { validateBody } = require('../middleware/validate');
 const { createExpense, updateExpense } = require('../validation/schemas');
 
@@ -32,11 +33,11 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 router.post('/', isAuthenticated, validateBody(createExpense), async (req, res, next) => {
   try {
     const { name, amount, category, date, notes, receipt_url } = req.body;
-    if (!name || !amount || !date) {
+    if (!name || amount === undefined || !date) {
       return res.status(400).json({ error: 'name, amount, and date are required' });
     }
     const expense = await prisma.expense.create({
-      data: {
+      data: currencyWrite('Expense', {
         user_id: req.user.id,
         name,
         amount: parseFloat(amount),
@@ -44,7 +45,7 @@ router.post('/', isAuthenticated, validateBody(createExpense), async (req, res, 
         date: parseLocalDate(date),
         notes: notes || null,
         receipt_url: receipt_url || null,
-      },
+      })
     });
     res.json(expense);
   } catch (err) {
@@ -68,7 +69,7 @@ router.put('/:id', isAuthenticated, validateBody(updateExpense), async (req, res
     if (notes !== undefined)       data.notes = notes || null;
     if (receipt_url !== undefined) data.receipt_url = receipt_url || null;
 
-    const updated = await prisma.expense.update({ where: { id: req.params.id }, data });
+    const updated = await prisma.expense.update({ where: { id: req.params.id }, data: currencyWrite('Expense', data) });
     res.json(updated);
   } catch (err) {
     next(err);

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { currencyWrite } = require('../services/currencyWrite');
 const { validateBody, validateQuery } = require('../middleware/validate');
 const { ebayPriceQuery, ebayPrice } = require('../validation/schemas');
 
@@ -46,8 +47,8 @@ router.post('/', isAuthenticated, validateBody(ebayPrice), async (req, res) => {
 
   const record = await prisma.ebayPriceCache.upsert({
     where: { product_name },
-    update: { last_sold_price: last_sold_price ?? null, currency: 'USD' },
-    create: { product_name, last_sold_price: last_sold_price ?? null, currency: 'USD' },
+    update: currencyWrite('EbayPriceCache', { last_sold_price: last_sold_price ?? null, currency: 'USD' }),
+    create: currencyWrite('EbayPriceCache', { product_name, last_sold_price: last_sold_price ?? null, currency: 'USD' }),
   });
 
   return res.json({
