@@ -1,4 +1,5 @@
 import { allocatedCost, effectiveCashbackRate, saleEconomics, isRealizedSale } from '../../../shared/finance.mjs';
+import { csvText, downloadFile } from '../utils/downloads';
 import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { useInventory, usePlatforms, usePaymentMethods, useInvalidate, apiFetch} from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
@@ -211,6 +212,7 @@ const Transactions = () => {
   }, [colsOpen]);
 
   // ─── Filter state ────────────────────────────────────────────────────────────
+  const [pagination, setPagination] = useState({ key: '', index: 0 });
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState(location.state?.status || '');
   const [filterVendorId, setFilterVendorId] = useState('');
@@ -575,6 +577,11 @@ const Transactions = () => {
     return true;
   });
 
+  const pageKey = JSON.stringify([search, filterStatus, filterVendorId, filterPlatformId, filterPaymentId, filterDateRange, filterTxnType, txnMode]);
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / 25));
+  const pageIndex = pagination.key === pageKey ? Math.min(pagination.index, pageCount - 1) : 0;
+  const pagedRows = filteredRows.slice(pageIndex * 25, (pageIndex + 1) * 25);
+
   // ─── Summary stats derived from filteredRows (respond to all active filters) ────
   const totalCostSum    = filteredRows.reduce((s, r) => s + (r.cost || 0), 0);
   const totalProfitSum  = filteredRows.filter(r => r.isSale).reduce((s, r) => s + (r.profit || 0), 0);
@@ -644,7 +651,7 @@ const Transactions = () => {
               <button
                 key={mode}
                 type="button"
-                onClick={() => setTxnMode(mode)}
+                onClick={() => { setPagination({ key: '', index: 0 }); setTxnMode(mode); }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   active
                     ? 'text-white bg-white/[0.08] border border-white/10 shadow-sm'
@@ -715,13 +722,13 @@ const Transactions = () => {
             )}
           </div>
           <button 
-            onClick={() => toast('Coming Soon')}
+            onClick={() => downloadFile('selvora-transactions.csv', csvText(filteredRows.map(row => ({ type: row.isSale ? 'Sale' : 'Purchase', date: row.rawDate, product: row.product, vendor: row.vendor, platform: row.platform, quantity: row.qty, cost: row.cost, sale: row.sale, commission: row.rawCommission, profit: row.profit, cashback: row.cashback, payment: row.payment, status: row.status, category: row.category }))), 'text/csv;charset=utf-8')}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 bg-white/[0.02] text-gray-300 text-xs font-medium hover:bg-white/5 transition-colors"
           >
             <Download className="w-3.5 h-3.5" /> CSV
           </button>
           <button 
-            onClick={() => toast('Coming Soon')}
+            aria-label="Clear filters" onClick={() => { setPagination({ key: '', index: 0 }); setSearch(''); setFilterStatus(''); setFilterVendorId(''); setFilterPlatformId(''); setFilterPaymentId(''); setFilterDateRange(''); setFilterTxnType(''); }}
             className="flex items-center justify-center w-8 h-8 rounded-lg border border-white/10 bg-white/[0.02] text-gray-300 hover:bg-white/5 transition-colors"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -763,7 +770,7 @@ const Transactions = () => {
               <input
                 type="text"
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={e => { setPagination({ key: '', index: 0 }); setSearch(e.target.value); }}
                 placeholder="Search products, stores, platforms..."
                 className="w-full bg-[#16181d] border border-white/5 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-white/20 transition-colors"
               />
@@ -774,7 +781,7 @@ const Transactions = () => {
                 <button
                   key={val}
                   type="button"
-                  onClick={() => setFilterTxnType(val)}
+                  onClick={() => { setPagination({ key: '', index: 0 }); setFilterTxnType(val); }}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                     filterTxnType === val
                       ? val === 'sale'
@@ -794,7 +801,7 @@ const Transactions = () => {
           <div className="flex flex-wrap gap-2 [&>select]:flex-1 [&>select]:min-w-[130px] sm:[&>select]:flex-none sm:[&>select]:min-w-0">
             <select
               value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value)}
+              onChange={e => { setPagination({ key: '', index: 0 }); setFilterStatus(e.target.value); }}
               className="bg-[#16181d] border border-white/5 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-white/20 appearance-none"
             >
               <option value="">All Statuses</option>
@@ -802,7 +809,7 @@ const Transactions = () => {
             </select>
             <select
               value={filterVendorId}
-              onChange={e => setFilterVendorId(e.target.value)}
+              onChange={e => { setPagination({ key: '', index: 0 }); setFilterVendorId(e.target.value); }}
               className="bg-[#16181d] border border-white/5 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-white/20 appearance-none"
             >
               <option value="">All Vendors</option>
@@ -810,7 +817,7 @@ const Transactions = () => {
             </select>
             <select
               value={filterPlatformId}
-              onChange={e => setFilterPlatformId(e.target.value)}
+              onChange={e => { setPagination({ key: '', index: 0 }); setFilterPlatformId(e.target.value); }}
               className="bg-[#16181d] border border-white/5 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-white/20 appearance-none"
             >
               <option value="">All Platforms</option>
@@ -818,7 +825,7 @@ const Transactions = () => {
             </select>
             <select
               value={filterPaymentId}
-              onChange={e => setFilterPaymentId(e.target.value)}
+              onChange={e => { setPagination({ key: '', index: 0 }); setFilterPaymentId(e.target.value); }}
               className="bg-[#16181d] border border-white/5 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-white/20 appearance-none"
             >
               <option value="">All Payment Methods</option>
@@ -827,7 +834,7 @@ const Transactions = () => {
             {/* Date Range filter */}
             <select
               value={filterDateRange}
-              onChange={e => setFilterDateRange(e.target.value)}
+              onChange={e => { setPagination({ key: '', index: 0 }); setFilterDateRange(e.target.value); }}
               className={`border rounded-lg px-3 py-2 text-sm focus:outline-none appearance-none transition-colors ${
                 filterDateRange
                   ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300 focus:border-indigo-400'
@@ -841,7 +848,7 @@ const Transactions = () => {
             </select>
             {(search || filterStatus || filterVendorId || filterPlatformId || filterPaymentId || filterDateRange || filterTxnType) && (
               <button
-                onClick={() => { setSearch(''); setFilterStatus(''); setFilterVendorId(''); setFilterPlatformId(''); setFilterPaymentId(''); setFilterDateRange(''); setFilterTxnType(''); }}
+                onClick={() => { setPagination({ key: '', index: 0 }); setSearch(''); setFilterStatus(''); setFilterVendorId(''); setFilterPlatformId(''); setFilterPaymentId(''); setFilterDateRange(''); setFilterTxnType(''); }}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-colors"
               >
                 <X className="w-3.5 h-3.5" /> Clear
@@ -903,7 +910,7 @@ const Transactions = () => {
             {isLoading ? 'Loading transactions...' : rows.length === 0 ? 'No transactions recorded yet.' : 'No results match your filters.'}
           </div>
         )}
-        {filteredRows.map(row => (
+        {pagedRows.map(row => (
           <div
             key={row.id}
             className="card bg-[#0f1115] p-4 rounded-xl border border-white/[0.06] flex flex-col gap-2"
@@ -1005,12 +1012,13 @@ const Transactions = () => {
                 <input 
                   type="checkbox" 
                   className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 accent-indigo-500" 
-                  checked={filteredRows.length > 0 && selectedIds.length === filteredRows.length}
+                  aria-label="Select records on this page"
+                  checked={pagedRows.length > 0 && pagedRows.every(row => selectedIds.includes(row.id))}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      setSelectedIds(filteredRows.map(r => r.id));
+                      setSelectedIds(current => [...new Set([...current, ...pagedRows.map(row => row.id)])]);
                     } else {
-                      setSelectedIds([]);
+                      setSelectedIds(current => current.filter(id => !pagedRows.some(row => row.id === id)));
                     }
                   }}
                 />
@@ -1046,7 +1054,7 @@ const Transactions = () => {
                 </td>
               </tr>
             )}
-            {filteredRows.map((row) => {
+            {pagedRows.map((row) => {
               const isEditing = editingId === row.id;
               return (
                 <tr
@@ -1336,14 +1344,14 @@ const Transactions = () => {
       {/* Footer */}
       <div className="flex items-center justify-between mt-4 px-2 pb-10">
         <div className="text-xs text-gray-500 font-medium">
-          Showing {filteredRows.length}{filteredRows.length !== rows.length ? ` of ${rows.length}` : ''} records
+          Showing {filteredRows.length ? pageIndex * 25 + 1 : 0}–{Math.min((pageIndex + 1) * 25, filteredRows.length)} of {filteredRows.length} records
         </div>
         <div className="flex items-center gap-3">
-          <button className="w-7 h-7 flex items-center justify-center rounded border border-white/5 bg-[#16181d] text-gray-500 hover:bg-white/5 transition-colors">
+          <button aria-label="Previous page" disabled={pageIndex === 0} onClick={() => setPagination({ key: pageKey, index: pageIndex - 1 })} className="w-7 h-7 flex items-center justify-center rounded border border-white/5 bg-[#16181d] text-gray-500 hover:bg-white/5 transition-colors">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="text-xs text-gray-400 font-medium">Page 1 of 1</span>
-          <button className="w-7 h-7 flex items-center justify-center rounded border border-white/5 bg-[#16181d] text-gray-500 hover:bg-white/5 transition-colors">
+          <span className="text-xs text-gray-400 font-medium">Page {pageIndex + 1} of {pageCount}</span>
+          <button aria-label="Next page" disabled={pageIndex === pageCount - 1} onClick={() => setPagination({ key: pageKey, index: pageIndex + 1 })} className="w-7 h-7 flex items-center justify-center rounded border border-white/5 bg-[#16181d] text-gray-500 hover:bg-white/5 transition-colors">
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>

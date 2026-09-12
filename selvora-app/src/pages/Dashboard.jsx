@@ -1,3 +1,4 @@
+import { downloadFile, shareCard } from '../utils/downloads';
 import React, { useState, useEffect, useRef } from 'react';
 import { useDashboard, useGoals } from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
@@ -786,7 +787,7 @@ const Dashboard = () => {
               ))}
             </div>
 
-            <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all text-[#d8a65a] hover:text-[#e8e2d6] hover:bg-white/[0.05] border border-[#d8a65a]/20">
+            <button disabled={!data} onClick={() => downloadFile('selvora-share-card.svg', shareCard(stats, modeFilter, dateFilter), 'image/svg+xml')} className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all text-[#d8a65a] hover:text-[#e8e2d6] hover:bg-white/[0.05] border border-[#d8a65a]/20">
               <Share2 className="w-3.5 h-3.5" /> Generate Share Card
             </button>
 
@@ -859,7 +860,7 @@ const Dashboard = () => {
 
           {/* Share Card + Settings — shown first on mobile (order-first), normal order on desktop */}
           <div className="flex items-center gap-2 order-first sm:order-last">
-            <button className={isGlass ? "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all text-[#d8a65a] hover:text-[#e8e2d6] hover:bg-white/[0.05] border border-[#d8a65a]/20" : "flex items-center gap-2 px-3 py-2 rounded-md text-[10px] font-medium transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"}>
+            <button disabled={!data} onClick={() => downloadFile('selvora-share-card.svg', shareCard(stats, modeFilter, dateFilter), 'image/svg+xml')} className={isGlass ? "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all text-[#d8a65a] hover:text-[#e8e2d6] hover:bg-white/[0.05] border border-[#d8a65a]/20" : "flex items-center gap-2 px-3 py-2 rounded-md text-[10px] font-medium transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"}>
               <Share2 className="w-3.5 h-3.5" /> Generate Share Card
             </button>
             <button

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { downloadJSON } from '../utils/downloads';
 import { useDashboard } from '../hooks/useApi';
 import {
   DollarSign, ShoppingCart, TrendingUp, Percent, Gift,
@@ -139,8 +140,8 @@ function Analytics() {
           >
             <RotateCcw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
-          <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-transparent text-gray-400 hover:text-white hover:bg-white/5 text-sm font-medium transition-colors">
-            <Download size={14} /> Export
+          <button disabled={loading || !data} onClick={() => downloadJSON('selvora-analytics.json', { generatedAt: new Date().toISOString(), mode, dateRange, report: data })} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-transparent text-gray-400 hover:text-white hover:bg-white/5 text-sm font-medium transition-colors">
+            <Download size={14} /> Export JSON
           </button>
         </div>
       </div>

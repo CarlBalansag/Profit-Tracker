@@ -28,9 +28,9 @@ function Forecast() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">Forecast Planner</h1>
-          <p className="text-sm text-gray-400 mt-1">Model growth, compounding, and strategy scenarios.</p>
+          <p className="text-sm text-gray-400 mt-1">Preview only. Forecast calculation and planning are not available yet.</p>
         </div>
-        <button className="px-3 py-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-[10px] font-bold text-blue-400 uppercase tracking-wider">
+        <button disabled title="Forecast prototype: unavailable" className="px-3 py-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-[10px] font-bold text-blue-400 uppercase tracking-wider">
           Dedicated Workspace
         </button>
       </div>
@@ -63,7 +63,7 @@ function Forecast() {
       {/* Forecast Control Deck */}
       <div className="bg-[#12121A] border border-gray-800 rounded-xl p-6 relative">
         <div className="absolute top-6 right-6">
-          <button className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-700 bg-gray-800 text-[10px] font-bold text-gray-300 uppercase tracking-wider hover:bg-gray-700 transition">
+          <button disabled title="Forecast prototype: unavailable" className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-700 bg-gray-800 text-[10px] font-bold text-gray-300 uppercase tracking-wider hover:bg-gray-700 transition">
             <Command size={12} className="text-purple-400" /> Smart Planner
           </button>
         </div>
@@ -123,7 +123,7 @@ function Forecast() {
                 <input type="text" defaultValue="5000" className="w-32 bg-[#0A0A0F] border border-gray-700 rounded-lg pl-7 pr-3 py-1.5 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors" />
               </div>
             </div>
-            <button className="flex items-center gap-2 px-6 py-1.5 rounded-lg bg-purple-600 text-white font-bold text-sm shadow-lg shadow-purple-900/30 hover:bg-purple-500 transition-colors h-[34px]">
+            <button disabled title="Forecast prototype: unavailable" className="flex items-center gap-2 px-6 py-1.5 rounded-lg bg-purple-600 text-white font-bold text-sm shadow-lg shadow-purple-900/30 hover:bg-purple-500 transition-colors h-[34px]">
               <RefreshCcw size={14} /> Recalculate
             </button>
           </div>

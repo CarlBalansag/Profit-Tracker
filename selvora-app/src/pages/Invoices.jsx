@@ -9,9 +9,9 @@ const Invoices = () => {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white">Invoices</h1>
-          <p className="text-sm text-gray-400 mt-1">Create, manage, and generate PDF invoices. Saved to cloud storage.</p>
+          <p className="text-sm text-gray-400 mt-1">Invoices are not available yet. Invoice creation and PDF storage are unfinished.</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors text-white bg-gradient-to-b from-purple-500/80 to-blue-600/80 hover:from-purple-500 hover:to-blue-600 border border-purple-500/50">
+        <button disabled title="Invoice creation is not available yet" className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-500 bg-gray-800 cursor-not-allowed">
           <Plus className="w-4 h-4" /> New Invoice
         </button>
       </div>
@@ -22,12 +22,12 @@ const Invoices = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
         <div className="relative flex-1 min-w-0 w-full sm:w-auto">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input 
+          <input disabled aria-label="Invoice search (unavailable)"
             className="input pl-10 w-full bg-white/[0.02] border border-white/10 rounded-lg py-2 text-sm text-white focus:outline-none focus:border-purple-500/50" 
             placeholder="Search invoices by number, buyer, seller..." 
           />
         </div>
-        <select className="px-3 py-2 rounded-lg text-sm text-white bg-white/[0.02] border border-white/10 appearance-none focus:outline-none focus:border-purple-500/50 w-full sm:w-40 cursor-pointer">
+        <select disabled aria-label="Invoice status (unavailable)" className="px-3 py-2 rounded-lg text-sm text-gray-500 bg-white/[0.02] border border-white/10 w-full sm:w-40 cursor-not-allowed">
           <option value="" className="bg-gray-900 text-white">All Statuses</option>
           <option value="DRAFT" className="bg-gray-900 text-white">DRAFT</option>
           <option value="SENT" className="bg-gray-900 text-white">SENT</option>
@@ -40,7 +40,7 @@ const Invoices = () => {
       {/* Empty State */}
       <div className="card p-12 text-center bg-white/[0.02] border border-white/10 rounded-xl mt-4">
         <FileText className="w-12 h-12 mx-auto text-gray-600 mb-3" />
-        <p className="text-gray-400 text-sm">No invoices yet. Create your first one!</p>
+        <p className="text-gray-400 text-sm">Invoice management is unavailable.</p>
       </div>
 
     </div>

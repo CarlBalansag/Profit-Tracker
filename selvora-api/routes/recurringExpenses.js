@@ -90,9 +90,11 @@ router.get('/', isAuthenticated, async (req, res, next) => {
     });
 
     // Generate missing entries for active recurring expenses
-    await Promise.all(
-      items.filter(r => r.active).map(r => generateEntries(r))
-    );
+    if (req.query.export !== 'true') {
+      await Promise.all(
+        items.filter(r => r.active).map(r => generateEntries(r))
+      );
+    }
 
     res.json(items);
   } catch (err) {

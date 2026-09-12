@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import {
   User, Database, FileJson, Bell, Palette, ExternalLink, Download, ArrowLeft
 } from 'lucide-react';
+import { DataExport } from '../components/Settings/DataExport';
 import { PaymentMethods } from '../components/Settings/PaymentMethods';
 import { Vendors } from '../components/Settings/Vendors';
 import { Cashouts } from '../components/Settings/Cashouts';
@@ -26,7 +27,7 @@ function Settings() {
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'datasetup', label: 'Data Setup', icon: Database },
     { id: 'data', label: 'Data', icon: FileJson },
-    { id: 'notifications', label: 'Notifications', icon: Bell, disabled: true, tag: 'Soon' },
+    { id: 'notifications', label: 'Notifications', icon: Bell, disabled: true, tag: 'Unavailable' },
     { id: 'appearance', label: 'Appearance', icon: Palette },
   ];
 
@@ -143,55 +144,7 @@ function Settings() {
           )}
 
           {/* DATA TAB */}
-          {activeTab === 'data' && (
-            <div className="rounded-xl border border-gray-800 bg-[#12121A] p-6 space-y-6">
-              <div>
-                <h2 className="text-sm font-bold text-white flex items-center gap-2 mb-2">
-                  <Download size={16} /> Export Data
-                </h2>
-                <p className="text-xs text-gray-500">Select which data to include in your export file.</p>
-                <div className="text-[10px] uppercase text-gray-600 font-bold tracking-wider mt-4">
-                   <span className="hover:text-gray-400 cursor-pointer">Select all</span> <span className="mx-1">|</span> <span className="hover:text-gray-400 cursor-pointer">Deselect all</span>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                 {[
-                   { label: 'Stores', desc: 'Your store locations' },
-                   { label: 'Accounts', desc: 'Store accounts' },
-                   { label: 'Payment Methods', desc: 'Credit cards & payment info' },
-                   { label: 'Card-Store Rates', desc: 'Cashback rules per card/store' },
-                   { label: 'Expenses', desc: 'Recurring and one-time business expenses' },
-                   { label: 'Tax Rules & Scenarios', desc: 'Tax calculator scenarios and custom deduction rules' },
-                   { label: 'Transactions', desc: 'All purchase & sale records' },
-                   { label: 'Inventory', desc: 'Current inventory items' },
-                   { label: 'Buyers', desc: 'Buyers & selling platforms' }
-                 ].map((item) => (
-                   <div key={item.label} className="flex gap-3">
-                     <button className="mt-1 flex-shrink-0 w-4 h-4 rounded border border-gray-600 bg-transparent flex items-center justify-center">
-                        <svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                     </button>
-                     <div>
-                       <div className="text-sm text-gray-300 font-medium">{item.label}</div>
-                       <div className="text-xs text-gray-600">{item.desc}</div>
-                     </div>
-                   </div>
-                 ))}
-              </div>
-
-              <div className="flex gap-3 pt-4 border-t border-gray-800/50">
-                 <button className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium rounded-lg transition-colors border border-gray-700/50">
-                   <Download size={14} /> Export as JSON
-                 </button>
-                 <button className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium rounded-lg transition-colors border border-gray-700/50">
-                   <Download size={14} /> Export with Receipts (ZIP)
-                 </button>
-                 <button className="flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-white/5 text-gray-300 text-sm font-medium rounded-lg transition-colors">
-                   Transactions CSV
-                 </button>
-              </div>
-            </div>
-          )}
+          {activeTab === 'data' && <DataExport />}
 
           {/* APPEARANCE TAB */}
           {activeTab === 'appearance' && (

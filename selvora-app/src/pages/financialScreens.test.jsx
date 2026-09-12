@@ -44,7 +44,7 @@ describe('financial screen regression', () => {
     localStorage.clear();
   });
   it('shows allocated remaining purchase value on Inventory', () => {
-    render(<Inventory />);
+    render(<MemoryRouter><Inventory /></MemoryRouter>);
     expect(screen.getAllByText('$100.00').length).toBe(2);
     expect(screen.queryByText('$120.00')).toBeNull();
   });

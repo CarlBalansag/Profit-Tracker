@@ -25,7 +25,7 @@ Commit each completed task separately and record precise coverage and remaining 
 | 2 | QA-21: Vendor/Marketplace editing | Fixed; focused browser/frontend/API QA passed |
 | 3 | QA-06: consistent financial calculations | Fixed core calculations; focused regression passed |
 | 4 | QA-19: Buyer/Invoice ownership | Fixed in code; isolated SQL/API regression passed; hosted migration not applied |
-| 5 | QA-20: inactive controls and unfinished workflows | Pending |
+| 5 | QA-20: inactive controls and unfinished workflows | Fixed/clearly disabled per scope; focused regression passed |
 | 6 | QA-15: staged currency precision migration | Pending |
 | 7 | QA-25: quality gates, coverage and finding reconciliation | Pending |
 | 8 | Overall regression across all changes and all 25 findings | Pending |
@@ -82,3 +82,13 @@ Added required User ownership and indexes to Buyer/Invoice. Invoice's composite 
 - Default client generation is blocked by a DLL loaded in a pre-existing local API process. The schema generated successfully to a temporary output without restarting the user's server. Production/development deployment requires normal client generation and the reviewed migration before this new schema runs against a database.
 - Prisma auto-install unexpectedly created a user-root package/modules during temporary generation. Verified they were new Prisma-only files and moved them into the temporary QA recovery directory; no existing user files were removed or moved. Automatic deletion review rejected cleanup, so reversible relocation was used successfully.
 - Browser changes are not part of this schema/API task. Invoice functionality is still QA-20 work.
+
+## QA-20 completed for agreed scope
+
+User requested unfinished features be clearly disabled. Invoices creation/search/status, Notifications and unsupported Tax Rules/Buyers export categories now say unavailable. Unrouted Forecast prototype actions are disabled. Settings selection controls, selected JSON export, ZIP receipts export, Transactions CSV, filtered Inventory export/search, Add Inventory navigation, Inventory transaction/batch actions, Analytics report JSON and Dashboard SVG share-card downloads are connected. Ledger pagination uses 25 rows per page; exports cover all filtered rows, and header selection covers only the visible page.
+
+- 14 frontend regression cases passed: selected/empty/unavailable exports, authentication/failure/malformed responses, failure/retry/duplicate submit, CSV quoting/formula protection, financial allocations/cancelled sales, SVG XML validity, ZIP deduplication/safe filenames/no external credentials/size limits/empty archives, pagination/filter reset/page selection and Inventory/invoice controls.
+- 2 API regression cases passed: every export data source applies ownership filtering; export reads do not generate recurring expenses; unauthenticated requests rejected.
+- Full API: 78 tests passed. Full frontend: 47 tests passed. Production/PWA build and focused lint for new utilities/forms/tests/Inventory/Invoices passed. Existing broader lint remains QA-25.
+- Browser fixture: Inventory opens existing edit form and Cancel closes it; Settings deselect disables export, select restores it, JSON and ZIP without receipts prepare downloads successfully. Real Cloudinary receipt transfer and OS file-save completion are not exercised; archive contents and failure paths are tested with mocked responses.
+- Exports use current owned API data, not a database-wide transaction snapshot; concurrent edits during separate reads can change records. ZIP fails explicitly before downloading on receipt failures; download size capped at 50 MB. No import feature added. No hosted changes.

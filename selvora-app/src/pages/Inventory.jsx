@@ -1,6 +1,9 @@
 import { allocatedCost } from '../../../shared/finance.mjs';
 import React, { useState } from 'react';
-import { useInventory } from '../hooks/useApi';
+import { useNavigate } from 'react-router-dom';
+import { csvText, downloadFile } from '../utils/downloads';
+import TransactionDetailModal from '../components/TransactionDetailModal';
+import { useInventory, usePlatforms, usePaymentMethods, useInvalidate } from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
 import { Columns3, Plus, Search, Package, AlertTriangle, TrendingUp, DollarSign, Clock, MoreVertical, ListChecks, ChevronRight, ChevronDown, ExternalLink } from 'lucide-react';
 import ProductNoteButton from '../components/ProductNoteButton';
@@ -25,6 +28,12 @@ const STATUS_COLORS = {
 
 const Inventory = () => {
   const { data: rawInventory = [], isLoading } = useInventory();
+  const navigate = useNavigate();
+  const { data: platforms = [] } = usePlatforms();
+  const { data: paymentMethods = [] } = usePaymentMethods();
+  const invalidate = useInvalidate();
+  const [detail, setDetail] = useState(null);
+  const [search, setSearch] = useState('');
   const [expandedGroups, setExpandedGroups] = useState(new Set());
   const toggleGroup = (name) => setExpandedGroups(prev => {
     const next = new Set(prev);
@@ -35,7 +44,7 @@ const Inventory = () => {
   const ebayUrl = (productName) =>
     `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(productName)}&LH_Sold=1&LH_Complete=1&_sop=13`;
 
-  const inventory = rawInventory.filter(item => item.qty_on_hand > 0);
+  const inventory = rawInventory.filter(item => item.qty_on_hand > 0 && `${item.product_name} ${item.category || ''}`.toLowerCase().includes(search.trim().toLowerCase()));
 
   const today = new Date();
   const processedInventory = inventory.map(item => {
@@ -74,7 +83,7 @@ const Inventory = () => {
 
   return (
     <div className="h-full overflow-auto px-4 py-6 sm:px-6 space-y-6">
-      
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -82,16 +91,16 @@ const Inventory = () => {
           <p className="text-gray-400 text-sm mt-1">Manage unsold assets, track aging stock, and calculate locked capital.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" className="btn-secondary flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-white/[0.02] text-gray-300 hover:text-white hover:bg-white/[0.06] border border-white/10">
+          <button type="button" onClick={() => downloadFile('selvora-inventory.csv', csvText(processedInventory.map(item => ({ product: item.product_name, category: item.category, quantity: item.qty_on_hand, cost: allocatedCost(item, item.qty_on_hand), status: item.status, purchaseDate: item.purchase_date }))), 'text/csv;charset=utf-8')} className="btn-secondary flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-white/[0.02] text-gray-300 hover:text-white hover:bg-white/[0.06] border border-white/10">
             Export Report
           </button>
-          <button type="button" className="btn-primary flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors text-white bg-gradient-to-b from-emerald-500/80 to-teal-600/80 hover:from-emerald-500 hover:to-teal-600 border border-emerald-500/50 shadow-lg shadow-emerald-500/20">
-            <Plus className="w-4 h-4" /> 
+          <button type="button" onClick={() => navigate('/add-transaction')} className="btn-primary flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors text-white bg-gradient-to-b from-emerald-500/80 to-teal-600/80 hover:from-emerald-500 hover:to-teal-600 border border-emerald-500/50 shadow-lg shadow-emerald-500/20">
+            <Plus className="w-4 h-4" />
             Add Inventory
           </button>
         </div>
       </div>
-      
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-in slide-in-from-bottom-4 duration-500 fade-in fill-mode-both">
         <div className="rounded-xl bg-white/[0.02] border border-white/10 p-5 relative overflow-hidden group hover:border-white/20 transition-colors">
@@ -148,16 +157,16 @@ const Inventory = () => {
           </div>
         </div>
       </div>
-      
+
       {/* Filters Card */}
       <div className="card p-4 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-300 fill-mode-both">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-            <input 
-              type="text" 
-              placeholder="Search by product name or category..." 
-              className="w-full bg-[#0a0a0f] border border-white/10 rounded-lg pl-10 pr-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/50 transition-colors" 
+            <input
+              type="text"
+              aria-label="Search inventory" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search by product name or category..."
+              className="w-full bg-[#0a0a0f] border border-white/10 rounded-lg pl-10 pr-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/50 transition-colors"
             />
           </div>
         </div>
@@ -237,7 +246,7 @@ const Inventory = () => {
                       </span>
                     </td>
                     <td className="px-4 py-5 text-right">
-                      <button className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100">
+                      <button aria-label={`View transaction for ${item.product_name}`} onClick={() => setDetail({ rawId: item.id, status: item.status })} className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors">
                         <MoreVertical className="w-4 h-4" />
                       </button>
                     </td>
@@ -294,7 +303,7 @@ const Inventory = () => {
                       <span className="text-xs text-gray-600">—</span>
                     </td>
                     <td className="px-4 py-5 text-right">
-                      <button className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100" onClick={e => e.stopPropagation()}>
+                      <button aria-label={`Show batches for ${group.product_name}`} className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors" onClick={e => { e.stopPropagation(); toggleGroup(group.product_name); }}>
                         <MoreVertical className="w-4 h-4" />
                       </button>
                     </td>
@@ -339,7 +348,7 @@ const Inventory = () => {
                           </span>
                         </td>
                         <td className="px-4 py-3.5 text-right">
-                          <button className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100">
+                          <button aria-label={`View transaction for ${item.product_name}`} onClick={() => setDetail({ rawId: item.id, status: item.status })} className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors">
                             <MoreVertical className="w-4 h-4" />
                           </button>
                         </td>
@@ -353,6 +362,7 @@ const Inventory = () => {
         </table>
       </div>
 
+      {detail && <TransactionDetailModal row={detail} platforms={platforms} paymentMethods={paymentMethods} onClose={() => setDetail(null)} onSaved={() => { setDetail(null); invalidate.all(); }} />}
     </div>
   );
 };
