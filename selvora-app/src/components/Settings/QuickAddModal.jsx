@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Search, X, Check, Copy } from 'lucide-react';
 import { PRESET_CARDS, ISSUERS } from '../../data/presetCards';
 import { IssuerLogo } from './IssuerLogo';
@@ -12,6 +12,11 @@ const QuickAddForm = ({ onClose, onAddCards, existingCardIds = [] }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedCards, setSelectedCards] = useState([]);
   const applyPresetRates = true;
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const savingRef = useRef(false);
+  const addedIds = useRef(new Set());
+  const dismiss = () => { if (!savingRef.current) onClose(); };
 
   const filteredCards = PRESET_CARDS.filter(card => {
     const matchesSearch = card.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -31,10 +36,20 @@ const QuickAddForm = ({ onClose, onAddCards, existingCardIds = [] }) => {
     );
   };
 
-  const handleAddSubmit = () => {
-    const cardsToAdd = PRESET_CARDS.filter(c => selectedCards.includes(c.id));
-    onAddCards(cardsToAdd, applyPresetRates);
-    onClose();
+  const handleAddSubmit = async () => {
+    if (savingRef.current) return;
+    const cardsToAdd = PRESET_CARDS.filter(c => selectedCards.includes(c.id) && !addedIds.current.has(c.id));
+    if (!cardsToAdd.length) return;
+    savingRef.current = true;
+    setSaving(true); setError('');
+    try {
+      await onAddCards(cardsToAdd, applyPresetRates, id => {
+        addedIds.current.add(id);
+        setSelectedCards(prev => prev.filter(selected => selected !== id));
+      });
+      onClose();
+    } catch (err) { setError(err.message || 'Could not add selected cards'); }
+    finally { savingRef.current = false; setSaving(false); }
   };
 
   return (
@@ -44,7 +59,7 @@ const QuickAddForm = ({ onClose, onAddCards, existingCardIds = [] }) => {
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-gray-800/50">
           <h2 className="text-lg font-bold text-white">Quick Add Cards</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+          <button onClick={dismiss} className="text-gray-400 hover:text-white transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -115,7 +130,7 @@ const QuickAddForm = ({ onClose, onAddCards, existingCardIds = [] }) => {
           ) : (
             filteredCards.map(card => {
               const isSelected = selectedCards.includes(card.id);
-              return (
+  return (
                 <button
                   key={card.id}
                   onClick={() => toggleCardSelection(card.id)}
@@ -162,19 +177,20 @@ const QuickAddForm = ({ onClose, onAddCards, existingCardIds = [] }) => {
         </div>
 
         {/* Footer */}
+        {error && <p role="alert" className="px-4 py-2 text-sm text-red-400">{error}</p>}
         <div className="p-4 border-t border-gray-800/50 flex justify-end gap-3 bg-[#12121A]">
            <button 
-             onClick={onClose}
+             onClick={dismiss}
              className="px-5 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-colors border border-transparent hover:border-gray-800"
            >
              Cancel
            </button>
            <button 
              onClick={handleAddSubmit}
-             disabled={selectedCards.length === 0}
+             disabled={saving || selectedCards.length === 0}
              className="px-5 py-2 rounded-lg text-sm font-medium bg-gray-800 hover:bg-gray-700 text-white transition-colors border border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
            >
-             Add Cards {selectedCards.length > 0 && `(${selectedCards.length})`}
+             {saving ? 'Saving…' : `Add Cards${selectedCards.length > 0 ? ` (${selectedCards.length})` : ''}`}
            </button>
         </div>
 

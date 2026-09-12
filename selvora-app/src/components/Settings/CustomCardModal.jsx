@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -19,6 +19,9 @@ const CustomCardForm = ({ onClose, onAddCard, cardToEdit }) => {
 
   const [formData, setFormData] = useState(() => cardToEdit ? { ...initialState, ...cardToEdit, baseRate: String(cardToEdit.baseRate ?? 0), statement_close_day: String(cardToEdit.statement_close_day ?? ''), due_day: String(cardToEdit.due_day ?? ''), credit_limit: String(cardToEdit.credit_limit ?? ''), min_payment_pct: String(cardToEdit.min_payment_pct ?? '') } : initialState);
   const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const dismiss = () => { if (!savingRef.current) onClose(); };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -40,8 +43,9 @@ const CustomCardForm = ({ onClose, onAddCard, cardToEdit }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (savingRef.current) return;
     if (!validate()) return;
 
     const processedCard = {
@@ -54,9 +58,14 @@ const CustomCardForm = ({ onClose, onAddCard, cardToEdit }) => {
       min_payment_pct: formData.min_payment_pct ? parseFloat(formData.min_payment_pct) : null,
     };
 
-    onAddCard(processedCard);
-    setFormData(initialState);
-    onClose();
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      await onAddCard(processedCard);
+      onClose();
+    } catch (error) {
+      setErrors(prev => ({ ...prev, submit: error.message || 'Could not save card' }));
+    } finally { savingRef.current = false; setSaving(false); }
   };
 
   const isEditing = !!cardToEdit;
@@ -73,13 +82,14 @@ const CustomCardForm = ({ onClose, onAddCard, cardToEdit }) => {
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-gray-800/50">
           <h2 className="text-lg font-bold text-white">{isEditing ? 'Edit Card' : 'Add Card'}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+          <button onClick={dismiss} className="text-gray-400 hover:text-white transition-colors" aria-label="Close card form">
             <X size={20} />
           </button>
         </div>
 
         {/* Form */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 modal-scrollbar smooth-scroll">
+          {errors.submit && <p role="alert" className="text-sm text-red-400">{errors.submit}</p>}
 
           {/* Card Name */}
           <div className="space-y-2">
@@ -226,7 +236,7 @@ const CustomCardForm = ({ onClose, onAddCard, cardToEdit }) => {
         <div className="p-4 border-t border-gray-800/50 flex justify-end gap-3 bg-[#12121A]">
           <button
             type="button"
-            onClick={onClose}
+            onClick={dismiss}
             className="px-6 py-2.5 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition-colors border border-transparent hover:border-gray-800"
           >
             Cancel
@@ -234,9 +244,10 @@ const CustomCardForm = ({ onClose, onAddCard, cardToEdit }) => {
           <button
             type="button"
             onClick={handleSubmit}
+            disabled={saving}
             className="px-6 py-2.5 rounded-lg text-sm font-bold bg-[#1A1A24] border border-gray-700 hover:border-gray-500 text-white transition-all shadow-lg active:scale-95"
           >
-            {isEditing ? 'Save Changes' : 'Create Card'}
+            {saving ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Card'}
           </button>
         </div>
 

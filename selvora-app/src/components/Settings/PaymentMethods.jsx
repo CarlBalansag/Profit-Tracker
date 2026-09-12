@@ -8,6 +8,7 @@ import { CustomCardModal } from './CustomCardModal';
 import { IssuerLogo } from './IssuerLogo';
 import clsx from 'clsx';
 import { sumMoney } from '../../utils/finance';
+import { PRESET_CARDS } from '../../data/presetCards';
 
 export const PaymentMethods = () => {
   const invalidate = useInvalidate();
@@ -35,6 +36,7 @@ export const PaymentMethods = () => {
         if (Array.isArray(data)) {
           const mapped = data.map(card => ({
             id: card.id,
+            presetId: PRESET_CARDS.find(preset => preset.name === card.name)?.id,
             name: card.name || 'Unnamed',
             issuer: (card.name || '').split(' ')[0] || 'Unknown',
             type: (card.type || '').toLowerCase().includes('debit') ? 'debit' : 'credit',
@@ -58,9 +60,10 @@ export const PaymentMethods = () => {
 
   useEffect(() => { fetchCards(); }, [fetchCards]);
 
-  const handleAddCards = async (newCards, includeStoreRates) => {
+  const handleAddCards = async (newCards, includeStoreRates, onAdded) => {
+    try {
     for (const card of newCards) {
-      await apiFetch(`/api/payment-methods`, {
+      const response = await apiFetch(`/api/payment-methods`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -72,9 +75,10 @@ export const PaymentMethods = () => {
           category_rates: includeStoreRates ? (card.categoryRates || []) : []
         })
       });
+      await requireSuccessfulResponse(response, `Could not add ${card.name}`);
+      onAdded?.(card.id);
     }
-    invalidate.paymentMethods();
-    setIsQuickAddOpen(false);
+    } finally { await fetchCards(); invalidate.paymentMethods(); }
   };
 
   const handleCustomAdd = async (processedCard) => {
@@ -85,12 +89,12 @@ export const PaymentMethods = () => {
 
     const method = isEditing ? 'PUT' : 'POST';
 
-    await apiFetch(url, {
+    const response = await apiFetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: processedCard.name,
-        type: processedCard.type,
+        type: /credit/i.test(processedCard.type) ? 'Credit' : /debit/i.test(processedCard.type) ? 'Debit' : processedCard.type,
         default_cashback_rate: processedCard.baseRate,
         statement_close_day: processedCard.statement_close_day ?? null,
         due_day: processedCard.due_day ?? null,
@@ -98,14 +102,14 @@ export const PaymentMethods = () => {
         min_payment_pct: processedCard.min_payment_pct ?? null,
       })
     });
-
+    await requireSuccessfulResponse(response, 'Could not save payment method');
+    await fetchCards();
     invalidate.paymentMethods();
-    setIsCustomModalOpen(false);
-    setEditingCard(null);
   };
 
   const openEditModal = (card) => {
-    setEditingCard(card);
+    setEditingCard({ ...card, credit_limit: card.creditLimit,
+      type: card.type === 'debit' ? 'Debit Card' : 'Credit Card' });
     setIsCustomModalOpen(true);
   };
 
@@ -116,6 +120,7 @@ export const PaymentMethods = () => {
         credentials: 'include'
       });
       await requireSuccessfulResponse(res, 'Could not remove payment method');
+      await fetchCards();
       invalidate.paymentMethods();
       toast.success('Payment method removed.');
     } catch (err) {
@@ -211,11 +216,12 @@ export const PaymentMethods = () => {
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                    <button 
                      onClick={() => openEditModal(card)}
+                     aria-label={`Edit ${card.name}`}
                      className="text-gray-500 hover:text-white"
                    >
                      <PenSquare size={14}/>
                    </button>
-                   <button onClick={() => removeCard(card.id)} className="text-red-500 hover:text-red-400"><Trash2 size={14}/></button>
+                   <button aria-label={`Remove ${card.name}`} onClick={() => removeCard(card.id)} className="text-red-500 hover:text-red-400"><Trash2 size={14}/></button>
                 </div>
               </div>
 

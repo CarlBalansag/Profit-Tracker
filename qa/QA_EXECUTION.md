@@ -162,3 +162,11 @@ Recurring templates, generated occurrences and generation markers now save in on
 ## QA-15 reconciliation: Payment Methods summary
 
 Payment Methods credit-limit and tracked-spend summaries now use shared Decimal sums. Added a screen regression for $0.10 + $0.20 = $0.30. This closes the additional Settings arithmetic path identified during reconciliation; final hosted legacy-column cleanup remains deferred.
+
+## QA-23 reconciliation: card form failures and list refresh
+
+Card create/edit callbacks now check HTTP responses and propagate failure to the modal. Forms await success before closing, preserve failed drafts, and block duplicate saves/dismissal while pending. Quick Add removes successfully saved cards from the retry selection and refreshes partial successes. Card edits preserve credit limits and normalize Credit/Debit types for existing report contracts. Successful deletes refresh the local list; failed deletes retain it.
+
+- Five focused form/parent regressions passed: save failure/retry and preserved limits/type, failed/successful delete list consistency, modal draft preservation, pending duplicate/dismissal protection and partial Quick Add retry without duplicates. Existing five modal-lifecycle cases also pass. Zero-warning lint passes.
+- No API/database contracts changed; ownership and write validation remain covered by existing API tests. No live data writes, deployment or external-service interactions.
+- A separate QA-12 delete failure path was found: generated expense deletion precedes template deletion. Preserve the existing requested delete behavior but make both operations atomic in the next focused task.
