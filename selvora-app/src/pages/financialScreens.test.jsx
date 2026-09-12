@@ -5,6 +5,7 @@ import AddSale from './AddSale';
 import AddTransaction from './AddTransaction';
 import Inventory from './Inventory';
 import TransactionDetailModal from '../components/TransactionDetailModal';
+import { PaymentMethods } from '../components/Settings/PaymentMethods';
 
 const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), inventory: [], platforms: [], cards: [], note: null }));
 vi.mock('../hooks/useApi', () => ({
@@ -32,6 +33,11 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe('financial screen regression', () => {
+  it('adds fractional card limits exactly in the Payment Methods summary', async () => {
+    mocks.apiFetch.mockResolvedValue(new Response(JSON.stringify([{ id: 'a', name: 'Card A', credit_limit: 0.10 }, { id: 'b', name: 'Card B', credit_limit: 0.20 }])));
+    render(<PaymentMethods />);
+    await waitFor(() => expect(screen.getByText('$0.30')).toBeTruthy());
+  });
   it('fills a fetched sale note while preserving user edits and intentional clearing', () => {
     const view = render(<MemoryRouter><AddSale /></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: /Fixture item/ }));

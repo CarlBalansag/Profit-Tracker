@@ -158,3 +158,7 @@ Recurring templates, generated occurrences and generation markers now save in on
 - Ten focused API tests passed: month-end dates, marker-failure rollback of template/occurrences, retry/repeated reads, partial end-date rejection, exact amounts, partial updates, ownership and read-only export behavior.
 - Added a native concurrent-generation/month-end/pause/resume regression to the next CI run. This uses the real unique constraint; fixture tests alone do not prove duplicate protection under native concurrency.
 - No hosted migrations, live data writes or deployment. Additional QA-23 card modal failures and QA-15 Settings total arithmetic were recorded during reconciliation and remain separate next tasks.
+
+## QA-15 reconciliation: Payment Methods summary
+
+Payment Methods credit-limit and tracked-spend summaries now use shared Decimal sums. Added a screen regression for $0.10 + $0.20 = $0.30. This closes the additional Settings arithmetic path identified during reconciliation; final hosted legacy-column cleanup remains deferred.

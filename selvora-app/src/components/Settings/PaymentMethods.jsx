@@ -7,6 +7,7 @@ import { QuickAddModal } from './QuickAddModal';
 import { CustomCardModal } from './CustomCardModal';
 import { IssuerLogo } from './IssuerLogo';
 import clsx from 'clsx';
+import { sumMoney } from '../../utils/finance';
 
 export const PaymentMethods = () => {
   const invalidate = useInvalidate();
@@ -122,8 +123,8 @@ export const PaymentMethods = () => {
     }
   };
 
-  const totalCreditLimit = savedCards.reduce((sum, c) => sum + (Number(c.creditLimit) || 0), 0);
-  const totalTrackedSpend = savedCards.reduce((sum, c) => sum + (Number(c.totalSpend) || 0), 0);
+  const totalCreditLimit = savedCards.reduce((sum, c) => sumMoney(sum, c.creditLimit || 0), 0);
+  const totalTrackedSpend = savedCards.reduce((sum, c) => sumMoney(sum, c.totalSpend || 0), 0);
 
   return (
     <div className="space-y-6">
