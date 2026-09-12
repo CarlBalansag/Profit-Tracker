@@ -1,5 +1,7 @@
 # Selvora full-site QA audit
 
+Historical findings from September 10. For current resolution and remaining limitations, read [QA_RECONCILIATION.md](QA_RECONCILIATION.md).
+
 Audit date: 2026-09-10
 Scope: all 16 routed pages, frontend workflows, Express routes, validation, Prisma schema/migrations, calculations, tenant isolation, and responsive behavior.
 

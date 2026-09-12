@@ -1,5 +1,7 @@
 # QA Remediation Progress
 
+Historical per-task checks follow. Current committed status, final regression totals and remaining limitations are in [QA_RECONCILIATION.md](QA_RECONCILIATION.md); old pending-push notes below describe the state at that time.
+
 This log records fixes made after the 2026-09-10 audit in `QA_REPORT.md`. Each entry is intentionally limited to one QA finding and its focused validation.
 
 ## QA-23 — Failed mutations shown as successful locally

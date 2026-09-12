@@ -1,5 +1,7 @@
 # QA checkpoint and execution record
 
+Final September 12 results and the status of all 25 findings are consolidated in [QA_RECONCILIATION.md](QA_RECONCILIATION.md). Earlier entries below retain their checks and limitations at the time of each task.
+
 Checkpoint prepared September 11, 2026 (America/Los_Angeles), before the next QA fixes.
 This is a recovery baseline, not a declaration that all application behavior is correct.
 
@@ -27,7 +29,7 @@ Commit each completed task separately and record precise coverage and remaining 
 | 4 | QA-19: Buyer/Invoice ownership | Fixed in code; isolated SQL/API regression passed; hosted migration not applied |
 | 5 | QA-20: inactive controls and unfinished workflows | Fixed/clearly disabled per scope; focused regression passed |
 | 6 | QA-15: staged currency precision migration | Stages 1–7 implemented and locally verified; hosted cutover/legacy cleanup deferred |
-| 7 | QA-25: quality gates, coverage and finding reconciliation | Lint and regression gates implemented; native CI verification and reconciliation in progress |
+| 7 | QA-25: quality gates, coverage and finding reconciliation | Complete; full regression, native PostgreSQL CI and desktop/mobile smoke checks passed; see current reconciliation |
 | 8 | Overall regression across all changes and all 25 findings | Pending |
 
 A finding that has partial safeguards is not closed until its affected paths and relevant scenarios have been checked.
@@ -109,7 +111,7 @@ Audited all 21 Float fields; added nullable NUMERIC(19,2) money and NUMERIC(9,6)
 Resolved frontend lint errors without turning off the React Hooks rules. Modal forms initialize when mounted and reset by selected record; notes derive fetched defaults while preserving user drafts. Tutorial animation tracking stops on unmount. Context hooks/step definitions are separate from provider components. Removed unused code and corrected the JSX Icon argument exception in the existing unused-variable rule.
 
 - Frontend lint passes with --max-warnings 0. Frontend suite: 56 tests passed; an additional Add Sale asynchronous-note regression passed in the focused 7-test financial-screen suite.
-- API: 114 tests passed, including a fresh database applying all 16 checked-in migrations in order. Three native PostgreSQL integration cases are explicitly skipped locally without QA_DATABASE_URL.
+- API: 114 tests passed, including a fresh database applying all 15 checked-in migrations in order. Three native PostgreSQL integration cases are explicitly skipped locally without QA_DATABASE_URL.
 - Production/PWA build passes; existing bundle-size warning remains.
 - Browser fixture: Settings navigation and payment-method loading work; Custom Card draft is discarded on Cancel/reopen. No external service or live record writes.
 - Added GitHub Actions gates for API tests, Prisma schema/migrations, frontend tests, lint and build, with disposable PostgreSQL service integration tests. These tests guard their database destination and never fall back to application DATABASE_URL. Remote workflow execution is not yet verified.

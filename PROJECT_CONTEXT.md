@@ -1,7 +1,8 @@
 # Selvora project reference
 
-Updated September 11, 2026. This is the main knowledge base for returning to the project.
+Updated September 12, 2026. This is the main knowledge base for returning to the project.
 Read [AGENTS.md](AGENTS.md) before changing code. Source code and the Prisma schema take precedence over this reference.
+Current QA resolution, regression evidence and deferred production verification are in [QA_RECONCILIATION.md](qa/QA_RECONCILIATION.md).
 
 ## Project and architecture
 

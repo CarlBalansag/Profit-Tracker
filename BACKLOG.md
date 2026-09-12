@@ -6,16 +6,15 @@ Work on one task at a time under [AGENTS.md](AGENTS.md).
 
 ## Correctness and quality
 
-- Review current source/tests against [QA audit](qa/QA_REPORT.md) and [remediation log](qa/QA_REMEDIATION_PROGRESS.md); confirm remaining findings before scheduling fixes.
-- Follow the separate [currency precision plan](CURRENCY_DECIMAL_MIGRATION_PLAN.md) for fixed-precision money.
-- Expand meaningful financial, transaction-edit, ownership, workflow and real-database concurrency coverage.
-- Add CI for tests, lint and build; address remaining quality-gate failures as separate tasks.
+- QA findings and final regression are reconciled in [current QA status](qa/QA_RECONCILIATION.md). Revalidate affected flows when making future changes.
+- Schedule the production verification/cutover in the [currency precision plan](CURRENCY_DECIMAL_MIGRATION_PLAN.md); stages 1–7 are implemented, while hosted migrations and legacy-column cleanup remain deferred.
+- Existing financial, edit, ownership and concurrency regressions and CI gates now pass. Extend coverage for future changes and verify live external integrations in an appropriate deployment window.
 - Recheck dynamic Tailwind classes in AddTransaction and replace unsupported interpolation if still present.
 - Gradually introduce TypeScript/shared types and split large page components when a focused task warrants it.
 
 ## Product features
 
-- Complete CSV/Excel exports for transactions, analytics and Settings data; retain existing Expenses CSV export.
+- Consider native Excel export if needed; existing-data Transactions CSV, Analytics JSON and Settings CSV/JSON/receipt exports are implemented.
 - Add bulk CSV import with field mapping and validation.
 - Implement tenant-owned invoices, sale linking, partial payments and overdue tracking; current invoice screen is a prototype.
 - Add an official eBay integration or price suggestions; current price endpoint is a cache, not a live scraper.
@@ -47,7 +46,7 @@ Work on one task at a time under [AGENTS.md](AGENTS.md).
 
 The editor's `.vscode/project-todos.json` is preserved as local user data. Its unchecked entries are reminders, not verified bug status:
 
-- Recheck Transactions inline editing against current fixes and regression coverage.
+- Transactions inline editing is fixed and covered by current QA; revalidate it when related behavior changes.
 - Consider a horizontal scrollbar above the Transactions table.
 - Consider a combined inbound/outbound shipping display while retaining their separate stored values.
 
