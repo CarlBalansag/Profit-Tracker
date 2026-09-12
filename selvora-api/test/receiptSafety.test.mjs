@@ -12,6 +12,28 @@ const attach = async (itemId, fileData = 'data:image/png;base64,YWJj') => {
   return { status: response.status, body: await response.json() };
 };
 describe('receipt upload safety', () => {
+  it('preserves an old receipt on database failure and cleans only the newly uploaded asset', async () => {
+    harness.db.inventory[0].receipt_url = 'https://example.invalid/old.png';
+    harness.faults['inventory.update'] = true;
+    expect((await attach(harness.ids.inventory)).status).toBe(500);
+    expect(harness.db.inventory[0].receipt_url).toBe('https://example.invalid/old.png');
+    const upload = harness.calls.find(call => call.model === 'cloudinary' && call.op === 'upload');
+    const cleanup = harness.calls.find(call => call.model === 'cloudinary' && call.op === 'destroy');
+    expect(upload.options.overwrite).toBe(false);
+    expect(cleanup.publicId).toBe(upload.options.public_id);
+    expect(cleanup.options.resource_type).toBe('image');
+    harness.faults['inventory.update'] = false;
+    expect((await attach(harness.ids.inventory)).status).toBe(200);
+    const uploads = harness.calls.filter(call => call.model === 'cloudinary' && call.op === 'upload');
+    expect(uploads[1].options.public_id).not.toBe(uploads[0].options.public_id);
+  });
+  it('preserves the old receipt even if cleanup of the failed new upload also fails', async () => {
+    harness.db.inventory[0].receipt_url = 'https://example.invalid/old.png';
+    harness.faults['inventory.update'] = true; harness.faults['cloudinary.destroy'] = true;
+    expect((await attach(harness.ids.inventory)).status).toBe(500);
+    expect(harness.db.inventory[0].receipt_url).toBe('https://example.invalid/old.png');
+    expect(harness.calls.filter(call => call.model === 'cloudinary' && call.op === 'destroy')).toHaveLength(1);
+  });
   it.each([150 * 1024, 5 * 1024 * 1024])('accepts an owned %s-byte attachment through the production JSON parser', async size => {
     const file = `data:application/pdf;base64,${Buffer.alloc(size, 1).toString('base64')}`;
     expect((await attach(harness.ids.inventory, file)).status).toBe(200);

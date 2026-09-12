@@ -83,7 +83,8 @@ prisma.$transaction=async fn=>{
   try{return await fn(prisma);}catch(error){db=snapshot;throw error;}finally{release();}
 };
 require.cache[requireApi.resolve('./prisma.js')]={id:requireApi.resolve('./prisma.js'),filename:requireApi.resolve('./prisma.js'),loaded:true,exports:prisma};
-requireApi('cloudinary').v2.uploader.upload=async(data,options)=>{calls.push({model:'cloudinary',op:'upload',options});return {secure_url:'https://example.invalid/qa-receipt.png'};};
+requireApi('cloudinary').v2.uploader.upload=async(data,options)=>{calls.push({model:'cloudinary',op:'upload',options});return {secure_url:'https://example.invalid/qa-receipt.png',public_id:options.public_id,resource_type:'image'};};
+requireApi('cloudinary').v2.uploader.destroy=async(publicId,options)=>{calls.push({model:'cloudinary',op:'destroy',publicId,options});if(faults['cloudinary.destroy'])throw new Error('Injected remote cleanup failure');return {result:'ok'};};
 function app() {
   const app=express();app.use(requireApi('./middleware/jsonBody'));
   app.use((req,res,next)=>{req.user=db.user[0];req.isAuthenticated=()=>req.headers['x-qa-unauthenticated']!=='true';next();});

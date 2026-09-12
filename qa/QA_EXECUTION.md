@@ -195,3 +195,9 @@ The fixture and application now share the production 7 MiB JSON parser. Receipt 
 ## QA-13 reconciliation coverage
 
 Added two Tax Exempt screen regressions. Customer-exempt/non-taxable sales from ordinarily taxed purchases remain visible; selected-year/quarter percentage denominators use the same period; unrelated taxed sales are excluded; empty periods show finite zero totals. Both cases pass. This is coverage of the existing fix, with no additional product behavior change.
+
+## QA-11 reconciliation: replacement receipt failure preservation
+
+Replacement receipts upload to a unique asset without overwriting the previous one. A later database failure attempts cleanup only of the newly uploaded asset. Failure of cleanup still preserves the old receipt URL and old asset; a possible unused new asset is logged. Successful replacement and detach retain prior assets, matching existing detach retention behavior.
+
+- 16 focused API cases passed, including old-receipt preservation on database failure, new-asset-only cleanup, cleanup failure, retry with a different asset ID and existing upload/export/calendar checks. External transfers and cleanup are mocked; no real remote assets changed.

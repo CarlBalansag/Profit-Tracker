@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { randomUUID } = require('node:crypto');
 const cloudinary = require('cloudinary').v2;
 const { validateBody } = require('../middleware/validate');
 const { attachReceipt, detachReceipt } = require('../validation/schemas');
@@ -129,11 +130,12 @@ router.post('/attach', isAuthenticated, validateBody(attachReceipt), async (req,
     const uploadResult = await cloudinary.uploader.upload(fileData, {
       folder: 'selvora/receipts',
       resource_type: 'auto',  // handles images and PDFs
-      public_id: `${itemType}_${itemId}`,
-      overwrite: true,
+      public_id: `${itemType}_${itemId}_${randomUUID()}`,
+      overwrite: false,
     });
     const receiptUrl = uploadResult.secure_url;
 
+    try {
     if (itemType === 'inventory') {
       await prisma.inventory.update({
         where: { id: itemId },
@@ -146,6 +148,20 @@ router.post('/attach', isAuthenticated, validateBody(attachReceipt), async (req,
       });
     } else {
       return res.status(400).json({ error: 'itemType must be inventory or expense' });
+    }
+    } catch (error) {
+      // This attempt never overwrites the previous receipt. Clean up only the
+      // newly uploaded asset when the database cannot store its URL.
+      if (uploadResult.public_id) {
+        try {
+          await cloudinary.uploader.destroy(uploadResult.public_id, {
+            resource_type: uploadResult.resource_type || 'image',
+          });
+        } catch (cleanupError) {
+          console.error('[receipts] failed upload cleanup:', cleanupError.message);
+        }
+      }
+      throw error;
     }
 
     res.json({ success: true, receipt_url: receiptUrl });
