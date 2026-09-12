@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { currencyWrite } = require('../services/currencyWrite');
 const { validateBody } = require('../middleware/validate');
 const { createInventory, updateInventory } = require('../validation/schemas');
 const { publishCalendarFeed } = require('../services/calendarFeed');
@@ -103,7 +104,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
 
     const inventory = await prisma.$transaction(async (tx) => {
       const created = await tx.inventory.create({
-        data: {
+        data: currencyWrite('Inventory', {
         user_id: req.user.id,
         product_name,
         vendor_id: vendor_id || null,
@@ -122,7 +123,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
         category: category || null,
         tax_exempt: tax_exempt === true || tax_exempt === 'true',
         status: status || 'PURCHASED',
-        }
+        })
       });
 
       if (sale_price) {
@@ -284,7 +285,7 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
 
     const updated = await prisma.inventory.update({
       where: { id: req.params.id },
-      data,
+      data: currencyWrite('Inventory', data),
       include: { vendor: true, payment_method: true }
     });
     await publishCalendarFeed(req.user.id);
