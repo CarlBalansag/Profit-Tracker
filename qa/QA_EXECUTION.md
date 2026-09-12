@@ -170,3 +170,9 @@ Card create/edit callbacks now check HTTP responses and propagate failure to the
 - Five focused form/parent regressions passed: save failure/retry and preserved limits/type, failed/successful delete list consistency, modal draft preservation, pending duplicate/dismissal protection and partial Quick Add retry without duplicates. Existing five modal-lifecycle cases also pass. Zero-warning lint passes.
 - No API/database contracts changed; ownership and write validation remain covered by existing API tests. No live data writes, deployment or external-service interactions.
 - A separate QA-12 delete failure path was found: generated expense deletion precedes template deletion. Preserve the existing requested delete behavior but make both operations atomic in the next focused task.
+
+## QA-12 reconciliation: recurring deletion
+
+Deleting a recurring template and its generated expenses now uses one transaction. Failure at template deletion preserves generated history. The existing API behavior still deletes generated entries on success; updated project context to distinguish it from the schema's SetNull relationship.
+
+- Focused recurring API suite: five cases passed, including failed delete preservation, successful retry, repeated-delete 404 and prior generation/date checks. No frontend behavior or hosted data changed.

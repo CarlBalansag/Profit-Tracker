@@ -9,6 +9,20 @@ beforeEach(() => harness.reset());
 afterAll(() => server.close());
 
 describe('recurring expense dates', () => {
+  it('preserves generated history on template-delete failure and deletes both on successful retry', async () => {
+    const created = await fetch(`${baseUrl}/api/recurring-expenses`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Delete fixture', amount: 1, frequency: 'monthly', start_date: '2026-01-31', end_date: '2026-04-30' }) });
+    const record = await created.json();
+    const remove = () => fetch(`${baseUrl}/api/recurring-expenses/${record.id}`, { method: 'DELETE' });
+    harness.faults['recurringExpense.delete'] = true;
+    expect((await remove()).status).toBe(500);
+    expect(harness.db.recurringExpense).toHaveLength(1);
+    expect(harness.db.expense.filter(e => e.recurring_expense_id === record.id)).toHaveLength(4);
+    harness.faults['recurringExpense.delete'] = false;
+    expect((await remove()).status).toBe(200);
+    expect(harness.db.recurringExpense).toHaveLength(0);
+    expect(harness.db.expense.filter(e => e.recurring_expense_id === record.id)).toHaveLength(0);
+    expect((await remove()).status).toBe(404);
+  });
   it('rejects a reversed create date range before writing a template', async () => {
     const response = await fetch(`${baseUrl}/api/recurring-expenses`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Invalid range', amount: 1, frequency: 'monthly', start_date: '2026-02-01', end_date: '2026-01-01' }) });
     expect(response.status).toBe(400);

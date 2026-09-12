@@ -102,7 +102,7 @@ The authoritative model is [schema.prisma](selvora-api/prisma/schema.prisma).
 Money has additive Prisma Decimal companions with retained Float compatibility columns. Calculations use shared Decimal arithmetic. Status/category values are mostly strings, not database enums.
 See the separate [currency migration plan](CURRENCY_DECIMAL_MIGRATION_PLAN.md); stages 1–7 are locally verified; hosted migration and final legacy cleanup remain deferred.
 Receipts are one URL on Inventory or Expense, not a separate Receipt model.
-Deleting Inventory cascades to linked Sales; deleting a recurring template preserves generated expenses via SetNull.
+Deleting Inventory cascades to linked Sales. The recurring-expense delete API atomically deletes the template and its generated entries; its database relation supports SetNull for direct template deletion.
 
 Stock rule: `qty_on_hand = qty_purchased - sum(linked Sales.quantity)`.
 Do not assume a cancelled sale automatically restores stock because analytics excludes it from realized totals.

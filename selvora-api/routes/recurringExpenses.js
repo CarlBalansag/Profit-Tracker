@@ -194,8 +194,10 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
     }
 
     // Delete all auto-generated expense entries tied to this recurring record
-    await prisma.expense.deleteMany({ where: { recurring_expense_id: req.params.id } });
-    await prisma.recurringExpense.delete({ where: { id: req.params.id } });
+    await prisma.$transaction(async tx => {
+      await tx.expense.deleteMany({ where: { recurring_expense_id: req.params.id, user_id: req.user.id } });
+      await tx.recurringExpense.delete({ where: { id: req.params.id } });
+    });
 
     res.json({ success: true });
   } catch (err) {
