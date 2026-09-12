@@ -1,187 +1,47 @@
 # Selvora — Reseller Profit Tracker
 
-> A full-stack business analytics platform built for resellers to track inventory, sales, cashback, and profit across multiple marketplaces.
+Selvora tracks purchase batches, linked sales, credit-card cashback, expenses and receipts for resellers.
+A React dashboard summarizes stock, sales economics and operational progress.
 
-**Live Demo:** [profit-tracker.vercel.app](https://profit-tracker.vercel.app) *(Discord login required)*
+[Demo](https://profit-tracker.vercel.app) — Discord login required; availability has not been checked as part of this documentation cleanup.
 
-> This repository is private. The app is fully deployed and accessible via the live demo link above.
+## Documentation
 
----
+- [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md): main knowledge base, architecture, data contracts, calculations, source map and setup details.
+- [BACKLOG.md](BACKLOG.md): curated future work and product ideas.
+- [AGENTS.md](AGENTS.md): required workflow for repository changes.
+- [QA report](qa/QA_REPORT.md) and [remediation log](qa/QA_REMEDIATION_PROGRESS.md): historical findings and later validation; compare with current code.
+- [Currency migration plan](CURRENCY_DECIMAL_MIGRATION_PLAN.md): staged precision work.
+- [Auth deployment checklist](AUTH_DEPLOYMENT_CHECKLIST.md): login/deployment configuration.
+- [Archived feature notes](notes/archive/README.md): older plans and prototypes, not current specifications.
 
-## What It Does
+## Stack
 
-Resellers buying from vendors (Nike, Amazon, etc.) and selling on marketplaces (eBay, StockX, GOAT) need to track true per-item profit — after platform commissions, outbound shipping, purchase cost, inbound shipping, sales tax, and credit card cashback. Spreadsheets break down fast at scale.
+React, Vite, React Router, TanStack React Query and Tailwind on the frontend.
+Express, Prisma, Zod and PostgreSQL on the backend, with Discord OAuth and PostgreSQL sessions.
+Cloudinary handles receipts and published calendar feeds. API Sentry is optional; frontend monitoring is currently a no-op.
 
-Selvora replaces that spreadsheet with a purpose-built analytics platform:
+The core flow is purchase → linked sale → stock and profit summaries. Purchases can have multiple partial sales.
+Goals, product notes, a calendar and dashboard customization supplement that flow.
+Invoices and forecasts remain prototypes, and some controls are unfinished.
+Financial formulas differ across screens; see the knowledge base and QA records before relying on reporting as complete accounting.
 
-- Log an inventory purchase → record a sale → instantly see net profit
-- Credit card cashback is factored into profit calculations at the item level
-- Recurring expenses (storage fees, software subscriptions) auto-generate monthly
-- A customizable dashboard surfaces KPIs, trends, and pipeline status at a glance
+## Getting started
 
----
+1. Configure `.env` in both packages using their examples and the [environment guide](PROJECT_CONTEXT.md#local-setup-and-checks). Preserve existing files.
+2. Use a dedicated development PostgreSQL database and configure Discord OAuth and Cloudinary as needed.
+3. Run `npm ci` separately in `selvora-api` and `selvora-app`. API postinstall generates Prisma Client.
+4. Review the Prisma migrations before applying them to the intended development database.
+5. Run `npm start` in `selvora-api`, and `npm run dev` in `selvora-app` in separate terminals.
 
-## Tech Stack
+The API defaults to localhost:3000 and Vite normally uses localhost:5173.
+Set frontend `VITE_API_URL=http://localhost:3000`; there is no Vite API proxy.
+Production can use an empty API URL with the configured frontend rewrites.
+For login, `VITE_API_DIRECT_URL` selects a direct OAuth origin, falling back to `VITE_API_URL`.
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 19, Vite 5, React Router 7, TanStack Query 5 |
-| Styling | Tailwind CSS 4, Lucide Icons, Recharts 3 |
-| Backend | Node.js, Express 5 |
-| Database | PostgreSQL (Render), Prisma ORM 5 |
-| Auth | Discord OAuth 2.0, express-session (PostgreSQL session store) |
-| Validation | Zod 4 (schema validation on all mutation endpoints) |
-| File Storage | Cloudinary (receipt photos and PDFs) |
-| Error Tracking | Sentry (frontend + backend) |
-| Hosting | Vercel (frontend) + Render paid tier (API + DB) |
-| PWA | vite-plugin-pwa (installable, standalone mode) |
-| Testing | Vitest, @testing-library/react |
+## Checks
 
----
-
-## Architecture
-
-```
-Browser (React SPA on Vercel CDN)
-  │
-  │  apiFetch() — CSRF header injected on every request
-  │
-  ▼
-Vercel Edge (API proxy rewrites)
-  │  /api/* → Render API
-  │  /auth/* → Render API
-  ▼
-Express 5 API (Render paid tier)
-  │  Passport.js session check
-  │  Zod request validation
-  ▼
-Prisma ORM → PostgreSQL (pgbouncer pooling)
-  │
-  ├── Cloudinary  (receipt uploads)
-  └── EbayPriceCache (last-sold price, 24h TTL)
-```
-
-**Session store**: PostgreSQL via `connect-pg-simple` — survives server restarts.
-**CSRF protection**: Custom middleware enforces `X-Requested-With: XMLHttpRequest` on all state-changing requests.
-**User isolation**: Every database query filters by `user_id` at the query level.
-
----
-
-## Features
-
-### Inventory & Sales
-- Log purchases with vendor, payment method, tax, inbound shipping, and cashback rate
-- Record sales with platform, commission fee, outbound shipping, and tax collected
-- Full inline editing of any transaction field from the transaction detail modal
-- Bulk delete with confirmation
-- Status lifecycle tracking: `PURCHASED → LISTED → SOLD → SHIPPED_OUT → PAID → COMPLETED`
-
-### Financial Calculations
-- Net profit = revenue − commission − sale shipping − cost basis + cashback
-- Cashback rate overrides per vendor/category (e.g. 5% at Amazon on a specific card)
-- Cost allocated proportionally across multi-unit batches
-- All figures reflected live as you type (no save required to preview)
-
-### Dashboard & Analytics
-- Customizable stat cards — show/hide and reorder
-- Two UI themes: neon-dark and glassmorphism-brown (persisted per user)
-- Revenue/profit trend charts (line, area, bar) via Recharts
-- Pipeline counts by status (unsold inventory stages)
-- Filter by marketplace, time window (7d / 30d / YTD / All Time)
-
-### Credit Card Tracker
-- Monthly statement per credit card
-- Loss-to-redeem cashback netting: if an item sold at a loss, shows how much cashback to redeem to cover it
-- Month navigation — scroll back to any previous month
-- Automatically refreshes when transactions are saved
-
-### Expenses
-- One-off and recurring expenses (weekly / biweekly / monthly)
-- Auto-generates missing recurring entries on load (catch-up generation)
-- Pause and resume recurring expenses without deleting history
-
-### Receipts
-- Attach photos or PDFs to any inventory item or expense
-- Stored on Cloudinary with MIME type and 5MB size validation
-
-### Onboarding
-- 20-step interactive tutorial with spotlight overlays on key UI elements
-- Persisted per user (`tutorial_seen` flag)
-- Replayable from the Guide page
-
-### Other
-- Tax-exempt purchase and sale tracking (resale exemptions)
-- Seller account management per platform
-- eBay last-sold price lookup with 24-hour database cache
-- Installable as a PWA (offline-capable shell)
-
----
-
-## Database Schema (key models)
-
-```
-User
-  └── Inventory (purchases)
-        └── Sales (per-unit sale events)
-              └── Buyer
-  └── PaymentMethod (credit/debit cards with cashback rates)
-  └── Platform (vendors, marketplaces, cashout platforms)
-        └── Account (seller accounts per platform)
-  └── Expense (one-off)
-  └── RecurringExpense → generates Expense entries
-EbayPriceCache (product name → last sold price, TTL)
-Invoice (buyer invoices)
-```
-
----
-
-## API Surface
-
-| Domain | Endpoints |
-|--------|-----------|
-| Auth | `GET /auth/discord`, `GET /auth/discord/callback`, `GET /auth/me`, `POST /auth/logout` |
-| Inventory | `GET/POST /api/inventory`, `GET/PUT/DELETE /api/inventory/:id` |
-| Sales | `GET/POST /api/sales`, `PUT /api/sales/:id` |
-| Analytics | `GET /api/analytics/dashboard?mode&date` |
-| Credit Card | `GET /api/creditcard/dashboard?month=YYYY-MM` |
-| Expenses | Full CRUD `/api/expenses` |
-| Recurring Expenses | Full CRUD `/api/recurring-expenses` |
-| Platforms | Full CRUD + `/api/platforms/batch` (bulk upsert) |
-| Payment Methods | Full CRUD `/api/payment-methods` |
-| Accounts | Full CRUD `/api/accounts` |
-| Receipts | `POST /api/receipts/attach`, `DELETE /api/receipts/detach` |
-| Preferences | `GET/PUT /api/preferences/dashboard-settings/:style` |
-| eBay Price | `GET/POST /api/ebay-price` |
-| Health | `GET /health` |
-
-All endpoints require session authentication. All mutation endpoints validated with Zod schemas.
-
----
-
-## Environment Variables
-
-**API (`selvora-api/.env`)**
-```
-DATABASE_URL=          # Pooled PostgreSQL connection string (pgbouncer)
-DIRECT_URL=            # Direct connection for Prisma migrations
-SESSION_SECRET=        # >= 32 character secret
-FRONTEND_URL=          # https://your-vercel-domain.vercel.app
-NODE_ENV=              # production | development
-DISCORD_CLIENT_ID=
-DISCORD_CLIENT_SECRET=
-DISCORD_CALLBACK_URL=  # https://your-api-domain/auth/discord/callback
-CLOUDINARY_CLOUD_NAME=
-CLOUDINARY_API_KEY=
-CLOUDINARY_API_SECRET=
-SENTRY_DSN=            # optional
-SENTRY_TRACES_SAMPLE_RATE=  # optional, e.g. 0.1
-```
-
-Calendar subscriptions use the configured Cloudinary account to publish a private, stable ICS feed. No `BACKEND_URL` variable is required. Keep the generated subscription link private because anyone with it can read that calendar.
-
-**Frontend (`selvora-app/.env`)**
-```
-VITE_API_URL=          # Leave empty if using Vercel proxy rewrites
-VITE_SENTRY_DSN=       # optional
-VITE_SENTRY_TRACES_SAMPLE_RATE=  # optional
-```
+Run `npm test` in each package. In `selvora-app`, also run `npm run lint` and `npm run build`.
+In `selvora-api`, run `npx prisma validate`; `npx prisma migrate status` checks the configured database's migration state.
+Follow AGENTS.md for focused workflow/API/database QA appropriate to each change.
+The fixture harness in qa/ does not replace real database concurrency or external integration checks.

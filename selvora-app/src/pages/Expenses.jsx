@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
+import { getExpenseInsights } from './expenseInsights';
 import { toast } from 'sonner';
 import {
   Receipt, Download, Plus, DollarSign, TrendingUp,
-  Search, X, Trash2, Pencil, RefreshCw, Pause, Play,
+  Search, X, Trash2, Pencil, RefreshCw, Pause, Play, Wallet, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
 
 const CATEGORIES = [
@@ -23,6 +24,7 @@ const FREQUENCIES = [
   { value: 'monthly',  label: 'Monthly' },
 ];
 const FREQ_MAP = Object.fromEntries(FREQUENCIES.map(f => [f.value, f.label]));
+
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 
@@ -365,20 +367,14 @@ const Expenses = () => {
   const thisMonth = now.getMonth();
   const thisYear  = now.getFullYear();
 
-  const monthlyCost = expenses
-    .filter(e => { const d = new Date(e.date); return d.getMonth() === thisMonth && d.getFullYear() === thisYear; })
-    .reduce((s, e) => s + e.amount, 0);
+  const insights = useMemo(() => getExpenseInsights(expenses, recurring), [expenses, recurring]);
+  const monthlyCost = insights.currentTotal;
 
   const ytdCost = expenses
     .filter(e => new Date(e.date).getFullYear() === thisYear)
     .reduce((s, e) => s + e.amount, 0);
 
-  const recurringMonthly = recurring.filter(r => r.active).reduce((s, r) => {
-    if (r.frequency === 'monthly')  return s + r.amount;
-    if (r.frequency === 'biweekly') return s + (r.amount * 26) / 12;
-    if (r.frequency === 'weekly')   return s + (r.amount * 52) / 12;
-    return s;
-  }, 0);
+  const recurringMonthly = insights.recurringMonthly;
 
   // ── Filter + sort ─────────────────────────────────────────────────────────
   const filtered = expenses
@@ -429,6 +425,60 @@ const Expenses = () => {
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-all bg-gradient-to-br from-purple-500/80 to-purple-600/80 border border-purple-500/40 hover:from-purple-500 hover:to-purple-600">
             <Plus className="w-4 h-4" /> Add Expense
           </button>
+        </div>
+      </div>
+
+      {/* Monthly spending insight */}
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+        <div className="xl:col-span-3 rounded-xl p-5 bg-white/[0.02] border border-white/10">
+          <div className="flex items-start justify-between gap-4 mb-5">
+            <div>
+              <p className="text-sm font-semibold text-white">This month by category</p>
+              <p className="text-xs text-gray-500 mt-1">See where operating costs are going before they affect your profit.</p>
+            </div>
+            {insights.largestCategory && (
+              <span className="text-[10px] px-2 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 whitespace-nowrap">
+                Highest: {CATEGORY_MAP[insights.largestCategory.category]?.label || 'Uncategorized'}
+              </span>
+            )}
+          </div>
+          {insights.categories.length === 0 ? (
+            <p className="py-8 text-center text-sm text-gray-600">Add an expense this month to see its category impact.</p>
+          ) : (
+            <div className="space-y-3">
+              {insights.categories.map(({ category, amount, share }) => {
+                const meta = CATEGORY_MAP[category] || { label: 'Uncategorized', color: 'text-gray-400' };
+                return (
+                  <div key={category}>
+                    <div className="flex justify-between text-xs mb-1.5">
+                      <span className={`font-medium ${meta.color}`}>{meta.label}</span>
+                      <span className="text-gray-300">${amount.toFixed(2)} <span className="text-gray-600">({Math.round(share * 100)}%)</span></span>
+                    </div>
+                    <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+                      <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-violet-400" style={{ width: `${Math.max(3, share * 100)}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="xl:col-span-2 rounded-xl p-5 bg-white/[0.02] border border-white/10 space-y-5">
+          <div className="flex items-center gap-2"><Wallet className="w-4 h-4 text-emerald-400" /><p className="text-sm font-semibold text-white">Monthly outlook</p></div>
+          <div>
+            <p className="text-xs text-gray-500">Compared with last month</p>
+            {insights.monthChange === null ? <p className="mt-1 text-sm text-gray-400">No prior-month expenses to compare.</p> : (
+              <p className={`mt-1 flex items-center gap-1 text-lg font-semibold ${insights.monthChange > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                {insights.monthChange > 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+                {Math.abs(insights.monthChange * 100).toFixed(1)}% {insights.monthChange > 0 ? 'more' : 'less'}
+              </p>
+            )}
+          </div>
+          <div className="pt-4 border-t border-white/[0.06]">
+            <p className="text-xs text-gray-500">Active recurring commitment</p>
+            <p className="mt-1 text-2xl font-bold text-white">${recurringMonthly.toFixed(2)}<span className="text-sm font-medium text-gray-500"> / month</span></p>
+            <p className="mt-1 text-[11px] text-gray-600">Includes weekly, bi-weekly, and monthly expenses normalized to a monthly amount.</p>
+          </div>
         </div>
       </div>
 

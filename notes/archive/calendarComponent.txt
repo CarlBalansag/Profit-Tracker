@@ -1,0 +1,590 @@
+================================================================================
+SELVORA — RESELLING CALENDAR FEATURE
+Implementation Notes & Progress Tracker
+================================================================================
+
+LIBRARY: @fullcalendar/react@7 + temporal-polyfill
+  - Single install, MIT free, Tailwind-compatible, month/week views built-in
+  - v7 (2025): unified package, no separate @fullcalendar/core needed
+  - Peer dep: temporal-polyfill (modern date handling)
+
+INSTALL CMD (run in selvora-app/):
+  npm install @fullcalendar/react@7 temporal-polyfill
+
+================================================================================
+PROGRESS TRACKER  [ ] = TODO  [x] = DONE
+================================================================================
+
+[x] Step 1  — DB: Add CalendarEvent model + calendar_token field on User
+[x] Step 2  — API: Create selvora-api/routes/calendarEvents.js (CRUD + auto-events)
+[x] Step 3  — API: Add LIVE FEED endpoint /api/calendar/feed.ics?token=XXX (webcal subscribe)
+[x] Step 4  — Validation: Add calendarEvent schema to selvora-api/validation/schemas.js
+[x] Step 5  — Register route in selvora-api/index.js
+[x] Step 6  — Frontend hooks in selvora-app/src/hooks/useApi.js
+[x] Step 7  — Install @fullcalendar/react@7 + temporal-polyfill
+[x] Step 8  — Create CalendarEventModal.jsx
+[x] Step 9  — Create CalendarEventPopover.jsx
+[x] Step 10 — Create selvora-app/src/pages/Calendar.jsx (full page)
+[x] Step 11 — Add /calendar route to App.jsx
+[x] Step 12 — Add Calendar nav item to Sidebar.jsx (UNDER Goals, in Insights section)
+
+ALL STEPS COMPLETE — Build passes with 0 errors (2026-07-17)
+
+================================================================================
+STEP 1 — DATABASE
+================================================================================
+
+FILE: selvora-api/prisma/schema.prisma
+
+Add to User model:
+  calendar_events  CalendarEvent[]
+
+Add new model:
+  model CalendarEvent {
+    id          String   @id @default(uuid())
+    user_id     String
+    user        User     @relation(fields: [user_id], references: [id])
+    title       String
+    date        String   // YYYY-MM-DD (local date, no TZ shift)
+    end_date    String?  // optional multi-day end (YYYY-MM-DD)
+    type        String   @default("manual")
+    color       String?  // "purple"|"blue"|"green"|"amber"|"red"
+    notes       String?
+    created_at  DateTime @default(now())
+
+    @@index([user_id])
+    @@index([user_id, date])
+  }
+
+Run:
+  cd selvora-api
+  npx prisma migrate dev --name add_calendar_events
+  npx prisma generate
+
+NOTE: Auto events (purchase/sale/payout) are NOT stored — they are computed on
+the fly from existing Inventory + Sales tables in the /auto endpoint.
+
+================================================================================
+STEP 2 — API ROUTES (selvora-api/routes/calendarEvents.js)
+================================================================================
+
+Pattern: follow goals.js exactly (isAuthenticated middleware, prisma, etc.)
+
+Endpoints:
+  GET    /api/calendar-events?month=YYYY-MM
+         → fetch user's manual events for month ± 1 (week-view edge)
+         → filter: date >= first day of prev month, date <= last day of next month
+
+  POST   /api/calendar-events
+         → body: { title, date, end_date?, color?, notes? }
+         → validate with calendarEvent schema
+         → prisma.calendarEvent.create({ data: { user_id: req.user.id, ...body } })
+
+  PUT    /api/calendar-events/:id
+         → body: partial calendarEvent fields
+         → verify ownership: findUnique where id AND user_id
+         → prisma.calendarEvent.update
+
+  DELETE /api/calendar-events/:id
+         → verify ownership first
+         → prisma.calendarEvent.delete
+
+  GET    /api/calendar-events/auto?month=YYYY-MM
+         → IMPORTANT: define this route BEFORE /:id to avoid param conflict
+         → Query Inventory: purchase_date in month range
+           → returns { id: inv.id, title: inv.product_name, date: purchase_date, type: 'purchase' }
+         → Query Sales: sale_date in month range (join inventory for product_name)
+           → returns { id: sale.id, title: product_name, date: sale_date, type: 'sale' }
+         → Query Sales: payout_date in month range (where payout_date != null)
+           → returns { id: sale.id+'_pay', title: product_name, date: payout_date, type: 'payout' }
+         → Merge all three arrays, return sorted by date
+
+================================================================================
+STEP 3 — LIVE CALENDAR FEED (auto-sync, replaces one-time .ics download)
+================================================================================
+
+HOW IT WORKS:
+  - Instead of a one-time file download, the API exposes a LIVE feed URL
+  - User adds it to Google/Apple Calendar ONCE via "Add calendar from URL"
+  - Google/Apple polls the URL every few hours and pulls the latest events
+  - When user adds a sale, purchase, or manual event in Selvora, it appears
+    automatically in their personal calendar on next poll — no re-export needed
+
+AUTHENTICATION (no login cookies on this endpoint):
+  - Add calendar_token field to User model (random UUID, generated on first use)
+  - Feed URL uses token as query param: /api/calendar/feed.ics?token=USER_TOKEN
+  - If token is missing or wrong → 401. No session needed.
+
+NEW ENDPOINT: GET /api/calendar/feed.ics?token=XXX
+  → IMPORTANT: define BEFORE /:id route, in a separate router or same file
+  → Look up user by calendar_token
+  → Fetch: all user manual events (no date filter — full history)
+  → Fetch: inventory purchase_date (all time, or past 1 year + future)
+  → Fetch: sales sale_date + payout_date (all time)
+  → Build .ics string with template literals (no npm library needed)
+  → Return: Content-Type: text/calendar; charset=utf-8
+            (NO Content-Disposition — subscribe feeds must not force download)
+
+NEW ENDPOINT: POST /api/calendar/token (authenticated, session-based)
+  → Generate or return existing calendar_token for req.user
+  → Returns { token, feedUrl }
+  → Called once when user visits the Calendar page to get their subscribe URL
+
+ICS format (RFC 5545):
+  BEGIN:VCALENDAR
+  VERSION:2.0
+  PRODID:-//Selvora//Reselling Calendar//EN
+  CALSCALE:GREGORIAN
+  METHOD:PUBLISH
+  X-WR-CALNAME:Selvora Reselling Calendar
+  REFRESH-INTERVAL;VALUE=DURATION:PT3H
+  X-PUBLISHED-TTL:PT3H
+  [for each event:]
+  BEGIN:VEVENT
+  UID:{id}@selvora
+  DTSTART;VALUE=DATE:{YYYYMMDD}
+  DTEND;VALUE=DATE:{YYYYMMDD or +1 day}
+  SUMMARY:{type label}: {title}
+  DESCRIPTION:{notes or empty}
+  END:VEVENT
+  END:VCALENDAR
+
+NOTES:
+  - REFRESH-INTERVAL and X-PUBLISHED-TTL hint to clients to poll every 3 hours
+  - Google Calendar actually polls ~every 24h regardless; Apple Calendar respects the hint
+  - User copies the feed URL and adds it via:
+      Google: "Other calendars" → "+" → "From URL" → paste URL
+      Apple:  File → New Calendar Subscription → paste URL
+      Outlook: Add calendar → Subscribe from web → paste URL
+
+DB change needed on User model:
+  calendar_token  String?  @unique  // generated UUID, null until first requested
+
+================================================================================
+STEP 4 — VALIDATION (selvora-api/validation/schemas.js)
+================================================================================
+
+Add before module.exports:
+
+  const calendarEvent = z.object({
+    title: requiredString('title').max(200),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+    end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+    color: z.enum(['purple','blue','green','amber','red']).optional().nullable(),
+    notes: z.string().max(1000).optional().nullable(),
+  });
+  const updateCalendarEvent = calendarEvent.partial();
+
+Add to module.exports:
+  calendarEvent,
+  updateCalendarEvent,
+
+================================================================================
+STEP 5 — REGISTER ROUTE (selvora-api/index.js)
+================================================================================
+
+  const calendarEventsRouter = require('./routes/calendarEvents');
+  app.use('/api/calendar-events', calendarEventsRouter);
+
+Place after the goals router line.
+
+================================================================================
+STEP 6 — FRONTEND HOOKS (selvora-app/src/hooks/useApi.js)
+================================================================================
+
+Add at bottom of file (before any closing code):
+
+  // ─── Calendar Events ────────────────────────────────────────────────────────
+  export const useCalendarEvents = (month) =>
+    useQuery({
+      queryKey: ['calendar-events', month],
+      queryFn: () => fetcher(`/api/calendar-events?month=${month}`),
+      enabled: !!month,
+    });
+
+  export const useCalendarAutoEvents = (month) =>
+    useQuery({
+      queryKey: ['calendar-auto-events', month],
+      queryFn: () => fetcher(`/api/calendar-events/auto?month=${month}`),
+      enabled: !!month,
+      staleTime: 1000 * 60 * 5,
+    });
+
+  export const useCalendarMutations = () => {
+    const qc = useQueryClient();
+    const invalidate = () => qc.invalidateQueries({ queryKey: ['calendar-events'] });
+
+    const create = useMutation({
+      mutationFn: (data) => fetcher('/api/calendar-events', { method: 'POST', body: JSON.stringify(data) }),
+      onSuccess: invalidate,
+    });
+    const update = useMutation({
+      mutationFn: ({ id, ...data }) => fetcher(`/api/calendar-events/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+      onSuccess: invalidate,
+    });
+    const remove = useMutation({
+      mutationFn: (id) => fetcher(`/api/calendar-events/${id}`, { method: 'DELETE' }),
+      onSuccess: invalidate,
+    });
+
+    return { create, update, remove };
+  };
+
+Also add to useInvalidate() return object:
+  calendarEvents: () => qc.invalidateQueries({ queryKey: ['calendar-events'] }),
+
+================================================================================
+STEP 7 — INSTALL FULLCALENDAR
+================================================================================
+
+  cd selvora-app
+  npm install @fullcalendar/react@7 temporal-polyfill
+
+================================================================================
+STEP 8 — CalendarEventModal.jsx
+================================================================================
+
+FILE: selvora-app/src/components/Calendar/CalendarEventModal.jsx
+
+Props: { open, event (null=create mode), defaultDate, onClose }
+Uses: useCalendarMutations()
+
+Fields:
+  - title       (text input, required)
+  - date        (date input, required, pre-filled from defaultDate or event.date)
+  - end_date    (date input, optional)
+  - color       (5 color swatches: purple=#a855f7, blue=#3b82f6, green=#22c55e,
+                  amber=#f59e0b, red=#ef4444)
+  - notes       (textarea, optional, max 1000)
+
+Styling: bg-[#15171d] border border-white/[0.08] rounded-2xl shadow-2xl
+         (same as other modals in the project)
+
+Buttons:
+  - Save → create.mutate or update.mutate depending on edit/create mode
+  - Delete (edit mode only) → remove.mutate(event.id)
+  - Cancel → onClose()
+
+================================================================================
+STEP 9 — CalendarEventPopover.jsx
+================================================================================
+
+FILE: selvora-app/src/components/Calendar/CalendarEventPopover.jsx
+
+Props: { date, events[], anchorEl, onClose, onAddEvent(date), onEditEvent(event) }
+
+Renders as a small floating card near the clicked day cell.
+Lists each event with:
+  - Colored dot (event.color or type default color)
+  - Event title
+  - Type badge: "Purchase" / "Sale" / "Payout" / "Manual"
+  - Click → onEditEvent(event) for manual; read-only info for auto events
+
+Footer: "Add event" button → onAddEvent(date)
+
+Outside-click closes via useEffect + mousedown on document.
+
+================================================================================
+STEP 10 — Calendar.jsx PAGE
+================================================================================
+
+FILE: selvora-app/src/pages/Calendar.jsx
+
+Imports:
+  import FullCalendar from '@fullcalendar/react';
+  import dayGridPlugin from '@fullcalendar/react/daygrid';
+  import timeGridPlugin from '@fullcalendar/react/timegrid';
+  import interactionPlugin from '@fullcalendar/react/interaction';
+  import '@fullcalendar/react/skeleton.css';
+
+State:
+  const calendarRef = useRef(null);
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  });
+  const [view, setView] = useState('dayGridMonth');
+  const [popover, setPopover] = useState(null); // { date, events, anchorEl }
+  const [modal, setModal] = useState({ open: false, event: null, defaultDate: null });
+
+Data:
+  const { data: manualEvents = [] } = useCalendarEvents(currentMonth);
+  const { data: autoEvents = [] } = useCalendarAutoEvents(currentMonth);
+
+Event shape for FullCalendar:
+  const COLOR_MAP = {
+    purchase: '#3b82f6',  // blue-500
+    sale:     '#22c55e',  // green-500
+    payout:   '#10b981',  // emerald-500
+    purple:   '#a855f7',
+    blue:     '#3b82f6',
+    green:    '#22c55e',
+    amber:    '#f59e0b',
+    red:      '#ef4444',
+  };
+
+  const fcEvents = [...autoEvents, ...manualEvents].map(e => ({
+    id: e.id,
+    title: e.title,
+    start: e.date,
+    end: e.end_date || undefined,
+    backgroundColor: COLOR_MAP[e.color ?? e.type] ?? '#a855f7',
+    borderColor: 'transparent',
+    extendedProps: { type: e.type, notes: e.notes, raw: e },
+  }));
+
+FullCalendar component:
+  <FullCalendar
+    ref={calendarRef}
+    plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+    initialView="dayGridMonth"
+    headerToolbar={false}           // use custom header
+    events={fcEvents}
+    eventClick={(info) => { /* open popover */ }}
+    dateClick={(info) => { /* open modal with defaultDate */ }}
+    datesSet={(info) => {
+      // update currentMonth when user navigates
+      const d = info.view.currentStart;
+      setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+    }}
+    height="auto"
+  />
+
+Custom toolbar (above FullCalendar):
+  - "Reselling Calendar" title (left)
+  - [Month | Week] toggle buttons (center)
+  - [← Prev] [Today] [Next →] nav buttons (right)
+  - [Export .ics] link button (far right)
+
+  Nav handlers:
+    const api = calendarRef.current.getApi();
+    api.prev()        // go back
+    api.next()        // go forward
+    api.today()       // jump to today
+    api.changeView('dayGridMonth' or 'timeGridWeek')
+
+Export .ics:
+  <a href="/api/calendar-events/export.ics" download>Export .ics</a>
+
+Dark theme CSS override (in a <style> tag or index.css):
+  .fc {
+    --fc-bg-color: transparent;
+    --fc-border-color: rgba(255,255,255,0.08);
+    --fc-today-bg-color: rgba(139,92,246,0.1);
+    --fc-page-bg-color: transparent;
+    --fc-neutral-bg-color: rgba(255,255,255,0.03);
+    --fc-list-event-hover-bg-color: rgba(255,255,255,0.05);
+    color: #e5e7eb;
+  }
+
+Legend panel (left of calendar):
+  ● Purchase — blue (#3b82f6)
+  ● Sale     — green (#22c55e)
+  ● Payout   — emerald (#10b981)
+  ● Manual   — purple (#a855f7)
+
+================================================================================
+STEP 11 — App.jsx
+================================================================================
+
+FILE: selvora-app/src/App.jsx
+
+Add import:
+  import Calendar from './pages/Calendar';
+
+Add route inside Shell/ProtectedRoute:
+  <Route path="/calendar" element={<Calendar />} />
+
+================================================================================
+STEP 12 — Sidebar.jsx
+================================================================================
+
+FILE: selvora-app/src/components/Layout/Sidebar.jsx
+
+CalendarDays is already available in lucide-react (no new import needed if
+Lucide is already imported). Add UNDER the Goals nav item (not Operations):
+
+  <NavItem icon={CalendarDays} label="Calendar" to="/calendar" isCollapsed={isCollapsed} />
+
+Place it directly after the Goals NavItem line.
+
+================================================================================
+FILES SUMMARY
+================================================================================
+
+BACKEND (selvora-api/):
+  [MODIFY] prisma/schema.prisma          — CalendarEvent model + User relation
+  [NEW]    routes/calendarEvents.js      — CRUD + /auto + /export.ics
+  [MODIFY] validation/schemas.js         — calendarEvent + updateCalendarEvent
+  [MODIFY] index.js                      — register /api/calendar-events router
+
+FRONTEND (selvora-app/src/):
+  [MODIFY] hooks/useApi.js               — useCalendarEvents, useCalendarAutoEvents, useCalendarMutations
+  [NEW]    components/Calendar/CalendarEventModal.jsx
+  [NEW]    components/Calendar/CalendarEventPopover.jsx
+  [NEW]    pages/Calendar.jsx
+  [MODIFY] App.jsx                       — /calendar route
+  [MODIFY] components/Layout/Sidebar.jsx — CalendarDays nav item
+
+================================================================================
+VERIFICATION CHECKLIST
+================================================================================
+
+[ ] npx prisma migrate dev succeeds, calendar_events table created in DB
+[ ] GET /api/calendar-events/auto?month=2026-07 returns purchase/sale/payout events
+[ ] GET /api/calendar-events?month=2026-07 returns manual events
+[ ] /calendar page loads without errors
+[ ] Month grid shows current month
+[ ] Auto events appear with correct colors (blue/green/emerald)
+[ ] Click a day → popover/modal opens
+[ ] Create manual event → appears on calendar, persists on refresh
+[ ] Edit / delete manual event — works
+[ ] Toggle Month <-> Week view — switches correctly
+[ ] Prev/Next navigation refetches data for new month
+[ ] Export .ics downloads and imports correctly into Apple Calendar / Google Calendar
+[ ] Dark theme looks consistent with rest of the app
+
+================================================================================
+
+================================================================================
+TESTING GUIDE — What to check to confirm everything works
+================================================================================
+
+── CALENDAR PAGE LOADS ─────────────────────────────────────────────────────────
+
+1. Navigate to /calendar in the app
+   → Page loads without a white screen or error boundary
+   → "Reselling Calendar" heading visible
+   → Month grid renders showing the current month (July 2026)
+   → Only this month's dates are shown (no greyed-out days from June or August)
+   → Today's date (17) has a yellow circle on the number and a yellow-tinted cell
+   → Each day cell has a visible border separating it from adjacent days
+
+── NAVIGATION ──────────────────────────────────────────────────────────────────
+
+2. Click the ← (Prev) button
+   → Calendar moves to June 2026
+   → Header label updates to "June 2026"
+
+3. Click the → (Next) button twice
+   → Calendar moves to August 2026
+
+4. Click "Today" button
+   → Calendar jumps back to July 2026
+
+5. Click "Week" toggle
+   → Calendar switches to a 7-day week view showing current week
+
+6. Click "Month" toggle
+   → Calendar switches back to month view
+
+── AUTO EVENTS (from existing inventory/sales data) ────────────────────────────
+
+7. If you have any inventory items with purchase dates in July 2026:
+   → Blue dots with the product name should appear on their purchase dates
+
+8. If you have any sales with a sale_date in July 2026:
+   → Green dots with the product name should appear on those dates
+
+9. If you have any sales with a payout_date in July 2026:
+   → Teal/emerald dots should appear on those dates
+
+10. If no data exists for the current month, navigate to a month where you have
+    inventory or sales to confirm events show up
+
+── CREATING A MANUAL EVENT ─────────────────────────────────────────────────────
+
+11. Click any empty day cell on the calendar
+    → "New Event" modal opens with the clicked date pre-filled in the Date field
+
+12. Fill in:
+    - Title: "Test Drop Day"
+    - Date: today's date (2026-07-17)
+    - Color: pick Amber
+    - Notes: "test notes"
+    → Click "Create Event"
+    → Modal closes
+    → Event appears on July 17 with an amber dot and title "Test Drop Day"
+
+13. Refresh the page
+    → The event is still there (persisted to DB)
+
+── MULTI-DAY EVENT ─────────────────────────────────────────────────────────────
+
+14. Click a day and create an event with both a Start Date and End Date
+    (e.g. July 20 - July 23)
+    → Event should span multiple days on the calendar
+
+── EDITING A MANUAL EVENT ──────────────────────────────────────────────────────
+
+15. Click the event you created ("Test Drop Day")
+    → A popover appears listing that day's events
+    → The event shows with its amber color dot and an "Edit" label
+
+16. Click the event in the popover
+    → "Edit Event" modal opens pre-filled with all the event's data
+
+17. Change the title to "Updated Drop Day", change color to Red
+    → Click "Save Changes"
+    → Modal closes, event updates on the calendar with red color
+
+── DELETING A MANUAL EVENT ─────────────────────────────────────────────────────
+
+18. Click the updated event to open its popover, then click to edit it
+    → In the Edit Event modal, click the red "Delete" button (bottom left)
+    → Modal closes, event disappears from the calendar
+
+── DAY POPOVER (multiple events) ───────────────────────────────────────────────
+
+19. On a day that has both an auto event and a manual event:
+    → Click that day's event pill
+    → Popover lists all events for that day
+    → Auto events (Purchase/Sale/Payout) show as read-only (no Edit label)
+    → Manual events show "Edit" label and open the modal when clicked
+    → "Add event" button at the bottom opens the New Event modal pre-filled with that date
+
+── SUBSCRIBE TO CALENDAR (live feed) ───────────────────────────────────────────
+
+20. Click "Subscribe to Calendar" button (top right of page)
+    → A panel opens showing a long feed URL (webcal/https link)
+    → Click "Copy" button → "Copied!" briefly appears
+    → The URL is copied to clipboard
+
+21. Paste the URL into a browser tab
+    → It should return a plain text .ics file starting with BEGIN:VCALENDAR
+    → The file should contain your purchase events, sale events, and any manual events
+
+22. (Optional) Add the URL to Google Calendar:
+    → Google Calendar → Other calendars → + → From URL → paste → Add Calendar
+    → Your Selvora events should appear in Google Calendar
+
+23. (Optional) Add the URL to Apple Calendar:
+    → File → New Calendar Subscription → paste URL → Subscribe
+    → Events should import
+
+── MONTH/WEEK DATA REFETCH ─────────────────────────────────────────────────────
+
+24. Navigate to a different month using ← or →
+    → Network tab (DevTools) should show new requests to
+      /api/calendar-events?month=YYYY-MM and /api/calendar-events/auto?month=YYYY-MM
+    → Events for that month load correctly
+
+── LEGEND ──────────────────────────────────────────────────────────────────────
+
+25. On a wide screen (>=1024px), the legend panel is visible on the left side:
+    - Blue dot   = Purchase
+    - Green dot  = Sale
+    - Teal dot   = Payout
+    - Purple dot = Manual
+    → Colors match the dots shown on the calendar events
+
+26. "+ Add event" link in the legend opens the New Event modal with no date pre-filled
+
+── MOBILE ──────────────────────────────────────────────────────────────────────
+
+27. Narrow the browser window below 1024px
+    → Legend panel hides
+    → A "+ Add Event" button appears at the bottom of the page
+    → Clicking it opens the New Event modal
+
+================================================================================
