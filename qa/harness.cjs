@@ -72,10 +72,15 @@ for(const model of Object.keys(db)) {
     return op==='deleteMany'?{count:rows.length}:rows[0];
   };
 }
+let transactionTail = Promise.resolve();
 prisma.$transaction=async fn=>{
   if(typeof fn!=='function')return Promise.all(fn);
+  const previous = transactionTail;
+  let release;
+  transactionTail = new Promise(resolve => { release = resolve; });
+  await previous;
   const snapshot=structuredClone(db);
-  try{return await fn(prisma);}catch(error){db=snapshot;throw error;}
+  try{return await fn(prisma);}catch(error){db=snapshot;throw error;}finally{release();}
 };
 require.cache[requireApi.resolve('./prisma.js')]={id:requireApi.resolve('./prisma.js'),filename:requireApi.resolve('./prisma.js'),loaded:true,exports:prisma};
 requireApi('cloudinary').v2.uploader.upload=async(data,options)=>{calls.push({model:'cloudinary',op:'upload',options});return {secure_url:'https://example.invalid/qa-receipt.png'};};

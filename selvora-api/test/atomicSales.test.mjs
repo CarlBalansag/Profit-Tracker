@@ -26,6 +26,41 @@ const request = async (method, path, body) => {
 };
 
 describe('atomic sale mutations', () => {
+  it('preserves purchase and all linked sales when deleting the purchase fails', async () => {
+    harness.db.sales.push({ ...harness.db.sales[0], id: 'other-sale', quantity: 1 });
+    harness.faults['inventory.delete'] = true;
+    expect((await request('DELETE', `/api/inventory/${harness.ids.inventory}`)).status).toBe(500);
+    expect(harness.db.inventory).toHaveLength(1);
+    expect(harness.db.sales).toHaveLength(2);
+    harness.faults['inventory.delete'] = false;
+    expect((await request('DELETE', `/api/inventory/${harness.ids.inventory}`)).status).toBe(200);
+    expect(harness.db.inventory).toHaveLength(0);
+    expect(harness.db.sales).toHaveLength(0);
+  });
+  it('rejects a stale concurrent edit rather than applying its stock delta twice', async () => {
+    const originalRead = harness.prisma.sales.findUnique;
+    let reads = 0; let release;
+    const bothRead = new Promise(resolve => { release = resolve; });
+    harness.prisma.sales.findUnique = async args => {
+      const result = await originalRead(args);
+      if (args.include?.inventory) {
+        if (++reads === 2) release();
+        await bothRead;
+      }
+      return result;
+    };
+    let responses;
+    try {
+    responses = await Promise.all([
+      request('PUT', `/api/sales/${harness.ids.sale}`, { quantity: 3 }),
+      request('PUT', `/api/sales/${harness.ids.sale}`, { quantity: 3 }),
+    ]);
+    } finally { harness.prisma.sales.findUnique = originalRead; }
+    expect(responses.map(response => response.status).sort()).toEqual([200, 409]);
+    expect(harness.db.sales[0].quantity).toBe(3);
+    expect(harness.db.inventory[0].qty_on_hand).toBe(2);
+    expect(harness.db.sales[0].quantity + harness.db.inventory[0].qty_on_hand).toBe(5);
+  });
   it('rolls back the stock claim when sale creation fails', async () => {
     harness.faults['sales.create'] = true;
     const response = await request('POST', '/api/sales', {
@@ -37,6 +72,30 @@ describe('atomic sale mutations', () => {
     expect(response.status).toBe(500);
     expect(harness.db.inventory[0].qty_on_hand).toBe(3);
     expect(harness.db.sales).toHaveLength(1);
+  });
+
+  it('rolls back a claimed sale edit when stock update fails and permits retry', async () => {
+    harness.faults['inventory.updateMany'] = true;
+    expect((await request('PUT', `/api/sales/${harness.ids.sale}`, { quantity: 3, unit_price: 160 })).status).toBe(500);
+    expect(harness.db.sales[0].quantity).toBe(2);
+    expect(harness.db.sales[0].unit_price).toBe(150);
+    expect(harness.db.inventory[0].qty_on_hand).toBe(3);
+    harness.faults['inventory.updateMany'] = false;
+    expect((await request('PUT', `/api/sales/${harness.ids.sale}`, { quantity: 3, unit_price: 160 })).status).toBe(200);
+    expect(harness.db.sales[0].quantity).toBe(3);
+    expect(harness.db.inventory[0].qty_on_hand).toBe(2);
+    expect((await request('PUT', `/api/sales/${harness.ids.sale}`, { quantity: 3 })).status).toBe(200);
+    expect(harness.db.inventory[0].qty_on_hand).toBe(2);
+  });
+
+  it('preserves omitted fields when independent status and price edits overlap', async () => {
+    const responses = await Promise.all([
+      request('PUT', `/api/sales/${harness.ids.sale}`, { status: 'PAID' }),
+      request('PUT', `/api/sales/${harness.ids.sale}`, { unit_price: 160 }),
+    ]);
+    expect(responses.map(r => r.status)).toEqual([200, 200]);
+    expect(harness.db.sales[0]).toMatchObject({ status: 'PAID', unit_price: 160, quantity: 2, sale_shipping: 12 });
+    expect(harness.db.inventory[0].qty_on_hand).toBe(3);
   });
 
   it('rejects an oversized quantity edit without changing the sale', async () => {

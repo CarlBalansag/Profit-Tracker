@@ -303,10 +303,8 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
       return res.status(404).json({ error: 'Not found or access denied' });
     }
 
-    // Manually delete linked sales first (belt-and-suspenders alongside DB cascade)
-    await prisma.sales.deleteMany({ where: { inventory_id: req.params.id } });
-
-    // Now delete the inventory record itself
+    // The foreign-key cascade deletes linked sales atomically with inventory.
+    // A failed purchase delete must preserve its entire sale history.
     await prisma.inventory.delete({ where: { id: req.params.id } });
 
     await publishCalendarFeed(req.user.id);

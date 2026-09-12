@@ -114,3 +114,12 @@ Resolved frontend lint errors without turning off the React Hooks rules. Modal f
 - Browser fixture: Settings navigation and payment-method loading work; Custom Card draft is discarded on Cancel/reopen. No external service or live record writes.
 - Added GitHub Actions gates for API tests, Prisma schema/migrations, frontend tests, lint and build, with disposable PostgreSQL service integration tests. These tests guard their database destination and never fall back to application DATABASE_URL. Remote workflow execution is not yet verified.
 - Finding reconciliation identified a possible QA-04 concurrent-edit gap: quantity deltas are computed from a sale read outside the transaction. Two edits can both apply the same delta. Reproduce with two concurrent PUTs changing one sale from quantity 2 to 3; check stock + sales against purchased quantity. A concurrent inventory quantity edit has a related stale-read risk (QA-10). Affected files: routes/sales.js and routes/inventory.js. Separate focused tasks follow this quality-gate change.
+
+## QA-04 reconciliation: conflicting sale edits and atomic deletion
+
+Reproduced the stale sale quantity read using a barrier before two concurrent edits. Sale updates now conditionally claim that quantity version inside the transaction; stale requests return 409 without applying stock changes. Only supplied fields are written, preserving independent concurrent status/price edits. Inventory deletion uses the database foreign-key cascade in one operation instead of deleting sales first.
+
+- Seven atomic mutation fixtures passed: concurrent stale edit, overlapping independent fields, edit failure/rollback/retry/repeated quantity, create rollback, oversized edit, concurrent stock claim and delete failure/history preservation/retry.
+- Focused API checks: 20 tests passed including decimal sales, report consistency and tenant ownership. Full API suite before the deletion case: 117 passed; no frontend behavior changed.
+- Fixture transactions serialize snapshots so a failed request cannot overwrite another fixture transaction's committed result. This tests application decisions, not native PostgreSQL isolation. Added native concurrent-edit coverage; four native cases remain skipped locally until a disposable PostgreSQL service is available.
+- No hosted writes or deployment. QA-10 concurrent inventory quantity updates remain a separate next task.

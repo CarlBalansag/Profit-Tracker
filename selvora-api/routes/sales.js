@@ -123,7 +123,27 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
     await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
     await requireOwned('buyer', buyer_id, req.user.id, 'Buyer');
     const qtyDiff = existing.quantity - newQty;
+    const data = {};
+    for (const [field, value] of Object.entries({ unit_price, commission_fee, sale_shipping, sale_tax_collected })) {
+      if (value !== undefined) data[field] = Number(value);
+    }
+    if (quantity !== undefined) data.quantity = newQty;
+    if (status !== undefined) data.status = status;
+    if (platform_id !== undefined) data.platform_id = platform_id || null;
+    if (buyer_id !== undefined) data.buyer_id = buyer_id;
+    if (sale_date !== undefined) data.sale_date = parseLocalDate(sale_date);
+    if (payout_date !== undefined) data.payout_date = parseLocalDate(payout_date);
+    if (taxable !== undefined) data.taxable = taxable === true || taxable === 'true';
+    if (customer_tax_exempt !== undefined) data.customer_tax_exempt = customer_tax_exempt === true || customer_tax_exempt === 'true';
+    if (exemption_type !== undefined) data.exemption_type = exemption_type || null;
     const updated = await prisma.$transaction(async (tx) => {
+      // Claim the version used to calculate the stock delta. A concurrent edit
+      // must not apply that delta again or overwrite fields omitted here.
+      const claim = await tx.sales.updateMany({
+        where: { id: req.params.id, quantity: existing.quantity, inventory: { user_id: req.user.id } },
+        data: currencyWrite('Sales', data),
+      });
+      if (claim.count !== 1) throw requestError(409, 'Sale changed while saving. Reload and retry.');
       if (qtyDiff < 0) {
         const stockClaim = await tx.inventory.updateMany({
           where: { id: existing.inventory_id, qty_on_hand: { gte: -qtyDiff } },
@@ -139,23 +159,8 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
         });
       }
 
-      return tx.sales.update({
+      return tx.sales.findUnique({
         where: { id: req.params.id },
-        data: currencyWrite('Sales', {
-        unit_price: unit_price !== undefined ? parseFloat(unit_price) : existing.unit_price,
-        quantity: newQty,
-        status: status !== undefined ? status : existing.status,
-        commission_fee: commission_fee !== undefined ? parseFloat(commission_fee) : existing.commission_fee,
-        sale_shipping: sale_shipping !== undefined ? parseFloat(sale_shipping) : existing.sale_shipping,
-        platform_id: platform_id !== undefined ? (platform_id || null) : existing.platform_id,
-        buyer_id: buyer_id !== undefined ? buyer_id : existing.buyer_id,
-        sale_date: sale_date !== undefined ? (parseLocalDate(sale_date) || existing.sale_date) : existing.sale_date,
-        payout_date: payout_date !== undefined ? (payout_date ? parseLocalDate(payout_date) : null) : existing.payout_date,
-        taxable: taxable !== undefined ? (taxable === true || taxable === 'true') : existing.taxable,
-        sale_tax_collected: sale_tax_collected !== undefined ? parseFloat(sale_tax_collected) : existing.sale_tax_collected,
-        customer_tax_exempt: customer_tax_exempt !== undefined ? (customer_tax_exempt === true || customer_tax_exempt === 'true') : existing.customer_tax_exempt,
-        exemption_type: exemption_type !== undefined ? (exemption_type || null) : existing.exemption_type,
-        })
       });
     });
 

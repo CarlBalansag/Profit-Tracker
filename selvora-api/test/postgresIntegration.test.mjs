@@ -80,6 +80,25 @@ describe.skipIf(!databaseUrl)('native PostgreSQL API integration', () => {
     expect(await prisma.sales.count({ where: { inventory_id: inventory.id } })).toBe(0);
     expect((await request('POST', '/api/sales', { inventory_id: inventory.id, quantity: 1, unit_price: 1 })).status).toBe(200);
   });
+  it('rejects a conflicting quantity edit against the same stale sale version', async () => {
+    await prisma.inventory.update({ where: { id: inventory.id }, data: { qty_purchased: 5, qty_on_hand: 3 } });
+    const sale = await prisma.sales.create({ data: { inventory_id: inventory.id, quantity: 2, unit_price: 1, sale_date: new Date() } });
+    const originalRead = prisma.sales.findUnique;
+    let reads = 0; let release;
+    const bothRead = new Promise(resolve => { release = resolve; });
+    prisma.sales.findUnique = async args => {
+      const result = await originalRead.call(prisma.sales, args);
+      if (args.include?.inventory) { if (++reads === 2) release(); await bothRead; }
+      return result;
+    };
+    let responses;
+    try { responses = await Promise.all([request('PUT', `/api/sales/${sale.id}`, { quantity: 3 }), request('PUT', `/api/sales/${sale.id}`, { quantity: 3 })]); }
+    finally { prisma.sales.findUnique = originalRead; }
+    expect(responses.map(r => r.status).sort()).toEqual([200, 409]);
+    const stored = await prisma.inventory.findUnique({ where: { id: inventory.id }, include: { sales: true } });
+    expect(stored.qty_on_hand).toBe(2);
+    expect(stored.sales[0].quantity).toBe(3);
+  });
   it('rejects foreign and unauthenticated inventory without writes', async () => {
     const foreignOwner = randomUUID();
     await prisma.user.create({ data: { id: foreignOwner, email: `${foreignOwner}@qa.invalid` } });

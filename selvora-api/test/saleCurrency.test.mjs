@@ -16,6 +16,8 @@ describe('sale decimal writes', () => {
     expect(updated.data.unit_price_decimal).toBe('0.29');
     expect(harness.db.inventory[0].qty_on_hand).toBe(1);
     harness.db.sales[0].unit_price = 1.234567;
+    // The additive backfill retains the original and creates this companion.
+    harness.db.sales[0].unit_price_decimal = '1.23';
     const historic = await write('PUT', `/${harness.ids.sale}`, { status: 'PAID' });
     expect(historic.status).toBe(200);
     expect(historic.data.unit_price).toBe(1.23);
