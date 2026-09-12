@@ -28,6 +28,8 @@ model User {
   goals                  Goal[]
   product_notes          ProductNote[]
   calendar_events        CalendarEvent[]
+  buyers                 Buyer[]
+  invoices               Invoice[]
   calendar_token         String?          @unique
 }
 
@@ -124,10 +126,14 @@ model Account {
 
 model Buyer {
   id                 String    @id @default(uuid())
+  user_id            String
+  user               User      @relation(fields: [user_id], references: [id])
   name               String
   avg_days_to_payout Int?
   sales              Sales[]
   invoices           Invoice[]
+  @@index([user_id])
+  @@unique([id, user_id])
 }
 
 model PaymentMethod {
@@ -182,12 +188,15 @@ model RecurringExpense {
 
 model Invoice {
   id           String   @id @default(uuid())
+  user_id      String
+  user         User     @relation(fields: [user_id], references: [id])
   buyer_id     String
-  buyer        Buyer    @relation(fields: [buyer_id], references: [id])
+  buyer        Buyer    @relation(fields: [buyer_id, user_id], references: [id, user_id])
   issue_date   DateTime
   due_date     DateTime
   total_amount Float
   status       String   // "Paid, Unpaid"
+  @@index([user_id])
 }
 
 model Goal {

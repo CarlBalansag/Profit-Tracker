@@ -62,6 +62,7 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
 
     const saleQty = parseInt(quantity, 10) || 1;
     await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
+    await requireOwned('buyer', buyer_id, req.user.id, 'Buyer');
     const sale = await prisma.$transaction(async (tx) => {
       const stockClaim = await tx.inventory.updateMany({
         where: {
@@ -108,7 +109,7 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
     const {
       unit_price, quantity, status, commission_fee, platform_id,
       sale_shipping, taxable, sale_tax_collected, customer_tax_exempt, exemption_type,
-      sale_date, payout_date,
+      sale_date, payout_date, buyer_id,
     } = req.body;
     const existing = await prisma.sales.findUnique({
       where: { id: req.params.id },
@@ -119,6 +120,7 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
     }
     const newQty = quantity !== undefined ? (parseInt(quantity) || existing.quantity) : existing.quantity;
     await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
+    await requireOwned('buyer', buyer_id, req.user.id, 'Buyer');
     const qtyDiff = existing.quantity - newQty;
     const updated = await prisma.$transaction(async (tx) => {
       if (qtyDiff < 0) {
@@ -145,6 +147,7 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
         commission_fee: commission_fee !== undefined ? parseFloat(commission_fee) : existing.commission_fee,
         sale_shipping: sale_shipping !== undefined ? parseFloat(sale_shipping) : existing.sale_shipping,
         platform_id: platform_id !== undefined ? (platform_id || null) : existing.platform_id,
+        buyer_id: buyer_id !== undefined ? buyer_id : existing.buyer_id,
         sale_date: sale_date !== undefined ? (parseLocalDate(sale_date) || existing.sale_date) : existing.sale_date,
         payout_date: payout_date !== undefined ? (payout_date ? parseLocalDate(payout_date) : null) : existing.payout_date,
         taxable: taxable !== undefined ? (taxable === true || taxable === 'true') : existing.taxable,

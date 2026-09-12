@@ -13,7 +13,7 @@ function reset() {
     paymentMethod:[{id:ids.card,user_id:ids.user,name:'QA Credit Card',type:'Credit',default_cashback_rate:2,category_rates:'[]',statement_close_day:15,due_day:10,credit_limit:5000,min_payment_pct:2}],
     inventory:[{id:ids.inventory,user_id:ids.user,product_name:'QA Multi-unit Sneaker',vendor_id:ids.vendor,payment_method_id:ids.card,unit_purchase_cost:100,qty_purchased:5,qty_on_hand:3,sales_tax:40,shipping_cost_inbound:20,fees:10,gift_card_amount:50,cashback_earned:10.4,status:'PURCHASED',category:'Shoes',purchase_date:new Date('2026-09-01T12:00:00Z'),created_at:new Date(),tracking_number:'9400111899223856928499',receipt_url:null,tax_exempt:false}],
     sales:[{id:ids.sale,inventory_id:ids.inventory,platform_id:ids.platform,buyer_id:null,quantity:2,unit_price:150,commission_fee:15,sale_shipping:12,sale_tax_collected:8,taxable:true,customer_tax_exempt:false,status:'SOLD',sale_date:new Date('2026-09-03T12:00:00Z'),payout_date:null}],
-    expense:[{id:randomUUID(),user_id:ids.user,name:'QA Storage',amount:25,date:new Date('2026-09-01T12:00:00Z'),category:'Storage'}],recurringExpense:[],account:[],goal:[],calendarEvent:[],productNote:[]};
+    expense:[{id:randomUUID(),user_id:ids.user,name:'QA Storage',amount:25,date:new Date('2026-09-01T12:00:00Z'),category:'Storage'}],recurringExpense:[],account:[],goal:[],calendarEvent:[],productNote:[],buyer:[],invoice:[]};
 }
 reset();
 function relations(model,row,key) {
@@ -22,7 +22,7 @@ function relations(model,row,key) {
   if(model==='inventory'&&key==='sales') return ['sales',db.sales.filter(x=>x.inventory_id===row.id)];
   if(model==='sales'&&key==='inventory') return ['inventory',db.inventory.find(x=>x.id===row.inventory_id)||null];
   if((model==='sales'||model==='account')&&key==='platform') return ['platform',db.platform.find(x=>x.id===row.platform_id)||null];
-  if(key==='buyer') return ['buyer',null];
+  if(key==='buyer') return ['buyer',db.buyer.find(x=>x.id===row.buyer_id)||null];
   if(model==='platform'&&key==='accounts') return ['account',db.account.filter(x=>x.platform_id===row.id)];
   return null;
 }

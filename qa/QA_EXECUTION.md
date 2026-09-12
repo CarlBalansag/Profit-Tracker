@@ -24,7 +24,7 @@ Commit each completed task separately and record precise coverage and remaining 
 | 1 | QA-22: intentional clearing of optional account fields | Fixed; focused API regression passed |
 | 2 | QA-21: Vendor/Marketplace editing | Fixed; focused browser/frontend/API QA passed |
 | 3 | QA-06: consistent financial calculations | Fixed core calculations; focused regression passed |
-| 4 | QA-19: Buyer/Invoice ownership | Pending |
+| 4 | QA-19: Buyer/Invoice ownership | Fixed in code; isolated SQL/API regression passed; hosted migration not applied |
 | 5 | QA-20: inactive controls and unfinished workflows | Pending |
 | 6 | QA-15: staged currency precision migration | Pending |
 | 7 | QA-25: quality gates, coverage and finding reconciliation | Pending |
@@ -70,3 +70,15 @@ Added shared/finance.mjs for batch/allocated costs, stored-rate cashback, sale e
 - Changed Add Transaction/Inventory/detail and new screen tests pass targeted lint; old Add Sale/Transactions/Analytics lint failures remain QA-25 work.
 - Form validation, attachment failure/retry, ownership and write rollback coverage remains in the passing baseline suites. This task changes calculations/cache refresh, not database money types or concurrent write contracts.
 - No live database, OAuth or Cloudinary calls were exercised. Tax reporting definitions and business overhead remain separate metrics; fixed-precision migration is QA-15.
+
+## QA-19 completed in code
+
+Added required User ownership and indexes to Buyer/Invoice. Invoice's composite Buyer foreign key enforces a matching owner. Sale create/update validate owned Buyer IDs and preserve omitted Buyer IDs while supporting intentional clearing. Migration infers only unambiguous linked-sale owners and rolls back for orphan/conflicting historical ownership.
+
+- Read-only configured database counts: 0 Buyers, 0 Invoices. No hosted migrations or writes performed.
+- 4 API regression cases passed: owned create/update/partial preservation, missing/foreign rejection without stock writes, intentional clearing.
+- 4 isolated PostgreSQL-engine SQL cases passed: empty migration/required owner/composite ownership constraint, unambiguous backfill, orphan rollback, conflicting-owner rollback. PGlite is a dev-only migration test dependency; it does not prove multi-connection concurrency.
+- Full API suite: 76 tests passed. Prisma schema validation and Node syntax check passed; git diff --check passed.
+- Default client generation is blocked by a DLL loaded in a pre-existing local API process. The schema generated successfully to a temporary output without restarting the user's server. Production/development deployment requires normal client generation and the reviewed migration before this new schema runs against a database.
+- Prisma auto-install unexpectedly created a user-root package/modules during temporary generation. Verified they were new Prisma-only files and moved them into the temporary QA recovery directory; no existing user files were removed or moved. Automatic deletion review rejected cleanup, so reversible relocation was used successfully.
+- Browser changes are not part of this schema/API task. Invoice functionality is still QA-20 work.

@@ -29,6 +29,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "prisma": "^5.22.0",
     "vitest": "^2.1.9"
   }

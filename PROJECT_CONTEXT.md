@@ -95,7 +95,7 @@ The authoritative model is [schema.prisma](selvora-api/prisma/schema.prisma).
 | Goal | User metric and 7-day, 30-day, YTD targets |
 | ProductNote | Note keyed by user plus lowercase/trimmed product name; not a SKU relationship |
 | CalendarEvent | Manual event with YYYY-MM-DD date strings and optional end date |
-| Buyer / Invoice | Incomplete invoice domain; neither currently has user_id |
+| Buyer / Invoice | User-owned invoice domain; composite Buyer/Invoice relation enforces matching ownership |
 | EbayPriceCache | Global product-name cache; no active scraper in the price router |
 | user_sessions | Session table managed by connect-pg-simple, ignored by Prisma |
 
@@ -112,7 +112,7 @@ Immediate purchase-plus-sale creation uses a transaction. These safeguards do no
 
 Request validation lives in [schemas.js](selvora-api/validation/schemas.js) and the validation middleware.
 Updates must preserve omitted fields and distinguish omission from intentional clearing.
-[Ownership service](selvora-api/services/ownership.js) checks related IDs; Buyer lacks tenant ownership and needs special treatment.
+[Ownership service](selvora-api/services/ownership.js) checks related IDs; Buyer IDs must belong to the signed-in user; Invoice links must match Buyer ownership.
 Verify ownership before external uploads and preserve saved records when an operation fails.
 
 Recurring generation runs on listing active templates and on create/update, through today or the end date.
