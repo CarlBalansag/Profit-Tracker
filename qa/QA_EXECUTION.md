@@ -191,3 +191,7 @@ The fixture and application now share the production 7 MiB JSON parser. Receipt 
 
 - Ten API cases passed: 150 KiB and exact 5 MiB requests, one-byte-over rejection with existing attachment preservation, empty/malformed/unsupported input, owned/foreign upload behavior and full purchase receipt cost.
 - Cloudinary is mocked. Real transfer, OS file saving and remote-file rollback on a later database failure are not exercised. No live data or remote-file writes.
+
+## QA-13 reconciliation coverage
+
+Added two Tax Exempt screen regressions. Customer-exempt/non-taxable sales from ordinarily taxed purchases remain visible; selected-year/quarter percentage denominators use the same period; unrelated taxed sales are excluded; empty periods show finite zero totals. Both cases pass. This is coverage of the existing fix, with no additional product behavior change.
