@@ -66,10 +66,10 @@ router.put('/:id', isAuthenticated, validateBody(updateAccount), async (req, res
       where: { id: req.params.id },
       data: {
         name:     name     ?? existing.name,
-        email:    email    ?? existing.email,
-        username: username ?? existing.username,
+        email:    email    !== undefined ? email : existing.email,
+        username: username !== undefined ? username : existing.username,
         status:   status   ?? existing.status,
-        notes:    notes    ?? existing.notes,
+        notes:    notes    !== undefined ? notes : existing.notes,
       }
     });
     res.json(account);

@@ -21,7 +21,7 @@ Commit each completed task separately and record precise coverage and remaining 
 
 | Order | Finding | Status |
 |---|---|---|
-| 1 | QA-22: intentional clearing of optional account fields | Pending |
+| 1 | QA-22: intentional clearing of optional account fields | Fixed; focused API regression passed |
 | 2 | QA-21: Vendor/Marketplace editing | Pending |
 | 3 | QA-06: consistent financial calculations | Pending |
 | 4 | QA-19: Buyer/Invoice ownership | Pending |
@@ -33,3 +33,16 @@ Commit each completed task separately and record precise coverage and remaining 
 A finding that has partial safeguards is not closed until its affected paths and relevant scenarios have been checked.
 Existing user changes in Expenses and project documentation are part of this checkpoint; editor files and npm caches are excluded.
 No deployment is authorized. A Git push must not trigger production or preview hosting.
+
+## QA-22 completed
+
+Changed only optional account update semantics: omitted email/username/notes preserve existing values; empty strings or null clear them.
+Ownership, platform association and required-name validation are preserved.
+
+- 13 focused API regression tests passed: individual/all-field clearing, read persistence, repeated clearing, partial/empty updates, restoring values, invalid inputs, missing/foreign/unauthenticated IDs, injected write failure and retry, create/delete.
+- Full backend suite: 15 files, 50 tests passed after the fix.
+- Node syntax check and git diff --check passed.
+- Each request uses the actual account router and validation with isolated fixture data. No live records were written.
+- The existing Accounts browser screen has create/delete only, so no browser edit/cancel flow was changed. Cancel has no update request to exercise for this API-only fix.
+- Database concurrency is not relevant to independent optional field assignments; real PostgreSQL execution was not tested for this change.
+- Git checkpoint 54c4721 was pushed to origin/codex/qa-checkpoint after the user confirmed the branch is excluded from hosting.
