@@ -176,3 +176,11 @@ Card create/edit callbacks now check HTTP responses and propagate failure to the
 Deleting a recurring template and its generated expenses now uses one transaction. Failure at template deletion preserves generated history. The existing API behavior still deletes generated entries on success; updated project context to distinguish it from the schema's SetNull relationship.
 
 - Focused recurring API suite: five cases passed, including failed delete preservation, successful retry, repeated-delete 404 and prior generation/date checks. No frontend behavior or hosted data changed.
+
+## QA-04 reconciliation: deleting a SALE preserves its purchase
+
+Added owned, atomic sale deletion: delete the selected quantity version and restore its stock in one transaction. Ledger SALE actions use that endpoint; BUY actions retain explicit purchase-plus-linked-sales deletion scope. Bulk delete deduplicates selected purchase/sale combinations, explains cascade scope, retains failed selections for retry and blocks duplicate submission. Successful deletes refresh related totals.
+
+- 24 focused API cases passed: selected sale/sibling preservation, stock restoration, failed restoration rollback/retry, repeated deletion, ownership/authentication, prior atomic edits and financial/transaction-wide consistency.
+- 11 focused frontend cases passed: sale endpoint routing, bulk deduplication/cascade warning, cancellation, failure selection preservation/retry and existing edit/pagination checks. Zero-warning lint passes; production/PWA build passes.
+- Added native concurrent sale-deletion coverage to verify stock restores once. This awaits the next CI run. All mutations used disposable fixtures; no hosted changes.

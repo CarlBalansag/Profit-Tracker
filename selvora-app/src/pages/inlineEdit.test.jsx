@@ -10,10 +10,44 @@ vi.mock('../hooks/useApi', () => ({ useInventory: () => ({ data: [purchase] }), 
 vi.mock('../components/ProductNoteButton', () => ({ default: () => null }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: mocks.error } }));
 beforeEach(() => { mocks.fetch.mockResolvedValue(new Response('{}')); localStorage.clear(); });
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.clearAllMocks(); vi.restoreAllMocks(); });
 const open = index => { render(<MemoryRouter><Transactions /></MemoryRouter>); const row = screen.getAllByText(index === 1 ? 'BUY' : 'SALE', { exact: true }).find(node => node.closest('tr')).closest('tr'); fireEvent.click(within(row).getByRole('button', { name: 'Edit row' })); };
 const save = async () => { fireEvent.click(screen.getByRole('button', { name: 'Save changes' })); await waitFor(() => expect(mocks.fetch).toHaveBeenCalledOnce()); return JSON.parse(mocks.fetch.mock.calls[0][1].body); };
 describe('inline transaction edits', () => {
+  it('keeps failed bulk selections for retry and respects cancellation', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValue(true);
+    mocks.fetch.mockResolvedValueOnce(new Response('{}', { status: 500 })).mockResolvedValueOnce(new Response('{}'));
+    render(<MemoryRouter><Transactions /></MemoryRouter>);
+    const saleRow = screen.getAllByText('SALE', { exact: true }).find(node => node.closest('tr')).closest('tr');
+    fireEvent.click(within(saleRow).getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Selected' }));
+    expect(mocks.fetch).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Selected' }));
+    await waitFor(() => expect(mocks.error).toHaveBeenCalledWith('Failed to delete 1 items.'));
+    expect(screen.getByRole('button', { name: 'Delete Selected' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Selected' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Delete Selected' })).toBeNull());
+    expect(mocks.fetch.mock.calls.map(([path]) => path)).toEqual(['/api/sales/sale', '/api/sales/sale']);
+    expect(confirm).toHaveBeenCalledTimes(3);
+  });
+  it('routes a SALE deletion to the sale endpoint and preserves purchase deletion scope', async () => {
+    render(<MemoryRouter><Transactions /></MemoryRouter>);
+    const button = screen.getAllByTitle('Delete sale').find(node => node.closest('tr'));
+    fireEvent.click(button); fireEvent.click(button);
+    await waitFor(() => expect(mocks.fetch).toHaveBeenCalledOnce());
+    expect(mocks.fetch.mock.calls[0][0]).toBe('/api/sales/sale');
+    expect(screen.getAllByTitle('Delete purchase and linked sales').length).toBeGreaterThan(0);
+  });
+  it('deduplicates a selected purchase and its sale in bulk deletion', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
+    render(<MemoryRouter><Transactions /></MemoryRouter>);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select records on this page' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Selected' }));
+    await waitFor(() => expect(mocks.fetch).toHaveBeenCalledOnce());
+    expect(mocks.fetch.mock.calls[0][0]).toBe('/api/inventory/purchase');
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('all their linked sales'));
+    vi.restoreAllMocks();
+  });
   it('preserves full purchased quantity when saving an unchanged remaining BUY row', async () => {
     open(1);
     const body = await save();

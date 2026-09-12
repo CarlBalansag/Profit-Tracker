@@ -129,6 +129,7 @@ const Transactions = () => {
   const [editData, setEditData] = useState({});
   const [saving, setSaving] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const deletingRef = useRef(false);
   const [expandedRow, setExpandedRow] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
   const [visibleCols, setVisibleCols] = useState(() => {
@@ -264,16 +265,19 @@ const Transactions = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally runs once on mount only
 
-  const removeTxn = async (rawId) => {
+  const removeTxn = async (row) => {
+    if (deletingRef.current) return;
+    deletingRef.current = true;
+    const path = row.isSale ? `/api/sales/${row.saleId}` : `/api/inventory/${row.rawId}`;
     try {
-      const res = await apiFetch(`/api/inventory/${rawId}`, {
+      const res = await apiFetch(path, {
         method: 'DELETE',
         credentials: 'include'
       });
       if (res.ok) {
         setConfirmDeleteId(null);
         toast.success('Transaction deleted.');
-        await invalidate.inventory();
+        await invalidate.all();
       } else {
         const err = await res.json();
         console.error('Delete failed:', err);
@@ -282,7 +286,7 @@ const Transactions = () => {
     } catch (err) {
       console.error('Delete error:', err);
       toast.error('Delete error: ' + err.message);
-    }
+    } finally { deletingRef.current = false; }
   };
 
   const startEdit = (row) => {
@@ -811,28 +815,29 @@ const Transactions = () => {
             </button>
             <button
               onClick={async () => {
-                if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} items?`)) return;
+                const selectedRows = rows.filter(row => selectedIds.includes(row.id));
+                const purchaseIds = new Set(selectedRows.filter(row => !row.isSale).map(row => row.rawId));
+                if (saving || !window.confirm(`Delete ${selectedRows.length} selected records?${purchaseIds.size ? ` This includes ${purchaseIds.size} purchase batch(es) and all their linked sales.` : ' Purchases and other sales will be preserved.'}`)) return;
                 setSaving(true);
                 let errors = 0;
-                for (const id of selectedIds) {
-                  const row = filteredRows.find(r => r.id === id);
-                  if (!row) continue;
+                const remaining = new Set(selectedIds);
+                const operations = selectedRows.filter(row => !row.isSale || !purchaseIds.has(row.rawId));
+                for (const row of operations) {
                   try {
-                    const res = await apiFetch(`/api/inventory/${row.rawId}`, {
-                      method: 'DELETE',
-                      credentials: 'include'
-                    });
+                    const path = row.isSale ? '/api/sales/' + row.saleId : '/api/inventory/' + row.rawId;
+                    const res = await apiFetch(path, { method: 'DELETE', credentials: 'include' });
                     if (!res.ok) errors++;
-                  } catch {
-                    errors++;
-                  }
+                    else if (row.isSale) remaining.delete(row.id);
+                    else selectedRows.filter(selected => selected.rawId === row.rawId).forEach(selected => remaining.delete(selected.id));
+                  } catch { errors++; }
                 }
                 setSaving(false);
                 if (errors > 0) toast.error(`Failed to delete ${errors} items.`);
                 else toast.success(`Successfully deleted ${selectedIds.length} items.`);
-                setSelectedIds([]);
-                await invalidate.inventory();
+                setSelectedIds([...remaining]);
+                await invalidate.all();
               }}
+              disabled={saving}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium transition-colors border border-red-500/20"
             >
               <Trash2 className="w-3.5 h-3.5" /> Delete Selected
@@ -910,21 +915,22 @@ const Transactions = () => {
                 <Edit2 className="w-3 h-3" /> Edit
               </button>
               <button
+                title={row.isSale ? 'Delete sale' : 'Delete purchase and linked sales'}
                 onClick={() => {
-                  if (confirmDeleteId === row.rawId) {
-                    removeTxn(row.rawId);
+                  if (confirmDeleteId === row.id) {
+                    removeTxn(row);
                   } else {
-                    setConfirmDeleteId(row.rawId);
+                    setConfirmDeleteId(row.id);
                   }
                 }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
-                  confirmDeleteId === row.rawId
+                  confirmDeleteId === row.id
                     ? 'bg-red-600 hover:bg-red-500 text-white border-red-600'
                     : 'bg-white/5 hover:bg-red-500/10 text-gray-500 hover:text-red-400 border-white/10'
                 }`}
               >
                 <Trash2 className="w-3 h-3" />
-                {confirmDeleteId === row.rawId ? 'Confirm' : 'Delete'}
+                {confirmDeleteId === row.id ? 'Confirm' : 'Delete'}
               </button>
             </div>
           </div>
@@ -997,7 +1003,7 @@ const Transactions = () => {
               return (
                 <tr
                   key={row.id}
-                  onMouseLeave={() => { if (confirmDeleteId === row.rawId) setConfirmDeleteId(null); }}
+                  onMouseLeave={() => { if (confirmDeleteId === row.id) setConfirmDeleteId(null); }}
                   className={`transition-colors group ${
                     isEditing
                       ? 'bg-indigo-950/20 border-l-2 border-indigo-500/50'
@@ -1252,21 +1258,21 @@ const Transactions = () => {
                         </button>
                         <button
                           onClick={() => {
-                            if (confirmDeleteId === row.rawId) {
-                              removeTxn(row.rawId);
+                            if (confirmDeleteId === row.id) {
+                              removeTxn(row);
                             } else {
-                              setConfirmDeleteId(row.rawId);
+                              setConfirmDeleteId(row.id);
                             }
                           }}
-                          title={confirmDeleteId === row.rawId ? 'Click again to confirm delete' : 'Delete'}
+                          title={confirmDeleteId === row.id ? (row.isSale ? 'Confirm sale deletion' : 'Confirm purchase and linked sales deletion') : (row.isSale ? 'Delete sale' : 'Delete purchase and linked sales')}
                           className={`flex items-center gap-1.5 px-2.5 h-7 rounded-lg transition-colors text-xs font-medium ${
-                            confirmDeleteId === row.rawId
+                            confirmDeleteId === row.id
                               ? 'bg-red-600 hover:bg-red-500 text-white'
                               : 'hover:bg-red-500/10 text-gray-500 hover:text-red-400'
                           }`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
-                          {confirmDeleteId === row.rawId && <span>Confirm</span>}
+                          {confirmDeleteId === row.id && <span>Confirm</span>}
                         </button>
                       </div>
                     )}

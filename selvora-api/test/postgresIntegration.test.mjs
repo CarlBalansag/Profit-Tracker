@@ -151,4 +151,12 @@ describe.skipIf(!databaseUrl)('native PostgreSQL API integration', () => {
     expect((await request('PUT', `/api/recurring-expenses/${recurring.id}`, { active: true })).status).toBe(200);
     expect(await prisma.expense.count({ where: { recurring_expense_id: recurring.id } })).toBe(4);
   });
+  it('restores stock once when concurrent requests delete the same sale', async () => {
+    const created = await request('POST', '/api/sales', { inventory_id: inventory.id, quantity: 1, unit_price: 1 });
+    const results = await Promise.all([request('DELETE', `/api/sales/${created.body.id}`), request('DELETE', `/api/sales/${created.body.id}`)]);
+    expect(results.filter(r => r.status === 200)).toHaveLength(1);
+    expect([404, 409]).toContain(results.find(r => r.status !== 200).status);
+    expect((await prisma.inventory.findUnique({ where: { id: inventory.id } })).qty_on_hand).toBe(1);
+    expect(await prisma.sales.count({ where: { inventory_id: inventory.id } })).toBe(0);
+  });
 });

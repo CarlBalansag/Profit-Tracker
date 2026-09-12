@@ -177,4 +177,20 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
   }
 });
 
+router.delete('/:id', isAuthenticated, async (req, res, next) => {
+  try {
+    const existing = await prisma.sales.findUnique({ where: { id: req.params.id }, include: { inventory: true } });
+    if (!existing || existing.inventory.user_id !== req.user.id) return res.status(404).json({ error: 'Sale not found or access denied' });
+    await prisma.$transaction(async tx => {
+      const inventory = await tx.inventory.updateMany({ where: { id: existing.inventory_id, user_id: req.user.id }, data: { qty_on_hand: { increment: 0 } } });
+      if (inventory.count !== 1) throw requestError(404, 'Inventory not found or access denied');
+      const removed = await tx.sales.deleteMany({ where: { id: existing.id, inventory_id: existing.inventory_id, quantity: existing.quantity } });
+      if (removed.count !== 1) throw requestError(409, 'Sale changed while deleting. Reload and retry.');
+      await tx.inventory.update({ where: { id: existing.inventory_id }, data: { qty_on_hand: { increment: existing.quantity } } });
+    });
+    await publishCalendarFeed(req.user.id);
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
