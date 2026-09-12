@@ -54,7 +54,7 @@ app.use(cors({
   credentials: true
 }));
 // A 5 MiB receipt expands to roughly 6.7 MiB when sent as base64 JSON.
-app.use(express.json({ limit: '7mb' }));
+app.use(require('./middleware/jsonBody'));
 
 // CSRF protection: every state-changing request from the SPA must include this header.
 // Browsers never attach custom headers to cross-origin simple requests, so its presence

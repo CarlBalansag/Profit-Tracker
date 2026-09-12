@@ -184,3 +184,10 @@ Added owned, atomic sale deletion: delete the selected quantity version and rest
 - 24 focused API cases passed: selected sale/sibling preservation, stock restoration, failed restoration rollback/retry, repeated deletion, ownership/authentication, prior atomic edits and financial/transaction-wide consistency.
 - 11 focused frontend cases passed: sale endpoint routing, bulk deduplication/cascade warning, cancellation, failure selection preservation/retry and existing edit/pagination checks. Zero-warning lint passes; production/PWA build passes.
 - Added native concurrent sale-deletion coverage to verify stock restores once. This awaits the next CI run. All mutations used disposable fixtures; no hosted changes.
+
+## QA-11 reconciliation: exact receipt size and production parser coverage
+
+The fixture and application now share the production 7 MiB JSON parser. Receipt byte-size validation accounts for base64 padding, accepts exactly 5 MiB and rejects malformed/empty base64 before upload. Ownership checks still run before external upload.
+
+- Ten API cases passed: 150 KiB and exact 5 MiB requests, one-byte-over rejection with existing attachment preservation, empty/malformed/unsupported input, owned/foreign upload behavior and full purchase receipt cost.
+- Cloudinary is mocked. Real transfer, OS file saving and remote-file rollback on a later database failure are not exercised. No live data or remote-file writes.

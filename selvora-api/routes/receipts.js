@@ -116,7 +116,11 @@ router.post('/attach', isAuthenticated, validateBody(attachReceipt), async (req,
 
     // Validate decoded file size server-side
     const base64Data = fileData.slice(dataUrlMatch[0].length);
-    const byteLength = Math.ceil(base64Data.length * 0.75);
+    if (!base64Data.length || base64Data.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64Data)) {
+      return res.status(400).json({ error: 'fileData must contain valid non-empty base64 data' });
+    }
+    const padding = base64Data.endsWith('==') ? 2 : base64Data.endsWith('=') ? 1 : 0;
+    const byteLength = base64Data.length / 4 * 3 - padding;
     if (byteLength > MAX_BYTES) {
       return res.status(400).json({ error: 'File exceeds the 5 MB size limit.' });
     }

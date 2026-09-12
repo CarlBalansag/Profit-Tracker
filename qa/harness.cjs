@@ -85,7 +85,7 @@ prisma.$transaction=async fn=>{
 require.cache[requireApi.resolve('./prisma.js')]={id:requireApi.resolve('./prisma.js'),filename:requireApi.resolve('./prisma.js'),loaded:true,exports:prisma};
 requireApi('cloudinary').v2.uploader.upload=async(data,options)=>{calls.push({model:'cloudinary',op:'upload',options});return {secure_url:'https://example.invalid/qa-receipt.png'};};
 function app() {
-  const app=express();app.use(express.json());
+  const app=express();app.use(requireApi('./middleware/jsonBody'));
   app.use((req,res,next)=>{req.user=db.user[0];req.isAuthenticated=()=>req.headers['x-qa-unauthenticated']!=='true';next();});
   app.get('/auth/me',(req,res)=>res.json(db.user[0]));
   app.use(requireApi('./middleware/currencyJSON'));
