@@ -11,7 +11,7 @@ vi.mock('../hooks/useApi', () => ({
   usePlatforms: () => ({ data: [] }), usePaymentMethods: () => ({ data: [] }),
   useInvalidate: () => ({ all: vi.fn() }),
 }));
-vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'a' } }) }));
+vi.mock('../context/auth', () => ({ useAuth: () => ({ user: { id: 'a' } }) }));
 vi.mock('../components/ProductNoteButton', () => ({ default: () => null }));
 vi.mock('../components/TransactionDetailModal', () => ({ default: ({ row, onClose }) => <div role="dialog">{row.rawId}<button onClick={onClose}>Close detail</button></div> }));
 vi.mock('../utils/downloads', async original => ({ ...await original(), downloadFile: mocks.download }));

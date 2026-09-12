@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, BookOpen, Play, LayoutDashboard, CirclePlus, DollarSign, ArrowLeftRight, Package, Receipt, FileText, ShieldCheck, ChartColumn, Wallet, CreditCard, Settings, Lightbulb, HelpCircle, TrendingUp } from 'lucide-react';
-import { useTutorial } from '../context/TutorialContext';
+import { useTutorial } from '../context/tutorial';
 
 // ─── Accordion item ────────────────────────────────────────────────────────
 const AccordionItem = ({ icon: Icon, title, color = 'emerald', children }) => {

@@ -30,10 +30,6 @@ function loadECharts() {
   });
 }
 
-function formatDateKey(date) {
-  return date.toISOString().slice(0, 10);
-}
-
 function hexToRgba(hex, alpha) {
   const value = hex.replace('#', '');
   const r = parseInt(value.slice(0, 2), 16);
@@ -128,7 +124,6 @@ function buildOptions(points, chartSeries, uiStyle = 'neon-dark', containerWidth
   const isMobile = containerWidth < 500;
   const dates = points.map(point => point.date);
   const displayDates = points.map(point => formatTrendLabel(point.date));
-  const isMonthly = points.length > 0 && points[0].date.length === 7;
   const activeSeries = normalizeSeriesConfig(chartSeries);
   const legendData = activeSeries.map(item => {
     const label = CHART_SERIES_REGISTRY[item.id].label;
@@ -337,7 +332,7 @@ function buildOptions(points, chartSeries, uiStyle = 'neon-dark', containerWidth
   };
 }
 
-export default function ProfitRevenueTrendChart({ stats, trend, trendMeta = null, recent, dateFilter, chartSeries, uiStyle = 'neon-dark', colorTheme = 'copper', trendMode = 'period', onTrendModeChange }) {
+export default function ProfitRevenueTrendChart({ trend, trendMeta = null, chartSeries, uiStyle = 'neon-dark', colorTheme = 'copper', trendMode = 'period', onTrendModeChange }) {
   const chartRef = useRef(null);
   const instanceRef = useRef(null);
   const [failed, setFailed] = useState(false);

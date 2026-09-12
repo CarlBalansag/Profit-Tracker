@@ -1,27 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Search, X, Check, Copy } from 'lucide-react';
 import { PRESET_CARDS, ISSUERS } from '../../data/presetCards';
 import { IssuerLogo } from './IssuerLogo';
 import clsx from 'clsx';
 
-export const QuickAddModal = ({ isOpen, onClose, onAddCards, existingCardIds = [] }) => {
+export const QuickAddModal = (props) => props.isOpen ? <QuickAddForm {...props} /> : null;
+
+const QuickAddForm = ({ onClose, onAddCards, existingCardIds = [] }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIssuer, setSelectedIssuer] = useState('All Issuers');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedCards, setSelectedCards] = useState([]);
-  const [applyPresetRates, setApplyPresetRates] = useState(true);
-
-  // Reset state when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setSearchQuery('');
-      setSelectedIssuer('All Issuers');
-      setSelectedCards([]);
-      setIsDropdownOpen(false);
-    }
-  }, [isOpen]);
-
-  if (!isOpen) return null;
+  const applyPresetRates = true;
 
   const filteredCards = PRESET_CARDS.filter(card => {
     const matchesSearch = card.name.toLowerCase().includes(searchQuery.toLowerCase()) || 

@@ -77,7 +77,6 @@ function StatusBadge({ status }) {
 function ItemRow({ item }) {
   const [expanded, setExpanded] = useState(false);
   const isLoss = item.netPnl !== null && item.netPnl < 0;
-  const isProfit = item.netPnl !== null && item.netPnl >= 0;
   const isPending = item.revenue === null;
 
   return (
@@ -198,8 +197,6 @@ function CreditCard() {
   const days = activeCard?.due_day ? daysUntilDue(activeCard.due_day) : null;
   const dueLabel = activeCard?.due_day ? dueDateLabel(activeCard.due_day) : null;
   const dueColor = days === null ? null : days <= 5 ? 'var(--red)' : days <= 10 ? 'var(--yellow)' : 'var(--green)';
-  const dueBg = days === null ? null : days <= 5 ? 'var(--red-bg)' : days <= 10 ? 'rgba(var(--yellow),0.08)' : 'var(--green-bg)';
-  const dueBorder = days === null ? null : days <= 5 ? 'var(--red)' : days <= 10 ? 'var(--yellow)' : 'var(--green-soft)';
 
   const creditLimit = activeCard?.credit_limit ?? 0;
   const totalSpend = activeCard?.totalSpend ?? 0;

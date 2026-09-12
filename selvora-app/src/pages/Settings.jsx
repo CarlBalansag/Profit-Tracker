@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   User, Database, FileJson, Bell, Palette, ExternalLink, Download, ArrowLeft
@@ -10,18 +10,17 @@ import { Cashouts } from '../components/Settings/Cashouts';
 import { Marketplaces } from '../components/Settings/Marketplaces';
 import { Accounts } from '../components/Settings/Accounts';
 import { UiPreferences } from '../components/Settings/UiPreferences';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/auth';
 
 function Settings() {
   const location = useLocation();
+  return <SettingsContent key={location.key} location={location} />;
+}
+
+function SettingsContent({ location }) {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState(location.state?.tab || 'profile');
   const [activeDataSetupView, setActiveDataSetupView] = useState(location.state?.view || null);
-
-  useEffect(() => {
-    if (location.state?.tab) setActiveTab(location.state.tab);
-    if (location.state?.view) setActiveDataSetupView(location.state.view);
-  }, [location.state]);
 
   const navItems = [
     { id: 'profile', label: 'Profile', icon: User },

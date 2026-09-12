@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Crown, Zap, Plus, LogOut, ChevronDown, PenSquare, Trash2 } from 'lucide-react';
 import { useInvalidate, apiFetch} from '../../hooks/useApi';
 import { requireSuccessfulResponse } from '../../hooks/apiResponse';
@@ -7,10 +7,8 @@ import { QuickAddModal } from './QuickAddModal';
 import { CustomCardModal } from './CustomCardModal';
 import { IssuerLogo } from './IssuerLogo';
 import clsx from 'clsx';
-import { useAuth } from '../../context/AuthContext';
 
 export const PaymentMethods = () => {
-  const { user } = useAuth();
   const invalidate = useInvalidate();
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
@@ -29,13 +27,8 @@ export const PaymentMethods = () => {
     });
   };
 
-  useEffect(() => {
-    fetchCards();
-  }, []);
-
-  const fetchCards = async () => {
-    try {
-      const res = await apiFetch(`/api/payment-methods`, { credentials: 'include' });
+  const fetchCards = useCallback(() =>
+    apiFetch(`/api/payment-methods`, { credentials: 'include' }).then(async (res) => {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -60,10 +53,9 @@ export const PaymentMethods = () => {
       } else {
         console.error('API Error:', res.status, await res.text());
       }
-    } catch (err) {
-      console.error(err);
-    }
-  };
+    }).catch((err) => console.error(err)), []);
+
+  useEffect(() => { fetchCards(); }, [fetchCards]);
 
   const handleAddCards = async (newCards, includeStoreRates) => {
     for (const card of newCards) {

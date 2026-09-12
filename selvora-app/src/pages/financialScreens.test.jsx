@@ -6,7 +6,7 @@ import AddTransaction from './AddTransaction';
 import Inventory from './Inventory';
 import TransactionDetailModal from '../components/TransactionDetailModal';
 
-const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), inventory: [], platforms: [], cards: [] }));
+const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), inventory: [], platforms: [], cards: [], note: null }));
 vi.mock('../hooks/useApi', () => ({
   apiFetch: mocks.apiFetch,
   useInventory: () => ({ data: mocks.inventory }),
@@ -14,7 +14,7 @@ vi.mock('../hooks/useApi', () => ({
   usePaymentMethods: () => ({ data: mocks.cards }),
   useProductNames: () => ({ data: [] }),
   useRecentTransaction: () => ({ data: null }),
-  useProductNote: () => ({ data: null }),
+  useProductNote: () => ({ data: mocks.note }),
   useProductNoteMutations: () => ({ upsert: { mutate: vi.fn() }, remove: { mutate: vi.fn() } }),
   useInvalidate: () => ({ all: vi.fn() }),
 }));
@@ -25,12 +25,27 @@ const purchase = { id: 'purchase', product_name: 'Fixture item', vendor_id: 'ven
   sales: [{ id: 'sale', quantity: 1, unit_price: 140, commission_fee: 10, sale_shipping: 8, status: 'SOLD', sale_date: '2026-09-02' }] };
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.note = null;
   mocks.inventory = [purchase];
   mocks.platforms = [{ id: 'vendor', name: 'Vendor', type: 'Vendor' }];
   mocks.cards = [{ id: 'card', name: 'Card', default_cashback_rate: 2 }];
 });
 afterEach(cleanup);
 describe('financial screen regression', () => {
+  it('fills a fetched sale note while preserving user edits and intentional clearing', () => {
+    const view = render(<MemoryRouter><AddSale /></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', { name: /Fixture item/ }));
+    mocks.note = { note: 'Saved product note' };
+    view.rerender(<MemoryRouter><AddSale /></MemoryRouter>);
+    expect(screen.getByDisplayValue('Saved product note')).toBeTruthy();
+    fireEvent.change(screen.getByDisplayValue('Saved product note'), { target: { value: 'User draft' } });
+    mocks.note = { note: 'Refreshed product note' };
+    view.rerender(<MemoryRouter><AddSale /></MemoryRouter>);
+    expect(screen.getByDisplayValue('User draft')).toBeTruthy();
+    fireEvent.change(screen.getByDisplayValue('User draft'), { target: { value: '' } });
+    view.rerender(<MemoryRouter><AddSale /></MemoryRouter>);
+    expect(screen.queryByDisplayValue('Refreshed product note')).toBeNull();
+  });
   it('distributes split-unit residual cents consistently in Inventory and Add Sale preview', () => {
     mocks.inventory = [{ ...purchase, qty_purchased: 3, qty_on_hand: 2, unit_purchase_cost: 3.33,
       sales_tax: 0, shipping_cost_inbound: 0, fees: 0.01, gift_card_amount: 0,

@@ -22,7 +22,7 @@ const SPARKLINE_REVENUE = [3200, 2900, 3800, 4100, 3600, 4800, 4400, 5100, 4700,
 const SPARKLINE_PROFIT  = [780, 690, 920, 1010, 840, 1180, 1050, 1260, 1140, 1380, 1290, 1520, 1450, 1640, 1580, 1770, 1700, 1950, 1860, 2080, 1990, 2230, 2150, 2400, 2280, 2560, 2460, 2720, 2600, 3010, 2880, 3250, 3100, 3480, 3300, 3720, 3500, 3960, 3780, 4200, 3980, 4430, 4220, 4710, 4520, 5060, 4860, 5490, 5240, 6214];
 
 // ─── SVG Sparkline area chart ────────────────────────────────────────────────
-function Sparkline({ values, color, fillColor, width = 400, height = 80 }) {
+function Sparkline({ values, color, width = 400, height = 80 }) {
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;

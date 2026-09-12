@@ -40,18 +40,20 @@ const EMPTY_FORM = {
 };
 
 // ─── Unified Add/Edit Modal ──────────────────────────────────────────────────
-function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, initialIsRecurring }) {
-  const [form, setForm] = useState(EMPTY_FORM);
+function ExpenseModal(props) {
+  return props.open ? <ExpenseForm key={`${props.initial?.id || "new"}-${!!props.initialIsRecurring}`} {...props} /> : null;
+}
+
+function ExpenseForm({ onClose, onSaveOneOff, onSaveRecurring, initial, initialIsRecurring }) {
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
   const nameRef = useRef(null);
 
-  useEffect(() => {
-    if (!open) return;
+  const [form, setForm] = useState(() => {
     const today = todayStr();
     if (initial) {
       if (initialIsRecurring) {
-        setForm({
+        return {
           name:       initial.name       || '',
           amount:     initial.amount     != null ? String(initial.amount) : '',
           category:   initial.category   || '',
@@ -61,9 +63,9 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
           start_date: initial.start_date ? new Date(initial.start_date).toISOString().split('T')[0] : today,
           end_date:   initial.end_date   ? new Date(initial.end_date).toISOString().split('T')[0]   : '',
           notes:      initial.notes      || '',
-        });
+        };
       } else {
-        setForm({
+        return {
           name:       initial.name     || '',
           amount:     initial.amount   != null ? String(initial.amount) : '',
           category:   initial.category || '',
@@ -73,16 +75,14 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
           start_date: today,
           end_date:   '',
           notes:      initial.notes    || '',
-        });
+        };
       }
     } else {
-      setForm({ ...EMPTY_FORM, date: today, start_date: today });
+      return { ...EMPTY_FORM, date: today, start_date: today };
     }
-    setError(''); setSaving(false);
-    setTimeout(() => nameRef.current?.focus(), 50);
-  }, [open, initial, initialIsRecurring]);
+  });
+  useEffect(() => { nameRef.current?.focus(); }, []);
 
-  if (!open) return null;
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSubmit = async (e) => {
@@ -365,7 +365,6 @@ const Expenses = () => {
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   const now = new Date();
-  const thisMonth = now.getMonth();
   const thisYear  = now.getFullYear();
 
   const insights = useMemo(() => getExpenseInsights(expenses, recurring), [expenses, recurring]);

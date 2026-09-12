@@ -3,8 +3,8 @@ import Sidebar from './Sidebar';
 import { Menu } from 'lucide-react';
 import clsx from 'clsx';
 import { useUiPreferences } from '../../hooks/useUiPreferences';
-import { useAuth } from '../../context/AuthContext';
-import { useTutorial } from '../../context/TutorialContext';
+import { useAuth } from '../../context/auth';
+import { useTutorial } from '../../context/tutorial';
 import { SpotlightOverlay } from '../Tutorial/SpotlightOverlay';
 
 const Header = ({ onMenuClick }) => {

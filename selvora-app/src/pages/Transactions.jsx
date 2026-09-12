@@ -1,6 +1,6 @@
 import { allocatedCost, effectiveCashbackRate, saleEconomics, isRealizedSale, sumMoney, multiplyMoney, allocateMoney, batchCashback, saleOffset } from '../utils/finance';
 import { csvText, downloadFile } from '../utils/downloads';
-import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { useInventory, usePlatforms, usePaymentMethods, useInvalidate, apiFetch} from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
 import { toast } from 'sonner';
@@ -11,7 +11,6 @@ import {
   Edit2, Trash2, ChevronLeft, ChevronRight, Maximize2, X,
   Zap, Store, Calendar
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
 import TransactionDetailModal from '../components/TransactionDetailModal';
 import ProductNoteButton from '../components/ProductNoteButton';
 
@@ -29,7 +28,7 @@ function EditInput({ value, onChange, type = 'text', className = '' }) {
 }
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
-export const STATUS_COLORS = {
+const STATUS_COLORS = {
   'PRE ORDER':     'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
   'ON HAND':       'bg-teal-500/10 text-teal-400 border-teal-500/20',
   PURCHASED:       'bg-blue-500/10 text-blue-400 border-blue-500/20',
@@ -120,7 +119,6 @@ const DEFAULT_COLS = Object.fromEntries(ALL_COLUMNS.map(c => [c.key, true]));
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 const Transactions = () => {
-  const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { data: transactions = [], isLoading, refetch: refetchTransactions } = useInventory();
@@ -137,14 +135,14 @@ const Transactions = () => {
     try {
       const stored = localStorage.getItem('txn_visible_cols');
       if (stored) return JSON.parse(stored);
-    } catch {}
+    } catch { /* Ignore invalid persisted column preferences and use defaults. */ }
     return DEFAULT_COLS;
   });
   const [columnOrder, setColumnOrder] = useState(() => {
     try {
       const stored = localStorage.getItem('txn_col_order');
       if (stored) return JSON.parse(stored);
-    } catch {}
+    } catch { /* Ignore invalid persisted column preferences and use defaults. */ }
     return ALL_COLUMNS.map(c => c.key);
   });
   const [colsOpen, setColsOpen] = useState(false);
@@ -883,7 +881,7 @@ const Transactions = () => {
                       credentials: 'include'
                     });
                     if (!res.ok) errors++;
-                  } catch (e) {
+                  } catch {
                     errors++;
                   }
                 }
@@ -1023,7 +1021,7 @@ const Transactions = () => {
               </th>
               <th className="px-2 py-3.5 w-8"></th>
               <th className="px-2 py-3.5 w-16"></th>
-              {columnOrder.map((colKey, index) => {
+              {columnOrder.map((colKey) => {
                 if (!visibleCols[colKey]) return null;
                 const colDef = ALL_COLUMNS.find(c => c.key === colKey);
                 if (!colDef) return null;

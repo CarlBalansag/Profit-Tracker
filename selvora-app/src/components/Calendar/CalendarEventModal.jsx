@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, Trash2 } from 'lucide-react';
 import { useCalendarMutations } from '../../hooks/useApi';
 
@@ -18,31 +18,16 @@ const defaultForm = {
   notes: '',
 };
 
-export default function CalendarEventModal({ open, event, defaultDate, onClose }) {
+export default function CalendarEventModal(props) {
+  return props.open ? <CalendarEventForm key={props.event?.id || props.defaultDate || "new"} {...props} /> : null;
+}
+
+function CalendarEventForm({ event, defaultDate, onClose }) {
   const { create, update, remove } = useCalendarMutations();
   const isEdit = !!event;
 
-  const [form, setForm] = useState(defaultForm);
+  const [form, setForm] = useState(() => event ? { title: event.title ?? '', date: event.date ?? '', end_date: event.end_date ?? '', color: event.color ?? 'purple', notes: event.notes ?? '' } : { ...defaultForm, date: defaultDate ?? '' });
   const [error, setError] = useState('');
-
-  // Sync form when modal opens
-  useEffect(() => {
-    if (!open) return;
-    if (event) {
-      setForm({
-        title:    event.title ?? '',
-        date:     event.date ?? '',
-        end_date: event.end_date ?? '',
-        color:    event.color ?? 'purple',
-        notes:    event.notes ?? '',
-      });
-    } else {
-      setForm({ ...defaultForm, date: defaultDate ?? '' });
-    }
-    setError('');
-  }, [open, event, defaultDate]);
-
-  if (!open) return null;
 
   const set = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }));
 

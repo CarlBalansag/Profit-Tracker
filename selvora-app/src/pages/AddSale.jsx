@@ -1,5 +1,5 @@
 import { saleEconomics, multiplyMoney, percentageMoney } from '../utils/finance';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { toast } from 'sonner';
 import {
   Package, DollarSign, Search, Check, Store, Globe, Calendar, CreditCard, StickyNote
@@ -21,7 +21,7 @@ const AddSale = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [saleTab, setSaleTab] = useState('cashout');
 
-  const [formData, setFormData] = useState({
+  const [draftFormData, setFormData] = useState({
     platform_id: '',
     quantity: 1,
     unit_price: '',
@@ -33,36 +33,20 @@ const AddSale = () => {
     sale_tax_collected: '',
     customer_tax_exempt: false,
     exemption_type: '',
-    note: '',
+    note: null,
   });
 
-  const noteAutoFilledRef = useRef(false);
 
   // Note hooks — keyed to the selected item's product name
   const { data: noteData } = useProductNote(selectedItem?.product_name);
   const { upsert: upsertNote, remove: removeNote } = useProductNoteMutations(selectedItem?.product_name);
 
-  // Auto-populate note field when a selected item has an existing note
-  useEffect(() => {
-    if (!selectedItem) {
-      noteAutoFilledRef.current = false;
-      return;
-    }
-    if (noteData?.note && !noteAutoFilledRef.current) {
-      setFormData(prev => ({ ...prev, note: noteData.note }));
-      noteAutoFilledRef.current = true;
-    }
-    if (!noteData?.note) {
-      noteAutoFilledRef.current = false;
-    }
-  }, [noteData, selectedItem]);
-
+  const formData = { ...draftFormData, note: draftFormData.note ?? noteData?.note ?? '' };
 
   // Update selected item resets form quantity defaults and note auto-fill
   const handleSelect = (item) => {
     setSelectedItem(item);
-    noteAutoFilledRef.current = false;
-    setFormData(prev => ({ ...prev, quantity: 1, unit_price: '', note: '' }));
+    setFormData(prev => ({ ...prev, quantity: 1, unit_price: '', note: null }));
   };
 
   const filteredInventory = inventory.filter(item => 
@@ -465,7 +449,6 @@ const AddSale = () => {
                     name="note"
                     value={formData.note}
                     onChange={(e) => {
-                      noteAutoFilledRef.current = true;
                       handleChange(e);
                     }}
                     rows={3}

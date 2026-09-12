@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
 
-export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
+export const CustomCardModal = (props) => props.isOpen ? <CustomCardForm key={props.cardToEdit?.id || "new"} {...props} /> : null;
+
+const CustomCardForm = ({ onClose, onAddCard, cardToEdit }) => {
   const initialState = {
     name: '',
     type: 'Credit Card',
@@ -15,27 +17,8 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
     min_payment_pct: '',
   };
 
-  const [formData, setFormData] = useState(initialState);
+  const [formData, setFormData] = useState(() => cardToEdit ? { ...initialState, ...cardToEdit, baseRate: String(cardToEdit.baseRate ?? 0), statement_close_day: String(cardToEdit.statement_close_day ?? ''), due_day: String(cardToEdit.due_day ?? ''), credit_limit: String(cardToEdit.credit_limit ?? ''), min_payment_pct: String(cardToEdit.min_payment_pct ?? '') } : initialState);
   const [errors, setErrors] = useState({});
-
-  useEffect(() => {
-    if (cardToEdit && isOpen) {
-      setFormData({
-        ...initialState,
-        ...cardToEdit,
-        baseRate: cardToEdit.baseRate?.toString() || '0',
-        statement_close_day: cardToEdit.statement_close_day?.toString() || '',
-        due_day: cardToEdit.due_day?.toString() || '',
-        credit_limit: cardToEdit.credit_limit?.toString() || '',
-        min_payment_pct: cardToEdit.min_payment_pct?.toString() || '',
-      });
-    } else if (isOpen) {
-      setFormData(initialState);
-    }
-    setErrors({});
-  }, [cardToEdit, isOpen]);
-
-  if (!isOpen) return null;
 
   const handleChange = (e) => {
     const { name, value } = e.target;

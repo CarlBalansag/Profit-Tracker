@@ -14,7 +14,7 @@ import { useProductNote, useProductNoteMutations } from '../hooks/useApi';
  */
 const ProductNoteButton = ({ productName }) => {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState('');
+  const [draftInput, setDraft] = useState(null);
   const popoverRef = useRef(null);
   const buttonRef = useRef(null);
   const textareaRef = useRef(null);
@@ -24,15 +24,16 @@ const ProductNoteButton = ({ productName }) => {
 
   const existingNote = data?.note ?? null;
   const hasNote = !!existingNote;
+  const draft = draftInput ?? existingNote ?? '';
 
   // Sync draft with fetched note when popover opens
   useEffect(() => {
     if (open) {
-      setDraft(existingNote ?? '');
       // Focus textarea after a short delay to allow render
-      setTimeout(() => textareaRef.current?.focus(), 50);
+      const timer = setTimeout(() => textareaRef.current?.focus(), 50);
+      return () => clearTimeout(timer);
     }
-  }, [open, existingNote]);
+  }, [open]);
 
   // Close on outside click
   useEffect(() => {
@@ -99,7 +100,7 @@ const ProductNoteButton = ({ productName }) => {
       <button
         ref={buttonRef}
         type="button"
-        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+        onClick={(e) => { e.stopPropagation(); setDraft(null); setOpen(o => !o); }}
         className={`p-1.5 rounded-md transition-colors ${
           hasNote
             ? 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/10'

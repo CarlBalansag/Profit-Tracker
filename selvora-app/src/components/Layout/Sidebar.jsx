@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/auth';
 
 const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'neon-dark' }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);

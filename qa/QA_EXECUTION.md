@@ -27,7 +27,7 @@ Commit each completed task separately and record precise coverage and remaining 
 | 4 | QA-19: Buyer/Invoice ownership | Fixed in code; isolated SQL/API regression passed; hosted migration not applied |
 | 5 | QA-20: inactive controls and unfinished workflows | Fixed/clearly disabled per scope; focused regression passed |
 | 6 | QA-15: staged currency precision migration | Stages 1–7 implemented and locally verified; hosted cutover/legacy cleanup deferred |
-| 7 | QA-25: quality gates, coverage and finding reconciliation | Pending |
+| 7 | QA-25: quality gates, coverage and finding reconciliation | Lint and regression gates implemented; native CI verification and reconciliation in progress |
 | 8 | Overall regression across all changes and all 25 findings | Pending |
 
 A finding that has partial safeguards is not closed until its affected paths and relevant scenarios have been checked.
@@ -103,3 +103,14 @@ Audited all 21 Float fields; added nullable NUMERIC(19,2) money and NUMERIC(9,6)
 - Read-only configured-data projection: 516 field comparisons in a disposable PGlite staging copy; zero mismatches or invalid historical values. Redacted results: CURRENCY_STAGING_QA.json. This is not a full production database clone or a native multi-connection concurrency test.
 - Browser fixture cent edit: remaining Inventory value $312.03; Transactions batch cost $520.05, sold cost $208.02 and realized profit $69.14.
 - No hosted migrations/writes. Stage 8 requires a production verification window before making companions required or removing original columns. Numeric compatibility totals are limited below one trillion; an excessive server total fails explicitly. No import feature exists. Full lint is the next QA-25 task.
+
+## QA-25 local quality gates
+
+Resolved frontend lint errors without turning off the React Hooks rules. Modal forms initialize when mounted and reset by selected record; notes derive fetched defaults while preserving user drafts. Tutorial animation tracking stops on unmount. Context hooks/step definitions are separate from provider components. Removed unused code and corrected the JSX Icon argument exception in the existing unused-variable rule.
+
+- Frontend lint passes with --max-warnings 0. Frontend suite: 56 tests passed; an additional Add Sale asynchronous-note regression passed in the focused 7-test financial-screen suite.
+- API: 114 tests passed, including a fresh database applying all 16 checked-in migrations in order. Three native PostgreSQL integration cases are explicitly skipped locally without QA_DATABASE_URL.
+- Production/PWA build passes; existing bundle-size warning remains.
+- Browser fixture: Settings navigation and payment-method loading work; Custom Card draft is discarded on Cancel/reopen. No external service or live record writes.
+- Added GitHub Actions gates for API tests, Prisma schema/migrations, frontend tests, lint and build, with disposable PostgreSQL service integration tests. These tests guard their database destination and never fall back to application DATABASE_URL. Remote workflow execution is not yet verified.
+- Finding reconciliation identified a possible QA-04 concurrent-edit gap: quantity deltas are computed from a sale read outside the transaction. Two edits can both apply the same delta. Reproduce with two concurrent PUTs changing one sale from quantity 2 to 3; check stock + sales against purchased quantity. A concurrent inventory quantity edit has a related stale-read risk (QA-10). Affected files: routes/sales.js and routes/inventory.js. Separate focused tasks follow this quality-gate change.

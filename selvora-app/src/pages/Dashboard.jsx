@@ -9,7 +9,7 @@ import {
   Clock, Layers, Zap, Store, Calendar, Share2, Settings,
   CreditCard, Info, TrendingUp, Target, DollarSign, ShoppingBag, Flame
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/auth';
 import { useDashboardSettings } from '../hooks/useDashboardSettings';
 import { useUiPreferences } from '../hooks/useUiPreferences';
 import {

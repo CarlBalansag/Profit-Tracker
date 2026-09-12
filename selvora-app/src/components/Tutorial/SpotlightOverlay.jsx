@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useTutorial, TUTORIAL_STEPS } from '../../context/TutorialContext';
+import { useTutorial, TUTORIAL_STEPS } from '../../context/tutorial';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 const PADDING = 10; // px around the spotlight target
@@ -25,13 +25,13 @@ function getRect(targetId) {
 function TooltipCard({ rect, placement, step, onNext, onBack, onSkip, stepIndex, totalSteps }) {
   const isFirst = stepIndex === 0;
   const isLast = stepIndex === totalSteps - 1;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
 
   // Compute tooltip position
   let style = {};
   const TIP_W = 340;
   const TIP_H = 200; // approx
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
 
   if (!rect || placement === 'center') {
     style = {
@@ -171,25 +171,20 @@ export const SpotlightOverlay = () => {
     // Do NOT cancel the timer on cleanup — let it fire after navigation settles
   }, [active, currentStep, navigate, location.pathname, location.search]);
 
-  // Track target element position with rAF
-  const updateRect = useCallback(() => {
-    if (!active || !currentStep || navigatingRef.current) return;
-    const r = getRect(currentStep.target);
-    setRect(r);
-    rafRef.current = requestAnimationFrame(updateRect);
-  }, [active, currentStep]);
-
+  // Track the DOM position and stop the loop on step changes or unmount.
   useEffect(() => {
-    if (!active) { setRect(null); return; }
+    if (!active || !currentStep) return;
+    const updateRect = () => {
+      if (!navigatingRef.current) setRect(getRect(currentStep.target));
+      rafRef.current = requestAnimationFrame(updateRect);
+    };
     rafRef.current = requestAnimationFrame(updateRect);
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [active, updateRect]);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [active, currentStep]);
 
   if (!active || !currentStep) return null;
 
   const hasSpotlight = rect !== null && currentStep.target !== null;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
 
   const handleNext = () => {
     if (stepIndex >= totalSteps - 1) finish();

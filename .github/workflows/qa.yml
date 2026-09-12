@@ -1,0 +1,53 @@
+name: QA checks
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'codex/**']
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: qa
+          POSTGRES_PASSWORD: local-test-only
+          POSTGRES_DB: selvora_qa
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U qa -d selvora_qa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://qa:local-test-only@127.0.0.1:5432/selvora_qa
+      DIRECT_URL: postgresql://qa:local-test-only@127.0.0.1:5432/selvora_qa
+      QA_DATABASE_URL: postgresql://qa:local-test-only@127.0.0.1:5432/selvora_qa
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            selvora-api/package-lock.json
+            selvora-app/package-lock.json
+      - run: npm ci
+        working-directory: selvora-api
+      - run: npx prisma validate && npx prisma migrate deploy
+        working-directory: selvora-api
+      - run: npm test
+        working-directory: selvora-api
+      - run: npm ci
+        working-directory: selvora-app
+      - run: npm run lint -- --max-warnings 0
+        working-directory: selvora-app
+      - run: npm test
+        working-directory: selvora-app
+      - run: npm run build
+        working-directory: selvora-app

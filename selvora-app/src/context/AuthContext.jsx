@@ -1,10 +1,8 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../hooks/useApi';
 import ServerWakeUpScreen from '../components/Auth/ServerWakeUpScreen';
 
-const AuthContext = createContext();
-
-export const useAuth = () => useContext(AuthContext);
+import { AuthContext } from './auth';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const WARMUP_RETRY_DELAYS = [0, 2_000, 4_000, 6_000, 8_000, 10_000, 10_000, 10_000, 10_000, 10_000];
