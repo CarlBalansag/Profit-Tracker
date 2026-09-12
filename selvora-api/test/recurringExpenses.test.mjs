@@ -9,6 +9,34 @@ beforeEach(() => harness.reset());
 afterAll(() => server.close());
 
 describe('recurring expense dates', () => {
+  it('rejects a reversed create date range before writing a template', async () => {
+    const response = await fetch(`${baseUrl}/api/recurring-expenses`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Invalid range', amount: 1, frequency: 'monthly', start_date: '2026-02-01', end_date: '2026-01-01' }) });
+    expect(response.status).toBe(400);
+    expect(harness.db.recurringExpense).toHaveLength(0);
+  });
+  it('rolls back template creation and generated entries if updating the marker fails, then retries cleanly', async () => {
+    const body = { name: 'Atomic monthly', amount: '0.29', frequency: 'monthly', start_date: '2026-01-31', end_date: '2026-04-30' };
+    const write = () => fetch(`${baseUrl}/api/recurring-expenses`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    harness.faults['recurringExpense.update'] = true;
+    expect((await write()).status).toBe(500);
+    expect(harness.db.recurringExpense).toHaveLength(0);
+    expect(harness.db.expense.filter(e => e.recurring_expense_id)).toHaveLength(0);
+    harness.faults['recurringExpense.update'] = false;
+    expect((await write()).status).toBe(200);
+    expect(harness.db.recurringExpense).toHaveLength(1);
+    expect(harness.db.expense.filter(e => e.recurring_expense_id)).toHaveLength(4);
+    await fetch(`${baseUrl}/api/recurring-expenses`);
+    await fetch(`${baseUrl}/api/recurring-expenses`);
+    expect(harness.db.expense.filter(e => e.recurring_expense_id)).toHaveLength(4);
+  });
+  it('rejects a partial end-date change before the saved start and preserves the record', async () => {
+    const created = await fetch(`${baseUrl}/api/recurring-expenses`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Future monthly', amount: 1, frequency: 'monthly', start_date: '2090-01-31' }) });
+    const record = await created.json();
+    const original = structuredClone(harness.db.recurringExpense[0]);
+    const response = await fetch(`${baseUrl}/api/recurring-expenses/${record.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ end_date: '2089-01-01' }) });
+    expect(response.status).toBe(400);
+    expect(harness.db.recurringExpense[0]).toEqual(original);
+  });
   it('clamps month-end recurrences to February instead of skipping it', async () => {
     const response = await fetch(`${baseUrl}/api/recurring-expenses`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },

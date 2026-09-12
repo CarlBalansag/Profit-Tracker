@@ -26,7 +26,7 @@ describe.skipIf(!databaseUrl)('native PostgreSQL API integration', () => {
   beforeAll(async () => {
     process.env.DATABASE_URL = databaseUrl;
     process.env.DIRECT_URL = databaseUrl;
-    for (const module of ['../prisma', '../services/calendarFeed', '../services/ownership', '../services/transactionEdit', '../routes/sales', '../routes/inventory']) {
+    for (const module of ['../prisma', '../services/calendarFeed', '../services/ownership', '../services/transactionEdit', '../routes/sales', '../routes/inventory', '../routes/recurringExpenses']) {
       const modulePath = require.resolve(module);
       originalModules.set(modulePath, require.cache[modulePath]);
       delete require.cache[modulePath];
@@ -40,6 +40,7 @@ describe.skipIf(!databaseUrl)('native PostgreSQL API integration', () => {
     app.use((req, res, next) => { req.user = { id: owner }; req.isAuthenticated = () => req.headers['x-qa-authenticated'] !== 'false'; next(); });
     app.use('/api/sales', require('../routes/sales'));
     app.use('/api/inventory', require('../routes/inventory'));
+    app.use('/api/recurring-expenses', require('../routes/recurringExpenses'));
     app.use((err, req, res, next) => res.status(err.status || 500).json({ error: err.message }));
     server = app.listen(0, '127.0.0.1');
     await new Promise(resolve => server.once('listening', resolve));
@@ -138,5 +139,16 @@ describe.skipIf(!databaseUrl)('native PostgreSQL API integration', () => {
     body.sales[0].status = 'PAID';
     expect((await request('PUT', `/api/inventory/${inventory.id}/transaction`, body)).status).toBe(200);
     expect((await prisma.inventory.findUnique({ where: { id: inventory.id } })).unit_purchase_cost_decimal.toFixed(2)).toBe('0.50');
+  });
+  it('generates month-end occurrences once under concurrent requests and preserves them on pause/resume', async () => {
+    const recurring = await prisma.recurringExpense.create({ data: { user_id: owner, name: 'Native month-end fixture', amount: 0.29, frequency: 'monthly', start_date: new Date('2026-01-31T12:00:00Z'), end_date: new Date('2026-04-30T12:00:00Z'), active: true } });
+    const responses = await Promise.all([request('GET', '/api/recurring-expenses'), request('GET', '/api/recurring-expenses')]);
+    expect(responses.map(r => r.status)).toEqual([200, 200]);
+    const entries = await prisma.expense.findMany({ where: { recurring_expense_id: recurring.id }, orderBy: { date: 'asc' } });
+    expect(entries.map(e => e.date.toISOString().slice(0, 10))).toEqual(['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30']);
+    expect(entries.map(e => e.amount_decimal.toFixed(2))).toEqual(['0.29', '0.29', '0.29', '0.29']);
+    expect((await request('PUT', `/api/recurring-expenses/${recurring.id}`, { active: false })).status).toBe(200);
+    expect((await request('PUT', `/api/recurring-expenses/${recurring.id}`, { active: true })).status).toBe(200);
+    expect(await prisma.expense.count({ where: { recurring_expense_id: recurring.id } })).toBe(4);
   });
 });

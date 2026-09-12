@@ -150,3 +150,11 @@ Inline BUY quantity edits now add already-sold units when calculating total purc
 - Ten transaction-wide API cases passed, including optional sale create, duplicate repeat rejection, sale-create rollback/retry and prior combined-edit/ownership cases. Seven atomic sale cases also pass.
 - Browser unchanged BUY save preserved three remaining units, $312 remaining basis, full $520 batch basis and $69.16 realized profit; store/card/status remained present.
 - CI run 34708764255 passed all gates on the preceding QA-03 commit, including all six native PostgreSQL cases. This inline change awaits the next CI run. No hosted changes.
+
+## QA-12 reconciliation: generation rollback and partial date validation
+
+Recurring templates, generated occurrences and generation markers now save in one transaction for create/update. Read-triggered generation uses a transaction per template. Partial date edits validate against the saved counterpart date. Existing month-end clamping and unique occurrence constraint remain in place.
+
+- Ten focused API tests passed: month-end dates, marker-failure rollback of template/occurrences, retry/repeated reads, partial end-date rejection, exact amounts, partial updates, ownership and read-only export behavior.
+- Added a native concurrent-generation/month-end/pause/resume regression to the next CI run. This uses the real unique constraint; fixture tests alone do not prove duplicate protection under native concurrency.
+- No hosted migrations, live data writes or deployment. Additional QA-23 card modal failures and QA-15 Settings total arithmetic were recorded during reconciliation and remain separate next tasks.
