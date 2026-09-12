@@ -1,16 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { displayCurrencyJSON } from '../../../shared/currencyContract.mjs';
 
 // Leave VITE_API_URL empty in production when Vercel rewrites proxy /api and /auth.
 // Set it locally to the API dev server, e.g. http://localhost:3000.
 const API = import.meta.env.VITE_API_URL || '';
 
 // All requests to the API must include X-Requested-With to satisfy the CSRF check.
-export const apiFetch = (path, options = {}) => {
+export const apiFetch = async (path, options = {}) => {
+  const { exactCurrency = false, ...requestOptions } = options;
   const headers = {
     'X-Requested-With': 'XMLHttpRequest',
+    'X-Currency-Format': 'decimal',
     ...options.headers,
   };
-  return fetch(`${API}${path}`, { credentials: 'include', ...options, headers });
+  const response = await fetch(`${API}${path}`, { credentials: 'include', ...requestOptions, headers });
+  if (!exactCurrency) {
+    const json = response.json.bind(response);
+    response.json = async () => displayCurrencyJSON(await json());
+  }
+  return response;
 };
 
 const fetcher = (path) =>

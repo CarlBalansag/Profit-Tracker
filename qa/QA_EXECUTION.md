@@ -26,7 +26,7 @@ Commit each completed task separately and record precise coverage and remaining 
 | 3 | QA-06: consistent financial calculations | Fixed core calculations; focused regression passed |
 | 4 | QA-19: Buyer/Invoice ownership | Fixed in code; isolated SQL/API regression passed; hosted migration not applied |
 | 5 | QA-20: inactive controls and unfinished workflows | Fixed/clearly disabled per scope; focused regression passed |
-| 6 | QA-15: staged currency precision migration | Pending |
+| 6 | QA-15: staged currency precision migration | Stages 1–7 implemented and locally verified; hosted cutover/legacy cleanup deferred |
 | 7 | QA-25: quality gates, coverage and finding reconciliation | Pending |
 | 8 | Overall regression across all changes and all 25 findings | Pending |
 
@@ -92,3 +92,14 @@ User requested unfinished features be clearly disabled. Invoices creation/search
 - Full API: 78 tests passed. Full frontend: 47 tests passed. Production/PWA build and focused lint for new utilities/forms/tests/Inventory/Invoices passed. Existing broader lint remains QA-25.
 - Browser fixture: Inventory opens existing edit form and Cancel closes it; Settings deselect disables export, select restores it, JSON and ZIP without receipts prepare downloads successfully. Real Cloudinary receipt transfer and OS file-save completion are not exercised; archive contents and failure paths are tested with mocked responses.
 - Exports use current owned API data, not a database-wide transaction snapshot; concurrent edits during separate reads can change records. ZIP fails explicitly before downloading on receipt failures; download size capped at 50 MB. No import feature added. No hosted changes.
+
+## QA-15 stages 1–7 implemented and verified locally
+
+Audited all 21 Float fields; added nullable NUMERIC(19,2) money and NUMERIC(9,6) rate companions with reversible backfill and compatibility triggers. Purchase, sale and supporting write flows validate precision, preserve omitted fields and dual-write companions. Shared Decimal arithmetic now drives reports, receipt/calendar costs, screen totals and allocations. Cumulative quantity boundaries conserve cents across split sales and remaining inventory. API clients can request exact currency strings; exports retain normalized strings while the display adapter supports existing forms.
+
+- Full backend suite: 113 tests passed, including precision parsing, additive migration rollback, dual-write validation/ownership/failure/retry, response contracts, cent allocations, cancelled-sale offsets and cross-report consistency.
+- Full frontend suite: 51 tests passed, including exact-response adapters, exports and split-cent Inventory/Add Sale previews.
+- Prisma validation and default client generation passed. Production build passed with the existing large-bundle warning.
+- Read-only configured-data projection: 516 field comparisons in a disposable PGlite staging copy; zero mismatches or invalid historical values. Redacted results: CURRENCY_STAGING_QA.json. This is not a full production database clone or a native multi-connection concurrency test.
+- Browser fixture cent edit: remaining Inventory value $312.03; Transactions batch cost $520.05, sold cost $208.02 and realized profit $69.14.
+- No hosted migrations/writes. Stage 8 requires a production verification window before making companions required or removing original columns. Numeric compatibility totals are limited below one trillion; an excessive server total fails explicitly. No import feature exists. Full lint is the next QA-25 task.

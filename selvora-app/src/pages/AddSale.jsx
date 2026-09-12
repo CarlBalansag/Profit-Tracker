@@ -1,4 +1,4 @@
-import { saleEconomics } from '../../../shared/finance.mjs';
+import { saleEconomics, multiplyMoney, percentageMoney } from '../utils/finance';
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import {
@@ -78,7 +78,7 @@ const AddSale = () => {
            if (plat && plat.fee_pct > 0) {
              const price = parseFloat(next.unit_price) || 0;
              const qty = parseInt(next.quantity) || 1;
-             const fee = (price * qty) * (plat.fee_pct / 100);
+             const fee = percentageMoney(multiplyMoney(price, qty), plat.fee_pct);
              next.commission_fee = fee > 0 ? fee.toFixed(2) : '';
            } else if ('platform_id' in updates) {
              next.commission_fee = '';
@@ -344,7 +344,7 @@ const AddSale = () => {
                     const economics = saleEconomics(selectedItem, { ...formData, quantity: qs, unit_price: sp });
                     const purchaseCost = economics.cost;
                     const unitCost = qs > 0 ? purchaseCost / qs : 0;
-                    const saleTotal = sp * qs;
+                    const saleTotal = multiplyMoney(sp, qs);
                     const commission = parseFloat(formData.commission_fee) || 0;
                     const saleShipping = parseFloat(formData.sale_shipping) || 0;
                     const profit = economics.grossProfit;
@@ -387,7 +387,7 @@ const AddSale = () => {
                             )}
                             {sp > 0 && (
                               <div className="flex justify-between px-4 py-2.5 font-semibold">
-                                <span className="text-gray-300">Est. Profit</span>
+                                <span className="text-gray-300">Est. Profit (before cashback)</span>
                                 <span className={profit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
                                   {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
                                 </span>

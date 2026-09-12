@@ -1,3 +1,4 @@
+import { sumMoney } from '../utils/finance';
 import React, { useState } from 'react';
 import { downloadJSON } from '../utils/downloads';
 import { useDashboard } from '../hooks/useApi';
@@ -76,9 +77,9 @@ function Analytics() {
       const existing = byMonth.get(month) || { name: month, revenue: 0, profit: 0, cashback: 0 };
       byMonth.set(month, {
         name: month,
-        revenue:  existing.revenue  + (pt.totalRevenue || 0),
-        profit:   existing.profit   + (pt.netProfit    || 0),
-        cashback: existing.cashback + (pt.cashback     || 0),
+        revenue:  sumMoney(existing.revenue, pt.totalRevenue || 0),
+        profit:   sumMoney(existing.profit, pt.netProfit    || 0),
+        cashback: sumMoney(existing.cashback, pt.cashback     || 0),
       });
     });
     return Array.from(byMonth.values());
@@ -91,13 +92,13 @@ function Analytics() {
     { name: 'Outbound Shipping', value: s.saleShipping || 0, color: THEME.yellow },
   ].filter(e => e.value > 0);
 
-  const expenseTotal = expenseData.reduce((sum, e) => sum + e.value, 0);
+  const expenseTotal = expenseData.reduce((sum, e) => sumMoney(sum, e.value), 0);
 
   // Cumulative profit area chart — accumulate monthly deltas into running totals.
   const cumulativeByMonth = (() => {
     let running = 0;
     return monthlyTrend.map(pt => {
-      running += pt.profit;
+      running = sumMoney(running, pt.profit);
       return { name: pt.name, profit: running };
     });
   })();

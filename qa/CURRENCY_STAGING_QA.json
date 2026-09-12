@@ -1,0 +1,62 @@
+{
+  "date": "2026-09-12T06:56:03.545Z",
+  "sourceReadOnly": true,
+  "hostedWrites": false,
+  "passed": true,
+  "models": {
+    "Inventory": {
+      "rows": 49,
+      "comparisons": 294,
+      "mismatches": 0,
+      "invalidHistoricalValues": 0
+    },
+    "Sales": {
+      "rows": 39,
+      "comparisons": 156,
+      "mismatches": 0,
+      "invalidHistoricalValues": 0
+    },
+    "Platform": {
+      "rows": 47,
+      "comparisons": 47,
+      "mismatches": 0,
+      "invalidHistoricalValues": 0
+    },
+    "PaymentMethod": {
+      "rows": 13,
+      "comparisons": 13,
+      "mismatches": 0,
+      "invalidHistoricalValues": 0
+    },
+    "Expense": {
+      "rows": 0,
+      "comparisons": 0,
+      "mismatches": 0,
+      "invalidHistoricalValues": 0
+    },
+    "RecurringExpense": {
+      "rows": 0,
+      "comparisons": 0,
+      "mismatches": 0,
+      "invalidHistoricalValues": 0
+    },
+    "Invoice": {
+      "rows": 0,
+      "comparisons": 0,
+      "mismatches": 0,
+      "invalidHistoricalValues": 0
+    },
+    "Goal": {
+      "rows": 3,
+      "comparisons": 6,
+      "mismatches": 0,
+      "invalidHistoricalValues": 0
+    },
+    "EbayPriceCache": {
+      "rows": 0,
+      "comparisons": 0,
+      "mismatches": 0,
+      "invalidHistoricalValues": 0
+    }
+  }
+}

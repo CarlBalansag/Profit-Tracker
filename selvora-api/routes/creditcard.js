@@ -9,14 +9,14 @@ const isAuthenticated = (req, res, next) => {
 
 // Same cashback rate logic as analytics.js — applies category rate overrides
 // (e.g. Amazon 5% on Chase Freedom Flex) with expiry support.
-const finance = import('../../shared/finance.mjs');
+const finance = require('../services/finance');
 
 // GET /dashboard
 // Returns credit-card spending breakdown for the current calendar month.
 // Only includes inventory purchased with PaymentMethod.type = 'Credit'.
 router.get('/dashboard', isAuthenticated, async (req, res, next) => {
   try {
-    const { batchCost, saleEconomics, effectiveCashbackRate: getEffectiveCashbackRate, isRealizedSale } = await finance;
+    const { batchCost, saleEconomics, effectiveCashbackRate: getEffectiveCashbackRate, isRealizedSale, sumMoney, subtractMoney, allocateMoney, batchCashback, saleOffset } = await finance;
     const userId = req.user.id;
     const now = new Date();
 
@@ -86,10 +86,10 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
       const rate = getEffectiveCashbackRate(inv);
       const qty = inv.qty_purchased || 1;
       const itemCost = batchCost(inv);
-      const itemCashback = itemCost * (rate / 100);
+      const itemCashback = batchCashback(inv, rate);
 
-      card.totalSpend += itemCost;
-      card.cashbackEarned += itemCashback;
+      card.totalSpend = sumMoney(card.totalSpend, itemCost);
+      card.cashbackEarned = sumMoney(card.cashbackEarned, itemCashback);
       card.txnCount += 1;
 
       // Per-item P&L for sold units
@@ -106,7 +106,7 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
           const lossToRedeem = Math.min(allocatedCashback, lossAmount);
 
           card.soldCount += sale.quantity;
-          if (isLoss) card.totalLosses += lossAmount;
+          if (isLoss) card.totalLosses = sumMoney(card.totalLosses, lossAmount);
 
           card.items.push({
             id: inv.id,
@@ -127,12 +127,8 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
         const soldQty = inv.sales.reduce((s, sa) => s + sa.quantity, 0);
         const unsoldQty = qty - soldQty;
         if (unsoldQty > 0) {
-          const unsoldCost = (inv.unit_purchase_cost * unsoldQty)
-            + (inv.sales_tax * (unsoldQty / qty))
-            + (inv.shipping_cost_inbound * (unsoldQty / qty))
-            + ((inv.fees || 0) * (unsoldQty / qty))
-            - ((inv.gift_card_amount || 0) * (unsoldQty / qty));
-          const unsoldCashback = unsoldCost * (rate / 100);
+          const unsoldCost = allocateMoney(itemCost, unsoldQty, qty, soldQty);
+          const unsoldCashback = allocateMoney(itemCashback, unsoldQty, qty, soldQty);
           card.pendingCount += unsoldQty;
           card.items.push({
             id: inv.id,
@@ -170,9 +166,9 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
     // Compute card-level cashback netting
     const cards = Object.values(cardMap).map(card => {
       const cashbackToRedeem = Math.min(card.cashbackEarned, card.totalLosses);
-      const cashbackToKeep = card.cashbackEarned - cashbackToRedeem;
-      const uncoveredLoss = Math.max(0, card.totalLosses - card.cashbackEarned);
-      const amountToPay = card.totalSpend - cashbackToRedeem;
+      const cashbackToKeep = subtractMoney(card.cashbackEarned, cashbackToRedeem);
+      const uncoveredLoss = Math.max(0, subtractMoney(card.totalLosses, card.cashbackEarned));
+      const amountToPay = subtractMoney(card.totalSpend, cashbackToRedeem);
 
       return {
         ...card,
@@ -185,12 +181,12 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
 
     // Summary totals
     const summary = cards.reduce((acc, card) => {
-      acc.totalSpend += card.totalSpend;
-      acc.totalCashbackEarned += card.cashbackEarned;
-      acc.totalCashbackToRedeem += card.cashbackToRedeem;
-      acc.totalCashbackToKeep += card.cashbackToKeep;
-      acc.totalAmountToPay += card.amountToPay;
-      acc.totalUncoveredLoss += card.uncoveredLoss;
+      acc.totalSpend = sumMoney(acc.totalSpend, card.totalSpend);
+      acc.totalCashbackEarned = sumMoney(acc.totalCashbackEarned, card.cashbackEarned);
+      acc.totalCashbackToRedeem = sumMoney(acc.totalCashbackToRedeem, card.cashbackToRedeem);
+      acc.totalCashbackToKeep = sumMoney(acc.totalCashbackToKeep, card.cashbackToKeep);
+      acc.totalAmountToPay = sumMoney(acc.totalAmountToPay, card.amountToPay);
+      acc.totalUncoveredLoss = sumMoney(acc.totalUncoveredLoss, card.uncoveredLoss);
       return acc;
     }, {
       totalSpend: 0,

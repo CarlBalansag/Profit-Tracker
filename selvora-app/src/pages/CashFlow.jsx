@@ -1,3 +1,4 @@
+import { sumMoney } from '../utils/finance';
 import React, { useState } from 'react';
 import { useDashboard } from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
@@ -27,12 +28,12 @@ function CashFlow() {
   // Total owed = unpaid sale revenue (SOLD but not PAID/COMPLETED)
   const owedRevenue = txns
     .filter(t => UNPAID_STATUSES.has((t.status || '').toUpperCase()))
-    .reduce((sum, t) => sum + (t.revenue ?? 0), 0);
+    .reduce((sum, t) => sumMoney(sum, t.revenue ?? 0), 0);
 
   // Total spending out = purchase spend
   const spendingOut = s.totalCost ?? 0;
   // Coming back = sold revenue + (cashback earned if toggle on)
-  const comingBack = soldRevenue + (includeCashback ? (s.totalCashback ?? 0) : 0);
+  const comingBack = sumMoney(soldRevenue, includeCashback ? (s.totalCashback ?? 0) : 0);
 
   // Pipeline counts for the progress bar
   const inTransitCount = (pipeline['PURCHASED'] ?? 0) + (pipeline['SHIPPED_IN'] ?? 0) +
@@ -53,9 +54,9 @@ function CashFlow() {
     }
     const b = buyerMap.get(key);
     b.items++;
-    b.spent      += t.cost    ?? 0;
-    b.comingBack += t.revenue ?? 0;
-    b.cashback   += t.cashback ?? 0;
+    b.spent = sumMoney(b.spent, t.cost    ?? 0);
+    b.comingBack = sumMoney(b.comingBack, t.revenue ?? 0);
+    b.cashback = sumMoney(b.cashback, t.cashback ?? 0);
     b.sales.push(t);
   });
   const buyers = Array.from(buyerMap.values());
@@ -214,7 +215,7 @@ function CashFlow() {
                     <div>
                       <div className="text-[10px] text-gray-500 mb-1">Coming Back</div>
                       <div className="text-sm font-bold text-green-400">
-                        ${fmt(buyer.comingBack + (includeCashback ? buyer.cashback : 0))}
+                        ${fmt(sumMoney(buyer.comingBack, includeCashback ? buyer.cashback : 0))}
                       </div>
                     </div>
                   </div>

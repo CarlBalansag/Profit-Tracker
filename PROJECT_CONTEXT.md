@@ -99,8 +99,8 @@ The authoritative model is [schema.prisma](selvora-api/prisma/schema.prisma).
 | EbayPriceCache | Global product-name cache; no active scraper in the price router |
 | user_sessions | Session table managed by connect-pg-simple, ignored by Prisma |
 
-Money is still Prisma Float. Status/category values are mostly strings, not database enums.
-See the separate [currency migration plan](CURRENCY_DECIMAL_MIGRATION_PLAN.md); its staged work is not completed by this documentation cleanup.
+Money has additive Prisma Decimal companions with retained Float compatibility columns. Calculations use shared Decimal arithmetic. Status/category values are mostly strings, not database enums.
+See the separate [currency migration plan](CURRENCY_DECIMAL_MIGRATION_PLAN.md); stages 1–7 are locally verified; hosted migration and final legacy cleanup remain deferred.
 Receipts are one URL on Inventory or Expense, not a separate Receipt model.
 Deleting Inventory cascades to linked Sales; deleting a recurring template preserves generated expenses via SetNull.
 
@@ -181,7 +181,7 @@ Cashback uses current stored payment-method rates with vendor-name substring ove
 Some frontend calculations also use preset fallback data. There is no universal historical rate snapshot or reward-cap engine.
 Static presets need periodic review. Credit Card estimates spend/loss coverage; it does not record bank payments or statement balances.
 
-Core batch allocation, sale economics and stored-rate cashback are shared in `shared/finance.mjs`. Verify preview, editor, ledger, dashboard, card and tax totals together when changing money.
+Core batch allocation, sale economics and stored-rate cashback are shared in `shared/decimalFinance.mjs`. Verify preview, editor, ledger, dashboard, card and tax totals together when changing money.
 Product decisions still needed include overhead treatment, historical cashback, cancellation/return stock rules, payout recognition and cashout accounting.
 
 React Query coexists with local-state fetching in Expenses, Receipts and Settings components.

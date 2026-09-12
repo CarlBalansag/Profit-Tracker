@@ -1,3 +1,4 @@
+import { sumMoney } from '../utils/finance';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
@@ -372,7 +373,7 @@ const Expenses = () => {
 
   const ytdCost = expenses
     .filter(e => new Date(e.date).getFullYear() === thisYear)
-    .reduce((s, e) => s + e.amount, 0);
+    .reduce((s, e) => sumMoney(s, e.amount), 0);
 
   const recurringMonthly = insights.recurringMonthly;
 
@@ -688,7 +689,7 @@ const Expenses = () => {
               <tfoot>
                 <tr className="border-t border-white/[0.08] bg-white/[0.015]">
                   <td colSpan={4} className="px-4 py-3 text-xs text-gray-500">{filtered.length} expense{filtered.length !== 1 ? 's' : ''}</td>
-                  <td className="px-4 py-3 text-right text-sm font-bold text-red-400">${filtered.reduce((s, e) => s + e.amount, 0).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-right text-sm font-bold text-red-400">${filtered.reduce((s, e) => sumMoney(s, e.amount), 0).toFixed(2)}</td>
                   <td />
                 </tr>
               </tfoot>

@@ -18,7 +18,7 @@ describe('data exports', () => {
     expect(snapshot.data.Inventory).toHaveLength(1);
     expect(snapshot.data.Transactions).toHaveLength(2);
     expect(request).toHaveBeenCalledTimes(3);
-    expect(request).toHaveBeenCalledWith('/api/recurring-expenses?export=true');
+    expect(request).toHaveBeenCalledWith('/api/recurring-expenses?export=true', { exactCurrency: true });
   });
   it('rejects empty/unavailable selections without requests', async () => {
     const request = vi.fn();
@@ -32,7 +32,7 @@ describe('data exports', () => {
     }
   });
   it('escapes CSV quotes, commas, newlines and spreadsheet formulas while retaining negative numbers', () => {
-    expect(csvText([{ product: '=SUM(1,2)', note: 'a"b\nc', profit: -5 }])).toBe('"product","note","profit"\r\n"\'=SUM(1,2)","a""b\nc","-5"');
+    expect(csvText([{ product: '=SUM(1,2)', note: 'a"b\nc', profit: -5 }])).toBe('"product","note","profit"\r\n"\'=SUM(1,2)","a""b\nc","-5.00"');
     expect(csvText([])).toBe('');
   });
   it('uses full purchase records and allocated sale costs, excluding cancelled profit', () => {

@@ -83,6 +83,7 @@ function app() {
   const app=express();app.use(express.json());
   app.use((req,res,next)=>{req.user=db.user[0];req.isAuthenticated=()=>req.headers['x-qa-unauthenticated']!=='true';next();});
   app.get('/auth/me',(req,res)=>res.json(db.user[0]));
+  app.use(requireApi('./middleware/currencyJSON'));
   for(const [url,file]of Object.entries({'inventory':'inventory','sales':'sales','platforms':'platforms','payment-methods':'paymentMethods','accounts':'accounts','analytics':'analytics','creditcard':'creditcard','expenses':'expenses','recurring-expenses':'recurringExpenses','receipts':'receipts','goals':'goals','calendar-events':'calendarEvents','product-notes':'productNotes','preferences':'preferences'}))app.use('/api/'+url,requireApi('./routes/'+file+'.js'));
   app.use((err,req,res,next)=>res.status(err.status||500).json({error:err.message}));
   return app;

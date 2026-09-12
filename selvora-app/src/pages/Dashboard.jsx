@@ -1,3 +1,4 @@
+import { sumMoney, subtractMoney, percentageMoney } from '../utils/finance';
 import { downloadFile, shareCard } from '../utils/downloads';
 import React, { useState, useEffect, useRef } from 'react';
 import { useDashboard, useGoals } from '../hooks/useApi';
@@ -107,10 +108,10 @@ function normalizeDashboardStats(rawStats, recent) {
     };
   }
 
-  const soldCost = recent.reduce((sum, row) => sum + (Number(row.cost) || 0), 0);
-  const soldCashback = soldCost * ((stats.avgCashbackRate || 0) / 100);
-  const grossProfit = stats.totalRevenue - soldCost;
-  const profit = grossProfit + soldCashback;
+  const soldCost = recent.reduce((sum, row) => sumMoney(sum, row.cost || 0), 0);
+  const soldCashback = percentageMoney(soldCost, stats.avgCashbackRate || 0);
+  const grossProfit = subtractMoney(stats.totalRevenue, soldCost);
+  const profit = sumMoney(grossProfit, soldCashback);
 
   return {
     ...stats,

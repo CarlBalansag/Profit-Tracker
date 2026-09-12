@@ -31,6 +31,18 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe('financial screen regression', () => {
+  it('distributes split-unit residual cents consistently in Inventory and Add Sale preview', () => {
+    mocks.inventory = [{ ...purchase, qty_purchased: 3, qty_on_hand: 2, unit_purchase_cost: 3.33,
+      sales_tax: 0, shipping_cost_inbound: 0, fees: 0.01, gift_card_amount: 0,
+      sales: [{ id: 'first', quantity: 1, unit_price: 4, sale_date: '2026-09-01', status: 'SOLD' }] }];
+    const view = render(<MemoryRouter><Inventory /></MemoryRouter>);
+    expect(screen.getAllByText('$6.67').length).toBe(2);
+    view.unmount();
+    render(<MemoryRouter><AddSale /></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', { name: /Fixture item/ }));
+    fireEvent.change(document.querySelector('input[name="unit_price"]'), { target: { value: '4' } });
+    expect(screen.getByText('+$0.66')).toBeTruthy();
+  });
   it('allocates purchase fees and cashback in Add Transaction partial-sale preview', () => {
     localStorage.setItem('add_transaction_draft', JSON.stringify({ ts: Date.now(), data: { ...purchase,
       qty_sold: 1, sale_price: 140, commission_fee: 10, sale_shipping: 8, sale_tab: 'marketplace',

@@ -18,7 +18,8 @@ describe('sale decimal writes', () => {
     harness.db.sales[0].unit_price = 1.234567;
     const historic = await write('PUT', `/${harness.ids.sale}`, { status: 'PAID' });
     expect(historic.status).toBe(200);
-    expect(historic.data.unit_price).toBe(1.234567);
+    expect(historic.data.unit_price).toBe(1.23);
+    expect(harness.db.sales[0].unit_price).toBe(1.234567);
     expect(historic.data.unit_price_decimal).toBe('1.23');
   });
   it.each(['0.001', -1, 'NaN', '1000000000000'])('rejects invalid %s without claiming stock or changing sales', async value => {

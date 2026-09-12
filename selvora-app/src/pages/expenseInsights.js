@@ -1,7 +1,11 @@
+import Decimal from 'decimal.js';
+import { sumMoney, subtractMoney } from '../utils/finance';
+
 const toMonthlyAmount = (expense) => {
-  if (expense.frequency === 'weekly') return expense.amount * 52 / 12;
-  if (expense.frequency === 'biweekly') return expense.amount * 26 / 12;
-  return expense.amount;
+  const amount = new Decimal(expense.amount || 0);
+  if (expense.frequency === 'weekly') return amount.times(52).div(12);
+  if (expense.frequency === 'biweekly') return amount.times(26).div(12);
+  return amount;
 };
 
 export function getExpenseInsights(expenses, recurring, referenceDate = new Date()) {
@@ -14,18 +18,18 @@ export function getExpenseInsights(expenses, recurring, referenceDate = new Date
     return value.getFullYear() === targetYear && value.getMonth() === targetMonth;
   };
   const currentExpenses = expenses.filter((expense) => inMonth(expense.date, year, month));
-  const currentTotal = currentExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const currentTotal = currentExpenses.reduce((sum, expense) => sumMoney(sum, expense.amount), 0);
   const previousTotal = expenses.filter((expense) => inMonth(expense.date, priorYear, priorMonth))
-    .reduce((sum, expense) => sum + expense.amount, 0);
+    .reduce((sum, expense) => sumMoney(sum, expense.amount), 0);
   const categoryTotals = currentExpenses.reduce((totals, expense) => {
     const category = expense.category || 'OTHER';
-    totals[category] = (totals[category] || 0) + expense.amount;
+    totals[category] = sumMoney(totals[category] || 0, expense.amount);
     return totals;
   }, {});
   const categories = Object.entries(categoryTotals)
     .map(([category, amount]) => ({ category, amount, share: currentTotal > 0 ? amount / currentTotal : 0 }))
     .sort((a, b) => b.amount - a.amount);
   const recurringMonthly = recurring.filter((expense) => expense.active)
-    .reduce((sum, expense) => sum + toMonthlyAmount(expense), 0);
-  return { currentTotal, previousTotal, monthChange: previousTotal === 0 ? null : (currentTotal - previousTotal) / previousTotal, categories, largestCategory: categories[0] || null, recurringMonthly };
+    .reduce((sum, expense) => sum.plus(toMonthlyAmount(expense)), new Decimal(0)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+  return { currentTotal, previousTotal, monthChange: previousTotal === 0 ? null : subtractMoney(currentTotal, previousTotal) / previousTotal, categories, largestCategory: categories[0] || null, recurringMonthly };
 }

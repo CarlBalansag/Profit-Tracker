@@ -7,7 +7,7 @@ const prismaPath = require.resolve('../prisma');
 const cloudinaryPath = require.resolve('cloudinary');
 const originalCloudName = process.env.CLOUDINARY_CLOUD_NAME;
 
-function loadFeedService() {
+function loadFeedService(purchaseOverrides = {}) {
   const upload = vi.fn().mockResolvedValue({ secure_url: 'https://example.test/calendar.ics' });
   require.cache[prismaPath] = {
     exports: {
@@ -16,7 +16,7 @@ function loadFeedService() {
       inventory: {
         findMany: vi.fn()
           .mockResolvedValueOnce([{ id: 'inventory-1', product_name: 'Sneaker', purchase_date: new Date('2026-09-10') }])
-          .mockResolvedValueOnce([{ id: 'inventory-1', product_name: 'Sneaker', purchase_date: new Date('2026-09-10'), qty_purchased: 1, unit_purchase_cost: 100, sales_tax: 5, shipping_cost_inbound: 0, payment_method: { due_day: 15 } }]),
+          .mockResolvedValueOnce([{ id: 'inventory-1', product_name: 'Sneaker', purchase_date: new Date('2026-09-10'), qty_purchased: 1, unit_purchase_cost: 100, sales_tax: 5, shipping_cost_inbound: 0, payment_method: { due_day: 15 }, ...purchaseOverrides }]),
       },
       sales: { findMany: vi.fn().mockResolvedValue([{ id: 'sale-1', sale_date: new Date('2026-09-11'), payout_date: null, inventory: { product_name: 'Sneaker' } }]) },
     },
@@ -35,6 +35,11 @@ afterEach(() => {
 });
 
 describe('Cloudinary calendar feed', () => {
+  it('matches the exact purchase basis including fees and gift credit', async () => {
+    const { service } = loadFeedService({ qty_purchased: 3, unit_purchase_cost: 0.1,
+      unit_purchase_cost_decimal: '0.10', sales_tax: 0.2, fees: 0.05, gift_card_amount: 0.1 });
+    expect(await service.buildCalendarFeed('user-1')).toContain('SUMMARY:CC Due: Sneaker ($0.45)');
+  });
   it('publishes one stable raw ICS file with calendar data', async () => {
     const { service, upload } = loadFeedService();
 

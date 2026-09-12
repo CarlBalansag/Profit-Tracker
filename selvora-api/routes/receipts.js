@@ -19,7 +19,7 @@ const isAuthenticated = (req, res, next) => {
 // GET /api/receipts — returns all inventory + expense items split by receipt status
 router.get('/', isAuthenticated, async (req, res, next) => {
   try {
-    const { batchCost } = await import('../../shared/finance.mjs');
+    const { batchCost } = await require('../services/finance');
     const [inventories, expenses] = await Promise.all([
       prisma.inventory.findMany({
         where: { user_id: req.user.id },

@@ -24,6 +24,7 @@ function getCalendarFeedUrl(token) {
 }
 
 async function buildCalendarFeed(userId) {
+  const { batchCost } = await require('./finance');
   const [manualEvents, inventories, sales, creditPurchases] = await Promise.all([
     prisma.calendarEvent.findMany({ where: { user_id: userId }, orderBy: { date: 'asc' } }),
     prisma.inventory.findMany({
@@ -38,7 +39,9 @@ async function buildCalendarFeed(userId) {
       where: { user_id: userId, payment_method: { type: 'Credit' } },
       select: {
         id: true, product_name: true, purchase_date: true, qty_purchased: true, unit_purchase_cost: true,
-        sales_tax: true, shipping_cost_inbound: true, payment_method: { select: { due_day: true } },
+        sales_tax: true, shipping_cost_inbound: true, fees: true, gift_card_amount: true,
+        unit_purchase_cost_decimal: true, sales_tax_decimal: true, shipping_cost_inbound_decimal: true,
+        fees_decimal: true, gift_card_amount_decimal: true, payment_method: { select: { due_day: true } },
       },
     }),
   ]);
@@ -65,7 +68,7 @@ async function buildCalendarFeed(userId) {
     const dueDate = item.payment_method?.due_day
       ? new Date(purchase.getFullYear() + (purchase.getMonth() + 1 > 11 ? 1 : 0), (purchase.getMonth() + 1) % 12, item.payment_method.due_day)
       : new Date(purchase.getTime() + 30 * 24 * 60 * 60 * 1000);
-    const amount = (item.unit_purchase_cost * item.qty_purchased) + (item.sales_tax || 0) + (item.shipping_cost_inbound || 0);
+    const amount = batchCost(item);
     addEvent(`cc_due_${item.id}`, toDateStr(dueDate), `CC Due: ${item.product_name} ($${amount.toFixed(2)})`);
   });
 

@@ -1,4 +1,4 @@
-import { batchCost, allocatedCost, effectiveCashbackRate, saleEconomics } from '../../../shared/finance.mjs';
+import { batchCost, allocatedCost, effectiveCashbackRate, saleEconomics, sumMoney, multiplyMoney, batchCashback } from '../utils/finance';
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import {
@@ -233,11 +233,8 @@ const AddTransaction = () => {
     });
   };
 
-  const subtotal = (parseFloat(formData.unit_purchase_cost) || 0) * (parseInt(formData.qty_purchased) || 0);
-  const totalCost = subtotal
-    + (parseFloat(formData.sales_tax) || 0)
-    + (parseFloat(formData.shipping_cost_inbound) || 0)
-    + (parseFloat(formData.fees) || 0);
+  const subtotal = multiplyMoney(formData.unit_purchase_cost || 0, parseInt(formData.qty_purchased) || 0);
+  const totalCost = batchCost(formData);
 
   // Cashback calculation — auto-applies category rate when vendor matches
   const selectedCard = paymentMethods.find(pm => pm.id === formData.payment_method_id);
@@ -264,8 +261,7 @@ const AddTransaction = () => {
   const categoryRateMatch = getCategoryRate(selectedCard, selectedVendor?.name);
   const cashbackRate = effectiveCashbackRate({ payment_method: selectedCard, vendor: selectedVendor });
 
-  const cashbackBase = batchCost(formData);
-  const cashbackAmount = cashbackBase * (cashbackRate / 100);
+  const cashbackAmount = batchCashback(formData, cashbackRate);
 
   // ── Cashback rate change toast ──────────────────────────────────────────────
   useEffect(() => {
@@ -1055,7 +1051,7 @@ const AddTransaction = () => {
                   const giftCard   = parseFloat(formData.gift_card_amount) || 0;
                   const salePrice  = parseFloat(formData.sale_price) || 0;
                   const qtySold    = parseInt(formData.qty_sold) || 1;
-                  const totalSale  = salePrice * qtySold;
+                  const totalSale  = multiplyMoney(salePrice, qtySold);
                   const economics = saleEconomics(formData, { quantity: qtySold, unit_price: salePrice,
                     commission_fee: formData.commission_fee, sale_shipping: formData.sale_shipping }, cashbackRate);
                   const totalUnitCost = economics.cost;
@@ -1082,7 +1078,7 @@ const AddTransaction = () => {
                       )}
 
                       <div className="border-t border-white/[0.06] pt-2">
-                        <Row label="Net Cost" value={`$${Math.max(0, totalCost - giftCard).toFixed(2)}`} color="text-white font-semibold" />
+                        <Row label="Net Cost" value={`$${totalCost.toFixed(2)}`} color="text-white font-semibold" />
                       </div>
 
                       {cashbackAmount > 0 && (
@@ -1127,8 +1123,8 @@ const AddTransaction = () => {
                               <span className="font-medium text-gray-200">
                                 {showCashbackProfit && cashbackAmount > 0 ? 'Est. Profit + Cashback' : 'Est. Profit'}
                               </span>
-                              <span className={`font-bold text-base ${(showCashbackProfit ? profit + allocatedCashback : profit) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                {(showCashbackProfit ? profit + allocatedCashback : profit) >= 0 ? '+' : ''}${(showCashbackProfit ? profit + allocatedCashback : profit).toFixed(2)}
+                              <span className={`font-bold text-base ${(showCashbackProfit ? sumMoney(profit, allocatedCashback) : profit) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {(showCashbackProfit ? sumMoney(profit, allocatedCashback) : profit) >= 0 ? '+' : ''}${(showCashbackProfit ? sumMoney(profit, allocatedCashback) : profit).toFixed(2)}
                               </span>
                             </div>
 

@@ -1,3 +1,4 @@
+import { sumMoney, subtractMoney, multiplyMoney } from '../utils/finance';
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
 import { ShieldCheck, Search, Package, DollarSign, Info } from 'lucide-react';
@@ -134,15 +135,15 @@ const TaxExempt = () => {
   // Stats scoped to the selected period
   const nonTaxableSales = periodSales.filter(s => !s.taxable);
   const exemptSalesPct = periodAllSales.length > 0 ? ((nonTaxableSales.length / periodAllSales.length) * 100) : 0;
-  const useTaxDue = periodItems.reduce((sum, i) => sum + (i.sales_tax || 0), 0);
-  const exemptCOGS = periodSales.reduce((sum, s) => sum + (s._inv.unit_purchase_cost * s.quantity), 0);
-  const exemptInventorySpend = periodItems.reduce((sum, i) => sum + (i.unit_purchase_cost * i.qty_purchased) + (i.sales_tax || 0) + (i.shipping_cost_inbound || 0), 0);
-  const exemptRevenue = periodSales.reduce((sum, s) => sum + (s.unit_price * s.quantity), 0);
+  const useTaxDue = periodItems.reduce((sum, i) => sumMoney(sum, i.sales_tax || 0), 0);
+  const exemptCOGS = periodSales.reduce((sum, s) => sumMoney(sum, multiplyMoney(s._inv.unit_purchase_cost, s.quantity)), 0);
+  const exemptInventorySpend = periodItems.reduce((sum, i) => sumMoney(sum, multiplyMoney(i.unit_purchase_cost, i.qty_purchased), i.sales_tax || 0, i.shipping_cost_inbound || 0), 0);
+  const exemptRevenue = periodSales.reduce((sum, s) => sumMoney(sum, multiplyMoney(s.unit_price, s.quantity)), 0);
   const exemptProfit = periodSales.reduce((sum, s) => {
-    const rev = s.unit_price * s.quantity;
-    const cogs = s._inv.unit_purchase_cost * s.quantity;
-    const fees = (s.commission_fee || 0) + (s.sale_shipping || 0);
-    return sum + (rev - cogs - fees);
+    const rev = multiplyMoney(s.unit_price, s.quantity);
+    const cogs = multiplyMoney(s._inv.unit_purchase_cost, s.quantity);
+    const fees = sumMoney(s.commission_fee || 0, s.sale_shipping || 0);
+    return sumMoney(sum, subtractMoney(subtractMoney(rev, cogs), fees));
   }, 0);
 
   const tabs = [
@@ -340,7 +341,7 @@ const TaxExempt = () => {
                   <tr className="border-t border-white/[0.08] bg-white/[0.02]">
                     <td colSpan={5} className="px-4 py-3 text-xs font-semibold text-gray-400 text-right">Total Spend</td>
                     <td className="px-4 py-3 text-right font-bold text-white">
-                      ${filteredPurchases.reduce((sum, i) => sum + (i.unit_purchase_cost * i.qty_purchased) + (i.sales_tax || 0) + (i.shipping_cost_inbound || 0), 0).toFixed(2)}
+                      ${filteredPurchases.reduce((sum, i) => sumMoney(sum, multiplyMoney(i.unit_purchase_cost, i.qty_purchased), i.sales_tax || 0, i.shipping_cost_inbound || 0), 0).toFixed(2)}
                     </td>
                   </tr>
                 </tfoot>

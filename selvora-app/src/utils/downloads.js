@@ -1,13 +1,26 @@
+import Decimal from 'decimal.js';
+import { moneyKeys, rateKeys } from '../../../shared/currencyContract.mjs';
+
+function currencyJSON(input) {
+  if (Array.isArray(input)) return input.map(currencyJSON);
+  if (!input || typeof input !== 'object') return input;
+  return Object.fromEntries(Object.entries(input).map(([key, value]) => [key,
+    (moneyKeys.has(key) || rateKeys.has(key)) && value != null && !(key.startsWith('target_') && input.metric === 'unitsSold')
+      ? new Decimal(value).toFixed(rateKeys.has(key) ? 6 : 2) : currencyJSON(value)]));
+}
+
 export function csvText(records) {
   if (!records.length) return '';
   const keys = Object.keys(records[0]);
-  const cell = value => {
+  const cell = (value, key) => {
     let text = value == null ? '' : String(value);
-    if (typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+    const numericCurrency = (moneyKeys.has(key) || rateKeys.has(key)) && /^-?\d+(?:\.\d+)?$/.test(text);
+    if (numericCurrency) text = new Decimal(text).toFixed(rateKeys.has(key) ? 6 : 2);
+    if (!numericCurrency && typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
     return `"${text.replaceAll('"', '""')}"`;
   };
   return [keys, ...records.map(row => keys.map(key => row[key]))]
-    .map(row => row.map(cell).join(',')).join('\r\n');
+    .map((row, index) => row.map((value, column) => cell(value, index ? keys[column] : null)).join(',')).join('\r\n');
 }
 
 export function downloadFile(name, content, type = 'application/json') {
@@ -22,7 +35,7 @@ export function downloadFile(name, content, type = 'application/json') {
 }
 
 export function downloadJSON(name, data) {
-  downloadFile(name, JSON.stringify(data, null, 2));
+  downloadFile(name, JSON.stringify(currencyJSON(data), null, 2));
 }
 
 export function shareCard(stats, mode, period) {

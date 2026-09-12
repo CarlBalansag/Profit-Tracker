@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { allocatedCost, batchCost, effectiveCashbackRate, realizedSummary, saleEconomics } from '../../shared/finance.mjs';
+import { createRequire } from 'node:module';
+const { allocatedCost, batchCost, effectiveCashbackRate, realizedSummary, saleEconomics } = await createRequire(import.meta.url)('../services/finance.js');
 const purchase = { unit_purchase_cost: 100, qty_purchased: 2, sales_tax: 10,
   shipping_cost_inbound: 6, fees: 4, gift_card_amount: 20,
   payment_method: { default_cashback_rate: 2 }, vendor: { name: 'Test Store' } };

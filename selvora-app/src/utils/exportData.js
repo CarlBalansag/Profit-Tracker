@@ -1,5 +1,5 @@
 import { apiFetch } from '../hooks/useApi';
-import { batchCost, saleEconomics, isRealizedSale } from '../../../shared/finance.mjs';
+import { batchCost, saleEconomics, isRealizedSale } from './finance';
 
 export const exportCategories = [
   'Stores', 'Accounts', 'Payment Methods', 'Card-Store Rates', 'Expenses', 'Transactions', 'Inventory',
@@ -14,7 +14,7 @@ export async function exportSnapshot(selected, request = apiFetch) {
   if (!selected.length || selected.some(category => !paths[category])) throw new Error('Select available data to export.');
   const required = [...new Set(selected.flatMap(category => paths[category]))];
   const results = await Promise.all(required.map(async path => {
-    const response = await request(`/api/${path}${path === 'recurring-expenses' ? '?export=true' : ''}`);
+    const response = await request(`/api/${path}${path === 'recurring-expenses' ? '?export=true' : ''}`, { exactCurrency: true });
     if (!response.ok) throw new Error(`Could not export ${path} (${response.status}). No file was downloaded.`);
     const data = await response.json();
     if (!Array.isArray(data)) throw new Error(`Invalid ${path} export response.`);

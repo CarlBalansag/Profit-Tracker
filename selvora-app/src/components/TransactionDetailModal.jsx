@@ -1,4 +1,4 @@
-import { batchCost, effectiveCashbackRate, saleEconomics, realizedSummary, isRealizedSale } from '../../../shared/finance.mjs';
+import { batchCost, effectiveCashbackRate, saleEconomics, realizedSummary, isRealizedSale, sumMoney, multiplyMoney, batchCashback } from '../utils/finance';
 import React, { useState, useEffect } from 'react';
 import { X, DollarSign, Package, CreditCard, Tag, ChevronDown, ChevronUp } from 'lucide-react';
 import { useInvalidate, apiFetch} from '../hooks/useApi';
@@ -166,14 +166,14 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
   });
 
   // ── Live calculations ────────────────────────────────────────────────────────
-  const subtotal    = Number(form?.unit_purchase_cost ?? 0) * Number(form?.qty_purchased ?? 1);
+  const subtotal    = multiplyMoney(form?.unit_purchase_cost ?? 0, form?.qty_purchased ?? 1);
   const taxAmt      = Number(form?.sales_tax ?? 0);
   const shippingAmt = Number(form?.shipping_cost_inbound ?? 0);
   const feesAmt     = Number(form?.fees ?? 0);
   const giftCardAmt = Number(form?.gift_card_amount ?? 0);
   const totalCost = batchCost(form ?? {});
   const cbRate = effectiveCashbackRate({ payment_method: paymentMethods.find(method => method.id === form?.payment_method_id), vendor: platforms.find(platform => platform.id === form?.vendor_id) });
-  const cbEarned = totalCost * cbRate / 100;
+  const cbEarned = batchCashback(form ?? {}, cbRate);
 
   // ── Save ─────────────────────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -396,7 +396,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                     const commission = Number(sale.commission_fee) || 0;
                     const saleShipping = Number(sale.sale_shipping) || 0;
                     const saleTotal = unitPrice * qty;
-                    const economics = saleEconomics(form, sale, cbRate);
+                    const economics = saleEconomics({ ...form, sales: form._sales }, sale, cbRate);
                     const totalCostForSale = economics.cost;
                     const saleCashback = economics.cashback;
                     const profit = isRealizedSale(sale) ? economics.netProfit : 0;
@@ -618,10 +618,10 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                 )}
                 {form._sales.length > 0 && (() => {
                   const realizedSales = form._sales.filter(isRealizedSale);
-                  const totalSaleRevenue = realizedSales.reduce((sum, s) => sum + ((Number(s.unit_price) || 0) * (Number(s.quantity) || 0)), 0);
-                  const totalCommissions = realizedSales.reduce((sum, s) => sum + (Number(s.commission_fee) || 0), 0);
-                  const totalSaleShipping = realizedSales.reduce((sum, s) => sum + (Number(s.sale_shipping) || 0), 0);
-                  const summary = realizedSummary(form, realizedSales, cbRate);
+                  const totalSaleRevenue = realizedSales.reduce((sum, s) => sumMoney(sum, multiplyMoney(s.unit_price || 0, s.quantity || 0)), 0);
+                  const totalCommissions = realizedSales.reduce((sum, s) => sumMoney(sum, s.commission_fee || 0), 0);
+                  const totalSaleShipping = realizedSales.reduce((sum, s) => sumMoney(sum, s.sale_shipping || 0), 0);
+                  const summary = realizedSummary(form, form._sales, cbRate);
                   const netProfit = summary.netProfit;
                   return (
                     <>

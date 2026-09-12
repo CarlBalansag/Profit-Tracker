@@ -1,4 +1,4 @@
-import { allocatedCost } from '../../../shared/finance.mjs';
+import { allocatedCost, sumMoney } from '../utils/finance';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { csvText, downloadFile } from '../utils/downloads';
@@ -74,7 +74,7 @@ const Inventory = () => {
   );
 
   // Summary card totals stay on the flat list so numbers are always correct
-  const totalCapital = processedInventory.reduce((sum, item) => sum + allocatedCost(item, item.qty_on_hand), 0);
+  const totalCapital = processedInventory.reduce((sum, item) => sumMoney(sum, allocatedCost(item, item.qty_on_hand)), 0);
   const totalUnits = processedInventory.reduce((sum, item) => sum + item.qty_on_hand, 0);
   const agingUnits = processedInventory.filter(i => i.daysInInv > 30).reduce((sum, item) => sum + item.qty_on_hand, 0);
   const activeListings = processedInventory.filter(i => i.status === 'LISTED').reduce((sum, item) => sum + item.qty_on_hand, 0);

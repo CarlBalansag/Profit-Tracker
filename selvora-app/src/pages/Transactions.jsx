@@ -1,4 +1,4 @@
-import { allocatedCost, effectiveCashbackRate, saleEconomics, isRealizedSale } from '../../../shared/finance.mjs';
+import { allocatedCost, effectiveCashbackRate, saleEconomics, isRealizedSale, sumMoney, multiplyMoney, allocateMoney, batchCashback, saleOffset } from '../utils/finance';
 import { csvText, downloadFile } from '../utils/downloads';
 import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { useInventory, usePlatforms, usePaymentMethods, useInvalidate, apiFetch} from '../hooks/useApi';
@@ -441,8 +441,6 @@ const Transactions = () => {
 
   transactions.forEach(inv => {
 
-    const unitTax = inv.qty_purchased > 0 ? inv.sales_tax / inv.qty_purchased : 0;
-    const unitInboundShipping = inv.qty_purchased > 0 ? inv.shipping_cost_inbound / inv.qty_purchased : 0;
 
     // Always show a purchase row if there is unsold stock on hand, OR if the
     // item has no sales at all (qty_on_hand may be 0 due to a data issue — we
@@ -470,12 +468,12 @@ const Transactions = () => {
         rawSale: null,
         sale: null,
         profit: null,
-        cashback: unsoldCost * (effectiveRate / 100),
+        cashback: allocateMoney(batchCashback(inv, effectiveRate), displayQty, inv.qty_purchased, Math.max(0, inv.qty_purchased - displayQty)),
         payment: inv.payment_method?.name || '',
         paymentMethodId: inv.payment_method_id || '',
         status: inv.status || 'PURCHASED',
-        tax: unitTax * displayQty,
-        shipping: unitInboundShipping * displayQty,
+        tax: allocateMoney(inv.sales_tax, displayQty, inv.qty_purchased, Math.max(0, inv.qty_purchased - displayQty)),
+        shipping: allocateMoney(inv.shipping_cost_inbound, displayQty, inv.qty_purchased, Math.max(0, inv.qty_purchased - displayQty)),
         category: inv.category || null,
         tracking_number: inv.tracking_number || null,
       });
@@ -484,8 +482,8 @@ const Transactions = () => {
     if (inv.sales?.length > 0) {
       inv.sales.forEach(sale => {
         // Proportionally allocate tax, shipping, and fees based on qty sold vs qty purchased
-        const allocatedTax = unitTax * sale.quantity;
-        const allocatedShipping = unitInboundShipping * sale.quantity;
+        const allocatedTax = allocateMoney(inv.sales_tax, sale.quantity, inv.qty_purchased, saleOffset(inv, sale));
+        const allocatedShipping = allocateMoney(inv.shipping_cost_inbound, sale.quantity, inv.qty_purchased, saleOffset(inv, sale));
         const economics = saleEconomics(inv, sale);
         const totalUnitCost = economics.cost;
         const profit = isRealizedSale(sale) ? economics.netProfit : 0;
@@ -506,7 +504,7 @@ const Transactions = () => {
           rawCost: inv.unit_purchase_cost,
           cost: totalUnitCost,
           rawSale: sale.unit_price,
-          sale: sale.unit_price * sale.quantity,
+          sale: multiplyMoney(sale.unit_price, sale.quantity),
           profit,
           cashback: economics.cashback,
           payment: inv.payment_method?.name || '',
@@ -583,8 +581,8 @@ const Transactions = () => {
   const pagedRows = filteredRows.slice(pageIndex * 25, (pageIndex + 1) * 25);
 
   // ─── Summary stats derived from filteredRows (respond to all active filters) ────
-  const totalCostSum    = filteredRows.reduce((s, r) => s + (r.cost || 0), 0);
-  const totalProfitSum  = filteredRows.filter(r => r.isSale).reduce((s, r) => s + (r.profit || 0), 0);
+  const totalCostSum    = filteredRows.reduce((s, r) => sumMoney(s, r.cost || 0), 0);
+  const totalProfitSum  = filteredRows.filter(r => r.isSale).reduce((s, r) => sumMoney(s, r.profit || 0), 0);
   const listedCount     = filteredRows.filter(r => !r.isSale).reduce((s, r) => s + r.qty, 0);
   const soldCount       = filteredRows.filter(r => r.isSale).reduce((s, r) => s + r.qty, 0);
 

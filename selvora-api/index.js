@@ -186,6 +186,7 @@ passport.deserializeUser(async (id, done) => {
 });
 
 // --- ROUTES ---
+app.use(require('./middleware/currencyJSON'));
 app.use('/api/payment-methods', paymentMethodsRouter);
 app.use('/api/inventory', inventoryRouter);
 app.use('/api/sales', salesRouter);

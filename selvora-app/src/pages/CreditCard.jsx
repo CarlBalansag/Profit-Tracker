@@ -1,3 +1,4 @@
+import { percentageMoney } from '../utils/finance';
 import React, { useState } from 'react';
 import { useCreditCard } from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
@@ -212,7 +213,7 @@ function CreditCard() {
   const uncoveredLoss = activeCard?.uncoveredLoss ?? 0;
   const amountToPay = activeCard?.amountToPay ?? 0;
   const cashbackEarned = activeCard?.cashbackEarned ?? 0;
-  const minPayment = activeCard?.min_payment_pct > 0 ? totalSpend * activeCard.min_payment_pct / 100 : null;
+  const minPayment = activeCard?.min_payment_pct > 0 ? percentageMoney(totalSpend, activeCard.min_payment_pct) : null;
 
   // Topbar badge: pick the most urgent due date across all cards
   const urgentCard = cards.reduce((worst, c) => {
