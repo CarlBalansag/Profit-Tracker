@@ -141,3 +141,12 @@ Added a validated transaction-wide inventory edit endpoint. It checks ownership 
 - Full local API: 128 passed, six native cases skipped locally. Full frontend: 59 passed. Zero-warning lint and production/PWA build passed. Added native transaction-wide rollback/retry coverage for the next CI run.
 - CI run 34708538284 on the previous checkpoint passed all gates, including five native PostgreSQL cases for sale and inventory concurrent edits. No hosted migrations, live data writes or deployment.
 - Reconciliation separately found inline BUY editing sends remaining units as total purchased units, and inline sale saves still use separate requests. Those are the next focused QA-02 task; they are not changed in this expanded-editor task.
+
+## QA-02 reconciliation: inline edits preserve batches and save atomically
+
+Inline BUY quantity edits now add already-sold units when calculating total purchased quantity. Existing sale edits save purchase relationships and sale fields together through the atomic endpoint; failure retains the draft. Optional inline sale creation is supported by that same endpoint and rolls back with purchase updates on failure. Payout clearing is explicit null. Purchase status is preserved.
+
+- Four frontend cases passed: unchanged partial BUY batch/relationships, remaining quantity changes, combined SALE payload/failure preservation, invalid fractional quantity rejected before request. Related pagination/selection tests pass. Zero-warning lint passes.
+- Ten transaction-wide API cases passed, including optional sale create, duplicate repeat rejection, sale-create rollback/retry and prior combined-edit/ownership cases. Seven atomic sale cases also pass.
+- Browser unchanged BUY save preserved three remaining units, $312 remaining basis, full $520 batch basis and $69.16 realized profit; store/card/status remained present.
+- CI run 34708764255 passed all gates on the preceding QA-03 commit, including all six native PostgreSQL cases. This inline change awaits the next CI run. No hosted changes.

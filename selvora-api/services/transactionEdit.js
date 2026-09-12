@@ -1,4 +1,4 @@
-const { updateInventory, updateSale } = require('../validation/schemas');
+const { updateInventory, updateSale, createSale } = require('../validation/schemas');
 const { currencyWrite } = require('./currencyWrite');
 const { requireOwned } = require('./ownership');
 
@@ -21,7 +21,7 @@ async function editTransaction(prisma, inventoryId, userId, payload) {
   if (new Set(ids).size !== ids.length) throw fail(400, 'A sale can only appear once');
   await requireOwned('platform', payload.inventory.vendor_id, userId, 'Vendor');
   await requireOwned('paymentMethod', payload.inventory.payment_method_id, userId, 'Payment method');
-  for (const sale of payload.sales) {
+  for (const sale of [...payload.sales, ...(payload.newSale ? [payload.newSale] : [])]) {
     await requireOwned('platform', sale.platform_id, userId, 'Sale platform');
     await requireOwned('buyer', sale.buyer_id, userId, 'Buyer');
   }
@@ -35,7 +35,7 @@ async function editTransaction(prisma, inventoryId, userId, payload) {
     const byId = new Map(sales.map(sale => [sale.id, sale]));
     for (const sale of payload.sales) if (!byId.has(sale.id)) throw fail(404, 'Sale not found in this transaction');
     const changes = new Map(payload.sales.map(sale => [sale.id, sale]));
-    const sold = sales.reduce((sum, sale) => sum + (changes.get(sale.id)?.quantity ?? sale.quantity), 0);
+    const sold = sales.reduce((sum, sale) => sum + (changes.get(sale.id)?.quantity ?? sale.quantity), 0) + (payload.newSale?.quantity ?? 0);
     const purchased = payload.inventory.qty_purchased ?? existing.qty_purchased;
     if (sold > purchased) throw fail(400, 'Quantity purchased cannot be lower than units sold');
     if (payload.inventory.qty_on_hand !== undefined && payload.inventory.qty_on_hand !== purchased - sold) {
@@ -48,6 +48,12 @@ async function editTransaction(prisma, inventoryId, userId, payload) {
       const claim = await tx.sales.updateMany({ where: { id: sale.id, inventory_id: inventoryId, quantity: byId.get(sale.id).quantity },
         data: currencyWrite('Sales', writable(sale, updateSale)) });
       if (claim.count !== 1) throw fail(409, 'Sale changed while saving. Reload and retry.');
+    }
+    if (payload.newSale) {
+      await tx.sales.create({ data: currencyWrite('Sales', {
+        ...writable(payload.newSale, createSale), inventory_id: inventoryId,
+        sale_date: dateValue(payload.newSale.sale_date) || new Date(),
+      }) });
     }
     return tx.inventory.findUnique({ where: { id: inventoryId }, include: { sales: true, vendor: true, payment_method: true } });
   });

@@ -300,6 +300,7 @@ const Transactions = () => {
       rawId: row.rawId,
       saleId: row.saleId,
       rawQtyOnHand: row.rawQtyOnHand,
+      rawQtyPurchased: row.rawQtyPurchased,
       paymentMethodId: row.paymentMethodId || '',
       tracking_number: row.tracking_number || '',
       commission_fee: row.rawCommission ?? '',
@@ -325,111 +326,50 @@ const Transactions = () => {
   };
 
   const saveEdit = async () => {
+    if (saving) return;
+    const quantity = Number(editData.qty);
+    if (!Number.isInteger(quantity) || quantity < 1) { toast.error('Quantity must be a whole number above zero.'); return; }
     setSaving(true);
     try {
-      let res;
+      const inventory = {
+        payment_method_id: editData.paymentMethodId || null,
+        vendor_id: editData.vendorId || null,
+        tracking_number: editData.tracking_number || null,
+      };
+      const body = { inventory, sales: [] };
       if (editData.isSale) {
-        const parsedSale = parseFloat(editData.sale);
-        const salePayload = {
-          quantity: parseInt(editData.qty) || 1,
-          status: editData.status,
+        body.sales.push({
+          id: editData.saleId, quantity, status: editData.status,
           platform_id: editData.platformId || null,
-          unit_price: !isNaN(parsedSale) ? parsedSale : undefined,
-          commission_fee: parseFloat(editData.commission_fee) || 0,
-          sale_date: editData.sale_date ? new Date(editData.sale_date).toISOString() : undefined,
-          payout_date: editData.payout_date ? new Date(editData.payout_date).toISOString() : undefined,
-        };
-        // payment method and tracking live on inventory, update them separately
-        const invRes = await apiFetch(`/api/inventory/${editData.rawId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            payment_method_id: editData.paymentMethodId || null,
-            vendor_id: editData.vendorId || null,
-            tracking_number: editData.tracking_number || null,
-          })
-        });
-        if (!invRes.ok) {
-          const resJson = await invRes.json().catch(() => ({}));
-          handleSaveError('Inventory update', invRes.status, resJson);
-          return;
-        }
-        res = await apiFetch(`/api/sales/${editData.saleId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(salePayload)
+          unit_price: editData.sale ?? undefined,
+          commission_fee: editData.commission_fee === '' ? 0 : editData.commission_fee,
+          sale_date: editData.sale_date || undefined,
+          payout_date: editData.payout_date || null,
         });
       } else {
-        const newQty = parseInt(editData.qty) || 1;
-        const parsedSale = parseFloat(editData.sale);
-        const hasSalePrice = !isNaN(parsedSale) && parsedSale > 0;
-        // Auto-set status to SOLD if a sale price or platform was provided
-        const resolvedStatus = (hasSalePrice || editData.platformId) ? 'SOLD' : editData.status;
-        const invPayload = {
-          product_name: editData.product,
-          unit_purchase_cost: parseFloat(editData.cost) || 0,
-          qty_purchased: newQty,
-          // if a sale is being created, set qty_on_hand to newQty first so the POST can deduct it
-          qty_on_hand: newQty,
-          status: resolvedStatus,
-          vendor_id: editData.vendorId || null,
-          payment_method_id: editData.paymentMethodId || null,
-          tracking_number: editData.tracking_number || null,
-        };
-        res = await apiFetch(`/api/inventory/${editData.rawId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(invPayload)
-        });
-        if (!res.ok) {
-          const resJson = await res.json().catch(() => ({}));
-          handleSaveError('Inventory update', res.status, resJson);
-          return;
+        const soldUnits = editData.rawQtyPurchased - editData.rawQtyOnHand;
+        Object.assign(inventory, { product_name: editData.product,
+          unit_purchase_cost: editData.cost === '' ? 0 : editData.cost,
+          qty_purchased: soldUnits + quantity, status: editData.status });
+        if (editData.sale !== null && editData.sale !== '' && editData.sale !== undefined) {
+          body.newSale = { quantity, unit_price: editData.sale,
+            platform_id: editData.platformId || null, status: 'SOLD' };
         }
-        // If user entered a sale price, create a sale record (POST deducts qty_on_hand)
-        if (hasSalePrice) {
-          const saleRes = await apiFetch(`/api/sales`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              inventory_id: editData.rawId,
-              platform_id: editData.platformId || null,
-              quantity: newQty,
-              unit_price: parsedSale,
-              commission_fee: 0,
-              sale_date: new Date().toISOString(),
-              status: resolvedStatus || 'SOLD',
-            })
-          });
-          if (!saleRes.ok) {
-            const errJson = await saleRes.json().catch(() => ({}));
-            handleSaveError('Sale creation', saleRes.status, errJson);
-            return;
-          }
-        }
-        await invalidate.inventory();
-        toast.success('Transaction saved.');
-        setEditingId(null);
+      }
+      const response = await apiFetch('/api/inventory/' + editData.rawId + '/transaction', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        handleSaveError('Transaction update', response.status, await response.json().catch(() => ({})));
         return;
       }
-      if (!res.ok) {
-        const resJson = await res.json().catch(() => ({}));
-        handleSaveError('Sale update', res.status, resJson);
-        return;
-      }
-      await invalidate.inventory();
+      await invalidate.all();
       toast.success('Transaction saved.');
       setEditingId(null);
     } catch (err) {
-      console.error('[saveEdit] unexpected error:', err);
       toast.error('Save error: ' + err.message);
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
   // Build rows
@@ -461,6 +401,7 @@ const Transactions = () => {
         platformId: '',
         qty: displayQty,
         rawQtyOnHand: inv.qty_on_hand,
+        rawQtyPurchased: inv.qty_purchased,
         rawCost: inv.unit_purchase_cost,
         cost: unsoldCost,
         rawSale: null,
@@ -499,6 +440,7 @@ const Transactions = () => {
           platformId: sale.platform_id || '',
           qty: sale.quantity,
           rawQtyOnHand: inv.qty_on_hand,
+          rawQtyPurchased: inv.qty_purchased,
           rawCost: inv.unit_purchase_cost,
           cost: totalUnitCost,
           rawSale: sale.unit_price,

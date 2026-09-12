@@ -11,6 +11,25 @@ const write = async (body, authenticated = true) => {
   return { status: response.status, body: await response.json() };
 };
 describe('atomic expanded transaction edits', () => {
+  it('creates an inline sale atomically while preserving the purchase batch and existing sales', async () => {
+    const body = { inventory: { qty_purchased: 5 }, sales: [], newSale: { quantity: 3, unit_price: '160.01' } };
+    expect((await write(body)).status).toBe(200);
+    expect(harness.db.inventory[0]).toMatchObject({ qty_purchased: 5, qty_on_hand: 0, status: 'PURCHASED' });
+    expect(harness.db.sales).toHaveLength(2);
+    expect(harness.db.sales[1]).toMatchObject({ quantity: 3, unit_price_decimal: '160.01' });
+    expect((await write(body)).status).toBe(400);
+    expect(harness.db.sales).toHaveLength(2);
+  });
+  it('preserves all purchase data if an inline new sale fails, then permits retry', async () => {
+    const original = structuredClone({ inventory: harness.db.inventory, sales: harness.db.sales });
+    harness.faults['sales.create'] = true;
+    const body = { inventory: { unit_purchase_cost: 200 }, sales: [], newSale: { quantity: 1, unit_price: 300 } };
+    expect((await write(body)).status).toBe(500);
+    expect({ inventory: harness.db.inventory, sales: harness.db.sales }).toEqual(original);
+    harness.faults['sales.create'] = false;
+    expect((await write(body)).status).toBe(200);
+    expect(harness.db.inventory[0].qty_on_hand).toBe(2);
+  });
   it('updates purchase and multiple sales together and reconciles combined quantity edits', async () => {
     const second = randomUUID();
     harness.db.sales.push({ ...harness.db.sales[0], id: second, quantity: 1 });

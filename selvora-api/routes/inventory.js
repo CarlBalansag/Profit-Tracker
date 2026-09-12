@@ -222,6 +222,7 @@ router.get('/:id', isAuthenticated, async (req, res, next) => {
 router.put('/:id/transaction', isAuthenticated, validateBody(require('zod').z.object({
   inventory: updateInventory,
   sales: require('../validation/schemas').updateSale.extend({ id: require('zod').z.string().uuid() }).array().max(500),
+  newSale: require('../validation/schemas').createSale.omit({ inventory_id: true }).optional(),
 })), async (req, res, next) => {
   try {
     const result = await require('../services/transactionEdit').editTransaction(prisma, req.params.id, req.user.id, req.body);
