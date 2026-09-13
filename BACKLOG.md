@@ -14,6 +14,9 @@ Work on one task at a time under [AGENTS.md](AGENTS.md).
 
 ## Product features
 
+- Schedule C expense worksheet is implemented with per-user opt-in, mixed business use, evidence references, annual reviewed totals and review queue. Next focused stages: accounting-method setup, verified mappings for additional tax years, expense splits/refunds and deferred deduction timing, category/vendor defaults, income/refund/customer-shipping worksheets, historical inventory/COGS and reviewed-year snapshots. Deploy its additive migration only in the intended database verification window.
+- Expense date defaults use the UTC day (`Expenses.jsx: todayStr`): in the US evening, open Add Expense and compare its default date with the local calendar date. Resolve local-date defaults as a separate focused task; tax payment dates remain explicit inputs.
+
 - Consider native Excel export if needed; existing-data Transactions CSV, Analytics JSON and Settings CSV/JSON/receipt exports are implemented.
 - Add bulk CSV import with field mapping and validation.
 - Implement tenant-owned invoices, sale linking, partial payments and overdue tracking; current invoice screen is a prototype.

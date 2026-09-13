@@ -1,5 +1,6 @@
 const { z } = require('zod');
 const { optionalCurrency, exactValue } = require('./currency');
+const { taxDetails } = require('./scheduleC');
 const exactOptionalMoney = optionalCurrency();
 const exactOptionalRate = optionalCurrency(6);
 
@@ -156,6 +157,7 @@ const updateSale = z.object({
 }).passthrough();
 
 const createExpense = z.object({
+  tax_details: taxDetails.optional(),
   name: requiredString('name'),
   amount: exactValue(2),
   category: optionalString,
@@ -164,7 +166,7 @@ const createExpense = z.object({
   receipt_url: optionalString,
 }).passthrough();
 
-const updateExpense = createExpense.partial();
+const updateExpense = createExpense.partial().extend({ expected_tax_version: z.number().int().min(0).optional() });
 
 const optionalDay = z.preprocess(
   emptyToUndefined,

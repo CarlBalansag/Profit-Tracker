@@ -16,6 +16,8 @@ describe('fresh database migration chain', () => {
       expect(result.rows).toEqual([{ column_name: 'unit_purchase_cost', data_type: 'double precision' }, { column_name: 'unit_purchase_cost_decimal', data_type: 'numeric' }]);
       const owner = await db.query(`SELECT is_nullable FROM information_schema.columns WHERE table_name = 'Buyer' AND column_name = 'user_id'`);
       expect(owner.rows).toEqual([{ is_nullable: 'NO' }]);
+      const tax = await db.query(`SELECT table_name, column_name, data_type FROM information_schema.columns WHERE (table_name = 'User' AND column_name = 'schedule_c_enabled') OR (table_name = 'Expense' AND column_name = 'tax_details') ORDER BY table_name`);
+      expect(tax.rows).toEqual([{ table_name: 'Expense', column_name: 'tax_details', data_type: 'jsonb' }, { table_name: 'User', column_name: 'schedule_c_enabled', data_type: 'boolean' }]);
     } finally { await db.close(); }
   }, 30000);
 });

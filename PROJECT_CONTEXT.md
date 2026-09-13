@@ -135,6 +135,7 @@ API routes require sessions except explicitly public auth/health and legacy cale
 | Transactions `/transactions` | `inventory.js`, `sales.js`, TransactionDetailModal; merged purchase/sale editing |
 | Inventory `/inventory` | `inventory.js`, `productNotes.js`; remaining stock grouped by product name |
 | Expenses `/expenses` | `expenses.js`, `recurringExpenses.js`; expense management and CSV export |
+| Schedule C `/schedule-c` | `scheduleC.js`, `services/scheduleC.js`; optional, owner-scoped cash-method expense worksheet and review queue |
 | Receipts `/receipts` | `receipts.js`; index, attach, detach, preview |
 | Analytics `/analytics` | `analytics.js`; dashboard-derived reporting |
 | Cash Flow `/cashflow` | `analytics.js`; inspect latest-sale detail scope separately from summary totals |
@@ -153,6 +154,7 @@ Some export, inventory and settings controls remain placeholders; see QA-20/21 b
 Inventory supports list/create/detail/update/delete plus product-names and recent-by-name lookups.
 Sales supports list/create/update, with no standalone delete endpoint.
 Receipts supports list, attach and detach. Product notes use GET/PUT/DELETE keyed by name.
+Schedule C opt-in is the dedicated User.schedule_c_enabled boolean, read/written through `/api/preferences/schedule-c`; it does not replace dashboard accounting_preferences. Expense.tax_details is validated JSON with business use, percentage, payee, purpose, category, payment details and review status. Expense.tax_version guards concurrent edits/reviews; reviewed PUT requests must supply expected_tax_version. Incomplete records remain saveable. Reviewed paid expenses are grouped by payment year with exact per-expense business-use rounding; personal/unpaid expenses are excluded and unknown dates remain visible for review across years. Ordinary Expense amounts are unchanged. Only 2025 line mappings are verified; other years display planning/reference labels. This first version excludes accrual reporting, income/COGS, deferred deductions, equipment, vehicle and home-office calculations, expense refunds/splits, annual locking and automatic category suggestions. Its additive migration has not been applied to hosted data.
 Calendar supports CRUD, `/auto`, `/token`, and legacy `/feed.ics`; the latter redirects to the published feed.
 Other CRUD paths and router registration are easiest to verify in API startup and the relevant router.
 

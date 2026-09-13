@@ -10,6 +10,7 @@ import { Cashouts } from '../components/Settings/Cashouts';
 import { Marketplaces } from '../components/Settings/Marketplaces';
 import { Accounts } from '../components/Settings/Accounts';
 import { UiPreferences } from '../components/Settings/UiPreferences';
+import { ScheduleCSettings } from '../components/Settings/ScheduleCSettings';
 import { useAuth } from '../context/auth';
 
 function Settings() {
@@ -26,6 +27,7 @@ function SettingsContent({ location }) {
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'datasetup', label: 'Data Setup', icon: Database },
     { id: 'data', label: 'Data', icon: FileJson },
+    { id: 'tax', label: 'Schedule C', icon: FileJson },
     { id: 'notifications', label: 'Notifications', icon: Bell, disabled: true, tag: 'Unavailable' },
     { id: 'appearance', label: 'Appearance', icon: Palette },
   ];
@@ -144,6 +146,7 @@ function SettingsContent({ location }) {
 
           {/* DATA TAB */}
           {activeTab === 'data' && <DataExport />}
+          {activeTab === 'tax' && <ScheduleCSettings />}
 
           {/* APPEARANCE TAB */}
           {activeTab === 'appearance' && (

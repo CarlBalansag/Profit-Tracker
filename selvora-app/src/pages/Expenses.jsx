@@ -4,6 +4,8 @@ import { apiFetch } from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { getExpenseInsights } from './expenseInsights';
 import { toast } from 'sonner';
+import { ExpenseTaxFields } from '../components/ScheduleC/ExpenseTaxFields';
+import { emptyTaxDetails, taxReviewIssues } from '../../../shared/scheduleC.mjs';
 import {
   Receipt, Download, Plus, DollarSign, TrendingUp,
   Search, X, Trash2, Pencil, RefreshCw, Pause, Play, Wallet, ArrowUpRight, ArrowDownRight,
@@ -14,6 +16,7 @@ const CATEGORIES = [
   { value: 'MEMBERSHIP',      label: 'Membership',        color: 'text-amber-400' },
   { value: 'PLATFORM_FEE',    label: 'Platform Fee',      color: 'text-purple-400' },
   { value: 'SHIPPING',        label: 'Shipping',          color: 'text-green-400' },
+  { value: 'SHIPPING_SUPPLIES', label: 'Shipping supplies', color: 'text-green-400' },
   { value: 'SOFTWARE',        label: 'Software / Tools',  color: 'text-cyan-400' },
   { value: 'OTHER',           label: 'Other',             color: 'text-gray-400' },
 ];
@@ -44,10 +47,13 @@ function ExpenseModal(props) {
   return props.open ? <ExpenseForm key={`${props.initial?.id || "new"}-${!!props.initialIsRecurring}`} {...props} /> : null;
 }
 
-function ExpenseForm({ onClose, onSaveOneOff, onSaveRecurring, initial, initialIsRecurring }) {
+function ExpenseForm({ onClose, onSaveOneOff, onSaveRecurring, initial, initialIsRecurring, taxEnabled }) {
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
   const nameRef = useRef(null);
+  const busy = useRef(false);
+  const [tax, setTax] = useState(() => ({ ...emptyTaxDetails(), ...initial?.tax_details }));
+  const showTax = !initialIsRecurring && (taxEnabled || !!initial?.tax_details);
 
   const [form, setForm] = useState(() => {
     const today = todayStr();
@@ -83,10 +89,14 @@ function ExpenseForm({ onClose, onSaveOneOff, onSaveRecurring, initial, initialI
   });
   useEffect(() => { nameRef.current?.focus(); }, []);
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const set = (k, v) => {
+    setForm(f => ({ ...f, [k]: v }));
+    if (['amount', 'date', 'name', 'category'].includes(k)) setTax(value => ({ ...value, reviewed: false }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (busy.current) return;
     if (!form.name.trim()) { setError('Name is required.'); return; }
     if (!form.amount || isNaN(parseFloat(form.amount)) || parseFloat(form.amount) <= 0) {
       setError('Enter a valid amount greater than 0.'); return;
@@ -96,7 +106,8 @@ function ExpenseForm({ onClose, onSaveOneOff, onSaveRecurring, initial, initialI
     } else {
       if (!form.date) { setError('Date is required.'); return; }
     }
-    setSaving(true); setError('');
+    if (!form.recurring && showTax && tax.reviewed && tax.business_use !== 'personal' && taxReviewIssues(tax).length) { setError('Complete business details before marking reviewed.'); return; }
+    busy.current = true; setSaving(true); setError('');
     try {
       if (form.recurring) {
         await onSaveRecurring({
@@ -115,18 +126,22 @@ function ExpenseForm({ onClose, onSaveOneOff, onSaveRecurring, initial, initialI
           category: form.category || null,
           date:     form.date,
           notes:    form.notes.trim() || null,
+          ...(showTax ? { tax_details: tax } : {}),
+          ...(initial ? { expected_tax_version: initial.tax_version ?? 0 } : {}),
         });
       }
       onClose();
     } catch (err) { setError(err.message || 'Failed to save.'); setSaving(false); }
+    finally { busy.current = false; }
   };
+  const dismiss = () => { if (!busy.current) onClose(); };
 
   const accent = form.recurring ? 'emerald' : 'purple';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl bg-[#16181d] border border-white/10 shadow-2xl">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={dismiss} />
+      <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-[#16181d] border border-white/10 shadow-2xl">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/[0.06]">
@@ -142,7 +157,7 @@ function ExpenseForm({ onClose, onSaveOneOff, onSaveRecurring, initial, initialI
                 : 'Add Expense'}
             </h2>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+          <button onClick={dismiss} disabled={saving} aria-label="Close expense" className="text-gray-500 hover:text-white transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -154,7 +169,7 @@ function ExpenseForm({ onClose, onSaveOneOff, onSaveRecurring, initial, initialI
             <label className="block text-xs font-medium text-gray-400 mb-1.5">Expense Name *</label>
             <input
               ref={nameRef} type="text"
-              placeholder={form.recurring ? 'e.g. eBay Store Monthly Fee' : 'e.g. Shipping Label Purchase'}
+              placeholder={form.recurring ? 'e.g. eBay Store Monthly Fee' : 'e.g. Packing Tape'}
               value={form.name} onChange={e => set('name', e.target.value)}
               className={`w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-gray-600 bg-white/[0.04] border border-white/10 focus:outline-none focus:border-${accent}-500/50`}
             />
@@ -226,6 +241,8 @@ function ExpenseForm({ onClose, onSaveOneOff, onSaveRecurring, initial, initialI
           </div>
 
           {/* Recurring toggle — hide when editing an existing entry (type is fixed) */}
+          {showTax && !form.recurring && <ExpenseTaxFields value={tax} onChange={setTax} disabled={saving} />}
+          {taxEnabled && form.recurring && <p className="text-xs text-gray-400">Generated expenses will need payment and business details confirmed individually in Schedule C.</p>}
           {!initial && (
             <button
               type="button"
@@ -251,7 +268,7 @@ function ExpenseForm({ onClose, onSaveOneOff, onSaveRecurring, initial, initialI
 
           {/* Actions */}
           <div className="flex items-center justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose}
+            <button type="button" onClick={dismiss} disabled={saving}
               className="px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-colors">
               Cancel
             </button>
@@ -272,6 +289,7 @@ function ExpenseForm({ onClose, onSaveOneOff, onSaveRecurring, initial, initialI
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 const Expenses = () => {
+  const [taxEnabled, setTaxEnabled] = useState(false);
   const [expenses, setExpenses]       = useState([]);
   const [recurring, setRecurring]     = useState([]);
   const [loading, setLoading]         = useState(true);
@@ -300,6 +318,11 @@ const Expenses = () => {
   };
 
   useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    let active = true;
+    apiFetch('/api/preferences/schedule-c').then(requireSuccessfulResponse).then(response => response.json()).then(data => { if (active) setTaxEnabled(data.enabled); }).catch(() => { /* Existing expense entry remains available; worksheet shows unclassified records. */ });
+    return () => { active = false; };
+  }, []);
 
   const openAdd = () => { setEditingItem(null); setEditingIsRec(false); setModalOpen(true); };
   const openEditExp = (exp) => { setEditingItem(exp); setEditingIsRec(false); setModalOpen(true); };
@@ -705,6 +728,7 @@ const Expenses = () => {
         onSaveRecurring={handleSaveRecurring}
         initial={editingItem}
         initialIsRecurring={editingIsRec}
+        taxEnabled={taxEnabled}
       />
 
       {/* Delete one-off confirm */}

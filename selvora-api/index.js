@@ -195,6 +195,7 @@ app.use('/api/analytics', analyticsRouter);
 app.use('/api/accounts', accountsRouter);
 app.use('/api/preferences', preferencesRouter);
 app.use('/api/expenses', expensesRouter);
+app.use('/api/schedule-c', require('./routes/scheduleC'));
 app.use('/api/recurring-expenses', recurringExpensesRouter);
 app.use('/api/receipts', receiptsRouter);
 app.use('/api/creditcard', creditCardRouter);

@@ -26,7 +26,7 @@ describe.skipIf(!databaseUrl)('native PostgreSQL API integration', () => {
   beforeAll(async () => {
     process.env.DATABASE_URL = databaseUrl;
     process.env.DIRECT_URL = databaseUrl;
-    for (const module of ['../prisma', '../services/calendarFeed', '../services/ownership', '../services/transactionEdit', '../routes/sales', '../routes/inventory', '../routes/recurringExpenses']) {
+    for (const module of ['../prisma', '../services/calendarFeed', '../services/ownership', '../services/transactionEdit', '../routes/sales', '../routes/inventory', '../routes/recurringExpenses', '../routes/expenses', '../routes/preferences', '../routes/scheduleC']) {
       const modulePath = require.resolve(module);
       originalModules.set(modulePath, require.cache[modulePath]);
       delete require.cache[modulePath];
@@ -41,6 +41,9 @@ describe.skipIf(!databaseUrl)('native PostgreSQL API integration', () => {
     app.use('/api/sales', require('../routes/sales'));
     app.use('/api/inventory', require('../routes/inventory'));
     app.use('/api/recurring-expenses', require('../routes/recurringExpenses'));
+    app.use('/api/expenses', require('../routes/expenses'));
+    app.use('/api/preferences', require('../routes/preferences'));
+    app.use('/api/schedule-c', require('../routes/scheduleC'));
     app.use((err, req, res, next) => res.status(err.status || 500).json({ error: err.message }));
     server = app.listen(0, '127.0.0.1');
     await new Promise(resolve => server.once('listening', resolve));
@@ -158,5 +161,46 @@ describe.skipIf(!databaseUrl)('native PostgreSQL API integration', () => {
     expect([404, 409]).toContain(results.find(r => r.status !== 200).status);
     expect((await prisma.inventory.findUnique({ where: { id: inventory.id } })).qty_on_hand).toBe(1);
     expect(await prisma.sales.count({ where: { inventory_id: inventory.id } })).toBe(0);
+  });
+  it('persists expense tax JSON and user opt-in, isolates owners and keeps precise worksheet adjustments separate', async () => {
+    expect((await request('GET', '/api/schedule-c?year=2026')).status).toBe(403);
+    expect((await request('PUT', '/api/preferences/schedule-c', { enabled: true })).status).toBe(200);
+    const tax = { business_use: 'mixed', business_percent: '80', payee: 'Native fixture packing store', purpose: 'Pack customer orders', tax_category: 'SUPPLIES', payment_status: 'paid', paid_date: '2026-01-01', payment_reference: 'Fixture statement, item 1', reviewed: true };
+    const created = await request('POST', '/api/expenses', { name: 'Native packing fixture', amount: '25.00', date: '2025-12-30', tax_details: tax });
+    expect(created.status).toBe(200);
+    const stored = await prisma.expense.findUnique({ where: { id: created.body.id } });
+    expect(stored.tax_details).toEqual(tax); expect(stored.amount_decimal.toFixed(2)).toBe('25.00');
+    const foreignOwner = await prisma.user.create({ data: { email: `${randomUUID()}@qa.invalid` } });
+    const foreign = await prisma.expense.create({ data: { user_id: foreignOwner.id, name: 'Private native expense', amount: 999, date: new Date(), tax_details: tax } });
+    const worksheet = await request('GET', '/api/schedule-c?year=2026');
+    expect(worksheet.body.total).toBe('20.00'); expect(worksheet.body.rows).toHaveLength(1);
+    expect((await request('PUT', `/api/expenses/${foreign.id}`, { tax_details: tax })).status).toBe(404);
+    expect((await request('PUT', `/api/expenses/${created.body.id}`, { notes: 'Keep tax details' })).status).toBe(200);
+    expect((await prisma.expense.findUnique({ where: { id: created.body.id } })).tax_details).toEqual(tax);
+    await request('PUT', `/api/expenses/${created.body.id}`, { amount: '30.00' });
+    expect((await request('PUT', `/api/expenses/${created.body.id}`, { tax_details: tax, expected_tax_version: 0 })).status).toBe(409);
+    expect((await request('GET', '/api/schedule-c?year=2026')).body.total).toBe('0.00');
+    await request('PUT', '/api/preferences/schedule-c', { enabled: false });
+    expect((await prisma.expense.findUnique({ where: { id: created.body.id } })).amount_decimal.toFixed(2)).toBe('30.00');
+  });
+  it('rejects a simultaneous expense edit or review against the same stale version', async () => {
+    const created = await request('POST', '/api/expenses', { name: 'Native review race', amount: '25.00', date: '2026-01-01' });
+    const tax = { business_use: 'business', business_percent: '100', payee: 'QA', purpose: 'Business packing', tax_category: 'SUPPLIES', payment_status: 'paid', paid_date: '2026-01-01', payment_reference: 'Fixture payment 1', reviewed: true };
+    const originalRead = prisma.expense.findUnique;
+    let reads = 0, release;
+    const bothRead = new Promise(resolve => { release = resolve; });
+    prisma.expense.findUnique = async args => {
+      const value = await originalRead.call(prisma.expense, args);
+      if (args.where.id === created.body.id && reads < 2) { if (++reads === 2) release(); await bothRead; }
+      return value;
+    };
+    let results;
+    try { results = await Promise.all([request('PUT', `/api/expenses/${created.body.id}`, { amount: '30.00' }), request('PUT', `/api/expenses/${created.body.id}`, { tax_details: tax, expected_tax_version: 0 })]); }
+    finally { prisma.expense.findUnique = originalRead; }
+    expect(results.map(result => result.status).sort()).toEqual([200, 409]);
+    const stored = await prisma.expense.findUnique({ where: { id: created.body.id } });
+    expect(stored.tax_version).toBe(1);
+    if (stored.tax_details?.reviewed) expect(stored.amount_decimal.toFixed(2)).toBe('25.00');
+    else expect(stored.amount_decimal.toFixed(2)).toBe('30.00');
   });
 });

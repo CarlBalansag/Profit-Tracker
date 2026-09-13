@@ -32,7 +32,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 // POST new expense
 router.post('/', isAuthenticated, validateBody(createExpense), async (req, res, next) => {
   try {
-    const { name, amount, category, date, notes, receipt_url } = req.body;
+    const { name, amount, category, date, notes, receipt_url, tax_details } = req.body;
     if (!name || amount === undefined || !date) {
       return res.status(400).json({ error: 'name, amount, and date are required' });
     }
@@ -45,6 +45,7 @@ router.post('/', isAuthenticated, validateBody(createExpense), async (req, res, 
         date: parseLocalDate(date),
         notes: notes || null,
         receipt_url: receipt_url || null,
+        ...(tax_details !== undefined ? { tax_details } : {}),
       })
     });
     res.json(expense);
@@ -60,8 +61,11 @@ router.put('/:id', isAuthenticated, validateBody(updateExpense), async (req, res
     if (!existing || existing.user_id !== req.user.id) {
       return res.status(404).json({ error: 'Not found' });
     }
-    const { name, amount, category, date, notes, receipt_url } = req.body;
+    const { name, amount, category, date, notes, receipt_url, tax_details } = req.body;
     const data = {};
+    if (tax_details?.reviewed && req.body.expected_tax_version === undefined) return res.status(400).json({ error: 'Reload the expense and provide its expected_tax_version before marking reviewed' });
+    if (tax_details !== undefined) data.tax_details = tax_details;
+    else if (existing.tax_details?.reviewed && ['amount', 'date', 'name', 'category'].some(key => req.body[key] !== undefined)) data.tax_details = { ...existing.tax_details, reviewed: false };
     if (name !== undefined)        data.name = name;
     if (amount !== undefined)      data.amount = parseFloat(amount);
     if (category !== undefined)    data.category = category || null;
@@ -69,7 +73,14 @@ router.put('/:id', isAuthenticated, validateBody(updateExpense), async (req, res
     if (notes !== undefined)       data.notes = notes || null;
     if (receipt_url !== undefined) data.receipt_url = receipt_url || null;
 
-    const updated = await prisma.expense.update({ where: { id: req.params.id }, data: currencyWrite('Expense', data) });
+    const updated = await prisma.$transaction(async tx => {
+      const claimed = await tx.expense.updateMany({
+        where: { id: req.params.id, user_id: req.user.id, tax_version: req.body.expected_tax_version ?? existing.tax_version ?? 0 },
+        data: { ...currencyWrite('Expense', data), tax_version: { increment: 1 } },
+      });
+      if (!claimed.count) throw Object.assign(new Error('Expense changed since it was opened. Reload the worksheet before reviewing again.'), { status: 409 });
+      return tx.expense.findUnique({ where: { id: req.params.id } });
+    });
     res.json(updated);
   } catch (err) {
     next(err);

@@ -43,6 +43,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <GlassNavItem icon={ArrowLeftRight} label="Transactions" to="/transactions" />
             <GlassNavItem icon={Package} label="Inventory" to="/inventory" />
             <GlassNavItem icon={Receipt} label="Expenses" to="/expenses" />
+            <GlassNavItem icon={FileText} label="Schedule C" to="/schedule-c" />
             <GlassNavItem icon={ChartColumn} label="Analytics" to="/analytics" />
             <GlassNavItem icon={Wallet} label="Cash Flow" to="/cashflow" />
             <GlassNavItem icon={CreditCardIcon} label="Credit Card" to="/creditcard" />
@@ -111,6 +112,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
           <SidebarSection title="Operations" isCollapsed={isCollapsed} tutorialId="sidebar-section-operations">
             <NavItem icon={Package} label="Inventory On Hand" to="/inventory" isCollapsed={isCollapsed} tutorialId="sidebar-inventory" />
             <NavItem icon={Receipt} label="Expenses" to="/expenses" isCollapsed={isCollapsed} tutorialId="sidebar-expenses" />
+            <NavItem icon={FileText} label="Schedule C" to="/schedule-c" isCollapsed={isCollapsed} />
             <NavItem icon={FileText} label="Receipts" to="/receipts" isCollapsed={isCollapsed} tutorialId="sidebar-receipts" />
             <NavItem icon={ShieldCheck} label="Tax Exempt" to="/tax-exempt" isCollapsed={isCollapsed} tutorialId="sidebar-tax-exempt" />
           </SidebarSection>

@@ -64,4 +64,18 @@ router.put('/dashboard-settings/:style', isAuthenticated, validateBody(dashboard
   }
 });
 
+router.get('/schedule-c', isAuthenticated, async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { schedule_c_enabled: true } });
+    res.json({ enabled: user?.schedule_c_enabled === true });
+  } catch (error) { next(error); }
+});
+router.put('/schedule-c', isAuthenticated, async (req, res, next) => {
+  try {
+    if (!req.body || Array.isArray(req.body) || typeof req.body.enabled !== 'boolean' || Object.keys(req.body).some(key => key !== 'enabled')) return res.status(400).json({ error: 'enabled must be a boolean' });
+    await prisma.user.update({ where: { id: req.user.id }, data: { schedule_c_enabled: req.body.enabled } });
+    res.json({ enabled: req.body.enabled });
+  } catch (error) { next(error); }
+});
+
 module.exports = router;

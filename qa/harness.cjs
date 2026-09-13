@@ -13,7 +13,7 @@ function reset() {
     paymentMethod:[{id:ids.card,user_id:ids.user,name:'QA Credit Card',type:'Credit',default_cashback_rate:2,category_rates:'[]',statement_close_day:15,due_day:10,credit_limit:5000,min_payment_pct:2}],
     inventory:[{id:ids.inventory,user_id:ids.user,product_name:'QA Multi-unit Sneaker',vendor_id:ids.vendor,payment_method_id:ids.card,unit_purchase_cost:100,qty_purchased:5,qty_on_hand:3,sales_tax:40,shipping_cost_inbound:20,fees:10,gift_card_amount:50,cashback_earned:10.4,status:'PURCHASED',category:'Shoes',purchase_date:new Date('2026-09-01T12:00:00Z'),created_at:new Date(),tracking_number:'9400111899223856928499',receipt_url:null,tax_exempt:false}],
     sales:[{id:ids.sale,inventory_id:ids.inventory,platform_id:ids.platform,buyer_id:null,quantity:2,unit_price:150,commission_fee:15,sale_shipping:12,sale_tax_collected:8,taxable:true,customer_tax_exempt:false,status:'SOLD',sale_date:new Date('2026-09-03T12:00:00Z'),payout_date:null}],
-    expense:[{id:randomUUID(),user_id:ids.user,name:'QA Storage',amount:25,date:new Date('2026-09-01T12:00:00Z'),category:'Storage'}],recurringExpense:[],account:[],goal:[],calendarEvent:[],productNote:[],buyer:[],invoice:[]};
+    expense:[{id:randomUUID(),user_id:ids.user,name:'QA Storage',amount:25,tax_version:0,date:new Date('2026-09-01T12:00:00Z'),category:'Storage'}],recurringExpense:[],account:[],goal:[],calendarEvent:[],productNote:[],buyer:[],invoice:[]};
 }
 reset();
 function relations(model,row,key) {
@@ -56,7 +56,7 @@ for(const model of Object.keys(db)) {
     if(op==='findUnique'||op==='findFirst')return project(model,rows[0],args);
     if(op==='create'||op==='createMany'||(op==='upsert'&&!rows.length)) {
       const data=op==='upsert'?args.create:args.data;
-      const created=(Array.isArray(data)?data:[data]).map(x=>({id:randomUUID(),...(model==='inventory'?{status:'PURCHASED',created_at:new Date()}:{}),...x}));
+      const created=(Array.isArray(data)?data:[data]).map(x=>({id:randomUUID(),...(model==='inventory'?{status:'PURCHASED',created_at:new Date()}:{}),...(model==='expense'?{tax_version:0}:{}),...x}));
       db[model].push(...created);return op==='createMany'?{count:created.length}:project(model,created[0],args);
     }
     if(op==='update'||op==='updateMany'||op==='upsert'){
@@ -90,6 +90,7 @@ function app() {
   app.use((req,res,next)=>{req.user=db.user[0];req.isAuthenticated=()=>req.headers['x-qa-unauthenticated']!=='true';next();});
   app.get('/auth/me',(req,res)=>res.json(db.user[0]));
   app.use(requireApi('./middleware/currencyJSON'));
+  app.use('/api/schedule-c', requireApi('./routes/scheduleC'));
   for(const [url,file]of Object.entries({'inventory':'inventory','sales':'sales','platforms':'platforms','payment-methods':'paymentMethods','accounts':'accounts','analytics':'analytics','creditcard':'creditcard','expenses':'expenses','recurring-expenses':'recurringExpenses','receipts':'receipts','goals':'goals','calendar-events':'calendarEvents','product-notes':'productNotes','preferences':'preferences'}))app.use('/api/'+url,requireApi('./routes/'+file+'.js'));
   app.use((err,req,res,next)=>res.status(err.status||500).json({error:err.message}));
   return app;
