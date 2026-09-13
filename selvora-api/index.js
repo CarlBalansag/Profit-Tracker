@@ -10,6 +10,8 @@ const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
+const { authDiagnostics } = require('./services/authDiagnostics');
+const { discordStrategyOptions } = require('./services/discordStrategyOptions');
 const paymentMethodsRouter = require('./routes/paymentMethods');
 const inventoryRouter = require('./routes/inventory');
 const salesRouter = require('./routes/sales');
@@ -124,12 +126,7 @@ async function withDbRetry(fn, retries = 3, delayMs = 2000) {
   }
 }
 
-passport.use(new DiscordStrategy({
-    clientID: process.env.DISCORD_CLIENT_ID,
-    clientSecret: process.env.DISCORD_CLIENT_SECRET,
-    callbackURL: process.env.DISCORD_CALLBACK_URL,
-    scope: ['identify', 'email']
-  },
+passport.use(new DiscordStrategy(discordStrategyOptions(),
   async function(accessToken, refreshToken, profile, done) {
     try {
       // Find or Create user in our DB — retry on Neon cold-start errors
@@ -223,7 +220,7 @@ app.get('/auth/discord/callback', (req, res, next) => {
     const redirectWithError = (reason) => res.redirect(`${FRONTEND_URL}/login?error=${reason}`);
     if (err) {
       const reason = NEON_RETRYABLE.has(err.code) ? 'server-waking' : 'login-failed';
-      console.error(`[auth/callback][${attemptId}] OAuth/DB error:`, err.message || err);
+      console.error(`[auth/callback][${attemptId}] OAuth/DB error:`, authDiagnostics(err));
       return redirectWithError(reason);
     }
     if (!user) {
