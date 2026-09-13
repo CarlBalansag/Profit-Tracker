@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const DiscordStrategy = require('passport-discord').Strategy;
 const { discordStrategyOptions } = require('../services/discordStrategyOptions');
 const { authDiagnostics } = require('../services/authDiagnostics');
+const { createDiscordTokenExchange } = require('../services/discordTokenExchange');
 let server;
 let base;
 let requests = [];
@@ -27,10 +28,13 @@ beforeAll(async () => {
 afterAll(() => new Promise(resolve => server.close(resolve)));
 
 function strategy(path = '/token') {
-  return new DiscordStrategy({ ...discordStrategyOptions({
+  const options = { ...discordStrategyOptions({
     DISCORD_CLIENT_ID: 'fixture-client', DISCORD_CLIENT_SECRET: 'fixture-secret',
     DISCORD_CALLBACK_URL: 'https://api.profittracker.carltechs.com/auth/discord/callback',
-  }), tokenURL: `${base}${path}` }, () => {});
+  }), tokenURL: `${base}${path}` };
+  const client = new DiscordStrategy(options, () => {});
+  client._oauth2.getOAuthAccessToken = createDiscordTokenExchange(options).exchange;
+  return client;
 }
 
 describe('Discord OAuth HTTP contract', () => {

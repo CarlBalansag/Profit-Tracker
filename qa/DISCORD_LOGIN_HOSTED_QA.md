@@ -34,3 +34,17 @@ Original checkout remains untouched at C:/Users/Carl/Desktop/Projects/selvora_cl
 Local branch codex/schedule-c-saved-20260913 preserves committed base 6bb6fad.
 Unfinished files and RESTORE.txt are copied to C:/Users/Carl/Desktop/Projects/selvora_schedule_c_backup_20260913.
 Login-only checkout: C:/Users/Carl/Desktop/Projects/selvora_discord_login, branch codex/discord-login-fix, based on hosted main.
+
+## Follow-up: confirmed Discord 429 and cooldown handling
+
+New Render logs from September 13 09:27–09:29 UTC show repeated token endpoint HTTP 429 responses, no network/DB error, and a reachable Neon session pool. The user/browser authorization flow reproduces /login?error=login-failed. Commit 9abdd33 is deployed; the user-agent change did not clear the restriction.
+
+Added a focused fetch transport for token exchange to preserve Retry-After headers discarded by node-oauth. It retains Passport profile/user verification and session handling, request identification, form parameters and callback behavior. A 429 starts an in-process cooldown using the longest valid Retry-After header/date, JSON retry_after or reset-after value. When the provider supplies no usable wait, a 60-second fallback prevents immediate repeated requests; this fallback does not assert the restriction expires in 60 seconds. OAuth initiation and repeated callback exchanges are blocked during the cooldown. There is no automatic token retry. All other errors retain normal failure behavior. Login now shows a countdown and disables all three login buttons until it expires. Logs include sanitized wait/scope and JSON/non-JSON response type for a persistent restriction.
+
+Focused QA: 20 backend tests and 7 frontend tests passed; production build passed (existing large-bundle warning). Actual disposable HTTP token/profile request checks and Passport tests cover success, canceled authorization, failed/invalid code, no token, malformed JSON, network failure, 429 JSON/non-JSON response, header dates, invalid/missing waits, repeated/concurrent callbacks during cooldown and recovery after expiry. Login tests cover generic/cold-start failures, malformed cooldown query values, disabled controls and expiry. A browser preview of the production build with an isolated unauthenticated /auth/me stub verified the cooldown message and disabled login controls; no production DB connected.
+
+Lint remains failing with 43 errors and 1 warning across existing code. Focused Login.jsx/Login.test.jsx lint finds only the pre-existing unused fillColor parameter at Login.jsx:25 (present in HEAD before this update); no new login lint issue. These unrelated findings are deferred rather than included in the login fix.
+
+Remaining limitation: the application cannot lift Discord's external restriction. Hosted success/logout/relogin/cold start/second profile remain pending after deployment and provider cooldown. Cooldown is process-local and resets on restart; multiple API replicas do not share it. If 429 persists after the provider wait, inspect rateLimitScope/responseType, check API outbound request volume and raise the issue with Discord support/Render; a shared outbound-IP restriction is a possibility, not established by the current logs. No credentials, token responses or private records were collected. Schedule C remains excluded.
+
+Reference: https://docs.discord.com/developers/topics/rate-limits

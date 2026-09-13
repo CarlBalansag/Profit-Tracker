@@ -19,7 +19,8 @@ describe('Discord callback diagnostics', () => {
   it('handles parsed Passport TokenError and a provider rate limit', () => {
     expect(authDiagnostics({ code: 'invalid_client' }).providerCode).toBe('invalid_client');
     expect(authDiagnostics({ oauthError: { statusCode: 429, data: '<html>private-data</html>' } }))
-      .toEqual({ providerCode: null, httpStatus: 429, networkCode: null, databaseCode: null });
+      .toEqual({ providerCode: null, httpStatus: 429, networkCode: null, databaseCode: null,
+        retryAfterSeconds: null, rateLimitScope: null, responseType: null });
   });
 
   it('distinguishes network failures from database cold starts', () => {

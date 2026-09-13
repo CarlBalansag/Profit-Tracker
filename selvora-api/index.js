@@ -12,6 +12,7 @@ const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 const { authDiagnostics } = require('./services/authDiagnostics');
 const { discordStrategyOptions } = require('./services/discordStrategyOptions');
+const { createDiscordTokenExchange } = require('./services/discordTokenExchange');
 const paymentMethodsRouter = require('./routes/paymentMethods');
 const inventoryRouter = require('./routes/inventory');
 const salesRouter = require('./routes/sales');
@@ -126,7 +127,9 @@ async function withDbRetry(fn, retries = 3, delayMs = 2000) {
   }
 }
 
-passport.use(new DiscordStrategy(discordStrategyOptions(),
+const discordOptions = discordStrategyOptions();
+const discordTokenExchange = createDiscordTokenExchange(discordOptions);
+const discordStrategy = new DiscordStrategy(discordOptions,
   async function(accessToken, refreshToken, profile, done) {
     try {
       // Find or Create user in our DB — retry on Neon cold-start errors
@@ -151,7 +154,9 @@ passport.use(new DiscordStrategy(discordStrategyOptions(),
       return done(error, null);
     }
   }
-));
+);
+discordStrategy._oauth2.getOAuthAccessToken = discordTokenExchange.exchange;
+passport.use(discordStrategy);
 
 // Serialization to save user in session
 passport.serializeUser((user, done) => {
@@ -206,6 +211,8 @@ app.get('/health', (req, res) => {
 
 // Auth Routes
 app.get('/auth/discord', (req, res, next) => {
+  const retryAfter = discordTokenExchange.remainingSeconds();
+  if (retryAfter) return res.redirect(`${FRONTEND_URL}/login?error=discord-rate-limited&retry_after=${retryAfter}`);
   console.log('[Discord Auth] DISCORD_CALLBACK_URL =', process.env.DISCORD_CALLBACK_URL);
   passport.authenticate('discord')(req, res, next);
 });
@@ -219,8 +226,11 @@ app.get('/auth/discord/callback', (req, res, next) => {
     const attemptId = randomUUID();
     const redirectWithError = (reason) => res.redirect(`${FRONTEND_URL}/login?error=${reason}`);
     if (err) {
-      const reason = NEON_RETRYABLE.has(err.code) ? 'server-waking' : 'login-failed';
-      console.error(`[auth/callback][${attemptId}] OAuth/DB error:`, authDiagnostics(err));
+      const diagnostics = authDiagnostics(err);
+      const reason = diagnostics.httpStatus === 429
+        ? `discord-rate-limited&retry_after=${discordTokenExchange.remainingSeconds() || 60}`
+        : NEON_RETRYABLE.has(err.code) ? 'server-waking' : 'login-failed';
+      console.error(`[auth/callback][${attemptId}] OAuth/DB error:`, diagnostics);
       return redirectWithError(reason);
     }
     if (!user) {

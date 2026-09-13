@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { TrendingUp, CreditCard, Wallet, BarChart2, ArrowRight, CheckCircle, ChevronDown, ShoppingBag, LogIn } from 'lucide-react';
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
@@ -82,11 +82,26 @@ function Pill({ status }) {
 const Login = () => {
   const [faqOpen, setFaqOpen] = useState(null);
   const loginError = new URLSearchParams(window.location.search).get('error');
-  const loginErrorMessage = loginError === 'server-waking'
+  const [retrySeconds, setRetrySeconds] = useState(() => {
+    if (loginError !== 'discord-rate-limited') return 0;
+    const value = Number(new URLSearchParams(window.location.search).get('retry_after'));
+    return Number.isSafeInteger(value) && value > 0 ? value : 60;
+  });
+  useEffect(() => {
+    if (loginError !== 'discord-rate-limited') return;
+    const timer = setInterval(() => setRetrySeconds(seconds => Math.max(0, seconds - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [loginError]);
+  const loginErrorMessage = loginError === 'discord-rate-limited'
+    ? retrySeconds > 0
+      ? `Discord is temporarily limiting sign-ins. Try again in ${retrySeconds} seconds.`
+      : 'You can try Discord sign-in again now.'
+    : loginError === 'server-waking'
     ? 'The server is waking up. Please wait a moment, then try Discord again.'
     : loginError ? 'Discord sign-in could not finish. Please try again.' : null;
 
   const handleLogin = () => {
+    if (retrySeconds > 0) return;
     const apiBase = import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || '';
     window.location.href = `${apiBase}/auth/discord`;
   };
@@ -112,6 +127,7 @@ const Login = () => {
           </div>
           <button
             onClick={handleLogin}
+            disabled={retrySeconds > 0}
             className="inline-flex items-center gap-2 bg-white text-[#07070a] hover:bg-white/90 font-semibold text-[13px] px-4 py-2 rounded-lg transition-colors"
           >
             <DiscordIcon className="w-4 h-4 text-[#5865F2]" />
@@ -143,6 +159,7 @@ const Login = () => {
           <div className="flex flex-wrap gap-3 items-center">
             <button
               onClick={handleLogin}
+              disabled={retrySeconds > 0}
               className="inline-flex items-center gap-2.5 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold text-[13px] px-5 py-2.5 rounded-lg transition-colors shadow-lg shadow-[#5865F2]/25"
             >
               <DiscordIcon className="w-4 h-4" />
@@ -485,6 +502,7 @@ const Login = () => {
           <p className="text-[14px] text-white/35 mb-8">Sign in with Discord and see your full operation in minutes.</p>
           <button
             onClick={handleLogin}
+            disabled={retrySeconds > 0}
             className="inline-flex items-center gap-2.5 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold text-[14px] px-6 py-3 rounded-lg transition-colors shadow-lg shadow-[#5865F2]/20"
           >
             <DiscordIcon className="w-5 h-5" />

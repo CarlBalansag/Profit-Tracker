@@ -24,7 +24,14 @@ function authDiagnostics(error) {
   const httpStatus = Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
   const networkCode = [underlying?.code, error?.code].find(code => NETWORK_CODES.has(code)) || null;
   const databaseCode = DATABASE_CODES.has(error?.code) ? error.code : null;
-  return { providerCode, httpStatus, networkCode, databaseCode };
+  const details = { providerCode, httpStatus, networkCode, databaseCode };
+  if (httpStatus === 429) {
+    details.retryAfterSeconds = Number.isSafeInteger(underlying?.retryAfterSeconds) && underlying.retryAfterSeconds > 0
+      ? underlying.retryAfterSeconds : null;
+    details.rateLimitScope = ['user', 'global', 'shared'].includes(underlying?.rateLimitScope) ? underlying.rateLimitScope : null;
+    details.responseType = ['json', 'non-json'].includes(underlying?.responseType) ? underlying.responseType : null;
+  }
+  return details;
 }
 
 module.exports = { authDiagnostics };
