@@ -30,6 +30,16 @@ function authDiagnostics(error) {
       ? underlying.retryAfterSeconds : null;
     details.rateLimitScope = ['user', 'global', 'shared'].includes(underlying?.rateLimitScope) ? underlying.rateLimitScope : null;
     details.responseType = ['json', 'non-json'].includes(underlying?.responseType) ? underlying.responseType : null;
+    details.requestOrigin = ['discord-response', 'local-cooldown'].includes(underlying?.requestOrigin) ? underlying.requestOrigin : null;
+    details.tokenRequestsLastMinute = Number.isSafeInteger(underlying?.tokenRequestsLastMinute) && underlying.tokenRequestsLastMinute >= 0
+      ? underlying.tokenRequestsLastMinute : null;
+    details.discordErrorCode = Number.isSafeInteger(underlying?.discordErrorCode) && underlying.discordErrorCode >= 0 && underlying.discordErrorCode <= 1_000_000_000
+      ? underlying.discordErrorCode : null;
+    details.cloudflareErrorCode = [1015, 1020, 1010].includes(underlying?.cloudflareErrorCode) ? underlying.cloudflareErrorCode : null;
+    details.cloudflareRay = typeof underlying?.cloudflareRay === 'string' && /^[a-f\d]{16,32}-[A-Z]{3}$/i.test(underlying.cloudflareRay)
+      ? underlying.cloudflareRay : null;
+    details.rateLimitReason = ['cloudflare-restriction', 'api-rate-limit', 'temporary-block'].includes(underlying?.rateLimitReason)
+      ? underlying.rateLimitReason : null;
   }
   return details;
 }

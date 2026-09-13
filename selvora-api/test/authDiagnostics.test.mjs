@@ -20,13 +20,24 @@ describe('Discord callback diagnostics', () => {
     expect(authDiagnostics({ code: 'invalid_client' }).providerCode).toBe('invalid_client');
     expect(authDiagnostics({ oauthError: { statusCode: 429, data: '<html>private-data</html>' } }))
       .toEqual({ providerCode: null, httpStatus: 429, networkCode: null, databaseCode: null,
-        retryAfterSeconds: null, rateLimitScope: null, responseType: null });
+        retryAfterSeconds: null, rateLimitScope: null, responseType: null,
+        requestOrigin: null, tokenRequestsLastMinute: null, discordErrorCode: null,
+        cloudflareErrorCode: null, cloudflareRay: null, rateLimitReason: null });
   });
 
   it('distinguishes network failures from database cold starts', () => {
     expect(authDiagnostics({ oauthError: { code: 'ECONNRESET' } }).networkCode).toBe('ECONNRESET');
     expect(authDiagnostics({ code: 'P1001' }).databaseCode).toBe('P1001');
     expect(authDiagnostics({ code: 'P2024' }).databaseCode).toBe('P2024');
+  });
+
+  it('rejects injected or unknown rate-limit metadata', () => {
+    const result = authDiagnostics({ oauthError: { statusCode: 429,
+      requestOrigin: 'secret', tokenRequestsLastMinute: 'secret', discordErrorCode: 'secret',
+      cloudflareErrorCode: 'secret', cloudflareRay: 'secret', rateLimitReason: 'secret',
+    } });
+    expect(JSON.stringify(result)).not.toContain('secret');
+    expect(result.cloudflareRay).toBeNull();
   });
 
   it.each([undefined, null, {}, { oauthError: { data: '{broken' } },

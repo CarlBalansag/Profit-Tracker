@@ -99,4 +99,35 @@ describe('Discord token rate-limit handling', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(verify).toHaveBeenCalledTimes(1);
   });
+
+  it('captures safe provider evidence and distinguishes cached cooldowns from actual traffic', async () => {
+    let now = 0;
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response('{"access_token":"fixture-access"}'))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: 'You are being rate limited.',
+        global: true, code: 20028, retry_after: 120, access_token: 'secret-token' }),
+      { status: 429, headers: { 'cf-ray': 'a3a6188e4b8a0c97-SJC' } }));
+    const client = createDiscordTokenExchange(options, { fetchImpl, now: () => now });
+    await exchange(client);
+    const provider = authDiagnostics({ oauthError: (await exchange(client)).error });
+    expect(provider).toMatchObject({ requestOrigin: 'discord-response', tokenRequestsLastMinute: 2,
+      rateLimitScope: 'global', discordErrorCode: 20028, rateLimitReason: 'api-rate-limit',
+      cloudflareRay: 'a3a6188e4b8a0c97-SJC' });
+    expect(JSON.stringify(provider)).not.toContain('secret-token');
+    now = 61000;
+    const local = authDiagnostics({ oauthError: (await exchange(client)).error });
+    expect(local).toMatchObject({ requestOrigin: 'local-cooldown', tokenRequestsLastMinute: 0,
+      rateLimitScope: 'global', cloudflareRay: provider.cloudflareRay });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('classifies a known edge error without retaining the raw provider response', async () => {
+    const client = createDiscordTokenExchange(options, { fetchImpl: vi.fn().mockResolvedValue(
+      new Response('<html>Error code: 1015 private-secret</html>', { status: 429,
+        headers: { 'cf-ray': 'private-secret' } })) });
+    const diagnostic = authDiagnostics({ oauthError: (await exchange(client)).error });
+    expect(diagnostic).toMatchObject({ rateLimitReason: 'cloudflare-restriction', cloudflareErrorCode: 1015,
+      cloudflareRay: null, responseType: 'non-json', tokenRequestsLastMinute: 1 });
+    expect(JSON.stringify(diagnostic)).not.toContain('private-secret');
+  });
 });
