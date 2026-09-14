@@ -29,6 +29,18 @@ model User {
   product_notes          ProductNote[]
   calendar_events        CalendarEvent[]
   calendar_token         String?          @unique
+  local_credential       LocalCredential?
+}
+
+model LocalCredential {
+  user_id              String   @id
+  user                 User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  email                String   @unique
+  password_hash        String
+  must_change_password Boolean  @default(true)
+  temporary_expires_at DateTime?
+  version              Int      @default(1)
+  disabled             Boolean  @default(false)
 }
 
 model Inventory {

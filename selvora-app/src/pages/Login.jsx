@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import PasswordLoginForm from '../components/Auth/PasswordLoginForm';
 import { TrendingUp, CreditCard, Wallet, BarChart2, ArrowRight, CheckCircle, ChevronDown, ShoppingBag, LogIn } from 'lucide-react';
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
@@ -81,33 +82,14 @@ function Pill({ status }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const Login = () => {
   const [faqOpen, setFaqOpen] = useState(null);
-  const loginError = new URLSearchParams(window.location.search).get('error');
-  const [retrySeconds, setRetrySeconds] = useState(() => {
-    if (loginError !== 'discord-rate-limited') return 0;
-    const value = Number(new URLSearchParams(window.location.search).get('retry_after'));
-    return Number.isSafeInteger(value) && value > 0 ? value : 60;
-  });
-  useEffect(() => {
-    if (loginError !== 'discord-rate-limited') return;
-    const timer = setInterval(() => setRetrySeconds(seconds => Math.max(0, seconds - 1)), 1000);
-    return () => clearInterval(timer);
-  }, [loginError]);
-  const loginErrorMessage = loginError === 'discord-rate-limited'
-    ? retrySeconds > 0
-      ? `Discord is temporarily limiting sign-ins. Try again in ${retrySeconds} seconds.`
-      : 'You can try Discord sign-in again now.'
-    : loginError === 'server-waking'
-    ? 'The server is waking up. Please wait a moment, then try Discord again.'
-    : loginError ? 'Discord sign-in could not finish. Please try again.' : null;
-
   const handleLogin = () => {
-    if (retrySeconds > 0) return;
-    const apiBase = import.meta.env.VITE_API_DIRECT_URL || import.meta.env.VITE_API_URL || '';
-    window.location.href = `${apiBase}/auth/discord`;
+    const input = document.getElementById('login-email');
+    input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    input?.focus();
   };
 
   const faqs = [
-    { q: 'Is this free to use?', a: 'Yes — Profit Tracker is completely free during its current phase. Sign in with Discord and start tracking immediately.' },
+    { q: 'Is this free to use?', a: 'Yes — Profit Tracker is completely free during its current phase. Access is invite-only. Sign in with the email and password provided by the owner.' },
     { q: 'What marketplaces does it support?', a: 'Any platform you sell on — eBay, StockX, GOAT, Amazon, Facebook Marketplace, and more. You define your own platforms and vendors.' },
     { q: 'How does cashback tracking work?', a: 'Link your credit cards and set cashback rates per card or per store. The app calculates what you earned on each purchase, which losses need to be covered by cashback, and what you can keep as points.' },
     { q: 'Do I need to connect my bank account?', a: 'No. There are zero financial integrations. You enter your data manually, keeping full control and privacy.' },
@@ -127,10 +109,8 @@ const Login = () => {
           </div>
           <button
             onClick={handleLogin}
-            disabled={retrySeconds > 0}
             className="inline-flex items-center gap-2 bg-white text-[#07070a] hover:bg-white/90 font-semibold text-[13px] px-4 py-2 rounded-lg transition-colors"
           >
-            <DiscordIcon className="w-4 h-4 text-[#5865F2]" />
             Sign in free
           </button>
         </div>
@@ -157,14 +137,7 @@ const Login = () => {
           </p>
 
           <div className="flex flex-wrap gap-3 items-center">
-            <button
-              onClick={handleLogin}
-              disabled={retrySeconds > 0}
-              className="inline-flex items-center gap-2.5 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold text-[13px] px-5 py-2.5 rounded-lg transition-colors shadow-lg shadow-[#5865F2]/25"
-            >
-              <DiscordIcon className="w-4 h-4" />
-              Get started with Discord
-            </button>
+            <PasswordLoginForm />
             <a href="#how" className="inline-flex items-center gap-1.5 text-[13px] text-white/35 hover:text-white/60 transition-colors">
               How it works <ArrowRight size={13} />
             </a>
@@ -422,7 +395,7 @@ const Login = () => {
           </div>
           <div className="space-y-10">
             {[
-              { n: '1', icon: LogIn, title: 'Sign in with Discord', body: 'One click. No email, no password, no forms. Your data is stored privately and never shared.' },
+              { n: '1', icon: LogIn, title: 'Sign in to your account', body: 'Use your invited email and password. Change a temporary password on your first login. Your existing records stay with your account.' },
               { n: '2', icon: ShoppingBag, title: 'Log your purchases', body: 'Add what you bought, which credit card you used, the vendor, and the cost. Takes seconds per item.' },
               { n: '3', icon: TrendingUp, title: 'Record sales, watch profit roll in', body: "Mark items sold when they move. Profit, margin, cashback, and cash flow update instantly across every page." },
             ].map((s, i) => {
@@ -499,13 +472,11 @@ const Login = () => {
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white mb-4 leading-tight">
             Your numbers are waiting.
           </h2>
-          <p className="text-[14px] text-white/35 mb-8">Sign in with Discord and see your full operation in minutes.</p>
+          <p className="text-[14px] text-white/35 mb-8">Sign in with your invited email and password.</p>
           <button
             onClick={handleLogin}
-            disabled={retrySeconds > 0}
             className="inline-flex items-center gap-2.5 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold text-[14px] px-6 py-3 rounded-lg transition-colors shadow-lg shadow-[#5865F2]/20"
           >
-            <DiscordIcon className="w-5 h-5" />
             Get started — it's free
           </button>
           <p className="text-[11px] text-white/15 mt-4">No credit card · No bank connections · Free to use</p>
@@ -525,21 +496,9 @@ const Login = () => {
         </div>
       </footer>
 
-      {loginErrorMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-red-950/90 border border-red-900/60 text-red-300 px-5 py-3 rounded-xl text-sm shadow-xl backdrop-blur-sm whitespace-nowrap">
-          {loginErrorMessage}
-        </div>
-      )}
+
     </div>
   );
 };
-
-function DiscordIcon({ className }) {
-  return (
-    <svg className={className} fill="currentColor" viewBox="0 0 127.14 96.36" width="1em" height="1em">
-      <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.31,60,73.31,53s5-12.74,11.43-12.74S96.2,46,96.12,53,91.08,65.69,84.69,65.69Z" />
-    </svg>
-  );
-}
 
 export default Login;

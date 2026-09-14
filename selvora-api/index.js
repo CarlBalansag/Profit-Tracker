@@ -5,14 +5,10 @@ const cors = require('cors');
 const compression = require('compression');
 const prisma = require('./prisma');
 const { Pool } = require('pg');
-const { randomUUID } = require('crypto');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const passport = require('passport');
-const DiscordStrategy = require('passport-discord').Strategy;
-const { authDiagnostics } = require('./services/authDiagnostics');
-const { discordStrategyOptions } = require('./services/discordStrategyOptions');
-const { createDiscordTokenExchange } = require('./services/discordTokenExchange');
+const { createPasswordAuth } = require('./routes/passwordAuth');
 const paymentMethodsRouter = require('./routes/paymentMethods');
 const inventoryRouter = require('./routes/inventory');
 const salesRouter = require('./routes/sales');
@@ -127,37 +123,6 @@ async function withDbRetry(fn, retries = 3, delayMs = 2000) {
   }
 }
 
-const discordOptions = discordStrategyOptions();
-const discordTokenExchange = createDiscordTokenExchange(discordOptions);
-const discordStrategy = new DiscordStrategy(discordOptions,
-  async function(accessToken, refreshToken, profile, done) {
-    try {
-      // Find or Create user in our DB — retry on Neon cold-start errors
-      let user = await withDbRetry(() => prisma.user.findUnique({
-        where: { discord_id: profile.id }
-      }));
-
-      if (!user) {
-        user = await withDbRetry(() => prisma.user.create({
-          data: {
-            discord_id: profile.id,
-            username: profile.username,
-            email: profile.email || `${profile.id}@discord.com`, // Fallback
-            auth_provider: 'discord'
-          }
-        }));
-      }
-
-      return done(null, user);
-    } catch (error) {
-      console.error('[discord-strategy] error after retries:', error.message);
-      return done(error, null);
-    }
-  }
-);
-discordStrategy._oauth2.getOAuthAccessToken = discordTokenExchange.exchange;
-passport.use(discordStrategy);
-
 // Serialization to save user in session
 passport.serializeUser((user, done) => {
   console.log('[serializeUser] serializing user id:', user.id);
@@ -187,6 +152,10 @@ passport.deserializeUser(async (id, done) => {
   }
 });
 
+const passwordAuth = createPasswordAuth({ prisma, clearUserCache });
+app.use(passwordAuth.sessionGuard);
+app.use('/auth', passwordAuth.router);
+
 // --- ROUTES ---
 app.use('/api/payment-methods', paymentMethodsRouter);
 app.use('/api/inventory', inventoryRouter);
@@ -209,68 +178,14 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', time: new Date() });
 });
 
-// Auth Routes
-app.get('/auth/discord', (req, res, next) => {
-  const retryAfter = discordTokenExchange.remainingSeconds();
-  if (retryAfter) return res.redirect(`${FRONTEND_URL}/login?error=discord-rate-limited&retry_after=${retryAfter}`);
-  console.log('[Discord Auth] DISCORD_CALLBACK_URL =', process.env.DISCORD_CALLBACK_URL);
-  passport.authenticate('discord')(req, res, next);
-});
-
-app.get('/auth/discord/callback', (req, res, next) => {
-  // Use the custom-callback form so that OAuth token-exchange errors, profile
-  // fetch errors, and verify-function errors (all of which passport-oauth2
-  // routes through self.error → next(err)) are caught here instead of
-  // falling through to the global error handler and producing a 500.
-  passport.authenticate('discord', (err, user, info) => {
-    const attemptId = randomUUID();
-    const redirectWithError = (reason) => res.redirect(`${FRONTEND_URL}/login?error=${reason}`);
-    if (err) {
-      const diagnostics = authDiagnostics(err);
-      const reason = diagnostics.httpStatus === 429
-        ? `discord-rate-limited&retry_after=${discordTokenExchange.remainingSeconds() || 60}`
-        : NEON_RETRYABLE.has(err.code) ? 'server-waking' : 'login-failed';
-      console.error(`[auth/callback][${attemptId}] OAuth/DB error:`, diagnostics);
-      return redirectWithError(reason);
-    }
-    if (!user) {
-      console.warn(`[auth/callback][${attemptId}] authentication failed (no user):`, info);
-      return redirectWithError('login-failed');
-    }
-
-    // Establish the login session (writes passport.user to req.session).
-    req.logIn(user, (loginErr) => {
-      if (loginErr) {
-        console.error(`[auth/callback][${attemptId}] req.logIn() error:`, loginErr);
-        return redirectWithError('login-failed');
-      }
-
-      // Explicitly wait for the session to be persisted to PostgreSQL before
-      // sending the response. Without this there is a race condition where the
-      // browser hits /auth/me before the INSERT into user_sessions completes.
-      req.session.save((saveErr) => {
-        if (saveErr) {
-          console.error(`[auth/callback][${attemptId}] session.save() failed:`, saveErr);
-          return redirectWithError('login-failed');
-        }
-        console.log('[auth/callback] session saved, sid:', req.sessionID, 'user:', req.user?.id);
-        // Use HTML redirect (not res.redirect) so Render/Vercel proxy forwards
-        // the Set-Cookie header to the browser before navigation occurs.
-        res.send(`<!DOCTYPE html><html><head>
-<meta http-equiv="refresh" content="0;url=${FRONTEND_URL}/">
-</head><body>
-<script>window.location.replace(${JSON.stringify(FRONTEND_URL + '/')});</script>
-</body></html>`);
-      });
-    });
-  })(req, res, next);
-});
+// Retired Discord entry points never contact Discord or create accounts.
+app.get(['/auth/discord', '/auth/discord/callback'], (req, res) => res.redirect(`${FRONTEND_URL}/login`));
 
 // Current Session Route
 app.get('/auth/me', (req, res) => {
   console.log('[/auth/me] sessionID:', req.sessionID, '| session:', JSON.stringify(req.session?.passport), '| user:', req.user?.id ?? 'none', '| cookie:', req.headers.cookie ? 'present' : 'MISSING');
   if (req.user) {
-    res.json(req.user);
+    res.json(passwordAuth.publicUser(req.user, req.localCredential));
   } else {
     res.status(401).json({ message: 'Unauthorized' });
   }
