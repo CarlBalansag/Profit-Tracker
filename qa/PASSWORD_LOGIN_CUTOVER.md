@@ -1,6 +1,6 @@
 # Invite-only password login cutover
 
-Prepared replacement for Discord login. Not deployed or provisioned yet. Schedule C is excluded.
+Replacement for Discord login. Auth-only migration and three owner-approved accounts provisioned; deployment and hosted checks tracked below. Schedule C is excluded.
 
 ## Data preservation
 
@@ -9,7 +9,7 @@ LocalCredential stores a normalized login email and password hash under an exist
 ## Before cutover
 
 1. Owner confirms the exact existing user IDs and chosen login emails; include the owner. Empty accounts are not automatically approved or deleted. Login email identifiers need not change the stored Discord email; users must know which identifier to use. There is no automated email delivery.
-2. Confirm Render's intended database and take a provider backup/restore point. Inspect the standalone LocalCredential migration. Apply only that additive migration in the intended database; do not run all pending QA/Schedule C migrations. Confirm the deployed branch has no Schedule C changes.
+2. Confirm Render's intended database and save a consistent private data snapshot (a provider backup/restore point is preferable when available). Inspect the standalone LocalCredential migration. Apply only that additive migration in the intended database; do not run all pending QA/Schedule C migrations. Confirm the deployed branch has no Schedule C changes.
 3. Generate Prisma Client and use the owner-only CLI in a trusted environment with the correct DATABASE_URL. Default CLI invocation is a read-only dry run:
 
    node scripts/provision-login.js --user-id EXISTING_UUID --email LOGIN_EMAIL
@@ -25,12 +25,16 @@ Password changes use a version-checked update. Concurrent/reset conflicts cannot
 
 ## Pending production verification
 
-No migration, account provisioning or deployment performed while mappings/database confirmation are pending. Hosted normal login, forced password change, logout/relogin, old-password rejection, session persistence across restart and owner/user data isolation must be tested after cutover. This file is an operational plan, not proof of hosted success.
+Owner confirmed the Render database and completed password rotation. A consistent read-only snapshot of business/user tables and schema metadata was saved outside Git in an owner-only Windows folder; it excludes live sessions and the price cache and is not a provider backup. The additive LocalCredential SQL and its Prisma migration record were applied together in one transaction, after rechecking business fingerprints. Credentials were provisioned only for the three owner-approved existing users; random passwords stayed in separate private files. Original users and business records were not edited.
+
+Hosted normal login, forced password change, logout/relogin, old-password rejection, session persistence across restart and owner/user data isolation must be tested after cutover. This file does not claim those pending checks succeeded.
 
 ## Local verification
 
-- API integration: `npx vitest run test/passwordAuth.test.mjs` passed 8 tests using Express, Passport and MemoryStore with fixture users/credentials. Covered forced changes, business-access denial, ownership isolation, invalid/unknown/disabled/expired access, input validation, logout/relogin, session/database failures, attempt limits and concurrent password changes.
+- API integration: `npx vitest run test/passwordAuth.test.mjs` passed 9 tests using Express, Passport and MemoryStore with fixture users/credentials. Covered forced changes, business-access denial, ownership isolation, invalid/unknown/disabled/expired access, input validation, logout/relogin, session/database failures, attempt limits, concurrent password changes and rejection of old Discord sessions.
 - UI: `npx vitest run src/pages/Login.test.jsx --environment jsdom` passed 6 tests for returning/temporary-password users, duplicate submission, failure/retry, protected routes and confirmation validation.
 - Frontend production build, Prisma validation/client generation, Node syntax and diff whitespace checks passed. Existing bundle-size warning and the existing unused `fillColor` in Login.jsx remain unrelated findings.
 - Standalone SQL migration exercised in disposable PGlite: foreign-key, duplicate-email and normalization constraints rejected invalid writes; existing fixture business records remained unchanged. This does not verify production PostgreSQL sessions.
-- Provisioning CLI durability improvement flushes the private credential file before transaction completion. Actual provisioning/reset CLI against the intended database, native-browser end-to-end checks and hosted verification remain pending.
+- Provisioning CLI: 5 regression tests passed for dry run/validation, hash-only persistence/private file output, explicit reset/version increment, transaction/disk/concurrency failure rollback and path restrictions. Private file output is flushed before transaction completion. Production dry runs and initial provisioning succeeded; a production owner reset was not exercised.
+- Browser with local fixture API: invalid login displayed a safe error, retry succeeded, and first login opened the forced password-change screen. No new private user password was entered through browser automation. UI tests and API integration cover completed password changes; owner/browser completion remains pending.
+- Netlify auth routing uses a 200 proxy rather than a 301 redirect, preserving password-login POST requests when VITE_API_URL is empty. Direct API and proxy deployment paths require hosted verification.

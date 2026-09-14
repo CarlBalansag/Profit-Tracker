@@ -53,6 +53,7 @@ beforeEach(async () => {
   app.use(passport.initialize()); app.use(passport.session());
   const auth = createPasswordAuth({ prisma });
   app.use(auth.sessionGuard); app.use('/auth', auth.router);
+  app.post('/fixture/legacy-session', (req, res, next) => req.logIn(users[0], error => error ? next(error) : res.json({ fixture: true })));
   app.get('/auth/me', (req, res) => req.user ? res.json(auth.publicUser(req.user, req.localCredential)) : res.sendStatus(401));
   app.get('/api/records', (req, res) => req.user ? res.json(business.filter(row => row.user_id === req.user.id)) : res.sendStatus(401));
   app.post('/auth/logout', (req, res, next) => req.logout(error => error ? next(error) : req.session.destroy(error => error ? next(error) : res.json({ success: true }))));
@@ -74,6 +75,17 @@ async function request(path, body, cookie, headers = {}) {
 const login = (index = 0, password = oldPassword, cookie) => request('/auth/login', { email: `login-${index}@example.test`, password }, cookie);
 
 describe('invite-only password authentication', () => {
+  it('rejects legacy Discord sessions and rechecks expiry/disabled access on existing sessions', async () => {
+    const legacy = await request('/fixture/legacy-session', {});
+    expect((await request('/auth/me', undefined, legacy.cookie)).status).toBe(401);
+    expect((await login(0, oldPassword, legacy.cookie)).status).toBe(200);
+    const temporary = await login();
+    credentials[0].temporary_expires_at = new Date(Date.now() - 1000);
+    expect((await request('/auth/me', undefined, temporary.cookie)).status).toBe(401);
+    const approved = await login(1);
+    credentials[1].disabled = true;
+    expect((await request('/api/records', undefined, approved.cookie)).status).toBe(401);
+  });
   it('preserves existing user IDs and blocks business access until the temporary password changes', async () => {
     const before = clone(business);
     const logged = await login();

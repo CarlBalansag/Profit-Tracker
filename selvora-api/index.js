@@ -107,7 +107,7 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Passport Discord Strategy setup
+// Passport session deserialization
 // Retry helper for transient Neon cold-start errors (P1001, P2024)
 const NEON_RETRYABLE = new Set(['P1001', 'P2024']);
 async function withDbRetry(fn, retries = 3, delayMs = 2000) {
