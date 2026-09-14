@@ -12,7 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'neon-dark' }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   if (uiStyle === 'glassmorphism-brown') {
     return (
@@ -141,11 +141,11 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             className={clsx("flex items-center rounded-md hover:bg-[var(--bg-hover)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-3 py-2 px-3 text-left")}
             onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
           >
-            <div className="w-8 h-8 rounded-full bg-[var(--bg-elevated)] flex-shrink-0 text-[var(--accent)] flex items-center justify-center text-xs font-semibold">CB</div>
+            <div className="w-8 h-8 rounded-full bg-[var(--bg-elevated)] flex-shrink-0 text-[var(--accent)] flex items-center justify-center text-xs font-semibold">{(user?.username || '?').slice(0, 2).toUpperCase()}</div>
             {!isCollapsed && (
               <>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[var(--text-primary)] truncate">CarlBBB</p>
+                  <p className="text-sm font-medium text-[var(--text-primary)] truncate">{user?.username || 'Account'}</p>
                   <p className="text-xs text-[var(--text-muted)]">Online</p>
                 </div>
                 <ChevronDown size={16} className={clsx("text-[var(--text-muted)] transition-transform", isProfileMenuOpen ? "rotate-180" : "")} />

@@ -40,7 +40,7 @@ function createPasswordAuth({ prisma, clearUserCache = () => {} }) {
       if (!valid || !credential || credential.disabled || expired(credential))
         return res.status(401).json({ error: 'Email or password is incorrect, or access is unavailable.' });
       const user = await prisma.user.findUnique({ where: { id: credential.user_id } });
-      if (!user) return res.status(401).json({ error: 'Email or password is incorrect, or access is unavailable.' });
+      if (!user || user.login_disabled) return res.status(401).json({ error: 'Email or password is incorrect, or access is unavailable.' });
       await call(req, 'logIn', user);
       req.session.authMethod = 'password';
       req.session.credentialVersion = credential.version;
@@ -87,10 +87,19 @@ function createPasswordAuth({ prisma, clearUserCache = () => {} }) {
   });
   async function sessionGuard(req, res, next) {
     try {
+      if (req.firebaseIdentity) return next();
       if (!req.user || ['/auth/logout', '/auth/login', '/health', '/auth/discord', '/auth/discord/callback'].includes(req.path)) return next();
+      const currentUser = await prisma.user.findUnique({ where: { id: req.user.id } });
+      if (!currentUser || currentUser.login_disabled) return res.status(401).json({ error: 'Sign-in required.' });
+      req.user = currentUser;
       const credential = await prisma.localCredential.findUnique({ where: { user_id: req.user.id } });
       if (req.session.authMethod !== 'password' || !credential || credential.disabled || expired(credential)
         || req.session.credentialVersion !== credential.version) {
+        if (['/auth/firebase/intent', '/auth/firebase/session'].includes(req.path)) {
+          await call(req.session, 'regenerate');
+          req.user = undefined;
+          return next();
+        }
         await call(req.session, 'destroy');
         return res.status(401).json({ error: 'Sign-in required.' });
       }

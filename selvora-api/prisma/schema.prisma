@@ -30,6 +30,57 @@ model User {
   calendar_events        CalendarEvent[]
   calendar_token         String?          @unique
   local_credential       LocalCredential?
+  login_disabled         Boolean          @default(false)
+  firebase_identity      FirebaseIdentity?
+}
+
+model FirebaseIdentity {
+  id          String @id @default(uuid())
+  project_id  String
+  firebase_uid String
+  user_id     String @unique
+  email       String
+  user        User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  sessions    FirebaseSession[]
+  @@unique([project_id, firebase_uid])
+}
+
+model FirebaseSession {
+  fingerprint String @id
+  identity_id String
+  identity FirebaseIdentity @relation(fields: [identity_id], references: [id], onDelete: Cascade)
+  expires_at DateTime
+  revoked Boolean @default(false)
+  @@index([expires_at])
+}
+
+model AuthIntent {
+  id String @id @default(uuid())
+  proof_hash String
+  session_hash String
+  purpose String
+  user_id String?
+  credential_version Int?
+  expires_at DateTime
+  consumed Boolean @default(false)
+  @@index([expires_at])
+}
+
+model MigrationApproval {
+  id String @id @default(uuid())
+  user_id String
+  project_id String
+  firebase_uid String
+  expires_at DateTime
+  consumed Boolean @default(false)
+  @@index([user_id, project_id, firebase_uid])
+}
+
+model AuthAttemptBucket {
+  key String @id
+  count Int @default(1)
+  expires_at DateTime
+  @@index([expires_at])
 }
 
 model LocalCredential {

@@ -10,6 +10,9 @@ import { Marketplaces } from '../components/Settings/Marketplaces';
 import { Accounts } from '../components/Settings/Accounts';
 import { UiPreferences } from '../components/Settings/UiPreferences';
 import { useAuth } from '../context/AuthContext';
+import FirebaseLoginForm from '../components/Auth/FirebaseLoginForm';
+import FirebaseAccount from '../components/Auth/FirebaseAccount';
+import { firebaseEnabled } from '../services/firebaseAuth';
 
 function Settings() {
   const location = useLocation();
@@ -54,6 +57,7 @@ function Settings() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-10">
+      {firebaseEnabled && activeTab === 'profile' && (user?.auth_provider === 'firebase' ? <FirebaseAccount /> : !user?.password_change_required && <FirebaseLoginForm migration />)}
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white tracking-tight">Settings</h1>
@@ -100,7 +104,7 @@ function Settings() {
                  </div>
                  <div>
                     <h3 className="font-bold text-white">{user?.username || 'Unknown'}</h3>
-                    <p className="text-xs text-gray-500">Connected via Discord</p>
+                    <p className="text-xs text-gray-500">{user?.auth_provider === 'firebase' ? 'Signed in with Firebase' : 'Signed in with your existing password'}</p>
                  </div>
               </div>
 
@@ -110,12 +114,12 @@ function Settings() {
                     <input type="text" readOnly value={user?.username || ''} className="w-full bg-[#0A0A0F] border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none" />
                  </div>
                  <div className="space-y-1.5">
-                    <label className="text-xs text-gray-400">Discord User ID</label>
-                    <input type="text" readOnly value={user?.discord_id || ''} className="w-full bg-[#0A0A0F] border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none" />
+                    <label className="text-xs text-gray-400">Account ID</label>
+                    <input type="text" readOnly value={user?.id || ''} className="w-full bg-[#0A0A0F] border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none" />
                  </div>
               </div>
 
-              <p className="text-xs text-gray-600 pt-2">Profile information is managed through your Discord account.</p>
+              <p className="text-xs text-gray-600 pt-2">Your records stay associated with this account ID when you change login methods.</p>
             </div>
           )}
 

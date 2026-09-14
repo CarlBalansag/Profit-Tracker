@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import PasswordLoginForm from '../components/Auth/PasswordLoginForm';
+import FirebaseLoginForm from '../components/Auth/FirebaseLoginForm';
+import { firebaseEnabled, signupEnabled } from '../services/firebaseAuth';
 import { TrendingUp, CreditCard, Wallet, BarChart2, ArrowRight, CheckCircle, ChevronDown, ShoppingBag, LogIn } from 'lucide-react';
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
@@ -89,7 +91,7 @@ const Login = () => {
   };
 
   const faqs = [
-    { q: 'Is this free to use?', a: 'Yes — Profit Tracker is completely free during its current phase. Access is invite-only. Sign in with the email and password provided by the owner.' },
+    { q: 'Is this free to use?', a: firebaseEnabled ? (signupEnabled ? 'Yes — Profit Tracker is free during its current phase. Create an account with a real email, verify it, then sign in.' : 'Yes — Profit Tracker is free during its current phase. Returning accounts can sign in; new registration is not open yet.') : 'Yes — Profit Tracker is completely free during its current phase. Access is invite-only. Sign in with the email and password provided by the owner.' },
     { q: 'What marketplaces does it support?', a: 'Any platform you sell on — eBay, StockX, GOAT, Amazon, Facebook Marketplace, and more. You define your own platforms and vendors.' },
     { q: 'How does cashback tracking work?', a: 'Link your credit cards and set cashback rates per card or per store. The app calculates what you earned on each purchase, which losses need to be covered by cashback, and what you can keep as points.' },
     { q: 'Do I need to connect my bank account?', a: 'No. There are zero financial integrations. You enter your data manually, keeping full control and privacy.' },
@@ -137,7 +139,7 @@ const Login = () => {
           </p>
 
           <div className="flex flex-wrap gap-3 items-center">
-            <PasswordLoginForm />
+            {firebaseEnabled ? <><FirebaseLoginForm /><details className="w-full"><summary className="cursor-pointer text-sm text-white/50">Existing account awaiting migration</summary><PasswordLoginForm /></details></> : <PasswordLoginForm />}
             <a href="#how" className="inline-flex items-center gap-1.5 text-[13px] text-white/35 hover:text-white/60 transition-colors">
               How it works <ArrowRight size={13} />
             </a>
@@ -395,7 +397,7 @@ const Login = () => {
           </div>
           <div className="space-y-10">
             {[
-              { n: '1', icon: LogIn, title: 'Sign in to your account', body: 'Use your invited email and password. Change a temporary password on your first login. Your existing records stay with your account.' },
+              { n: '1', icon: LogIn, title: 'Sign in to your account', body: firebaseEnabled ? 'Use your verified email and private password. Existing users can migrate their account from Settings with owner approval to keep their records.' : 'Use your invited email and password. Change a temporary password on your first login. Your existing records stay with your account.' },
               { n: '2', icon: ShoppingBag, title: 'Log your purchases', body: 'Add what you bought, which credit card you used, the vendor, and the cost. Takes seconds per item.' },
               { n: '3', icon: TrendingUp, title: 'Record sales, watch profit roll in', body: "Mark items sold when they move. Profit, margin, cashback, and cash flow update instantly across every page." },
             ].map((s, i) => {
@@ -472,7 +474,7 @@ const Login = () => {
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white mb-4 leading-tight">
             Your numbers are waiting.
           </h2>
-          <p className="text-[14px] text-white/35 mb-8">Sign in with your invited email and password.</p>
+          <p className="text-[14px] text-white/35 mb-8">{firebaseEnabled ? 'Sign in with your verified email and password.' : 'Sign in with your invited email and password.'}</p>
           <button
             onClick={handleLogin}
             className="inline-flex items-center gap-2.5 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold text-[14px] px-6 py-3 rounded-lg transition-colors shadow-lg shadow-[#5865F2]/20"

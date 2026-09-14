@@ -9,6 +9,8 @@ const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const passport = require('passport');
 const { createPasswordAuth } = require('./routes/passwordAuth');
+const { firebaseConfig, getFirebaseAuth } = require('./services/firebase');
+const { createFirebaseAuth } = require('./routes/firebaseAuth');
 const paymentMethodsRouter = require('./routes/paymentMethods');
 const inventoryRouter = require('./routes/inventory');
 const salesRouter = require('./routes/sales');
@@ -28,6 +30,8 @@ const calendarEventsRouter = require('./routes/calendarEvents');
 const app = express();
 const isProd = process.env.NODE_ENV === 'production';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const firebaseSettings = firebaseConfig();
+const firebaseAuth = createFirebaseAuth({ prisma, config: firebaseSettings, auth: getFirebaseAuth(firebaseSettings) });
 
 // Startup env dump — remove after debugging
 console.log('[ENV CHECK] NODE_ENV =', process.env.NODE_ENV);
@@ -46,6 +50,7 @@ if (isProd) app.set('trust proxy', 1);
 
 // Compress all responses — cuts JSON payload size by ~65-75%
 app.use(compression());
+app.use('/auth', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 
 // Allow frontend connection with credentials
 app.use(cors({
@@ -53,6 +58,7 @@ app.use(cors({
   credentials: true
 }));
 // A 5 MiB receipt expands to roughly 6.7 MiB when sent as base64 JSON.
+app.use('/auth/firebase', firebaseAuth.preflight, express.json({ limit: '16kb' }));
 app.use(express.json({ limit: '7mb' }));
 
 // CSRF protection: every state-changing request from the SPA must include this header.
@@ -61,6 +67,7 @@ app.use(express.json({ limit: '7mb' }));
 app.use((req, res, next) => {
   const safeMethods = ['GET', 'HEAD', 'OPTIONS'];
   if (safeMethods.includes(req.method)) return next();
+  if (req.get('Origin') !== FRONTEND_URL) return res.status(403).json({ error: 'CSRF check failed' });
   if (req.headers['x-requested-with'] === 'XMLHttpRequest') return next();
   return res.status(403).json({ error: 'CSRF check failed' });
 });
@@ -153,8 +160,14 @@ passport.deserializeUser(async (id, done) => {
 });
 
 const passwordAuth = createPasswordAuth({ prisma, clearUserCache });
+app.use((req, res, next) => req.path === '/auth/logout' ? next() : firebaseAuth.guard(req, res, next));
 app.use(passwordAuth.sessionGuard);
 app.use('/auth', passwordAuth.router);
+app.use('/auth/firebase', firebaseAuth.router);
+// Parser failures must not reach general telemetry with a token-containing request body.
+app.use('/auth/firebase', (err, req, res, next) => {
+  res.status(err.status === 413 ? 413 : 400).json({ error: err.status === 413 ? 'Authentication request too large.' : 'Invalid authentication request.' });
+});
 
 // --- ROUTES ---
 app.use('/api/payment-methods', paymentMethodsRouter);
@@ -183,9 +196,8 @@ app.get(['/auth/discord', '/auth/discord/callback'], (req, res) => res.redirect(
 
 // Current Session Route
 app.get('/auth/me', (req, res) => {
-  console.log('[/auth/me] sessionID:', req.sessionID, '| session:', JSON.stringify(req.session?.passport), '| user:', req.user?.id ?? 'none', '| cookie:', req.headers.cookie ? 'present' : 'MISSING');
   if (req.user) {
-    res.json(passwordAuth.publicUser(req.user, req.localCredential));
+    res.json(req.firebaseIdentity ? firebaseAuth.publicUser(req.user) : passwordAuth.publicUser(req.user, req.localCredential));
   } else {
     res.status(401).json({ message: 'Unauthorized' });
   }
@@ -201,11 +213,12 @@ app.patch('/auth/me', async (req, res) => {
     data: { tutorial_seen },
   });
   clearUserCache(req.user.id);
-  res.json(updated);
+  res.json(req.firebaseIdentity ? firebaseAuth.publicUser(updated) : passwordAuth.publicUser(updated, req.localCredential));
 });
 
 // Logout Route — remove Passport state, the persisted server session, and the browser cookie.
 app.post('/auth/logout', (req, res, next) => {
+  if (req.headers.cookie?.includes(`${firebaseAuth.cookieName}=`)) return firebaseAuth.logout(req, res, next);
   const userId = req.user?.id;
   req.logout((err) => {
     if (err) { return next(err); }

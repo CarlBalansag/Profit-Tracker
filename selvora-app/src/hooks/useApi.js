@@ -10,7 +10,10 @@ export const apiFetch = (path, options = {}) => {
     'X-Requested-With': 'XMLHttpRequest',
     ...options.headers,
   };
-  return fetch(`${API}${path}`, { credentials: 'include', ...options, headers });
+  return fetch(`${API}${path}`, { credentials: 'include', ...options, headers }).then(response => {
+    if (response.status === 401 && path.startsWith('/api/')) window.dispatchEvent(new Event('auth-expired'));
+    return response;
+  });
 };
 
 const fetcher = (path) =>

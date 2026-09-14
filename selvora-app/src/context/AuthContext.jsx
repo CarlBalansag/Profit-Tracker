@@ -1,23 +1,39 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../hooks/useApi';
 import ServerWakeUpScreen from '../components/Auth/ServerWakeUpScreen';
+import { useQueryClient } from '@tanstack/react-query';
 
 const AuthContext = createContext();
 
+// The context hook intentionally shares this module with its provider.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const WARMUP_RETRY_DELAYS = [0, 2_000, 4_000, 6_000, 8_000, 10_000, 10_000, 10_000, 10_000, 10_000];
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, updateUser] = useState(null);
+  const userId = useRef(null);
+  const queryClient = useQueryClient();
+  const setUser = useCallback((nextUser) => {
+    if (userId.current !== (nextUser?.id || null)) { queryClient.cancelQueries(); queryClient.clear(); }
+    userId.current = nextUser?.id || null;
+    updateUser(nextUser);
+  }, [queryClient]);
   const [loading, setLoading] = useState(true);
   const [serverError, setServerError] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
   const [attempt, setAttempt] = useState(1);
   const [startedAt, setStartedAt] = useState(() => Date.now());
   const requestSequence = useRef(0);
+  useEffect(() => {
+    const expired = () => { requestSequence.current++; setUser(null); };
+    window.addEventListener('auth-expired', expired);
+    return () => window.removeEventListener('auth-expired', expired);
+  }, [setUser]);
 
-  const fetchUser = async () => {
+  const fetchUser = useCallback(async () => {
     const requestId = ++requestSequence.current;
     const isCurrentRequest = () => requestId === requestSequence.current;
     setLoading(true);
@@ -42,6 +58,7 @@ export const AuthProvider = ({ children }) => {
     try {
       if (response?.ok) {
         const userData = await response.json();
+        if (!isCurrentRequest()) return;
         setUser(userData);
       } else if (!response || response.status >= 500) {
         // Server error after all retries — don't log out, show retry screen
@@ -53,16 +70,16 @@ export const AuthProvider = ({ children }) => {
     } catch {
       setUser(null);
     } finally {
-      setLoading(false);
+      if (isCurrentRequest()) setLoading(false);
     }
-  };
+  }, [setUser]);
 
   useEffect(() => {
     fetchUser();
     return () => {
       requestSequence.current += 1;
     };
-  }, []);
+  }, [fetchUser]);
 
   if (loading) {
     return <ServerWakeUpScreen key={startedAt} startedAt={startedAt} attempt={attempt} />;
@@ -73,17 +90,20 @@ export const AuthProvider = ({ children }) => {
   }
 
   const logout = async () => {
+    requestSequence.current++;
+    setLogoutError('');
     try {
       const response = await apiFetch('/auth/logout', { method: 'POST' });
       if (!response.ok) throw new Error(`Logout failed: ${response.status}`);
     } catch {
-      // Clear local state even when a sleeping server cannot confirm logout.
+      setLogoutError('Sign-out was not confirmed by the server. Please retry before leaving this device.');
     }
     setUser(null);
   };
 
   return (
     <AuthContext.Provider value={{ user, setUser, loading, logout }}>
+      {logoutError && <div role="alert" className="bg-red-950 p-3 text-white">{logoutError} <button onClick={logout} className="underline">Retry sign out</button></div>}
       {children}
     </AuthContext.Provider>
   );
