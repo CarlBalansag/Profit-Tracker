@@ -10,9 +10,7 @@ import { Marketplaces } from '../components/Settings/Marketplaces';
 import { Accounts } from '../components/Settings/Accounts';
 import { UiPreferences } from '../components/Settings/UiPreferences';
 import { useAuth } from '../context/AuthContext';
-import FirebaseLoginForm from '../components/Auth/FirebaseLoginForm';
 import FirebaseAccount from '../components/Auth/FirebaseAccount';
-import { firebaseEnabled } from '../services/firebaseAuth';
 
 function Settings() {
   const location = useLocation();
@@ -57,7 +55,7 @@ function Settings() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-10">
-      {firebaseEnabled && activeTab === 'profile' && (user?.auth_provider === 'firebase' ? <FirebaseAccount /> : !user?.password_change_required && <FirebaseLoginForm migration />)}
+      {activeTab === 'profile' && <FirebaseAccount />}
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white tracking-tight">Settings</h1>
@@ -104,7 +102,7 @@ function Settings() {
                  </div>
                  <div>
                     <h3 className="font-bold text-white">{user?.username || 'Unknown'}</h3>
-                    <p className="text-xs text-gray-500">{user?.auth_provider === 'firebase' ? 'Signed in with Firebase' : 'Signed in with your existing password'}</p>
+                    <p className="text-xs text-gray-500">Signed in with Firebase</p>
                  </div>
               </div>
 

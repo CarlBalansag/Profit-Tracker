@@ -19,7 +19,6 @@ import AddSale from './pages/AddSale';
 import TaxExempt from './pages/TaxExempt';
 import Guide from './pages/Guide';
 import Login from './pages/Login';
-import ChangePassword from './pages/ChangePassword';
 import Goals from './pages/Goals';
 import Calendar from './pages/Calendar';
 import { AuthProvider } from './context/AuthContext';
@@ -50,7 +49,6 @@ function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
           <Route path="*" element={
             <ProtectedRoute>
               <Shell>

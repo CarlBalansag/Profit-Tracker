@@ -7,8 +7,6 @@ const prisma = require('./prisma');
 const { Pool } = require('pg');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
-const passport = require('passport');
-const { createPasswordAuth } = require('./routes/passwordAuth');
 const { firebaseConfig, getFirebaseAuth } = require('./services/firebase');
 const { createFirebaseAuth } = require('./routes/firebaseAuth');
 const paymentMethodsRouter = require('./routes/paymentMethods');
@@ -32,12 +30,6 @@ const isProd = process.env.NODE_ENV === 'production';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const firebaseSettings = firebaseConfig();
 const firebaseAuth = createFirebaseAuth({ prisma, config: firebaseSettings, auth: getFirebaseAuth(firebaseSettings) });
-
-// Startup env dump — remove after debugging
-console.log('[ENV CHECK] NODE_ENV =', process.env.NODE_ENV);
-console.log('[ENV CHECK] FRONTEND_URL =', process.env.FRONTEND_URL);
-console.log('[ENV CHECK] DISCORD_CALLBACK_URL =', process.env.DISCORD_CALLBACK_URL);
-console.log('[ENV CHECK] DISCORD_CLIENT_ID =', process.env.DISCORD_CLIENT_ID);
 
 // Guard: refuse to start without a proper session secret (all environments)
 if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
@@ -110,59 +102,12 @@ app.use(session({
   }
 }));
 
-// Initialize Passport
-app.use(passport.initialize());
-app.use(passport.session());
+// Logout must run before the Firebase guard so an expired/revoked cookie can still be cleared.
+app.post('/auth/logout', firebaseAuth.logout);
 
-// Passport session deserialization
-// Retry helper for transient Neon cold-start errors (P1001, P2024)
-const NEON_RETRYABLE = new Set(['P1001', 'P2024']);
-async function withDbRetry(fn, retries = 3, delayMs = 2000) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      const isRetryable = NEON_RETRYABLE.has(err.code);
-      console.warn(`[db-retry] attempt ${i + 1} failed (code=${err.code}):`, err.message);
-      if (!isRetryable || i === retries - 1) throw err;
-      await new Promise(r => setTimeout(r, delayMs));
-    }
-  }
-}
+// Firebase session guard — populates req.user and req.firebaseIdentity for all other routes.
+app.use(firebaseAuth.guard);
 
-// Serialization to save user in session
-passport.serializeUser((user, done) => {
-  console.log('[serializeUser] serializing user id:', user.id);
-  done(null, user.id);
-});
-
-// Deserialization to attach user info to req.user.
-const userCache = new Map();
-const USER_CACHE_TTL = 5 * 60 * 1000;
-const clearUserCache = (id) => userCache.delete(id);
-
-passport.deserializeUser(async (id, done) => {
-  console.log('[deserializeUser] deserializing id:', id);
-  try {
-    const cached = userCache.get(id);
-    if (cached && cached.expiresAt > Date.now()) {
-      console.log('[deserializeUser] cache hit for id:', id);
-      return done(null, cached.user);
-    }
-    const user = await withDbRetry(() => prisma.user.findUnique({ where: { id } }));
-    console.log('[deserializeUser] DB lookup result:', user ? `found user ${user.id}` : 'NOT FOUND');
-    if (user) userCache.set(id, { user, expiresAt: Date.now() + USER_CACHE_TTL });
-    done(null, user);
-  } catch (error) {
-    console.error('[deserializeUser] error after retries:', error.message);
-    done(error, null);
-  }
-});
-
-const passwordAuth = createPasswordAuth({ prisma, clearUserCache });
-app.use((req, res, next) => req.path === '/auth/logout' ? next() : firebaseAuth.guard(req, res, next));
-app.use(passwordAuth.sessionGuard);
-app.use('/auth', passwordAuth.router);
 app.use('/auth/firebase', firebaseAuth.router);
 // Parser failures must not reach general telemetry with a token-containing request body.
 app.use('/auth/firebase', (err, req, res, next) => {
@@ -196,11 +141,8 @@ app.get(['/auth/discord', '/auth/discord/callback'], (req, res) => res.redirect(
 
 // Current Session Route
 app.get('/auth/me', (req, res) => {
-  if (req.user) {
-    res.json(req.firebaseIdentity ? firebaseAuth.publicUser(req.user) : passwordAuth.publicUser(req.user, req.localCredential));
-  } else {
-    res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (req.user) res.json(firebaseAuth.publicUser(req.user));
+  else res.status(401).json({ message: 'Unauthorized' });
 });
 
 // Mark tutorial as seen
@@ -212,29 +154,7 @@ app.patch('/auth/me', async (req, res) => {
     where: { id: req.user.id },
     data: { tutorial_seen },
   });
-  clearUserCache(req.user.id);
-  res.json(req.firebaseIdentity ? firebaseAuth.publicUser(updated) : passwordAuth.publicUser(updated, req.localCredential));
-});
-
-// Logout Route — remove Passport state, the persisted server session, and the browser cookie.
-app.post('/auth/logout', (req, res, next) => {
-  if (req.headers.cookie?.includes(`${firebaseAuth.cookieName}=`)) return firebaseAuth.logout(req, res, next);
-  const userId = req.user?.id;
-  req.logout((err) => {
-    if (err) { return next(err); }
-    const cookieOptions = {
-      path: '/',
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
-    };
-    res.clearCookie('connect.sid', cookieOptions);
-    req.session.destroy((destroyErr) => {
-      if (destroyErr) return next(destroyErr);
-      if (userId) clearUserCache(userId);
-      res.json({ success: true });
-    });
-  });
+  res.json(firebaseAuth.publicUser(updated));
 });
 
 // Central error handler — never expose raw error messages in production
