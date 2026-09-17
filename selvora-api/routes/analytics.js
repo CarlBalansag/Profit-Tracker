@@ -5,7 +5,7 @@ const { validateQuery } = require('../middleware/validate');
 const { analyticsDashboardQuery } = require('../validation/schemas');
 
 const isAuthenticated = (req, res, next) => {
-  if (req.isAuthenticated()) return next();
+  if (req.user) return next();
   res.status(401).json({ message: 'Unauthorized' });
 };
 

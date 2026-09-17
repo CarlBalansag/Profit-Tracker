@@ -6,7 +6,7 @@ const { account, updateAccount } = require('../validation/schemas');
 const { requireOwned } = require('../services/ownership');
 
 const isAuthenticated = (req, res, next) => {
-  if (req.isAuthenticated()) return next();
+  if (req.user) return next();
   res.status(401).json({ message: 'Unauthorized' });
 };
 
