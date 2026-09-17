@@ -5,6 +5,7 @@ const { validateBody } = require('../middleware/validate');
 const { createSale, updateSale } = require('../validation/schemas');
 const { publishCalendarFeed } = require('../services/calendarFeed');
 const { requireOwned } = require('../services/ownership');
+const { refreshTracking, checkTrackingRateLimit } = require('../services/tracking');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -51,6 +52,7 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
       sale_tax_collected,
       customer_tax_exempt,
       exemption_type,
+      tracking_number,
     } = req.body;
 
     // Check ownership before opening the transaction. Stock itself is claimed
@@ -91,6 +93,7 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
           sale_tax_collected: parseFloat(sale_tax_collected) || 0,
           customer_tax_exempt: customer_tax_exempt === true || customer_tax_exempt === 'true',
           exemption_type: exemption_type || null,
+          tracking_number: tracking_number || null,
         }
       });
     });
@@ -108,7 +111,7 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
     const {
       unit_price, quantity, status, commission_fee, platform_id,
       sale_shipping, taxable, sale_tax_collected, customer_tax_exempt, exemption_type,
-      sale_date, payout_date,
+      sale_date, payout_date, tracking_number,
     } = req.body;
     const existing = await prisma.sales.findUnique({
       where: { id: req.params.id },
@@ -151,12 +154,44 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
         sale_tax_collected: sale_tax_collected !== undefined ? parseFloat(sale_tax_collected) : existing.sale_tax_collected,
         customer_tax_exempt: customer_tax_exempt !== undefined ? (customer_tax_exempt === true || customer_tax_exempt === 'true') : existing.customer_tax_exempt,
         exemption_type: exemption_type !== undefined ? (exemption_type || null) : existing.exemption_type,
+        tracking_number: tracking_number !== undefined ? (tracking_number || null) : existing.tracking_number,
         }
       });
     });
 
     await publishCalendarFeed(req.user.id);
     res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/sales/:id/track - refresh live carrier status for this sale's tracking number
+router.post('/:id/track', isAuthenticated, async (req, res, next) => {
+  try {
+    const existing = await prisma.sales.findUnique({
+      where: { id: req.params.id },
+      include: { inventory: true },
+    });
+    if (!existing || existing.inventory.user_id !== req.user.id) {
+      return res.status(404).json({ error: 'Sale not found or access denied' });
+    }
+    if (!existing.tracking_number) {
+      return res.status(400).json({ error: 'No tracking number set for this sale' });
+    }
+
+    const rate = await checkTrackingRateLimit(prisma, req.user.id);
+    if (!rate.allowed) {
+      res.set('Retry-After', String(rate.retryAfterSeconds));
+      return res.status(429).json({ error: 'Too many tracking checks. Please try again later.', retryAfterSeconds: rate.retryAfterSeconds });
+    }
+
+    const tracking_info = await refreshTracking(existing.tracking_number);
+    const updated = await prisma.sales.update({
+      where: { id: req.params.id },
+      data: { tracking_info },
+    });
+    res.json({ ...updated, rate_limit: { remaining: rate.remaining, resetAt: rate.resetAt } });
   } catch (err) {
     next(err);
   }

@@ -15,6 +15,12 @@ describe('partial update schemas', () => {
     expect(updateSale.parse({ status: 'PAID' })).toEqual({ status: 'PAID' });
   });
 
+  it('accepts a tracking number update on a sale', () => {
+    expect(updateSale.parse({ tracking_number: '1Z999AA10123456784' })).toEqual({
+      tracking_number: '1Z999AA10123456784',
+    });
+  });
+
   it('still validates supplied update values', () => {
     expect(() => updateInventory.parse({ qty_purchased: 0 })).toThrow();
     expect(() => updateSale.parse({ commission_fee: -1 })).toThrow();

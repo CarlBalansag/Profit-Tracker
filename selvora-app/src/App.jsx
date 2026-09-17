@@ -21,6 +21,7 @@ import Guide from './pages/Guide';
 import Login from './pages/Login';
 import Goals from './pages/Goals';
 import Calendar from './pages/Calendar';
+import Shipping from './pages/Shipping';
 import { AuthProvider } from './context/AuthContext';
 import { TutorialProvider } from './context/TutorialContext';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
@@ -58,6 +59,7 @@ function App() {
           <Route path="/add-sale" element={<AddSale />} />
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/inventory" element={<Inventory />} />
+          <Route path="/shipping" element={<Shipping />} />
           <Route path="/expenses" element={<Expenses />} />
           <Route path="/receipts" element={<Receipts />} />
           <Route path="/invoices" element={<Invoices />} />

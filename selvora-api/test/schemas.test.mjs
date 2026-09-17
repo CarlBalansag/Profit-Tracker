@@ -55,6 +55,13 @@ describe('API validation schemas', () => {
       unit_price: '30',
       quantity: '1',
     }).unit_price).toBe(30);
+
+    expect(createSale.parse({
+      inventory_id: '11111111-1111-4111-8111-111111111111',
+      unit_price: '30',
+      quantity: '1',
+      tracking_number: '1Z999AA10123456784',
+    }).tracking_number).toBe('1Z999AA10123456784');
   });
 
   it('limits recurring frequency values', () => {

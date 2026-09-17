@@ -132,6 +132,7 @@ const createSale = z.object({
   sale_tax_collected: optionalMoney.default(0),
   customer_tax_exempt: optionalBoolish,
   exemption_type: optionalString,
+  tracking_number: optionalString,
 }).passthrough();
 
 const updateSale = z.object({
@@ -148,6 +149,7 @@ const updateSale = z.object({
   sale_tax_collected: optionalMoney,
   customer_tax_exempt: optionalBoolish,
   exemption_type: optionalString,
+  tracking_number: optionalString,
 }).passthrough();
 
 const createExpense = z.object({

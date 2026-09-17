@@ -5,6 +5,7 @@ const { validateBody } = require('../middleware/validate');
 const { createInventory, updateInventory } = require('../validation/schemas');
 const { publishCalendarFeed } = require('../services/calendarFeed');
 const { requireOwned } = require('../services/ownership');
+const { refreshTracking, checkTrackingRateLimit } = require('../services/tracking');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -30,7 +31,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
         unit_purchase_cost: true, qty_purchased: true, qty_on_hand: true,
         sales_tax: true, shipping_cost_inbound: true, fees: true,
         cashback_earned: true, gift_card_amount: true,
-        order_number: true, tracking_number: true, receipt_url: true,
+        order_number: true, tracking_number: true, tracking_info: true, receipt_url: true,
         tax_exempt: true,
         vendor: { select: { id: true, name: true, type: true } },
         payment_method: { select: { id: true, name: true, type: true, default_cashback_rate: true, preset_card_id: true, category_rates: true } },
@@ -312,6 +313,34 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
     res.json({ success: true });
   } catch (err) {
     console.error('DELETE inventory error:', err);
+    next(err);
+  }
+});
+
+// POST /api/inventory/:id/track - refresh live carrier status for this item's tracking number
+router.post('/:id/track', isAuthenticated, async (req, res, next) => {
+  try {
+    const existing = await prisma.inventory.findUnique({ where: { id: req.params.id } });
+    if (!existing || existing.user_id !== req.user.id) {
+      return res.status(404).json({ error: 'Not found or access denied' });
+    }
+    if (!existing.tracking_number) {
+      return res.status(400).json({ error: 'No tracking number set for this item' });
+    }
+
+    const rate = await checkTrackingRateLimit(prisma, req.user.id);
+    if (!rate.allowed) {
+      res.set('Retry-After', String(rate.retryAfterSeconds));
+      return res.status(429).json({ error: 'Too many tracking checks. Please try again later.', retryAfterSeconds: rate.retryAfterSeconds });
+    }
+
+    const tracking_info = await refreshTracking(existing.tracking_number);
+    const updated = await prisma.inventory.update({
+      where: { id: req.params.id },
+      data: { tracking_info },
+    });
+    res.json({ ...updated, rate_limit: { remaining: rate.remaining, resetAt: rate.resetAt } });
+  } catch (err) {
     next(err);
   }
 });

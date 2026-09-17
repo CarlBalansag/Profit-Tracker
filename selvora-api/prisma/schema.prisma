@@ -116,6 +116,7 @@ model Inventory {
   gift_card_amount      Float          @default(0)
   order_number          String?
   tracking_number       String?
+  tracking_info         Json?
   category              String?
   receipt_url           String?
   tax_exempt            Boolean        @default(false)
@@ -146,6 +147,8 @@ model Sales {
   sale_tax_collected  Float     @default(0)
   customer_tax_exempt Boolean   @default(false)
   exemption_type      String?
+  tracking_number     String?
+  tracking_info       Json?
 
   @@index([inventory_id])
   @@index([platform_id])

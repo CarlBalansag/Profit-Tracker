@@ -150,6 +150,7 @@ Invoice (buyer invoices)
 | Payment Methods | Full CRUD `/api/payment-methods` |
 | Accounts | Full CRUD `/api/accounts` |
 | Receipts | `POST /api/receipts/attach`, `DELETE /api/receipts/detach` |
+| Shipping Tracking | `POST /api/inventory/:id/track`, `POST /api/sales/:id/track` |
 | Preferences | `GET/PUT /api/preferences/dashboard-settings/:style` |
 | eBay Price | `GET/POST /api/ebay-price` |
 | Health | `GET /health` |
@@ -175,6 +176,12 @@ CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
 SENTRY_DSN=            # optional
 SENTRY_TRACES_SAMPLE_RATE=  # optional, e.g. 0.1
+UPS_CLIENT_ID=         # optional — enables live UPS tracking status
+UPS_CLIENT_SECRET=
+FEDEX_CLIENT_ID=       # optional — enables live FedEx tracking status
+FEDEX_CLIENT_SECRET=
+USPS_CLIENT_ID=        # optional — enables live USPS tracking status (own Mailer ID numbers only)
+USPS_CLIENT_SECRET=
 ```
 
 Calendar subscriptions use the configured Cloudinary account to publish a private, stable ICS feed. No `BACKEND_URL` variable is required. Keep the generated subscription link private because anyone with it can read that calendar.
