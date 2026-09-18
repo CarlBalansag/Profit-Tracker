@@ -6,6 +6,7 @@ const { createInventory, updateInventory } = require('../validation/schemas');
 const { publishCalendarFeed } = require('../services/calendarFeed');
 const { requireOwned } = require('../services/ownership');
 const { refreshTracking, checkTrackingRateLimit } = require('../services/tracking');
+const { autoShippedStatus } = require('../services/statusHierarchy');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -90,6 +91,13 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
 
     console.log('POST inventory body:', JSON.stringify(req.body));
     const qty = parseInt(qty_purchased, 10) || 1;
+    // A tracking number entered at creation time advances status the same
+    // way adding one later does — unless the caller explicitly chose a status.
+    let resolvedStatus = status || 'PURCHASED';
+    if (!status && tracking_number) {
+      const advanced = autoShippedStatus('inbound', resolvedStatus);
+      if (advanced) resolvedStatus = advanced;
+    }
     await requireOwned('platform', vendor_id, req.user.id, 'Vendor');
     await requireOwned('paymentMethod', payment_method_id, req.user.id, 'Payment method');
 
@@ -122,7 +130,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
         cashback_earned: 0, // Calculated at query time from payment method rates
         category: category || null,
         tax_exempt: tax_exempt === true || tax_exempt === 'true',
-        status: status || 'PURCHASED',
+        status: resolvedStatus,
         }
       });
 
@@ -276,6 +284,13 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
     if (gift_card_amount !== undefined)      data.gift_card_amount = parseFloat(gift_card_amount) || 0;
     if (order_number !== undefined)          data.order_number = order_number || null;
     if (tracking_number !== undefined)       data.tracking_number = tracking_number || null;
+    // Adding a tracking number to a still-pre-shipment item automatically
+    // advances its status — never overrides an explicit status change in the
+    // same request, and never touches an item that's already further along.
+    if (status === undefined && tracking_number && !existing.tracking_number) {
+      const advanced = autoShippedStatus('inbound', existing.status);
+      if (advanced) data.status = advanced;
+    }
     if (cashback_earned !== undefined)       data.cashback_earned = parseFloat(cashback_earned) || 0;
     if (category !== undefined)              data.category = category || null;
     if (vendor_id !== undefined)             data.vendor_id = vendor_id || null;

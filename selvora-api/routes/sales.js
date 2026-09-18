@@ -6,6 +6,7 @@ const { createSale, updateSale } = require('../validation/schemas');
 const { publishCalendarFeed } = require('../services/calendarFeed');
 const { requireOwned } = require('../services/ownership');
 const { refreshTracking, checkTrackingRateLimit } = require('../services/tracking');
+const { autoShippedStatus } = require('../services/statusHierarchy');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -64,6 +65,13 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
 
     const saleQty = parseInt(quantity, 10) || 1;
     await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
+    // A tracking number entered at creation time advances status the same
+    // way adding one later does — unless the caller explicitly chose a status.
+    let resolvedStatus = status || 'SOLD';
+    if (!status && tracking_number) {
+      const advanced = autoShippedStatus('outbound', resolvedStatus);
+      if (advanced) resolvedStatus = advanced;
+    }
     const sale = await prisma.$transaction(async (tx) => {
       const stockClaim = await tx.inventory.updateMany({
         where: {
@@ -88,7 +96,7 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
           sale_shipping: parseFloat(sale_shipping) || 0,
           sale_date: parseLocalDate(sale_date) || new Date(),
           payout_date: payout_date ? parseLocalDate(payout_date) : null,
-          status: status || 'SOLD',
+          status: resolvedStatus,
           taxable: taxable !== undefined ? (taxable === true || taxable === 'true') : true,
           sale_tax_collected: parseFloat(sale_tax_collected) || 0,
           customer_tax_exempt: customer_tax_exempt === true || customer_tax_exempt === 'true',
@@ -123,6 +131,15 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
     const newQty = quantity !== undefined ? (parseInt(quantity) || existing.quantity) : existing.quantity;
     await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
     const qtyDiff = existing.quantity - newQty;
+
+    // Adding a tracking number to a still-unshipped sale automatically
+    // advances its status — never overrides an explicit status change in the
+    // same request, and never touches a sale that's already further along.
+    let resolvedStatus = status !== undefined ? status : existing.status;
+    if (status === undefined && tracking_number && !existing.tracking_number) {
+      const advanced = autoShippedStatus('outbound', existing.status);
+      if (advanced) resolvedStatus = advanced;
+    }
     const updated = await prisma.$transaction(async (tx) => {
       if (qtyDiff < 0) {
         const stockClaim = await tx.inventory.updateMany({
@@ -144,7 +161,7 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
         data: {
         unit_price: unit_price !== undefined ? parseFloat(unit_price) : existing.unit_price,
         quantity: newQty,
-        status: status !== undefined ? status : existing.status,
+        status: resolvedStatus,
         commission_fee: commission_fee !== undefined ? parseFloat(commission_fee) : existing.commission_fee,
         sale_shipping: sale_shipping !== undefined ? parseFloat(sale_shipping) : existing.sale_shipping,
         platform_id: platform_id !== undefined ? (platform_id || null) : existing.platform_id,
