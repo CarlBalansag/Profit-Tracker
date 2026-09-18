@@ -67,8 +67,10 @@ async function trackByNumber(trackingNumber) {
 
   const status = normalizeStatus(data.statusCategory || data.status);
   const deliveredAt = status === 'Delivered' ? (events[0]?.date || null) : null;
+  const estimatedDeliveryRaw = data.expectedDeliveryDate || data.expectedDeliveryTimestamp || null;
+  const estimatedDelivery = estimatedDeliveryRaw ? new Date(estimatedDeliveryRaw).toISOString() : null;
 
-  return { status, events, deliveredAt };
+  return { status, events, deliveredAt, estimatedDelivery };
 }
 
 module.exports = { isConfigured, trackByNumber };

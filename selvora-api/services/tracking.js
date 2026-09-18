@@ -69,8 +69,8 @@ async function refreshTracking(trackingNumber, clients = LIVE_CARRIERS) {
   if (!client.isConfigured()) return { carrier, trackable: false, reason: 'not_configured', checkedAt };
 
   try {
-    const { status, events, deliveredAt } = await client.trackByNumber(trackingNumber);
-    return { carrier, trackable: true, status, events, deliveredAt, checkedAt };
+    const { status, events, deliveredAt, estimatedDelivery } = await client.trackByNumber(trackingNumber);
+    return { carrier, trackable: true, status, events, deliveredAt, estimatedDelivery, checkedAt };
   } catch (err) {
     if (err.restricted) return { carrier, trackable: false, reason: 'restricted', checkedAt };
     // Logged (not just swallowed into the generic "error" reason) so a real

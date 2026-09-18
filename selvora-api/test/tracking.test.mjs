@@ -80,11 +80,27 @@ describe('refreshTracking', () => {
           status: 'Delivered',
           events: [{ date: '2026-09-01T00:00:00.000Z', description: 'Delivered', location: 'Austin, TX' }],
           deliveredAt: '2026-09-01T00:00:00.000Z',
+          estimatedDelivery: null,
         }),
       },
     });
     expect(result).toMatchObject({ carrier: 'UPS', trackable: true, status: 'Delivered' });
     expect(result.events).toHaveLength(1);
+  });
+
+  it('passes through an estimated delivery date for an in-transit package', async () => {
+    const result = await refreshTracking('1Z999AA10123456784', {
+      UPS: {
+        isConfigured: () => true,
+        trackByNumber: vi.fn().mockResolvedValue({
+          status: 'In Transit',
+          events: [],
+          deliveredAt: null,
+          estimatedDelivery: '2026-09-20T12:00:00.000Z',
+        }),
+      },
+    });
+    expect(result).toMatchObject({ carrier: 'UPS', trackable: true, status: 'In Transit', estimatedDelivery: '2026-09-20T12:00:00.000Z' });
   });
 });
 

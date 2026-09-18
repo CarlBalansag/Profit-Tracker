@@ -70,12 +70,14 @@ async function trackByNumber(trackingNumber) {
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
   const actualDelivery = trackResult?.dateAndTimes?.find(d => d.type === 'ACTUAL_DELIVERY')?.dateTime;
+  const estimatedDeliveryRaw = trackResult?.dateAndTimes?.find(d => d.type === 'ESTIMATED_DELIVERY')?.dateTime;
   const latestDescription = trackResult?.latestStatusDetail?.description || events[0]?.description;
 
   return {
     status: normalizeStatus(latestDescription),
     events,
     deliveredAt: actualDelivery ? new Date(actualDelivery).toISOString() : null,
+    estimatedDelivery: estimatedDeliveryRaw ? new Date(estimatedDeliveryRaw).toISOString() : null,
   };
 }
 

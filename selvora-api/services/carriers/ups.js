@@ -55,6 +55,14 @@ function activityLocation(activity) {
   return [addr.city, addr.stateProvince, addr.country].filter(Boolean).join(', ') || null;
 }
 
+// UPS package-level dates use plain YYYYMMDD (no time component).
+function packageDateIso(dateStr) {
+  if (!dateStr || dateStr.length < 8) return null;
+  const iso = `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}T12:00:00`;
+  const parsed = new Date(iso);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 async function trackByNumber(trackingNumber) {
   const token = await getAccessToken();
   const res = await fetch(`${TRACK_URL}/${encodeURIComponent(trackingNumber)}`, {
@@ -75,11 +83,15 @@ async function trackByNumber(trackingNumber) {
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
   const deliveredEvent = events.find(e => e.description.toLowerCase().includes('delivered'));
+  // "SDD" = Scheduled Delivery Date — UPS's estimated-arrival field for
+  // packages still in transit.
+  const estimatedDelivery = packageDateIso(pkg?.deliveryDate?.find(d => d.type === 'SDD')?.date);
 
   return {
     status: normalizeStatus(events[0]?.description),
     events,
     deliveredAt: deliveredEvent?.date || null,
+    estimatedDelivery,
   };
 }
 

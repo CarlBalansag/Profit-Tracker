@@ -17,6 +17,11 @@ function timeAgo(iso) {
   return `${days}d ago`;
 }
 
+function formatEta(iso) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 const STATUS_COLORS = {
   'Delivered': 'text-emerald-400',
   'Out for Delivery': 'text-sky-400',
@@ -58,6 +63,9 @@ function TrackingStatusCell({ trackingNumber, trackingInfo }) {
   return (
     <div className="flex flex-col">
       <span className={`text-xs font-semibold ${STATUS_COLORS[trackingInfo.status] || 'text-gray-300'}`}>{trackingInfo.status}</span>
+      {trackingInfo.estimatedDelivery && trackingInfo.status !== 'Delivered' && (
+        <span className="text-[10px] text-gray-500">Est. arrival {formatEta(trackingInfo.estimatedDelivery)}</span>
+      )}
       <span className="text-[10px] text-gray-600">checked {timeAgo(trackingInfo.checkedAt)}</span>
     </div>
   );
