@@ -73,6 +73,10 @@ async function refreshTracking(trackingNumber, clients = LIVE_CARRIERS) {
     return { carrier, trackable: true, status, events, deliveredAt, checkedAt };
   } catch (err) {
     if (err.restricted) return { carrier, trackable: false, reason: 'restricted', checkedAt };
+    // Logged (not just swallowed into the generic "error" reason) so a real
+    // failure — bad credentials, sandbox-vs-production mismatch, carrier
+    // outage — is diagnosable from server logs instead of a dead end.
+    console.error(`[tracking] ${carrier} lookup failed:`, err.status ? `HTTP ${err.status} —` : '', err.message);
     return { carrier, trackable: false, reason: 'error', checkedAt };
   }
 }
