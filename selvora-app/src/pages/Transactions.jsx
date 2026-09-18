@@ -13,7 +13,6 @@ import { useAuth } from '../context/AuthContext';
 import TransactionDetailModal from '../components/TransactionDetailModal';
 import ProductNoteButton from '../components/ProductNoteButton';
 import { PRESET_CARDS } from '../data/presetCards';
-import StatusQuickSelect, { INVENTORY_STATUSES, SALE_STATUSES } from '../components/StatusQuickSelect';
 import { detectCarrier } from '../utils/carrier';
 
 // ─── Inline editable cell input ───────────────────────────────────────────────
@@ -29,6 +28,33 @@ function EditInput({ value, onChange, type = 'text', className = '' }) {
 }
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
+export const STATUS_COLORS = {
+  'PRE ORDER':     'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+  'ON HAND':       'bg-teal-500/10 text-teal-400 border-teal-500/20',
+  PURCHASED:       'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  SHIPPED_IN:      'bg-purple-500/10 text-purple-400 border-purple-500/20',
+  SHIPPED_OUT:     'bg-sky-500/10 text-sky-400 border-sky-500/20',
+  DELIVERED:       'bg-orange-500/10 text-orange-400 border-orange-500/20',
+  SCANNED_IN:      'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+  LISTED:          'bg-amber-500/10 text-amber-400 border-amber-500/20',
+  SOLD:            'bg-green-500/10 text-green-400 border-green-500/20',
+  PAID:            'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  COMPLETED:       'bg-teal-500/10 text-teal-400 border-teal-500/20',
+  AUTHENTICATION:  'bg-violet-500/10 text-violet-400 border-violet-500/20',
+  RETURNED:        'bg-red-500/10 text-red-400 border-red-500/20',
+  DISPUTED:        'bg-rose-500/10 text-rose-400 border-rose-500/20',
+  CANCELLED:       'bg-gray-500/10 text-gray-400 border-gray-500/20',
+};
+
+function StatusBadge({ status }) {
+  const cls = STATUS_COLORS[status?.toUpperCase()] || STATUS_COLORS.PURCHASED;
+  return (
+    <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border ${cls}`}>
+      {status}
+    </span>
+  );
+}
+
 // ─── Inline select ───────────────────────────────────────────────────────────
 function EditSelect({ value, onChange, options, placeholder = 'Select...' }) {
   return (
@@ -45,7 +71,7 @@ function EditSelect({ value, onChange, options, placeholder = 'Select...' }) {
   );
 }
 
-const STATUSES = INVENTORY_STATUSES;
+const STATUSES = ['Pre Order', 'On Hand', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
 
 const ALL_COLUMNS = [
   { key: 'date',     label: 'Date' },
@@ -923,12 +949,7 @@ const Transactions = () => {
               {row.date && <span>{row.date}</span>}
               {row.vendor && <span>{row.vendor}</span>}
               {row.platform && <span className="text-gray-400">{row.platform}</span>}
-              <StatusQuickSelect
-                id={row.isSale ? row.saleId : row.rawId}
-                status={row.status}
-                kind={row.isSale ? 'sale' : 'inventory'}
-                options={row.isSale ? SALE_STATUSES : INVENTORY_STATUSES}
-              />
+              <StatusBadge status={row.status} />
             </div>
 
             {/* Bottom row: cost → sale → profit */}
@@ -1214,14 +1235,7 @@ const Transactions = () => {
                               options={STATUSES.map(s => ({ id: s, name: s }))}
                               placeholder=""
                             />
-                          ) : (
-                            <StatusQuickSelect
-                              id={row.isSale ? row.saleId : row.rawId}
-                              status={row.status}
-                              kind={row.isSale ? 'sale' : 'inventory'}
-                              options={row.isSale ? SALE_STATUSES : INVENTORY_STATUSES}
-                            />
-                          )}
+                          ) : <StatusBadge status={row.status} />}
                         </td>
                       );
                       case 'retail': return (

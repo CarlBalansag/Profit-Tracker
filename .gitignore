@@ -12,3 +12,6 @@ selvora-api/prisma/dev.db
 selvora-api/.env
 selvora-app/.env
 selvora-app/.env.local
+
+# Local Netlify folder
+.netlify
