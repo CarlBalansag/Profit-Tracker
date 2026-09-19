@@ -18,6 +18,7 @@ import {
 import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import ProfitRevenueTrendChart from '../components/Dashboard/ProfitRevenueTrendChart';
 import MonthlyProfitSpendChart from '../components/Dashboard/MonthlyProfitSpendChart';
+import ImpeccableDashboard from '../components/Dashboard/ImpeccableDashboard';
 
 const GLASS_BASE_LAYOUT_ITEMS = ['statCards', 'radarGraph', 'trendChart', 'paymentMethods', 'recentSales'];
 
@@ -128,6 +129,7 @@ const Dashboard = () => {
   const { preferences } = useUiPreferences();
   const { settings, saveSettings } = useDashboardSettings(preferences.style);
   const isGlass = preferences.style === 'glassmorphism-brown';
+  const isImpeccable = preferences.style === 'impeccable';
   const [dateFilter, setDateFilter] = useState(settings.defaultDateFilter || '30 Days');
   const [modeFilter, setModeFilter] = useState('All');
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -839,6 +841,48 @@ const Dashboard = () => {
   }
 
   if (isLoading) return <PageLoader variant="dashboard" />;
+
+  if (isImpeccable) {
+    return (
+      <ImpeccableDashboard
+        user={user}
+        lastUpdated={lastUpdated}
+        isLoading={isLoading}
+        modeFilter={modeFilter}
+        setModeFilter={setModeFilter}
+        dateFilter={dateFilter}
+        setDateFilter={setDateFilter}
+        settingsOpen={settingsOpen}
+        setSettingsOpen={setSettingsOpen}
+        settings={settings}
+        saveSettings={saveSettings}
+        uiStyle={preferences.style}
+        navigate={navigate}
+        stats={stats}
+        pipeline={pipeline}
+        topCards={topCards}
+        trend={trend}
+        trendMeta={trendMeta}
+        recent={recent}
+        visibleStatCards={visibleStatCards}
+        statCardRegistry={STAT_CARD_REGISTRY}
+        visiblePipelineCards={visiblePipelineCards}
+        pipelineCardRegistry={PIPELINE_CARD_REGISTRY}
+        visibleChartSeries={visibleChartSeries}
+        showTrendChart={showTrendChart}
+        showRecentSales={showRecentSales}
+        showPaymentMethods={showPaymentMethods}
+        showPipeline={showPipeline}
+        showStatCards={showStatCards}
+        activeGoals={activeGoals}
+        showGoalsWidget={showGoalsWidget}
+        trendMode={trendMode}
+        setTrendMode={setTrendMode}
+        chartView={chartView}
+        setChartView={setChartView}
+      />
+    );
+  }
 
   return (
     <div className={isGlass

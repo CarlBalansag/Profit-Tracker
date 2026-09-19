@@ -59,7 +59,112 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
       </>
     );
   }
-  
+
+  if (uiStyle === 'impeccable') {
+    return (
+      <>
+        {isOpen && (
+          <div
+            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            onClick={() => setIsOpen(false)}
+          />
+        )}
+
+        <aside className={clsx(
+          "fixed inset-y-0 left-0 z-50 flex flex-col transition-all duration-300 ease-in-out lg:static lg:translate-x-0 border-r border-[color:var(--border-default)] bg-[var(--bg-surface)]",
+          isOpen ? "translate-x-0" : "-translate-x-full",
+          isCollapsed ? "w-[64px]" : "w-56"
+        )}>
+          <div className={clsx("flex items-center py-4 border-b border-[color:var(--border-default)]", isCollapsed ? "justify-center px-0" : "gap-2.5 px-3")}>
+            <div className="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-[4px] border border-[color:var(--border-default)] text-[11px] font-semibold text-[var(--text-primary)]" style={{ fontFamily: "'Geist Mono', ui-monospace, monospace" }}>
+              PT
+            </div>
+
+            {!isCollapsed && (
+              <div className="flex-1 min-w-0">
+                <h1 className="text-[13px] font-semibold text-[var(--text-primary)]">Profit Tracker</h1>
+              </div>
+            )}
+
+            <button className="lg:hidden p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-[4px] hover:bg-[var(--bg-hover)]" onClick={() => setIsOpen(false)}>
+              <X size={18} />
+            </button>
+
+            <button
+              className="hidden lg:block p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-[4px] hover:bg-[var(--bg-hover)]"
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {isCollapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
+            </button>
+          </div>
+
+          <nav className="flex-1 py-3 px-2 overflow-y-auto overflow-x-hidden">
+            <ImpeccableSectionLabel isCollapsed={isCollapsed}>Core</ImpeccableSectionLabel>
+            <ImpeccableNavItem icon={LayoutDashboard} label="Dashboard" to="/" isCollapsed={isCollapsed} />
+            <ImpeccableNavItem icon={CirclePlus} label="Add Transaction" to="/add-transaction" isCollapsed={isCollapsed} tutorialId="sidebar-add-transaction" />
+            <ImpeccableNavItem icon={DollarSign} label="Record Sale" to="/add-sale" isCollapsed={isCollapsed} tutorialId="sidebar-record-sale" />
+            <ImpeccableNavItem icon={ArrowLeftRight} label="Transactions" to="/transactions" isCollapsed={isCollapsed} tutorialId="sidebar-transactions" />
+
+            <ImpeccableSectionLabel isCollapsed={isCollapsed}>Operations</ImpeccableSectionLabel>
+            <ImpeccableNavItem icon={Package} label="Inventory On Hand" to="/inventory" isCollapsed={isCollapsed} tutorialId="sidebar-inventory" />
+            <ImpeccableNavItem icon={Truck} label="Shipping" to="/shipping" isCollapsed={isCollapsed} />
+            <ImpeccableNavItem icon={Receipt} label="Expenses" to="/expenses" isCollapsed={isCollapsed} tutorialId="sidebar-expenses" />
+            <ImpeccableNavItem icon={FileText} label="Receipts" to="/receipts" isCollapsed={isCollapsed} tutorialId="sidebar-receipts" />
+            <ImpeccableNavItem icon={ShieldCheck} label="Tax Exempt" to="/tax-exempt" isCollapsed={isCollapsed} tutorialId="sidebar-tax-exempt" />
+
+            <ImpeccableSectionLabel isCollapsed={isCollapsed}>Insights</ImpeccableSectionLabel>
+            <ImpeccableNavItem icon={ChartColumn} label="Analytics & Insights" to="/analytics" isCollapsed={isCollapsed} tutorialId="sidebar-analytics" />
+            <ImpeccableNavItem icon={Wallet} label="Cash Flow" to="/cashflow" isCollapsed={isCollapsed} tutorialId="sidebar-cashflow" />
+            <ImpeccableNavItem icon={CreditCardIcon} label="Credit Card" to="/creditcard" isCollapsed={isCollapsed} tutorialId="sidebar-creditcard" />
+            <ImpeccableNavItem icon={Target} label="Goals" to="/goals" isCollapsed={isCollapsed} />
+            <ImpeccableNavItem icon={CalendarDays} label="Calendar" to="/calendar" isCollapsed={isCollapsed} />
+          </nav>
+
+          <div className="p-2 border-t border-[color:var(--border-default)]">
+            <button
+              data-tutorial-id="sidebar-datasetup"
+              onClick={() => navigate('/settings', { state: { tab: 'datasetup' } })}
+              className={clsx("flex items-center rounded-[4px] text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-2.5 py-1.5 px-2.5")}>
+              <Settings size={15} />
+              {!isCollapsed && <span className="truncate">Data Setup</span>}
+            </button>
+            <ImpeccableNavItem icon={BookOpen} label="Guide" to="/guide" isCollapsed={isCollapsed} tutorialId="sidebar-guide" />
+          </div>
+
+          <div className="p-2 border-t border-[color:var(--border-default)] relative">
+            <button
+              className={clsx("flex items-center rounded-[4px] hover:bg-[var(--bg-hover)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-2.5 py-1.5 px-2.5 text-left")}
+              onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+            >
+              <div className="w-6 h-6 rounded-[4px] border border-[color:var(--border-default)] flex-shrink-0 text-[var(--text-secondary)] flex items-center justify-center text-[10px] font-semibold">{(user?.username || '?').slice(0, 2).toUpperCase()}</div>
+              {!isCollapsed && (
+                <>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[var(--text-primary)] truncate">{user?.username || 'Account'}</p>
+                  </div>
+                  <ChevronDown size={14} className={clsx("text-[var(--text-muted)] transition-transform", isProfileMenuOpen ? "rotate-180" : "")} />
+                </>
+              )}
+            </button>
+
+            {isProfileMenuOpen && (
+              <div className="absolute bottom-full left-2 right-2 mb-2 bg-[var(--bg-elevated)] border border-[color:var(--border-default)] rounded-[6px] py-1 z-50 overflow-hidden">
+                 <NavLink to="/settings" className="flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
+                   <Settings size={15} className="text-[var(--text-secondary)]" /> Settings
+                 </NavLink>
+                 <div className="h-px w-full bg-[var(--border-default)] my-1"></div>
+                 <button className="flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium text-[var(--red)] hover:bg-[var(--red-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); logout(); }}>
+                   <PanelLeftClose size={15} className="rotate-180 text-[var(--red)] opacity-80" /> Sign Out
+                 </button>
+              </div>
+            )}
+          </div>
+        </aside>
+      </>
+    );
+  }
+
   return (
     <>
       {/* Mobile overlay */}
@@ -209,6 +314,35 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId }) => (
     }
   >
     <Icon size={18} className="flex-shrink-0" />
+    {!isCollapsed && <span className="truncate flex-1 disabled-link">{label}</span>}
+  </NavLink>
+);
+
+const ImpeccableSectionLabel = ({ children, isCollapsed }) => {
+  if (isCollapsed) return <div className="mt-3 first:mt-0 h-px mx-2 bg-[color:var(--border-default)]" />;
+  return (
+    <p className="mt-4 first:mt-0 mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-[0.7px] text-[var(--text-muted)]">
+      {children}
+    </p>
+  );
+};
+
+const ImpeccableNavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId }) => (
+  <NavLink
+    to={to}
+    title={isCollapsed ? label : undefined}
+    data-tutorial-id={tutorialId}
+    className={({ isActive }) =>
+      clsx(
+        "flex items-center rounded-[4px] border-l transition-colors",
+        isCollapsed ? "justify-center p-2" : "gap-2.5 px-2.5 py-1.5 text-[13px] font-medium",
+        isActive
+          ? "text-[var(--accent)] bg-[var(--accent-bg)] [border-left-color:var(--accent)] pointer-events-none"
+          : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border-l-transparent"
+      )
+    }
+  >
+    <Icon size={15} className="flex-shrink-0" />
     {!isCollapsed && <span className="truncate flex-1 disabled-link">{label}</span>}
   </NavLink>
 );
