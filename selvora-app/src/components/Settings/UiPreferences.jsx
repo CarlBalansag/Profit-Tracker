@@ -1,13 +1,28 @@
 import React from 'react';
-import { Check, LayoutDashboard, Layers } from 'lucide-react';
+import { Check, LayoutDashboard, Layers, LayoutGrid } from 'lucide-react';
 import { COLOR_THEME_OPTIONS, UI_STYLE_OPTIONS, useUiPreferences } from '../../hooks/useUiPreferences';
 
 const STYLE_ICONS = {
   'neon-dark': LayoutDashboard,
   'glassmorphism-brown': Layers,
+  'impeccable': LayoutGrid,
 };
 
 function UiPreview({ styleId }) {
+  if (styleId === 'impeccable') {
+    return (
+      <div className="h-24 rounded-md border border-white/10 bg-black/60 p-2 flex flex-col gap-1.5">
+        <div className="h-3 w-2/5 rounded-sm bg-white/15" />
+        <div className="grid grid-cols-3 gap-1.5">
+          <div className="h-5 rounded-sm border border-white/10 bg-white/[0.03]" />
+          <div className="h-5 rounded-sm border border-white/10 bg-white/[0.03]" />
+          <div className="h-5 rounded-sm border border-white/10 bg-white/[0.03]" />
+        </div>
+        <div className="h-8 rounded-sm border border-white/10 bg-white/[0.03]" />
+      </div>
+    );
+  }
+
   if (styleId === 'glassmorphism-brown') {
     return (
       <div className="h-24 rounded-lg border border-amber-200/20 bg-[linear-gradient(135deg,rgba(74,43,24,0.74),rgba(24,18,14,0.92))] p-2 shadow-inner">

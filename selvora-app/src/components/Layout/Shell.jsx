@@ -28,7 +28,15 @@ const Shell = ({ children }) => {
   const { user } = useAuth();
   const { start } = useTutorial();
   const isGlass = preferences.style === 'glassmorphism-brown';
-  const isCarbonWorkspace = !isGlass;
+  const isImpeccable = preferences.style === 'impeccable';
+  // Explicit three-way mapping (DESIGN.md "No-Inheritance Rule"): each
+  // style owns its own workspace class. Impeccable must never fall back
+  // to carbon-workspace by default.
+  const workspaceClass = isGlass
+    ? 'glass-workspace'
+    : isImpeccable
+      ? 'impeccable-workspace'
+      : 'carbon-workspace';
 
   // Auto-start tutorial on first login
   useEffect(() => {
@@ -61,8 +69,7 @@ const Shell = ({ children }) => {
         <div className={clsx(
           "flex-1 overflow-y-auto theme-scrollbar",
           isGlass ? "p-4 sm:p-6 lg:p-7" : "p-3 sm:p-4 lg:p-6",
-          isGlass && "glass-workspace",
-          isCarbonWorkspace && "carbon-workspace"
+          workspaceClass
         )}>
           {children}
         </div>

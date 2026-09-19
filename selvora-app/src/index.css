@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
 @layer base {
@@ -225,7 +226,63 @@
     --toast-text: var(--glass-text-primary);
     --toast-shadow: 0 18px 44px rgba(0, 0, 0, 0.32);
   }
-  
+
+  /* Impeccable — placed after the data-theme blocks above so it always
+     wins the cascade regardless of the stored colorTheme (Copper/Arctic/
+     Jade/Dusk/Signal must have no visual effect on Impeccable). */
+  :root[data-ui-style="impeccable"] {
+    --bg-base: #0a0a0b;
+    --bg-surface: #101012;
+    --bg-elevated: #161618;
+    --bg-hover: #1c1c1f;
+    --border-default: rgba(255, 255, 255, 0.08);
+    --border-hover: rgba(255, 255, 255, 0.14);
+    --text-primary: #f2f2f0;
+    --text-secondary: #9a9a9f;
+    --text-muted: #5c5c61;
+    --green: #46a758;
+    --green-soft: #46a758;
+    --green-muted: #46a758;
+    --green-bg: rgba(70, 167, 88, 0.12);
+    --red: #e5484d;
+    --red-bg: rgba(229, 72, 77, 0.12);
+    --yellow: #f5a623;
+    --accent: #f2f2f0;
+    --accent-soft: #d8d8d5;
+    --accent-muted: #d8d8d5;
+    --accent-bg: rgba(255, 255, 255, 0.06);
+    --info: #3b82f6;
+    --chart-1: #8a8a90;
+    --chart-2: #46a758;
+    --chart-3: #5c5c61;
+    --chart-4: #3a3a3e;
+    --sidebar-bg-start: #101012;
+    --sidebar-bg-end: #101012;
+    --toast-bg: var(--bg-elevated);
+    --toast-border: var(--border-default);
+    --toast-text: var(--text-primary);
+    --toast-shadow: 0 1px 2px rgba(0, 0, 0, 0.24);
+  }
+
+  /* Geist scoping: additive only, targets elements directly so it wins
+     over the html/body/#root rule below by specificity, without editing
+     that shared rule or affecting Neon Dark / Glassmorphism Brown. */
+  :root[data-ui-style="impeccable"] body,
+  :root[data-ui-style="impeccable"] #root {
+    font-family: 'Geist Sans', 'Inter', sans-serif;
+  }
+
+  /* Sidebar/Header logo mark ("P") sits outside .impeccable-workspace's
+     scope (it's rendered as a sibling, not inside the scrollable content
+     div) and hardcodes text-white on a bg-[var(--accent)] chip. Every
+     other style's accent is a dark-ish hue, so white text works; Impeccable's
+     accent is near-white, which would make the mark invisible. Fixed here
+     rather than touching Sidebar.jsx/Shell.jsx, per the CSS-First Rule. */
+  html[data-ui-style="impeccable"] [class*="bg-[var(--accent)]"],
+  html[data-ui-style="impeccable"] [class*="bg-[var(--accent)]"] [class*="text-white"] {
+    color: var(--bg-base) !important;
+  }
+
   html, body, #root {
     height: 100%;
     background-color: var(--bg-base);
@@ -670,6 +727,292 @@
     background-color: var(--glass-accent) !important;
     border-color: var(--glass-accent) !important;
     color: #111315 !important;
+  }
+
+  /* ==================================================================
+     Impeccable — an independent workspace override block. It mirrors
+     .carbon-workspace's retrofit strategy (redirect literal Tailwind
+     utility classes to CSS custom properties) but targets Impeccable's
+     own flat, monochrome, shadow-free values. This block must never be
+     merged with, extend, or share rules with .carbon-workspace — see
+     DESIGN.md's "No-Inheritance Rule". Radius is 6px (Impeccable's
+     card/section scale), never carbon's 9px. No box-shadow, no
+     backdrop-filter, no hover lift, and entrance animations already
+     present in page markup are neutralized (Flat-At-Rest Rule /
+     restrained-motion mandate).
+     ================================================================== */
+
+  .impeccable-workspace {
+    color: var(--text-primary);
+  }
+
+  .impeccable-workspace .card,
+  .impeccable-workspace .card-glow,
+  .impeccable-workspace .card-hover,
+  .impeccable-workspace [class*="bg-[#12121A]"],
+  .impeccable-workspace [class*="bg-[#12121e]"],
+  .impeccable-workspace [class*="bg-[#12121E]"],
+  .impeccable-workspace [class*="bg-[#0f1115]"],
+  .impeccable-workspace [class*="bg-[#16161E]"],
+  .impeccable-workspace [class*="bg-[#16181d]"],
+  .impeccable-workspace [class*="bg-[#1A1A24]"],
+  .impeccable-workspace [class*="bg-[#1a1a24]"] {
+    background: var(--bg-surface) !important;
+    border-color: var(--border-default) !important;
+    border-radius: 6px !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .impeccable-workspace .card-hover:hover,
+  .impeccable-workspace [class*="hover:bg-[#16161E]"]:hover,
+  .impeccable-workspace [class*="hover:bg-gray-700"]:hover,
+  .impeccable-workspace [class*="hover:bg-gray-800"]:hover,
+  .impeccable-workspace [class*="hover:bg-white/5"]:hover,
+  .impeccable-workspace [class*="hover:bg-white/[0.05]"]:hover,
+  .impeccable-workspace [class*="hover:bg-white/[0.06]"]:hover,
+  .impeccable-workspace [class*="hover:bg-white/[0.10]"]:hover {
+    background: var(--bg-hover) !important;
+    border-color: var(--border-hover) !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  .impeccable-workspace [class*="bg-[#0A0A0F]"],
+  .impeccable-workspace [class*="bg-[#0d0d18]"],
+  .impeccable-workspace [class*="bg-white/[0.02]"] {
+    background: var(--bg-elevated) !important;
+    border-color: var(--border-default) !important;
+  }
+
+  .impeccable-workspace input,
+  .impeccable-workspace select,
+  .impeccable-workspace textarea {
+    background-color: var(--bg-surface) !important;
+    border-color: var(--border-default) !important;
+    color: var(--text-primary) !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+  }
+
+  .impeccable-workspace input[type="checkbox"],
+  .impeccable-workspace input[type="radio"] {
+    accent-color: var(--accent);
+  }
+
+  .impeccable-workspace input:focus,
+  .impeccable-workspace select:focus,
+  .impeccable-workspace textarea:focus {
+    border-color: var(--text-primary) !important;
+    outline: none !important;
+  }
+
+  .impeccable-workspace input::placeholder,
+  .impeccable-workspace textarea::placeholder {
+    color: var(--text-muted) !important;
+  }
+
+  .impeccable-workspace option {
+    background-color: var(--bg-elevated);
+    color: var(--text-primary);
+  }
+
+  .impeccable-workspace h1 {
+    color: var(--text-primary) !important;
+    font-size: 20px !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.2px !important;
+  }
+
+  .impeccable-workspace h2,
+  .impeccable-workspace h3 {
+    color: var(--text-primary) !important;
+    font-weight: 600 !important;
+  }
+
+  .impeccable-workspace label,
+  .impeccable-workspace .section-title,
+  .impeccable-workspace [class*="uppercase"] {
+    letter-spacing: 0.7px !important;
+  }
+
+  .impeccable-workspace [class*="text-white"],
+  .impeccable-workspace [class*="text-gray-100"],
+  .impeccable-workspace [class*="text-gray-200"],
+  .impeccable-workspace [class*="text-gray-300"] {
+    color: var(--text-primary) !important;
+  }
+
+  .impeccable-workspace [class*="text-gray-400"],
+  .impeccable-workspace [class*="text-slate-400"] {
+    color: var(--text-secondary) !important;
+  }
+
+  .impeccable-workspace [class*="text-gray-500"],
+  .impeccable-workspace [class*="text-gray-600"],
+  .impeccable-workspace [class*="text-slate-500"] {
+    color: var(--text-muted) !important;
+  }
+
+  .impeccable-workspace [class*="border-white/"],
+  .impeccable-workspace [class*="border-gray-"],
+  .impeccable-workspace [class*="divide-white/"] > * + * {
+    border-color: var(--border-default) !important;
+  }
+
+  .impeccable-workspace [class*="bg-gradient"],
+  .impeccable-workspace [class*="from-purple"],
+  .impeccable-workspace [class*="from-blue"],
+  .impeccable-workspace [class*="from-indigo"],
+  .impeccable-workspace [class*="from-pink"],
+  .impeccable-workspace [class*="to-blue"],
+  .impeccable-workspace [class*="to-purple"],
+  .impeccable-workspace [class*="shadow-"],
+  .impeccable-workspace [class*="shadow_"] {
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  .impeccable-workspace [class*="bg-purple"],
+  .impeccable-workspace [class*="bg-indigo"],
+  .impeccable-workspace [class*="bg-blue"],
+  .impeccable-workspace [class*="bg-cyan"],
+  .impeccable-workspace [class*="bg-pink"],
+  .impeccable-workspace [class*="bg-violet"],
+  .impeccable-workspace [class*="bg-sky"] {
+    background-color: var(--accent-bg) !important;
+  }
+
+  .impeccable-workspace [class*="bg-[#1a2235]"],
+  .impeccable-workspace [class*="bg-[#261935]"] {
+    background-color: var(--accent-bg) !important;
+  }
+
+  .impeccable-workspace [class*="border-purple"],
+  .impeccable-workspace [class*="border-indigo"],
+  .impeccable-workspace [class*="border-blue"],
+  .impeccable-workspace [class*="border-cyan"],
+  .impeccable-workspace [class*="border-pink"],
+  .impeccable-workspace [class*="border-violet"],
+  .impeccable-workspace [class*="border-sky"] {
+    border-color: var(--border-hover) !important;
+  }
+
+  .impeccable-workspace [class*="text-purple"],
+  .impeccable-workspace [class*="text-indigo"],
+  .impeccable-workspace [class*="text-blue"],
+  .impeccable-workspace [class*="text-cyan"],
+  .impeccable-workspace [class*="text-pink"],
+  .impeccable-workspace [class*="text-violet"],
+  .impeccable-workspace [class*="text-sky"],
+  .impeccable-workspace [class*="text-[#60a5fa]"],
+  .impeccable-workspace [class*="text-[#c084fc]"] {
+    color: var(--accent) !important;
+  }
+
+  .impeccable-workspace [class*="bg-amber"],
+  .impeccable-workspace [class*="bg-yellow"],
+  .impeccable-workspace [class*="bg-orange"] {
+    background-color: color-mix(in srgb, var(--yellow) 14%, transparent) !important;
+  }
+
+  .impeccable-workspace [class*="border-amber"],
+  .impeccable-workspace [class*="border-yellow"],
+  .impeccable-workspace [class*="border-orange"] {
+    border-color: color-mix(in srgb, var(--yellow) 45%, transparent) !important;
+  }
+
+  .impeccable-workspace [class*="text-amber"],
+  .impeccable-workspace [class*="text-yellow"],
+  .impeccable-workspace [class*="text-orange"] {
+    color: var(--yellow) !important;
+  }
+
+  .impeccable-workspace [class*="bg-green"],
+  .impeccable-workspace [class*="bg-emerald"],
+  .impeccable-workspace [class*="bg-teal"] {
+    background-color: var(--green-bg) !important;
+  }
+
+  .impeccable-workspace [class*="border-green"],
+  .impeccable-workspace [class*="border-emerald"],
+  .impeccable-workspace [class*="border-teal"] {
+    border-color: color-mix(in srgb, var(--green) 45%, transparent) !important;
+  }
+
+  .impeccable-workspace [class*="text-green"],
+  .impeccable-workspace [class*="text-emerald"],
+  .impeccable-workspace [class*="text-teal"] {
+    color: var(--green) !important;
+  }
+
+  .impeccable-workspace [class*="bg-red"],
+  .impeccable-workspace [class*="bg-rose"] {
+    background-color: var(--red-bg) !important;
+  }
+
+  .impeccable-workspace [class*="border-red"],
+  .impeccable-workspace [class*="border-rose"] {
+    border-color: color-mix(in srgb, var(--red) 45%, transparent) !important;
+  }
+
+  .impeccable-workspace [class*="text-red"],
+  .impeccable-workspace [class*="text-rose"] {
+    color: var(--red) !important;
+  }
+
+  .impeccable-workspace button[class*="bg-indigo"],
+  .impeccable-workspace button[class*="bg-purple"],
+  .impeccable-workspace button[class*="bg-blue"],
+  .impeccable-workspace button[class*="bg-amber"] {
+    background-color: var(--accent) !important;
+    border-color: var(--accent) !important;
+    color: var(--bg-base) !important;
+    box-shadow: none !important;
+  }
+
+  .impeccable-workspace button[class*="bg-green"] {
+    background-color: var(--green) !important;
+    border-color: var(--green) !important;
+    color: #fff !important;
+    box-shadow: none !important;
+  }
+
+  .impeccable-workspace button[class*="bg-red"] {
+    background-color: var(--red) !important;
+    border-color: var(--red) !important;
+    color: #fff !important;
+    box-shadow: none !important;
+  }
+
+  .impeccable-workspace table {
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .impeccable-workspace thead tr {
+    border-color: var(--border-default) !important;
+    color: var(--text-muted) !important;
+    font-size: 9px !important;
+    letter-spacing: 0.7px !important;
+  }
+
+  .impeccable-workspace tbody tr:hover {
+    background: var(--bg-hover) !important;
+  }
+
+  /* Restrained-motion mandate: neutralize entrance/slide/fade-in
+     utilities already present in page markup rather than editing that
+     markup (CSS-First Rule). Hover/focus/menu/dialog transitions are
+     untouched. */
+  .impeccable-workspace [class*="animate-in"],
+  .impeccable-workspace [class*="fade-in"],
+  .impeccable-workspace [class*="slide-in-from"],
+  .impeccable-workspace [class*="zoom-in"],
+  .impeccable-workspace [class*="fill-mode"] {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
   }
 }
 

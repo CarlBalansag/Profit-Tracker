@@ -15,6 +15,12 @@ export const UI_STYLE_OPTIONS = [
     eyebrow: 'Next',
     description: 'A warmer glass-style interface with brown tones, soft panels, and layered depth.',
   },
+  {
+    id: 'impeccable',
+    name: 'Impeccable',
+    eyebrow: 'New',
+    description: 'A flat, monochrome black-and-white interface with restrained motion and color reserved for profit, loss, and warning states.',
+  },
 ];
 
 export const COLOR_THEME_OPTIONS = [

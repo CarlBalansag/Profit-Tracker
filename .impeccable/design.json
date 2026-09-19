@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-18T00:00:00Z",
+  "title": "Design System: Profit Tracker",
+  "extensions": {
+    "colorMeta": {
+      "impeccable-bg-base": { "role": "neutral", "displayName": "Impeccable Near-Black", "canonical": "#0a0a0b", "tonalRamp": ["#050505", "#0a0a0b", "#101012", "#1c1c1f", "#5c5c61", "#9a9a9f", "#d4d4d6", "#f2f2f0"] },
+      "impeccable-text-primary": { "role": "neutral", "displayName": "Impeccable Near-White", "canonical": "#f2f2f0", "tonalRamp": ["#050505", "#0a0a0b", "#101012", "#1c1c1f", "#5c5c61", "#9a9a9f", "#d4d4d6", "#f2f2f0"] },
+      "impeccable-accent": { "role": "primary", "displayName": "Monochrome Accent (near-white)", "canonical": "#f2f2f0", "tonalRamp": ["#050505", "#0a0a0b", "#101012", "#1c1c1f", "#5c5c61", "#9a9a9f", "#d4d4d6", "#f2f2f0"] },
+      "impeccable-green": { "role": "semantic-success", "displayName": "Profit Green", "canonical": "#46a758", "tonalRamp": ["#0d2414", "#153a21", "#1f5730", "#2c7a43", "#46a758", "#6cc17c", "#9adaa8", "#d3f0d9"] },
+      "impeccable-red": { "role": "semantic-danger", "displayName": "Loss Red", "canonical": "#e5484d", "tonalRamp": ["#2b0d0e", "#411416", "#611d20", "#a3333a", "#e5484d", "#ef7478", "#f6a5a7", "#fbd6d7"] },
+      "impeccable-amber": { "role": "semantic-warning", "displayName": "Warning Amber", "canonical": "#f5a623", "tonalRamp": ["#2b1d05", "#412b08", "#66430d", "#b3760f", "#f5a623", "#f8bd5c", "#fad38f", "#fce9c4"] },
+      "impeccable-info": { "role": "semantic-info", "displayName": "Informational Blue", "canonical": "#3b82f6", "tonalRamp": ["#0a1a3a", "#0f2657", "#173a7e", "#2557b8", "#3b82f6", "#6ba3f8", "#9cc3fa", "#cee1fd"] }
+    },
+    "typographyMeta": {
+      "impeccable-body": { "displayName": "Geist Sans (Impeccable)", "purpose": "All interface text inside .impeccable-workspace; never applied globally." },
+      "impeccable-mono": { "displayName": "Geist Mono (Impeccable)", "purpose": "Dollar amounts, percentages, IDs, reference values, table dates only." }
+    },
+    "shadows": [
+      { "name": "impeccable-flat", "value": "none", "purpose": "Default state for every static surface (cards, rows, inputs, buttons)." },
+      { "name": "impeccable-floating-hairline", "value": "0 1px 2px rgba(0,0,0,0.24)", "purpose": "Reserved for floating layers only: dialogs, dropdowns, tooltips, popovers, toasts." }
+    ],
+    "motion": [
+      { "name": "impeccable-ease-standard", "value": "cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Default easing for hover/focus/menu/dialog/tooltip transitions, 100-150ms only." }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary-impeccable",
+      "description": "Filled monochrome primary action button; near-white fill, near-black text.",
+      "html": "<button class=\"ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn-primary { background: #f2f2f0; color: #0a0a0b; padding: 8px 16px; border: none; border-radius: 6px; font-family: 'Geist Sans', Inter, sans-serif; font-size: 13px; font-weight: 500; transition: background 120ms cubic-bezier(0.4,0,0.2,1), transform 120ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-primary:hover { background: #e0e0dd; } .ds-btn-primary:focus-visible { outline: 2px solid #f2f2f0; outline-offset: 2px; } .ds-btn-primary:active { transform: scale(0.98); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary-impeccable",
+      "description": "Outlined ghost button for secondary actions.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { background: transparent; color: #f2f2f0; padding: 8px 16px; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; font-family: 'Geist Sans', Inter, sans-serif; font-size: 13px; font-weight: 500; transition: background 120ms cubic-bezier(0.4,0,0.2,1), border-color 120ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-secondary:hover { background: #1c1c1f; border-color: rgba(255,255,255,0.14); } .ds-btn-secondary:focus-visible { outline: 2px solid #f2f2f0; outline-offset: 2px; }"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input-impeccable",
+      "description": "Text input with hairline border, no glow on focus.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Search transactions\" />",
+      "css": ".ds-input { background: #101012; color: #f2f2f0; border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; padding: 6px 10px; font-family: 'Geist Sans', Inter, sans-serif; font-size: 13px; transition: border-color 120ms cubic-bezier(0.4,0,0.2,1); } .ds-input::placeholder { color: #5c5c61; } .ds-input:focus-visible { outline: none; border-color: #f2f2f0; }"
+    },
+    {
+      "name": "Selected Nav Item",
+      "kind": "nav",
+      "refersTo": "nav-item-selected-impeccable",
+      "description": "Active sidebar navigation item: near-white text, subtle wash, left accent bar.",
+      "html": "<a class=\"ds-nav-item ds-nav-item--active\" href=\"#\">Dashboard</a>",
+      "css": ".ds-nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-left: 2px solid transparent; border-radius: 0 4px 4px 0; font-family: 'Geist Sans', Inter, sans-serif; font-size: 13px; font-weight: 500; color: #9a9a9f; transition: background 120ms cubic-bezier(0.4,0,0.2,1), color 120ms cubic-bezier(0.4,0,0.2,1); } .ds-nav-item:hover { color: #f2f2f0; background: #1c1c1f; } .ds-nav-item--active { color: #f2f2f0; background: rgba(255,255,255,0.06); border-left-color: #f2f2f0; }"
+    },
+    {
+      "name": "Monetary Value",
+      "kind": "custom",
+      "refersTo": "monetary-value-impeccable",
+      "description": "Scannable profit/loss figure: Geist Mono, tabular numerals, semantic color plus explicit sign.",
+      "html": "<span class=\"ds-money ds-money--positive\">+$1,248.50</span>",
+      "css": ".ds-money { font-family: 'Geist Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-weight: 500; font-size: 14px; } .ds-money--positive { color: #46a758; } .ds-money--negative { color: #e5484d; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "One product, three coats of paint",
+    "overview": "Profit Tracker is a dense financial productivity tool whose visual system is a runtime switcher between three styles selected under Settings -> Appearance and persisted client-side. All three read from the same routed pages and component tree; the difference is almost entirely CSS custom-property values plus, in a handful of files, an explicit uiStyle branch. Neon Dark and Glassmorphism Brown are incumbent and unchanged. Impeccable is the approved, not-yet-implemented third style: flat, monochrome, dark, inspired primarily by shadcn/ui and secondarily by Linear and Vercel.",
+    "keyCharacteristics": [
+      "Three selectable, mutually exclusive UI styles switched by a single data-ui-style attribute on <html>.",
+      "Neon Dark's five accent color themes (data-theme) apply only to Neon Dark.",
+      "Impeccable is monochrome-only: near-black backgrounds, near-white foreground, color reserved for profit/loss/warning/informational semantics.",
+      "No IA change across styles: same routes, same components, same data."
+    ],
+    "rules": [
+      { "name": "The Isolated Palette Rule", "body": "Impeccable never reads the Copper/Arctic/Jade/Dusk/Signal accent tokens; its root block is placed after the data-theme blocks so it always wins the cascade.", "section": "colors" },
+      { "name": "The Selective Mono Rule", "body": "Geist Mono is for scannable numeric/technical values only - dollar amounts, percentages, IDs, reference numbers. The interface is never fully monospace.", "section": "typography" },
+      { "name": "The Flat-At-Rest Rule", "body": "If it isn't floating above the page (dialog, dropdown, tooltip, popover, toast), it has no shadow. No exceptions.", "section": "elevation" },
+      { "name": "The No-Inheritance Rule", "body": "Impeccable must not inherit .carbon-workspace's override rules; it gets its own independent .impeccable-workspace block.", "section": "components" },
+      { "name": "The CSS-First Rule", "body": "Exhaust token/CSS overrides before adding any uiStyle === 'impeccable' JSX branch.", "section": "components" }
+    ],
+    "dos": [
+      "Do reuse the existing data-ui-style/data-theme attribute + CSS custom property mechanism for every Impeccable value.",
+      "Do place :root[data-ui-style=\"impeccable\"] after the data-theme blocks in index.css.",
+      "Do give Impeccable its own .impeccable-workspace override block, independent from .carbon-workspace.",
+      "Do exhaust token/CSS overrides before adding any uiStyle === 'impeccable' JSX branch.",
+      "Do reserve color for profit, loss/destructive/error, warning, and rare informational states only.",
+      "Do use Geist Mono selectively for scannable numeric/technical values.",
+      "Do keep shadows to the floating-layer hairline only."
+    ],
+    "donts": [
+      "Don't modify any Neon Dark token, class, or component branch.",
+      "Don't modify any Glassmorphism Brown token, class, or component branch.",
+      "Don't let the Copper/Arctic/Jade/Dusk/Signal accent picker affect or appear for Impeccable.",
+      "Don't add card shadows, hover lift, glow, gradients, backdrop-blur, or decorative blobs inside .impeccable-workspace.",
+      "Don't use a filled/saturated color for anything that isn't a profit/loss/warning/informational signal.",
+      "Don't apply Geist Mono to the whole interface.",
+      "Don't introduce a light-mode variant of Impeccable.",
+      "Don't restructure routes, remove features, or change dashboard functionality while implementing this theme."
+    ]
+  }
+}
