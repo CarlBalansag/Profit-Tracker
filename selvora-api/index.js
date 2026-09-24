@@ -90,6 +90,13 @@ app.use(session({
     tableName: 'user_sessions',
     createTableIfMissing: true,
     errorLog: (...args) => console.error('[pg-session-store]', ...args),
+    // Without this, connect-pg-simple runs its own DELETE every ~15 min (randomized
+    // 7.5-22.5 min) for the life of the process — on Render's always-on instance that
+    // keeps re-waking Neon's auto-suspended compute around the clock, driving most of
+    // the account's compute-hour usage. Expired rows are already excluded by the get()
+    // query's `expire >= now` filter, so skipping pruning here is safe; stale rows are
+    // harmless and can be cleaned up out-of-band if the table ever needs it.
+    pruneSessionInterval: false,
   }),
   secret: process.env.SESSION_SECRET,
   resave: false,
