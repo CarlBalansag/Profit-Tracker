@@ -9,8 +9,10 @@ import { Cashouts } from '../components/Settings/Cashouts';
 import { Marketplaces } from '../components/Settings/Marketplaces';
 import { Accounts } from '../components/Settings/Accounts';
 import { UiPreferences } from '../components/Settings/UiPreferences';
+import { ScheduleCSettings } from '../components/Settings/ScheduleCSettings';
 import { useAuth } from '../context/AuthContext';
 import FirebaseAccount from '../components/Auth/FirebaseAccount';
+import { SCHEDULE_C_ENABLED } from '../config/features';
 
 function Settings() {
   const location = useLocation();
@@ -27,6 +29,7 @@ function Settings() {
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'datasetup', label: 'Data Setup', icon: Database },
     { id: 'data', label: 'Data', icon: FileJson },
+    ...(SCHEDULE_C_ENABLED ? [{ id: 'tax', label: 'Schedule C', icon: FileJson }] : []),
     { id: 'notifications', label: 'Notifications', icon: Bell, disabled: true, tag: 'Soon' },
     { id: 'appearance', label: 'Appearance', icon: Palette },
   ];
@@ -194,6 +197,9 @@ function Settings() {
               </div>
             </div>
           )}
+
+          {/* TAX TAB */}
+          {SCHEDULE_C_ENABLED && activeTab === 'tax' && <ScheduleCSettings />}
 
           {/* APPEARANCE TAB */}
           {activeTab === 'appearance' && (

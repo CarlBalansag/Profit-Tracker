@@ -1,4 +1,5 @@
 const { z } = require('zod');
+const { taxDetails } = require('./scheduleC');
 
 const emptyToUndefined = (value) => (value === '' ? undefined : value);
 const emptyToNull = (value) => (value === '' ? null : value);
@@ -159,9 +160,10 @@ const createExpense = z.object({
   date: dateString,
   notes: optionalString,
   receipt_url: optionalString,
+  tax_details: taxDetails.optional(),
 }).passthrough();
 
-const updateExpense = createExpense.partial();
+const updateExpense = createExpense.partial().extend({ expected_tax_version: z.number().int().min(0).optional() });
 
 const optionalDay = z.preprocess(
   emptyToUndefined,

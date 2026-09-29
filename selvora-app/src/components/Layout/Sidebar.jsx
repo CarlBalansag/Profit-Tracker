@@ -8,6 +8,7 @@ import {
 import clsx from 'clsx';
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { SCHEDULE_C_ENABLED } from '../../config/features';
 
 const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'neon-dark' }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -44,6 +45,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <GlassNavItem icon={Package} label="Inventory" to="/inventory" />
             <GlassNavItem icon={Truck} label="Shipping" to="/shipping" />
             <GlassNavItem icon={Receipt} label="Expenses" to="/expenses" />
+            {SCHEDULE_C_ENABLED && <GlassNavItem icon={FileText} label="Schedule C" to="/schedule-c" />}
             <GlassNavItem icon={ChartColumn} label="Analytics" to="/analytics" />
             <GlassNavItem icon={Wallet} label="Cash Flow" to="/cashflow" />
             <GlassNavItem icon={CreditCardIcon} label="Credit Card" to="/creditcard" />
@@ -110,6 +112,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <ImpeccableNavItem icon={Package} label="Inventory On Hand" to="/inventory" isCollapsed={isCollapsed} tutorialId="sidebar-inventory" />
             <ImpeccableNavItem icon={Truck} label="Shipping" to="/shipping" isCollapsed={isCollapsed} />
             <ImpeccableNavItem icon={Receipt} label="Expenses" to="/expenses" isCollapsed={isCollapsed} tutorialId="sidebar-expenses" />
+            {SCHEDULE_C_ENABLED && <ImpeccableNavItem icon={FileText} label="Schedule C" to="/schedule-c" isCollapsed={isCollapsed} />}
             <ImpeccableNavItem icon={FileText} label="Receipts" to="/receipts" isCollapsed={isCollapsed} tutorialId="sidebar-receipts" />
             <ImpeccableNavItem icon={ShieldCheck} label="Tax Exempt" to="/tax-exempt" isCollapsed={isCollapsed} tutorialId="sidebar-tax-exempt" />
 
@@ -218,6 +221,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <NavItem icon={Package} label="Inventory On Hand" to="/inventory" isCollapsed={isCollapsed} tutorialId="sidebar-inventory" />
             <NavItem icon={Truck} label="Shipping" to="/shipping" isCollapsed={isCollapsed} />
             <NavItem icon={Receipt} label="Expenses" to="/expenses" isCollapsed={isCollapsed} tutorialId="sidebar-expenses" />
+            {SCHEDULE_C_ENABLED && <NavItem icon={FileText} label="Schedule C" to="/schedule-c" isCollapsed={isCollapsed} />}
             <NavItem icon={FileText} label="Receipts" to="/receipts" isCollapsed={isCollapsed} tutorialId="sidebar-receipts" />
             <NavItem icon={ShieldCheck} label="Tax Exempt" to="/tax-exempt" isCollapsed={isCollapsed} tutorialId="sidebar-tax-exempt" />
           </SidebarSection>

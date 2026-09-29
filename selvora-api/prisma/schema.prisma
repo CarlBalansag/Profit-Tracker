@@ -32,6 +32,7 @@ model User {
   local_credential       LocalCredential?
   login_disabled         Boolean          @default(false)
   firebase_identity      FirebaseIdentity?
+  schedule_c_enabled     Boolean          @default(false)
 }
 
 model FirebaseIdentity {
@@ -224,6 +225,8 @@ model Expense {
   receipt_url          String?
   recurring_expense_id String?
   recurring_expense    RecurringExpense? @relation(fields: [recurring_expense_id], references: [id], onDelete: SetNull)
+  tax_details          Json?
+  tax_version          Int               @default(0)
 
   @@index([user_id])
   @@index([user_id, date])
