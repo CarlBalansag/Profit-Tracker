@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { randomUUID } = require('node:crypto');
 const cloudinary = require('cloudinary').v2;
 const { validateBody } = require('../middleware/validate');
 const { attachReceipt, detachReceipt } = require('../validation/schemas');
@@ -119,32 +120,53 @@ router.post('/attach', isAuthenticated, validateBody(attachReceipt), async (req,
 
     // Validate decoded file size server-side
     const base64Data = fileData.slice(dataUrlMatch[0].length);
-    const byteLength = Math.ceil(base64Data.length * 0.75);
+    if (!base64Data.length || base64Data.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64Data)) {
+      return res.status(400).json({ error: 'fileData must contain valid non-empty base64 data' });
+    }
+    const padding = base64Data.endsWith('==') ? 2 : base64Data.endsWith('=') ? 1 : 0;
+    const byteLength = base64Data.length / 4 * 3 - padding;
     if (byteLength > MAX_BYTES) {
       return res.status(400).json({ error: 'File exceeds the 5 MB size limit.' });
     }
 
-    // Upload base64 dataURL to Cloudinary
+    // Upload base64 dataURL to Cloudinary. Never overwrites the previous
+    // receipt in place — a failed database write below must not leave the
+    // item with no receipt at all.
     const uploadResult = await cloudinary.uploader.upload(fileData, {
       folder: 'selvora/receipts',
       resource_type: 'auto',  // handles images and PDFs
-      public_id: `${itemType}_${itemId}`,
-      overwrite: true,
+      public_id: `${itemType}_${itemId}_${randomUUID()}`,
+      overwrite: false,
     });
     const receiptUrl = uploadResult.secure_url;
 
-    if (itemType === 'inventory') {
-      await prisma.inventory.update({
-        where: { id: itemId },
-        data: { receipt_url: receiptUrl },
-      });
-    } else if (itemType === 'expense') {
-      await prisma.expense.update({
-        where: { id: itemId },
-        data: { receipt_url: receiptUrl },
-      });
-    } else {
-      return res.status(400).json({ error: 'itemType must be inventory or expense' });
+    try {
+      if (itemType === 'inventory') {
+        await prisma.inventory.update({
+          where: { id: itemId },
+          data: { receipt_url: receiptUrl },
+        });
+      } else if (itemType === 'expense') {
+        await prisma.expense.update({
+          where: { id: itemId },
+          data: { receipt_url: receiptUrl },
+        });
+      } else {
+        return res.status(400).json({ error: 'itemType must be inventory or expense' });
+      }
+    } catch (error) {
+      // Clean up only the newly uploaded asset — the previous receipt (if any)
+      // was never touched, so the item still has a working receipt_url.
+      if (uploadResult.public_id) {
+        try {
+          await cloudinary.uploader.destroy(uploadResult.public_id, {
+            resource_type: uploadResult.resource_type || 'image',
+          });
+        } catch (cleanupError) {
+          console.error('[receipts] failed upload cleanup:', cleanupError.message);
+        }
+      }
+      throw error;
     }
 
     res.json({ success: true, receipt_url: receiptUrl });
