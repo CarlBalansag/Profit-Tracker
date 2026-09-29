@@ -31,4 +31,28 @@ describe('receipt upload safety', () => {
     expect(response.status).toBe(200);
     expect(harness.calls.some((call) => call.model === 'cloudinary')).toBe(true);
   });
+  it('never overwrites the previous asset in place', async () => {
+    await attach(harness.ids.inventory);
+    const upload = harness.calls.find((call) => call.op === 'upload');
+    expect(upload.options.overwrite).toBe(false);
+    expect(upload.options.public_id).not.toBe(`inventory_${harness.ids.inventory}`);
+  });
+  it('cleans up the new upload and preserves the previous receipt when the database save fails', async () => {
+    harness.db.inventory[0].receipt_url = 'https://example.invalid/previous-receipt.png';
+    harness.faults['inventory.update'] = true;
+    const response = await attach(harness.ids.inventory);
+    expect(response.status).toBe(500);
+    expect(harness.db.inventory[0].receipt_url).toBe('https://example.invalid/previous-receipt.png');
+    const destroy = harness.calls.find((call) => call.op === 'destroy');
+    expect(destroy.publicId).toBe(harness.calls.find((call) => call.op === 'upload').options.public_id);
+  });
+  it.each([
+    ['empty', 'data:image/png;base64,'],
+    ['not a multiple of 4', 'data:image/png;base64,YWJ'],
+    ['invalid characters', 'data:image/png;base64,!!!!'],
+  ])('rejects malformed base64 data (%s) before uploading', async (label, fileData) => {
+    const response = await fetch(`${baseUrl}/api/receipts/attach`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemType: 'inventory', itemId: harness.ids.inventory, fileData }) });
+    expect(response.status).toBe(400);
+    expect(harness.calls.some((call) => call.model === 'cloudinary')).toBe(false);
+  });
 });
