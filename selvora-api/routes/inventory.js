@@ -1,12 +1,14 @@
 const express = require('express');
 const router = express.Router();
+const { z } = require('zod');
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
-const { createInventory, updateInventory } = require('../validation/schemas');
+const { createInventory, updateInventory, updateSale, createSale } = require('../validation/schemas');
 const { publishCalendarFeed } = require('../services/calendarFeed');
 const { requireOwned } = require('../services/ownership');
 const { refreshTracking, checkTrackingRateLimit } = require('../services/tracking');
 const { autoShippedStatus } = require('../services/statusHierarchy');
+const { editTransaction } = require('../services/transactionEdit');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -221,6 +223,22 @@ router.get('/:id', isAuthenticated, async (req, res, next) => {
     });
     if (!item || item.user_id !== req.user.id) return res.status(404).json({ error: 'Not found' });
     res.json(item);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT - save a purchase and its sales (plus optionally one new sale) atomically
+const transactionEditBody = z.object({
+  inventory: updateInventory,
+  sales: updateSale.extend({ id: z.string().uuid() }).array().max(500),
+  newSale: createSale.omit({ inventory_id: true }).optional(),
+});
+router.put('/:id/transaction', isAuthenticated, validateBody(transactionEditBody), async (req, res, next) => {
+  try {
+    const result = await editTransaction(prisma, req.params.id, req.user.id, req.body);
+    await publishCalendarFeed(req.user.id);
+    res.json(result);
   } catch (err) {
     next(err);
   }

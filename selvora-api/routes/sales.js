@@ -142,6 +142,14 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
       if (advanced) resolvedStatus = advanced;
     }
     const updated = await prisma.$transaction(async (tx) => {
+      // Claim the inventory row first, using the same lock order as the
+      // combined transaction-edit route, so the two can't deadlock when they
+      // run concurrently against the same purchase.
+      const inventoryClaim = await tx.inventory.updateMany({
+        where: { id: existing.inventory_id, user_id: req.user.id },
+        data: { qty_on_hand: { increment: 0 } },
+      });
+      if (inventoryClaim.count !== 1) throw requestError(404, 'Inventory not found or access denied');
       if (qtyDiff < 0) {
         const stockClaim = await tx.inventory.updateMany({
           where: { id: existing.inventory_id, qty_on_hand: { gte: -qtyDiff } },
