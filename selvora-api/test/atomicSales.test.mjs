@@ -59,4 +59,34 @@ describe('atomic sale mutations', () => {
     expect(harness.db.inventory[0].qty_on_hand).toBe(0);
     expect(harness.db.sales).toHaveLength(2);
   });
+
+  it('rejects foreign and unauthenticated sale deletion without changing records', async () => {
+    harness.db.inventory[0].user_id = harness.ids.other;
+    expect((await request('DELETE', `/api/sales/${harness.ids.sale}`)).status).toBe(404);
+    harness.db.inventory[0].user_id = harness.ids.user;
+    const response = await fetch(`${baseUrl}/api/sales/${harness.ids.sale}`, { method: 'DELETE', headers: { 'X-QA-Unauthenticated': 'true' } });
+    expect(response.status).toBe(401);
+    expect(harness.db.sales).toHaveLength(1);
+    expect(harness.db.inventory[0].qty_on_hand).toBe(3);
+  });
+
+  it('deletes only the selected sale, restores its stock and preserves sibling records', async () => {
+    harness.db.sales.push({ ...harness.db.sales[0], id: 'sibling', quantity: 1 });
+    harness.db.inventory[0].qty_on_hand = 2;
+    expect((await request('DELETE', `/api/sales/${harness.ids.sale}`)).status).toBe(200);
+    expect(harness.db.inventory[0]).toMatchObject({ qty_purchased: 5, qty_on_hand: 4, fees: 10, gift_card_amount: 50 });
+    expect(harness.db.sales.map((sale) => sale.id)).toEqual(['sibling']);
+    expect((await request('DELETE', `/api/sales/${harness.ids.sale}`)).status).toBe(404);
+    expect(harness.db.inventory[0].qty_on_hand).toBe(4);
+  });
+
+  it('rolls back sale deletion if restoring stock fails and permits retry', async () => {
+    harness.faults['inventory.update'] = true;
+    expect((await request('DELETE', `/api/sales/${harness.ids.sale}`)).status).toBe(500);
+    expect(harness.db.sales).toHaveLength(1);
+    expect(harness.db.inventory[0].qty_on_hand).toBe(3);
+    harness.faults['inventory.update'] = false;
+    expect((await request('DELETE', `/api/sales/${harness.ids.sale}`)).status).toBe(200);
+    expect(harness.db.inventory[0].qty_on_hand).toBe(5);
+  });
 });
