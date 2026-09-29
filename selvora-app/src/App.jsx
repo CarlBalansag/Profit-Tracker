@@ -22,9 +22,11 @@ import Login from './pages/Login';
 import Goals from './pages/Goals';
 import Calendar from './pages/Calendar';
 import Shipping from './pages/Shipping';
+import ScheduleC from './pages/ScheduleC';
 import { AuthProvider } from './context/AuthContext';
 import { TutorialProvider } from './context/TutorialContext';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
+import { SCHEDULE_C_ENABLED } from './config/features';
 
 
 function App() {
@@ -61,6 +63,7 @@ function App() {
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/shipping" element={<Shipping />} />
           <Route path="/expenses" element={<Expenses />} />
+          {SCHEDULE_C_ENABLED && <Route path="/schedule-c" element={<ScheduleC />} />}
           <Route path="/receipts" element={<Receipts />} />
           <Route path="/invoices" element={<Invoices />} />
           <Route path="/analytics" element={<Analytics />} />
