@@ -157,8 +157,11 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
         });
       }
 
-      return tx.sales.update({
-        where: { id: req.params.id },
+      // Claim the sale version the stock delta above was calculated from. A
+      // concurrent edit must not have this write silently re-apply that delta
+      // or clobber fields this request never touched.
+      const claim = await tx.sales.updateMany({
+        where: { id: req.params.id, quantity: existing.quantity, inventory: { user_id: req.user.id } },
         data: {
         unit_price: unit_price !== undefined ? parseFloat(unit_price) : existing.unit_price,
         quantity: newQty,
@@ -175,6 +178,8 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
         tracking_number: tracking_number !== undefined ? (tracking_number || null) : existing.tracking_number,
         }
       });
+      if (claim.count !== 1) throw requestError(409, 'Sale changed while saving. Reload and retry.');
+      return tx.sales.findUnique({ where: { id: req.params.id } });
     });
 
     await publishCalendarFeed(req.user.id);
