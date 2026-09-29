@@ -83,11 +83,11 @@ function Analytics() {
     return Array.from(byMonth.values());
   })();
 
-  // Expense breakdown pie: COGS vs tax vs commission
+  // Purchase tax is already allocated inside soldCost; do not count it twice.
   const expenseData = [
     { name: 'COGS',       value: s.soldCost       || 0, color: THEME.red },
-    { name: 'Tax',        value: s.totalTax        || 0, color: THEME.yellow },
     { name: 'Commission', value: s.commissionFees  || 0, color: THEME.accent },
+    { name: 'Outbound Shipping', value: s.saleShipping || 0, color: THEME.yellow },
   ].filter(e => e.value > 0);
 
   const expenseTotal = expenseData.reduce((sum, e) => sum + e.value, 0);

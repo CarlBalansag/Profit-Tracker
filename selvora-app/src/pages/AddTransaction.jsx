@@ -1,3 +1,4 @@
+import { batchCost, allocatedCost, effectiveCashbackRate, saleEconomics } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import {
@@ -212,8 +213,6 @@ const AddTransaction = () => {
       loading: pendingReceiptInventoryId ? 'Attaching receipt...' : 'Saving transaction...',
       success: ({ attachedReceipt }) => {
         localStorage.removeItem(DRAFT_KEY);
-        invalidate.inventory();
-        invalidate.dashboard();
         setPendingReceiptInventoryId(null);
         setAttachedFiles([]);
         // Save or clear the product note independently (fire-and-forget)
@@ -226,6 +225,7 @@ const AddTransaction = () => {
             removeNote.mutate();
           }
         }
+        invalidate.all();
         setTimeout(() => navigate('/transactions'), 800);
         return attachedReceipt ? 'Transaction and receipt added successfully!' : 'Transaction added successfully!';
       },
@@ -262,15 +262,9 @@ const AddTransaction = () => {
   };
 
   const categoryRateMatch = getCategoryRate(selectedCard, selectedVendor?.name);
-  const cashbackRate = categoryRateMatch ? categoryRateMatch.rate : (selectedCard?.default_cashback_rate || 0);
+  const cashbackRate = effectiveCashbackRate({ payment_method: selectedCard, vendor: selectedVendor });
 
-  const giftCardAmount = parseFloat(formData.gift_card_amount) || 0;
-  const cashbackBase = Math.max(0,
-    subtotal
-    + (formData.cashback_include_tax ? (parseFloat(formData.sales_tax) || 0) : 0)
-    + (formData.cashback_include_shipping ? (parseFloat(formData.shipping_cost_inbound) || 0) : 0)
-    - giftCardAmount
-  );
+  const cashbackBase = batchCost(formData);
   const cashbackAmount = cashbackBase * (cashbackRate / 100);
 
   // ── Cashback rate change toast ──────────────────────────────────────────────
@@ -760,27 +754,7 @@ const AddTransaction = () => {
                 </div>
               </Field>
 
-              {/* Cashback toggles */}
-              <div className="flex items-center gap-6">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={formData.cashback_include_tax}
-                    onChange={e => setFormData(p => ({ ...p, cashback_include_tax: e.target.checked }))}
-                    className="w-3.5 h-3.5 rounded border-gray-600 accent-pink-500"
-                  />
-                  <span className="text-xs text-gray-400">Include tax in cashback</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={formData.cashback_include_shipping}
-                    onChange={e => setFormData(p => ({ ...p, cashback_include_shipping: e.target.checked }))}
-                    className="w-3.5 h-3.5 rounded border-gray-600 accent-pink-500"
-                  />
-                  <span className="text-xs text-gray-400">Include shipping in cashback</span>
-                </label>
-              </div>
+              <p className="text-xs text-gray-400">Cashback uses purchase cost including tax, shipping and fees, less gift cards.</p>
             </div>
 
             {/* ── "Has item been sold?" toggle ──────────────────── */}
@@ -998,7 +972,7 @@ const AddTransaction = () => {
                 {(() => {
                   const sp = parseFloat(formData.sale_price) || 0;
                   const qs = parseInt(formData.qty_sold) || 1;
-                  const purchaseTotal = subtotal;
+                  const purchaseTotal = allocatedCost(formData, qs);
                   const saleTotal = sp * qs;
                   return (
                     <>
@@ -1082,15 +1056,13 @@ const AddTransaction = () => {
                   const salePrice  = parseFloat(formData.sale_price) || 0;
                   const qtySold    = parseInt(formData.qty_sold) || 1;
                   const totalSale  = salePrice * qtySold;
-                  const unitCost   = parseFloat(formData.unit_purchase_cost) || 0;
-                  const qtyPurchased = parseInt(formData.qty_purchased) || 1;
-                  const allocatedTax = (tax / qtyPurchased) * qtySold;
-                  const allocatedShipping = (shipping / qtyPurchased) * qtySold;
-                  const allocatedGiftCard = (giftCard / qtyPurchased) * qtySold;
-                  const totalUnitCost = (unitCost * qtySold) + allocatedTax + allocatedShipping - allocatedGiftCard;
+                  const economics = saleEconomics(formData, { quantity: qtySold, unit_price: salePrice,
+                    commission_fee: formData.commission_fee, sale_shipping: formData.sale_shipping }, cashbackRate);
+                  const totalUnitCost = economics.cost;
+                  const allocatedCashback = economics.cashback;
                   const saleShipping = parseFloat(formData.sale_shipping) || 0;
                   const saleFees = parseFloat(formData.commission_fee) || 0;
-                  const profit = totalSale - totalUnitCost - saleShipping - saleFees;
+                  const profit = economics.grossProfit;
 
                   const Row = ({ label, value, color = 'text-gray-200' }) => (
                     <div className="flex justify-between items-center">
@@ -1155,14 +1127,14 @@ const AddTransaction = () => {
                               <span className="font-medium text-gray-200">
                                 {showCashbackProfit && cashbackAmount > 0 ? 'Est. Profit + Cashback' : 'Est. Profit'}
                               </span>
-                              <span className={`font-bold text-base ${(showCashbackProfit ? profit + cashbackAmount : profit) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                {(showCashbackProfit ? profit + cashbackAmount : profit) >= 0 ? '+' : ''}${(showCashbackProfit ? profit + cashbackAmount : profit).toFixed(2)}
+                              <span className={`font-bold text-base ${(showCashbackProfit ? profit + allocatedCashback : profit) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {(showCashbackProfit ? profit + allocatedCashback : profit) >= 0 ? '+' : ''}${(showCashbackProfit ? profit + allocatedCashback : profit).toFixed(2)}
                               </span>
                             </div>
 
                             {showCashbackProfit && cashbackAmount > 0 && (
                               <p className="text-[10px] text-gray-600">
-                                Includes ${cashbackAmount.toFixed(2)} cashback ({cashbackRate}% on ${cashbackBase.toFixed(2)})
+                                Includes ${allocatedCashback.toFixed(2)} cashback ({cashbackRate}% on ${totalUnitCost.toFixed(2)})
                               </p>
                             )}
                           </div>

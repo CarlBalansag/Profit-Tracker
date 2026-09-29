@@ -4,7 +4,7 @@ import TransactionDetailModal from './TransactionDetailModal';
 
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
-  invalidate: { inventory: vi.fn(), sales: vi.fn(), dashboard: vi.fn(), creditCard: vi.fn() },
+  invalidate: { all: vi.fn() },
   error: vi.fn(),
 }));
 vi.mock('../hooks/useApi', () => ({ apiFetch: mocks.fetch, useInvalidate: () => mocks.invalidate }));
@@ -45,8 +45,7 @@ describe('expanded editor atomic save', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Update Transaction' }));
     await waitFor(() => expect(saved).toHaveBeenCalledOnce());
     expect(close).toHaveBeenCalledOnce();
-    expect(mocks.invalidate.inventory).toHaveBeenCalledOnce();
-    expect(mocks.invalidate.sales).toHaveBeenCalledOnce();
+    expect(mocks.invalidate.all).toHaveBeenCalledOnce();
   });
 
   it('prevents duplicate save and dismissal while the combined operation is pending', async () => {
