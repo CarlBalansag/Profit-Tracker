@@ -49,7 +49,7 @@ function getOccurrences(frequency, start, end) {
 }
 
 // ── Generate missing Expense entries for one recurring record ────────────────
-async function generateEntries(rec) {
+async function generateEntries(rec, client) {
   const lastGen = rec.last_generated ? new Date(rec.last_generated) : null;
   const occurrences = getOccurrences(rec.frequency, rec.start_date, rec.end_date);
 
@@ -60,7 +60,7 @@ async function generateEntries(rec) {
 
   if (toCreate.length === 0) return;
 
-  await prisma.expense.createMany({
+  await client.expense.createMany({
     data: toCreate.map(date => ({
       user_id:             rec.user_id,
       name:                rec.name,
@@ -75,7 +75,7 @@ async function generateEntries(rec) {
 
   // Update last_generated to the most recent occurrence created
   const latest = toCreate[toCreate.length - 1];
-  await prisma.recurringExpense.update({
+  await client.recurringExpense.update({
     where: { id: rec.id },
     data:  { last_generated: latest },
   });
@@ -91,7 +91,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 
     // Generate missing entries for active recurring expenses
     await Promise.all(
-      items.filter(r => r.active).map(r => generateEntries(r))
+      items.filter(r => r.active).map(r => prisma.$transaction(tx => generateEntries(r, tx)))
     );
 
     res.json(items);
@@ -107,23 +107,29 @@ router.post('/', isAuthenticated, validateBody(recurringExpense), async (req, re
     if (!name || !amount || !frequency || !start_date) {
       return res.status(400).json({ error: 'name, amount, frequency, and start_date are required' });
     }
+    if (end_date && parseLocalDate(end_date) < parseLocalDate(start_date)) {
+      return res.status(400).json({ error: 'End date cannot be before start date' });
+    }
 
-    const rec = await prisma.recurringExpense.create({
-      data: {
-        user_id:    req.user.id,
-        name,
-        amount:     parseFloat(amount),
-        category:   category  || null,
-        frequency,
-        start_date: parseLocalDate(start_date),
-        end_date:   end_date  ? parseLocalDate(end_date) : null,
-        notes:      notes     || null,
-        active:     true,
-      },
+    const rec = await prisma.$transaction(async (tx) => {
+      const created = await tx.recurringExpense.create({
+        data: {
+          user_id:    req.user.id,
+          name,
+          amount:     parseFloat(amount),
+          category:   category  || null,
+          frequency,
+          start_date: parseLocalDate(start_date),
+          end_date:   end_date  ? parseLocalDate(end_date) : null,
+          notes:      notes     || null,
+          active:     true,
+        },
+      });
+
+      // Immediately generate all past occurrences
+      await generateEntries(created, tx);
+      return tx.recurringExpense.findUnique({ where: { id: created.id } });
     });
-
-    // Immediately generate all past occurrences
-    await generateEntries(rec);
 
     res.json(rec);
   } catch (err) {
@@ -155,12 +161,21 @@ router.put('/:id', isAuthenticated, validateBody(updateRecurringExpense), async 
     if (active !== undefined) data.active = Boolean(active);
     if (wasInactive && nowActive) data.last_generated = existing.last_generated; // keep, generateEntries handles gaps
 
-    const updated = await prisma.recurringExpense.update({ where: { id: req.params.id }, data });
-
-    // If still active after update, generate any new entries
-    if (updated.active) {
-      await generateEntries(updated);
+    const effectiveStart = data.start_date ?? existing.start_date;
+    const effectiveEnd = data.end_date !== undefined ? data.end_date : existing.end_date;
+    if (effectiveEnd && new Date(effectiveEnd) < new Date(effectiveStart)) {
+      return res.status(400).json({ error: 'End date cannot be before start date' });
     }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const saved = await tx.recurringExpense.update({ where: { id: req.params.id }, data });
+
+      // If still active after update, generate any new entries
+      if (saved.active) {
+        await generateEntries(saved, tx);
+      }
+      return tx.recurringExpense.findUnique({ where: { id: saved.id } });
+    });
 
     res.json(updated);
   } catch (err) {
@@ -177,8 +192,10 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
     }
 
     // Delete all auto-generated expense entries tied to this recurring record
-    await prisma.expense.deleteMany({ where: { recurring_expense_id: req.params.id } });
-    await prisma.recurringExpense.delete({ where: { id: req.params.id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.expense.deleteMany({ where: { recurring_expense_id: req.params.id, user_id: req.user.id } });
+      await tx.recurringExpense.delete({ where: { id: req.params.id } });
+    });
 
     res.json({ success: true });
   } catch (err) {
