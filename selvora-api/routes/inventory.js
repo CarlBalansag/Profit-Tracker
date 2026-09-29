@@ -298,11 +298,26 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
     if (purchase_date !== undefined)         data.purchase_date = parseLocalDate(purchase_date);
     if (tax_exempt !== undefined)            data.tax_exempt = tax_exempt === true || tax_exempt === 'true';
 
-    const updated = await prisma.inventory.update({
-      where: { id: req.params.id },
-      data,
-      include: { vendor: true, payment_method: true }
-    });
+    // Quantity fields double as the basis for every sale's stock math, so a
+    // concurrent sale changing qty_on_hand between the read above and this
+    // write must not be silently overwritten.
+    const updated = (qty_purchased !== undefined || qty_on_hand !== undefined)
+      ? await prisma.$transaction(async (tx) => {
+        const claim = await tx.inventory.updateMany({
+          where: {
+            id: req.params.id, user_id: req.user.id,
+            qty_purchased: existing.qty_purchased, qty_on_hand: existing.qty_on_hand,
+          },
+          data,
+        });
+        if (claim.count !== 1) throw Object.assign(new Error('Inventory changed while saving. Reload and retry.'), { status: 409 });
+        return tx.inventory.findUnique({ where: { id: req.params.id }, include: { vendor: true, payment_method: true } });
+      })
+      : await prisma.inventory.update({
+        where: { id: req.params.id },
+        data,
+        include: { vendor: true, payment_method: true }
+      });
     await publishCalendarFeed(req.user.id);
     res.json(updated);
   } catch (err) {
@@ -318,10 +333,10 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
       return res.status(404).json({ error: 'Not found or access denied' });
     }
 
-    // Manually delete linked sales first (belt-and-suspenders alongside DB cascade)
-    await prisma.sales.deleteMany({ where: { inventory_id: req.params.id } });
-
-    // Now delete the inventory record itself
+    // The foreign-key cascade deletes linked sales atomically with inventory
+    // in one statement. A failed purchase delete must preserve its entire
+    // sale history — a separate manual deleteMany here could otherwise
+    // succeed while the inventory delete that follows it fails.
     await prisma.inventory.delete({ where: { id: req.params.id } });
 
     await publishCalendarFeed(req.user.id);
