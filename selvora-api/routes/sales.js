@@ -65,6 +65,7 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
 
     const saleQty = parseInt(quantity, 10) || 1;
     await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
+    await requireOwned('buyer', buyer_id, req.user.id, 'Buyer');
     // A tracking number entered at creation time advances status the same
     // way adding one later does — unless the caller explicitly chose a status.
     let resolvedStatus = status || 'SOLD';
