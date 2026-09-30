@@ -38,8 +38,12 @@ const optionalMoney = z.preprocess(
 function decimalAmount({ scale = 2, optional = false, defaultValue, round = false } = {}) {
   const schema = z.preprocess(emptyToUndefined, z.any()).transform((val, ctx) => {
     if (val === undefined) {
-      if (defaultValue !== undefined) return defaultValue;
-      if (optional) return undefined;
+      // Only reached when the raw field was present but empty (e.g. '') --
+      // a fully absent key is intercepted by .optional()/.default() below
+      // before this transform ever runs. Matches the original
+      // optionalMoney/optionalMoney.default(0) behavior for that case,
+      // which left it undefined and relied on the route's own `|| 0`.
+      if (optional || defaultValue !== undefined) return undefined;
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Amount is required.' });
       return z.NEVER;
     }
@@ -55,7 +59,13 @@ function decimalAmount({ scale = 2, optional = false, defaultValue, round = fals
       return z.NEVER;
     }
   });
-  return optional || defaultValue !== undefined ? schema.optional() : schema;
+  // A real fully-absent key must be intercepted here (by .default() or
+  // .optional()) rather than inside the transform above -- Zod never invokes
+  // a field's schema at all when the raw value is undefined and the schema
+  // is ZodOptional/ZodDefault, so defaultValue handling inside the transform
+  // is unreachable for that case and must live here instead.
+  if (defaultValue !== undefined) return schema.default(defaultValue);
+  return optional ? schema.optional() : schema;
 }
 
 const positiveInt = z.preprocess(
@@ -190,7 +200,7 @@ const updateSale = z.object({
 
 const createExpense = z.object({
   name: requiredString('name'),
-  amount: money,
+  amount: decimalAmount(),
   category: optionalString,
   date: dateString,
   notes: optionalString,
@@ -208,19 +218,19 @@ const optionalDay = z.preprocess(
 const paymentMethod = z.object({
   name: requiredString('name'),
   type: requiredString('type'),
-  default_cashback_rate: optionalMoney.default(0),
+  default_cashback_rate: decimalAmount({ scale: 6, defaultValue: 0 }),
   preset_card_id: optionalString,
   category_rates: z.array(categoryRate).optional(),
   statement_close_day: optionalDay,
   due_day: optionalDay,
-  credit_limit: optionalMoney,
-  min_payment_pct: optionalMoney,
+  credit_limit: decimalAmount({ optional: true }),
+  min_payment_pct: decimalAmount({ scale: 6, optional: true }),
 }).passthrough();
 
 const platform = z.object({
   name: requiredString('name'),
   type: optionalString,
-  fee_pct: optionalMoney.default(0),
+  fee_pct: decimalAmount({ scale: 6, defaultValue: 0 }),
   address: optionalString,
   notes: optionalString,
   tax_exempt_place: optionalBoolish,
@@ -229,7 +239,7 @@ const platform = z.object({
 const updatePlatform = z.object({
   name: requiredString('name').optional(),
   type: optionalString,
-  fee_pct: optionalMoney,
+  fee_pct: decimalAmount({ scale: 6, optional: true }),
   address: optionalString,
   notes: optionalString,
   tax_exempt_place: optionalBoolish,
@@ -257,7 +267,7 @@ const updateAccount = account.omit({ platform_id: true }).partial();
 
 const recurringExpense = z.object({
   name: requiredString('name'),
-  amount: money,
+  amount: decimalAmount(),
   category: optionalString,
   frequency: z.enum(['weekly', 'biweekly', 'monthly']),
   start_date: dateString,

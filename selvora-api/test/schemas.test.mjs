@@ -30,6 +30,23 @@ describe('API validation schemas', () => {
     })).toThrow();
   });
 
+  it('applies decimalAmount defaults when the key is entirely absent, not just empty', () => {
+    // Regression test: decimalAmount's defaultValue previously only applied
+    // when the field was present-but-empty (e.g. sales_tax: ''); a fully
+    // absent key was intercepted by Zod's .optional() before the default
+    // logic ever ran, silently leaving it undefined. Fixed by using a real
+    // Zod .default() wrapper instead.
+    const parsed = createInventory.parse({
+      product_name: 'No fees field at all',
+      unit_purchase_cost: '10.00',
+      qty_purchased: '1',
+      // fees, gift_card_amount, shipping_cost_inbound keys entirely omitted
+    });
+    expect(parsed.fees).toBe(0);
+    expect(parsed.gift_card_amount).toBe(0);
+    expect(parsed.shipping_cost_inbound).toBe(0);
+  });
+
   it('requires valid money and dates for expenses', () => {
     expect(createExpense.parse({
       name: 'Software',
