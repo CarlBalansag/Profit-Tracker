@@ -1,22 +1,21 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const { Decimal, isRealizedSale, batchCost, effectiveCashbackRate, saleEconomics } = require('../services/decimalFinance');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
   res.status(401).json({ message: 'Unauthorized' });
 };
 
-// Cost, cashback and profit formulas live in shared/finance.mjs, shared with
-// analytics.js and the frontend, so they can't drift from each other.
-const finance = import('../../shared/finance.mjs');
+const zero = () => new Decimal(0);
+const money = (d) => d.toDecimalPlaces(2).toNumber();
 
 // GET /dashboard
 // Returns credit-card spending breakdown for the current calendar month.
 // Only includes inventory purchased with PaymentMethod.type = 'Credit'.
 router.get('/dashboard', isAuthenticated, async (req, res, next) => {
   try {
-    const { batchCost, saleEconomics, effectiveCashbackRate: getEffectiveCashbackRate, isRealizedSale } = await finance;
     const userId = req.user.id;
     const now = new Date();
 
@@ -61,9 +60,9 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
         id: pm.id,
         name: pm.name,
         cashbackRate: 0,
-        totalSpend: 0,
-        cashbackEarned: 0,
-        totalLosses: 0,
+        totalSpend: zero(),
+        cashbackEarned: zero(),
+        totalLosses: zero(),
         txnCount: 0,
         soldCount: 0,
         pendingCount: 0,
@@ -83,13 +82,13 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
       if (!cardMap[pm.id]) continue;
 
       const card = cardMap[pm.id];
-      const rate = getEffectiveCashbackRate(inv);
+      const rate = effectiveCashbackRate(inv);
       const qty = inv.qty_purchased || 1;
       const itemCost = batchCost(inv);
-      const itemCashback = itemCost * (rate / 100);
+      const itemCashback = itemCost.times(rate).div(100);
 
-      card.totalSpend += itemCost;
-      card.cashbackEarned += itemCashback;
+      card.totalSpend = card.totalSpend.plus(itemCost);
+      card.cashbackEarned = card.cashbackEarned.plus(itemCashback);
       card.txnCount += 1;
 
       // Per-item P&L for sold units
@@ -100,24 +99,24 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
         for (const sale of inv.sales) {
           if (!isRealizedSale(sale)) continue;
           const { cost: allocatedCost, cashback: allocatedCashback, revenue: saleRevenue, grossProfit: netPnl } = saleEconomics(inv, sale, rate);
-          const isLoss = netPnl < 0;
-          const lossAmount = isLoss ? Math.abs(netPnl) : 0;
-          const lossToRedeem = Math.min(allocatedCashback, lossAmount);
+          const isLoss = netPnl.isNegative();
+          const lossAmount = isLoss ? netPnl.abs() : zero();
+          const lossToRedeem = Decimal.min(allocatedCashback, lossAmount);
 
           card.soldCount += sale.quantity;
-          if (isLoss) card.totalLosses += lossAmount;
+          if (isLoss) card.totalLosses = card.totalLosses.plus(lossAmount);
 
           card.items.push({
             id: inv.id,
             saleId: sale.id,
             product: inv.product_name,
-            cost: allocatedCost,
-            cashback: allocatedCashback,
+            cost: money(allocatedCost),
+            cashback: money(allocatedCashback),
             status: sale.status || 'SOLD',
-            revenue: saleRevenue,
-            netPnl,
-            lossAmount,
-            lossToRedeem,
+            revenue: money(saleRevenue),
+            netPnl: money(netPnl),
+            lossAmount: money(lossAmount),
+            lossToRedeem: money(lossToRedeem),
             cashbackRate: rate,
           });
         }
@@ -126,19 +125,20 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
         const soldQty = inv.sales.reduce((s, sa) => s + sa.quantity, 0);
         const unsoldQty = qty - soldQty;
         if (unsoldQty > 0) {
-          const unsoldCost = (inv.unit_purchase_cost * unsoldQty)
-            + (inv.sales_tax * (unsoldQty / qty))
-            + (inv.shipping_cost_inbound * (unsoldQty / qty))
-            + ((inv.fees || 0) * (unsoldQty / qty))
-            - ((inv.gift_card_amount || 0) * (unsoldQty / qty));
-          const unsoldCashback = unsoldCost * (rate / 100);
+          const unsoldShare = new Decimal(unsoldQty).div(qty);
+          const unsoldCost = new Decimal(inv.unit_purchase_cost || 0).times(unsoldQty)
+            .plus(new Decimal(inv.sales_tax || 0).times(unsoldShare))
+            .plus(new Decimal(inv.shipping_cost_inbound || 0).times(unsoldShare))
+            .plus(new Decimal(inv.fees || 0).times(unsoldShare))
+            .minus(new Decimal(inv.gift_card_amount || 0).times(unsoldShare));
+          const unsoldCashback = unsoldCost.times(rate).div(100);
           card.pendingCount += unsoldQty;
           card.items.push({
             id: inv.id,
             saleId: null,
             product: inv.product_name,
-            cost: unsoldCost,
-            cashback: unsoldCashback,
+            cost: money(unsoldCost),
+            cashback: money(unsoldCashback),
             status: inv.status || 'PURCHASED',
             revenue: null,
             netPnl: null,
@@ -154,8 +154,8 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
           id: inv.id,
           saleId: null,
           product: inv.product_name,
-          cost: itemCost,
-          cashback: itemCashback,
+          cost: money(itemCost),
+          cashback: money(itemCashback),
           status: inv.status || 'PURCHASED',
           revenue: null,
           netPnl: null,
@@ -166,39 +166,50 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
       }
     }
 
-    // Compute card-level cashback netting
-    const cards = Object.values(cardMap).map(card => {
-      const cashbackToRedeem = Math.min(card.cashbackEarned, card.totalLosses);
-      const cashbackToKeep = card.cashbackEarned - cashbackToRedeem;
-      const uncoveredLoss = Math.max(0, card.totalLosses - card.cashbackEarned);
-      const amountToPay = card.totalSpend - cashbackToRedeem;
+    // Compute card-level cashback netting (still in Decimal -- these feed the
+    // summary reduce below before anything is rounded to a display Number).
+    const cardsDecimal = Object.values(cardMap).map(card => {
+      const cashbackToRedeem = Decimal.min(card.cashbackEarned, card.totalLosses);
+      const cashbackToKeep = card.cashbackEarned.minus(cashbackToRedeem);
+      const uncoveredLoss = Decimal.max(0, card.totalLosses.minus(card.cashbackEarned));
+      const amountToPay = card.totalSpend.minus(cashbackToRedeem);
 
-      return {
-        ...card,
-        cashbackToRedeem,
-        cashbackToKeep,
-        uncoveredLoss,
-        amountToPay,
-      };
-    }).sort((a, b) => b.totalSpend - a.totalSpend);
-
-    // Summary totals
-    const summary = cards.reduce((acc, card) => {
-      acc.totalSpend += card.totalSpend;
-      acc.totalCashbackEarned += card.cashbackEarned;
-      acc.totalCashbackToRedeem += card.cashbackToRedeem;
-      acc.totalCashbackToKeep += card.cashbackToKeep;
-      acc.totalAmountToPay += card.amountToPay;
-      acc.totalUncoveredLoss += card.uncoveredLoss;
-      return acc;
-    }, {
-      totalSpend: 0,
-      totalCashbackEarned: 0,
-      totalCashbackToRedeem: 0,
-      totalCashbackToKeep: 0,
-      totalAmountToPay: 0,
-      totalUncoveredLoss: 0,
+      return { ...card, cashbackToRedeem, cashbackToKeep, uncoveredLoss, amountToPay };
     });
+
+    // Summary totals — summed in Decimal across cards, rounded once.
+    const summaryDecimal = cardsDecimal.reduce((acc, card) => ({
+      totalSpend: acc.totalSpend.plus(card.totalSpend),
+      totalCashbackEarned: acc.totalCashbackEarned.plus(card.cashbackEarned),
+      totalCashbackToRedeem: acc.totalCashbackToRedeem.plus(card.cashbackToRedeem),
+      totalCashbackToKeep: acc.totalCashbackToKeep.plus(card.cashbackToKeep),
+      totalAmountToPay: acc.totalAmountToPay.plus(card.amountToPay),
+      totalUncoveredLoss: acc.totalUncoveredLoss.plus(card.uncoveredLoss),
+    }), {
+      totalSpend: zero(),
+      totalCashbackEarned: zero(),
+      totalCashbackToRedeem: zero(),
+      totalCashbackToKeep: zero(),
+      totalAmountToPay: zero(),
+      totalUncoveredLoss: zero(),
+    });
+
+    const cards = cardsDecimal
+      .map(card => ({
+        ...card,
+        totalSpend: money(card.totalSpend),
+        cashbackEarned: money(card.cashbackEarned),
+        totalLosses: money(card.totalLosses),
+        cashbackToRedeem: money(card.cashbackToRedeem),
+        cashbackToKeep: money(card.cashbackToKeep),
+        uncoveredLoss: money(card.uncoveredLoss),
+        amountToPay: money(card.amountToPay),
+      }))
+      .sort((a, b) => b.totalSpend - a.totalSpend);
+
+    const summary = Object.fromEntries(
+      Object.entries(summaryDecimal).map(([key, value]) => [key, money(value)])
+    );
 
     res.json({ month: monthLabel, cards, summary });
   } catch (err) {

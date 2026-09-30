@@ -5,6 +5,7 @@ const { randomUUID } = require('node:crypto');
 const cloudinary = require('cloudinary').v2;
 const { validateBody } = require('../middleware/validate');
 const { attachReceipt, detachReceipt } = require('../validation/schemas');
+const { batchCost } = require('../services/decimalFinance');
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -20,7 +21,6 @@ const isAuthenticated = (req, res, next) => {
 // GET /api/receipts — returns all inventory + expense items split by receipt status
 router.get('/', isAuthenticated, async (req, res, next) => {
   try {
-    const { batchCost } = await import('../../shared/finance.mjs');
     const [inventories, expenses] = await Promise.all([
       prisma.inventory.findMany({
         where: { user_id: req.user.id },
@@ -57,7 +57,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
         itemType: 'inventory',
         name: inv.product_name,
         date: inv.purchase_date,
-        amount: batchCost(inv),
+        amount: batchCost(inv).toDecimalPlaces(2).toNumber(),
         receipt_url: inv.receipt_url || null,
       })),
       ...expenses.map(exp => ({
