@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
 import { Search, Paperclip, Eye, Trash2, FileText, Package, Receipt, X, Upload } from 'lucide-react';
+import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { toast } from 'sonner';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
@@ -21,9 +22,10 @@ function isImageUrl(url) {
 // ── Preview Modal ──────────────────────────────────────────────────────────────
 function PreviewModal({ dataUrl, onClose }) {
   const isPdf = isPdfUrl(dataUrl);
+  const modalRef = useModalKeyboard(true, onClose);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative max-w-3xl w-full max-h-[90vh] rounded-xl overflow-hidden bg-[#16181d] border border-white/10 shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div ref={modalRef} className="relative max-w-3xl w-full max-h-[90vh] rounded-xl overflow-hidden bg-[#16181d] border border-white/10 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
           <span className="text-sm font-medium text-white">Receipt Preview</span>
           <button onClick={onClose} className="p-1 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors">

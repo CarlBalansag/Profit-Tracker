@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../hooks/useApi';
 import { requireSuccessfulResponse } from '../../hooks/apiResponse';
+import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 import { toast } from 'sonner';
 import { 
   User, Database, Plus, Search, X, Edit2, Trash2, 
@@ -122,6 +123,7 @@ function AddAccountModal({ vendor, platformList, onClose, onSave }) {
     notes: '' 
   });
   const [saving, setSaving] = useState(false);
+  const modalRef = useModalKeyboard(true, () => { if (!saving) onClose(); });
 
   const handleSubmit = async () => {
     if (!form.name.trim() || !form.platform_id) return;
@@ -147,7 +149,7 @@ function AddAccountModal({ vendor, platformList, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-[#12121e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+      <div ref={modalRef} className="w-full max-w-md bg-[#12121e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <h3 className="text-base font-semibold text-white">Add Account</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">

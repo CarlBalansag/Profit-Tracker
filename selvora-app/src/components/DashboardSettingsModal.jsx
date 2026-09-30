@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Eye, EyeOff, ChevronUp, ChevronDown, Info, Plus, Minus } from 'lucide-react';
 import { toast } from 'sonner';
+import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import {
   STAT_CARD_REGISTRY,
   PIPELINE_CARD_REGISTRY,
@@ -68,7 +69,7 @@ function getMetricMeaning(label) {
 }
 
 function FormulaPopup({ formula, label, onClose }) {
-  const ref = useRef(null);
+  const ref = useModalKeyboard(true, onClose);
   const calculation = formula.join(' ');
 
   useEffect(() => {
@@ -77,7 +78,7 @@ function FormulaPopup({ formula, label, onClose }) {
     }
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
+  }, [onClose, ref]);
 
   return (
     <div
@@ -370,6 +371,7 @@ export default function DashboardSettingsModal({ settings, onClose, onSave, uiSt
   const visibleStatCount = local.statCards.filter(c => c.visible).length;
   const visibleChartCount = local.chartSeries.filter(c => c.visible).length;
   const visibleRecentSalesColumnCount = local.recentSalesColumns.filter(c => c.visible).length;
+  const modalRef = useModalKeyboard(true, onClose);
   const [collapsedSections, setCollapsedSections] = useState({
     summaryCards: false,
     pipeline: false,
@@ -766,7 +768,7 @@ export default function DashboardSettingsModal({ settings, onClose, onSave, uiSt
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative flex h-[90vh] sm:h-[80vh] w-full sm:w-[min(1180px,92vw)] flex-col overflow-hidden sm:rounded-2xl border border-white/[0.08] bg-[#0a0a0b] shadow-2xl">
+      <div ref={modalRef} className="relative flex h-[90vh] sm:h-[80vh] w-full sm:w-[min(1180px,92vw)] flex-col overflow-hidden sm:rounded-2xl border border-white/[0.08] bg-[#0a0a0b] shadow-2xl">
         <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-4 sm:px-6 py-4">
           <div>
             <h2 className="text-base font-semibold text-white">Dashboard Settings</h2>

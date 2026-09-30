@@ -11,6 +11,7 @@ import {
 import { useCalendarEvents, useCalendarAutoEvents, useCalendarToken } from '../hooks/useApi';
 import CalendarEventModal from '../components/Calendar/CalendarEventModal';
 import CalendarEventPopover from '../components/Calendar/CalendarEventPopover';
+import { useModalKeyboard } from '../hooks/useModalKeyboard';
 
 // ─── Color maps ───────────────────────────────────────────────────────────────
 const TYPE_COLOR = {
@@ -112,6 +113,7 @@ function toMonthStr(date) {
 function SubscribePanel({ onClose }) {
   const { data, isLoading } = useCalendarToken();
   const [copied, setCopied] = useState(false);
+  const modalRef = useModalKeyboard(true, onClose);
 
   const handleCopy = () => {
     if (!data?.feedUrl) return;
@@ -124,7 +126,7 @@ function SubscribePanel({ onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg bg-[#15171d] border border-white/[0.08] rounded-2xl shadow-2xl p-6 space-y-4">
+      <div ref={modalRef} className="relative z-10 w-full max-w-lg bg-[#15171d] border border-white/[0.08] rounded-2xl shadow-2xl p-6 space-y-4">
         <h2 className="text-base font-semibold text-gray-100 flex items-center gap-2">
           <Link2 size={16} className="text-[var(--accent)]" />
           Subscribe to Calendar

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Trash2 } from 'lucide-react';
 import { useCalendarMutations } from '../../hooks/useApi';
+import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 
 const COLOR_OPTIONS = [
   { value: 'purple', label: 'Purple', hex: '#a855f7' },
@@ -24,6 +25,9 @@ export default function CalendarEventModal({ open, event, defaultDate, onClose }
 
   const [form, setForm] = useState(defaultForm);
   const [error, setError] = useState('');
+  const modalRef = useModalKeyboard(open, () => {
+    if (!create.isPending && !update.isPending && !remove.isPending) onClose();
+  });
 
   // Sync form when modal opens
   useEffect(() => {
@@ -88,7 +92,7 @@ export default function CalendarEventModal({ open, event, defaultDate, onClose }
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
-      <div className="relative z-10 w-full max-w-md bg-[#15171d] border border-white/[0.08] rounded-2xl shadow-2xl">
+      <div ref={modalRef} className="relative z-10 w-full max-w-md bg-[#15171d] border border-white/[0.08] rounded-2xl shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
           <h2 className="text-base font-semibold text-gray-100">

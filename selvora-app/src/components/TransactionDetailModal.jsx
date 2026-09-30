@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, DollarSign, Package, CreditCard, Tag, ChevronDown, ChevronUp } from 'lucide-react';
 import { useInvalidate, apiFetch} from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
+import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { toast } from 'sonner';
 
 const STATUSES = ['Pre Order', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
@@ -101,6 +102,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const dismiss = () => { if (!savingRef.current) onClose(); };
+  const modalRef = useModalKeyboard(true, dismiss);
   // track which sale card is expanded (index)
   const [expandedSale, setExpandedSale] = useState(0);
   const invalidate = useInvalidate();
@@ -242,6 +244,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
 
       {/* Panel */}
       <div
+        ref={modalRef}
         className="relative w-full max-w-[640px] max-h-[90vh] sm:max-h-[90vh] h-full sm:h-auto bg-[#15171d] border border-white/[0.08] sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
         style={{ animation: 'fadeInScale 0.2s ease-out' }}
       >

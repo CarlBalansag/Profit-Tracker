@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useInvalidate, apiFetch} from '../../hooks/useApi';
 import { requireSuccessfulResponse } from '../../hooks/apiResponse';
+import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 import { toast } from 'sonner';
 
 // ─── Quick Add Store Directory ────────────────────────────────────────────────
@@ -177,6 +178,7 @@ function VendorBadge({ name }) {
 function CustomModal({ onClose, onSave }) {
   const [form, setForm] = useState({ name: '', type: 'Vendor', address: '', notes: '' });
   const [saving, setSaving] = useState(false);
+  const modalRef = useModalKeyboard(true, () => { if (!saving) onClose(); });
 
   const handleSubmit = async () => {
     if (!form.name.trim()) return;
@@ -202,7 +204,7 @@ function CustomModal({ onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-[#12121e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+      <div ref={modalRef} className="w-full max-w-md bg-[#12121e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <h3 className="text-base font-semibold text-white">Add Vendor</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
@@ -280,6 +282,7 @@ function EditModal({ vendor, onClose, onSave }) {
     notes: vendor.notes || '',
   });
   const [saving, setSaving] = useState(false);
+  const modalRef = useModalKeyboard(true, () => { if (!saving) onClose(); });
 
   const handleSubmit = async () => {
     if (!form.name.trim()) return;
@@ -309,7 +312,7 @@ function EditModal({ vendor, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-[#12121e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+      <div ref={modalRef} className="w-full max-w-md bg-[#12121e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <h3 className="text-base font-semibold text-white">Edit Vendor</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
@@ -373,6 +376,7 @@ function QuickAddModal({ existingVendors, onClose, onSave }) {
   const [category, setCategory] = useState('All Categories');
   const [selected, setSelected] = useState({});
   const [saving, setSaving] = useState(false);
+  const modalRef = useModalKeyboard(true, () => { if (!saving) onClose(); });
 
   const existingNames = new Set(existingVendors.map(v => v.name.toLowerCase()));
 
@@ -415,7 +419,7 @@ function QuickAddModal({ existingVendors, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg bg-[#12121e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ maxHeight: '85vh' }}>
+      <div ref={modalRef} className="w-full max-w-lg bg-[#12121e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ maxHeight: '85vh' }}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <h3 className="text-base font-semibold text-white">Quick Add Vendors</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">

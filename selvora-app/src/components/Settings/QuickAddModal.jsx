@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, X, Check, Copy } from 'lucide-react';
 import { PRESET_CARDS, ISSUERS } from '../../data/presetCards';
 import { IssuerLogo } from './IssuerLogo';
+import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 import clsx from 'clsx';
 
 export const QuickAddModal = ({ isOpen, onClose, onAddCards, existingCardIds = [] }) => {
@@ -11,6 +12,7 @@ export const QuickAddModal = ({ isOpen, onClose, onAddCards, existingCardIds = [
   const [selectedCards, setSelectedCards] = useState([]);
   const [applyPresetRates, setApplyPresetRates] = useState(true);
   const [saving, setSaving] = useState(false);
+  const modalRef = useModalKeyboard(isOpen, () => { if (!saving) onClose(); });
 
   // Reset state when modal opens
   useEffect(() => {
@@ -57,7 +59,7 @@ export const QuickAddModal = ({ isOpen, onClose, onAddCards, existingCardIds = [
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-[#12121A] border border-gray-800 rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+      <div ref={modalRef} className="bg-[#12121A] border border-gray-800 rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
         
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-gray-800/50">

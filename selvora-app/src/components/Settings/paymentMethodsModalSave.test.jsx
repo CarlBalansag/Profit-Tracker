@@ -54,6 +54,27 @@ describe('QA-20/QA-23 regression: card modals do not close/clear before save suc
     expect(mocks.invalidatePaymentMethods).toHaveBeenCalled();
   });
 
+  it('does not close the Custom Card modal on Escape while a save is in flight', async () => {
+    render(<PaymentMethods />);
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: /Custom/ }));
+    expect(await screen.findByText('Add Card')).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText('e.g., Chase Freedom Flex'), { target: { value: 'My Card' } });
+
+    let resolveSave;
+    mocks.apiFetch.mockReturnValueOnce(new Promise(resolve => { resolveSave = resolve; }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create Card' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Saving...' })).toBeTruthy());
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByText('Add Card')).toBeTruthy();
+
+    const created = { id: 'c2', name: 'My Card', type: 'Credit Card', default_cashback_rate: 0, category_rates: [] };
+    resolveSave(new Response(JSON.stringify(created), { status: 200 }));
+    await waitFor(() => expect(screen.queryByText('Add Card')).toBeNull());
+  });
+
   it('keeps the Quick Add modal open with the selection intact when a card fails to add', async () => {
     render(<PaymentMethods />);
     await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalled());

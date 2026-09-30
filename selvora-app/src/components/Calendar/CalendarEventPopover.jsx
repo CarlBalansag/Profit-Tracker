@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { X, Plus, ShoppingBag, DollarSign, Banknote, Calendar, CreditCard } from 'lucide-react';
+import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 
 const TYPE_CONFIG = {
   purchase:   { label: 'Purchase',    color: '#3b82f6', icon: ShoppingBag },
@@ -32,7 +33,7 @@ function formatDate(dateStr) {
 }
 
 export default function CalendarEventPopover({ date, events, onClose, onAddEvent, onEditEvent }) {
-  const ref = useRef(null);
+  const ref = useModalKeyboard(true, onClose);
 
   useEffect(() => {
     const handler = (e) => {
@@ -40,7 +41,7 @@ export default function CalendarEventPopover({ date, events, onClose, onAddEvent
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
+  }, [onClose, ref]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

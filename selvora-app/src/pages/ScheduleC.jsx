@@ -5,6 +5,7 @@ import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { ExpenseTaxFields } from '../components/ScheduleC/ExpenseTaxFields';
 import { emptyTaxDetails, taxReviewIssues } from '../../../shared/scheduleC.mjs';
 import { csvText, downloadFile, downloadJSON } from '../utils/downloads';
+import { useModalKeyboard } from '../hooks/useModalKeyboard';
 
 function TaxEditor({ expense, onClose, onSaved }) {
   const [tax, setTax] = useState(() => ({ ...emptyTaxDetails(), ...expense.tax_details }));
@@ -12,6 +13,7 @@ function TaxEditor({ expense, onClose, onSaved }) {
   const [error, setError] = useState('');
   const busy = useRef(false);
   const close = () => { if (!busy.current) onClose(); };
+  const modalRef = useModalKeyboard(true, close);
   const save = async e => {
     e.preventDefault(); if (busy.current) return;
     if (tax.reviewed && tax.business_use !== 'personal' && taxReviewIssues(tax).length) { setError('Complete business details before marking reviewed.'); return; }
@@ -24,7 +26,7 @@ function TaxEditor({ expense, onClose, onSaved }) {
   };
   return <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
     <div className="absolute inset-0 bg-black/70" onClick={close} />
-    <form role="dialog" aria-modal="true" aria-label="Review expense tax details" onSubmit={save} className="relative max-h-[90vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-xl border border-white/10 bg-[#16181d] p-5">
+    <form ref={modalRef} role="dialog" aria-modal="true" aria-label="Review expense tax details" onSubmit={save} className="relative max-h-[90vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-xl border border-white/10 bg-[#16181d] p-5">
       <h2 className="text-lg font-semibold text-white">{expense.name} · ${expense.amount}</h2>
       <ExpenseTaxFields value={tax} onChange={setTax} disabled={saving} />
       <p className="text-xs text-gray-400">Attach supporting receipts through <Link to="/receipts" className="underline">Receipts</Link>. Keep the payment evidence referenced here.</p>

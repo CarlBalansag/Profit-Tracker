@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Target, Pencil, TrendingUp, DollarSign, ShoppingBag, X, Flame, Eye, EyeOff } from 'lucide-react';
 import { useGoals, useGoalsMutations, useDashboard } from '../hooks/useApi';
 import { useUiPreferences } from '../hooks/useUiPreferences';
+import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { PageLoader } from '../components/PageLoader';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -154,6 +155,7 @@ function GoalModal({ goal, onSave, onClose, isGlass, isSaving }) {
     'YTD':     goal.target_ytd != null ? String(goal.target_ytd) : '',
   });
   const [error, setError] = useState('');
+  const modalRef = useModalKeyboard(true, () => { if (!isSaving) onClose(); });
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -181,7 +183,7 @@ function GoalModal({ goal, onSave, onClose, isGlass, isSaving }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className={`w-full max-w-sm rounded-2xl p-6 shadow-2xl ${isGlass ? 'bg-[#1a1c1e] border border-white/[0.08]' : 'bg-[var(--bg-surface)] border border-[color:var(--border-default)]'}`}>
+      <div ref={modalRef} className={`w-full max-w-sm rounded-2xl p-6 shadow-2xl ${isGlass ? 'bg-[#1a1c1e] border border-white/[0.08]' : 'bg-[var(--bg-surface)] border border-[color:var(--border-default)]'}`}>
         <div className="flex items-center justify-between mb-5">
           <h2 className={isGlass ? 'text-base font-semibold text-[#e8e2d6]' : 'text-[14px] font-semibold text-[var(--text-primary)]'}>
             Set {metaDef.label} Goal

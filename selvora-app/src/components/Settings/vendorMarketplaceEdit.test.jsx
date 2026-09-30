@@ -75,4 +75,17 @@ describe('QA-21 regression: Vendor and Marketplace edit buttons', () => {
     await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledTimes(2));
     expect(screen.getByText('Edit Vendor')).toBeTruthy();
   });
+
+  it('closes the edit modal when Escape is pressed', async () => {
+    const vendor = { id: 'v3', name: 'Escapable', type: 'Vendor', address: '', notes: '' };
+    mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify([vendor]), { status: 200 }));
+    render(<Vendors />);
+    await waitFor(() => expect(screen.getByText('Escapable')).toBeTruthy());
+
+    clickEditButton();
+    expect(await screen.findByText('Edit Vendor')).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByText('Edit Vendor')).toBeNull());
+  });
 });

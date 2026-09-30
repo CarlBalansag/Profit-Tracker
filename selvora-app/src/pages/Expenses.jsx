@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
+import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { toast } from 'sonner';
 import {
   Receipt, Download, Plus, DollarSign, TrendingUp,
@@ -42,6 +43,7 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
   const nameRef = useRef(null);
+  const modalRef = useModalKeyboard(open, () => { if (!saving) onClose(); });
 
   useEffect(() => {
     if (!open) return;
@@ -123,7 +125,7 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl bg-[#16181d] border border-white/10 shadow-2xl">
+      <div ref={modalRef} className="relative w-full max-w-md rounded-2xl bg-[#16181d] border border-white/10 shadow-2xl">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/[0.06]">
@@ -279,6 +281,8 @@ const Expenses = () => {
 
   const [deleteExpId, setDeleteExpId]   = useState(null);
   const [deleteRecId, setDeleteRecId]   = useState(null);
+  const deleteExpModalRef = useModalKeyboard(!!deleteExpId, () => setDeleteExpId(null));
+  const deleteRecModalRef = useModalKeyboard(!!deleteRecId, () => setDeleteRecId(null));
 
   const [search, setSearch]     = useState('');
   const [catFilter, setCatFilter] = useState('');
@@ -661,7 +665,7 @@ const Expenses = () => {
       {deleteExpId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDeleteExpId(null)} />
-          <div className="relative w-full max-w-sm rounded-2xl bg-[#16181d] border border-white/10 shadow-2xl p-6 text-center">
+          <div ref={deleteExpModalRef} className="relative w-full max-w-sm rounded-2xl bg-[#16181d] border border-white/10 shadow-2xl p-6 text-center">
             <Trash2 className="w-8 h-8 text-red-400 mx-auto mb-3" />
             <h3 className="text-base font-semibold text-white mb-1">Delete expense?</h3>
             <p className="text-sm text-gray-500 mb-5">This cannot be undone.</p>
@@ -677,7 +681,7 @@ const Expenses = () => {
       {deleteRecId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDeleteRecId(null)} />
-          <div className="relative w-full max-w-sm rounded-2xl bg-[#16181d] border border-white/10 shadow-2xl p-6 text-center">
+          <div ref={deleteRecModalRef} className="relative w-full max-w-sm rounded-2xl bg-[#16181d] border border-white/10 shadow-2xl p-6 text-center">
             <Trash2 className="w-8 h-8 text-red-400 mx-auto mb-3" />
             <h3 className="text-base font-semibold text-white mb-1">Delete recurring expense?</h3>
             <p className="text-sm text-gray-500 mb-5">This cannot be undone.</p>

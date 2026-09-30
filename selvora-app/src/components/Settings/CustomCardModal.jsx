@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
+import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 
 export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
   const initialState = {
@@ -18,6 +19,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
   const [formData, setFormData] = useState(initialState);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const modalRef = useModalKeyboard(isOpen, () => { if (!saving) onClose(); });
 
   useEffect(() => {
     if (cardToEdit && isOpen) {
@@ -93,7 +95,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-[#12121A] border border-gray-800 rounded-xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div ref={modalRef} className="bg-[#12121A] border border-gray-800 rounded-xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
 
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-gray-800/50">
