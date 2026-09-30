@@ -181,6 +181,20 @@ Relevant locations: `Inventory.jsx:85-90`, `:158`; `Invoices.jsx:14-43`; `Dashbo
 - Production build: passes, but warns about the duplicate object key and produces a 1.58 MB main JavaScript chunk.
 - No tests cover transaction edits, quantity invariants, concurrent sales, calculations, tenant relationships, recurring generation, receipts, or page workflows.
 
+### QA-26 — Orphaned currency-decimal columns and triggers live in production, undeclared in schema.prisma
+
+**Reproduced (2026-09-30), found while diagnosing an unrelated Render deploy failure.**
+
+Production's Postgres database has 6 `_decimal` NUMERIC columns plus 9 `sync_<Table>_currency` BEFORE INSERT/UPDATE triggers (and their backing functions) on `Inventory`, `Sales`, `Platform`, `PaymentMethod`, `Expense`, `RecurringExpense`, `Invoice`, `Goal`, and `ebay_price_cache`. They were introduced by a migration named `20260912090000_additive_currency_decimals`, applied directly to production from a separate `codex/qa-checkpoint` branch (see commit `6ec3e0e81a51a56d0419000eb8c7496950bdde57` on that branch). No equivalent migration or `_decimal` field exists anywhere in `main`'s `prisma/schema.prisma` or migrations directory — `main` and `codex/qa-checkpoint` implemented overlapping features independently, and only `codex/qa-checkpoint`'s currency-decimal work ever reached the database.
+
+Confirmed impact:
+- `grep -r "_decimal"` across `selvora-api` and `selvora-app/src` returns no matches — no application code reads or writes these columns today.
+- Current row counts are small: Inventory 62, Sales 49, Platform 49, PaymentMethod 13, Expense 7, Goal 3; RecurringExpense/Invoice/ebay_price_cache are empty.
+- **Confirmed failure mode**: a rolled-back test insert of `Infinity` into `Expense.amount` throws `numeric field overflow` from the `sync_Expense_currency` trigger, because Postgres `NUMERIC` cannot represent `Infinity` the way `float`/`double precision` can. Any future bug that produces a float `Infinity`/`-Infinity` (e.g. a division-by-zero in a margin calculation) on any of the 9 affected tables will now hard-fail the entire write with this generic error instead of the failure surfacing in application logic.
+- Because this schema exists in the database but not in `schema.prisma`, `prisma db pull` or `prisma migrate dev` run against this database would misrepresent the real schema or report unexpected drift.
+
+Not fixed as part of this task (unrelated to the Render build failure it was found alongside). Recommended follow-up: decide whether to formally adopt the decimal-currency migration into `main` (write the matching `schema.prisma` fields and reconcile the migration history) or drop the orphaned columns/triggers/functions to bring production back in line with `main`'s declared schema.
+
 ## Checks that passed
 
 - Production frontend build completed.
