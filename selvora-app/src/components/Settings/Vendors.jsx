@@ -272,6 +272,101 @@ function CustomModal({ onClose, onSave }) {
   );
 }
 
+// ─── Edit Vendor Modal ──────────────────────────────────────────────────────────
+function EditModal({ vendor, onClose, onSave }) {
+  const [form, setForm] = useState({
+    name: vendor.name,
+    address: vendor.address || '',
+    notes: vendor.notes || '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!form.name.trim()) return;
+    setSaving(true);
+    try {
+      const res = await apiFetch(`/api/platforms/${vendor.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: form.name,
+          address: form.address,
+          notes: form.notes,
+        })
+      });
+      const successRes = await requireSuccessfulResponse(res, 'Could not update vendor');
+      onSave(await successRes.json());
+      toast.success('Vendor updated.');
+      onClose();
+    } catch (err) {
+      console.error(err);
+      toast.error(`Could not update vendor: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-[#12121e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+          <h3 className="text-base font-semibold text-white">Edit Vendor</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">Vendor Name <span className="text-red-400">*</span></label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              className="w-full bg-[#0d0d18] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-purple-500/50 transition-colors"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">Address</label>
+            <input
+              type="text"
+              placeholder="Optional"
+              value={form.address}
+              onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+              className="w-full bg-[#0d0d18] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-purple-500/50 transition-colors"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">Notes</label>
+            <textarea
+              rows={3}
+              value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              className="w-full bg-[#0d0d18] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-purple-500/50 transition-colors resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/10">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={saving || !form.name.trim()}
+            className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-sm font-semibold text-white transition-colors"
+          >
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Quick Add Modal ──────────────────────────────────────────────────────────
 function QuickAddModal({ existingVendors, onClose, onSave }) {
   const [search, setSearch] = useState('');
@@ -409,6 +504,7 @@ export function Vendors() {
   const [vendors, setVendors] = useState([]);
   const [showCustom, setShowCustom] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [editVendor, setEditVendor] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const invalidate = useInvalidate();
 
@@ -452,6 +548,11 @@ export function Vendors() {
 
   const handleBatchSave = (newVendors) => {
     setVendors(v => [...v, ...newVendors]);
+    invalidate.platforms();
+  };
+
+  const handleSaveEdit = (updated) => {
+    setVendors(v => v.map(x => x.id === updated.id ? updated : x));
     invalidate.platforms();
   };
 
@@ -505,7 +606,10 @@ export function Vendors() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="p-1 text-gray-500 hover:text-white transition-colors">
+                    <button
+                      onClick={() => setEditVendor(vendor)}
+                      className="p-1 text-gray-500 hover:text-white transition-colors"
+                    >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
@@ -534,6 +638,13 @@ export function Vendors() {
           existingVendors={vendors}
           onClose={() => setShowQuickAdd(false)}
           onSave={handleBatchSave}
+        />
+      )}
+      {editVendor && (
+        <EditModal
+          vendor={editVendor}
+          onClose={() => setEditVendor(null)}
+          onSave={handleSaveEdit}
         />
       )}
     </div>

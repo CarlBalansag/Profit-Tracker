@@ -176,6 +176,101 @@ function CustomModal({ onClose, onSave }) {
   );
 }
 
+// ─── Edit Marketplace Modal ──────────────────────────────────────────────────────
+function EditModal({ platform, onClose, onSave }) {
+  const [form, setForm] = useState({
+    name: platform.name,
+    address: platform.address || '',
+    notes: platform.notes || '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!form.name.trim()) return;
+    setSaving(true);
+    try {
+      const res = await apiFetch(`/api/platforms/${platform.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: form.name,
+          address: form.address,
+          notes: form.notes,
+        })
+      });
+      const successRes = await requireSuccessfulResponse(res, 'Could not update marketplace');
+      onSave(await successRes.json());
+      toast.success('Marketplace updated.');
+      onClose();
+    } catch (err) {
+      console.error(err);
+      toast.error(`Could not update marketplace: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-[#12121e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+          <h3 className="text-base font-semibold text-white">Edit Marketplace</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">Marketplace Name <span className="text-red-400">*</span></label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              className="w-full bg-[#0d0d18] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">Address</label>
+            <input
+              type="text"
+              placeholder="Optional"
+              value={form.address}
+              onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+              className="w-full bg-[#0d0d18] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">Notes</label>
+            <textarea
+              rows={3}
+              value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              className="w-full bg-[#0d0d18] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/50 transition-colors resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/10">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={saving || !form.name.trim()}
+            className="px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-sm font-semibold text-white transition-colors"
+          >
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Quick Add Modal ──────────────────────────────────────────────────────────
 function QuickAddModal({ existingPlatforms, onClose, onSave }) {
   const [search, setSearch] = useState('');
@@ -313,6 +408,7 @@ export function Marketplaces() {
   const [platforms, setPlatforms] = useState([]);
   const [showCustom, setShowCustom] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [editPlatform, setEditPlatform] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const invalidate = useInvalidate();
 
@@ -356,6 +452,11 @@ export function Marketplaces() {
 
   const handleBatchSave = (newPlatforms) => {
     setPlatforms(v => [...v, ...newPlatforms]);
+    invalidate.platforms();
+  };
+
+  const handleSaveEdit = (updated) => {
+    setPlatforms(v => v.map(x => x.id === updated.id ? updated : x));
     invalidate.platforms();
   };
 
@@ -409,7 +510,10 @@ export function Marketplaces() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="p-1 text-gray-500 hover:text-white transition-colors">
+                    <button
+                      onClick={() => setEditPlatform(platform)}
+                      className="p-1 text-gray-500 hover:text-white transition-colors"
+                    >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
@@ -438,6 +542,13 @@ export function Marketplaces() {
           existingPlatforms={platforms}
           onClose={() => setShowQuickAdd(false)}
           onSave={handleBatchSave}
+        />
+      )}
+      {editPlatform && (
+        <EditModal
+          platform={editPlatform}
+          onClose={() => setEditPlatform(null)}
+          onSave={handleSaveEdit}
         />
       )}
     </div>
