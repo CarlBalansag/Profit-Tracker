@@ -54,7 +54,7 @@ Exit criteria: all new financial calculations can call a single tested utility w
 
 ### 3. Add additive database columns and backfill
 
-Status: **Not started**
+Status: **Complete** — `selvora-api/prisma/migrations/20260930000000_additive_currency_decimals/migration.sql`, adopting a design already proven correct in production (see below). Comparison report and Goal-recommendation update in `qa/CURRENCY_MIGRATION_AUDIT.md`.
 
 1. Add new nullable `Decimal` columns beside existing `Float` money/rate columns. Do not remove or overwrite existing columns in this task.
 2. Backfill exact two-decimal monetary values from existing data using an explicit, reviewed conversion query.
@@ -134,7 +134,7 @@ Exit criteria: no production code reads Float monetary fields, reconciliation pa
 | --- | --- | --- | --- | --- |
 | 1. Inventory and mapping audit | Complete | 2026-09-30 | Read-only field/consumption audit + production value sampling | 21 Float fields: 15 money, 3 rate, 3 product-decision (Goal targets), 1 dormant (Invoice, no route exists). Zero existing precision drift found in stored values; risk is in calculation (shared/finance.mjs), not storage. See qa/CURRENCY_MIGRATION_AUDIT.md. |
 | 2. Shared currency utilities | Complete | 2026-09-30 | 5 focused tests: decimal add/subtract/multiply, half-cent rounding, allocation across split quantities (incl. remainder distribution), rejection of malformed/negative/over-precision/excessive input, rate-scale (6dp) parsing | `services/money.js` exports Decimal, decimal, parseAmount(value, scale), moneyString, rateString, add, subtract, multiply, allocate. Not yet wired into any route or the schema — that starts in Task 3/4. |
-| 3. Additive columns and backfill | Not started | — | — | — |
+| 3. Additive columns and backfill | Complete | 2026-09-30 | Fresh-database migration test (embedded-postgres), zero-drift check (`prisma migrate diff` against schema.prisma), read-only comparison report across every field in production | 21 nullable Decimal columns + 9 sync triggers across Inventory/Sales/Platform/PaymentMethod/Expense/RecurringExpense/Invoice/Goal/ebay_price_cache. This formally adopts a design that had already been applied to production out-of-band (see QA-26) — verified byte-identical to that prior implementation before reuse. Goal recommendation from Task 1 reversed (see audit addendum): target columns included after all, using the existing conditional (metric <> 'unitsSold') backfill design. One real float-precision artifact found and explained in Inventory.cashback_earned (a computed, not user-entered, field) — not a backfill defect. |
 | 4. Inventory purchase flow | Not started | — | — | — |
 | 5. Sales flow | Not started | — | — | — |
 | 6. Supporting finance flows | Not started | — | — | — |

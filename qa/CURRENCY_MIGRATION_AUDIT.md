@@ -100,3 +100,13 @@ A direct SQL check (`WHERE unit_purchase_cost != ROUND(unit_purchase_cost::numer
 - [x] One rounding policy defined for allocation fractions and for aggregate rounding.
 
 Task 1 is complete. No schema change, utility code, or migration file has been written yet — that starts with Task 2 (shared currency utilities), per the plan's "pause before starting the next task" rule.
+
+## Addendum (Task 3): `Goal` recommendation reversed, and a live example of the bug this migration fixes
+
+**`Goal` targets**: Task 1 recommended leaving `Goal.target_7d/30d/ytd` as `Float` with no Decimal column, reasoning that the three-metric design didn't cleanly support a money/count split. While implementing Task 3, production was found to already have exactly this problem solved by a nullable `Decimal` column populated only `WHEN metric <> 'unitsSold'` (left `NULL` for count-based goals) — a working, already-battle-tested design from the orphaned migration this task formally adopts. That recommendation is reversed: `Goal.target_7d_decimal/target_30d_decimal/target_ytd_decimal` are included, exactly matching this pattern.
+
+**Comparison report** (old Float sum vs new Decimal sum, every money/rate field, all rows, production, read-only): every field matched exactly — `Inventory.unit_purchase_cost`, `sales_tax`, `shipping_cost_inbound`, `fees`, `gift_card_amount`; `Sales.unit_price`, `commission_fee`, `sale_shipping`, `sale_tax_collected`; `Platform.fee_pct`; `PaymentMethod.credit_limit`, `default_cashback_rate`, `min_payment_pct`; `Expense.amount` — with one instructive exception:
+
+`Inventory.cashback_earned` summed to 192.12 (float) vs 192.15 (decimal) across 62 rows. Investigated directly: no single row differs by more than half a cent (e.g. `3.0748 → 3.07`, `5.415800000000001 → 5.42`), and `cashback_earned` is a *computed* field (cost × cashback rate, not a direct user input), so its raw float values already carry visible IEEE-754 imprecision. The decimal column's rounding is correct per-row; the 3-cent aggregate gap is many small sub-half-cent roundings compounding across rows — precisely the failure mode this migration exists to eliminate, now visible for the first time because the exact and inexact totals can finally be compared side by side. This is not a backfill defect.
+
+Task 3 status: see `CURRENCY_DECIMAL_MIGRATION_PLAN.md`.

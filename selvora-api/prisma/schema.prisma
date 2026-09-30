@@ -109,14 +109,20 @@ model Inventory {
   purchase_date         DateTime
   received_date         DateTime?
   unit_purchase_cost    Float
+  unit_purchase_cost_decimal Decimal?  @db.Decimal(19, 2)
   qty_purchased         Int
   qty_on_hand           Int
   status                String         @default("PURCHASED")
   sales_tax             Float          @default(0)
+  sales_tax_decimal     Decimal?       @db.Decimal(19, 2)
   shipping_cost_inbound Float          @default(0)
+  shipping_cost_inbound_decimal Decimal? @db.Decimal(19, 2)
   fees                  Float          @default(0)
+  fees_decimal          Decimal?       @db.Decimal(19, 2)
   cashback_earned       Float          @default(0)
+  cashback_earned_decimal Decimal?     @db.Decimal(19, 2)
   gift_card_amount      Float          @default(0)
+  gift_card_amount_decimal Decimal?    @db.Decimal(19, 2)
   order_number          String?
   tracking_number       String?
   tracking_info         Json?
@@ -141,13 +147,17 @@ model Sales {
   buyer               Buyer?    @relation(fields: [buyer_id], references: [id])
   quantity            Int
   unit_price          Float
+  unit_price_decimal  Decimal?  @db.Decimal(19, 2)
   commission_fee      Float     @default(0)
+  commission_fee_decimal Decimal? @db.Decimal(19, 2)
   sale_shipping       Float     @default(0)
+  sale_shipping_decimal Decimal? @db.Decimal(19, 2)
   sale_date           DateTime
   payout_date         DateTime?
   status              String    @default("SOLD")
   taxable             Boolean   @default(true)
   sale_tax_collected  Float     @default(0)
+  sale_tax_collected_decimal Decimal? @db.Decimal(19, 2)
   customer_tax_exempt Boolean   @default(false)
   exemption_type      String?
   tracking_number     String?
@@ -166,6 +176,7 @@ model Platform {
   name             String
   type             String      // "Marketplace, Cashout, Vendor"
   fee_pct          Float       @default(0)
+  fee_pct_decimal  Decimal?    @db.Decimal(9, 6)
   address          String?
   notes            String?
   tax_exempt_place Boolean     @default(false)
@@ -211,12 +222,15 @@ model PaymentMethod {
   name                  String      // "e.g. Amex Blue"
   type                  String      // "Credit, Debit"
   default_cashback_rate Float       @default(0)
+  default_cashback_rate_decimal Decimal? @db.Decimal(9, 6)
   preset_card_id        String?     // matches PRESET_CARDS[].id in presetCards.js
   category_rates        String?     // JSON array: [{store, rate, expires?}]
   statement_close_day   Int?        // day of month statement closes (1–28)
   due_day               Int?        // day of month payment is due (1–28)
   credit_limit          Float?      // total credit limit on the card
+  credit_limit_decimal  Decimal?    @db.Decimal(19, 2)
   min_payment_pct       Float?      // minimum payment as % of balance (e.g. 2.0 = 2%)
+  min_payment_pct_decimal Decimal?  @db.Decimal(9, 6)
   inventories           Inventory[]
 }
 
@@ -226,6 +240,7 @@ model Expense {
   user                 User              @relation(fields: [user_id], references: [id])
   name                 String
   amount               Float
+  amount_decimal       Decimal?          @db.Decimal(19, 2)
   category             String?
   date                 DateTime
   notes                String?
@@ -246,6 +261,7 @@ model RecurringExpense {
   user             User      @relation(fields: [user_id], references: [id])
   name             String
   amount           Float
+  amount_decimal   Decimal?  @db.Decimal(19, 2)
   category         String?
   frequency        String    // "weekly" | "biweekly" | "monthly"
   start_date       DateTime
@@ -265,6 +281,7 @@ model Invoice {
   issue_date   DateTime
   due_date     DateTime
   total_amount Float
+  total_amount_decimal Decimal? @db.Decimal(19, 2)
   status       String   // "Paid, Unpaid"
 
   @@index([user_id])
@@ -276,8 +293,11 @@ model Goal {
   user         User     @relation(fields: [user_id], references: [id])
   metric       String            // 'netProfit' | 'totalRevenue' | 'unitsSold'
   target_7d    Float?            // target for 7-day period
+  target_7d_decimal Decimal?     @db.Decimal(19, 2) // NULL when metric = 'unitsSold' (a count, not money)
   target_30d   Float?            // target for 30-day period
+  target_30d_decimal Decimal?    @db.Decimal(19, 2)
   target_ytd   Float?            // target for year-to-date period
+  target_ytd_decimal Decimal?    @db.Decimal(19, 2)
   active       Boolean  @default(true)
   created_at   DateTime @default(now())
 
@@ -315,6 +335,7 @@ model CalendarEvent {
 model EbayPriceCache {
   product_name   String   @id
   last_sold_price Float?
+  last_sold_price_decimal Decimal? @db.Decimal(19, 2)
   currency       String   @default("USD")
   fetched_at     DateTime @updatedAt
 
