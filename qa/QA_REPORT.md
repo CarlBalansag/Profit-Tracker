@@ -195,6 +195,18 @@ Confirmed impact:
 
 Not fixed as part of this task (unrelated to the Render build failure it was found alongside). Recommended follow-up: decide whether to formally adopt the decimal-currency migration into `main` (write the matching `schema.prisma` fields and reconcile the migration history) or drop the orphaned columns/triggers/functions to bring production back in line with `main`'s declared schema.
 
+**Update 2026-09-30**: resolved by the currency migration's Task 3 (`CURRENCY_DECIMAL_MIGRATION_PLAN.md`) -- the columns/triggers were formally adopted into a tracked `main` migration (`20260930000000_additive_currency_decimals`), verified byte-identical to what was already live, and `schema.prisma` now declares all 21 fields. See `qa/CURRENCY_MIGRATION_AUDIT.md` for the comparison report.
+
+### QA-27 — Local test runs can silently hit a live carrier API depending on module require order
+
+**Reproduced 2026-09-30**, found while adding regression tests for the currency migration's Task 4 (unrelated to this finding).
+
+`selvora-api/.env` has real `FEDEX_CLIENT_ID`/`FEDEX_CLIENT_SECRET` values configured (presumably for manual testing of the live app). `test/trackingRoutes.test.mjs`'s `POST /api/sales/:id/track` test asserts `{ trackable: false, reason: 'not_configured' }`, with a comment claiming "No carrier credentials are configured in the test environment" -- but that was only true by accident: whether `services/tracking.js`'s `client.isConfigured()` check sees the real env vars depends on whether something earlier in the require graph has already triggered `dotenv` to load (e.g. via `@prisma/client`'s bundled auto-load) by the time the test harness checks them.
+
+Concretely: adding `require('../services/money.js')` to `selvora-api/validation/schemas.js` (an otherwise-unrelated new require early in the module graph) was enough to flip this test from passing (`not_configured`, ~300ms) to making a real outbound request to FedEx's tracking API and getting `trackable: true` back (~1.5-1.9s) -- confirmed reproducible 6/6 runs with the require present, 6/6 without it. Confirmed **not** a CI risk: `.github/workflows/qa.yml` never sets these env vars, so `FEDEX_CLIENT_ID=` `FEDEX_CLIENT_SECRET=` (matching CI) makes the test pass regardless of require order.
+
+Proposed fix: the test (or the harness's `beforeAll`) should explicitly clear/stub `process.env.FEDEX_CLIENT_ID`/`FEDEX_CLIENT_SECRET` (and the other carrier credential pairs) rather than relying on them happening to be unset, so local runs can't depend on require order or on what happens to be in a developer's `.env`.
+
 ## Checks that passed
 
 - Production frontend build completed.

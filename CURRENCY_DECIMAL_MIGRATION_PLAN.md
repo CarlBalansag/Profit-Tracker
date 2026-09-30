@@ -65,7 +65,7 @@ Exit criteria: backfill is complete in a staging copy and comparisons are accept
 
 ### 4. Migrate one bounded write flow: inventory purchases
 
-Status: **Not started**
+Status: **Complete** — `selvora-api/validation/schemas.js` (`decimalAmount` helper), applied to `createInventory`/`updateInventory`'s 6 Inventory money fields.
 
 1. Update inventory purchase validation and create/edit routes to write the new decimal fields.
 2. Keep compatibility reads while older records/clients still use original fields.
@@ -135,7 +135,7 @@ Exit criteria: no production code reads Float monetary fields, reconciliation pa
 | 1. Inventory and mapping audit | Complete | 2026-09-30 | Read-only field/consumption audit + production value sampling | 21 Float fields: 15 money, 3 rate, 3 product-decision (Goal targets), 1 dormant (Invoice, no route exists). Zero existing precision drift found in stored values; risk is in calculation (shared/finance.mjs), not storage. See qa/CURRENCY_MIGRATION_AUDIT.md. |
 | 2. Shared currency utilities | Complete | 2026-09-30 | 5 focused tests: decimal add/subtract/multiply, half-cent rounding, allocation across split quantities (incl. remainder distribution), rejection of malformed/negative/over-precision/excessive input, rate-scale (6dp) parsing | `services/money.js` exports Decimal, decimal, parseAmount(value, scale), moneyString, rateString, add, subtract, multiply, allocate. Not yet wired into any route or the schema — that starts in Task 3/4. |
 | 3. Additive columns and backfill | Complete | 2026-09-30 | Fresh-database migration test (embedded-postgres), zero-drift check (`prisma migrate diff` against schema.prisma), read-only comparison report across every field in production | 21 nullable Decimal columns + 9 sync triggers across Inventory/Sales/Platform/PaymentMethod/Expense/RecurringExpense/Invoice/Goal/ebay_price_cache. This formally adopts a design that had already been applied to production out-of-band (see QA-26) — verified byte-identical to that prior implementation before reuse. Goal recommendation from Task 1 reversed (see audit addendum): target columns included after all, using the existing conditional (metric <> 'unitsSold') backfill design. One real float-precision artifact found and explained in Inventory.cashback_earned (a computed, not user-entered, field) — not a backfill defect. |
-| 4. Inventory purchase flow | Not started | — | — | — |
+| 4. Inventory purchase flow | Complete | 2026-09-30 | 8 new tests (`test/inventoryDecimalValidation.test.mjs`) covering valid input, over-precision/malformed/negative rejection, partial-update isolation; full suite (183 tests) green | Wired Task 2's `parseAmount` into `createInventory`/`updateInventory` for the 5 direct-entry Inventory money fields (reject over-precision/malformed/negative input) and `cashback_earned` specifically with `round: true` instead of reject, since it's server/client-*computed* (cost × rate ÷ 100), not typed by a person -- this directly fixes the float-drift instance found in the Task 3 comparison report. Storage is still the Float columns (sync triggers keep `_decimal` mirrors current); no read path changed. |
 | 5. Sales flow | Not started | — | — | — |
 | 6. Supporting finance flows | Not started | — | — | — |
 | 7. Reports, imports, exports, API | Not started | — | — | — |

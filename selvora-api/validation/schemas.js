@@ -1,5 +1,6 @@
 const { z } = require('zod');
 const { taxDetails } = require('./scheduleC');
+const { decimal, parseAmount } = require('../services/money');
 
 const emptyToUndefined = (value) => (value === '' ? undefined : value);
 const emptyToNull = (value) => (value === '' ? null : value);
@@ -24,6 +25,38 @@ const optionalMoney = z.preprocess(
   emptyToUndefined,
   z.coerce.number().finite().min(0).optional()
 );
+
+// Exact-decimal money validator backed by services/money.js. By default
+// rejects malformed, negative, non-finite and over-precision input instead
+// of silently coercing it -- for fields a person types in directly, where
+// extra precision is a mistake worth surfacing.
+//
+// `round: true` instead rounds to `scale` decimal places rather than
+// rejecting them, for fields the server/client computes rather than a
+// person enters directly (e.g. cashback_earned = cost * rate / 100), where
+// float noise past the 2nd decimal is expected and not a user error.
+function decimalAmount({ scale = 2, optional = false, defaultValue, round = false } = {}) {
+  const schema = z.preprocess(emptyToUndefined, z.any()).transform((val, ctx) => {
+    if (val === undefined) {
+      if (defaultValue !== undefined) return defaultValue;
+      if (optional) return undefined;
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Amount is required.' });
+      return z.NEVER;
+    }
+    try {
+      if (round) {
+        const result = decimal(val);
+        if (result.isNegative()) throw new Error('Amount cannot be negative.');
+        return result.toDecimalPlaces(scale).toNumber();
+      }
+      return parseAmount(val, scale).toNumber();
+    } catch (err) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: err.message });
+      return z.NEVER;
+    }
+  });
+  return optional || defaultValue !== undefined ? schema.optional() : schema;
+}
 
 const positiveInt = z.preprocess(
   emptyToUndefined,
@@ -74,12 +107,12 @@ const createInventory = z.object({
   vendor_id: id,
   payment_method_id: id,
   purchase_date: optionalDateString,
-  unit_purchase_cost: optionalMoney.default(0),
+  unit_purchase_cost: decimalAmount({ defaultValue: 0 }),
   qty_purchased: positiveInt.default(1),
-  sales_tax: optionalMoney.default(0),
-  shipping_cost_inbound: optionalMoney.default(0),
-  fees: optionalMoney.default(0),
-  gift_card_amount: optionalMoney.default(0),
+  sales_tax: decimalAmount({ defaultValue: 0 }),
+  shipping_cost_inbound: decimalAmount({ defaultValue: 0 }),
+  fees: decimalAmount({ defaultValue: 0 }),
+  gift_card_amount: decimalAmount({ defaultValue: 0 }),
   order_number: optionalString,
   tracking_number: optionalString,
   category: optionalString,
@@ -103,14 +136,14 @@ const updateInventory = z.object({
   vendor_id: id,
   payment_method_id: id,
   purchase_date: optionalDateString,
-  unit_purchase_cost: optionalMoney,
+  unit_purchase_cost: decimalAmount({ optional: true }),
   qty_purchased: positiveInt.optional(),
   qty_on_hand: optionalNonNegativeInt,
-  cashback_earned: optionalMoney,
-  sales_tax: optionalMoney,
-  shipping_cost_inbound: optionalMoney,
-  fees: optionalMoney,
-  gift_card_amount: optionalMoney,
+  cashback_earned: decimalAmount({ optional: true, round: true }),
+  sales_tax: decimalAmount({ optional: true }),
+  shipping_cost_inbound: decimalAmount({ optional: true }),
+  fees: decimalAmount({ optional: true }),
+  gift_card_amount: decimalAmount({ optional: true }),
   order_number: optionalString,
   tracking_number: optionalString,
   category: optionalString,
