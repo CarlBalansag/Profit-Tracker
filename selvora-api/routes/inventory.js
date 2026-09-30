@@ -9,6 +9,7 @@ const { requireOwned } = require('../services/ownership');
 const { refreshTracking, checkTrackingRateLimit } = require('../services/tracking');
 const { autoShippedStatus } = require('../services/statusHierarchy');
 const { editTransaction } = require('../services/transactionEdit');
+const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -22,6 +23,16 @@ const parseLocalDate = (str) => {
   return new Date(str);
 };
 
+// Task 8 read cutover: substitute each Decimal column's exact value into its
+// paired Float field, for an inventory row and any nested sales/payment_method.
+function exactInventory(item) {
+  if (!item) return item;
+  const result = withExactFields(item, MAPPINGS.inventory);
+  if (result.payment_method) result.payment_method = withExactFields(result.payment_method, MAPPINGS.paymentMethod);
+  if (Array.isArray(result.sales)) result.sales = result.sales.map(sale => withExactFields(sale, MAPPINGS.sales));
+  return result;
+}
+
 // GET all inventory items for current user
 router.get('/', isAuthenticated, async (req, res, next) => {
   try {
@@ -34,15 +45,18 @@ router.get('/', isAuthenticated, async (req, res, next) => {
         unit_purchase_cost: true, qty_purchased: true, qty_on_hand: true,
         sales_tax: true, shipping_cost_inbound: true, fees: true,
         cashback_earned: true, gift_card_amount: true,
+        unit_purchase_cost_decimal: true, sales_tax_decimal: true, shipping_cost_inbound_decimal: true,
+        fees_decimal: true, cashback_earned_decimal: true, gift_card_amount_decimal: true,
         order_number: true, tracking_number: true, tracking_info: true, receipt_url: true,
         tax_exempt: true,
         vendor: { select: { id: true, name: true, type: true } },
-        payment_method: { select: { id: true, name: true, type: true, default_cashback_rate: true, preset_card_id: true, category_rates: true } },
+        payment_method: { select: { id: true, name: true, type: true, default_cashback_rate: true, default_cashback_rate_decimal: true, preset_card_id: true, category_rates: true } },
         sales: {
           select: {
             id: true, platform_id: true, quantity: true, unit_price: true, commission_fee: true,
             sale_shipping: true, sale_date: true, payout_date: true, status: true,
             taxable: true, sale_tax_collected: true, customer_tax_exempt: true, exemption_type: true,
+            unit_price_decimal: true, commission_fee_decimal: true, sale_shipping_decimal: true, sale_tax_collected_decimal: true,
             platform: { select: { id: true, name: true, type: true, tax_exempt_place: true } },
             buyer: { select: { id: true, name: true } },
           }
@@ -50,7 +64,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       },
       orderBy: { purchase_date: 'desc' }
     });
-    res.json(items);
+    res.json(items.map(exactInventory));
   } catch (err) {
     next(err);
   }
@@ -163,7 +177,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
     });
 
     await publishCalendarFeed(req.user.id);
-    res.json(inventory);
+    res.json(exactInventory(inventory));
   } catch (err) {
     next(err);
   }
@@ -199,12 +213,14 @@ router.get('/recent-by-name', isAuthenticated, async (req, res, next) => {
         sales_tax: true, shipping_cost_inbound: true, fees: true,
         gift_card_amount: true, tax_exempt: true, category: true,
         vendor_id: true, payment_method_id: true,
+        unit_purchase_cost_decimal: true, sales_tax_decimal: true, shipping_cost_inbound_decimal: true,
+        fees_decimal: true, gift_card_amount_decimal: true,
         vendor: { select: { id: true, name: true } },
         payment_method: { select: { id: true, name: true } },
       },
       orderBy: { created_at: 'desc' },
     });
-    res.json(item || null);
+    res.json(item ? exactInventory(item) : null);
   } catch (err) { next(err); }
 });
 
@@ -222,7 +238,7 @@ router.get('/:id', isAuthenticated, async (req, res, next) => {
       }
     });
     if (!item || item.user_id !== req.user.id) return res.status(404).json({ error: 'Not found' });
-    res.json(item);
+    res.json(exactInventory(item));
   } catch (err) {
     next(err);
   }
@@ -238,7 +254,7 @@ router.put('/:id/transaction', isAuthenticated, validateBody(transactionEditBody
   try {
     const result = await editTransaction(prisma, req.params.id, req.user.id, req.body);
     await publishCalendarFeed(req.user.id);
-    res.json(result);
+    res.json(exactInventory(result));
   } catch (err) {
     next(err);
   }
@@ -337,7 +353,7 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
         include: { vendor: true, payment_method: true }
       });
     await publishCalendarFeed(req.user.id);
-    res.json(updated);
+    res.json(exactInventory(updated));
   } catch (err) {
     next(err);
   }
@@ -387,7 +403,7 @@ router.post('/:id/track', isAuthenticated, async (req, res, next) => {
       where: { id: req.params.id },
       data: { tracking_info },
     });
-    res.json({ ...updated, rate_limit: { remaining: rate.remaining, resetAt: rate.resetAt } });
+    res.json({ ...exactInventory(updated), rate_limit: { remaining: rate.remaining, resetAt: rate.resetAt } });
   } catch (err) {
     next(err);
   }

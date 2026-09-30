@@ -7,6 +7,16 @@ const { publishCalendarFeed } = require('../services/calendarFeed');
 const { requireOwned } = require('../services/ownership');
 const { refreshTracking, checkTrackingRateLimit } = require('../services/tracking');
 const { autoShippedStatus } = require('../services/statusHierarchy');
+const { withExactFields, MAPPINGS } = require('../services/decimalRead');
+
+// Task 8 read cutover: substitute each Decimal column's exact value into its
+// paired Float field, for a sale and its nested inventory (if included).
+function exactSale(sale) {
+  if (!sale) return sale;
+  const result = withExactFields(sale, MAPPINGS.sales);
+  if (result.inventory) result.inventory = withExactFields(result.inventory, MAPPINGS.inventory);
+  return result;
+}
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -29,7 +39,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       include: { inventory: true, platform: true, buyer: true },
       orderBy: { sale_date: 'desc' }
     });
-    res.json(sales);
+    res.json(sales.map(exactSale));
   } catch (err) {
     next(err);
   }
@@ -108,7 +118,7 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
     });
 
     await publishCalendarFeed(req.user.id);
-    res.json(sale);
+    res.json(exactSale(sale));
   } catch (err) {
     next(err);
   }
@@ -191,7 +201,7 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
     });
 
     await publishCalendarFeed(req.user.id);
-    res.json(updated);
+    res.json(exactSale(updated));
   } catch (err) {
     next(err);
   }
@@ -251,7 +261,7 @@ router.post('/:id/track', isAuthenticated, async (req, res, next) => {
       where: { id: req.params.id },
       data: { tracking_info },
     });
-    res.json({ ...updated, rate_limit: { remaining: rate.remaining, resetAt: rate.resetAt } });
+    res.json({ ...exactSale(updated), rate_limit: { remaining: rate.remaining, resetAt: rate.resetAt } });
   } catch (err) {
     next(err);
   }

@@ -110,3 +110,25 @@ Task 1 is complete. No schema change, utility code, or migration file has been w
 `Inventory.cashback_earned` summed to 192.12 (float) vs 192.15 (decimal) across 62 rows. Investigated directly: no single row differs by more than half a cent (e.g. `3.0748 → 3.07`, `5.415800000000001 → 5.42`), and `cashback_earned` is a *computed* field (cost × cashback rate, not a direct user input), so its raw float values already carry visible IEEE-754 imprecision. The decimal column's rounding is correct per-row; the 3-cent aggregate gap is many small sub-half-cent roundings compounding across rows — precisely the failure mode this migration exists to eliminate, now visible for the first time because the exact and inexact totals can finally be compared side by side. This is not a backfill defect.
 
 Task 3 status: see `CURRENCY_DECIMAL_MIGRATION_PLAN.md`.
+
+## Addendum (Task 8): read cutover and final reconciliation report
+
+**Read cutover**: every response route that serves a money/rate field now substitutes the Decimal mirror's exact value into the paired Float field's name before serialization, via `selvora-api/services/decimalRead.js` (`withExactFields`/`withExactList`, applied per-model through a `MAPPINGS` table). This covers all 8 models with a live route: Inventory, Sales, Platform, PaymentMethod, Expense, RecurringExpense, Goal, ebay_price_cache. The API response shape is unchanged (same field names, plain JSON numbers) — only precision improves — so no frontend change was needed. Storage is untouched: the `Float` columns are still what's written, and the Task 3 sync triggers keep `_decimal` current regardless of which route performs the write. This makes the read cutover itself fully reversible (a redeploy without these changes reverts to float-precision reads) ahead of the irreversible step below.
+
+`Invoice.total_amount`/`total_amount_decimal` is not wired into `decimalRead.js`'s `MAPPINGS` — confirmed again here that no route reads or writes the `Invoice` model at all (0 rows in production, `grep -rn "prisma.invoice"` across the backend returns nothing). Nothing to cut over until a route exists.
+
+**Final reconciliation report** (read-only, production, run 2026-09-30, one query per money/rate column across every model):
+
+| Table | Rows | Columns checked | Unexpected NULL decimal mirrors | Rows drifting >$0.005 from the float source |
+| --- | --- | --- | --- | --- |
+| Inventory | 62 | 6 | 0 | 0 |
+| Sales | 49 | 4 | 0 | 0 |
+| Platform | 49 | 1 | 0 | 0 |
+| PaymentMethod | 13 | 3 | 0 | 0 |
+| Expense | 8 | 1 | 0 | 0 |
+| RecurringExpense | 0 | 1 | 0 | 0 |
+| Invoice | 0 | 1 | 0 | 0 |
+| Goal | 3 | 3 (unitsSold rows excluded, expected NULL) | 0 | 0 |
+| ebay_price_cache | 0 | 1 | 0 | 0 |
+
+Every row in production has a populated, matching Decimal mirror for every money/rate field it has a Float value for; zero drift beyond the agreed rounding policy anywhere. This satisfies Task 8 step 2 ("run a final reconciliation report before deleting legacy columns") for the read-cutover portion of the task. Dropping the `Float` columns themselves (Task 8 steps 1, 3, 4 — making Decimal required, removing Float columns, updating the data dictionary) is a separate, irreversible action intentionally **not** performed as part of this pass — see `CURRENCY_DECIMAL_MIGRATION_PLAN.md`'s own "full production verification window" gate.

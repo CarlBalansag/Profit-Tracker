@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { validateBody, validateQuery } = require('../middleware/validate');
 const { ebayPriceQuery, ebayPrice } = require('../validation/schemas');
+const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -24,11 +25,12 @@ router.get('/', isAuthenticated, validateQuery(ebayPriceQuery), async (req, res)
   if (cached && cached.fetched_at) {
     const age = Date.now() - new Date(cached.fetched_at).getTime();
     if (age < CACHE_TTL_MS) {
+      const exact = withExactFields(cached, MAPPINGS.ebayPriceCache);
       return res.json({
         product_name: query,
-        last_sold_price: cached.last_sold_price,
-        currency: cached.currency,
-        fetched_at: cached.fetched_at,
+        last_sold_price: exact.last_sold_price,
+        currency: exact.currency,
+        fetched_at: exact.fetched_at,
         from_cache: true,
       });
     }
@@ -50,11 +52,12 @@ router.post('/', isAuthenticated, validateBody(ebayPrice), async (req, res) => {
     create: { product_name, last_sold_price: last_sold_price ?? null, currency: 'USD' },
   });
 
+  const exact = withExactFields(record, MAPPINGS.ebayPriceCache);
   return res.json({
-    product_name: record.product_name,
-    last_sold_price: record.last_sold_price,
-    currency: record.currency,
-    fetched_at: record.fetched_at,
+    product_name: exact.product_name,
+    last_sold_price: exact.last_sold_price,
+    currency: exact.currency,
+    fetched_at: exact.fetched_at,
   });
 });
 

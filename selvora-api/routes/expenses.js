@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { createExpense, updateExpense } = require('../validation/schemas');
+const { withExactFields, withExactList, MAPPINGS } = require('../services/decimalRead');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -22,7 +23,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       where: { user_id: req.user.id },
       orderBy: { date: 'desc' },
     });
-    res.json(expenses);
+    res.json(withExactList(expenses, MAPPINGS.expense));
   } catch (err) {
     next(err);
   }
@@ -47,7 +48,7 @@ router.post('/', isAuthenticated, validateBody(createExpense), async (req, res, 
         ...(tax_details !== undefined ? { tax_details } : {}),
       },
     });
-    res.json(expense);
+    res.json(withExactFields(expense, MAPPINGS.expense));
   } catch (err) {
     next(err);
   }
@@ -80,7 +81,7 @@ router.put('/:id', isAuthenticated, validateBody(updateExpense), async (req, res
       if (!claimed.count) throw Object.assign(new Error('Expense changed since it was opened. Reload the worksheet before reviewing again.'), { status: 409 });
       return tx.expense.findUnique({ where: { id: req.params.id } });
     });
-    res.json(updated);
+    res.json(withExactFields(updated, MAPPINGS.expense));
   } catch (err) {
     next(err);
   }

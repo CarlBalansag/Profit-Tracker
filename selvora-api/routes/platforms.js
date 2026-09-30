@@ -4,6 +4,7 @@ const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { platform, updatePlatform, platformBatch } = require('../validation/schemas');
 const { requireOwned } = require('../services/ownership');
+const { withExactFields, withExactList, MAPPINGS } = require('../services/decimalRead');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -18,7 +19,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       orderBy: { name: 'asc' },
       include: { accounts: true }
     });
-    res.json(platforms);
+    res.json(withExactList(platforms, MAPPINGS.platform));
   } catch (err) {
     next(err);
   }
@@ -39,7 +40,7 @@ router.post('/', isAuthenticated, validateBody(platform), async (req, res, next)
         tax_exempt_place: tax_exempt_place === true || tax_exempt_place === 'true',
       }
     });
-    res.json(platform);
+    res.json(withExactFields(platform, MAPPINGS.platform));
   } catch (err) {
     next(err);
   }
@@ -70,7 +71,7 @@ router.post('/batch', isAuthenticated, validateBody(platformBatch), async (req, 
         })
       )
     );
-    res.json(created);
+    res.json(withExactList(created, MAPPINGS.platform));
   } catch (err) {
     next(err);
   }
@@ -117,7 +118,7 @@ router.put('/:id', isAuthenticated, validateBody(updatePlatform), async (req, re
       return [p, bulk];
     });
 
-    res.json({ ...updated, _salesUpdated: bulkResult.count });
+    res.json({ ...withExactFields(updated, MAPPINGS.platform), _salesUpdated: bulkResult.count });
   } catch (err) {
     next(err);
   }

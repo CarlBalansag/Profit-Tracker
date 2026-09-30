@@ -4,17 +4,19 @@ const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { paymentMethod } = require('../validation/schemas');
 const { publishCalendarFeed } = require('../services/calendarFeed');
+const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
   res.status(401).json({ message: 'Unauthorized' });
 };
 
-// Parse category_rates JSON stored in DB and attach as array
-const parseRates = (method) => ({
+// Parse category_rates JSON stored in DB and attach as array, and substitute
+// each Decimal column's exact value into its paired Float field (Task 8).
+const parseRates = (method) => withExactFields({
   ...method,
   category_rates: method.category_rates ? JSON.parse(method.category_rates) : []
-});
+}, MAPPINGS.paymentMethod);
 
 // GET all payment methods for the authenticated user
 router.get('/', isAuthenticated, async (req, res, next) => {

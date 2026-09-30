@@ -4,6 +4,7 @@ const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { goal, updateGoal } = require('../validation/schemas');
 const { parseAmount } = require('../services/money');
+const { withExactFields, withExactList, MAPPINGS } = require('../services/decimalRead');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -44,7 +45,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       where: { user_id: req.user.id },
       orderBy: { created_at: 'asc' },
     });
-    res.json(goals);
+    res.json(withExactList(goals, MAPPINGS.goal));
   } catch (err) {
     next(err);
   }
@@ -66,7 +67,7 @@ router.post('/', isAuthenticated, validateBody(goal), async (req, res, next) => 
         active:     active ?? true,
       },
     });
-    res.json(goal);
+    res.json(withExactFields(goal, MAPPINGS.goal));
   } catch (err) {
     next(err);
   }
@@ -94,7 +95,7 @@ router.put('/:id', isAuthenticated, validateBody(updateGoal), async (req, res, n
         ...(active                    !== undefined && { active }),
       },
     });
-    res.json(updated);
+    res.json(withExactFields(updated, MAPPINGS.goal));
   } catch (err) {
     next(err);
   }

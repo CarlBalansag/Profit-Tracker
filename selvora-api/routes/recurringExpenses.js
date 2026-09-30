@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { recurringExpense, updateRecurringExpense } = require('../validation/schemas');
+const { withExactFields, withExactList, MAPPINGS } = require('../services/decimalRead');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -94,7 +95,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       items.filter(r => r.active).map(r => prisma.$transaction(tx => generateEntries(r, tx)))
     );
 
-    res.json(items);
+    res.json(withExactList(items, MAPPINGS.recurringExpense));
   } catch (err) {
     next(err);
   }
@@ -131,7 +132,7 @@ router.post('/', isAuthenticated, validateBody(recurringExpense), async (req, re
       return tx.recurringExpense.findUnique({ where: { id: created.id } });
     });
 
-    res.json(rec);
+    res.json(withExactFields(rec, MAPPINGS.recurringExpense));
   } catch (err) {
     next(err);
   }
@@ -177,7 +178,7 @@ router.put('/:id', isAuthenticated, validateBody(updateRecurringExpense), async 
       return tx.recurringExpense.findUnique({ where: { id: saved.id } });
     });
 
-    res.json(updated);
+    res.json(withExactFields(updated, MAPPINGS.recurringExpense));
   } catch (err) {
     next(err);
   }
