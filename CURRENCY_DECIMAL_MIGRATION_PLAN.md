@@ -43,7 +43,7 @@ Exit criteria: a reviewed field map and rounding policy exist before any schema 
 
 ### 2. Shared currency utilities
 
-Status: **Not started**
+Status: **Complete** — `selvora-api/services/money.js`, tested in `selvora-api/test/money.test.mjs`.
 
 1. Add a small server-side money utility based on Prisma `Decimal`.
 2. Provide safe parsing for request values, addition, subtraction, multiplication, allocation, and final cent rounding.
@@ -133,7 +133,7 @@ Exit criteria: no production code reads Float monetary fields, reconciliation pa
 | Task | Status | Completed | Validation | Notes |
 | --- | --- | --- | --- | --- |
 | 1. Inventory and mapping audit | Complete | 2026-09-30 | Read-only field/consumption audit + production value sampling | 21 Float fields: 15 money, 3 rate, 3 product-decision (Goal targets), 1 dormant (Invoice, no route exists). Zero existing precision drift found in stored values; risk is in calculation (shared/finance.mjs), not storage. See qa/CURRENCY_MIGRATION_AUDIT.md. |
-| 2. Shared currency utilities | Not started | — | — | — |
+| 2. Shared currency utilities | Complete | 2026-09-30 | 5 focused tests: decimal add/subtract/multiply, half-cent rounding, allocation across split quantities (incl. remainder distribution), rejection of malformed/negative/over-precision/excessive input, rate-scale (6dp) parsing | `services/money.js` exports Decimal, decimal, parseAmount(value, scale), moneyString, rateString, add, subtract, multiply, allocate. Not yet wired into any route or the schema — that starts in Task 3/4. |
 | 3. Additive columns and backfill | Not started | — | — | — |
 | 4. Inventory purchase flow | Not started | — | — | — |
 | 5. Sales flow | Not started | — | — | — |
