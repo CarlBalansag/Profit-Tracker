@@ -66,11 +66,10 @@ export const PaymentMethods = () => {
   };
 
   const handleAddCards = async (newCards, includeStoreRates) => {
-    for (const card of newCards) {
-      await apiFetch(`/api/payment-methods`, {
+    const results = await Promise.allSettled(newCards.map(card =>
+      apiFetch(`/api/payment-methods`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           name: card.name,
           type: 'Credit',
@@ -78,10 +77,17 @@ export const PaymentMethods = () => {
           preset_card_id: card.id,
           category_rates: includeStoreRates ? (card.categoryRates || []) : []
         })
-      });
-    }
+      }).then(res => requireSuccessfulResponse(res, `Could not add ${card.name}`))
+    ));
+
     invalidate.paymentMethods();
-    setIsQuickAddOpen(false);
+
+    const failedCount = results.filter(r => r.status === 'rejected').length;
+    if (failedCount > 0) {
+      toast.error(`Added ${results.length - failedCount} of ${results.length} card(s); ${failedCount} failed to add.`);
+      throw new Error('Some cards failed to add');
+    }
+    toast.success(`${results.length} card${results.length > 1 ? 's' : ''} added.`);
   };
 
   const handleCustomAdd = async (processedCard) => {
@@ -92,23 +98,27 @@ export const PaymentMethods = () => {
 
     const method = isEditing ? 'PUT' : 'POST';
 
-    await apiFetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: processedCard.name,
-        type: processedCard.type,
-        default_cashback_rate: processedCard.baseRate,
-        statement_close_day: processedCard.statement_close_day ?? null,
-        due_day: processedCard.due_day ?? null,
-        credit_limit: processedCard.credit_limit ?? null,
-        min_payment_pct: processedCard.min_payment_pct ?? null,
-      })
-    });
-
-    invalidate.paymentMethods();
-    setIsCustomModalOpen(false);
-    setEditingCard(null);
+    try {
+      const res = await apiFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: processedCard.name,
+          type: processedCard.type,
+          default_cashback_rate: processedCard.baseRate,
+          statement_close_day: processedCard.statement_close_day ?? null,
+          due_day: processedCard.due_day ?? null,
+          credit_limit: processedCard.credit_limit ?? null,
+          min_payment_pct: processedCard.min_payment_pct ?? null,
+        })
+      });
+      await requireSuccessfulResponse(res, isEditing ? 'Could not update card' : 'Could not add card');
+      invalidate.paymentMethods();
+      toast.success(isEditing ? 'Card updated.' : 'Card added.');
+    } catch (err) {
+      toast.error(err.message);
+      throw err;
+    }
   };
 
   const openEditModal = (card) => {

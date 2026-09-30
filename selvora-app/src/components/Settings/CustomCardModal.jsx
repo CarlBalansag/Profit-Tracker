@@ -17,6 +17,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
 
   const [formData, setFormData] = useState(initialState);
   const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (cardToEdit && isOpen) {
@@ -57,7 +58,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
@@ -71,9 +72,16 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
       min_payment_pct: formData.min_payment_pct ? parseFloat(formData.min_payment_pct) : null,
     };
 
-    onAddCard(processedCard);
-    setFormData(initialState);
-    onClose();
+    setSaving(true);
+    try {
+      await onAddCard(processedCard);
+      setFormData(initialState);
+      onClose();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const isEditing = !!cardToEdit;
@@ -244,16 +252,18 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
           <button
             type="button"
             onClick={onClose}
-            className="px-6 py-2.5 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition-colors border border-transparent hover:border-gray-800"
+            disabled={saving}
+            className="px-6 py-2.5 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition-colors border border-transparent hover:border-gray-800 disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleSubmit}
-            className="px-6 py-2.5 rounded-lg text-sm font-bold bg-[#1A1A24] border border-gray-700 hover:border-gray-500 text-white transition-all shadow-lg active:scale-95"
+            disabled={saving}
+            className="px-6 py-2.5 rounded-lg text-sm font-bold bg-[#1A1A24] border border-gray-700 hover:border-gray-500 text-white transition-all shadow-lg active:scale-95 disabled:opacity-50"
           >
-            {isEditing ? 'Save Changes' : 'Create Card'}
+            {saving ? 'Saving...' : (isEditing ? 'Save Changes' : 'Create Card')}
           </button>
         </div>
 

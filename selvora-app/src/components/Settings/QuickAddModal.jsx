@@ -10,6 +10,7 @@ export const QuickAddModal = ({ isOpen, onClose, onAddCards, existingCardIds = [
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedCards, setSelectedCards] = useState([]);
   const [applyPresetRates, setApplyPresetRates] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   // Reset state when modal opens
   useEffect(() => {
@@ -41,10 +42,17 @@ export const QuickAddModal = ({ isOpen, onClose, onAddCards, existingCardIds = [
     );
   };
 
-  const handleAddSubmit = () => {
+  const handleAddSubmit = async () => {
     const cardsToAdd = PRESET_CARDS.filter(c => selectedCards.includes(c.id));
-    onAddCards(cardsToAdd, applyPresetRates);
-    onClose();
+    setSaving(true);
+    try {
+      await onAddCards(cardsToAdd, applyPresetRates);
+      onClose();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -173,18 +181,19 @@ export const QuickAddModal = ({ isOpen, onClose, onAddCards, existingCardIds = [
 
         {/* Footer */}
         <div className="p-4 border-t border-gray-800/50 flex justify-end gap-3 bg-[#12121A]">
-           <button 
+           <button
              onClick={onClose}
-             className="px-5 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-colors border border-transparent hover:border-gray-800"
+             disabled={saving}
+             className="px-5 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-colors border border-transparent hover:border-gray-800 disabled:opacity-50"
            >
              Cancel
            </button>
-           <button 
+           <button
              onClick={handleAddSubmit}
-             disabled={selectedCards.length === 0}
+             disabled={selectedCards.length === 0 || saving}
              className="px-5 py-2 rounded-lg text-sm font-medium bg-gray-800 hover:bg-gray-700 text-white transition-colors border border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
            >
-             Add Cards {selectedCards.length > 0 && `(${selectedCards.length})`}
+             {saving ? 'Adding...' : `Add Cards ${selectedCards.length > 0 ? `(${selectedCards.length})` : ''}`}
            </button>
         </div>
 
