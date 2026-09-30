@@ -32,7 +32,7 @@ Goals may represent either currency or units. Before converting those fields, id
 
 ### 1. Inventory and mapping audit
 
-Status: **Not started**
+Status: **Complete** — see `qa/CURRENCY_MIGRATION_AUDIT.md` for the full field map, consumption trace, representative production values, and proposed rounding policy.
 
 1. List every Prisma `Float` field and classify it as money, rate, count, measurement, or unrelated.
 2. Trace each money/rate field through forms, API validation, routes, database writes, analytics, imports/exports, and reports.
@@ -132,7 +132,7 @@ Exit criteria: no production code reads Float monetary fields, reconciliation pa
 
 | Task | Status | Completed | Validation | Notes |
 | --- | --- | --- | --- | --- |
-| 1. Inventory and mapping audit | Not started | — | — | — |
+| 1. Inventory and mapping audit | Complete | 2026-09-30 | Read-only field/consumption audit + production value sampling | 21 Float fields: 15 money, 3 rate, 3 product-decision (Goal targets), 1 dormant (Invoice, no route exists). Zero existing precision drift found in stored values; risk is in calculation (shared/finance.mjs), not storage. See qa/CURRENCY_MIGRATION_AUDIT.md. |
 | 2. Shared currency utilities | Not started | — | — | — |
 | 3. Additive columns and backfill | Not started | — | — | — |
 | 4. Inventory purchase flow | Not started | — | — | — |
