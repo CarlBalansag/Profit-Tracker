@@ -97,4 +97,14 @@ describe('API validation schemas', () => {
       fileData: 'data:image/png;base64,abc',
     })).toThrow();
   });
+
+  // ideas.md ISSUES #3: a create request must reject an inventory-only
+  // status on a sale too, not just updates.
+  it('rejects an inventory-only status on createSale', () => {
+    expect(() => createSale.parse({
+      inventory_id: '11111111-1111-4111-8111-111111111111',
+      unit_price: 10,
+      status: 'PURCHASED',
+    })).toThrow();
+  });
 });

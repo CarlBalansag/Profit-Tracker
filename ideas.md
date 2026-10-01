@@ -34,6 +34,8 @@ ISSUES: URGENT
 
 ## 3. Inventory, sales, and status quantities are confusing
 
+**Update 2026-10-01: data-integrity bug fixed via `Audit` branch; labeling clarity improved.** "Some sale rows still have PURCHASED as their status" was a real, reproducible gap: both `createSale`/`updateSale` and the Transactions inline-edit status dropdown accepted any string, including inventory-only statuses. Sales' status is now a strict 8-value enum (`SOLD`, `SHIPPED_OUT`, `AUTHENTICATION`, `PAID`, `COMPLETED`, `RETURNED`, `DISPUTED`, `CANCELLED`) rejected at the API layer (`validation/schemas.js`), and the Transactions dropdown only offers that list for sale rows. Inventory's status intentionally keeps the full 15-value union, since it legitimately uses every value (confirmed by existing tests -- a purchase can be directly marked `COMPLETED` or `CANCELLED` with no sale). The "Pipeline Sold: 3 vs Units sold: 48" distinction itself was not a bug -- they're different, legitimate metrics (current-stage snapshot vs. cumulative period total) -- so the Dashboard's Status Pipeline section now has an explanatory caption plus a per-card tooltip, and the ambiguous "Sold" glass-theme tile was renamed "Units Sold" with a tooltip. Analytics' "Sales Count" tile was already unambiguously labeled ("N sales").
+
 - Inventory quantity: **29** total units currently on hand.
 - Pipeline `On Hand`: **24** units whose exact status is `On Hand`.
 - The other five inventory units are four marked `PURCHASED` and one marked `COMPLETED`.

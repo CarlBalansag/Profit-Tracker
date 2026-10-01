@@ -197,7 +197,7 @@ const Dashboard = () => {
     roi: { label: 'ROI', value: `${(stats.roi || 0).toFixed(0)}%`, icon: Zap, accent: true },
     revenue: { label: 'Revenue', value: `$${(stats.totalRevenue || 0).toFixed(0)}`, icon: Store, accent: false },
     cashback: { label: 'Cashback', value: `$${(stats.totalCashback || 0).toFixed(0)}`, icon: Layers, accent: true },
-    sold: { label: 'Sold', value: String(stats.unitsSold || stats.salesCount || 0), icon: TrendingUp, accent: false },
+    sold: { label: 'Units Sold', value: String(stats.unitsSold || stats.salesCount || 0), icon: TrendingUp, accent: false, title: 'Total quantity of items sold in the selected time range (not the number of sale records).' },
     tax: { label: 'Tax', value: `$${(stats.totalTax || 0).toFixed(0)}`, icon: Zap, accent: true },
     inventory: { label: 'Inventory', value: `$${(stats.inventoryValue || 0).toFixed(0)}`, icon: Store, accent: false },
     qty: { label: 'Qty', value: String(stats.inventoryQty || 0), icon: Layers, accent: true },
@@ -251,7 +251,10 @@ const Dashboard = () => {
           ? "rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.22)] animate-in fade-in duration-300 fill-mode-both"
           : "rounded-[9px] p-4 bg-[var(--bg-surface)] border border-[color:var(--border-default)] animate-in slide-in-from-bottom-4 duration-500 fade-in delay-300 fill-mode-both"
         }>
-          <h3 className={isGlass ? "mb-3 px-0.5 text-[10px] font-semibold uppercase tracking-[0.28em] text-white/24" : "text-[11px] font-medium uppercase tracking-[0.8px] text-[var(--text-muted)] mb-4"}>Status Pipeline</h3>
+          <h3 className={isGlass ? "mb-1 px-0.5 text-[10px] font-semibold uppercase tracking-[0.28em] text-white/24" : "text-[11px] font-medium uppercase tracking-[0.8px] text-[var(--text-muted)] mb-1"}>Status Pipeline</h3>
+          <p className={isGlass ? "mb-3 px-0.5 text-[10px] text-white/18" : "text-[10px] text-[var(--text-muted)] mb-4"}>
+            Units currently in each stage right now — not a cumulative total. See "Units Sold" below for all units sold in this period regardless of their current status.
+          </p>
           <div className={isGlass ? "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"}>
             {visiblePipelineCards.map(cardConfig => {
               const def = PIPELINE_CARD_REGISTRY[cardConfig.id];
@@ -676,6 +679,7 @@ const Dashboard = () => {
             <button
               key={`${panelIndex}-${metricIndex}-${item.label}`}
               onClick={() => navigate('/transactions', { state: { dateFilter, platformMode: modeFilter !== 'All' ? modeFilter : undefined } })}
+              title={item.title}
               className={`h-full min-h-[130px] rounded-[12px] border p-5 text-left shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-colors hover:bg-[#1d1f21]/78 ${item.accent ? 'border-[#d8a65a]/14 bg-[#181816]/82' : 'border-white/[0.06] bg-[#181a1c]/72'}`}
             >
               <IconComponent className="h-3.5 w-3.5 text-white/14" />
@@ -1435,6 +1439,7 @@ function PipelineCard({ icon, count, label, statusKey, modeFilter, dateFilter, o
         dateFilter: dateFilter || undefined,
         platformMode: modeFilter && modeFilter !== 'All' ? modeFilter : undefined,
       }})}
+      title={`${count} unit${count === 1 ? '' : 's'} currently in "${label}" status. Click to view them in Transactions.`}
       className={isGlass
         ? "group relative min-h-[160px] cursor-pointer overflow-hidden rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-5 text-left shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-colors hover:border-[#d8a65a]/18 hover:bg-[#1d1f21]/78"
         : `flex items-center gap-3 rounded-md p-3 cursor-pointer transition-colors ${isEmpty ? 'bg-transparent opacity-30' : `bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] ${carbonBorder}`}`

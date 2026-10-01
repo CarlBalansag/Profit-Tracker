@@ -72,6 +72,14 @@ function EditSelect({ value, onChange, options, placeholder = 'Select...' }) {
 }
 
 const STATUSES = ['Pre Order', 'On Hand', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
+// A sale row's status is a narrower post-sale-only subset of the full
+// lifecycle -- offering every status (including inventory-only values like
+// PURCHASED) to a sale row let a user pick one that doesn't belong there
+// (ideas.md ISSUES #3), which the backend now also rejects. A purchase/unsold
+// row can still legitimately hold any status in the full list (e.g. directly
+// marking a purchase COMPLETED or CANCELLED with no sale), so only sale rows
+// need the narrower list.
+const SALE_STATUSES = ['SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
 
 const ALL_COLUMNS = [
   { key: 'date',     label: 'Date' },
@@ -1157,7 +1165,7 @@ const Transactions = () => {
                             <EditSelect
                               value={editData.status}
                               onChange={v => setEditData(d => ({ ...d, status: v }))}
-                              options={STATUSES.map(s => ({ id: s, name: s }))}
+                              options={(row.isSale ? SALE_STATUSES : STATUSES).map(s => ({ id: s, name: s }))}
                               placeholder=""
                             />
                           ) : <StatusBadge status={row.status} />}
