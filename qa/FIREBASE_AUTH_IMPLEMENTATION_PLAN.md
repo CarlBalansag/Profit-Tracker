@@ -2,6 +2,8 @@
 
 Status: research/design only. No Firebase project, accounts, credentials, dependencies, schema or hosted runtime changed. This replaces the standalone Google-signup direction: Firebase will manage email/password first, with Google available later through the same Firebase identity. Neon remains the business database. Schedule C stays isolated.
 
+**Update 2026-09-30**: implemented since. All five proposed models (`FirebaseIdentity`, `FirebaseSession`, `AuthIntent`, `MigrationApproval`, `AuthAttemptBucket`) exist in `selvora-api/prisma/schema.prisma`, and the session-cookie flow described here is live in `routes/firebaseAuth.js`/`services/firebase.js`. Firebase email/password is now the app's only login method; Google sign-in was never built (see `qa/GOOGLE_SIGNUP_IMPLEMENTATION_PLAN.md`, still accurate as an unbuilt plan). This document describes the design that shipped, not a current proposal.
+
 ## Decisions and scope
 
 - React uses the Firebase Web SDK; Render uses firebase-admin. Firebase holds authentication accounts/passwords and issues identity credentials. Render authorizes requests; Prisma/Neon retain existing User.id and all business foreign keys. Firestore and Firebase Hosting are not required.

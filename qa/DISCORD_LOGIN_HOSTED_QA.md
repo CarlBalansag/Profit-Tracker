@@ -1,5 +1,7 @@
 # Hosted Discord login QA — September 13, 2026
 
+**Update 2026-09-30**: moot. Discord OAuth was fully retired shortly after this QA was recorded — `/auth/discord` and `/auth/discord/callback` now just redirect to `/login` without contacting Discord (`selvora-api/index.js`), and the app's only login method today is Firebase email/password (see `qa/FIREBASE_AUTH_ROLLOUT.md`). The rate-limit/429 investigation below never reached a conclusion before the feature was replaced; left as historical record only.
+
 Scope: hosted Discord login only. Checkout based on origin/main 265e1b8. Schedule C is excluded.
 
 ## Active hosted flow and evidence

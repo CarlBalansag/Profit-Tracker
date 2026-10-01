@@ -2,7 +2,7 @@
 
 > A full-stack business analytics platform built for resellers to track inventory, sales, cashback, and profit across multiple marketplaces.
 
-**Live Demo:** [profit-tracker.vercel.app](https://profit-tracker.vercel.app) *(Discord login required)*
+**Live Demo:** [profittracker.carltechs.com](https://profittracker.carltechs.com) *(Firebase email/password login required)*
 
 > This repository is private. The app is fully deployed and accessible via the live demo link above.
 
@@ -18,6 +18,7 @@ Selvora replaces that spreadsheet with a purpose-built analytics platform:
 - Credit card cashback is factored into profit calculations at the item level
 - Recurring expenses (storage fees, software subscriptions) auto-generate monthly
 - A customizable dashboard surfaces KPIs, trends, and pipeline status at a glance
+- Optional Schedule C tax worksheet groups expenses by IRS category for filing
 
 ---
 
@@ -27,43 +28,46 @@ Selvora replaces that spreadsheet with a purpose-built analytics platform:
 |-------|-----------|
 | Frontend | React 19, Vite 5, React Router 7, TanStack Query 5 |
 | Styling | Tailwind CSS 4, Lucide Icons, Recharts 3 |
-| Backend | Node.js, Express 5 |
-| Database | PostgreSQL (Render), Prisma ORM 5 |
-| Auth | Discord OAuth 2.0, express-session (PostgreSQL session store) |
+| Backend | Node.js (>=22), Express 5 |
+| Database | PostgreSQL (Neon, serverless/auto-suspended), Prisma ORM 5 |
+| Auth | Firebase Authentication (email/password), server-verified session cookie |
 | Validation | Zod 4 (schema validation on all mutation endpoints) |
-| File Storage | Cloudinary (receipt photos and PDFs) |
+| Money | Prisma `Decimal` end-to-end (purchase/sale/fee/cashback/expense fields) — see [Currency precision](#currency-precision) |
+| File Storage | Cloudinary (receipt photos/PDFs, and the hosted calendar `.ics` feed) |
 | Error Tracking | Sentry (frontend + backend) |
-| Hosting | Vercel (frontend) + Render paid tier (API + DB) |
+| Hosting | Netlify (frontend) + Render (API), Neon (DB) |
 | PWA | vite-plugin-pwa (installable, standalone mode) |
-| Testing | Vitest, @testing-library/react |
+| Testing | Vitest (API + frontend), @testing-library/react |
 
 ---
 
 ## Architecture
 
 ```
-Browser (React SPA on Vercel CDN)
+Browser (React SPA on Netlify CDN)
   │
   │  apiFetch() — CSRF header injected on every request
   │
   ▼
-Vercel Edge (API proxy rewrites)
-  │  /api/* → Render API
+Netlify redirects (netlify.toml)
+  │  /api/*  → Render API
   │  /auth/* → Render API
+  │  /health → Render API
+  │  /*      → index.html (SPA fallback)
   ▼
-Express 5 API (Render paid tier)
-  │  Passport.js session check
+Express 5 API (Render)
+  │  Firebase session-cookie guard (routes/firebaseAuth.js)
   │  Zod request validation
   ▼
-Prisma ORM → PostgreSQL (pgbouncer pooling)
+Prisma ORM → PostgreSQL (Neon)
   │
-  ├── Cloudinary  (receipt uploads)
-  └── EbayPriceCache (last-sold price, 24h TTL)
+  ├── Cloudinary       (receipt uploads, hosted calendar feed)
+  └── EbayPriceCache   (last-sold price, 24h TTL)
 ```
 
-**Session store**: PostgreSQL via `connect-pg-simple` — survives server restarts.
+**Session store**: PostgreSQL via `connect-pg-simple`, holding a server-verified Firebase session cookie — survives server restarts.
 **CSRF protection**: Custom middleware enforces `X-Requested-With: XMLHttpRequest` on all state-changing requests.
-**User isolation**: Every database query filters by `user_id` at the query level.
+**User isolation**: Every database query filters by `user_id` at the query level; related IDs (vendor, payment method, platform, buyer) are ownership-checked before being attached to a record.
 
 ---
 
@@ -72,15 +76,16 @@ Prisma ORM → PostgreSQL (pgbouncer pooling)
 ### Inventory & Sales
 - Log purchases with vendor, payment method, tax, inbound shipping, and cashback rate
 - Record sales with platform, commission fee, outbound shipping, and tax collected
-- Full inline editing of any transaction field from the transaction detail modal
+- Full inline editing of any transaction field from the transaction detail modal, saved atomically alongside its sales
 - Bulk delete with confirmation
 - Status lifecycle tracking: `PURCHASED → LISTED → SOLD → SHIPPED_OUT → PAID → COMPLETED`
 
 ### Financial Calculations
 - Net profit = revenue − commission − sale shipping − cost basis + cashback
 - Cashback rate overrides per vendor/category (e.g. 5% at Amazon on a specific card)
-- Cost allocated proportionally across multi-unit batches
+- Cost allocated proportionally across multi-unit batches (cumulative-boundary rounding so allocations always sum exactly to the batch total)
 - All figures reflected live as you type (no save required to preview)
+- Server-side money math is exact (Prisma `Decimal`), not binary floating point — see [Currency precision](#currency-precision)
 
 ### Dashboard & Analytics
 - Customizable stat cards — show/hide and reorder
@@ -88,6 +93,7 @@ Prisma ORM → PostgreSQL (pgbouncer pooling)
 - Revenue/profit trend charts (line, area, bar) via Recharts
 - Pipeline counts by status (unsold inventory stages)
 - Filter by marketplace, time window (7d / 30d / YTD / All Time)
+- Excludes cancelled/returned/disputed sales from revenue and profit; includes outbound shipping in cost
 
 ### Credit Card Tracker
 - Monthly statement per credit card
@@ -95,14 +101,19 @@ Prisma ORM → PostgreSQL (pgbouncer pooling)
 - Month navigation — scroll back to any previous month
 - Automatically refreshes when transactions are saved
 
-### Expenses
-- One-off and recurring expenses (weekly / biweekly / monthly)
-- Auto-generates missing recurring entries on load (catch-up generation)
+### Expenses & Schedule C
+- One-off and recurring expenses (weekly / biweekly / monthly), with month-end-safe recurrence (no skipped/duplicated occurrences)
+- Auto-generates missing recurring entries on load (catch-up generation), unique-constrained against duplicates
 - Pause and resume recurring expenses without deleting history
+- Optional Schedule C worksheet: categorizes expenses by IRS line, tracks reviewed/pending/excluded status and documentation gaps, per tax year
 
 ### Receipts
 - Attach photos or PDFs to any inventory item or expense
-- Stored on Cloudinary with MIME type and 5MB size validation
+- Stored on Cloudinary with MIME type and size validation; ownership is checked before upload
+
+### Calendar
+- Auto-generated events from purchases, sales/payouts, and credit-card due dates
+- Manually created events, with a private hosted `.ics` subscription feed (published to Cloudinary, no extra server config required)
 
 ### Onboarding
 - 20-step interactive tutorial with spotlight overlays on key UI elements
@@ -117,21 +128,34 @@ Prisma ORM → PostgreSQL (pgbouncer pooling)
 
 ---
 
+## Currency precision
+
+Every money and rate field (purchase cost, sale price, fees, tax, shipping, cashback, expense amounts, credit limits, goal targets, cached prices) is backed by a Prisma `Decimal` column kept exactly in sync with its legacy `Float` column by database triggers, validated on write via a shared `services/money.js` utility (rejects negative/over-precision/non-finite input), aggregated in `Decimal` wherever a route sums many rows (avoiding floating-point drift across hundreds of records), and substituted into API responses by `services/decimalRead.js` so every number the frontend receives is exact — with no change to the response shape. See `CURRENCY_DECIMAL_MIGRATION_PLAN.md` and `qa/CURRENCY_MIGRATION_AUDIT.md` for the full migration record and a zero-drift production reconciliation. The legacy `Float` columns remain as a reversible safety net pending a production verification window before their removal.
+
+---
+
 ## Database Schema (key models)
 
 ```
 User
-  └── Inventory (purchases)
-        └── Sales (per-unit sale events)
-              └── Buyer
-  └── PaymentMethod (credit/debit cards with cashback rates)
-  └── Platform (vendors, marketplaces, cashout platforms)
-        └── Account (seller accounts per platform)
-  └── Expense (one-off)
-  └── RecurringExpense → generates Expense entries
+  ├── FirebaseIdentity ── FirebaseSession*        (Firebase auth identity + active sessions)
+  ├── LocalCredential                             (legacy local password, migration path only)
+  ├── Inventory (purchases)
+  │     └── Sales (per-unit sale events) ── Buyer
+  ├── PaymentMethod (credit/debit cards with cashback rates)
+  ├── Platform (vendors, marketplaces, cashout platforms)
+  │     └── Account (seller accounts per platform)
+  ├── Expense (one-off)
+  ├── RecurringExpense → generates Expense entries
+  ├── Buyer → Invoice
+  ├── Goal (profit/revenue/units targets)
+  ├── ProductNote
+  └── CalendarEvent
 EbayPriceCache (product name → last sold price, TTL)
-Invoice (buyer invoices)
+AuthIntent, MigrationApproval, AuthAttemptBucket   (stateless auth-flow support, no FK to User)
 ```
+
+Every model above except `User`, `Account`, `Buyer`, `ProductNote`, `CalendarEvent`, and the auth-support models has a `Decimal` mirror column per money/rate field (see [Currency precision](#currency-precision)).
 
 ---
 
@@ -139,56 +163,73 @@ Invoice (buyer invoices)
 
 | Domain | Endpoints |
 |--------|-----------|
-| Auth | `GET /auth/discord`, `GET /auth/discord/callback`, `GET /auth/me`, `POST /auth/logout` |
-| Inventory | `GET/POST /api/inventory`, `GET/PUT/DELETE /api/inventory/:id` |
-| Sales | `GET/POST /api/sales`, `PUT /api/sales/:id` |
+| Auth | `POST /auth/firebase/intent`, `POST /auth/firebase/session`, `POST /auth/firebase/link`, `POST /auth/firebase/account-check`, `POST /auth/firebase/logout-all`, `GET/PATCH /auth/me`, `POST /auth/logout` |
+| Inventory | `GET/POST /api/inventory`, `GET /api/inventory/product-names`, `GET /api/inventory/recent-by-name`, `GET/PUT/DELETE /api/inventory/:id`, `PUT /api/inventory/:id/transaction`, `POST /api/inventory/:id/track` |
+| Sales | `GET/POST /api/sales`, `PUT/DELETE /api/sales/:id`, `POST /api/sales/:id/track` |
 | Analytics | `GET /api/analytics/dashboard?mode&date` |
 | Credit Card | `GET /api/creditcard/dashboard?month=YYYY-MM` |
 | Expenses | Full CRUD `/api/expenses` |
 | Recurring Expenses | Full CRUD `/api/recurring-expenses` |
+| Schedule C | `GET /api/schedule-c?year=YYYY` |
 | Platforms | Full CRUD + `/api/platforms/batch` (bulk upsert) |
 | Payment Methods | Full CRUD `/api/payment-methods` |
 | Accounts | Full CRUD `/api/accounts` |
-| Receipts | `POST /api/receipts/attach`, `DELETE /api/receipts/detach` |
+| Goals | Full CRUD `/api/goals` |
+| Receipts | `GET /api/receipts`, `POST /api/receipts/attach`, `DELETE /api/receipts/detach` |
+| Product Notes | `GET/PUT/DELETE /api/product-notes` |
+| Calendar Events | `GET /api/calendar-events`, `GET /api/calendar-events/auto`, `POST/PUT/DELETE /api/calendar-events/:id`, `POST /api/calendar-events/token` |
 | Shipping Tracking | `POST /api/inventory/:id/track`, `POST /api/sales/:id/track` |
-| Preferences | `GET/PUT /api/preferences/dashboard-settings/:style` |
+| Preferences | `GET/PUT /api/preferences/dashboard-settings/:style`, `GET/PUT /api/preferences/schedule-c` |
 | eBay Price | `GET/POST /api/ebay-price` |
 | Health | `GET /health` |
 
-All endpoints require session authentication. All mutation endpoints validated with Zod schemas.
+All `/api/*` endpoints require a valid Firebase session cookie. All mutation endpoints are validated with Zod schemas; related IDs are ownership-checked before being attached to a record.
 
 ---
 
 ## Environment Variables
 
-**API (`selvora-api/.env`)**
+**API (`selvora-api/.env`)** — see `selvora-api/.env.example` for the authoritative, commented list. Key groups:
 ```
-DATABASE_URL=          # Pooled PostgreSQL connection string (pgbouncer)
-DIRECT_URL=            # Direct connection for Prisma migrations
+DATABASE_URL=          # Neon pooled PostgreSQL connection string
 SESSION_SECRET=        # >= 32 character secret
-FRONTEND_URL=          # https://your-vercel-domain.vercel.app
+FRONTEND_URL=          # https://your-netlify-domain
 NODE_ENV=              # production | development
-DISCORD_CLIENT_ID=
-DISCORD_CLIENT_SECRET=
-DISCORD_CALLBACK_URL=  # https://your-api-domain/auth/discord/callback
+
+# Firebase Auth (server)
+FIREBASE_AUTH_ENABLED=
+FIREBASE_SIGNUP_ENABLED=
+FIREBASE_PROJECT_ID=
+FIREBASE_SERVICE_ACCOUNT_JSON=   # service-account JSON, Render secret
+
 CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
-SENTRY_DSN=            # optional
-SENTRY_TRACES_SAMPLE_RATE=  # optional, e.g. 0.1
-UPS_CLIENT_ID=         # optional — enables live UPS tracking status
-UPS_CLIENT_SECRET=
-FEDEX_CLIENT_ID=       # optional — enables live FedEx tracking status
-FEDEX_CLIENT_SECRET=
-USPS_CLIENT_ID=        # optional — enables live USPS tracking status (own Mailer ID numbers only)
-USPS_CLIENT_SECRET=
+SENTRY_DSN=                      # optional
+SENTRY_TRACES_SAMPLE_RATE=       # optional, e.g. 0.1
+
+# Shipping tracking — all optional, per carrier
+UPS_CLIENT_ID= / UPS_CLIENT_SECRET=
+FEDEX_CLIENT_ID= / FEDEX_CLIENT_SECRET=
+USPS_CLIENT_ID= / USPS_CLIENT_SECRET=
 ```
+
+`DISCORD_CLIENT_ID`/`DISCORD_CLIENT_SECRET`/`DISCORD_CALLBACK_URL` are no longer read by the app — Discord OAuth is retired (the `/auth/discord*` routes now just redirect to `/login`). `passport`/`passport-discord` remain as unused dependencies pending removal.
 
 Calendar subscriptions use the configured Cloudinary account to publish a private, stable ICS feed. No `BACKEND_URL` variable is required. Keep the generated subscription link private because anyone with it can read that calendar.
 
-**Frontend (`selvora-app/.env`)**
+**Frontend (`selvora-app/.env.local`)** — see `selvora-app/.env.example`:
 ```
-VITE_API_URL=          # Leave empty if using Vercel proxy rewrites
-VITE_SENTRY_DSN=       # optional
+VITE_API_URL=                    # Leave empty when using Netlify redirects (netlify.toml)
+
+# Firebase Auth (public web config — never put a service-account key here)
+VITE_FIREBASE_AUTH_ENABLED=
+VITE_FIREBASE_SIGNUP_ENABLED=
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_APP_ID=
+
+VITE_SENTRY_DSN=                 # optional
 VITE_SENTRY_TRACES_SAMPLE_RATE=  # optional
 ```

@@ -2,6 +2,8 @@
 
 This log records fixes made after the 2026-09-10 audit in `QA_REPORT.md`. Each entry is intentionally limited to one QA finding and its focused validation.
 
+**Update 2026-09-30**: all four entries below are long since committed and merged into `main` (first landed around commit `1810b70`, well before the branch-consolidation and currency-migration work tracked elsewhere); the "pending the next requested commit/push" status on each is stale. See `qa/QA_REPORT.md`'s updated QA-16/18/23/24 entries for current confirmation against today's source.
+
 ## QA-23 — Failed mutations shown as successful locally
 
 Status: **Fixed locally; pending the next requested commit/push**

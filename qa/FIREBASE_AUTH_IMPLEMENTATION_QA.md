@@ -2,6 +2,8 @@
 
 Result: local email/password implementation tested through repeated implement -> QA -> fix -> QA passes, isolated PostgreSQL integration, Firebase Auth Emulator and the actual browser. **Hosted/Firebase production acceptance remains pending configuration.** No production user/business data, credentials or Schedule C changes were made in this task. No deployment/push occurred.
 
+**Update 2026-09-30**: hosted deployment has since happened. Production has `FIREBASE_AUTH_ENABLED=true` with `FIREBASE_SIGNUP_ENABLED=false` (invite-only, consistent with this doc's staged rollout), the `20260914000000_firebase_auth` migration is applied, and Discord/legacy password auth are both retired. The "pending configuration" status below is no longer current; the QA mechanics it describes are accurate history.
+
 ## Scope
 
 Firebase email/password signup, verification, login, recovery, cookie exchange, single/all logout, exact-UID settings reauthentication, private-password plus owner-approved migration preserving User.id, durable API limits, fresh disabled/revocation checks, safe auth errors, query-cache/account isolation and migration-compatible rollback flags. Additive schema creates five auth tables and User.login_disabled. Google linking/redirect, App Check configuration and legacy-provider cleanup remain the explicitly staged follow-ups in the plan.

@@ -1,4 +1,6 @@
-# Discord login deployment checklist
+# Discord login deployment checklist (superseded)
+
+**Update 2026-09-30**: both the hosting provider and the auth provider this checklist describes are gone. The frontend is hosted on Netlify, not Vercel (see `selvora-app/netlify.toml`), and Discord OAuth has been fully retired in favor of Firebase email/password auth (`/auth/discord*` now just redirects to `/login`; see `qa/FIREBASE_AUTH_ROLLOUT.md`). For the current, accurate environment-variable and deployment setup, see the root `README.md`'s "Environment Variables" and "Architecture" sections. Left below as a historical record only — do not follow it for a current deployment.
 
 The following values must use the exact active Vercel domain. Do not mix an old Vercel preview URL, a Netlify URL, or the Render API domain.
 

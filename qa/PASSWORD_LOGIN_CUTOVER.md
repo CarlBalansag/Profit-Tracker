@@ -2,6 +2,8 @@
 
 Replacement for Discord login deployed in hosted commit 4f09154. Auth-only migration and three owner-approved accounts provisioned; hosted checks and remaining owner checks tracked below. Schedule C is excluded.
 
+**Update 2026-09-30**: this intermediate state (Passport/PostgreSQL-session `LocalCredential` login) has itself since been retired and replaced by Firebase email/password auth (see `qa/FIREBASE_AUTH_ROLLOUT.md`). The `LocalCredential` model still exists in `schema.prisma` but only as the migration path onto Firebase — no current route logs a user in through it directly. Left as a historical record of that intermediate migration stage.
+
 ## Data preservation
 
 LocalCredential stores a normalized login email and password hash under an existing User.id. Original Discord IDs, usernames, User.email and every business foreign key remain unchanged. No business records need moving. Six accounts were found by a read-only query of the configured Neon database; three have inventory/sales. Confirm that database matches Render before any production writes. Do not commit the private roster or credential files.

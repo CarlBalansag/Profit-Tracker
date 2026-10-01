@@ -2,6 +2,8 @@
 
 Status: email/password implementation exists locally in the isolated login worktree. Firebase and new registration default OFF. Production has not been deployed or migrated. Schedule C is excluded.
 
+**Update 2026-09-30**: rollout completed since. `FIREBASE_AUTH_ENABLED=true` in production, the `20260914000000_firebase_auth` migration is applied, and Discord/password auth have both been retired in favor of Firebase email/password as the sole login method. `FIREBASE_SIGNUP_ENABLED` remains `false` (invite-only), matching this doc's intended staged rollout. The owner-configuration steps below reflect what was actually done, not a pending checklist.
+
 ## Owner configuration required
 
 1. Create/select separate development and production Firebase projects. Share project IDs only; keep service-account private keys out of chat and Git. Add a Firebase Web app to each project to obtain its public web configuration.
