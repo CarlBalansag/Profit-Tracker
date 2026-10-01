@@ -43,7 +43,7 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
   const nameRef = useRef(null);
-  const modalRef = useModalKeyboard(open, () => { if (!saving) onClose(); });
+  const modalRef = useModalKeyboard(open, () => { if (!saving) onClose(); }, nameRef);
 
   useEffect(() => {
     if (!open) return;
@@ -80,7 +80,6 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
       setForm({ ...EMPTY_FORM, date: today, start_date: today });
     }
     setError(''); setSaving(false);
-    setTimeout(() => nameRef.current?.focus(), 50);
   }, [open, initial, initialIsRecurring]);
 
   if (!open) return null;

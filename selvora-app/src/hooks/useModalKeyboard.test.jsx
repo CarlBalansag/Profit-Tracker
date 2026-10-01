@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { useModalKeyboard } from './useModalKeyboard';
@@ -30,6 +30,31 @@ function Harness({ onClose }) {
     <div>
       <button onClick={() => setOpen(true)}>Open trigger</button>
       <TestModal isOpen={open} onClose={() => { onClose?.(); setOpen(false); }} />
+    </div>
+  );
+}
+
+// Mirrors ExpenseModal: a close button rendered before the field that should
+// actually receive initial focus (e.g. a name input), wired via initialFocusRef
+// instead of a second, independently-timed focus() call.
+function TestModalWithPreferredFocus({ isOpen, onClose }) {
+  const nameRef = useRef(null);
+  const ref = useModalKeyboard(isOpen, onClose, nameRef);
+  if (!isOpen) return null;
+  return (
+    <div ref={ref} role="dialog">
+      <button>Close</button>
+      <input ref={nameRef} placeholder="Name" />
+    </div>
+  );
+}
+
+function PreferredFocusHarness() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button onClick={() => setOpen(true)}>Open trigger</button>
+      <TestModalWithPreferredFocus isOpen={open} onClose={() => setOpen(false)} />
     </div>
   );
 }
@@ -69,6 +94,16 @@ describe('useModalKeyboard', () => {
 
     fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
     expect(document.activeElement).toBe(screen.getByText('Last'));
+  });
+
+  it('focuses the given initialFocusRef instead of the first focusable element', async () => {
+    render(<PreferredFocusHarness />);
+    fireEvent.click(screen.getByText('Open trigger'));
+    await vi.waitFor(() => expect(document.activeElement).toBe(screen.getByPlaceholderText('Name')));
+    // The close button is first in DOM order but must never receive initial
+    // focus here -- Space on a focused button activates it, so if focus ever
+    // lands there this keypress would close the modal instead of typing.
+    expect(document.activeElement).not.toBe(screen.getByText('Close'));
   });
 
   it('restores focus to the trigger element after closing', async () => {

@@ -17,9 +17,15 @@ function getFocusable(container) {
  * `onClose` is called as-is on Escape -- pass a guarded handler (e.g. one that
  * no-ops while a save is in flight) when the modal needs to block dismissal.
  *
+ * By default, initial focus goes to the first focusable element in the modal
+ * (often a close button). Pass `initialFocusRef` to focus a specific element
+ * instead (e.g. a name field) -- do not also set focus yourself from the
+ * caller, since a second, independently-timed focus call races this one and
+ * leaves keystrokes landing on whatever had focus first.
+ *
  * Returns a ref to attach to the modal's outermost focusable container.
  */
-export function useModalKeyboard(isOpen, onClose) {
+export function useModalKeyboard(isOpen, onClose, initialFocusRef) {
   const containerRef = useRef(null);
   const previouslyFocused = useRef(null);
 
@@ -29,8 +35,9 @@ export function useModalKeyboard(isOpen, onClose) {
     previouslyFocused.current = document.activeElement;
 
     const focusTimer = setTimeout(() => {
+      const preferred = initialFocusRef?.current;
       const [first] = getFocusable(containerRef.current);
-      (first || containerRef.current)?.focus();
+      (preferred || first || containerRef.current)?.focus();
     }, 0);
 
     const handleKeyDown = (e) => {
@@ -65,7 +72,7 @@ export function useModalKeyboard(isOpen, onClose) {
         restore.focus();
       }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, initialFocusRef]);
 
   return containerRef;
 }
