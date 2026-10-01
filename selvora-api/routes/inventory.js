@@ -50,9 +50,9 @@ router.get('/', isAuthenticated, async (req, res, next) => {
         purchase_date: true, received_date: true,
         unit_purchase_cost: true, qty_purchased: true, qty_on_hand: true,
         sales_tax: true, shipping_cost_inbound: true, fees: true,
-        cashback_earned: true, gift_card_amount: true,
+        cashback_earned: true, cashback_rate: true, gift_card_amount: true,
         unit_purchase_cost_decimal: true, sales_tax_decimal: true, shipping_cost_inbound_decimal: true,
-        fees_decimal: true, cashback_earned_decimal: true, gift_card_amount_decimal: true,
+        fees_decimal: true, cashback_earned_decimal: true, cashback_rate_decimal: true, gift_card_amount_decimal: true,
         order_number: true, tracking_number: true, tracking_info: true, receipt_url: true,
         tax_exempt: true,
         vendor: { select: { id: true, name: true, type: true } },
@@ -90,6 +90,8 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
       shipping_cost_inbound,
       fees,
       gift_card_amount,
+      cashback_rate,
+      cashback_earned,
       order_number,
       tracking_number,
       category,
@@ -149,7 +151,10 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
         gift_card_amount: parseFloat(gift_card_amount) || 0,
         order_number: order_number || null,
         tracking_number: tracking_number || null,
-        cashback_earned: 0, // Calculated at query time from payment method rates
+        // A non-null rate marks this purchase as a snapshotted/overridden
+        // cashback value. Callers that omit it retain legacy dynamic rates.
+        cashback_rate: cashback_rate !== undefined ? parseFloat(cashback_rate) : null,
+        cashback_earned: cashback_earned !== undefined ? parseFloat(cashback_earned) || 0 : 0,
         category: category || null,
         tax_exempt: tax_exempt === true || tax_exempt === 'true',
         status: resolvedStatus,
@@ -217,10 +222,10 @@ router.get('/recent-by-name', isAuthenticated, async (req, res, next) => {
       select: {
         unit_purchase_cost: true, qty_purchased: true,
         sales_tax: true, shipping_cost_inbound: true, fees: true,
-        gift_card_amount: true, tax_exempt: true, category: true,
+        gift_card_amount: true, cashback_rate: true, cashback_earned: true, tax_exempt: true, category: true,
         vendor_id: true, payment_method_id: true,
         unit_purchase_cost_decimal: true, sales_tax_decimal: true, shipping_cost_inbound_decimal: true,
-        fees_decimal: true, gift_card_amount_decimal: true,
+        fees_decimal: true, gift_card_amount_decimal: true, cashback_rate_decimal: true, cashback_earned_decimal: true,
         vendor: { select: { id: true, name: true } },
         payment_method: { select: { id: true, name: true } },
       },
@@ -287,6 +292,7 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
       gift_card_amount,
       order_number,
       tracking_number,
+      cashback_rate,
       cashback_earned,
       category,
       vendor_id,
@@ -331,6 +337,7 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
       const advanced = autoShippedStatus('inbound', existing.status);
       if (advanced) data.status = advanced;
     }
+    if (cashback_rate !== undefined)         data.cashback_rate = parseFloat(cashback_rate);
     if (cashback_earned !== undefined)       data.cashback_earned = parseFloat(cashback_earned) || 0;
     if (category !== undefined)              data.category = category || null;
     if (vendor_id !== undefined)             data.vendor_id = vendor_id || null;

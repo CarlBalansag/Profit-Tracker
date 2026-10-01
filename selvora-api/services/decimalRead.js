@@ -33,6 +33,7 @@ const MAPPINGS = {
     shipping_cost_inbound: 'shipping_cost_inbound_decimal',
     fees: 'fees_decimal',
     cashback_earned: 'cashback_earned_decimal',
+    cashback_rate: 'cashback_rate_decimal',
     gift_card_amount: 'gift_card_amount_decimal',
   },
   sales: {

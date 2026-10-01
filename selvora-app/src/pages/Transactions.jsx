@@ -1,4 +1,4 @@
-import { allocatedCost, effectiveCashbackRate, saleEconomics, isRealizedSale } from '../../../shared/finance.mjs';
+import { allocatedCost, allocatedCashback, effectiveCashbackRate, saleEconomics, isRealizedSale } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { useInventory, usePlatforms, usePaymentMethods, useInvalidate, apiFetch} from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
@@ -417,7 +417,7 @@ const Transactions = () => {
         rawSale: null,
         sale: null,
         profit: null,
-        cashback: unsoldCost * (effectiveRate / 100),
+        cashback: allocatedCashback(inv, displayQty, effectiveRate),
         payment: inv.payment_method?.name || '',
         paymentMethodId: inv.payment_method_id || '',
         status: inv.status || 'PURCHASED',

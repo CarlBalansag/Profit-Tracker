@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
-const { Decimal, isRealizedSale, batchCost, effectiveCashbackRate, saleEconomics } = require('../services/decimalFinance');
+const { Decimal, isRealizedSale, batchCost, effectiveCashbackRate, inventoryCashback, allocatedCashback, saleEconomics } = require('../services/decimalFinance');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -85,7 +85,7 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
       const rate = effectiveCashbackRate(inv);
       const qty = inv.qty_purchased || 1;
       const itemCost = batchCost(inv);
-      const itemCashback = itemCost.times(rate).div(100);
+      const itemCashback = inventoryCashback(inv, rate);
 
       card.totalSpend = card.totalSpend.plus(itemCost);
       card.cashbackEarned = card.cashbackEarned.plus(itemCashback);
@@ -131,7 +131,7 @@ router.get('/dashboard', isAuthenticated, async (req, res, next) => {
             .plus(new Decimal(inv.shipping_cost_inbound || 0).times(unsoldShare))
             .plus(new Decimal(inv.fees || 0).times(unsoldShare))
             .minus(new Decimal(inv.gift_card_amount || 0).times(unsoldShare));
-          const unsoldCashback = unsoldCost.times(rate).div(100);
+          const unsoldCashback = allocatedCashback(inv, unsoldQty, rate);
           card.pendingCount += unsoldQty;
           card.items.push({
             id: inv.id,

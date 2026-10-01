@@ -64,6 +64,20 @@ describe('currency migration Task 6: expenses, recurring expenses, payment metho
     expect(bad.status).toBe(400);
   });
 
+  it('accepts cleared optional card fields when changing the default cashback rate', async () => {
+    const res = await put(`/api/payment-methods/${harness.ids.card}`, {
+      ...cardBase,
+      default_cashback_rate: '5',
+      statement_close_day: null,
+      due_day: null,
+      credit_limit: null,
+      min_payment_pct: null,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.default_cashback_rate).toBe(5);
+    expect(res.body.credit_limit).toBeNull();
+  });
+
   it('rejects an over-precision platform fee_pct', async () => {
     const res = await put(`/api/platforms/${harness.ids.vendor}`, { fee_pct: '1.2345678' });
     expect(res.status).toBe(400);

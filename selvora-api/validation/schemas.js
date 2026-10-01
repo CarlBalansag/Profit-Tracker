@@ -137,6 +137,8 @@ const createInventory = z.object({
   shipping_cost_inbound: decimalAmount({ defaultValue: 0 }),
   fees: decimalAmount({ defaultValue: 0 }),
   gift_card_amount: decimalAmount({ defaultValue: 0 }),
+  cashback_rate: decimalAmount({ scale: 6, optional: true }),
+  cashback_earned: decimalAmount({ optional: true, round: true }),
   order_number: optionalString,
   tracking_number: optionalString,
   category: optionalString,
@@ -170,6 +172,7 @@ const updateInventory = z.object({
   shipping_cost_inbound: decimalAmount({ optional: true }),
   fees: decimalAmount({ optional: true }),
   gift_card_amount: decimalAmount({ optional: true }),
+  cashback_rate: decimalAmount({ scale: 6, optional: true }),
   order_number: optionalString,
   tracking_number: optionalString,
   category: optionalString,
@@ -236,10 +239,10 @@ const paymentMethod = z.object({
   default_cashback_rate: decimalAmount({ scale: 6, defaultValue: 0 }),
   preset_card_id: optionalString,
   category_rates: z.array(categoryRate).optional(),
-  statement_close_day: optionalDay,
-  due_day: optionalDay,
-  credit_limit: decimalAmount({ optional: true }),
-  min_payment_pct: decimalAmount({ scale: 6, optional: true }),
+  statement_close_day: optionalDay.nullable(),
+  due_day: optionalDay.nullable(),
+  credit_limit: decimalAmount({ optional: true }).nullable(),
+  min_payment_pct: decimalAmount({ scale: 6, optional: true }).nullable(),
 }).passthrough();
 
 const platform = z.object({

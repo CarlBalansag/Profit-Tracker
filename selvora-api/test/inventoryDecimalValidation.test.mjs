@@ -46,6 +46,20 @@ describe('currency migration Task 4: inventory purchase decimal validation', () 
     expect(res.body.unit_purchase_cost).toBe(249.99);
   });
 
+  it('stores a per-transaction cashback rate and amount override on create', async () => {
+    const res = await post('/api/inventory', {
+      product_name: 'QA Cashback Override',
+      vendor_id: harness.ids.vendor,
+      payment_method_id: harness.ids.card,
+      unit_purchase_cost: '100.00',
+      qty_purchased: 1,
+      cashback_rate: '5',
+      cashback_earned: '7.00',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ cashback_rate: 5, cashback_earned: 7 });
+  });
+
   it('rejects a purchase cost with more than 2 decimal places on create', async () => {
     const res = await post('/api/inventory', {
       product_name: 'QA Bad Item',

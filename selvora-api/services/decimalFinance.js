@@ -30,6 +30,9 @@ function allocatedCost(inventory = {}, quantity = 0) {
 // value doesn't accumulate float error the way a running sum does, so this
 // stays a plain number rather than a Decimal.
 function effectiveCashbackRate(inventory = {}, today = new Date()) {
+  if (inventory.cashback_rate !== null && inventory.cashback_rate !== undefined) {
+    return Math.max(0, number(inventory.cashback_rate));
+  }
   const card = inventory.payment_method;
   if (!card) return 0;
   let rates = card.category_rates;
@@ -47,14 +50,28 @@ function effectiveCashbackRate(inventory = {}, today = new Date()) {
   return Math.max(0, number(card.default_cashback_rate));
 }
 
+function inventoryCashback(inventory = {}, rate = effectiveCashbackRate(inventory)) {
+  if (inventory.cashback_rate !== null && inventory.cashback_rate !== undefined) {
+    return Decimal.max(0, decimal(inventory.cashback_earned || 0));
+  }
+  return batchCost(inventory).times(number(rate)).div(100);
+}
+
+function allocatedCashback(inventory = {}, quantity = 0, rate = effectiveCashbackRate(inventory)) {
+  const purchased = number(inventory.qty_purchased);
+  return purchased > 0
+    ? inventoryCashback(inventory, rate).times(number(quantity)).div(purchased)
+    : new Decimal(0);
+}
+
 function saleEconomics(inventory = {}, sale = {}, rate = effectiveCashbackRate(inventory)) {
   const cost = allocatedCost(inventory, sale.quantity);
   const revenue = decimal(sale.unit_price || 0).times(number(sale.quantity))
     .minus(decimal(sale.commission_fee || 0))
     .minus(decimal(sale.sale_shipping || 0));
-  const cashback = cost.times(number(rate)).div(100);
+  const cashback = allocatedCashback(inventory, sale.quantity, rate);
   const grossProfit = revenue.minus(cost);
   return { cost, revenue, cashback, grossProfit, netProfit: grossProfit.plus(cashback) };
 }
 
-module.exports = { Decimal, decimal, isRealizedSale, batchCost, allocatedCost, effectiveCashbackRate, saleEconomics };
+module.exports = { Decimal, decimal, isRealizedSale, batchCost, allocatedCost, effectiveCashbackRate, inventoryCashback, allocatedCashback, saleEconomics };

@@ -48,6 +48,23 @@ describe('financial reporting consistency', () => {
     expect(harness.db.inventory).toEqual(original);
   });
 
+  it('uses the transaction cashback override consistently instead of the card default', async () => {
+    harness.db.inventory[0].cashback_rate = 5;
+    harness.db.inventory[0].cashback_earned = 50;
+
+    const analytics = await read('analytics/dashboard');
+    const credit = await read('creditcard/dashboard?month=2026-09');
+    expect(analytics.stats.totalCashback).toBe(50);
+    expect(analytics.cashFlowTransactions[0].cashback).toBe(20);
+    expect(analytics.stats.profit).toBe(85);
+
+    const sold = credit.cards[0].items.find((item) => item.saleId);
+    const unsold = credit.cards[0].items.find((item) => !item.saleId);
+    expect(sold.cashback).toBe(20);
+    expect(unsold.cashback).toBe(30);
+    expect(credit.cards[0].cashbackEarned).toBe(50);
+  });
+
   it('adds multiple purchases and split sales with omitted optional costs', async () => {
     const inventory = {
       ...harness.db.inventory[0], id: 'second', qty_purchased: 2, qty_on_hand: 0,

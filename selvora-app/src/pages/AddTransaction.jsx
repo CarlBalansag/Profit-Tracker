@@ -55,6 +55,8 @@ const AddTransaction = () => {
     customer_tax_exempt: false,
     exemption_type: '',
     gift_card_amount: '',
+    cashback_rate: '',
+    cashback_earned: '',
     cashback_include_tax: true,
     cashback_include_shipping: true,
     sale_tab: 'cashout',
@@ -79,6 +81,11 @@ const AddTransaction = () => {
 
   const saved = loadDraft();
   const [formData, setFormData] = useState(saved?.form ?? defaultForm);
+  const [cashbackOverrideMode, setCashbackOverrideMode] = useState(() =>
+    saved?.form?.cashback_earned !== '' && saved?.form?.cashback_earned !== undefined ? 'amount'
+      : saved?.form?.cashback_rate !== '' && saved?.form?.cashback_rate !== undefined ? 'rate'
+        : 'default'
+  );
   const [itemSold, setItemSold] = useState(false);
   const [showCashbackProfit, setShowCashbackProfit] = useState(false);
 
@@ -100,6 +107,7 @@ const AddTransaction = () => {
   const showSuggestionPanel = !!recentTxn && !suggestionDismissed;
 
   const acceptSuggestion = () => {
+    setCashbackOverrideMode('default');
     setFormData(prev => ({
       ...prev,
       unit_purchase_cost: recentTxn.unit_purchase_cost ?? prev.unit_purchase_cost,
@@ -112,6 +120,8 @@ const AddTransaction = () => {
       category: recentTxn.category ?? prev.category,
       vendor_id: recentTxn.vendor_id ?? prev.vendor_id,
       payment_method_id: recentTxn.payment_method_id ?? prev.payment_method_id,
+      cashback_rate: '',
+      cashback_earned: '',
       purchase_date: new Date().toISOString().split('T')[0],
     }));
     setSuggestionDismissed(true);
@@ -155,7 +165,14 @@ const AddTransaction = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+      ...(['payment_method_id', 'vendor_id'].includes(name)
+        ? { cashback_rate: '', cashback_earned: '' }
+        : {}),
+    }));
+    if (['payment_method_id', 'vendor_id'].includes(name)) setCashbackOverrideMode('default');
   };
 
   const handleQtyChange = (delta) => {
@@ -196,7 +213,11 @@ const AddTransaction = () => {
       try {
         return await saveInventoryWithReceipt({
           apiFetch,
-          formData,
+          formData: {
+            ...formData,
+            cashback_rate: Number(cashbackRate.toFixed(6)),
+            cashback_earned: Number(cashbackAmount.toFixed(2)),
+          },
           existingInventoryId: pendingReceiptInventoryId,
           receipt,
         });
@@ -262,10 +283,40 @@ const AddTransaction = () => {
   };
 
   const categoryRateMatch = getCategoryRate(selectedCard, selectedVendor?.name);
-  const cashbackRate = effectiveCashbackRate({ payment_method: selectedCard, vendor: selectedVendor });
-
   const cashbackBase = batchCost(formData);
-  const cashbackAmount = cashbackBase * (cashbackRate / 100);
+  const suggestedCashbackRate = effectiveCashbackRate({ payment_method: selectedCard, vendor: selectedVendor });
+  const enteredCashbackRate = Number(formData.cashback_rate);
+  const enteredCashbackAmount = Number(formData.cashback_earned);
+  const cashbackRate = cashbackOverrideMode === 'amount'
+    ? (cashbackBase > 0 && Number.isFinite(enteredCashbackAmount)
+      ? Number((enteredCashbackAmount / cashbackBase * 100).toFixed(6))
+      : 0)
+    : cashbackOverrideMode === 'rate' && Number.isFinite(enteredCashbackRate)
+      ? Math.max(0, enteredCashbackRate)
+      : suggestedCashbackRate;
+  const cashbackAmount = cashbackOverrideMode === 'amount' && Number.isFinite(enteredCashbackAmount)
+    ? Math.max(0, enteredCashbackAmount)
+    : cashbackBase * (cashbackRate / 100);
+  const cashbackInventory = {
+    ...formData,
+    cashback_rate: cashbackRate,
+    cashback_earned: cashbackAmount,
+  };
+
+  const handleCashbackRateChange = (value) => {
+    setCashbackOverrideMode('rate');
+    setFormData(prev => ({ ...prev, cashback_rate: value, cashback_earned: '' }));
+  };
+
+  const handleCashbackAmountChange = (value) => {
+    setCashbackOverrideMode('amount');
+    setFormData(prev => ({ ...prev, cashback_earned: value, cashback_rate: '' }));
+  };
+
+  const resetCashbackOverride = () => {
+    setCashbackOverrideMode('default');
+    setFormData(prev => ({ ...prev, cashback_rate: '', cashback_earned: '' }));
+  };
 
   // ── Cashback rate change toast ──────────────────────────────────────────────
   useEffect(() => {
@@ -715,13 +766,15 @@ const AddTransaction = () => {
                 <Field label="Cashback Rate %">
                   <div className="relative">
                     <input
-                      type="number" readOnly
+                      type="number" min="0" step="0.000001"
+                      aria-label="Cashback Rate %"
                       value={cashbackRate}
-                      className={`w-full bg-white/[0.02] border rounded-lg px-3 pr-8 py-2 text-sm focus:outline-none ${categoryRateMatch ? 'border-emerald-500/40 text-emerald-400' : 'border-white/10 text-gray-400'}`}
+                      onChange={e => handleCashbackRateChange(e.target.value)}
+                      className={`w-full bg-white/[0.02] border rounded-lg px-3 pr-8 py-2 text-sm text-white focus:outline-none focus:border-pink-500/50 ${categoryRateMatch && cashbackOverrideMode === 'default' ? 'border-emerald-500/40' : 'border-white/10'}`}
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">%</span>
                   </div>
-                  {categoryRateMatch && (
+                  {categoryRateMatch && cashbackOverrideMode === 'default' && (
                     <p className="text-[10px] text-emerald-500/80 mt-1">
                       {categoryRateMatch.store} rate
                       {categoryRateMatch.expires ? ` · expires ${new Date(categoryRateMatch.expires).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
@@ -729,17 +782,25 @@ const AddTransaction = () => {
                   )}
                 </Field>
 
-                <Field label={<span>Cashback Amount <span className="text-gray-600 normal-case font-normal">(auto)</span></span>}>
+                <Field label={<span>Cashback Amount <span className="text-gray-600 normal-case font-normal">(editable)</span></span>}>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                     <input
-                      type="number" readOnly
-                      value={cashbackAmount.toFixed(2)}
-                      className="w-full bg-white/[0.02] border border-white/10 rounded-lg pl-7 pr-3 py-2 text-sm text-emerald-400 focus:outline-none"
+                      type="number" min="0" step="0.01"
+                      aria-label="Cashback Amount"
+                      value={cashbackOverrideMode === 'amount' ? formData.cashback_earned : cashbackAmount.toFixed(2)}
+                      onChange={e => handleCashbackAmountChange(e.target.value)}
+                      className="w-full bg-white/[0.02] border border-white/10 rounded-lg pl-7 pr-3 py-2 text-sm text-emerald-400 focus:outline-none focus:border-pink-500/50"
                     />
                   </div>
                 </Field>
               </div>
+
+              {cashbackOverrideMode !== 'default' && (
+                <button type="button" onClick={resetCashbackOverride} className="text-[11px] text-pink-300 hover:text-pink-200 underline">
+                  Reset to payment method rate ({suggestedCashbackRate}%)
+                </button>
+              )}
 
               {/* Row 2: Gift Card */}
               <Field label="Gift Card Used">
@@ -1056,7 +1117,7 @@ const AddTransaction = () => {
                   const salePrice  = parseFloat(formData.sale_price) || 0;
                   const qtySold    = parseInt(formData.qty_sold) || 1;
                   const totalSale  = salePrice * qtySold;
-                  const economics = saleEconomics(formData, { quantity: qtySold, unit_price: salePrice,
+                  const economics = saleEconomics(cashbackInventory, { quantity: qtySold, unit_price: salePrice,
                     commission_fee: formData.commission_fee, sale_shipping: formData.sale_shipping }, cashbackRate);
                   const totalUnitCost = economics.cost;
                   const allocatedCashback = economics.cashback;

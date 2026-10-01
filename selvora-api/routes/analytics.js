@@ -3,7 +3,7 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { validateQuery } = require('../middleware/validate');
 const { analyticsDashboardQuery } = require('../validation/schemas');
-const { Decimal, decimal, isRealizedSale, batchCost, allocatedCost, effectiveCashbackRate, saleEconomics } = require('../services/decimalFinance');
+const { Decimal, decimal, isRealizedSale, batchCost, allocatedCost, effectiveCashbackRate, inventoryCashback, saleEconomics } = require('../services/decimalFinance');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -110,7 +110,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       totalCost = totalCost.plus(lineCost);
       totalTax = totalTax.plus(inv.sales_tax || 0);
       const rate = effectiveCashbackRate(inv);
-      totalCashback = totalCashback.plus(lineCost.times(rate).div(100));
+      totalCashback = totalCashback.plus(inventoryCashback(inv, rate));
     });
 
     // Sold metrics: only sales in the selected sale-date/platform window.
@@ -272,15 +272,15 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
         const rate = effectiveCashbackRate(inv);
         pt.totalCost = pt.totalCost.plus(lineCost);
         pt.totalTax = pt.totalTax.plus(inv.sales_tax || 0);
-        pt.cashback = pt.cashback.plus(lineCost.times(rate).div(100));
+        pt.cashback = pt.cashback.plus(inventoryCashback(inv, rate));
       });
     } else {
-      saleAlloc.forEach(({ inv, saleCost, allocatedTax, rate }) => {
+      saleAlloc.forEach(({ inv, saleCost, allocatedTax, saleCashback }) => {
         const key = bucketKey(dateKey(inv.purchase_date));
         const pt = ensureBucket(key);
         pt.totalCost = pt.totalCost.plus(saleCost);
         pt.totalTax = pt.totalTax.plus(allocatedTax);
-        pt.cashback = pt.cashback.plus(saleCost.times(rate).div(100));
+        pt.cashback = pt.cashback.plus(saleCashback);
       });
     }
 

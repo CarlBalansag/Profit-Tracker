@@ -121,6 +121,8 @@ model Inventory {
   fees_decimal          Decimal?       @db.Decimal(19, 2)
   cashback_earned       Float          @default(0)
   cashback_earned_decimal Decimal?     @db.Decimal(19, 2)
+  cashback_rate         Float?
+  cashback_rate_decimal Decimal?       @db.Decimal(9, 6)
   gift_card_amount      Float          @default(0)
   gift_card_amount_decimal Decimal?    @db.Decimal(19, 2)
   order_number          String?

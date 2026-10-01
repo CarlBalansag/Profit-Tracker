@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allocatedCost, batchCost, effectiveCashbackRate, realizedSummary, saleEconomics } from '../../shared/finance.mjs';
+import { allocatedCost, batchCost, effectiveCashbackRate, inventoryCashback, realizedSummary, saleEconomics } from '../../shared/finance.mjs';
 
 const purchase = {
   unit_purchase_cost: 100, qty_purchased: 2, sales_tax: 10,
@@ -35,6 +35,17 @@ describe('shared financial conventions', () => {
     expect(effectiveCashbackRate({ ...purchase, payment_method: { ...card, category_rates: JSON.stringify(rates) } }, new Date('2026-09-11'))).toBe(5);
     expect(effectiveCashbackRate({ ...purchase, payment_method: card }, new Date('2027-02-01'))).toBe(2);
     expect(effectiveCashbackRate({ ...purchase, payment_method: { ...card, category_rates: '{bad' } })).toBe(2);
+  });
+
+  it('uses a transaction cashback override instead of a later card default', () => {
+    const overridden = { ...purchase, cashback_rate: 5, cashback_earned: 10 };
+    expect(effectiveCashbackRate(overridden)).toBe(5);
+    expect(inventoryCashback(overridden)).toBe(10);
+    expect(saleEconomics(overridden, sale).cashback).toBe(5);
+
+    overridden.payment_method.default_cashback_rate = 20;
+    expect(effectiveCashbackRate(overridden)).toBe(5);
+    expect(saleEconomics(overridden, sale).cashback).toBe(5);
   });
 
   it('ignores malformed rates and does not mutate inputs', () => {

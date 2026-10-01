@@ -3,20 +3,20 @@ import { X } from 'lucide-react';
 import clsx from 'clsx';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 
-export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
-  const initialState = {
-    name: '',
-    type: 'Credit Card',
-    issuer: '',
-    last4: '',
-    baseRate: '0',
-    statement_close_day: '',
-    due_day: '',
-    credit_limit: '',
-    min_payment_pct: '',
-  };
+const INITIAL_STATE = {
+  name: '',
+  type: 'Credit Card',
+  issuer: '',
+  last4: '',
+  baseRate: '0',
+  statement_close_day: '',
+  due_day: '',
+  credit_limit: '',
+  min_payment_pct: '',
+};
 
-  const [formData, setFormData] = useState(initialState);
+export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
+  const [formData, setFormData] = useState(INITIAL_STATE);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const modalRef = useModalKeyboard(isOpen, () => { if (!saving) onClose(); });
@@ -24,16 +24,16 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
   useEffect(() => {
     if (cardToEdit && isOpen) {
       setFormData({
-        ...initialState,
+        ...INITIAL_STATE,
         ...cardToEdit,
         baseRate: cardToEdit.baseRate?.toString() || '0',
         statement_close_day: cardToEdit.statement_close_day?.toString() || '',
         due_day: cardToEdit.due_day?.toString() || '',
-        credit_limit: cardToEdit.credit_limit?.toString() || '',
+        credit_limit: (cardToEdit.credit_limit ?? cardToEdit.creditLimit)?.toString() || '',
         min_payment_pct: cardToEdit.min_payment_pct?.toString() || '',
       });
     } else if (isOpen) {
-      setFormData(initialState);
+      setFormData(INITIAL_STATE);
     }
     setErrors({});
   }, [cardToEdit, isOpen]);
@@ -50,6 +50,8 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
     const newErrors = {};
     if (!formData.name.trim()) newErrors.name = 'Card name is required';
     if (!formData.type.trim()) newErrors.type = 'Card type is required';
+    const baseRate = Number(formData.baseRate);
+    if (!Number.isFinite(baseRate) || baseRate < 0) newErrors.baseRate = 'Enter a cashback rate of 0 or greater';
     const closeDay = parseInt(formData.statement_close_day);
     const dueDay = parseInt(formData.due_day);
     if (formData.statement_close_day && (isNaN(closeDay) || closeDay < 1 || closeDay > 28))
@@ -77,7 +79,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
     setSaving(true);
     try {
       await onAddCard(processedCard);
-      setFormData(initialState);
+      setFormData(INITIAL_STATE);
       onClose();
     } catch (err) {
       console.error(err);
@@ -180,6 +182,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
                 onChange={handleChange}
                 className={inputClass('baseRate')}
               />
+              {errors.baseRate && <p className="text-[10px] text-red-500 font-medium mt-1">{errors.baseRate}</p>}
             </div>
           </div>
 

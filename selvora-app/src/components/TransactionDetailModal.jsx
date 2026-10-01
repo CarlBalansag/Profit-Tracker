@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 
 const STATUSES = ['Pre Order', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
 const SALE_STATUSES = ['SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
+const EMPTY_LIST = [];
 
 // ─── Reusable field wrapper ────────────────────────────────────────────────────
 function Field({ label, children, className = '' }) {
@@ -22,7 +23,7 @@ function Field({ label, children, className = '' }) {
 }
 
 // ─── Styled input ──────────────────────────────────────────────────────────────
-function Input({ value, onChange, type = 'text', placeholder = '', className = '', readOnly = false }) {
+function Input({ value, onChange, type = 'text', placeholder = '', className = '', readOnly = false, ariaLabel }) {
   return (
     <input
       type={type}
@@ -30,13 +31,14 @@ function Input({ value, onChange, type = 'text', placeholder = '', className = '
       onChange={e => onChange && onChange(e.target.value)}
       placeholder={placeholder}
       readOnly={readOnly}
+      aria-label={ariaLabel}
       className={`w-full bg-[#0f1014] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500/60 transition-colors ${readOnly ? 'opacity-60 cursor-default' : ''} ${className}`}
     />
   );
 }
 
 // ─── Dollar input ──────────────────────────────────────────────────────────────
-function DollarInput({ value, onChange, placeholder = '0.00', accentClass = 'focus:border-green-500/60' }) {
+function DollarInput({ value, onChange, placeholder = '0.00', accentClass = 'focus:border-green-500/60', ariaLabel }) {
   return (
     <div className="relative">
       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
@@ -46,6 +48,7 @@ function DollarInput({ value, onChange, placeholder = '0.00', accentClass = 'foc
         value={value ?? ''}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
+        aria-label={ariaLabel}
         className={`w-full bg-[#0f1014] border border-white/[0.08] rounded-lg pl-7 pr-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none transition-colors ${accentClass}`}
       />
     </div>
@@ -96,7 +99,7 @@ function toDateInput(val) {
 }
 
 // ─── Main Modal ────────────────────────────────────────────────────────────────
-export default function TransactionDetailModal({ row, onClose, onSaved, platforms = [], paymentMethods = [] }) {
+export default function TransactionDetailModal({ row, onClose, onSaved, platforms = EMPTY_LIST, paymentMethods = EMPTY_LIST }) {
   const [form, setForm] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -117,6 +120,15 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
         const res = await apiFetch(`/api/inventory/${row.rawId}`, { credentials: 'include' });
         if (res.ok) {
           const d = await res.json();
+          const defaultCashbackRate = effectiveCashbackRate({
+            ...d,
+            payment_method: d.payment_method ?? paymentMethods.find(method => String(method.id) === String(d.payment_method_id)),
+            vendor: d.vendor ?? platforms.find(platform => String(platform.id) === String(d.vendor_id)),
+          });
+          const storedCashbackRate = d.cashback_rate ?? defaultCashbackRate;
+          const storedCashbackAmount = d.cashback_rate !== null && d.cashback_rate !== undefined
+            ? d.cashback_earned ?? 0
+            : batchCost(d) * storedCashbackRate / 100;
           setForm({
             product_name:            d.product_name ?? '',
             status:                  d.status ?? 'PURCHASED',
@@ -130,8 +142,8 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             fees:                    d.fees ?? 0,
             gift_card_amount:        d.gift_card_amount ?? 0,
             payment_method_id:       d.payment_method_id ?? '',
-            cashback_rate:           d.payment_method?.default_cashback_rate ?? 0,
-            cashback_earned:         d.cashback_earned ?? 0,
+            cashback_rate:           storedCashbackRate,
+            cashback_earned:         storedCashbackAmount,
             include_tax_in_cashback:    true,
             include_shipping_in_cashback: true,
             tax_exempt:              d.tax_exempt ?? false,
@@ -160,7 +172,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
       }
     };
     fetchDetail();
-  }, [row.rawId, row.status]);
+  }, [row.rawId, row.status, paymentMethods, platforms]);
 
   const set = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
@@ -177,8 +189,39 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
   const feesAmt     = Number(form?.fees ?? 0);
   const giftCardAmt = Number(form?.gift_card_amount ?? 0);
   const totalCost = batchCost(form ?? {});
-  const cbRate = effectiveCashbackRate({ payment_method: paymentMethods.find(method => method.id === form?.payment_method_id), vendor: platforms.find(platform => platform.id === form?.vendor_id) });
-  const cbEarned = totalCost * cbRate / 100;
+  const cbRate = Math.max(0, Number(form?.cashback_rate) || 0);
+  const cbEarned = Math.max(0, Number(form?.cashback_earned) || 0);
+
+  const applyCashbackDefault = (paymentMethodId, vendorId) => {
+    const rate = effectiveCashbackRate({
+      payment_method: paymentMethods.find(method => String(method.id) === String(paymentMethodId)),
+      vendor: platforms.find(platform => String(platform.id) === String(vendorId)),
+    });
+    setForm(prev => ({
+      ...prev,
+      payment_method_id: paymentMethodId,
+      vendor_id: vendorId,
+      cashback_rate: rate,
+      cashback_earned: batchCost(prev) * rate / 100,
+    }));
+  };
+
+  const setCashbackRate = (value) => {
+    const rate = Math.max(0, Number(value) || 0);
+    setForm(prev => ({ ...prev, cashback_rate: value, cashback_earned: batchCost(prev) * rate / 100 }));
+  };
+
+  const setCashbackAmount = (value) => {
+    const amount = Math.max(0, Number(value) || 0);
+    setForm(prev => {
+      const cost = batchCost(prev);
+      return {
+        ...prev,
+        cashback_earned: value,
+        cashback_rate: cost > 0 ? Number((amount / cost * 100).toFixed(6)) : 0,
+      };
+    });
+  };
 
   // ── Save ─────────────────────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -201,6 +244,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             shipping_cost_inbound: Number(form.shipping_cost_inbound),
             fees:                  Number(form.fees),
             gift_card_amount:      Number(form.gift_card_amount),
+            cashback_rate:         Number(form.cashback_rate),
             cashback_earned:       cbEarned,
             category:              form.category || null,
             vendor_id:             form.vendor_id || null,
@@ -293,7 +337,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             {/* Vendor / Date / Category */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="Store / Vendor">
-                <Sel value={form.vendor_id} onChange={v => set('vendor_id', v)} options={vendors} placeholder="Select vendor…" />
+                <Sel value={form.vendor_id} onChange={v => applyCashbackDefault(form.payment_method_id, v)} options={vendors} placeholder="Select vendor…" />
               </Field>
               <Field label="Purchase Date">
                 <Input type="date" value={form.purchase_date} onChange={v => set('purchase_date', v)} className="[color-scheme:dark]" />
@@ -357,23 +401,24 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                   <Sel
                     value={form.payment_method_id}
                     onChange={v => {
-                      const pm = paymentMethods.find(p => String(p.id) === String(v));
-                      set('payment_method_id', v);
-                      if (pm) set('cashback_rate', pm.default_cashback_rate ?? 0);
+                      applyCashbackDefault(v, form.vendor_id);
                     }}
                     options={paymentMethods}
                     placeholder="Select…"
                   />
                 </Field>
                 <Field label="Cashback %">
-                  <ReadBox value={`${cbRate}%`} />
+                  <div className="relative">
+                    <Input value={form.cashback_rate} onChange={setCashbackRate} type="number" className="pr-8" ariaLabel="Cashback %" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">%</span>
+                  </div>
                 </Field>
                 <Field label="Cashback $">
-                  <ReadBox value={`$${cbEarned.toFixed(2)}`} className="text-emerald-400 font-semibold" />
-                  <p className="text-[10px] text-gray-600 mt-1">Auto-calculated</p>
+                  <DollarInput value={form.cashback_earned} onChange={setCashbackAmount} accentClass="focus:border-pink-500/60 text-emerald-400" ariaLabel="Cashback $" />
+                  <p className="text-[10px] text-gray-600 mt-1">Payment method default; editable for this transaction</p>
                 </Field>
               </div>
-              <p className="text-xs text-gray-400 mt-3">Cashback uses the selected payment method and vendor. Update rates in Payment Methods settings.</p>
+              <p className="text-xs text-gray-400 mt-3">Changing the payment method or vendor applies its default rate. You can override either field for this transaction.</p>
             </div>
 
             <div className="border-t border-white/[0.04]" />

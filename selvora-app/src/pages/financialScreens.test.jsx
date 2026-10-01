@@ -50,6 +50,26 @@ describe('financial screen regression', () => {
     localStorage.clear();
   });
 
+  it('lets Add Transaction override either the cashback rate or amount', () => {
+    localStorage.clear();
+    render(<MemoryRouter><AddTransaction /></MemoryRouter>);
+    fireEvent.change(document.querySelector('input[name="unit_purchase_cost"]'), { target: { value: '100' } });
+    fireEvent.change(document.querySelector('select[name="payment_method_id"]'), { target: { name: 'payment_method_id', value: 'card' } });
+
+    const rateInput = screen.getByLabelText('Cashback Rate %');
+    const amountInput = screen.getByLabelText('Cashback Amount');
+    expect(rateInput.readOnly).toBe(false);
+    expect(amountInput.readOnly).toBe(false);
+    expect(Number(rateInput.value)).toBe(2);
+    expect(Number(amountInput.value)).toBe(2);
+
+    fireEvent.change(rateInput, { target: { value: '5' } });
+    expect(Number(amountInput.value)).toBe(5);
+
+    fireEvent.change(amountInput, { target: { value: '7' } });
+    expect(Number(rateInput.value)).toBe(7);
+  });
+
   it('shows allocated remaining purchase value on Inventory', () => {
     render(<Inventory />);
     expect(screen.getAllByText('$100.00').length).toBe(2);
@@ -75,6 +95,26 @@ describe('financial screen regression', () => {
     expect(screen.getAllByText('+$24.00').length).toBeGreaterThan(0);
     expect(screen.queryByText('-$74.00')).toBeNull();
     expect(screen.getByText(/Includes \$2.00 sold-unit cashback/)).toBeTruthy();
+  });
+
+  it('lets the expanded transaction editor override cashback and saves both values', async () => {
+    mocks.apiFetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(purchase), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(purchase), { status: 200 }));
+    render(<TransactionDetailModal row={{ rawId: 'purchase', status: 'SOLD' }} platforms={mocks.platforms}
+      paymentMethods={mocks.cards} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText('Payment & Cashback')).toBeTruthy());
+
+    const rateInput = screen.getByLabelText('Cashback %');
+    const amountInput = screen.getByLabelText('Cashback $');
+    fireEvent.change(rateInput, { target: { value: '5' } });
+    expect(Number(amountInput.value)).toBe(10);
+    fireEvent.click(screen.getByRole('button', { name: 'Update Transaction' }));
+
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledTimes(2));
+    const body = JSON.parse(mocks.apiFetch.mock.calls[1][1].body);
+    expect(body.inventory.cashback_rate).toBe(5);
+    expect(body.inventory.cashback_earned).toBe(10);
   });
 
   it('excludes a cancelled sale from the editor realized profit summary', async () => {

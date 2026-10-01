@@ -1,5 +1,6 @@
-// Current product convention: batch overhead and gift cards are allocated by units.
-// Expenses are separate overhead; cashback uses current stored card configuration.
+// Current product convention: batch overhead, gift cards, and snapshotted
+// transaction cashback are allocated by units. Legacy purchases without a
+// snapshot continue to fall back to the current stored card configuration.
 const number = value => Number.isFinite(Number(value)) ? Number(value) : 0;
 export const isRealizedSale = sale => !['CANCELLED', 'RETURNED', 'DISPUTED'].includes((sale.status || '').toUpperCase());
 export function batchCost(inventory = {}) {
@@ -12,6 +13,9 @@ export function allocatedCost(inventory = {}, quantity = 0) {
   return purchased > 0 ? batchCost(inventory) * number(quantity) / purchased : 0;
 }
 export function effectiveCashbackRate(inventory = {}, today = new Date()) {
+  if (inventory.cashback_rate !== null && inventory.cashback_rate !== undefined) {
+    return Math.max(0, number(inventory.cashback_rate));
+  }
   const card = inventory.payment_method;
   if (!card) return 0;
   let rates = card.category_rates;
@@ -28,10 +32,20 @@ export function effectiveCashbackRate(inventory = {}, today = new Date()) {
   }
   return Math.max(0, number(card.default_cashback_rate));
 }
+export function inventoryCashback(inventory = {}, rate = effectiveCashbackRate(inventory)) {
+  if (inventory.cashback_rate !== null && inventory.cashback_rate !== undefined) {
+    return Math.max(0, number(inventory.cashback_earned));
+  }
+  return batchCost(inventory) * number(rate) / 100;
+}
+export function allocatedCashback(inventory = {}, quantity = 0, rate = effectiveCashbackRate(inventory)) {
+  const purchased = number(inventory.qty_purchased);
+  return purchased > 0 ? inventoryCashback(inventory, rate) * number(quantity) / purchased : 0;
+}
 export function saleEconomics(inventory = {}, sale = {}, rate = effectiveCashbackRate(inventory)) {
   const cost = allocatedCost(inventory, sale.quantity);
   const revenue = number(sale.unit_price) * number(sale.quantity) - number(sale.commission_fee) - number(sale.sale_shipping);
-  const cashback = cost * number(rate) / 100;
+  const cashback = allocatedCashback(inventory, sale.quantity, rate);
   const grossProfit = revenue - cost;
   return { cost, revenue, cashback, grossProfit, netProfit: grossProfit + cashback };
 }
