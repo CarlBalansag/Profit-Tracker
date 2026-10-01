@@ -190,13 +190,13 @@ function CustomModal({ onClose, onSave }) {
         credentials: 'include',
         body: JSON.stringify(form)
       });
-      if (res.ok) {
-        const vendor = await res.json();
-        onSave(vendor);
-        onClose();
-      }
+      const successRes = await requireSuccessfulResponse(res, 'Could not add vendor');
+      const vendor = await successRes.json();
+      onSave(vendor);
+      onClose();
+      toast.success('Vendor added.');
     } catch (err) {
-      console.error(err);
+      toast.error(err.message);
     } finally {
       setSaving(false);
     }
@@ -405,13 +405,13 @@ function QuickAddModal({ existingVendors, onClose, onSave }) {
         credentials: 'include',
         body: JSON.stringify({ vendors: toAdd.map(v => ({ ...v, type: 'Vendor' })) })
       });
-      if (res.ok) {
-        const created = await res.json();
-        onSave(created);
-        onClose();
-      }
+      const successRes = await requireSuccessfulResponse(res, 'Could not add vendors');
+      const created = await successRes.json();
+      onSave(created);
+      onClose();
+      toast.success(`${created.length} vendor${created.length > 1 ? 's' : ''} added.`);
     } catch (err) {
-      console.error(err);
+      toast.error(err.message);
     } finally {
       setSaving(false);
     }
@@ -510,17 +510,20 @@ export function Vendors() {
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [editVendor, setEditVendor] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const invalidate = useInvalidate();
 
   const fetchVendors = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
     try {
       const res = await apiFetch(`/api/platforms`, { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        setVendors(data.filter(p => p.type === 'Vendor'));
-      }
+      const successRes = await requireSuccessfulResponse(res, 'Could not load vendors');
+      const data = await successRes.json();
+      setVendors(data.filter(p => p.type === 'Vendor'));
     } catch (err) {
       console.error(err);
+      setLoadError(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -592,6 +595,16 @@ export function Vendors() {
 
         {isLoading ? (
           <div className="text-center py-16 text-gray-500 text-sm">Loading vendors...</div>
+        ) : loadError ? (
+          <div className="text-center py-16 text-sm border border-dashed border-red-500/20 rounded-xl bg-red-500/[0.03]">
+            <p className="text-red-400 font-medium mb-3">Could not load vendors: {loadError}</p>
+            <button
+              onClick={fetchVendors}
+              className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-colors"
+            >
+              Retry
+            </button>
+          </div>
         ) : vendors.length === 0 ? (
           <div className="text-center py-16 text-gray-500 text-sm">
             <Store className="w-10 h-10 mx-auto mb-3 opacity-30" />

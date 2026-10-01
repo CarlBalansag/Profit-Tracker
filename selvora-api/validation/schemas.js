@@ -16,6 +16,20 @@ const optionalString = z.preprocess(
 const id = z.preprocess(emptyToNull, z.string().trim().uuid().nullable().optional());
 const requiredId = z.string().trim().uuid();
 
+// An Inventory record legitimately holds any status in its full lifecycle
+// (confirmed by Inventory.jsx's own status-badge map and existing tests --
+// e.g. a purchase can be directly marked COMPLETED or CANCELLED with no
+// sale). A Sale record's status is a narrower post-sale-only subset. Both
+// previously used an unrestricted string, which let a sale row end up with
+// an inventory-only status like PURCHASED (ideas.md ISSUES #3) via the
+// Transactions inline editor's shared dropdown offering every status to
+// every row. Only Sales needs the narrower enum -- Inventory keeps the full
+// union so no currently-valid inventory status is rejected.
+const INVENTORY_STATUSES = ['Pre Order', 'On Hand', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
+const SALE_STATUSES = ['SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
+const inventoryStatus = z.preprocess(emptyToUndefined, z.enum(INVENTORY_STATUSES).optional());
+const saleStatus = z.preprocess(emptyToUndefined, z.enum(SALE_STATUSES).optional());
+
 const money = z.preprocess(
   emptyToUndefined,
   z.coerce.number().finite().min(0)
@@ -137,7 +151,7 @@ const createInventory = z.object({
   sale_tax_collected: decimalAmount({ defaultValue: 0 }),
   sale_date: optionalDateString,
   qty_sold: positiveInt.optional(),
-  status: optionalString,
+  status: inventoryStatus,
 }).passthrough();
 
 // Update schemas must not be derived from create schemas with .partial().
@@ -160,7 +174,7 @@ const updateInventory = z.object({
   tracking_number: optionalString,
   category: optionalString,
   tax_exempt: optionalBoolish,
-  status: optionalString,
+  status: inventoryStatus,
 }).passthrough();
 
 const createSale = z.object({
@@ -173,7 +187,7 @@ const createSale = z.object({
   sale_shipping: decimalAmount({ defaultValue: 0 }),
   sale_date: optionalDateString,
   payout_date: optionalDateString,
-  status: optionalString,
+  status: saleStatus,
   taxable: optionalBoolish,
   sale_tax_collected: decimalAmount({ defaultValue: 0 }),
   customer_tax_exempt: optionalBoolish,
@@ -190,7 +204,7 @@ const updateSale = z.object({
   sale_shipping: decimalAmount({ optional: true }),
   sale_date: optionalDateString,
   payout_date: nullableOptionalDateString,
-  status: optionalString,
+  status: saleStatus,
   taxable: optionalBoolish,
   sale_tax_collected: decimalAmount({ optional: true }),
   customer_tax_exempt: optionalBoolish,

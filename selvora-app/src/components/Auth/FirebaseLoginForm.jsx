@@ -21,6 +21,34 @@ export default function FirebaseLoginForm({ migration = false }) {
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; firebaseClient().then(signOut).catch(() => {}); }; }, []);
   useEffect(() => { if (!cooldown) return; const timer = setTimeout(() => setCooldown(value => Math.max(0, value - 1)), 1000); return () => clearTimeout(timer); }, [cooldown]);
+  // ideas.md #8: verifying by clicking the emailed link happens in a
+  // different tab/session, so Firebase's client SDK never learns about it on
+  // its own -- the user had to come back and click "Continue" manually. Poll
+  // silently instead, so the app moves on by itself once verified. This
+  // intentionally does not go through run()/setMessage(): a mere "not
+  // verified yet" background check is not a user-facing error, and a
+  // transient reload() hiccup every few seconds must not flash a scary
+  // message over the "check your email" instructions already showing.
+  useEffect(() => {
+    if (!providerUser || providerUser.emailVerified) return undefined;
+    let cancelled = false;
+    const intervalId = setInterval(async () => {
+      if (busy.current || cancelled) return;
+      try {
+        await reload(providerUser);
+        if (!cancelled && providerUser.emailVerified) {
+          busy.current = true; setPending(true);
+          try { await finish(providerUser, migration ? 'migration' : mode === 'signup' ? 'signup' : 'login'); }
+          catch (error) { if (mounted.current) setMessage(friendlyAuthError(error)); }
+          finally { busy.current = false; if (mounted.current) setPending(false); }
+        }
+      } catch {
+        // Transient check failure -- next poll tick tries again silently.
+      }
+    }, 4000);
+    return () => { cancelled = true; clearInterval(intervalId); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providerUser, migration, mode]);
   async function run(action) {
     if (busy.current) return;
     busy.current = true; setPending(true); setMessage('');

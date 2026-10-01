@@ -72,6 +72,14 @@ function EditSelect({ value, onChange, options, placeholder = 'Select...' }) {
 }
 
 const STATUSES = ['Pre Order', 'On Hand', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
+// A sale row's status is a narrower post-sale-only subset of the full
+// lifecycle -- offering every status (including inventory-only values like
+// PURCHASED) to a sale row let a user pick one that doesn't belong there
+// (ideas.md ISSUES #3), which the backend now also rejects. A purchase/unsold
+// row can still legitimately hold any status in the full list (e.g. directly
+// marking a purchase COMPLETED or CANCELLED with no sale), so only sale rows
+// need the narrower list.
+const SALE_STATUSES = ['SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
 
 const ALL_COLUMNS = [
   { key: 'date',     label: 'Date' },
@@ -944,10 +952,10 @@ const Transactions = () => {
         <table className="w-full text-left whitespace-nowrap">
           <thead>
             <tr className="border-b border-white/[0.06] text-[10px] uppercase font-semibold text-gray-500 tracking-widest">
-              <th className="px-4 py-3.5 w-10">
-                <input 
-                  type="checkbox" 
-                  className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 accent-indigo-500" 
+              <th className="px-4 py-3.5 w-10 sticky left-0 z-20 bg-[#0f1115]">
+                <input
+                  type="checkbox"
+                  className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 accent-indigo-500"
                   checked={filteredRows.length > 0 && selectedIds.length === filteredRows.length}
                   onChange={(e) => {
                     if (e.target.checked) {
@@ -978,7 +986,7 @@ const Transactions = () => {
                   </th>
                 );
               })}
-              <th className="px-4 py-3.5 w-20"></th>
+              <th className="px-4 py-3.5 w-20 sticky right-0 z-20 bg-[#0f1115]"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/[0.02]">
@@ -1001,10 +1009,10 @@ const Transactions = () => {
                       : 'hover:bg-white/[0.025] border-l-2 border-transparent'
                   }`}
                 >
-                  <td className="px-4 py-3.5">
-                    <input 
-                      type="checkbox" 
-                      className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 accent-indigo-500" 
+                  <td className={`px-4 py-3.5 sticky left-0 z-10 ${isEditing ? 'bg-[#1a1530]' : 'bg-[#0f1115]'}`}>
+                    <input
+                      type="checkbox"
+                      className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 accent-indigo-500"
                       checked={selectedIds.includes(row.id)}
                       onChange={(e) => {
                         if (e.target.checked) {
@@ -1157,7 +1165,7 @@ const Transactions = () => {
                             <EditSelect
                               value={editData.status}
                               onChange={v => setEditData(d => ({ ...d, status: v }))}
-                              options={STATUSES.map(s => ({ id: s, name: s }))}
+                              options={(row.isSale ? SALE_STATUSES : STATUSES).map(s => ({ id: s, name: s }))}
                               placeholder=""
                             />
                           ) : <StatusBadge status={row.status} />}
@@ -1220,7 +1228,7 @@ const Transactions = () => {
                   })}
 
                   {/* Actions */}
-                  <td className="px-4 py-3.5">
+                  <td className={`px-4 py-3.5 sticky right-0 z-10 ${isEditing ? 'bg-[#1a1530]' : 'bg-[#0f1115]'}`}>
                     {isEditing ? (
                       <div className="flex items-center gap-2">
                         <button

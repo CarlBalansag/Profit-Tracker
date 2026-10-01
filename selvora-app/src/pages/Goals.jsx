@@ -269,7 +269,10 @@ function GoalCard({ metaDef, goal, getStats, trend, isGlass, onEdit, onToggleAct
   const stats   = getStats(viewPeriod);
   const current = getCurrentValue(stats, metaDef.value);
 
-  const progressPct = hasTarget ? Math.min(100, (current / periodTarget) * 100) : 0;
+  // truePct is the real, uncapped percentage for display; progressPct is
+  // capped to 100 and used only for the ring/bar's visual fill.
+  const truePct = hasTarget ? (current / periodTarget) * 100 : 0;
+  const progressPct = Math.min(100, truePct);
 
   // Simple pace: for rolling windows (7d, 30d) we're always "in the window" so compare directly
   // For YTD use elapsed days of year
@@ -362,7 +365,7 @@ function GoalCard({ metaDef, goal, getStats, trend, isGlass, onEdit, onToggleAct
           <ProgressRing pct={progressPct} size={84} stroke={7} color={ringColor} />
           <div className="absolute inset-0 flex items-center justify-center">
             <span className={`text-[13px] font-bold tabular-nums ${isGlass ? 'text-[#e8e2d6]' : 'text-[var(--text-primary)]'}`}>
-              {hasTarget ? `${Math.round(progressPct)}%` : '—'}
+              {hasTarget ? `${Math.round(truePct)}%` : '—'}
             </span>
           </div>
         </div>
@@ -414,7 +417,7 @@ function GoalCard({ metaDef, goal, getStats, trend, isGlass, onEdit, onToggleAct
         </div>
         <div className="flex justify-end mt-1">
           <p className={`text-[9px] ${isGlass ? 'text-white/18' : 'text-[var(--text-muted)]'}`}>
-            {hasTarget ? `${Math.round(progressPct)}% of goal` : 'Set a target to track progress'}
+            {hasTarget ? `${Math.round(truePct)}% of goal` : 'Set a target to track progress'}
           </p>
         </div>
       </div>

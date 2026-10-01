@@ -135,7 +135,7 @@ const Dashboard = () => {
   const [trendMode, setTrendMode] = useState('period'); // 'period' | 'cumulative'
   const [chartView, setChartView] = useState('line'); // 'line' | 'bar'
 
-  const { data, isLoading } = useDashboard(modeFilter, dateFilter);
+  const { data, isLoading, isError, error, refetch } = useDashboard(modeFilter, dateFilter);
   const { data: goals = [] } = useGoals();
   useEffect(() => { if (data) setLastUpdated(new Date()); }, [data]);
 
@@ -197,7 +197,7 @@ const Dashboard = () => {
     roi: { label: 'ROI', value: `${(stats.roi || 0).toFixed(0)}%`, icon: Zap, accent: true },
     revenue: { label: 'Revenue', value: `$${(stats.totalRevenue || 0).toFixed(0)}`, icon: Store, accent: false },
     cashback: { label: 'Cashback', value: `$${(stats.totalCashback || 0).toFixed(0)}`, icon: Layers, accent: true },
-    sold: { label: 'Sold', value: String(stats.unitsSold || stats.salesCount || 0), icon: TrendingUp, accent: false },
+    sold: { label: 'Units Sold', value: String(stats.unitsSold || stats.salesCount || 0), icon: TrendingUp, accent: false, title: 'Total quantity of items sold in the selected time range (not the number of sale records).' },
     tax: { label: 'Tax', value: `$${(stats.totalTax || 0).toFixed(0)}`, icon: Zap, accent: true },
     inventory: { label: 'Inventory', value: `$${(stats.inventoryValue || 0).toFixed(0)}`, icon: Store, accent: false },
     qty: { label: 'Qty', value: String(stats.inventoryQty || 0), icon: Layers, accent: true },
@@ -251,7 +251,10 @@ const Dashboard = () => {
           ? "rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.22)] animate-in fade-in duration-300 fill-mode-both"
           : "rounded-[9px] p-4 bg-[var(--bg-surface)] border border-[color:var(--border-default)] animate-in slide-in-from-bottom-4 duration-500 fade-in delay-300 fill-mode-both"
         }>
-          <h3 className={isGlass ? "mb-3 px-0.5 text-[10px] font-semibold uppercase tracking-[0.28em] text-white/24" : "text-[11px] font-medium uppercase tracking-[0.8px] text-[var(--text-muted)] mb-4"}>Status Pipeline</h3>
+          <h3 className={isGlass ? "mb-1 px-0.5 text-[10px] font-semibold uppercase tracking-[0.28em] text-white/24" : "text-[11px] font-medium uppercase tracking-[0.8px] text-[var(--text-muted)] mb-1"}>Status Pipeline</h3>
+          <p className={isGlass ? "mb-3 px-0.5 text-[10px] text-white/18" : "text-[10px] text-[var(--text-muted)] mb-4"}>
+            Units currently in each stage right now — not a cumulative total. See "Units Sold" below for all units sold in this period regardless of their current status.
+          </p>
           <div className={isGlass ? "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"}>
             {visiblePipelineCards.map(cardConfig => {
               const def = PIPELINE_CARD_REGISTRY[cardConfig.id];
@@ -676,6 +679,7 @@ const Dashboard = () => {
             <button
               key={`${panelIndex}-${metricIndex}-${item.label}`}
               onClick={() => navigate('/transactions', { state: { dateFilter, platformMode: modeFilter !== 'All' ? modeFilter : undefined } })}
+              title={item.title}
               className={`h-full min-h-[130px] rounded-[12px] border p-5 text-left shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-colors hover:bg-[#1d1f21]/78 ${item.accent ? 'border-[#d8a65a]/14 bg-[#181816]/82' : 'border-white/[0.06] bg-[#181a1c]/72'}`}
             >
               <IconComponent className="h-3.5 w-3.5 text-white/14" />
@@ -840,6 +844,22 @@ const Dashboard = () => {
 
   if (isLoading) return <PageLoader variant="dashboard" />;
 
+  if (isError) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <div className="max-w-sm text-center text-sm border border-dashed border-red-500/20 rounded-xl bg-red-500/[0.03] p-8">
+          <p className="text-red-400 font-medium mb-3">Could not load dashboard data{error?.message ? `: ${error.message}` : '.'}</p>
+          <button
+            onClick={() => refetch()}
+            className="px-4 py-2 rounded-lg bg-[var(--accent)] text-white text-sm font-semibold transition-colors hover:opacity-90"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={isGlass
       ? "h-full overflow-auto theme-scrollbar w-full max-w-[1800px] 4xl:max-w-[2100px] mx-auto space-y-6 text-[#e8e2d6]"
@@ -939,13 +959,21 @@ const GOAL_METRIC_META = {
   unitsSold:    { label: 'Units Sold',  icon: ShoppingBag, prefix: ''  },
 };
 
+// Goals only store 7-day/30-day/YTD targets -- there is no dedicated
+// "all time" target field. For "All Time" this returns the largest
+// configured period target as a best-effort reference, along with which
+// period it came from, so the UI can label it honestly instead of implying
+// it's a true all-time goal.
 function getTargetForFilter(goal, dateFilter) {
-  if (dateFilter === '7 Days')  return goal.target_7d  ?? null;
-  if (dateFilter === '30 Days') return goal.target_30d ?? null;
-  if (dateFilter === 'YTD')     return goal.target_ytd ?? null;
-  // All Time: show the largest set target as a best-effort reference
-  const candidates = [goal.target_7d, goal.target_30d, goal.target_ytd].filter(v => v != null);
-  return candidates.length > 0 ? Math.max(...candidates) : null;
+  if (dateFilter === '7 Days')  return { value: goal.target_7d  ?? null, period: '7-Day' };
+  if (dateFilter === '30 Days') return { value: goal.target_30d ?? null, period: '30-Day' };
+  if (dateFilter === 'YTD')     return { value: goal.target_ytd ?? null, period: 'YTD' };
+  const candidates = [
+    { value: goal.target_7d,  period: '7-Day' },
+    { value: goal.target_30d, period: '30-Day' },
+    { value: goal.target_ytd, period: 'YTD' },
+  ].filter(c => c.value != null);
+  return candidates.length > 0 ? candidates.reduce((max, c) => (c.value > max.value ? c : max)) : { value: null, period: null };
 }
 
 function getCurrentGoalValue(stats, metric) {
@@ -977,7 +1005,7 @@ function MiniProgressRing({ pct, size = 56, stroke = 5, color, isGlass }) {
 
 function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate }) {
   const [idx, setIdx] = useState(0);
-  const goalsWithTarget = goals.filter(g => getTargetForFilter(g, dateFilter) != null);
+  const goalsWithTarget = goals.filter(g => getTargetForFilter(g, dateFilter).value != null);
   const allGoals = goalsWithTarget.length > 0 ? goalsWithTarget : goals;
   const count = allGoals.length;
   const safeIdx = count > 0 ? ((idx % count) + count) % count : 0;
@@ -988,9 +1016,13 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate })
   const meta = GOAL_METRIC_META[goal.metric] || GOAL_METRIC_META.netProfit;
   const IconComp = meta.icon;
   const current = getCurrentGoalValue(stats, goal.metric);
-  const target = getTargetForFilter(goal, dateFilter);
+  const { value: target, period: targetPeriod } = getTargetForFilter(goal, dateFilter);
   const hasTarget = target != null && target > 0;
-  const progressPct = hasTarget ? Math.min(100, (current / target) * 100) : 0;
+  // truePct is the real, uncapped percentage for display; progressPct is
+  // capped to 100 and used only for the ring/bar's visual fill, which must
+  // never overshoot its own circle/track.
+  const truePct = hasTarget ? (current / target) * 100 : 0;
+  const progressPct = Math.min(100, truePct);
 
   const ringColor = !hasTarget
     ? (isGlass ? 'rgba(255,255,255,0.12)' : 'var(--border-default)')
@@ -1011,7 +1043,7 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate })
     : progressPct >= 35  ? 'text-amber-400'
     : 'text-red-400';
 
-  const filterLabel = dateFilter === 'All Time' ? 'best target' : dateFilter;
+  const noTargetLabel = dateFilter === 'All Time' ? 'no target configured' : `no target for ${dateFilter}`;
 
   const fmt = (v) => goal.metric === 'unitsSold'
     ? Math.round(v).toLocaleString()
@@ -1071,22 +1103,22 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate })
             {/* Target */}
             {hasTarget ? (
               <p className={`text-[11px] mt-0.5 ${isGlass ? 'text-white/25' : 'text-[var(--text-muted)]'}`}>
-                of {fmt(target)} goal
+                of {fmt(target)} goal{dateFilter === 'All Time' && targetPeriod ? ` (${targetPeriod} target, no all-time target set)` : ''}
               </p>
             ) : (
               <p className={`text-[11px] mt-0.5 ${isGlass ? 'text-white/20' : 'text-[var(--text-muted)]'}`}>
-                no target for {filterLabel}
+                {noTargetLabel}
               </p>
             )}
 
-            {/* Percentage */}
+            {/* Percentage — the real, uncapped value; only the ring/bar fill is capped */}
             {hasTarget && (
               <p className={`text-[28px] font-bold tabular-nums leading-none mt-3 ${
                 progressPct >= 100 ? 'text-[#4ade80]'
                 : progressPct >= 60  ? (isGlass ? 'text-[#6aaa8e]' : 'text-[var(--green)]')
                 : progressPct >= 35  ? 'text-amber-400'
                 : 'text-red-400'
-              }`}>{Math.round(progressPct)}%</p>
+              }`}>{Math.round(truePct)}%</p>
             )}
           </div>
 
@@ -1423,6 +1455,7 @@ function PipelineCard({ icon, count, label, statusKey, modeFilter, dateFilter, o
         dateFilter: dateFilter || undefined,
         platformMode: modeFilter && modeFilter !== 'All' ? modeFilter : undefined,
       }})}
+      title={`${count} unit${count === 1 ? '' : 's'} currently in "${label}" status. Click to view them in Transactions.`}
       className={isGlass
         ? "group relative min-h-[160px] cursor-pointer overflow-hidden rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-5 text-left shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-colors hover:border-[#d8a65a]/18 hover:bg-[#1d1f21]/78"
         : `flex items-center gap-3 rounded-md p-3 cursor-pointer transition-colors ${isEmpty ? 'bg-transparent opacity-30' : `bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] ${carbonBorder}`}`

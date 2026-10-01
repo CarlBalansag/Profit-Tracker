@@ -229,8 +229,8 @@ function CreditCard() {
   const totalKeep = summary.totalCashbackToKeep ?? 0;
   const totalUncovered = summary.totalUncoveredLoss ?? 0;
 
-  const pill = (label, color, bg, border) => (
-    <span key={label} style={{
+  const pill = (label, color, bg, border, title) => (
+    <span key={label} title={title} style={{
       display: 'inline-flex', alignItems: 'center', gap: 5,
       padding: '3px 10px', borderRadius: 20, border: `1px solid ${border}`,
       background: bg, color, fontSize: 10, fontWeight: 700,
@@ -277,7 +277,7 @@ function CreditCard() {
 
         {/* Right: dynamic badge pills */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          {totalKeep > 0 && pill(`Keep $${fmt(totalKeep)}`, 'var(--green)', 'var(--green-bg)', 'var(--green-soft)')}
+          {totalKeep > 0 && pill(`All Cards · Keep $${fmt(totalKeep)}`, 'var(--green)', 'var(--green-bg)', 'var(--green-soft)', 'Total cashback to keep across every active card for the selected month.')}
           {urgentDays !== null && pill(`Due in ${urgentDays}d`, urgentColor, urgentBg, urgentBorder)}
           {totalUncovered > 0 && pill(`Loss $${fmt(totalUncovered)}`, 'var(--red)', 'var(--red-bg)', 'var(--red)')}
         </div>
@@ -520,7 +520,7 @@ function CreditCard() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflow: 'hidden' }}>
             {cashbackEarned > 0 && pill(`Earned $${fmt(cashbackEarned)}`, 'var(--green)', 'var(--green-bg)', 'var(--green-soft)')}
             {cashbackToRedeem > 0 && pill(`Redeem $${fmt(cashbackToRedeem)}`, 'var(--red)', 'var(--red-bg)', 'var(--red)')}
-            {cashbackToKeep > 0 && pill(`Keep $${fmt(cashbackToKeep)}`, 'var(--accent)', 'var(--accent-bg)', 'var(--accent-soft)')}
+            {cashbackToKeep > 0 && pill(`This Card · Keep $${fmt(cashbackToKeep)}`, 'var(--accent)', 'var(--accent-bg)', 'var(--accent-soft)', `Cashback to keep for ${activeCard?.name || 'this card'} only this month, not the combined total shown at the top.`)}
             {uncoveredLoss > 0 && pill(`Uncovered $${fmt(uncoveredLoss)}`, 'var(--red)', 'var(--red-bg)', 'var(--red)')}
           </div>
 

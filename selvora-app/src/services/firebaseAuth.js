@@ -19,12 +19,38 @@ export async function firebaseClient() {
   }
   return ready;
 }
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Render's free tier sleeps after inactivity (ideas.md #8: "the first
+// sign-in attempt displayed 'Could not reach sign-in'"). The initial app
+// load already retries through ServerWakeUpScreen, but a sign-in submitted
+// after the page has sat open long enough for the server to fall back
+// asleep hit this same cold-start failure with no retry at all. Retries only
+// on a network-level failure or a non-JSON response (characteristic of a
+// server that isn't up yet) -- a real response, even a 4xx with a proper
+// error body, is a genuine auth failure and must never be retried.
+const AUTH_REQUEST_ATTEMPTS = 3;
 export async function authRequest(path, body) {
-  const response = await apiFetch(`/auth/firebase/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  let data;
-  try { data = await response.json(); } catch { throw new Error('Could not reach sign-in. Please retry.'); }
-  if (!response.ok) throw new Error(data.error || 'Sign-in failed. Please retry.');
-  return data;
+  for (let attempt = 1; attempt <= AUTH_REQUEST_ATTEMPTS; attempt++) {
+    let response;
+    try {
+      response = await apiFetch(`/auth/firebase/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    } catch {
+      if (attempt === AUTH_REQUEST_ATTEMPTS) throw new Error('Could not reach sign-in. Please retry.');
+      await delay(attempt * 1500);
+      continue;
+    }
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      if (attempt === AUTH_REQUEST_ATTEMPTS) throw new Error('Could not reach sign-in. Please retry.');
+      await delay(attempt * 1500);
+      continue;
+    }
+    if (!response.ok) throw new Error(data.error || 'Sign-in failed. Please retry.');
+    return data;
+  }
 }
 export async function exchangeFirebase(user, purpose, currentPassword) {
   const grant = await authRequest('intent', { purpose, ...(purpose === 'migration' ? { current_password: currentPassword } : {}) });

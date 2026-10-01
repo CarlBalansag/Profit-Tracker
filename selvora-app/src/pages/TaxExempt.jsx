@@ -138,12 +138,10 @@ const TaxExempt = () => {
   const exemptCOGS = periodSales.reduce((sum, s) => sum + (s._inv.unit_purchase_cost * s.quantity), 0);
   const exemptInventorySpend = periodItems.reduce((sum, i) => sum + (i.unit_purchase_cost * i.qty_purchased) + (i.sales_tax || 0) + (i.shipping_cost_inbound || 0), 0);
   const exemptRevenue = periodSales.reduce((sum, s) => sum + (s.unit_price * s.quantity), 0);
-  const exemptProfit = periodSales.reduce((sum, s) => {
-    const rev = s.unit_price * s.quantity;
-    const cogs = s._inv.unit_purchase_cost * s.quantity;
-    const fees = (s.commission_fee || 0) + (s.sale_shipping || 0);
-    return sum + (rev - cogs - fees);
-  }, 0);
+  // Shown as its own line below (ideas.md #4: the $12.90 commission+shipping
+  // deduction was silently folded into Exempt Profit with no visible total).
+  const exemptFeesAndShipping = periodSales.reduce((sum, s) => sum + (s.commission_fee || 0) + (s.sale_shipping || 0), 0);
+  const exemptProfit = exemptRevenue - exemptCOGS - exemptFeesAndShipping;
 
   const tabs = [
     { id: 'purchases', label: 'Purchases', icon: Package, count: filteredPurchases.length },
@@ -222,8 +220,8 @@ const TaxExempt = () => {
         </div>
       </div>
 
-      {/* Second row — 4 smaller inventory/P&L metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 -mt-2">
+      {/* Second row — 5 smaller inventory/P&L metrics */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 -mt-2">
         <div className="card px-3 py-2.5">
           <div className="flex items-center mb-0.5">
             <p className="text-[10px] text-gray-500 uppercase tracking-wider">Exempt Inv. Purchased</p>
@@ -244,6 +242,13 @@ const TaxExempt = () => {
             <InfoTooltip text="Total sale revenue generated from tax-exempt inventory items." />
           </div>
           <p className="text-base font-bold text-green-400">${exemptRevenue.toFixed(2)}</p>
+        </div>
+        <div className="card px-3 py-2.5">
+          <div className="flex items-center mb-0.5">
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Fees &amp; Shipping</p>
+            <InfoTooltip text="Platform commission fees plus outbound sale shipping, deducted from revenue to reach Exempt Profit." />
+          </div>
+          <p className="text-base font-bold text-amber-400">−${exemptFeesAndShipping.toFixed(2)}</p>
         </div>
         <div className="card px-3 py-2.5">
           <div className="flex items-center mb-0.5">

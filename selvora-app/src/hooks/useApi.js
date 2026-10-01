@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-// Leave VITE_API_URL empty in production when Vercel rewrites proxy /api and /auth.
+// Leave VITE_API_URL empty in production when Netlify redirects proxy /api and /auth (see netlify.toml).
 // Set it locally to the API dev server, e.g. http://localhost:3000.
 const API = import.meta.env.VITE_API_URL || '';
 

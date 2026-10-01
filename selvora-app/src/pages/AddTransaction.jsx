@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import {
   Package, ShoppingCart, Truck, CreditCard, DollarSign, Plus,
-  Paperclip, X, Hash, MapPin, ChevronDown, CheckCircle2, StickyNote
+  Paperclip, X, Hash, MapPin, ChevronDown, CheckCircle2, StickyNote, AlertTriangle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePaymentMethods, usePlatforms, useInvalidate, apiFetch, useProductNote, useProductNoteMutations, useProductNames, useRecentTransaction } from '../hooks/useApi';
@@ -1145,6 +1145,16 @@ const AddTransaction = () => {
                 })()}
               </div>
 
+              {/* ideas.md #12: flag missing receipt/tracking at entry time
+                  instead of only discovering the gap later on the Receipts
+                  or Shipping pages. Both remain optional -- this is a
+                  reminder, not a block. */}
+              {!formData.tracking_number && attachedFiles.length === 0 && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/5 border border-amber-500/15 text-xs text-amber-400/90">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                  <span>No tracking number or receipt attached. You can add either later from the Receipts or Shipping pages, but this transaction will show as incomplete there until you do.</span>
+                </div>
+              )}
 
               <button
                 type="submit"
