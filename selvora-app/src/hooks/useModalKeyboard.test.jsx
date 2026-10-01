@@ -59,6 +59,36 @@ function PreferredFocusHarness() {
   );
 }
 
+// Mirrors ExpenseModal's real shape: form state lives in the component that
+// also owns useModalKeyboard, and onClose is an inline arrow (a new function
+// identity every render) that closes over that state -- e.g. `() => { if
+// (!saving) onClose(); }`. Typing in any field re-renders this component.
+function TypingFormModal({ isOpen, onRequestClose }) {
+  const [saving] = useState(false);
+  const [name, setName] = useState('');
+  const [amount, setAmount] = useState('');
+  const nameRef = useRef(null);
+  const ref = useModalKeyboard(isOpen, () => { if (!saving) onRequestClose(); }, nameRef);
+  if (!isOpen) return null;
+  return (
+    <div ref={ref} role="dialog">
+      <button>Close</button>
+      <input ref={nameRef} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+      <input placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
+    </div>
+  );
+}
+
+function TypingFormHarness() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button onClick={() => setOpen(true)}>Open trigger</button>
+      <TypingFormModal isOpen={open} onRequestClose={() => setOpen(false)} />
+    </div>
+  );
+}
+
 afterEach(cleanup);
 
 describe('useModalKeyboard', () => {
@@ -104,6 +134,25 @@ describe('useModalKeyboard', () => {
     // focus here -- Space on a focused button activates it, so if focus ever
     // lands there this keypress would close the modal instead of typing.
     expect(document.activeElement).not.toBe(screen.getByText('Close'));
+  });
+
+  it('does not steal focus back to the initial field when typing elsewhere triggers a re-render', async () => {
+    render(<TypingFormHarness />);
+    fireEvent.click(screen.getByText('Open trigger'));
+    await vi.waitFor(() => expect(document.activeElement).toBe(screen.getByPlaceholderText('Name')));
+
+    const amountInput = screen.getByPlaceholderText('Amount');
+    amountInput.focus();
+    fireEvent.change(amountInput, { target: { value: '3' } });
+    // A naive effect that depends on the inline onClose (a new function every
+    // render) re-runs on this re-render and re-steals focus to the Name field
+    // via its own setTimeout(0) -- which is already true (focus never moved
+    // yet) on the very next tick, so asserting only once isn't enough to
+    // catch it. Wait past where that stray timer would have fired, then
+    // check focus is still where the user left it.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(document.activeElement).toBe(amountInput);
+    expect(amountInput.value).toBe('3');
   });
 
   it('restores focus to the trigger element after closing', async () => {

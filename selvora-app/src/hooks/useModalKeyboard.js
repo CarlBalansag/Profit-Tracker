@@ -29,6 +29,14 @@ export function useModalKeyboard(isOpen, onClose, initialFocusRef) {
   const containerRef = useRef(null);
   const previouslyFocused = useRef(null);
 
+  // Callers often pass an inline `onClose` (e.g. one that checks a `saving`
+  // flag), which is a new function identity every render. Reading it through
+  // a ref -- instead of putting it in the effect's dependency array -- keeps
+  // the lifecycle effect below from tearing down and re-running (and so
+  // re-stealing focus) on every keystroke-triggered re-render of the modal.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!isOpen) return undefined;
 
@@ -43,7 +51,7 @@ export function useModalKeyboard(isOpen, onClose, initialFocusRef) {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose?.();
+        onCloseRef.current?.();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -72,7 +80,8 @@ export function useModalKeyboard(isOpen, onClose, initialFocusRef) {
         restore.focus();
       }
     };
-  }, [isOpen, onClose, initialFocusRef]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onClose is read via onCloseRef, not a dependency; see comment above.
+  }, [isOpen]);
 
   return containerRef;
 }
