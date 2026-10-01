@@ -60,4 +60,46 @@ describe('Firebase email UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Register this verified account' }));
     await waitFor(() => expect(mocks.exchange).toHaveBeenLastCalledWith(firebaseUser, 'signup', ''));
   });
+
+  // ideas.md #8: "the extra Continue step makes the verification flow feel
+  // incomplete or stalled" -- verifying happens in a different tab, so the
+  // app should notice on its own instead of waiting for a manual click.
+  it('automatically continues once email verification is detected by background polling, with no click needed', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mount(); fill();
+      fireEvent.click(screen.getByRole('button', { name: 'Sign in', exact: true }));
+      expect(await screen.findByRole('button', { name: 'Continue after verification' })).toBeInTheDocument();
+      expect(mocks.exchange).not.toHaveBeenCalled();
+
+      // Simulate the user verifying in another tab: reload() now reports it.
+      mocks.reload.mockImplementation(async () => { firebaseUser.emailVerified = true; });
+      await vi.advanceTimersByTimeAsync(4000);
+
+      await vi.waitFor(() => expect(mocks.exchange).toHaveBeenCalledWith(firebaseUser, 'login', ''));
+      expect(mocks.setUser).toHaveBeenCalledWith({ id: 'existing-neon-user' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not show a background polling failure as a user-facing error, and keeps polling', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mount(); fill();
+      fireEvent.click(screen.getByRole('button', { name: 'Sign in', exact: true }));
+      expect(await screen.findByRole('button', { name: 'Continue after verification' })).toBeInTheDocument();
+
+      mocks.reload.mockRejectedValueOnce(new Error('transient network hiccup'));
+      await vi.advanceTimersByTimeAsync(4000);
+      // A silent background check failure must not replace the verification instructions.
+      expect(screen.getByText(/Verify your email/)).toBeInTheDocument();
+
+      mocks.reload.mockImplementation(async () => { firebaseUser.emailVerified = true; });
+      await vi.advanceTimersByTimeAsync(4000);
+      await vi.waitFor(() => expect(mocks.exchange).toHaveBeenCalledWith(firebaseUser, 'login', ''));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

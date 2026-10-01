@@ -86,6 +86,8 @@ ISSUES: URGENT
 
 ## 8. Sign-in and verification flow is unreliable
 
+**Update 2026-10-01: fixed via `Audit` branch.** A dedicated `ServerWakeUpScreen` component (already built, wired into `AuthContext.jsx`) already retries the *initial* `/auth/me` check with progress and a distinguishable failed state, but that same retry logic didn't cover the sign-in form's own network calls -- `authRequest()` (`services/firebaseAuth.js`) made a single attempt with no retry, and a non-JSON/network failure (the exact shape of a cold Render backend) surfaced immediately as "Could not reach sign-in" on the very first click. It now retries up to 3 times with backoff on a network-level failure or a non-JSON response, while a real parsed error response (invalid credentials, etc.) still fails immediately with no retry -- correctly distinguishing an unavailable server from a genuine auth failure. Separately, "the user must click Continue before entering the application" is fixed: `FirebaseLoginForm.jsx` now polls silently every 4s for verification status while waiting (verifying happens in a different tab, so the client SDK never learns about it on its own) and auto-advances once verified, with the manual "Continue after verification" button kept as an immediate fallback. 6 new tests (`FirebaseLoginForm.test.jsx`, `firebaseAuthRequest.test.js`) cover both fixes, including that a transient background-poll failure never surfaces as a user-facing error. Full suite green: 79 frontend tests, build passes.
+
 - After completing verification, the user must click **Continue** before entering the application.
 - The first sign-in attempt displayed **“Could not reach sign-in.”**
 - The extra Continue step makes the verification flow feel incomplete or stalled.
