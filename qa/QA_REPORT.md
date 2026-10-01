@@ -9,6 +9,8 @@ The current build is deployable, and the live PostgreSQL schema is valid and up 
 
 No product code or live records were changed during this audit. Browser mutation tests ran against an in-memory fixture server that loads the real Express routers. The only live database operation was the read-only `prisma migrate status` check.
 
+**Status update, 2026-09-30**: a 7-phase branch-consolidation effort plus an 8-task currency Float→Decimal migration have since addressed 23 of this report's 24 original QA-01–24 findings (confirmed against current source, see each finding's "Update" note below); QA-20 is partially fixed. QA-25 (weak quality gates) and QA-27 (test env flakiness) remain open as documented. The executive summary above describes the app's state as of 2026-09-10 and should be read alongside the per-finding updates, not as the current state.
+
 ## Critical findings
 
 ### QA-01 — Partial updates inject create defaults and erase stored values
@@ -19,6 +21,8 @@ No product code or live records were changed during this audit. Browser mutation
 - `PUT /api/sales/:id` with only `{ status: "PAID" }` became an update containing quantity `1`, commission `0`, outbound shipping `0`, and collected tax `0`.
 
 This is the direct cause of the reported “Edit Row turns values to zero” behavior. See `selvora-api/validation/schemas.js:61-66`, `:82`, `:91-99`, and `:104`.
+
+**Update 2026-09-30**: fixed during branch consolidation. `updateInventory`/`updateSale` in `selvora-api/validation/schemas.js` are now standalone schemas with only `optional()` fields, not `.partial()` of a defaulted create schema -- an untouched field is simply absent from the parsed body instead of being injected as its create-time default.
 
 ### QA-02 — Inline editor cannot preserve vendor, marketplace, or payment method
 
@@ -32,6 +36,8 @@ Consequences:
 
 See `selvora-api/routes/inventory.js:24-40`, `selvora-app/src/pages/Transactions.jsx:295-304`, `:623-629`.
 
+**Update 2026-09-30**: fixed during branch consolidation. `GET /api/inventory` now explicitly selects `vendor_id`, `payment_method_id`, and nested `sales.platform_id`, and `Transactions.jsx` builds its edit state and filter option lists directly from those fields.
+
 ### QA-03 — Expanded/maximize editor also corrupts an unchanged transaction
 
 **Reproduced in the UI.** With a fixture purchase of $500 + $40 tax + $20 inbound shipping + $10 fee − $50 gift card, clicking maximize and saving without changes:
@@ -44,6 +50,8 @@ See `selvora-api/routes/inventory.js:24-40`, `selvora-app/src/pages/Transactions
 
 The modal initializes inventory status from the selected sale row, omits fees and gift card, sends a null payout date the API rejects, and never checks individual sale response statuses. See `selvora-app/src/components/TransactionDetailModal.jsx:115`, `:168-173`, `:181-225`.
 
+**Update 2026-09-30**: fixed during branch consolidation. `TransactionDetailModal.jsx` now saves through the atomic `PUT /api/inventory/:id/transaction` route (`services/transactionEdit.js`), includes fees/gift-card/payout-date fields, checks each response via `requireSuccessfulResponse`, and computes totals through the shared `shared/finance.mjs` helpers instead of ad hoc math.
+
 ### QA-04 — Sale/inventory mutations are non-atomic and can leave impossible data
 
 **Reproduced with injected failures and concurrent requests.**
@@ -53,6 +61,8 @@ The modal initializes inventory status from the selected sale row, omits fees an
 - Two concurrent sales both read one unit on hand and both succeeded. Two sale records were created for one available unit.
 
 See `selvora-api/routes/sales.js:53-87` and `:103-140`. These writes need one database transaction with a conditional/locked stock update.
+
+**Update 2026-09-30**: fixed during branch consolidation. `routes/sales.js` and `routes/inventory.js` now wrap stock decrement and sale create/update/delete in `prisma.$transaction`, using conditional `updateMany` claims (`qty_on_hand: { gte: saleQty }`, version-matched `where` clauses) as an optimistic-concurrency lock, so a failed or concurrent write can no longer leave a partial record or oversell.
 
 ### QA-05 — Cross-user foreign IDs are accepted
 
@@ -64,6 +74,8 @@ See `selvora-api/routes/sales.js:53-87` and `:103-140`. These writes need one da
 - `/api/platforms/batch` will return an existing foreign platform when its UUID is supplied.
 
 This breaks tenant isolation and can expose platform metadata. See `selvora-api/routes/inventory.js:94-103`, `sales.js:53-75`, `accounts.js:15-31`, and `platforms.js:49-68`.
+
+**Update 2026-09-30**: fixed during branch consolidation. `requireOwned()` (`services/ownership.js`) is now called for vendor/payment-method/platform IDs in `inventory.js` and `sales.js`, for `platform_id` in `accounts.js`, and per-vendor in `platforms.js`'s `/batch` route.
 
 ## High-severity findings
 
@@ -80,15 +92,21 @@ This breaks tenant isolation and can expose platform metadata. See `selvora-api/
 
 Transactions ignores gift cards and outbound sale shipping. The expanded editor ignores fees and gift cards. Its summary applies full-batch cost and cashback to partial sales. Analytics applies fees/gift cards but ignores outbound sale shipping. Relevant code: `Transactions.jsx:476-527`, `TransactionDetailModal.jsx:168-173`, `:406-410`, `:614-640`, `analytics.js:100-110`.
 
+**Update 2026-09-30**: fixed during branch consolidation. Cost/cashback/profit formulas are now consolidated in one shared module (`shared/finance.mjs`, with a Decimal-exact backend mirror in `services/decimalFinance.js` added by the currency migration) and consumed consistently by `Transactions.jsx`, `TransactionDetailModal.jsx`, and `routes/analytics.js` -- there is no longer a second, independently-written formula per surface.
+
 ### QA-07 — Analytics and Credit Card ignore outbound shipping and count cancelled sales
 
 **Reproduced.** Increasing sale shipping by $100 did not change Dashboard stats or Credit Card loss/netting results. Changing the sale status to `CANCELLED` still counted its revenue, profit, and two units sold.
 
 The analytics query includes every sale status and defines revenue as price minus commission only. Credit Card uses the same omission. See `selvora-api/routes/analytics.js:99-110`, `:131-155`; `creditcard.js:123-135`.
 
+**Update 2026-09-30**: fixed during branch consolidation. Both routes now filter sales through the shared `isRealizedSale` helper (excludes CANCELLED/RETURNED/DISPUTED) and compute revenue via `saleEconomics`, which subtracts `sale_shipping`.
+
 ### QA-08 — Cash Flow totals and buyer/owed detail use different data sets
 
 **Code-confirmed.** The analytics API returns only the latest 10 records as `recentTransactions`. Cash Flow uses all-time aggregate stats for its cards but uses those 10 records for “Unpaid” and all buyer breakdowns. Accounts with more than 10 sales get incomplete owed totals and missing buyers while the headline total still includes all sales. See `selvora-api/routes/analytics.js:357` and `selvora-app/src/pages/CashFlow.jsx:21-62`.
+
+**Update 2026-09-30**: fixed during branch consolidation. `analytics.js` now returns a full `cashFlowTransactions` array alongside the 10-item `recentTransactions` slice, and `CashFlow.jsx` builds its buyer/owed breakdowns from the full array instead of the 10-record one.
 
 ### QA-09 — Immediate sale can oversell, partially save, and ignore selected purchase status
 
@@ -96,9 +114,13 @@ The analytics query includes every sale status and defines revenue as price minu
 
 See `selvora-api/routes/inventory.js:94-142`. Add Transaction’s sold quantity input also has no maximum tied to purchased quantity (`selvora-app/src/pages/AddTransaction.jsx:868-880`).
 
+**Update 2026-09-30**: fixed during branch consolidation. The inventory create route wraps the immediate sale and stock decrement in one `$transaction` with a pre-check that rejects an over-quantity sale before writing anything, preserves an explicitly submitted purchase status instead of forcing `PURCHASED`, and `AddTransaction.jsx`'s sold-quantity input is now capped to `qty_purchased`.
+
 ### QA-10 — Editing purchased quantity does not reconcile stock or sales
 
 **Reproduced.** A five-unit purchase with two units sold and three on hand accepted an update to `qty_purchased: 1`, leaving `qty_on_hand: 3` plus two sold units. There is no invariant enforcing `qty_purchased = qty_on_hand + valid sold quantity`. See `selvora-api/routes/inventory.js:238-260`.
+
+**Update 2026-09-30**: fixed during branch consolidation. `PUT /api/inventory/:id` now rejects a `qty_purchased` below the already-sold quantity and recomputes `qty_on_hand = requestedQty - soldQty` inside the same optimistic-concurrency transaction, enforcing the invariant directly (see `test/inventoryQuantityInvariant.test.mjs`).
 
 ### QA-11 — Receipt upload limit is effectively about 75 KiB, not 5 MiB
 
@@ -106,23 +128,33 @@ See `selvora-api/routes/inventory.js:94-142`. Add Transaction’s sold quantity 
 
 The route also uploads to Cloudinary before checking record ownership. A foreign/nonexistent item returned 404 after an upload had already occurred (`receipts.js:113-136`), creating orphaned files and allowing unauthorized IDs to consume storage/API quota.
 
+**Update 2026-09-30**: fixed during branch consolidation. `index.js` raises the body limit (`express.json({ limit: '7mb' })`), and `routes/receipts.js` now checks item ownership before calling Cloudinary (see `test/receiptSafety.test.mjs`).
+
 ### QA-12 — Recurring expenses skip month-end dates and can duplicate entries
 
 **Reproduced.** Monthly recurrence starting January 31 generated January 31, March 3, and April 3, skipping February. JavaScript `setMonth()` overflow is being used as the recurrence rule (`selvora-api/routes/recurringExpenses.js:34-43`).
 
 Two concurrent GET requests can both see the same `last_generated`, both insert the same occurrence, and then both update the marker. There is no unique constraint on `(recurring_expense_id, date)` and generation is triggered by a read endpoint (`:49-74`, `:77-92`).
 
+**Update 2026-09-30**: fixed during branch consolidation. `getOccurrences()` now clamps month-end rollover to the real last day of the target month, `Expense` has `@@unique([recurring_expense_id, date])`, and generation uses `skipDuplicates: true` inside a transaction, so concurrent generation can no longer produce duplicate occurrences.
+
 ### QA-13 — Tax Exempt reporting excludes valid exempt sales and uses the wrong denominator
 
 **Code-confirmed.** The Sales tab is built only from sales belonging to tax-exempt purchases. A customer-exempt/non-taxable sale of ordinarily taxed inventory is omitted. The percentage numerator is period-filtered while its denominator is all sales across all periods. See `selvora-app/src/pages/TaxExempt.jsx:70-78`, `:115-138`.
+
+**Update 2026-09-30**: fixed during branch consolidation. `TaxExempt.jsx` now builds its sale set from `inventory.tax_exempt || !taxable || customer_tax_exempt` (not just tax-exempt-purchase inventory), and the percentage's numerator and denominator both use the same period-filtered set.
 
 ### QA-14 — Platform tax settings can erase fields or be ignored
 
 **Reproduced at the API.** A partial platform update containing only `tax_exempt_place` reset fee percentage to zero and cleared address/notes. Creating a platform with `tax_exempt_place: true` ignored the flag. See `selvora-api/routes/platforms.js:30-41`, `:75-101` and the defaulted platform validation at `validation/schemas.js:137`.
 
+**Update 2026-09-30**: fixed during branch consolidation. `routes/platforms.js` create/update now explicitly preserve `fee_pct`/`address`/`notes` via `!== undefined` fallbacks instead of defaulting them away, and `tax_exempt_place` is applied correctly on both create and update.
+
 ### QA-15 — Currency is stored and calculated as binary floating point
 
 **Schema-confirmed.** Costs, prices, taxes, fees, cashback, expenses, and invoice totals all use Prisma `Float`/PostgreSQL double precision. Financial arithmetic can accumulate fractions of a cent and inconsistent rounding. These should use fixed-scale `Decimal` or integer cents. See `selvora-api/prisma/schema.prisma:45-53`, `:76-84`, `:139-145`, `:154`, `:171`, `:188`.
+
+**Update 2026-09-30**: fixed by the 8-task currency migration (`CURRENCY_DECIMAL_MIGRATION_PLAN.md`). Every money/rate field now has a paired `Decimal` column kept in sync by database triggers, all write paths validate/round through `services/money.js`, server-side aggregation uses `services/decimalFinance.js`, and every API response substitutes the exact Decimal value (`services/decimalRead.js`). See `qa/CURRENCY_MIGRATION_AUDIT.md` for the full audit and a zero-drift production reconciliation.
 
 ## Medium-severity findings
 
@@ -130,19 +162,27 @@ Two concurrent GET requests can both see the same `last_generated`, both insert 
 
 **Code-confirmed.** Files can be selected, previewed, and removed, but `handleSubmit` never reads or uploads `attachedFiles`. The transaction succeeds without the advertised attachment. See `selvora-app/src/pages/AddTransaction.jsx:88`, `:173-177`, `:184-211`, `:635-665`.
 
+**Update 2026-09-30**: fixed during branch consolidation. `handleSubmit` now reads the attached file and uploads it via `attachInventoryReceipt` (`POST /api/receipts/attach`) after the transaction is created.
+
 ### QA-17 — Calendar validation and subscription URL are unreliable
 
 **Reproduced.** The API accepted date `2026-02-31`, an end date before the start date, and an unsupported color. The Zod calendar schema exists but the create/update routes do not use it (`selvora-api/routes/calendarEvents.js:379-425`).
 
 Calendar subscription constructs its public feed from `BACKEND_URL`, otherwise `http://localhost:3000`. `BACKEND_URL` is absent from the checked local environment, `.env.example`, and README, so the generated link is locally unusable and production depends on an undocumented variable (`calendarEvents.js:205-208`).
 
+**Update 2026-09-30**: fixed during branch consolidation. `routes/calendarEvents.js` now validates create/update bodies with Zod (`calendarEvent`/`updateCalendarEvent`), rejecting invalid dates and an end date before the start date, and the subscription feed is published to Cloudinary (`services/calendarFeed.js`) instead of depending on `BACKEND_URL`.
+
 ### QA-18 — Goals accept invalid targets and coerce string `false` to true
 
 **Reproduced.** The API accepted a negative target and stored `active: true` for the JSON string `"false"` because it calls `Boolean(active)`. Goal routes have no Zod validation. See `selvora-api/routes/goals.js:22-43`, `:62-72`.
 
+**Update 2026-09-30**: fixed during branch consolidation. `routes/goals.js` now validates through Zod `goal`/`updateGoal` schemas (rejecting a negative target) and a `goalActive` parser that correctly reads boolean/`'true'`/`'false'` instead of `Boolean(active)`.
+
 ### QA-19 — Buyer and Invoice are not tenant-owned
 
 **Schema-confirmed.** `Buyer` and `Invoice` have no `user_id`, unlike all other business entities. Once invoice APIs are implemented, records cannot be safely isolated by account without a schema change. See `selvora-api/prisma/schema.prisma:125-132`, `:182-190`.
+
+**Update 2026-09-30**: fixed during branch consolidation (Phase 2). `Buyer` and `Invoice` both now have `user_id`, with `Invoice.buyer` enforced as a composite FK on `[buyer_id, user_id]` so a buyer and its invoice can never belong to different tenants. See `test/buyerOwnership.test.mjs` and `test/buyerInvoiceOwnershipMigration.test.mjs`. No `Invoice` route exists yet (confirmed again in the currency migration audit), so the ownership column is ready but unexercised by any endpoint.
 
 ### QA-20 — Several visible controls are nonfunctional
 
@@ -157,21 +197,31 @@ Calendar subscription constructs its public feed from `BACKEND_URL`, otherwise `
 
 Relevant locations: `Inventory.jsx:85-90`, `:158`; `Invoices.jsx:14-43`; `Dashboard.jsx:789-791`; `Analytics.jsx:142-144`; `Transactions.jsx:755-763`; `Settings.jsx:150-205`.
 
+**Update 2026-09-30 — partially fixed.** Settings → Data was changed from a fake-interactive mockup to an honest "coming soon" placeholder during branch consolidation (Phase 5). Everything else listed here is still unchanged and still nonfunctional: Inventory's Export Report/Add Inventory buttons, the Invoices page (New Invoice/search/status filter), Dashboard's Generate Share Card, and Analytics' Export control have no click handlers (confirmed directly against current source). Not fixed as part of this pass -- out of scope for the currency-migration/read-cutover work this session focused on; candidates for a dedicated UI task.
+
 ### QA-21 — Vendor and Marketplace edit icons do nothing
 
 **Code-confirmed.** The edit icon buttons have no click handlers, while Cashouts has a working edit modal. See `selvora-app/src/components/Settings/Vendors.jsx:503-505` and `Marketplaces.jsx:407-409`.
+
+**Update 2026-09-30**: fixed during branch consolidation (Phase 5). Both edit buttons now call `onClick` handlers that open a working `EditModal` with save handling, matching Cashouts' existing pattern.
 
 ### QA-22 — Optional account fields cannot be cleared
 
 **Reproduced.** Updating an account email to an empty string leaves the old email because the validated empty string becomes `null`, then the update uses nullish coalescing to retain the existing value. See `selvora-api/routes/accounts.js:63-73` and `validation/schemas.js:12-15`, `:161`.
 
+**Update 2026-09-30**: fixed during branch consolidation (Phase 4). `routes/accounts.js`'s update handler now uses `field !== undefined ? field : existing.field` instead of `??`, so an explicit `null` from an emptied field is persisted rather than falling back to the old value.
+
 ### QA-23 — Some failed mutations are shown as successful locally
 
 **Code-confirmed.** Expense delete/pause, platform delete, payment-method delete, and account delete handlers generally do not check `response.ok` before removing/toggling UI state. A 4xx/5xx `fetch` resolves normally, so the page can hide or toggle an item that the database did not change. Examples: `selvora-app/src/pages/Expenses.jsx:323-340`, `Settings/Vendors.jsx:429-437`, `Settings/PaymentMethods.jsx:117-123`, `Settings/Accounts.jsx:278-288`.
 
+**Update 2026-09-30**: fixed during branch consolidation (Phase 5). Expense delete/pause, vendor/platform delete, payment-method delete, and account delete all now call the shared `requireSuccessfulResponse()` helper and only update UI state after a confirmed success.
+
 ### QA-24 — Receipt amounts omit most purchase costs
 
 **Code-confirmed.** Receipts displays inventory amount as `unit_purchase_cost * qty_purchased`, excluding tax, inbound shipping, fees, and gift cards. That conflicts with Dashboard/credit-card spend and the amount likely shown on the receipt. See `selvora-api/routes/receipts.js:48-56`.
+
+**Update 2026-09-30**: fixed during branch consolidation / currency migration Task 7. `routes/receipts.js` now computes the amount via the shared `batchCost()` formula, which includes tax, inbound shipping, fees, and gift card -- not just `unit_purchase_cost * qty_purchased` -- and rounds the Decimal-exact result once at the response boundary.
 
 ### QA-25 — Quality gates are too weak for the app’s data risk
 
