@@ -3,15 +3,18 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, CirclePlus, ArrowLeftRight, Package,
   Receipt, FileText, ChartColumn, Wallet, CreditCard as CreditCardIcon,
-  Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, DollarSign, ShieldCheck, BookOpen, Target, CalendarDays, Truck
+  Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, DollarSign, ShieldCheck, BookOpen, Target, CalendarDays, Truck, Sparkles
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { SCHEDULE_C_ENABLED } from '../../config/features';
+import { CURRENT_VERSION } from '../../data/changelog';
+import VersionHistoryModal from '../VersionHistoryModal';
 
 const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'neon-dark' }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
   const navigate = useNavigate();
   const { logout, user } = useAuth();
 
@@ -132,6 +135,13 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
 
         <div className="p-2 border-t border-[color:var(--border-default)]">
           <button
+            onClick={() => setShowChangelog(true)}
+            title={isCollapsed ? `v${CURRENT_VERSION} — What's New` : undefined}
+            className={clsx("flex items-center rounded-md border-l-2 border-transparent text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-2.5 py-2 px-3")}>
+            <Sparkles size={16} />
+            {!isCollapsed && <span className="truncate">v{CURRENT_VERSION}</span>}
+          </button>
+          <button
             data-tutorial-id="sidebar-datasetup"
             onClick={() => navigate('/settings', { state: { tab: 'datasetup' } })}
             className={clsx("flex items-center rounded-md border-l-2 border-transparent text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-2.5 py-2 px-3")}>
@@ -171,6 +181,8 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
           )}
         </div>
       </aside>
+
+      <VersionHistoryModal open={showChangelog} onClose={() => setShowChangelog(false)} />
     </>
   );
 };
