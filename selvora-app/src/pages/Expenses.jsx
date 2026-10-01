@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { apiFetch } from '../hooks/useApi';
+import { apiFetch, usePaymentMethods } from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { toast } from 'sonner';
 import {
   Receipt, Download, Plus, DollarSign, TrendingUp,
-  Search, X, Trash2, Pencil, RefreshCw, Pause, Play,
+  Search, X, Trash2, Pencil, RefreshCw, Pause, Play, CreditCard,
 } from 'lucide-react';
 
 const CATEGORIES = [
@@ -34,11 +34,11 @@ const EMPTY_FORM = {
   // recurring
   recurring: false, frequency: 'monthly', start_date: '', end_date: '',
   // shared
-  notes: '',
+  notes: '', payment_method_id: '',
 };
 
 // ─── Unified Add/Edit Modal ──────────────────────────────────────────────────
-function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, initialIsRecurring }) {
+function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, initialIsRecurring, paymentMethods = [] }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
@@ -60,6 +60,7 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
           start_date: initial.start_date ? new Date(initial.start_date).toISOString().split('T')[0] : today,
           end_date:   initial.end_date   ? new Date(initial.end_date).toISOString().split('T')[0]   : '',
           notes:      initial.notes      || '',
+          payment_method_id: initial.payment_method_id || '',
         });
       } else {
         setForm({
@@ -72,6 +73,7 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
           start_date: today,
           end_date:   '',
           notes:      initial.notes    || '',
+          payment_method_id: initial.payment_method_id || '',
         });
       }
     } else {
@@ -106,6 +108,7 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
           start_date: form.start_date,
           end_date:   form.end_date   || null,
           notes:      form.notes.trim() || null,
+          payment_method_id: form.payment_method_id || null,
         });
       } else {
         await onSaveOneOff({
@@ -114,6 +117,7 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
           category: form.category || null,
           date:     form.date,
           notes:    form.notes.trim() || null,
+          payment_method_id: form.payment_method_id || null,
         });
       }
       onClose();
@@ -207,14 +211,26 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
             </div>
           )}
 
-          {/* Category */}
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Category</label>
-            <select value={form.category} onChange={e => set('category', e.target.value)}
-              className={`w-full px-3 py-2.5 rounded-lg text-sm text-white bg-white/[0.04] border border-white/10 focus:outline-none focus:border-${accent}-500/50 appearance-none`}>
-              <option value="" className="bg-[#16181d]">Uncategorized</option>
-              {CATEGORIES.map(c => <option key={c.value} value={c.value} className="bg-[#16181d]">{c.label}</option>)}
-            </select>
+          {/* Category + Card */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">Category</label>
+              <select value={form.category} onChange={e => set('category', e.target.value)}
+                className={`w-full px-3 py-2.5 rounded-lg text-sm text-white bg-white/[0.04] border border-white/10 focus:outline-none focus:border-${accent}-500/50 appearance-none`}>
+                <option value="" className="bg-[#16181d]">Uncategorized</option>
+                {CATEGORIES.map(c => <option key={c.value} value={c.value} className="bg-[#16181d]">{c.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="expense-card" className="block text-xs font-medium text-gray-400 mb-1.5">
+                Card <span className="text-gray-600 font-normal">(optional)</span>
+              </label>
+              <select id="expense-card" value={form.payment_method_id} onChange={e => set('payment_method_id', e.target.value)}
+                className={`w-full px-3 py-2.5 rounded-lg text-sm text-white bg-white/[0.04] border border-white/10 focus:outline-none focus:border-${accent}-500/50 appearance-none`}>
+                <option value="" className="bg-[#16181d]">No card / cash</option>
+                {paymentMethods.map(pm => <option key={pm.id} value={pm.id} className="bg-[#16181d]">{pm.name}</option>)}
+              </select>
+            </div>
           </div>
 
           {/* Notes */}
@@ -274,6 +290,7 @@ const Expenses = () => {
   const [expenses, setExpenses]       = useState([]);
   const [recurring, setRecurring]     = useState([]);
   const [loading, setLoading]         = useState(true);
+  const { data: paymentMethods = [] } = usePaymentMethods();
 
   const [modalOpen, setModalOpen]         = useState(false);
   const [editingItem, setEditingItem]     = useState(null);
@@ -490,6 +507,11 @@ const Expenses = () => {
                           {FREQ_MAP[rec.frequency] || rec.frequency}
                         </span>
                         {cat && <span className={`text-[10px] font-medium ${cat.color}`}>{cat.label}</span>}
+                        {rec.payment_method && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] text-gray-500">
+                            <CreditCard className="w-2.5 h-2.5" />{rec.payment_method.name}
+                          </span>
+                        )}
                         {!rec.active && <span className="text-[10px] text-gray-500 font-medium">Paused</span>}
                       </div>
                     </div>
@@ -590,6 +612,7 @@ const Expenses = () => {
                   <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500">Date</th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500">Name</th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500">Category</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500">Card</th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500">Notes</th>
                   <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase tracking-wider text-gray-500">Amount</th>
                   <th className="px-4 py-3 text-center text-[10px] font-semibold uppercase tracking-wider text-gray-500">Actions</th>
@@ -617,6 +640,11 @@ const Expenses = () => {
                       <td className="px-4 py-3.5">
                         {cat ? <span className={`text-xs font-medium ${cat.color}`}>{cat.label}</span> : <span className="text-xs text-gray-600">—</span>}
                       </td>
+                      <td className="px-4 py-3.5 text-xs text-gray-400 whitespace-nowrap">
+                        {exp.payment_method
+                          ? <span className="inline-flex items-center gap-1"><CreditCard className="w-3 h-3 text-gray-500" />{exp.payment_method.name}</span>
+                          : <span className="text-gray-700">—</span>}
+                      </td>
                       <td className="px-4 py-3.5 text-gray-500 text-xs max-w-[200px] truncate">
                         {exp.notes || <span className="text-gray-700">—</span>}
                       </td>
@@ -641,7 +669,7 @@ const Expenses = () => {
               </tbody>
               <tfoot>
                 <tr className="border-t border-white/[0.08] bg-white/[0.015]">
-                  <td colSpan={4} className="px-4 py-3 text-xs text-gray-500">{filtered.length} expense{filtered.length !== 1 ? 's' : ''}</td>
+                  <td colSpan={5} className="px-4 py-3 text-xs text-gray-500">{filtered.length} expense{filtered.length !== 1 ? 's' : ''}</td>
                   <td className="px-4 py-3 text-right text-sm font-bold text-red-400">${filtered.reduce((s, e) => s + e.amount, 0).toFixed(2)}</td>
                   <td />
                 </tr>
@@ -659,6 +687,7 @@ const Expenses = () => {
         onSaveRecurring={handleSaveRecurring}
         initial={editingItem}
         initialIsRecurring={editingIsRec}
+        paymentMethods={paymentMethods}
       />
 
       {/* Delete one-off confirm */}
