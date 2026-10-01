@@ -9,7 +9,8 @@ Use this workflow for every change in this repository.
 5. For changes that affect quantities, money, inventory, sales, or related records, also test multi-item data, partial updates, repeated actions, concurrent requests where applicable, and consistency across every screen that displays the affected totals.
 6. Verify the database contract: validate request data, confirm ownership of every related ID, preserve data on failed operations, and use atomic database operations where multiple records must remain consistent.
 7. Run the relevant automated tests, lint/build checks, and browser/API checks. Add meaningful regression coverage for a bug when practical.
-8. Report what changed, the use cases tested, results, and any remaining limitations. Do not claim QA is complete if a relevant scenario was not exercised.
+8. Bump the version and add an entry to `selvora-app/src/data/changelog.js` for any change a user would notice (a feature, a visible fix, a behavior change) — not for internal refactors, QA-only changes, or docs. Increment the version by `0.01` from the current top entry, and write one short, non-technical sentence describing what changed. This feeds the "What's New" modal in the app sidebar. Compute the increment from `main`'s current top entry right before merging (not whatever it was when the branch started) — two branches bumping from the same base will otherwise collide on the same version number.
+9. Report what changed, the use cases tested, results, and any remaining limitations. Do not claim QA is complete if a relevant scenario was not exercised.
 
 Do not fix unrelated issues discovered during QA. Record them with reproduction steps and affected files so they can become separate, focused tasks.
 
