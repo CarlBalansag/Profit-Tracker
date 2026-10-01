@@ -12,6 +12,8 @@ ISSUES: URGENT
 
 ## 1. Dashboard and Transactions show different total cost
 
+**Update 2026-10-01: already fixed, confirmed via `Audit` branch.** Not by a dedicated patch -- the currency migration's Task 7 rewrite of `routes/analytics.js` happened to replace the old totalCost computation with one that sums every inventory row in the window unconditionally (no status or sales-presence filter), which eliminates this exact exclusion. Verified directly: adding a COMPLETED purchase with no sale and `qty_on_hand: 0` now correctly adds its full cost to `stats.totalCost` and `stats.transactionCount`. Locked in with 7 new tests in `test/analyticsOrphanedPurchase.test.mjs` covering every lifecycle status.
+
 - Dashboard: **$14,013.05** across 32 purchases.
 - Transactions: **$14,052.02** across 33 records.
 - Difference: **$38.97**.
