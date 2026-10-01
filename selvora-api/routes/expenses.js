@@ -3,7 +3,8 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { createExpense, updateExpense } = require('../validation/schemas');
-const { withExactFields, withExactList, MAPPINGS } = require('../services/decimalRead');
+const { withExactFields, MAPPINGS } = require('../services/decimalRead');
+const { requireOwned } = require('../services/ownership');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -16,14 +17,24 @@ const parseLocalDate = (str) => {
   return new Date(str);
 };
 
+// Substitutes exact Decimal values on the expense itself and its nested
+// payment_method (same pattern as inventory.js/sales.js -- see QA-28).
+function exactExpense(expense) {
+  if (!expense) return expense;
+  const result = withExactFields(expense, MAPPINGS.expense);
+  if (result.payment_method) result.payment_method = withExactFields(result.payment_method, MAPPINGS.paymentMethod);
+  return result;
+}
+
 // GET all expenses for current user
 router.get('/', isAuthenticated, async (req, res, next) => {
   try {
     const expenses = await prisma.expense.findMany({
       where: { user_id: req.user.id },
       orderBy: { date: 'desc' },
+      include: { payment_method: { select: { id: true, name: true, type: true } } },
     });
-    res.json(withExactList(expenses, MAPPINGS.expense));
+    res.json(expenses.map(exactExpense));
   } catch (err) {
     next(err);
   }
@@ -32,10 +43,11 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 // POST new expense
 router.post('/', isAuthenticated, validateBody(createExpense), async (req, res, next) => {
   try {
-    const { name, amount, category, date, notes, receipt_url, tax_details } = req.body;
+    const { name, amount, category, date, notes, receipt_url, payment_method_id, tax_details } = req.body;
     if (!name || !amount || !date) {
       return res.status(400).json({ error: 'name, amount, and date are required' });
     }
+    await requireOwned('paymentMethod', payment_method_id, req.user.id, 'Payment method');
     const expense = await prisma.expense.create({
       data: {
         user_id: req.user.id,
@@ -45,10 +57,12 @@ router.post('/', isAuthenticated, validateBody(createExpense), async (req, res, 
         date: parseLocalDate(date),
         notes: notes || null,
         receipt_url: receipt_url || null,
+        payment_method_id: payment_method_id || null,
         ...(tax_details !== undefined ? { tax_details } : {}),
       },
+      include: { payment_method: { select: { id: true, name: true, type: true } } },
     });
-    res.json(withExactFields(expense, MAPPINGS.expense));
+    res.json(exactExpense(expense));
   } catch (err) {
     next(err);
   }
@@ -61,7 +75,8 @@ router.put('/:id', isAuthenticated, validateBody(updateExpense), async (req, res
     if (!existing || existing.user_id !== req.user.id) {
       return res.status(404).json({ error: 'Not found' });
     }
-    const { name, amount, category, date, notes, receipt_url, tax_details } = req.body;
+    const { name, amount, category, date, notes, receipt_url, payment_method_id, tax_details } = req.body;
+    if (payment_method_id !== undefined) await requireOwned('paymentMethod', payment_method_id, req.user.id, 'Payment method');
     const data = {};
     if (tax_details?.reviewed && req.body.expected_tax_version === undefined) return res.status(400).json({ error: 'Reload the expense and provide its expected_tax_version before marking reviewed' });
     if (tax_details !== undefined) data.tax_details = tax_details;
@@ -72,6 +87,7 @@ router.put('/:id', isAuthenticated, validateBody(updateExpense), async (req, res
     if (date !== undefined)        data.date = parseLocalDate(date);
     if (notes !== undefined)       data.notes = notes || null;
     if (receipt_url !== undefined) data.receipt_url = receipt_url || null;
+    if (payment_method_id !== undefined) data.payment_method_id = payment_method_id || null;
 
     const updated = await prisma.$transaction(async tx => {
       const claimed = await tx.expense.updateMany({
@@ -79,9 +95,9 @@ router.put('/:id', isAuthenticated, validateBody(updateExpense), async (req, res
         data: { ...data, tax_version: { increment: 1 } },
       });
       if (!claimed.count) throw Object.assign(new Error('Expense changed since it was opened. Reload the worksheet before reviewing again.'), { status: 409 });
-      return tx.expense.findUnique({ where: { id: req.params.id } });
+      return tx.expense.findUnique({ where: { id: req.params.id }, include: { payment_method: { select: { id: true, name: true, type: true } } } });
     });
-    res.json(withExactFields(updated, MAPPINGS.expense));
+    res.json(exactExpense(updated));
   } catch (err) {
     next(err);
   }

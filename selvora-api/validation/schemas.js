@@ -219,6 +219,7 @@ const createExpense = z.object({
   date: dateString,
   notes: optionalString,
   receipt_url: optionalString,
+  payment_method_id: id,
   tax_details: taxDetails.optional(),
 }).passthrough();
 
@@ -287,6 +288,7 @@ const recurringExpense = z.object({
   start_date: dateString,
   end_date: optionalDateString,
   notes: optionalString,
+  payment_method_id: id,
 }).passthrough();
 
 const updateRecurringExpense = recurringExpense.partial().extend({
