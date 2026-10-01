@@ -23,6 +23,8 @@ ISSUES: URGENT
 
 ## 2. Pages use different definitions of inventory value
 
+**Update 2026-10-01: already fixed, confirmed via `Audit` branch.** Inventory.jsx now imports the same `allocatedCost()` from `shared/finance.mjs` that the backend's `inventoryValue` uses (landed cost: merchandise + allocated tax + inbound shipping + fees − gift card) -- likely from the branch-consolidation effort's shared-formula work. Verified by computing Inventory's figure directly from a real `GET /api/inventory` response and comparing it to `GET /api/analytics/dashboard`'s `inventoryValue` for the same data: they're identical (`test/inventoryValueConsistency.test.mjs`), including a sanity check that the fixture's tax/shipping/fees/gift-card are non-trivial, so a merchandise-only regression would be caught.
+
 - Dashboard and Analytics: **$1,822.46**.
 - Inventory: **$1,765.23**.
 - Difference: **$57.23**.
