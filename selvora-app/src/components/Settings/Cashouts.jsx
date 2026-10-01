@@ -105,13 +105,13 @@ function CustomModal({ onClose, onSave }) {
         credentials: 'include',
         body: JSON.stringify(form)
       });
-      if (res.ok) {
-        const platform = await res.json();
-        onSave(platform);
-        onClose();
-      }
+      const successRes = await requireSuccessfulResponse(res, 'Could not add cashout platform');
+      const platform = await successRes.json();
+      onSave(platform);
+      onClose();
+      toast.success('Cashout platform added.');
     } catch (err) {
-      console.error(err);
+      toast.error(err.message);
     } finally {
       setSaving(false);
     }
@@ -330,13 +330,13 @@ function QuickAddModal({ existingPlatforms, onClose, onSave }) {
         credentials: 'include',
         body: JSON.stringify({ vendors: toAdd.map(v => ({ ...v, type: 'Cashout' })) })
       });
-      if (res.ok) {
-        const created = await res.json();
-        onSave(created);
-        onClose();
-      }
+      const successRes = await requireSuccessfulResponse(res, 'Could not add cashout platforms');
+      const created = await successRes.json();
+      onSave(created);
+      onClose();
+      toast.success(`${created.length} cashout platform${created.length > 1 ? 's' : ''} added.`);
     } catch (err) {
-      console.error(err);
+      toast.error(err.message);
     } finally {
       setSaving(false);
     }
@@ -435,17 +435,20 @@ export function Cashouts() {
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [editPlatform, setEditPlatform] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const invalidate = useInvalidate();
 
   const fetchPlatforms = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
     try {
       const res = await apiFetch(`/api/platforms`, { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        setPlatforms(data.filter(p => p.type === 'Cashout'));
-      }
+      const successRes = await requireSuccessfulResponse(res, 'Could not load cashout groups');
+      const data = await successRes.json();
+      setPlatforms(data.filter(p => p.type === 'Cashout'));
     } catch (err) {
       console.error(err);
+      setLoadError(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -517,6 +520,16 @@ export function Cashouts() {
 
         {isLoading ? (
           <div className="text-center py-16 text-gray-500 text-sm">Loading cashout groups...</div>
+        ) : loadError ? (
+          <div className="text-center py-16 text-sm border border-dashed border-red-500/20 rounded-xl bg-red-500/[0.03]">
+            <p className="text-red-400 font-medium mb-3">Could not load cashout groups: {loadError}</p>
+            <button
+              onClick={fetchPlatforms}
+              className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white text-sm font-semibold transition-colors"
+            >
+              Retry
+            </button>
+          </div>
         ) : platforms.length === 0 ? (
           <div className="text-center py-16 text-gray-500 text-sm">
             <DollarSign className="w-10 h-10 mx-auto mb-3 opacity-30" />

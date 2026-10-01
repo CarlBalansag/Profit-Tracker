@@ -94,11 +94,20 @@ ISSUES: URGENT
 
 ## 9. Accounts shows zero accounts for every vendor
 
+**Update 2026-10-01: root cause found and fixed via `Audit` branch.** Queried production directly: `Platform.type` values are correctly cased (`Vendor`/`Marketplace`/`Cashout`, 24/10/15 rows) and the vendor/account relationship join itself is correct -- the real finding is that the `Account` table has **zero rows in the entire database**. Tracing why: `AddAccountModal`'s submit handler (`Accounts.jsx`) only acted `if (res.ok)` and otherwise did nothing -- no error toast, no visible failure, modal just sat there. A user whose account-creation request failed (validation error, ownership check, anything) would see no feedback at all and have no way to know it didn't save, which plausibly explains why real accounts were never successfully created. Fixed to use `requireSuccessfulResponse` + a toast, matching the pattern already used for deletes in the same file. See #10 for the broader silent-failure pattern this was one instance of.
+
 - The Accounts area shows **0 accounts** on all **12 vendors**.
 - This may mean account records are not being loaded, vendor-to-account relationships are not being returned or joined correctly, or the displayed count is using the wrong field.
 - Work needed: inspect the Accounts API response, verify vendor/account relationship data, and confirm that each vendor card counts the correct linked records.
 
 ## 10. Several pages fail silently and log console errors
+
+**Update 2026-10-01: fixed via `Audit` branch for every page named here.** Without a live browser this session couldn't directly observe console/network errors, but static analysis found the same silent-failure shape repeated across all five pages: a failed fetch was caught and `console.error`'d with no visible UI feedback at all.
+- Vendors, Marketplaces, Cashouts: both the main platform-list load and every "Add"/"Quick Add" modal silently did nothing on failure (the "Edit" modals and deletes were already fixed earlier, per QA-21/QA-23 in `qa/QA_REPORT.md`). All three now show a visible retry state on a failed load and a toast on a failed add.
+- Accounts: same pattern, plus the specific root-cause bug described in #9.
+- Dashboard: `useDashboard()` (TanStack Query) already retried once automatically but the component never read `isError`/`error`, so a load failure rendered a silently empty dashboard. Now shows a visible retry state.
+
+5 new tests (`vendorMarketplaceErrorHandling.test.jsx`) cover Vendors/Marketplaces/Accounts list-load failure and add failure. Dashboard's fix has no dedicated test (the page has no existing test file to extend) -- verified by code inspection against the same `isError`/`refetch` pattern TanStack Query exposes, consistent with how other pages in this app already handle query errors.
 
 - Vendors, Accounts, Marketplaces, Cashouts, and the Dashboard all produce errors in the browser developer console.
 - No visible error message appears in the application, so users cannot tell that requests or components are failing.

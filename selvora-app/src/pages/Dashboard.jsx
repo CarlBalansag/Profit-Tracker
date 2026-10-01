@@ -135,7 +135,7 @@ const Dashboard = () => {
   const [trendMode, setTrendMode] = useState('period'); // 'period' | 'cumulative'
   const [chartView, setChartView] = useState('line'); // 'line' | 'bar'
 
-  const { data, isLoading } = useDashboard(modeFilter, dateFilter);
+  const { data, isLoading, isError, error, refetch } = useDashboard(modeFilter, dateFilter);
   const { data: goals = [] } = useGoals();
   useEffect(() => { if (data) setLastUpdated(new Date()); }, [data]);
 
@@ -843,6 +843,22 @@ const Dashboard = () => {
   }
 
   if (isLoading) return <PageLoader variant="dashboard" />;
+
+  if (isError) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <div className="max-w-sm text-center text-sm border border-dashed border-red-500/20 rounded-xl bg-red-500/[0.03] p-8">
+          <p className="text-red-400 font-medium mb-3">Could not load dashboard data{error?.message ? `: ${error.message}` : '.'}</p>
+          <button
+            onClick={() => refetch()}
+            className="px-4 py-2 rounded-lg bg-[var(--accent)] text-white text-sm font-semibold transition-colors hover:opacity-90"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={isGlass

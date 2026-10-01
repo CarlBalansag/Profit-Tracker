@@ -135,13 +135,13 @@ function AddAccountModal({ vendor, platformList, onClose, onSave }) {
         credentials: 'include',
         body: JSON.stringify(form)
       });
-      if (res.ok) {
-        const account = await res.json();
-        onSave(account);
-        onClose();
-      }
+      const successRes = await requireSuccessfulResponse(res, 'Could not create account');
+      const account = await successRes.json();
+      onSave(account);
+      onClose();
+      toast.success('Account added.');
     } catch (err) {
-      console.error(err);
+      toast.error(err.message);
     } finally {
       setSaving(false);
     }
@@ -252,16 +252,19 @@ export function Accounts() {
   const [selectedVendor, setSelectedVendor] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
 
   const fetchPlatforms = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
     try {
       const res = await apiFetch(`/api/platforms`, { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        setPlatforms(data.filter(p => p.type === 'Vendor'));
-      }
+      const successRes = await requireSuccessfulResponse(res, 'Could not load platforms');
+      const data = await successRes.json();
+      setPlatforms(data.filter(p => p.type === 'Vendor'));
     } catch (err) {
       console.error(err);
+      setLoadError(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -409,6 +412,16 @@ export function Accounts() {
 
       {isLoading ? (
         <div className="text-center py-16 text-gray-500 text-sm">Loading platforms...</div>
+      ) : loadError ? (
+        <div className="text-center py-16 text-sm border border-dashed border-red-500/20 rounded-xl bg-red-500/[0.03]">
+          <p className="text-red-400 font-medium mb-3">Could not load platforms: {loadError}</p>
+          <button
+            onClick={fetchPlatforms}
+            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-colors"
+          >
+            Retry
+          </button>
+        </div>
       ) : platforms.length === 0 ? (
         <div className="text-center py-16 text-gray-500 text-sm border border-dashed border-white/10 rounded-xl bg-white/[0.01]">
           <Database className="w-10 h-10 mx-auto mb-3 opacity-30" />
