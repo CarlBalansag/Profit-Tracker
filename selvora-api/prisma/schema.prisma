@@ -232,6 +232,8 @@ model PaymentMethod {
   min_payment_pct       Float?      // minimum payment as % of balance (e.g. 2.0 = 2%)
   min_payment_pct_decimal Decimal?  @db.Decimal(9, 6)
   inventories           Inventory[]
+  expenses              Expense[]
+  recurring_expenses    RecurringExpense[]
 }
 
 model Expense {
@@ -247,6 +249,8 @@ model Expense {
   receipt_url          String?
   recurring_expense_id String?
   recurring_expense    RecurringExpense? @relation(fields: [recurring_expense_id], references: [id], onDelete: SetNull)
+  payment_method_id    String?
+  payment_method       PaymentMethod?    @relation(fields: [payment_method_id], references: [id], onDelete: SetNull)
   tax_details          Json?
   tax_version          Int               @default(0)
 
@@ -269,6 +273,8 @@ model RecurringExpense {
   active           Boolean   @default(true)
   notes            String?
   last_generated   DateTime?
+  payment_method_id String?
+  payment_method   PaymentMethod? @relation(fields: [payment_method_id], references: [id], onDelete: SetNull)
   generated_entries Expense[]
 }
 

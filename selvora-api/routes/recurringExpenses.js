@@ -3,12 +3,24 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { recurringExpense, updateRecurringExpense } = require('../validation/schemas');
-const { withExactFields, withExactList, MAPPINGS } = require('../services/decimalRead');
+const { withExactFields, MAPPINGS } = require('../services/decimalRead');
+const { requireOwned } = require('../services/ownership');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
   res.status(401).json({ message: 'Unauthorized' });
 };
+
+const CARD_SELECT = { payment_method: { select: { id: true, name: true, type: true } } };
+
+// Substitutes exact Decimal values on a recurring expense and its nested
+// payment_method (same pattern as inventory.js/sales.js -- see QA-28).
+function exactRecurring(rec) {
+  if (!rec) return rec;
+  const result = withExactFields(rec, MAPPINGS.recurringExpense);
+  if (result.payment_method) result.payment_method = withExactFields(result.payment_method, MAPPINGS.paymentMethod);
+  return result;
+}
 
 const parseLocalDate = (str) => {
   if (!str) return null;
@@ -70,6 +82,7 @@ async function generateEntries(rec, client) {
       date,
       notes:               rec.notes || null,
       recurring_expense_id: rec.id,
+      payment_method_id:   rec.payment_method_id || null,
     })),
     skipDuplicates: true,
   });
@@ -88,6 +101,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
     const items = await prisma.recurringExpense.findMany({
       where: { user_id: req.user.id },
       orderBy: { start_date: 'desc' },
+      include: CARD_SELECT,
     });
 
     // Generate missing entries for active recurring expenses
@@ -95,7 +109,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       items.filter(r => r.active).map(r => prisma.$transaction(tx => generateEntries(r, tx)))
     );
 
-    res.json(withExactList(items, MAPPINGS.recurringExpense));
+    res.json(items.map(exactRecurring));
   } catch (err) {
     next(err);
   }
@@ -104,13 +118,14 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 // ── POST new recurring expense ────────────────────────────────────────────────
 router.post('/', isAuthenticated, validateBody(recurringExpense), async (req, res, next) => {
   try {
-    const { name, amount, category, frequency, start_date, end_date, notes } = req.body;
+    const { name, amount, category, frequency, start_date, end_date, notes, payment_method_id } = req.body;
     if (!name || !amount || !frequency || !start_date) {
       return res.status(400).json({ error: 'name, amount, frequency, and start_date are required' });
     }
     if (end_date && parseLocalDate(end_date) < parseLocalDate(start_date)) {
       return res.status(400).json({ error: 'End date cannot be before start date' });
     }
+    await requireOwned('paymentMethod', payment_method_id, req.user.id, 'Payment method');
 
     const rec = await prisma.$transaction(async (tx) => {
       const created = await tx.recurringExpense.create({
@@ -124,15 +139,16 @@ router.post('/', isAuthenticated, validateBody(recurringExpense), async (req, re
           end_date:   end_date  ? parseLocalDate(end_date) : null,
           notes:      notes     || null,
           active:     true,
+          payment_method_id: payment_method_id || null,
         },
       });
 
       // Immediately generate all past occurrences
       await generateEntries(created, tx);
-      return tx.recurringExpense.findUnique({ where: { id: created.id } });
+      return tx.recurringExpense.findUnique({ where: { id: created.id }, include: CARD_SELECT });
     });
 
-    res.json(withExactFields(rec, MAPPINGS.recurringExpense));
+    res.json(exactRecurring(rec));
   } catch (err) {
     next(err);
   }
@@ -146,7 +162,8 @@ router.put('/:id', isAuthenticated, validateBody(updateRecurringExpense), async 
       return res.status(404).json({ error: 'Not found' });
     }
 
-    const { name, amount, category, frequency, start_date, end_date, notes, active } = req.body;
+    const { name, amount, category, frequency, start_date, end_date, notes, active, payment_method_id } = req.body;
+    if (payment_method_id !== undefined) await requireOwned('paymentMethod', payment_method_id, req.user.id, 'Payment method');
     const data = {};
     if (name       !== undefined) data.name       = name;
     if (amount     !== undefined) data.amount     = parseFloat(amount);
@@ -155,6 +172,7 @@ router.put('/:id', isAuthenticated, validateBody(updateRecurringExpense), async 
     if (start_date !== undefined) data.start_date = parseLocalDate(start_date);
     if (end_date   !== undefined) data.end_date   = end_date ? parseLocalDate(end_date) : null;
     if (notes      !== undefined) data.notes      = notes || null;
+    if (payment_method_id !== undefined) data.payment_method_id = payment_method_id || null;
 
     // Resuming from paused: reset last_generated so new entries get picked up
     const wasInactive = !existing.active;
@@ -175,10 +193,10 @@ router.put('/:id', isAuthenticated, validateBody(updateRecurringExpense), async 
       if (saved.active) {
         await generateEntries(saved, tx);
       }
-      return tx.recurringExpense.findUnique({ where: { id: saved.id } });
+      return tx.recurringExpense.findUnique({ where: { id: saved.id }, include: CARD_SELECT });
     });
 
-    res.json(withExactFields(updated, MAPPINGS.recurringExpense));
+    res.json(exactRecurring(updated));
   } catch (err) {
     next(err);
   }
