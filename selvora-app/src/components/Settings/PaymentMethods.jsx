@@ -39,20 +39,26 @@ export const PaymentMethods = () => {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
-          const mapped = data.map(card => ({
-            id: card.id,
-            name: card.name || 'Unnamed',
-            issuer: (card.name || '').split(' ')[0] || 'Unknown',
-            type: (card.type || '').toLowerCase().includes('debit') ? 'debit' : 'credit',
-            baseRate: card.default_cashback_rate || 0,
-            categoryRates: Array.isArray(card.category_rates) ? card.category_rates : [],
-            creditLimit: card.credit_limit || 0,
-            totalSpend: 0,
-            availableSpend: 0,
-            statement_close_day: card.statement_close_day ?? null,
-            due_day: card.due_day ?? null,
-            min_payment_pct: card.min_payment_pct ?? null,
-          }));
+          const mapped = data.map(card => {
+            const creditLimit = card.credit_limit ?? null;
+            const totalSpend = card.total_spend || 0;
+            return {
+              id: card.id,
+              name: card.name || 'Unnamed',
+              issuer: (card.name || '').split(' ')[0] || 'Unknown',
+              type: (card.type || '').toLowerCase().includes('debit') ? 'debit' : 'credit',
+              baseRate: card.default_cashback_rate || 0,
+              categoryRates: Array.isArray(card.category_rates) ? card.category_rates : [],
+              creditLimit,
+              totalSpend,
+              // null (not 0) when no limit is configured, so the UI can show
+              // "No limit" instead of a misleading "$0.00 available".
+              availableSpend: creditLimit != null ? Math.max(0, creditLimit - totalSpend) : null,
+              statement_close_day: card.statement_close_day ?? null,
+              due_day: card.due_day ?? null,
+              min_payment_pct: card.min_payment_pct ?? null,
+            };
+          });
           setSavedCards(mapped);
         } else {
           console.error('API returned non-array:', data);
@@ -244,11 +250,11 @@ export const PaymentMethods = () => {
                  </div>
                  <div>
                     <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Credit Limit</div>
-                    <div className="text-base font-bold text-white mt-0.5">${(card.creditLimit || 0).toFixed(2)}</div>
+                    <div className="text-base font-bold text-white mt-0.5">{card.creditLimit != null ? `$${card.creditLimit.toFixed(2)}` : 'No limit set'}</div>
                  </div>
                  <div>
                     <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Available</div>
-                    <div className="text-sm font-bold text-[#6DDBA9] mt-0.5">${(card.availableSpend || 0).toFixed(2)}</div>
+                    <div className="text-sm font-bold text-[#6DDBA9] mt-0.5">{card.availableSpend != null ? `$${card.availableSpend.toFixed(2)}` : '—'}</div>
                  </div>
                  <div>
                     <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Total Spend</div>

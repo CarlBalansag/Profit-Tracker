@@ -5,6 +5,7 @@ const { validateBody } = require('../middleware/validate');
 const { paymentMethod } = require('../validation/schemas');
 const { publishCalendarFeed } = require('../services/calendarFeed');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
+const { Decimal, batchCost } = require('../services/decimalFinance');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -18,13 +19,33 @@ const parseRates = (method) => withExactFields({
   category_rates: method.category_rates ? JSON.parse(method.category_rates) : []
 }, MAPPINGS.paymentMethod);
 
-// GET all payment methods for the authenticated user
+// GET all payment methods for the authenticated user, with lifetime spend
+// (ISSUES #7 "Payment Methods always shows zero spend"). Spend reuses the
+// same batchCost() formula Card Tracker uses, summed across every inventory
+// purchase ever made on each card -- not scoped to a statement month, since
+// this page has no month selector (Card Tracker is where monthly detail lives).
 router.get('/', isAuthenticated, async (req, res, next) => {
   try {
-    const methods = await prisma.paymentMethod.findMany({
-      where: { user_id: req.user.id }
-    });
-    res.json(methods.map(parseRates));
+    const [methods, inventories] = await Promise.all([
+      prisma.paymentMethod.findMany({ where: { user_id: req.user.id } }),
+      prisma.inventory.findMany({
+        where: { user_id: req.user.id, payment_method_id: { not: null } },
+        select: {
+          payment_method_id: true, unit_purchase_cost: true, qty_purchased: true,
+          sales_tax: true, shipping_cost_inbound: true, fees: true, gift_card_amount: true,
+        },
+      }),
+    ]);
+    const spendByCard = {};
+    for (const inv of inventories) {
+      const prior = spendByCard[inv.payment_method_id] || new Decimal(0);
+      spendByCard[inv.payment_method_id] = prior.plus(batchCost(inv));
+    }
+    const withSpend = methods.map(method => ({
+      ...method,
+      total_spend: (spendByCard[method.id] || new Decimal(0)).toDecimalPlaces(2).toNumber(),
+    }));
+    res.json(withSpend.map(parseRates));
   } catch (err) {
     next(err);
   }
