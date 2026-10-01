@@ -4,4 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| _(none active)_ | | | | |
+| `expense-payment-method` | Add payment-method (card) selection to Expense/RecurringExpense | `selvora-api/prisma/schema.prisma`, `selvora-api/routes/expenses.js`, `selvora-api/routes/recurringExpenses.js`, `selvora-api/validation/schemas.js`, `selvora-app/src/pages/Expenses.jsx` | In progress | 2026-10-01 |
