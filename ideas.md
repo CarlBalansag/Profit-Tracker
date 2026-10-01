@@ -47,6 +47,8 @@ ISSUES: URGENT
 
 ## 4. Tax Exempt profit does not visibly explain deductions
 
+**Update 2026-10-01: fixed via `Audit` branch.** Added a "Fees & Shipping" summary card (`TaxExempt.jsx`) showing the combined commission-fee + sale-shipping deduction as its own negative line item between Exempt COGS and Exempt Profit, so the formula's full chain (Revenue → COGS → Fees & Shipping → Profit) is now visible at a glance instead of folded silently into one number. Did not add per-row fee/shipping columns to the sales table below -- the work-needed text offered either option, and adding more columns to an already-wide table would conflict with issue #11's overflow fix (handled separately, same pass).
+
 - Revenue: **$8,134.00**.
 - COGS: **$7,263.95**.
 - Revenue minus COGS: **$870.05**.
