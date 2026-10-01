@@ -4,4 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| _(none active)_ | | | | |
+| `Audit` | Fix all 12 `ideas.md` "ISSUES: URGENT" findings (dashboard/transactions cost mismatch, inventory value formulas, lifecycle status labeling, tax-exempt deductions, card tracker scope labeling, goal progress/period, payment-method spend, sign-in flow, accounts relationship, silent errors, table overflow, missing receipt/tracking data) | `selvora-app/src/pages/*`, `selvora-app/src/components/*`, `selvora-api/routes/*`, `selvora-api/services/*` (broad — spans most of the app; see `ideas.md` for the full list) | In progress | 2026-10-01 |
