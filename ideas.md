@@ -60,6 +60,8 @@ ISSUES: URGENT
 
 ## 5. Card Tracker shows two different “Keep” amounts
 
+**Update 2026-10-01: fixed via `Audit` branch.** Relabeled the header pill to "All Cards · Keep $X" and the selected-card bottom-bar pill to "This Card · Keep $X" (`CreditCard.jsx`), plus added a hover tooltip to each spelling out the exact scope, matching the exact fix suggested in "Work needed" below.
+
 - Header: **Keep $55.13**.
 - Selected-card summary: **Keep $35.74**.
 - The header is the total cashback to keep across all active cards for the selected month.
