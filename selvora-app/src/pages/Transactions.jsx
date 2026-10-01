@@ -952,10 +952,10 @@ const Transactions = () => {
         <table className="w-full text-left whitespace-nowrap">
           <thead>
             <tr className="border-b border-white/[0.06] text-[10px] uppercase font-semibold text-gray-500 tracking-widest">
-              <th className="px-4 py-3.5 w-10">
-                <input 
-                  type="checkbox" 
-                  className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 accent-indigo-500" 
+              <th className="px-4 py-3.5 w-10 sticky left-0 z-20 bg-[#0f1115]">
+                <input
+                  type="checkbox"
+                  className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 accent-indigo-500"
                   checked={filteredRows.length > 0 && selectedIds.length === filteredRows.length}
                   onChange={(e) => {
                     if (e.target.checked) {
@@ -986,7 +986,7 @@ const Transactions = () => {
                   </th>
                 );
               })}
-              <th className="px-4 py-3.5 w-20"></th>
+              <th className="px-4 py-3.5 w-20 sticky right-0 z-20 bg-[#0f1115]"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/[0.02]">
@@ -1009,10 +1009,10 @@ const Transactions = () => {
                       : 'hover:bg-white/[0.025] border-l-2 border-transparent'
                   }`}
                 >
-                  <td className="px-4 py-3.5">
-                    <input 
-                      type="checkbox" 
-                      className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 accent-indigo-500" 
+                  <td className={`px-4 py-3.5 sticky left-0 z-10 ${isEditing ? 'bg-[#1a1530]' : 'bg-[#0f1115]'}`}>
+                    <input
+                      type="checkbox"
+                      className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 accent-indigo-500"
                       checked={selectedIds.includes(row.id)}
                       onChange={(e) => {
                         if (e.target.checked) {
@@ -1228,7 +1228,7 @@ const Transactions = () => {
                   })}
 
                   {/* Actions */}
-                  <td className="px-4 py-3.5">
+                  <td className={`px-4 py-3.5 sticky right-0 z-10 ${isEditing ? 'bg-[#1a1530]' : 'bg-[#0f1115]'}`}>
                     {isEditing ? (
                       <div className="flex items-center gap-2">
                         <button
