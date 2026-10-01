@@ -4,10 +4,19 @@ const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { account, updateAccount } = require('../validation/schemas');
 const { requireOwned } = require('../services/ownership');
+const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
   res.status(401).json({ message: 'Unauthorized' });
+};
+
+// Task 8 read cutover: an account's nested platform carries fee_pct/fee_pct_decimal.
+const exactAccount = (account) => {
+  if (!account) return account;
+  const result = { ...account };
+  if (result.platform) result.platform = withExactFields(result.platform, MAPPINGS.platform);
+  return result;
 };
 
 // CREATE: Add a new account
@@ -46,7 +55,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       where: { user_id: req.user.id },
       include: { platform: true },
     });
-    res.json(accounts);
+    res.json(accounts.map(exactAccount));
   } catch (error) {
     console.error('Error fetching accounts:', error);
     res.status(500).json({ error: 'Internal Server Error' });

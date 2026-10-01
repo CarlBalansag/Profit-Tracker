@@ -257,6 +257,22 @@ Concretely: adding `require('../services/money.js')` to `selvora-api/validation/
 
 Proposed fix: the test (or the harness's `beforeAll`) should explicitly clear/stub `process.env.FEDEX_CLIENT_ID`/`FEDEX_CLIENT_SECRET` (and the other carrier credential pairs) rather than relying on them happening to be unset, so local runs can't depend on require order or on what happens to be in a developer's `.env`.
 
+### QA-28 — Task 8's read cutover missed nested Platform objects, leaking raw Decimal fields
+
+**Reproduced and fixed 2026-09-30**, found during a fresh QA pass after the currency migration and branch-consolidation work. `Vendor` and a `Sale`'s `platform` are both the same `Platform` model, which carries `fee_pct`/`fee_pct_decimal` -- but the Task 8 read-cutover helpers only ever substituted the *direct* model's own fields, not nested relations of the same model:
+
+- `GET /api/inventory/:id` and `PUT /api/inventory/:id` / `PUT /api/inventory/:id/transaction` use `include: { vendor: true, ... }`, returning the vendor's raw `fee_pct` (not exact) plus the raw `fee_pct_decimal` Decimal instance, unprocessed, as an undocumented extra field in the JSON response. `GET /api/inventory/:id` additionally nests `sales[].platform`, with the same leak.
+- `GET /api/sales` includes a sibling `platform` on each sale with the identical leak.
+- `GET /api/accounts` includes `platform` with the identical leak.
+- `services/scheduleC.js`'s `expenseWorksheet` summed `expense.amount` (the Float column) directly rather than the exact Decimal value, and spread the raw expense record (including the unprocessed `amount_decimal` field) into each worksheet row.
+- `routes/analytics.js`'s `cashFlowTransactions[].commission` read `sale.commission_fee` directly, inconsistent with every sibling field in that object, which is Decimal-computed and rounded at the response boundary.
+
+Confirmed real but low-impact in practice: the production reconciliation (`qa/CURRENCY_MIGRATION_AUDIT.md`) already showed zero drift beyond $0.005 for every affected field, so the *displayed numbers* were correct; the bug was the leaked raw `_decimal` field (an internal implementation detail appearing in API responses) and the architectural inconsistency with Task 8's "no production code reads Float monetary fields" goal.
+
+**Fixed**: `exactInventory()` (`routes/inventory.js`) now also substitutes a nested `vendor` and each sale's nested `platform`; `exactSale()` (`routes/sales.js`) now substitutes a nested `platform`; `routes/accounts.js` gained an `exactAccount()` wrapper for its nested `platform`; `routes/scheduleC.js` now runs its expense list through `withExactList()` before building the worksheet; `analytics.js`'s `commission` field now reads the exact Decimal value like its siblings. All via the existing `services/decimalRead.js` helpers -- no new logic, just completing the wiring. Full regression suite (215 backend + 68 frontend tests) green after the fix; no schema or API shape change.
+
+Also surfaced along the way: re-running the original `qa/probe.cjs` bug-reproduction harness against current code confirmed 26 of 29 original probes no longer reproduce (consistent with the QA-01–24 updates above). One probe ("100 KiB JSON parser rejects advertised sub-5 MB receipt," QA-11) still reports REPRODUCED, but this is a harness fidelity gap, not a real regression: `qa/harness.cjs` builds its own bare `express.json()` (Express's 100 KiB default) rather than mounting the real `selvora-api/index.js`, which has set `express.json({ limit: '7mb' })` since the QA-11 fix. Confirmed directly against `index.js` source. Not fixed as part of this task -- a harness-accuracy issue, in the same spirit as QA-25's broader "quality gates are too weak" finding, not a product bug.
+
 ## Checks that passed
 
 - Production frontend build completed.

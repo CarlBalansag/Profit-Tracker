@@ -10,11 +10,12 @@ const { autoShippedStatus } = require('../services/statusHierarchy');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 
 // Task 8 read cutover: substitute each Decimal column's exact value into its
-// paired Float field, for a sale and its nested inventory (if included).
+// paired Float field, for a sale and its nested inventory/platform (if included).
 function exactSale(sale) {
   if (!sale) return sale;
   const result = withExactFields(sale, MAPPINGS.sales);
   if (result.inventory) result.inventory = withExactFields(result.inventory, MAPPINGS.inventory);
+  if (result.platform) result.platform = withExactFields(result.platform, MAPPINGS.platform);
   return result;
 }
 

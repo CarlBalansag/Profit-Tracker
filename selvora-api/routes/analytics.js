@@ -3,7 +3,7 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { validateQuery } = require('../middleware/validate');
 const { analyticsDashboardQuery } = require('../validation/schemas');
-const { Decimal, isRealizedSale, batchCost, allocatedCost, effectiveCashbackRate, saleEconomics } = require('../services/decimalFinance');
+const { Decimal, decimal, isRealizedSale, batchCost, allocatedCost, effectiveCashbackRate, saleEconomics } = require('../services/decimalFinance');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -323,7 +323,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       buyer: s.buyer?.name || 'Unknown',
       cost: money(saleCost),
       revenue: money(saleRevenue),
-      commission: s.commission_fee,
+      commission: money(decimal(s.commission_fee_decimal ?? s.commission_fee)),
       cashback: money(saleCashback),
       profit: money(saleRevenue.minus(saleCost).plus(saleCashback)),
       status: s.status,

@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const prisma = require('../prisma');
 const { expenseWorksheet } = require('../services/scheduleC');
+const { withExactList, MAPPINGS } = require('../services/decimalRead');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -13,7 +14,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { schedule_c_enabled: true } });
     if (!user?.schedule_c_enabled) return res.status(403).json({ error: 'Enable Schedule C in Settings first' });
     const expenses = await prisma.expense.findMany({ where: { user_id: req.user.id } });
-    res.json(await expenseWorksheet(expenses, Number(req.query.year)));
+    res.json(await expenseWorksheet(withExactList(expenses, MAPPINGS.expense), Number(req.query.year)));
   } catch (error) { next(error); }
 });
 module.exports = router;

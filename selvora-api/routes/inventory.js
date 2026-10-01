@@ -24,12 +24,18 @@ const parseLocalDate = (str) => {
 };
 
 // Task 8 read cutover: substitute each Decimal column's exact value into its
-// paired Float field, for an inventory row and any nested sales/payment_method.
+// paired Float field, for an inventory row and any nested vendor/payment_method/sales.
+// `vendor` and a sale's `platform` are both the same Platform model, so both use MAPPINGS.platform.
 function exactInventory(item) {
   if (!item) return item;
   const result = withExactFields(item, MAPPINGS.inventory);
+  if (result.vendor) result.vendor = withExactFields(result.vendor, MAPPINGS.platform);
   if (result.payment_method) result.payment_method = withExactFields(result.payment_method, MAPPINGS.paymentMethod);
-  if (Array.isArray(result.sales)) result.sales = result.sales.map(sale => withExactFields(sale, MAPPINGS.sales));
+  if (Array.isArray(result.sales)) result.sales = result.sales.map(sale => {
+    const exactSale = withExactFields(sale, MAPPINGS.sales);
+    if (exactSale.platform) exactSale.platform = withExactFields(exactSale.platform, MAPPINGS.platform);
+    return exactSale;
+  });
   return result;
 }
 
