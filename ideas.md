@@ -126,6 +126,15 @@ ISSUES: URGENT
 
 ## 12. Receipt and inbound tracking data is incomplete
 
+**Update 2026-10-01: verified via `Audit` branch -- confirmed genuine historical data gap, not a bug; partially addressed.** Queried production directly: **0 of 62** Inventory rows have a `receipt_url`, **0 of 62** have a `tracking_number` (worse than the 36/32 figures above, consistent with more unreceipted/untracked purchases accumulating since this doc was written) -- but `Sales.tracking_number` is set on 10 of 49 rows, proving tracking data *can* and does save correctly elsewhere. Traced the save path for inventory end to end: `AddTransaction.jsx` has a working "Tracking Number" input wired to `formData.tracking_number`, submitted unconditionally via `saveInventoryWithReceipt()`'s `JSON.stringify(formData)` to `POST /api/inventory`, which stores it with no validation gap. Nothing failed to migrate or load -- this is confirmed exactly as hedged in the original report: the user simply hasn't been filling these in, not a defect.
+
+Given that, re-scoped "work needed" to what's actually missing:
+- "Avoid treating unavailable historical data as a silent success" and a `-- *provide ... remediation tools*" are **already mostly in place**: `Receipts.jsx` has a dedicated "Without Receipt" tab (filterable, with a per-item attach flow) and `Shipping.jsx` has an "untracked" view with a per-row add-tracking-number form -- both already surface incompleteness rather than hiding it, and both already let you fix one record at a time.
+- "Flag missing data during entry" was the one real gap -- added a non-blocking reminder banner in `AddTransaction.jsx`, shown when both the tracking number and the receipt are empty at submit time, pointing the user at Receipts/Shipping to finish later. Both fields remain optional; this only adds visibility.
+- **Not built**: true bulk (multi-select-and-apply) remediation tooling. The existing one-at-a-time attach/add-tracking flows already cover the "avoid silent success" and "remediation tool" asks at a basic level; building actual bulk editing would be a standalone feature (UI for multi-select, a batch API endpoint, etc.), not a fix, and is left as a separate follow-up task rather than scope-creeping into this pass.
+
+No dedicated test added for the `AddTransaction.jsx` banner -- it's a simple, directly-verifiable conditional on two already-initialized pieces of state, and the page has no existing test harness to extend (it would need mocking ~6 hooks from scratch for one small addition). Verified via the full build + existing suite (unaffected) instead. Full suite green: 79 frontend tests, build passes.
+
 - All **36 records** are missing receipts.
 - **32 inbound shipments** have no tracking number.
 - This may be missing historical data rather than a calculation defect, but it prevents receipt coverage and shipping status features from being useful.
