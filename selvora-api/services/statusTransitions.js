@@ -481,7 +481,14 @@ async function applyTransition(tx, kind, record, action, payload = {}) {
   const user_id = ownerOf(kind, record, payload);
   if (!user_id) throw transitionError(400, 'Record owner is required');
 
-  const { data, restores, guardQuantity } = build(record, payload, now);
+  const { data: change, restores, guardQuantity } = build(record, payload, now);
+  // Dual-write (checkpoint 3): the legacy `status` column is still what every
+  // financial screen reads (services/decimalFinance.js, shared/finance.mjs), so
+  // a sale transition landing on an exception status that has a legacy
+  // equivalent writes both columns in the one guarded statement below. Without
+  // this, a sale voided through an action endpoint restores its inventory but
+  // keeps counting as realized revenue everywhere.
+  const data = kind === 'sale' ? { ...change, ...legacySaleStatusPatch(change.workflow_status) } : change;
   const from = currentStatus;
   const to = (kind === 'inventory' ? data.receiving_status : data.workflow_status) ?? from;
 
@@ -594,6 +601,31 @@ function legacyWorkflowStatus(legacyStatus, workflowType) {
   return position >= 0 ? path[position] || null : null;
 }
 
+// New sale status -> legacy `status` value, for the exception statuses only.
+// The legacy vocabulary (validation/schemas.js SALE_STATUSES) contains exactly
+// these three of the new exception statuses, and they mean the same thing in
+// both, so an exception transition can safely write them to both columns.
+//
+// RETURN_IN_PROGRESS and AUTHENTICATION_FAILED are deliberately absent: the
+// legacy vocabulary has no equivalent, and inventing one (RETURNED for a return
+// that has only been requested, CANCELLED for a failed authentication) would
+// take money out of the realized totals before the item is actually back. Those
+// two keep whatever legacy status the row already had, which is also what
+// EXCLUDED_FROM_FINANCIALS says about them: neither is excluded.
+const WORKFLOW_TO_LEGACY_SALE_STATUS = {
+  CANCELLED: 'CANCELLED',
+  RETURNED: 'RETURNED',
+  DISPUTED: 'DISPUTED',
+};
+
+// Returns the legacy-column patch for a transition that lands on
+// `workflowStatus`, or {} when that status has no legacy equivalent. A patch
+// rather than a bare value so the caller can spread it unconditionally.
+function legacySaleStatusPatch(workflowStatus) {
+  const status = WORKFLOW_TO_LEGACY_SALE_STATUS[workflowStatus];
+  return status ? { status } : {};
+}
+
 // The retired services/statusHierarchy.autoShippedStatus table, verbatim. It is
 // kept only so the legacy column keeps advancing exactly as it does today.
 const LEGACY_AUTO_SHIP = {
@@ -651,8 +683,10 @@ module.exports = {
   // Legacy-column bridge (checkpoint 2, removed with the legacy column)
   LEGACY_TO_RECEIVING_STATUS,
   LEGACY_TO_WORKFLOW_STATUS,
+  WORKFLOW_TO_LEGACY_SALE_STATUS,
   LEGACY_AUTO_SHIP,
   legacyReceivingPatch,
+  legacySaleStatusPatch,
   legacyWorkflowStatus,
   resolveSaleWorkflow,
   trackingAttached,

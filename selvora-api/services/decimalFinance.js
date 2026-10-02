@@ -8,9 +8,23 @@
 // number a client receives is already rounded correctly, with no float
 // accumulation error from summing many rows along the way.
 const { Decimal, decimal } = require('./money');
+// services/statusTransitions.js owns the excluded set (EXCLUDED_FROM_FINANCIALS)
+// for both status columns, so adding or renaming an excluded status stays a
+// one-line change in one file.
+const { isExcludedFromFinancials } = require('./statusTransitions');
 
 const number = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
-const isRealizedSale = sale => !['CANCELLED', 'RETURNED', 'DISPUTED'].includes((sale.status || '').toUpperCase());
+// A sale counts toward realized revenue/profit unless EITHER status column
+// excludes it. Both are checked rather than preferring the new column with the
+// legacy one as a fallback, because the two are written by different paths:
+// the status-workflow action endpoints write workflow_status (and, for the
+// exception statuses, the legacy column alongside it), while the legacy status
+// dropdown in the UI still writes only `status` -- on a sale that already has a
+// workflow_status from its creation. Preferring one column alone would let a
+// sale cancelled through either path back into the totals. The legacy check is
+// byte-for-byte the one that has always run, so every pre-existing row (all of
+// which have workflow_status = NULL) is classified exactly as before.
+const isRealizedSale = sale => !isExcludedFromFinancials(sale.workflow_status) && !isExcludedFromFinancials(sale.status);
 
 function batchCost(inventory = {}) {
   return decimal(inventory.unit_purchase_cost || 0)

@@ -156,6 +156,11 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
               sale_shipping:   s.sale_shipping ?? 0,
               platform_id:     s.platform_id ?? '',
               status:          s.status ?? 'SOLD',
+              // Read-only here (the save projection below deliberately omits
+              // it): isRealizedSale reads both status columns, so without it
+              // this editor's realized summary would disagree with the
+              // Transactions row for the same sale.
+              workflow_status: s.workflow_status ?? null,
               sale_date:       toDateInput(s.sale_date),
               payout_date:     toDateInput(s.payout_date),
               taxable:         s.taxable ?? true,

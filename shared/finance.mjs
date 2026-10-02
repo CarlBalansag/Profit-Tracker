@@ -2,7 +2,16 @@
 // transaction cashback are allocated by units. Legacy purchases without a
 // snapshot continue to fall back to the current stored card configuration.
 const number = value => Number.isFinite(Number(value)) ? Number(value) : 0;
-export const isRealizedSale = sale => !['CANCELLED', 'RETURNED', 'DISPUTED'].includes((sale.status || '').toUpperCase());
+// Deliberate copy of selvora-api/services/statusTransitions.js
+// EXCLUDED_FROM_FINANCIALS: this module is isomorphic (the Vite frontend imports
+// it for live previews) and so cannot require a CommonJS backend service. The
+// two are pinned together by selvora-api/test/statusFinancialExclusion.test.mjs.
+const EXCLUDED_FROM_FINANCIALS = ['CANCELLED', 'RETURNED', 'DISPUTED'];
+const isExcludedFromFinancials = status => EXCLUDED_FROM_FINANCIALS.includes(String(status || '').toUpperCase());
+// Both status columns are checked, matching services/decimalFinance.js exactly:
+// the new status-workflow actions write workflow_status, the legacy status
+// dropdown still writes `status`, and a sale excluded by either must not count.
+export const isRealizedSale = sale => !isExcludedFromFinancials(sale.workflow_status) && !isExcludedFromFinancials(sale.status);
 export function batchCost(inventory = {}) {
   return number(inventory.unit_purchase_cost) * number(inventory.qty_purchased)
     + number(inventory.sales_tax) + number(inventory.shipping_cost_inbound)

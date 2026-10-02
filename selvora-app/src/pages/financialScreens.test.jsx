@@ -124,4 +124,16 @@ describe('financial screen regression', () => {
     await waitFor(() => expect(screen.getByText('Realized Profit + Cashback')).toBeTruthy());
     expect(screen.getAllByText('+$0.00').length).toBeGreaterThan(0);
   });
+
+  // A sale voided through a status-workflow action endpoint carries the
+  // exclusion on workflow_status; the legacy `status` the UI reads can still
+  // say SOLD. The summary must exclude it just the same.
+  it('excludes a sale whose workflow_status says cancelled while the legacy status says SOLD', async () => {
+    const voided = { ...purchase.sales[0], status: 'SOLD', workflow_status: 'CANCELLED' };
+    mocks.apiFetch.mockResolvedValue(new Response(JSON.stringify({ ...purchase, sales: [voided] }), { status: 200 }));
+    render(<TransactionDetailModal row={{ rawId: 'purchase', status: 'SOLD' }} platforms={mocks.platforms}
+      paymentMethods={mocks.cards} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText('Realized Profit + Cashback')).toBeTruthy());
+    expect(screen.getAllByText('+$0.00').length).toBeGreaterThan(0);
+  });
 });
