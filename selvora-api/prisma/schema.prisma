@@ -113,6 +113,14 @@ model Inventory {
   qty_purchased         Int
   qty_on_hand           Int
   status                String         @default("PURCHASED")
+  // Status-workflow rework (additive). `status` above stays authoritative until
+  // a later checkpoint moves routes onto these fields. A NULL receiving_status
+  // means "not yet backfilled" -- see scripts/migrateStatusWorkflow.js.
+  receiving_status      String?
+  is_listed             Boolean        @default(false)
+  received_at           DateTime?
+  cancelled_at          DateTime?
+  correction_note       String?
   sales_tax             Float          @default(0)
   sales_tax_decimal     Decimal?       @db.Decimal(19, 2)
   shipping_cost_inbound Float          @default(0)
@@ -155,8 +163,24 @@ model Sales {
   sale_shipping       Float     @default(0)
   sale_shipping_decimal Decimal? @db.Decimal(19, 2)
   sale_date           DateTime
+  // User-entered "expected payout" reminder. Not a payment confirmation --
+  // that is paid_at/paid_amount/paid_reference below.
   payout_date         DateTime?
   status              String    @default("SOLD")
+  // Status-workflow rework (additive). workflow_type is copied from the
+  // platform's preset when the sale is created, so changing a platform's
+  // preset later never rewrites old sales.
+  workflow_type       String?
+  workflow_status     String?
+  delivered_at        DateTime?
+  paid_at             DateTime?
+  paid_amount         Decimal?  @db.Decimal(19, 2)
+  paid_reference      String?
+  cancelled_at        DateTime?
+  voided_at           DateTime?
+  return_requested_at DateTime?
+  returned_at         DateTime?
+  disputed_at         DateTime?
   taxable             Boolean   @default(true)
   sale_tax_collected  Float     @default(0)
   sale_tax_collected_decimal Decimal? @db.Decimal(19, 2)
@@ -182,6 +206,10 @@ model Platform {
   address          String?
   notes            String?
   tax_exempt_place Boolean     @default(false)
+  // Default sale workflow for new sales on this platform (status-workflow
+  // rework, additive). Separate from `type` above, whose live values
+  // ('Vendor' | 'Marketplace' | 'Cashout') other screens already depend on.
+  workflow_preset  String?
   inventories      Inventory[] // Platforms as vendors
   sales            Sales[]     // Platforms as marketplaces
   accounts         Account[]
