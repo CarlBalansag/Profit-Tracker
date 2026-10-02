@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, CirclePlus, ArrowLeftRight, Package,
   Receipt, FileText, ChartColumn, Wallet, CreditCard as CreditCardIcon,
-  Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, DollarSign, ShieldCheck, BookOpen, Target, CalendarDays, Truck, Sparkles
+  Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, DollarSign, ShieldCheck, BookOpen, Target, CalendarDays, Truck, Sparkles, ListChecks
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useState } from 'react';
@@ -47,6 +47,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <GlassNavItem icon={ArrowLeftRight} label="Transactions" to="/transactions" />
             <GlassNavItem icon={Package} label="Inventory" to="/inventory" />
             <GlassNavItem icon={Truck} label="Shipping" to="/shipping" />
+            <GlassNavItem icon={ListChecks} label="Statuses" to="/statuses" />
             <GlassNavItem icon={Receipt} label="Expenses" to="/expenses" />
             {SCHEDULE_C_ENABLED && <GlassNavItem icon={FileText} label="Schedule C" to="/schedule-c" />}
             <GlassNavItem icon={ChartColumn} label="Analytics" to="/analytics" />
@@ -117,6 +118,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
           <SidebarSection title="Operations" isCollapsed={isCollapsed} tutorialId="sidebar-section-operations">
             <NavItem icon={Package} label="Inventory On Hand" to="/inventory" isCollapsed={isCollapsed} tutorialId="sidebar-inventory" />
             <NavItem icon={Truck} label="Shipping" to="/shipping" isCollapsed={isCollapsed} />
+            <NavItem icon={ListChecks} label="Statuses" to="/statuses" isCollapsed={isCollapsed} />
             <NavItem icon={Receipt} label="Expenses" to="/expenses" isCollapsed={isCollapsed} tutorialId="sidebar-expenses" />
             {SCHEDULE_C_ENABLED && <NavItem icon={FileText} label="Schedule C" to="/schedule-c" isCollapsed={isCollapsed} />}
             <NavItem icon={FileText} label="Receipts" to="/receipts" isCollapsed={isCollapsed} tutorialId="sidebar-receipts" />

@@ -22,6 +22,7 @@ import Login from './pages/Login';
 import Goals from './pages/Goals';
 import Calendar from './pages/Calendar';
 import Shipping from './pages/Shipping';
+import Statuses from './pages/Statuses';
 import ScheduleC from './pages/ScheduleC';
 import { AuthProvider } from './context/AuthContext';
 import { TutorialProvider } from './context/TutorialContext';
@@ -62,6 +63,7 @@ function App() {
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/shipping" element={<Shipping />} />
+          <Route path="/statuses" element={<Statuses />} />
           <Route path="/expenses" element={<Expenses />} />
           {SCHEDULE_C_ENABLED && <Route path="/schedule-c" element={<ScheduleC />} />}
           <Route path="/receipts" element={<Receipts />} />
