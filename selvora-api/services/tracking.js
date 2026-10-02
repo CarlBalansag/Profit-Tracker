@@ -1,6 +1,7 @@
 const ups = require('./carriers/ups');
 const fedex = require('./carriers/fedex');
 const usps = require('./carriers/usps');
+const statusTransitions = require('./statusTransitions');
 
 // Carrier lookups can cost money once real credentials are configured, so
 // checks are capped per user regardless of which item/side they're for.
@@ -81,4 +82,71 @@ async function refreshTracking(trackingNumber, clients = LIVE_CARRIERS) {
   }
 }
 
-module.exports = { detectCarrier, refreshTracking, checkTrackingRateLimit };
+// The normalized "it arrived" value every carrier client maps its own wording
+// onto (services/carriers/*.js normalizeStatus).
+const DELIVERED_STATUS = 'Delivered';
+
+/**
+ * One carrier request per physical package.
+ *
+ * Several Inventory and/or Sales rows owned by the same user can legitimately
+ * share one tracking number -- one inbound box holding several purchases, or an
+ * outbound package relabelled onto a sale. The plan requires a manual check to
+ * spend one carrier request for the package, not one per row, so this checks
+ * once and writes the normalized result to every matching row inside a single
+ * transaction: a partial failure must not leave one row holding a carrier
+ * result the others never got.
+ *
+ * Rows the carrier reports delivered also take their mark_delivered transition
+ * in the same transaction. That is gated by statusTransitions.SYSTEM_ACTION_FROM,
+ * so a repeated or late check is idempotent and can never move a row backward,
+ * and a carrier error or unknown status changes no business status at all.
+ *
+ * The legacy `status` column is deliberately not touched here: a manual carrier
+ * check does not advance it today either, and no live screen reads the new
+ * columns yet, so this adds the new-column advance without changing what any
+ * current screen shows.
+ *
+ * `clients` is passed straight through to refreshTracking for tests.
+ */
+async function refreshSharedTracking({ prisma, userId, trackingNumber, clients }) {
+  // Every row of either kind that this one carrier request answers for.
+  const [inventoryRows, saleRows] = await Promise.all([
+    prisma.inventory.findMany({ where: { user_id: userId, tracking_number: trackingNumber } }),
+    prisma.sales.findMany({ where: { tracking_number: trackingNumber, inventory: { user_id: userId } } }),
+  ]);
+
+  const tracking_info = clients
+    ? await refreshTracking(trackingNumber, clients)
+    : await refreshTracking(trackingNumber);
+
+  const delivered = Boolean(tracking_info.trackable) && tracking_info.status === DELIVERED_STATUS;
+  const deliveredAt = delivered ? (tracking_info.deliveredAt || tracking_info.checkedAt) : null;
+
+  return prisma.$transaction(async (tx) => {
+    const updated = { tracking_info, inventory: [], sales: [], advanced: [] };
+    const kinds = [
+      { kind: 'inventory', rows: inventoryRows, model: tx.inventory, statusField: 'receiving_status', bucket: 'inventory' },
+      { kind: 'sale', rows: saleRows, model: tx.sales, statusField: 'workflow_status', bucket: 'sales' },
+    ];
+
+    for (const { kind, rows, model, statusField, bucket } of kinds) {
+      for (const row of rows) {
+        await model.update({ where: { id: row.id }, data: { tracking_info } });
+        let record = { ...row, tracking_info };
+        const eligible = statusTransitions.SYSTEM_ACTION_FROM[kind].mark_delivered.includes(row[statusField]);
+        if (delivered && eligible) {
+          const result = await statusTransitions.applyTransition(
+            tx, kind, row, 'mark_delivered', { delivered_at: deliveredAt, user_id: userId },
+          );
+          record = { ...result.record, tracking_info };
+          updated.advanced.push({ kind, id: row.id, from: result.from, to: result.to });
+        }
+        updated[bucket].push(record);
+      }
+    }
+    return updated;
+  });
+}
+
+module.exports = { detectCarrier, refreshTracking, checkTrackingRateLimit, refreshSharedTracking, LIVE_CARRIERS };

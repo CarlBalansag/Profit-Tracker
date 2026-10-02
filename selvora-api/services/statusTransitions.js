@@ -390,6 +390,62 @@ const SALE_TRANSITIONS = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Request payloads
+// ---------------------------------------------------------------------------
+// Date-only input is read as local noon, the same rule routes/inventory.js and
+// routes/sales.js already use, so a payment dated today cannot land on the
+// previous day in a negative UTC offset.
+const parseActionDate = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const text = String(value);
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(text) ? new Date(`${text}T12:00:00.000Z`) : new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+// Mark Paid is the one action with a server-enforced required payload. The plan
+// is explicit that there is no one-click Mark Paid anywhere, so a request that
+// omits the payment date or amount is rejected rather than quietly defaulted to
+// "now" for nothing. The plan's form field names (paid_date, amount, reference)
+// and the stored column names are both accepted.
+const REQUIRED_ACTION_PAYLOADS = {
+  mark_paid: (body) => {
+    const paid_at = parseActionDate(body.paid_at ?? body.paid_date);
+    if (!paid_at) throw transitionError(400, 'Payment date is required');
+    const rawAmount = body.paid_amount ?? body.amount;
+    if (rawAmount === undefined || rawAmount === null || rawAmount === '') {
+      throw transitionError(400, 'Payment amount is required');
+    }
+    const amount = Number(rawAmount);
+    if (!Number.isFinite(amount) || amount < 0) throw transitionError(400, 'Payment amount must be a non-negative number');
+    return {
+      paid_at,
+      paid_amount: amount.toFixed(2),
+      paid_reference: body.paid_reference ?? body.reference ?? null,
+    };
+  },
+};
+
+const DATE_PAYLOAD_FIELDS = ['received_at', 'delivered_at'];
+
+/**
+ * Turns a request body into the payload applyTransition expects, enforcing the
+ * fields an action cannot be performed without.
+ */
+function actionPayload(action, body = {}) {
+  if (REQUIRED_ACTION_PAYLOADS[action]) return REQUIRED_ACTION_PAYLOADS[action](body);
+  const payload = { ...body };
+  // A caller must never set the transition clock or the owner the concurrency
+  // guard is built from, whatever it sends.
+  delete payload.now;
+  delete payload.user_id;
+  for (const field of DATE_PAYLOAD_FIELDS) {
+    if (payload[field] !== undefined) payload[field] = parseActionDate(payload[field]);
+  }
+  return payload;
+}
+
 const ownerOf = (kind, record = {}, payload = {}) =>
   payload.user_id || (kind === 'inventory' ? record.user_id : record.user_id || record.inventory?.user_id);
 
@@ -479,6 +535,103 @@ async function applyTransition(tx, kind, record, action, payload = {}) {
   return { kind, action, from, to, data, restored: restores || 0, record: updated };
 }
 
+// ---------------------------------------------------------------------------
+// Legacy `status` column bridge (checkpoint 2, temporary)
+// ---------------------------------------------------------------------------
+// Every live screen still reads the legacy Inventory.status / Sales.status
+// column, so checkpoint 2 writes the new columns *alongside* it rather than
+// switching over. Two pieces live here so the legacy rules sit next to the new
+// ones and cannot drift apart; checkpoint 5 deletes this whole section with the
+// legacy column.
+
+// Unambiguous legacy -> new receiving status. Only the rules
+// scripts/migrateStatusWorkflow.js already applies to historical rows are
+// repeated (test/statusWorkflowCutover.test.mjs asserts the two agree).
+// Anything the migration calls ambiguous -- the sale-only statuses, CANCELLED,
+// RETURNED/DISPUTED -- maps to nothing rather than being guessed at.
+const LEGACY_TO_RECEIVING_STATUS = {
+  'Pre Order': 'PRE_ORDER',
+  PURCHASED: 'PURCHASED',
+  SHIPPED_IN: 'INBOUND',
+  'On Hand': 'ON_HAND',
+  DELIVERED: 'ON_HAND',
+  SCANNED_IN: 'ON_HAND',
+  LISTED: 'ON_HAND',
+};
+
+const LEGACY_TO_WORKFLOW_STATUS = {
+  SOLD: 'AWAITING_SHIPMENT',
+  SHIPPED_OUT: 'OUTBOUND',
+  AUTHENTICATION: 'AUTHENTICATING',
+  PAID: 'PAID',
+  RETURNED: 'RETURNED',
+  DISPUTED: 'DISPUTED',
+  CANCELLED: 'CANCELLED',
+};
+
+// Returns the new-column patch for a row whose legacy status is `legacyStatus`,
+// or {} when there is no unambiguous equivalent. A patch, not a bare status,
+// because legacy LISTED carries the listing attribute as well.
+function legacyReceivingPatch(legacyStatus) {
+  const receiving_status = LEGACY_TO_RECEIVING_STATUS[legacyStatus];
+  if (!receiving_status) return {};
+  return legacyStatus === 'LISTED' ? { receiving_status, is_listed: true } : { receiving_status };
+}
+
+const resolveSaleWorkflow = (preset) =>
+  SALE_STATUSES_BY_WORKFLOW[preset] ? preset : DEFAULT_SALE_WORKFLOW;
+
+// The legacy sale vocabulary only ever described the standard ship-out path, so
+// a non-standard workflow takes the status at the same position in its own path
+// (legacy SOLD on a DIRECT_LOCAL sale is AWAITING_HANDOFF, not AWAITING_SHIPMENT).
+function legacyWorkflowStatus(legacyStatus, workflowType) {
+  const base = LEGACY_TO_WORKFLOW_STATUS[legacyStatus];
+  if (!base) return null;
+  if (SALE_EXCEPTION_STATUSES.includes(base)) return base;
+  const path = SALE_STATUSES_BY_WORKFLOW[resolveSaleWorkflow(workflowType)];
+  if (path.includes(base)) return base;
+  const position = SALE_STATUSES_BY_WORKFLOW[DEFAULT_SALE_WORKFLOW].indexOf(base);
+  return position >= 0 ? path[position] || null : null;
+}
+
+// The retired services/statusHierarchy.autoShippedStatus table, verbatim. It is
+// kept only so the legacy column keeps advancing exactly as it does today.
+const LEGACY_AUTO_SHIP = {
+  inventory: { from: ['Pre Order', 'PURCHASED'], to: 'SHIPPED_IN' },
+  sale: { from: ['SOLD'], to: 'SHIPPED_OUT' },
+};
+
+const TRACKING_ATTACHED_ACTION = { inventory: 'add_tracking', sale: 'add_outbound_tracking' };
+
+/**
+ * "A tracking number was attached" as one entry point, for the create/update
+ * routes that write a whole row in a single guarded statement and so need a
+ * patch to merge rather than a transition of their own.
+ *
+ * Returns { legacy_status, data }: the legacy value the retired engine produced
+ * (or null), and the new-column change this registry produces (or {}). The two
+ * sides are decided independently, because a row the backfill has not reached
+ * has a legacy status but no receiving_status/workflow_status yet -- it must
+ * still advance its legacy column exactly as it does today.
+ */
+function trackingAttached(kind, record = {}, trackingNumber) {
+  const result = { legacy_status: null, data: {} };
+  const legacy = LEGACY_AUTO_SHIP[kind];
+  const tracking = String(trackingNumber || '').trim();
+  if (!legacy || !tracking) return result;
+
+  if (legacy.from.includes(record.status)) result.legacy_status = legacy.to;
+
+  const action = TRACKING_ATTACHED_ACTION[kind];
+  if (isActionAllowed(record, kind, action)) {
+    const transitions = kind === 'inventory' ? INVENTORY_TRANSITIONS : SALE_TRANSITIONS;
+    // The caller writes tracking_number itself; only the status change is ours.
+    const { tracking_number, ...statusChange } = transitions[action](record, { tracking_number: tracking }, new Date()).data;
+    result.data = statusChange;
+  }
+  return result;
+}
+
 module.exports = {
   INVENTORY_RECEIVING_STATUSES,
   SALE_WORKFLOW_TYPES,
@@ -493,5 +646,14 @@ module.exports = {
   availabilityLabel,
   allowedActions,
   isActionAllowed,
+  actionPayload,
   applyTransition,
+  // Legacy-column bridge (checkpoint 2, removed with the legacy column)
+  LEGACY_TO_RECEIVING_STATUS,
+  LEGACY_TO_WORKFLOW_STATUS,
+  LEGACY_AUTO_SHIP,
+  legacyReceivingPatch,
+  legacyWorkflowStatus,
+  resolveSaleWorkflow,
+  trackingAttached,
 };

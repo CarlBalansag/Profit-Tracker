@@ -2,11 +2,11 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
-const { createSale, updateSale } = require('../validation/schemas');
+const { createSale, updateSale, statusActionBody } = require('../validation/schemas');
 const { publishCalendarFeed } = require('../services/calendarFeed');
 const { requireOwned } = require('../services/ownership');
-const { refreshTracking, checkTrackingRateLimit } = require('../services/tracking');
-const { autoShippedStatus } = require('../services/statusHierarchy');
+const { checkTrackingRateLimit, refreshSharedTracking } = require('../services/tracking');
+const statusTransitions = require('../services/statusTransitions');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 
 // Task 8 read cutover: substitute each Decimal column's exact value into its
@@ -32,6 +32,12 @@ const parseLocalDate = (str) => {
 
 const requestError = (status, message) => Object.assign(new Error(message), { status });
 
+// Checkpoint 2: every record a GET returns carries the contextual actions its
+// current workflow status allows, so the client never derives them itself and
+// never needs a second request after performing one. Computed, never stored.
+const withActions = (sale) =>
+  (sale ? { ...sale, allowed_actions: statusTransitions.allowedActions(sale, 'sale') } : sale);
+
 // GET /api/sales
 router.get('/', isAuthenticated, async (req, res, next) => {
   try {
@@ -40,7 +46,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       include: { inventory: true, platform: true, buyer: true },
       orderBy: { sale_date: 'desc' }
     });
-    res.json(sales.map(exactSale));
+    res.json(sales.map((sale) => withActions(exactSale(sale))));
   } catch (err) {
     next(err);
   }
@@ -75,14 +81,25 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
     }
 
     const saleQty = parseInt(quantity, 10) || 1;
-    await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
+    const platform = await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
     await requireOwned('buyer', buyer_id, req.user.id, 'Buyer');
+    // The platform's preset is copied onto the sale now, so changing that
+    // platform's default workflow later never rewrites this sale.
+    const workflow_type = statusTransitions.resolveSaleWorkflow(platform && platform.workflow_preset);
     // A tracking number entered at creation time advances status the same
     // way adding one later does — unless the caller explicitly chose a status.
+    // The legacy `status` column keeps the exact values it has always had; the
+    // status-workflow columns are written alongside it from the same decision.
     let resolvedStatus = status || 'SOLD';
+    let workflowData = { workflow_type, workflow_status: statusTransitions.legacyWorkflowStatus(resolvedStatus, workflow_type) };
     if (!status && tracking_number) {
-      const advanced = autoShippedStatus('outbound', resolvedStatus);
-      if (advanced) resolvedStatus = advanced;
+      const advanced = statusTransitions.trackingAttached(
+        'sale',
+        { status: resolvedStatus, quantity: saleQty, ...workflowData },
+        tracking_number,
+      );
+      if (advanced.legacy_status) resolvedStatus = advanced.legacy_status;
+      workflowData = { ...workflowData, ...advanced.data };
     }
     const sale = await prisma.$transaction(async (tx) => {
       const stockClaim = await tx.inventory.updateMany({
@@ -109,6 +126,7 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
           sale_date: parseLocalDate(sale_date) || new Date(),
           payout_date: payout_date ? parseLocalDate(payout_date) : null,
           status: resolvedStatus,
+          ...workflowData,
           taxable: taxable !== undefined ? (taxable === true || taxable === 'true') : true,
           sale_tax_collected: parseFloat(sale_tax_collected) || 0,
           customer_tax_exempt: customer_tax_exempt === true || customer_tax_exempt === 'true',
@@ -147,10 +165,14 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
     // Adding a tracking number to a still-unshipped sale automatically
     // advances its status — never overrides an explicit status change in the
     // same request, and never touches a sale that's already further along.
+    // The legacy column advances to exactly the value it always did; the
+    // status-workflow column advances alongside it when the row has one.
     let resolvedStatus = status !== undefined ? status : existing.status;
+    const workflowData = {};
     if (status === undefined && tracking_number && !existing.tracking_number) {
-      const advanced = autoShippedStatus('outbound', existing.status);
-      if (advanced) resolvedStatus = advanced;
+      const advanced = statusTransitions.trackingAttached('sale', existing, tracking_number);
+      if (advanced.legacy_status) resolvedStatus = advanced.legacy_status;
+      Object.assign(workflowData, advanced.data);
     }
     const updated = await prisma.$transaction(async (tx) => {
       // Claim the inventory row first, using the same lock order as the
@@ -185,6 +207,7 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
         unit_price: unit_price !== undefined ? parseFloat(unit_price) : existing.unit_price,
         quantity: newQty,
         status: resolvedStatus,
+        ...workflowData,
         commission_fee: commission_fee !== undefined ? parseFloat(commission_fee) : existing.commission_fee,
         sale_shipping: sale_shipping !== undefined ? parseFloat(sale_shipping) : existing.sale_shipping,
         platform_id: platform_id !== undefined ? (platform_id || null) : existing.platform_id,
@@ -237,6 +260,38 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
   }
 });
 
+// POST /api/sales/:id/actions/:action - perform one status-workflow action
+router.post('/:id/actions/:action', isAuthenticated, validateBody(statusActionBody), async (req, res, next) => {
+  try {
+    const { id, action } = req.params;
+    const existing = await prisma.sales.findUnique({
+      where: { id },
+      include: { inventory: true },
+    });
+    if (!existing || existing.inventory.user_id !== req.user.id) {
+      return res.status(404).json({ error: 'Sale not found or access denied' });
+    }
+    // The sale's own current status decides what it can do, so a client cannot
+    // force an action the state does not support. applyTransition re-checks
+    // this inside the transaction, against the row it actually claims, which is
+    // what makes a concurrent action safe rather than this.
+    if (!statusTransitions.isActionAllowed(existing, 'sale', action)) {
+      return res.status(409).json({ error: `Action "${action}" is not available for this sale's current status` });
+    }
+
+    const payload = { ...statusTransitions.actionPayload(action, req.body), user_id: req.user.id };
+    const result = await prisma.$transaction((tx) =>
+      statusTransitions.applyTransition(tx, 'sale', existing, action, payload));
+
+    await publishCalendarFeed(req.user.id);
+    // The recomputed actions travel with the record so the client can redraw
+    // its buttons without a second request.
+    res.json(withActions(exactSale(result.record)));
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/sales/:id/track - refresh live carrier status for this sale's tracking number
 router.post('/:id/track', isAuthenticated, async (req, res, next) => {
   try {
@@ -257,12 +312,14 @@ router.post('/:id/track', isAuthenticated, async (req, res, next) => {
       return res.status(429).json({ error: 'Too many tracking checks. Please try again later.', retryAfterSeconds: rate.retryAfterSeconds });
     }
 
-    const tracking_info = await refreshTracking(existing.tracking_number);
-    const updated = await prisma.sales.update({
-      where: { id: req.params.id },
-      data: { tracking_info },
+    // One carrier request for the package, applied to every purchase and sale
+    // of this user sharing the number -- not one request per row.
+    const shared = await refreshSharedTracking({
+      prisma, userId: req.user.id, trackingNumber: existing.tracking_number,
     });
-    res.json({ ...exactSale(updated), rate_limit: { remaining: rate.remaining, resetAt: rate.resetAt } });
+    const updated = shared.sales.find((row) => row.id === req.params.id)
+      || { ...existing, tracking_info: shared.tracking_info };
+    res.json({ ...withActions(exactSale(updated)), rate_limit: { remaining: rate.remaining, resetAt: rate.resetAt } });
   } catch (err) {
     next(err);
   }

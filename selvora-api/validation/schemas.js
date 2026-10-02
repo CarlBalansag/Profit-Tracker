@@ -215,6 +215,36 @@ const updateSale = z.object({
   tracking_number: optionalString,
 }).passthrough();
 
+// Body for the status-workflow action endpoints
+// (POST /api/inventory/:id/actions/:action and POST /api/sales/:id/actions/:action).
+//
+// One schema for every action: *which* of these fields a given action requires
+// depends on the record's current status, so that decision belongs to
+// services/statusTransitions.js, not here. This schema only allowlists and
+// type-checks. Deliberately NOT .passthrough() — stripping unknown keys is what
+// stops a caller smuggling in `now` (the transition clock) or `user_id` (the
+// ownership guard) alongside a legitimate payload.
+//
+// `paid_date`/`amount`/`reference` are the plan's wording for the Mark Paid form;
+// `paid_at`/`paid_amount`/`paid_reference` are the stored column names. Both are
+// accepted and the route normalizes them onto the column names.
+const statusActionBody = z.object({
+  tracking_number: optionalString,
+  received_at: optionalDateString,
+  delivered_at: optionalDateString,
+  qty_on_hand: optionalNonNegativeInt,
+  quantity: optionalNonNegativeInt,
+  correction_note: optionalString,
+  receiving_status: optionalString,
+  workflow_status: optionalString,
+  paid_at: optionalDateString,
+  paid_date: optionalDateString,
+  paid_amount: decimalAmount({ optional: true }),
+  amount: decimalAmount({ optional: true }),
+  paid_reference: optionalString,
+  reference: optionalString,
+});
+
 const createExpense = z.object({
   name: requiredString('name'),
   amount: decimalAmount(),
@@ -402,4 +432,5 @@ module.exports = {
   updateCalendarEvent,
   goal,
   updateGoal,
+  statusActionBody,
 };
