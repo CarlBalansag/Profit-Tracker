@@ -1,124 +1,261 @@
 import React, { useMemo, useState } from 'react';
-import { ListChecks } from 'lucide-react';
+import { ListChecks, Truck, Package, Send } from 'lucide-react';
 import { useInventory, useSales } from '../hooks/useApi';
 import StatusPipeline from '../components/UI/StatusPipeline';
 import ContextualActions from '../components/UI/ContextualActions';
 import {
-  STATUS_ORDER,
+  INVENTORY_RECEIVING_STATUSES,
+  SALE_STATUS_ORDER,
+  SALE_EXCEPTION_STATUSES,
   displayLabel,
-  availabilityLabel,
+  statusVisual,
 } from '../data/statusWorkflow';
 
-// Legacy rows that the status-workflow backfill has not reached yet have no
-// receiving_status/workflow_status at all. They get their own bucket so they are
-// visible (and fixable) rather than silently missing from every tile.
-const UNASSIGNED = '__UNASSIGNED__';
+// ─── Board columns ───────────────────────────────────────────────────────────
+// A column is purely a filter over the record's *current* stored status. There
+// is no "move" mechanism and no drag-and-drop: an action POSTs to the action
+// endpoint, useRecordActions invalidates the inventory/sales/dashboard caches,
+// and the record re-renders under whichever column its new status matches.
 
-const statusKeyOf = (record) => record.__kind === 'inventory'
-  ? (record.receiving_status || UNASSIGNED)
-  : (record.workflow_status || UNASSIGNED);
+// Derived rather than retyped, so a receiving status added to the registry (and
+// mirrored in statusWorkflow.js) lands in the Incoming column automatically.
+const INCOMING_STATUSES = INVENTORY_RECEIVING_STATUSES.filter((status) => status !== 'ON_HAND');
+const ON_HAND_STATUSES = ['ON_HAND'];
 
-const productNameOf = (record) => record.__kind === 'inventory'
+const isInventory = (record) => record.__kind === 'inventory';
+const isSale = (record) => record.__kind === 'sale';
+
+const COLUMNS = [
+  {
+    id: 'incoming',
+    title: 'Incoming',
+    icon: Truck,
+    blurb: 'Purchases working their way toward you.',
+    empty: 'Nothing incoming right now.',
+    statuses: INCOMING_STATUSES,
+    includes: (record) => isInventory(record) && INCOMING_STATUSES.includes(record.receiving_status),
+  },
+  {
+    id: 'on-hand',
+    title: 'On Hand',
+    icon: Package,
+    blurb: 'Units you are holding, ready to list or sell.',
+    empty: 'Nothing on hand right now.',
+    statuses: ON_HAND_STATUSES,
+    // qty_on_hand === 0 leaves the board on purpose: a fully sold batch has
+    // nothing left to act on here, and the rest of those units' story is told by
+    // the sales that consumed them, which are already in Outbound.
+    includes: (record) => isInventory(record)
+      && record.receiving_status === 'ON_HAND'
+      && Number(record.qty_on_hand) > 0,
+  },
+  {
+    id: 'outbound',
+    title: 'Outbound',
+    icon: Send,
+    blurb: 'Sales in flight, waiting on payment, or needing attention.',
+    empty: 'Nothing outbound right now.',
+    // Every sale status across every workflow_type, forward path and exceptions
+    // alike. Exceptions share this column (the board is exactly three columns)
+    // and are flagged on the card instead of being split out.
+    statuses: SALE_STATUS_ORDER,
+    includes: (record) => isSale(record) && SALE_STATUS_ORDER.includes(record.workflow_status),
+  },
+];
+
+const statusKeyOf = (record) => (isInventory(record) ? record.receiving_status : record.workflow_status);
+
+// A fully sold on-hand batch is deliberately off the board, so it must not fall
+// through into the "not in the workflow yet" list either.
+const isSoldOutOnHand = (record) => isInventory(record)
+  && record.receiving_status === 'ON_HAND'
+  && !(Number(record.qty_on_hand) > 0);
+
+const productNameOf = (record) => (isInventory(record)
   ? (record.product_name || 'Item')
-  : (record.inventory?.product_name || 'Item');
+  // GET /api/sales includes the linked inventory row, so the product name is
+  // already on the sale -- no client-side join is needed.
+  : (record.inventory?.product_name || 'Item'));
 
-const counterpartOf = (record) => record.__kind === 'inventory'
+const counterpartOf = (record) => (isInventory(record)
   ? (record.vendor?.name || 'Direct')
-  : (record.platform?.name || record.buyer?.name || '—');
+  : (record.platform?.name || record.buyer?.name || '—'));
 
-const detailOf = (record) => {
-  if (record.__kind === 'inventory') {
-    const onHand = Number(record.qty_on_hand) || 0;
-    const purchased = Number(record.qty_purchased) || 0;
-    return `${onHand} of ${purchased} on hand · ${availabilityLabel(record)}${record.is_listed ? ' · Listed' : ''}`;
-  }
-  const qty = Number(record.quantity) || 0;
-  return `${qty} unit${qty === 1 ? '' : 's'}`;
+const units = (count) => `${count} unit${Number(count) === 1 ? '' : 's'}`;
+
+// Sales in an exception status, and purchases that were cancelled, get the same
+// red accent plus a tag. One treatment for both keeps "this one is off the happy
+// path" readable at a glance anywhere on the board.
+const exceptionTagOf = (record) => {
+  if (isSale(record) && SALE_EXCEPTION_STATUSES.includes(record.workflow_status)) return 'Exception';
+  if (isInventory(record) && record.cancelled_at) return 'Cancelled';
+  return null;
 };
 
-const ROW_CLASS = 'block md:table-row mb-3 last:mb-0 md:mb-0 rounded-xl md:rounded-none border border-white/10 md:border-0 md:border-b md:border-white/5 overflow-hidden hover:bg-white/2 transition-colors';
-const CELL_FIRST = 'block md:table-cell px-4 pt-3 md:py-3 align-top';
-const CELL_MID = 'block md:table-cell px-4 py-2 md:py-3 align-top';
-const CELL_LAST = 'block md:table-cell px-4 pb-3 md:py-3 align-top';
+const TAG = 'px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wide border';
 
-function CellLabel({ children }) {
-  return <span className="md:hidden text-[10px] uppercase font-semibold text-gray-500 tracking-wider mr-2">{children}</span>;
+function Tag({ children, tone = 'neutral' }) {
+  const tones = {
+    neutral: 'text-gray-400 border-white/10 bg-white/[0.03]',
+    good: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
+    bad: 'text-red-300 border-red-500/40 bg-red-500/10',
+  };
+  return <span className={`${TAG} ${tones[tone]}`}>{children}</span>;
 }
 
-function StatusRow({ record }) {
+function RecordCard({ record }) {
   const statusKey = statusKeyOf(record);
+  const visual = statusVisual(statusKey);
+  const exception = exceptionTagOf(record);
+
   return (
-    <tr className={ROW_CLASS}>
-      <td className={CELL_FIRST}>
-        <p className="text-sm font-medium text-gray-100 md:truncate md:max-w-60">{productNameOf(record)}</p>
-        <p className="text-xs text-gray-500">{counterpartOf(record)}</p>
-      </td>
-      <td className={CELL_MID}>
-        <CellLabel>Type</CellLabel>
-        <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border ${
-          record.__kind === 'inventory'
-            ? 'text-sky-300 border-sky-500/30 bg-sky-500/10'
-            : 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10'
-        }`}>
-          {record.__kind === 'inventory' ? 'PURCHASE' : 'SALE'}
+    <li
+      data-record={`${record.__kind}-${record.id}`}
+      data-exception={exception ? 'true' : undefined}
+      className={[
+        'rounded-xl border px-3 py-3 transition-colors',
+        exception
+          ? 'border-red-500/40 bg-red-500/[0.06]'
+          : 'border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.04]',
+      ].join(' ')}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-gray-100 truncate">{productNameOf(record)}</p>
+          <p className="text-xs text-gray-500 truncate">{counterpartOf(record)}</p>
+        </div>
+        <span className="text-[11px] font-semibold text-right shrink-0" style={{ color: visual.color }}>
+          {statusKey ? displayLabel(statusKey) : 'No status yet'}
         </span>
-      </td>
-      <td className={CELL_MID}>
-        <CellLabel>Status</CellLabel>
-        <p className="text-xs font-semibold text-gray-200">
-          {statusKey === UNASSIGNED ? 'No status yet' : displayLabel(statusKey)}
-        </p>
-        <p className="text-[11px] text-gray-500">{detailOf(record)}</p>
-        {record.__kind === 'inventory' && record.cancelled_at && (
-          <p className="text-[11px] text-red-400">Cancelled</p>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {exception && <Tag tone="bad">{exception}</Tag>}
+        {isInventory(record) ? (
+          record.receiving_status === 'ON_HAND' ? (
+            <>
+              <Tag>{`${Number(record.qty_on_hand) || 0} of ${Number(record.qty_purchased) || 0} on hand`}</Tag>
+              <Tag tone={record.is_listed ? 'good' : 'neutral'}>{record.is_listed ? 'Listed' : 'Not listed'}</Tag>
+            </>
+          ) : (
+            <Tag>{units(Number(record.qty_purchased) || 0)}</Tag>
+          )
+        ) : (
+          <Tag>{units(Number(record.quantity) || 0)}</Tag>
         )}
-      </td>
-      <td className={CELL_LAST}>
-        <CellLabel>Actions</CellLabel>
+      </div>
+
+      <div className="mt-2.5 pt-2.5 border-t border-white/5">
         <ContextualActions record={record} kind={record.__kind} />
-      </td>
-    </tr>
+      </div>
+    </li>
   );
 }
 
-export default function Statuses() {
-  const { data: inventory = [], isLoading: loadingInventory } = useInventory();
-  const { data: sales = [], isLoading: loadingSales } = useSales();
+function CardList({ records, empty }) {
+  return (
+    <ul className="px-3 pb-3 pt-3 space-y-2.5">
+      {records.length === 0 ? (
+        <li className="px-1 py-6 text-center text-xs text-gray-500">{empty}</li>
+      ) : records.map((record) => (
+        <RecordCard key={`${record.__kind}-${record.id}`} record={record} />
+      ))}
+    </ul>
+  );
+}
+
+function BoardColumn({ column, records }) {
   const [activeKey, setActiveKey] = useState(null);
+  const Icon = column.icon;
 
-  const loading = loadingInventory || loadingSales;
-
-  // One combined list: inventory receiving statuses and sale workflow statuses
-  // are disjoint vocabularies, so a selected tile already implies which kind of
-  // record it filters to.
-  const records = useMemo(() => [
-    ...inventory.map((item) => ({ ...item, __kind: 'inventory' })),
-    ...sales.map((sale) => ({ ...sale, __kind: 'sale' })),
-  ], [inventory, sales]);
-
+  // Only the statuses this column actually holds, in the registry's order.
   const statuses = useMemo(() => {
     const counts = new Map();
     for (const record of records) {
       const key = statusKeyOf(record);
       counts.set(key, (counts.get(key) || 0) + 1);
     }
-    // Known statuses in the canonical pipeline order, then the unassigned
-    // bucket, and only the ones that actually have records.
-    const ordered = STATUS_ORDER.filter((key) => counts.has(key)).map((key) => ({ key, count: counts.get(key) }));
-    if (counts.has(UNASSIGNED)) ordered.push({ key: UNASSIGNED, label: 'No status yet', count: counts.get(UNASSIGNED) });
-    return ordered;
-  }, [records]);
-
-  const visible = useMemo(
-    () => (activeKey ? records.filter((record) => statusKeyOf(record) === activeKey) : records),
-    [records, activeKey],
-  );
+    return column.statuses
+      .filter((key) => counts.has(key))
+      .map((key) => ({ key, count: counts.get(key) }));
+  }, [records, column.statuses]);
 
   // A tile can disappear between renders (the last record in it moved on), which
-  // would otherwise leave the page stuck on an empty filter with no way back.
-  const activeStillExists = activeKey && statuses.some((status) => status.key === activeKey);
-  const effectiveKey = activeStillExists ? activeKey : null;
-  const shown = effectiveKey ? visible : records;
+  // would otherwise leave the column stuck on an empty filter with no way back.
+  const effectiveKey = activeKey && statuses.some((status) => status.key === activeKey) ? activeKey : null;
+  const shown = effectiveKey ? records.filter((record) => statusKeyOf(record) === effectiveKey) : records;
+
+  return (
+    <section
+      aria-label={column.title}
+      className="card bg-[#0f1115] rounded-xl border border-white/6 min-w-0 flex flex-col"
+    >
+      <div className="px-4 py-3.5 border-b border-white/6">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+            <Icon className="w-4 h-4 text-indigo-400" />
+            {column.title}
+            <span className="text-xs font-medium text-gray-500">{records.length}</span>
+          </h2>
+          {effectiveKey && (
+            <button
+              type="button"
+              onClick={() => setActiveKey(null)}
+              className="px-2 h-6 rounded-lg border border-white/10 text-[11px] font-medium text-gray-300 hover:bg-white/5 transition-colors"
+            >
+              Clear filter
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-gray-500 mt-1">
+          {effectiveKey ? `${displayLabel(effectiveKey)} · ${shown.length} of ${records.length}` : column.blurb}
+        </p>
+      </div>
+
+      {statuses.length > 0 && (
+        <div className="px-3 pt-3">
+          <StatusPipeline
+            statuses={statuses}
+            activeKey={effectiveKey}
+            onSelect={setActiveKey}
+            label={`${column.title} status filters`}
+            gridClassName="grid grid-cols-2 gap-2"
+          />
+        </div>
+      )}
+
+      <CardList
+        records={shown}
+        empty={effectiveKey ? 'Nothing in this status right now.' : column.empty}
+      />
+    </section>
+  );
+}
+
+export default function Statuses() {
+  const { data: inventory = [], isLoading: loadingInventory } = useInventory();
+  const { data: sales = [], isLoading: loadingSales } = useSales();
+
+  const loading = loadingInventory || loadingSales;
+
+  const records = useMemo(() => [
+    ...inventory.map((item) => ({ ...item, __kind: 'inventory' })),
+    ...sales.map((sale) => ({ ...sale, __kind: 'sale' })),
+  ], [inventory, sales]);
+
+  const { byColumn, unassigned } = useMemo(() => {
+    const grouped = new Map(COLUMNS.map((column) => [column.id, []]));
+    const leftover = [];
+    for (const record of records) {
+      const column = COLUMNS.find((candidate) => candidate.includes(record));
+      if (column) grouped.get(column.id).push(record);
+      // Legacy rows the status-workflow backfill has not reached have no stored
+      // status at all. They belong to no column, but hiding them would make them
+      // unfixable, so they get a plain list under the board instead.
+      else if (!isSoldOutOnHand(record)) leftover.push(record);
+    }
+    return { byColumn: grouped, unassigned: leftover };
+  }, [records]);
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300 h-full overflow-auto px-4 py-6 sm:px-6">
@@ -127,7 +264,7 @@ export default function Statuses() {
           <ListChecks className="w-5 h-5 text-indigo-400" /> Statuses
         </h1>
         <p className="text-sm text-gray-400 mt-1">
-          Everything waiting on you, grouped by where it is in the workflow. Pick a tile to narrow the list.
+          Everything waiting on you, from purchase to payout. Act on a card and it moves to the column its new status belongs to.
         </p>
       </div>
 
@@ -140,55 +277,26 @@ export default function Statuses() {
         </div>
       ) : (
         <>
-          <StatusPipeline statuses={statuses} activeKey={effectiveKey} onSelect={setActiveKey} />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5 items-start">
+            {COLUMNS.map((column) => (
+              <BoardColumn key={column.id} column={column} records={byColumn.get(column.id)} />
+            ))}
+          </div>
 
-          <div className="card bg-[#0f1115] rounded-xl border border-white/6">
-            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 border-b border-white/6">
-              <div>
-                <h2 className="text-base font-semibold text-white">
-                  {effectiveKey
-                    ? (effectiveKey === UNASSIGNED ? 'No status yet' : displayLabel(effectiveKey))
-                    : 'All records'}
+          {unassigned.length > 0 && (
+            <section aria-label="Not in the workflow yet" className="card bg-[#0f1115] rounded-xl border border-white/6">
+              <div className="px-4 py-3.5 border-b border-white/6">
+                <h2 className="text-sm font-semibold text-white">
+                  Not in the workflow yet
+                  <span className="ml-2 text-xs font-medium text-gray-500">{unassigned.length}</span>
                 </h2>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {shown.length} record{shown.length === 1 ? '' : 's'}
+                <p className="text-xs text-gray-500 mt-1">
+                  These records have no workflow status stored, so they belong to no column. Set one from the record itself.
                 </p>
               </div>
-              {effectiveKey && (
-                <button
-                  type="button"
-                  onClick={() => setActiveKey(null)}
-                  className="px-3 h-7 rounded-lg border border-white/10 text-xs font-medium text-gray-300 hover:bg-white/5 transition-colors"
-                >
-                  Clear filter
-                </button>
-              )}
-            </div>
-
-            <div className="overflow-x-auto px-3 py-3 md:p-0">
-              <table className="w-full text-left block md:table">
-                <thead className="hidden md:table-header-group">
-                  <tr className="text-[10px] uppercase font-semibold text-gray-500 tracking-widest">
-                    <th className="px-4 py-2.5">Item</th>
-                    <th className="px-4 py-2.5">Type</th>
-                    <th className="px-4 py-2.5">Status</th>
-                    <th className="px-4 py-2.5">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="block md:table-row-group">
-                  {shown.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="block md:table-cell px-4 py-8 text-center text-sm text-gray-500">
-                        Nothing in this status right now.
-                      </td>
-                    </tr>
-                  ) : shown.map((record) => (
-                    <StatusRow key={`${record.__kind}-${record.id}`} record={record} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+              <CardList records={unassigned} empty="" />
+            </section>
+          )}
         </>
       )}
     </div>

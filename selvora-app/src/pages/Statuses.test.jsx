@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import Statuses from './Statuses';
@@ -40,15 +40,22 @@ const setData = ({ inventory = [], sales = [], loading = false }) => {
   mocks.sales = { data: sales, isLoading: loading };
 };
 
-const renderPage = () => render(<MemoryRouter><Statuses /></MemoryRouter>);
+const ui = () => <MemoryRouter><Statuses /></MemoryRouter>;
+const renderPage = () => render(ui());
 
-const rows = () => screen.getAllByRole('row').filter((row) => within(row).queryAllByRole('cell').length > 0);
-// Scoped to the filter strip: a tile label like "On Hand" is also a substring of
-// a row's "Mark On Hand" action button, and a status label like "Purchased"
-// appears in both the tile and the row.
-const strip = () => within(screen.getByRole('group', { name: 'Status filters' }));
-const tile = (name) => strip().getByRole('button', { name: new RegExp(name) });
-const table = () => within(screen.getByRole('table'));
+// ─── Board helpers ───────────────────────────────────────────────────────────
+// Each column is a labelled region, so every assertion is scoped to one column
+// and a card showing up in the wrong one fails rather than passing by accident.
+const column = (title) => screen.getByRole('region', { name: title });
+const inColumn = (title) => within(column(title));
+// Cards carry data-record; the per-column empty state is an <li> too, so role
+// alone would count it as a card.
+const cardKeys = (title) => Array.from(column(title).querySelectorAll('[data-record]'))
+  .map((card) => card.getAttribute('data-record'));
+const card = (title, key) => column(title).querySelector(`[data-record="${key}"]`);
+// A column's own mini filter strip, named after the column.
+const strip = (title) => within(screen.getByRole('group', { name: `${title} status filters` }));
+const tile = (title, name) => strip(title).getByRole('button', { name: new RegExp(name) });
 
 beforeEach(() => {
   setData({});
@@ -56,120 +63,301 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-describe('Statuses page', () => {
+describe('Statuses board', () => {
   it('shows a loading state while either resource is still fetching', () => {
     setData({ loading: true });
     renderPage();
     expect(screen.getByText('Loading…')).toBeTruthy();
   });
 
-  it('shows an empty state and no pipeline when there are no records', () => {
+  it('shows the page-level empty state and no columns when there is nothing at all', () => {
     renderPage();
     expect(screen.getByText('Nothing to track yet.')).toBeTruthy();
-    expect(screen.queryByRole('table')).toBeNull();
-    expect(screen.queryByRole('group', { name: 'Status filters' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Incoming' })).toBeNull();
   });
 
-  it('renders a single record with its status, detail and actions', () => {
+  it('renders exactly three columns', () => {
+    setData({ inventory: [purchase()] });
+    renderPage();
+    expect(column('Incoming')).toBeTruthy();
+    expect(column('On Hand')).toBeTruthy();
+    expect(column('Outbound')).toBeTruthy();
+  });
+
+  // ─── Left column: Incoming ─────────────────────────────────────────────────
+  it('puts a PURCHASED purchase in the Incoming column with its actions', () => {
     setData({ inventory: [purchase()] });
     renderPage();
 
-    expect(table().getByText('Widget')).toBeTruthy();
-    expect(table().getByText('Store')).toBeTruthy();
-    expect(table().getByText('PURCHASE')).toBeTruthy();
-    expect(table().getByText('Purchased')).toBeTruthy();
-    expect(table().getByText('5 of 5 on hand · Available')).toBeTruthy();
-    expect(table().getByRole('button', { name: 'Mark On Hand' })).toBeTruthy();
-    expect(screen.getByText('1 record')).toBeTruthy();
+    expect(cardKeys('Incoming')).toEqual(['inventory-inv1']);
+    expect(cardKeys('On Hand')).toEqual([]);
+    expect(cardKeys('Outbound')).toEqual([]);
+    // Card-scoped: the column's own filter tile carries the status label too.
+    const node = card('Incoming', 'inventory-inv1');
+    expect(within(node).getByText('Widget')).toBeTruthy();
+    expect(within(node).getByText('Store')).toBeTruthy();
+    expect(within(node).getByText('Purchased')).toBeTruthy();
+    expect(within(node).getByText('5 units')).toBeTruthy();
+    expect(within(node).getByRole('button', { name: 'Mark On Hand' })).toBeTruthy();
   });
 
-  it('groups purchases by receiving status and sales by workflow status', () => {
+  it('keeps every not-yet-received receiving status in Incoming', () => {
     setData({
-      inventory: [purchase(), purchase({ id: 'inv2', receiving_status: 'INBOUND' }), purchase({ id: 'inv3' })],
-      sales: [saleRecord(), saleRecord({ id: 'sale2', workflow_status: 'OUTBOUND', allowed_actions: [] })],
+      inventory: [
+        purchase({ id: 'inv1', receiving_status: 'PRE_ORDER' }),
+        purchase({ id: 'inv2', receiving_status: 'PURCHASED' }),
+        purchase({ id: 'inv3', receiving_status: 'INBOUND' }),
+      ],
+    });
+    renderPage();
+    expect(cardKeys('Incoming')).toEqual(['inventory-inv1', 'inventory-inv2', 'inventory-inv3']);
+  });
+
+  // ─── Middle column: On Hand ────────────────────────────────────────────────
+  it('puts an ON_HAND purchase with stock left in On Hand, showing the remaining quantity', () => {
+    setData({ inventory: [purchase({ receiving_status: 'ON_HAND', qty_on_hand: 3, allowed_actions: [] })] });
+    renderPage();
+
+    expect(cardKeys('On Hand')).toEqual(['inventory-inv1']);
+    expect(cardKeys('Incoming')).toEqual([]);
+    expect(inColumn('On Hand').getByText('3 of 5 on hand')).toBeTruthy();
+  });
+
+  it('tags an on-hand purchase as listed or not and offers the listing action', () => {
+    setData({
+      inventory: [
+        purchase({ id: 'inv1', receiving_status: 'ON_HAND', is_listed: true, allowed_actions: [act('unlist', 'Unlist')] }),
+        purchase({ id: 'inv2', receiving_status: 'ON_HAND', is_listed: false, allowed_actions: [act('list_item', 'List Item')] }),
+      ],
     });
     renderPage();
 
-    expect(tile('Purchased').textContent).toContain('2');
-    expect(tile('Inbound').textContent).toContain('1');
-    expect(tile('Waiting for Payment').textContent).toContain('1');
-    expect(tile('Outbound').textContent).toContain('1');
-    expect(rows()).toHaveLength(5);
-    expect(screen.getByText('5 records')).toBeTruthy();
+    expect(within(card('On Hand', 'inventory-inv1')).getByText('Listed')).toBeTruthy();
+    expect(within(card('On Hand', 'inventory-inv1')).getByRole('button', { name: 'Unlist' })).toBeTruthy();
+    expect(within(card('On Hand', 'inventory-inv2')).getByText('Not listed')).toBeTruthy();
+    expect(within(card('On Hand', 'inventory-inv2')).getByRole('button', { name: 'List Item' })).toBeTruthy();
   });
 
-  it('orders the tiles along the canonical pipeline, receiving before sale steps', () => {
+  // A sold-out batch has nothing left to act on from this board; the remaining
+  // story for those units is told by its sales in Outbound.
+  it('drops an ON_HAND purchase from the board once qty_on_hand reaches 0', () => {
+    setData({ inventory: [purchase({ receiving_status: 'ON_HAND', qty_on_hand: 0, allowed_actions: [] })] });
+    renderPage();
+
+    expect(cardKeys('On Hand')).toEqual([]);
+    expect(cardKeys('Incoming')).toEqual([]);
+    expect(cardKeys('Outbound')).toEqual([]);
+    expect(inColumn('On Hand').getByText('Nothing on hand right now.')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Not in the workflow yet' })).toBeNull();
+  });
+
+  // ─── Right column: Outbound ────────────────────────────────────────────────
+  it('puts a sale in Outbound whatever its workflow_type or forward status', () => {
     setData({
-      inventory: [purchase({ receiving_status: 'ON_HAND' }), purchase({ id: 'inv2', receiving_status: 'PRE_ORDER' })],
-      sales: [saleRecord({ workflow_status: 'PAID', allowed_actions: [] }), saleRecord({ id: 'sale2', workflow_status: 'OUTBOUND', allowed_actions: [] })],
+      sales: [
+        saleRecord({ id: 'sale1', workflow_status: 'AWAITING_SHIPMENT', allowed_actions: [] }),
+        saleRecord({ id: 'sale2', workflow_status: 'OUTBOUND', allowed_actions: [] }),
+        saleRecord({ id: 'sale3', workflow_status: 'AUTHENTICATING', workflow_type: 'AUTH_MARKETPLACE', allowed_actions: [] }),
+        saleRecord({ id: 'sale4', workflow_status: 'SCANNED_IN', workflow_type: 'CASHOUT', allowed_actions: [] }),
+        saleRecord({ id: 'sale5', workflow_status: 'HANDED_OVER', workflow_type: 'DIRECT_LOCAL', allowed_actions: [] }),
+        saleRecord({ id: 'sale6', workflow_status: 'PAID', allowed_actions: [] }),
+      ],
     });
     renderPage();
 
-    const labels = within(screen.getByRole('group', { name: 'Status filters' }))
-      .getAllByRole('button')
-      .map((button) => button.textContent.replace(/\d+$/, ''));
-    expect(labels).toEqual(['Pre-order', 'On Hand', 'Outbound', 'Paid']);
+    expect(cardKeys('Outbound')).toHaveLength(6);
+    expect(cardKeys('Incoming')).toEqual([]);
+    expect(cardKeys('On Hand')).toEqual([]);
   });
 
-  it('filters the list to the clicked status and clears again on a second click', () => {
+  it('renders a sale card from the linked inventory the sales endpoint already includes', () => {
+    setData({ sales: [saleRecord()] });
+    renderPage();
+    expect(inColumn('Outbound').getByText('Widget')).toBeTruthy();
+    expect(inColumn('Outbound').getByText('Market')).toBeTruthy();
+    expect(inColumn('Outbound').getByText('2 units')).toBeTruthy();
+    expect(inColumn('Outbound').getByRole('button', { name: 'Mark Paid…' })).toBeTruthy();
+  });
+
+  it('keeps exception-status sales in Outbound but flags them visually', () => {
     setData({
-      inventory: [purchase(), purchase({ id: 'inv2', product_name: 'Gadget', receiving_status: 'INBOUND' })],
+      sales: [
+        saleRecord({ id: 'sale1', allowed_actions: [] }),
+        saleRecord({ id: 'sale2', workflow_status: 'CANCELLED', allowed_actions: [] }),
+        saleRecord({ id: 'sale3', workflow_status: 'RETURN_IN_PROGRESS', allowed_actions: [] }),
+        saleRecord({ id: 'sale4', workflow_status: 'RETURNED', allowed_actions: [] }),
+        saleRecord({ id: 'sale5', workflow_status: 'DISPUTED', allowed_actions: [] }),
+        saleRecord({ id: 'sale6', workflow_status: 'AUTHENTICATION_FAILED', allowed_actions: [] }),
+      ],
+    });
+    renderPage();
+
+    // No fourth column: all six live in Outbound.
+    expect(cardKeys('Outbound')).toHaveLength(6);
+    for (const key of ['sale2', 'sale3', 'sale4', 'sale5', 'sale6']) {
+      const node = card('Outbound', `sale-${key}`);
+      expect(node.getAttribute('data-exception')).toBe('true');
+      expect(node.className).toContain('border-red-500/40');
+      expect(within(node).getByText('Exception')).toBeTruthy();
+    }
+    // The healthy sale carries neither the tag nor the accent.
+    const healthy = card('Outbound', 'sale-sale1');
+    expect(healthy.getAttribute('data-exception')).toBeNull();
+    expect(within(healthy).queryByText('Exception')).toBeNull();
+  });
+
+  it('flags a cancelled purchase without dropping it from Incoming', () => {
+    setData({ inventory: [purchase({ cancelled_at: '2026-09-30T00:00:00.000Z', allowed_actions: [] })] });
+    renderPage();
+    const node = card('Incoming', 'inventory-inv1');
+    expect(node.getAttribute('data-exception')).toBe('true');
+    expect(within(node).getByText('Cancelled')).toBeTruthy();
+  });
+
+  // ─── Per-column filter strips ──────────────────────────────────────────────
+  it('gives each column its own strip scoped to that column\'s statuses and counts', () => {
+    setData({
+      inventory: [
+        purchase({ id: 'inv1', receiving_status: 'PURCHASED' }),
+        purchase({ id: 'inv2', receiving_status: 'PURCHASED' }),
+        purchase({ id: 'inv3', receiving_status: 'INBOUND' }),
+        purchase({ id: 'inv4', receiving_status: 'ON_HAND', allowed_actions: [] }),
+      ],
       sales: [saleRecord({ allowed_actions: [] })],
     });
     renderPage();
-    expect(rows()).toHaveLength(3);
 
-    fireEvent.click(tile('Inbound'));
-    expect(rows()).toHaveLength(1);
-    expect(table().getByText('Gadget')).toBeTruthy();
-    expect(table().queryByText('Widget')).toBeNull();
-    expect(screen.getByText('1 record')).toBeTruthy();
-
-    fireEvent.click(tile('Inbound'));
-    expect(rows()).toHaveLength(3);
+    expect(strip('Incoming').getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['Purchased2', 'Inbound1']);
+    expect(strip('On Hand').getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['On Hand1']);
+    expect(strip('Outbound').getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['Waiting for Payment1']);
   });
 
-  it('clears the filter from the Clear filter button', () => {
-    setData({ inventory: [purchase(), purchase({ id: 'inv2', receiving_status: 'ON_HAND' })] });
+  it('filters one column without touching the others, and clears on a second click', () => {
+    setData({
+      inventory: [
+        purchase({ id: 'inv1', receiving_status: 'PURCHASED' }),
+        purchase({ id: 'inv2', receiving_status: 'INBOUND' }),
+      ],
+      sales: [saleRecord({ allowed_actions: [] })],
+    });
     renderPage();
+    expect(cardKeys('Incoming')).toHaveLength(2);
 
-    fireEvent.click(tile('On Hand'));
-    expect(rows()).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
-    expect(rows()).toHaveLength(2);
-    expect(screen.queryByRole('button', { name: 'Clear filter' })).toBeNull();
+    fireEvent.click(tile('Incoming', 'Inbound'));
+    expect(cardKeys('Incoming')).toEqual(['inventory-inv2']);
+    expect(cardKeys('Outbound')).toEqual(['sale-sale1']);
+
+    fireEvent.click(tile('Incoming', 'Inbound'));
+    expect(cardKeys('Incoming')).toHaveLength(2);
   });
 
-  // Legacy rows the status-workflow backfill has not reached have no status at
-  // all; they must stay visible rather than vanishing from every tile.
-  it('buckets records with no status yet under their own tile', () => {
-    setData({ inventory: [purchase({ receiving_status: null, allowed_actions: [] })] });
+  it('clears a column filter from that column\'s Clear filter button', () => {
+    setData({
+      inventory: [
+        purchase({ id: 'inv1', receiving_status: 'PURCHASED' }),
+        purchase({ id: 'inv2', receiving_status: 'INBOUND' }),
+      ],
+    });
     renderPage();
 
-    expect(tile('No status yet')).toBeTruthy();
-    fireEvent.click(tile('No status yet'));
-    expect(rows()).toHaveLength(1);
-    expect(screen.getByText('No action needed')).toBeTruthy();
+    fireEvent.click(tile('Incoming', 'Inbound'));
+    expect(cardKeys('Incoming')).toHaveLength(1);
+    fireEvent.click(inColumn('Incoming').getByRole('button', { name: 'Clear filter' }));
+    expect(cardKeys('Incoming')).toHaveLength(2);
+    expect(inColumn('Incoming').queryByRole('button', { name: 'Clear filter' })).toBeNull();
   });
 
-  it('marks a cancelled purchase without dropping it from its receiving tile', () => {
-    setData({ inventory: [purchase({ cancelled_at: '2026-09-30T00:00:00.000Z', allowed_actions: [] })] });
-    renderPage();
-    expect(screen.getByText('Cancelled')).toBeTruthy();
-    expect(tile('Purchased').textContent).toContain('1');
+  // The filtered status disappearing (its last record moved on) must not strand
+  // the column on an empty filter with no way back.
+  it('falls back to showing the whole column when the filtered status empties out', () => {
+    setData({
+      inventory: [
+        purchase({ id: 'inv1', receiving_status: 'INBOUND', allowed_actions: [] }),
+        purchase({ id: 'inv2', receiving_status: 'PURCHASED', allowed_actions: [] }),
+      ],
+    });
+    const { rerender } = renderPage();
+
+    fireEvent.click(tile('Incoming', 'Inbound'));
+    expect(cardKeys('Incoming')).toEqual(['inventory-inv1']);
+
+    setData({ inventory: [purchase({ id: 'inv2', receiving_status: 'PURCHASED', allowed_actions: [] })] });
+    rerender(ui());
+
+    expect(cardKeys('Incoming')).toEqual(['inventory-inv2']);
+    expect(inColumn('Incoming').queryByRole('button', { name: 'Clear filter' })).toBeNull();
   });
 
-  it('notes a listed purchase and a sold-out batch in the row detail', () => {
-    setData({ inventory: [purchase({ receiving_status: 'ON_HAND', qty_on_hand: 0, is_listed: true, allowed_actions: [] })] });
+  // ─── Empty columns ─────────────────────────────────────────────────────────
+  it('renders each column\'s own empty state without crashing', () => {
+    setData({ inventory: [purchase()] });
     renderPage();
-    expect(screen.getByText('0 of 5 on hand · Sold Out · Listed')).toBeTruthy();
+    expect(inColumn('On Hand').getByText('Nothing on hand right now.')).toBeTruthy();
+    expect(inColumn('Outbound').getByText('Nothing outbound right now.')).toBeTruthy();
+    // Incoming has the one purchase, so it shows no empty message.
+    expect(inColumn('Incoming').queryByText('Nothing incoming right now.')).toBeNull();
+    // An empty column renders no strip at all.
+    expect(screen.queryByRole('group', { name: 'Outbound status filters' })).toBeNull();
   });
 
-  it('renders each row\'s own contextual actions against the shared endpoints', () => {
-    setData({ inventory: [purchase()], sales: [saleRecord()] });
+  // ─── Status change moves the card ──────────────────────────────────────────
+  // There is no "move" mechanism: the action posts, the caches are invalidated,
+  // and the refreshed record simply matches a different column. The mocked query
+  // data standing in for the refetch is what proves that.
+  it('moves a purchase from Incoming to On Hand once the refreshed record says ON_HAND', async () => {
+    setData({ inventory: [purchase()] });
+    const { rerender } = renderPage();
+    expect(cardKeys('Incoming')).toEqual(['inventory-inv1']);
+
+    fireEvent.click(inColumn('Incoming').getByRole('button', { name: 'Mark On Hand' }));
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+    expect(mocks.apiFetch.mock.calls[0][0]).toBe('/api/inventory/inv1/actions/mark_on_hand');
+    await waitFor(() => expect(mocks.invalidate).toHaveBeenCalled());
+
+    // What the invalidated inventory query now returns.
+    setData({ inventory: [purchase({ receiving_status: 'ON_HAND', qty_on_hand: 5, allowed_actions: [act('list_item', 'List Item')] })] });
+    rerender(ui());
+
+    expect(cardKeys('Incoming')).toEqual([]);
+    expect(cardKeys('On Hand')).toEqual(['inventory-inv1']);
+    expect(inColumn('On Hand').getByText('5 of 5 on hand')).toBeTruthy();
+    expect(inColumn('On Hand').getByRole('button', { name: 'List Item' })).toBeTruthy();
+  });
+
+  it('moves a sale into the exception treatment once the refreshed record says CANCELLED', async () => {
+    setData({ sales: [saleRecord({ allowed_actions: [act('cancel_sale', 'Cancel Sale')] })] });
+    const { rerender } = renderPage();
+    expect(card('Outbound', 'sale-sale1').getAttribute('data-exception')).toBeNull();
+
+    fireEvent.click(inColumn('Outbound').getByRole('button', { name: 'Cancel Sale' }));
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+    expect(mocks.apiFetch.mock.calls[0][0]).toBe('/api/sales/sale1/actions/cancel_sale');
+
+    setData({ sales: [saleRecord({ workflow_status: 'CANCELLED', allowed_actions: [] })] });
+    rerender(ui());
+
+    // Still the right column -- exceptions are not a fourth column.
+    expect(cardKeys('Outbound')).toEqual(['sale-sale1']);
+    expect(card('Outbound', 'sale-sale1').getAttribute('data-exception')).toBe('true');
+    expect(inColumn('Outbound').getByText('Exception')).toBeTruthy();
+  });
+
+  // ─── Records with no stored status ─────────────────────────────────────────
+  it('lists records with no stored workflow status under the board rather than hiding them', () => {
+    setData({
+      inventory: [purchase({ receiving_status: null, allowed_actions: [] })],
+      sales: [saleRecord({ workflow_status: null, allowed_actions: [] })],
+    });
     renderPage();
-    // The sale's Mark Paid is a modal trigger, not a one-click button.
-    expect(screen.getByRole('button', { name: 'Mark Paid…' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Mark On Hand' })).toBeTruthy();
+
+    const leftover = screen.getByRole('region', { name: 'Not in the workflow yet' });
+    expect(Array.from(leftover.querySelectorAll('[data-record]')).map((n) => n.getAttribute('data-record')))
+      .toEqual(['inventory-inv1', 'sale-sale1']);
+    expect(cardKeys('Incoming')).toEqual([]);
+    expect(cardKeys('Outbound')).toEqual([]);
+    expect(within(leftover).getAllByText('No action needed')).toHaveLength(2);
   });
 });

@@ -17,12 +17,23 @@ import { statusVisual, displayLabel } from '../../data/statusWorkflow';
  *   onSelect   (key) => void. Called with the tile's key, or with null when the
  *              already-active tile is clicked (i.e. clicking again clears the
  *              filter). Omit it to render a read-only summary.
+ *   label      accessible name for the strip. A page that renders more than one
+ *              strip (the Statuses board renders one per column) must name each
+ *              of them, otherwise they are indistinguishable to a screen reader.
+ *   gridClassName  layout override, so a strip inside a narrow board column can
+ *              wrap at two tiles instead of the full-width five.
  */
-const StatusPipeline = ({ statuses = [], activeKey = null, onSelect }) => {
+const StatusPipeline = ({
+  statuses = [],
+  activeKey = null,
+  onSelect,
+  label = 'Status filters',
+  gridClassName = 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3',
+}) => {
   if (statuses.length === 0) return null;
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3" role="group" aria-label="Status filters">
+    <div className={gridClassName} role="group" aria-label={label}>
       {statuses.map((status) => {
         const visual = statusVisual(status.key);
         const Icon = status.icon || visual.icon;
