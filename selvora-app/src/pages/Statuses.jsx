@@ -3,6 +3,7 @@ import { ListChecks, Truck, Package, Send } from 'lucide-react';
 import { useInventory, useSales } from '../hooks/useApi';
 import StatusPipeline from '../components/UI/StatusPipeline';
 import ContextualActions from '../components/UI/ContextualActions';
+import QuickStatusSelect from '../components/UI/QuickStatusSelect';
 import {
   INVENTORY_RECEIVING_STATUSES,
   SALE_STATUS_ORDER,
@@ -103,7 +104,10 @@ function Tag({ children, tone = 'neutral' }) {
   return <span className={`${TAG} ${tones[tone]}`}>{children}</span>;
 }
 
-function RecordCard({ record }) {
+// `quickStatus` adds the inline status dropdown. Only the three board columns set
+// it: a record under "Not in the workflow yet" has no status to change and no
+// workflow to scope a list from, so it keeps its dedicated Set Status form alone.
+function RecordCard({ record, quickStatus = false }) {
   const statusKey = statusKeyOf(record);
   const visual = statusVisual(statusKey);
   const exception = exceptionTagOf(record);
@@ -145,20 +149,21 @@ function RecordCard({ record }) {
         )}
       </div>
 
-      <div className="mt-2.5 pt-2.5 border-t border-white/5">
+      <div className="mt-2.5 pt-2.5 border-t border-white/5 space-y-2">
         <ContextualActions record={record} kind={record.__kind} />
+        {quickStatus && <QuickStatusSelect record={record} kind={record.__kind} />}
       </div>
     </li>
   );
 }
 
-function CardList({ records, empty }) {
+function CardList({ records, empty, quickStatus = false }) {
   return (
     <ul className="px-3 pb-3 pt-3 space-y-2.5">
       {records.length === 0 ? (
         <li className="px-1 py-6 text-center text-xs text-gray-500">{empty}</li>
       ) : records.map((record) => (
-        <RecordCard key={`${record.__kind}-${record.id}`} record={record} />
+        <RecordCard key={`${record.__kind}-${record.id}`} record={record} quickStatus={quickStatus} />
       ))}
     </ul>
   );
@@ -227,6 +232,7 @@ function BoardColumn({ column, records }) {
       <CardList
         records={shown}
         empty={effectiveKey ? 'Nothing in this status right now.' : column.empty}
+        quickStatus
       />
     </section>
   );

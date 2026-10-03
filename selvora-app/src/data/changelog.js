@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.54',
+    date: '2026-10-03',
+    notes: 'Every card on the Statuses board now has a quick status dropdown, showing only the statuses that make sense for that purchase or sale.',
+  },
+  {
     version: '0.53',
     date: '2026-10-02',
     notes: 'Purchases and sales with no status yet can now be given one straight from the Statuses page.',

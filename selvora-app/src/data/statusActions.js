@@ -127,6 +127,30 @@ export function fieldsForAction(action, kind, record = {}, descriptor = {}) {
 export const actionNeedsFormFields = (action, kind, record, descriptor) =>
   fieldsForAction(action, kind, record, descriptor).length > 0;
 
+// ─── Quick inline status change ───────────────────────────────────────────────
+// The Statuses board's per-card dropdown is a faster route to the very same
+// `correct_status` action the form above collects, so the option list has to be
+// derived the same way -- per record, never a universal list of every status in
+// the app, which is the exact problem this rework replaced.
+//
+// The payload key per kind, matching what each kind's `correct_status` transition
+// reads (INVENTORY_TRANSITIONS reads receiving_status, SALE_TRANSITIONS reads
+// workflow_status).
+export const QUICK_STATUS_FIELD = { inventory: 'receiving_status', sale: 'workflow_status' };
+
+// Exactly the set the server validates the chosen value against:
+//   inventory -> INVENTORY_RECEIVING_STATUSES.
+//   sale      -> this sale's own workflow path + the exception statuses, with the
+//                same DEFAULT_SALE_WORKFLOW fallback saleWorkflowOf applies when
+//                the sale has no (or an unknown) workflow_type. The quick path
+//                deliberately never sends workflow_type -- changing what kind of
+//                sale something is belongs to the dedicated Set Sale Status form.
+export const quickStatusOptions = (kind, record = {}) => {
+  if (kind === 'inventory') return INVENTORY_RECEIVING_STATUSES;
+  if (kind === 'sale') return correctableSaleStatuses(record.workflow_type);
+  return [];
+};
+
 // ─── Consequence copy ────────────────────────────────────────────────────────
 // The plan requires a confirmation that states what actually happens, never a
 // generic "Are you sure?". Each string describes the concrete effect of the

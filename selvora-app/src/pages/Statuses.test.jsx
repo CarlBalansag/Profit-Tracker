@@ -417,4 +417,245 @@ describe('Statuses board', () => {
     expect(path).toBe('/api/sales/sale1/actions/correct_status');
     expect(JSON.parse(options.body)).toEqual({ workflow_type: 'DIRECT_LOCAL', workflow_status: 'AWAITING_HANDOFF' });
   });
+
+  // ─── Quick inline status dropdown ──────────────────────────────────────────
+  // A second, faster route to the same `correct_status` action the More menu's
+  // form reaches. What it must never do is offer a mixed list: the options are
+  // scoped to the record's own category (and, for a sale, its own workflow), and
+  // nothing is written until the apply control is pressed.
+  const CORRECT_RECEIVING = act('correct_status', 'Correct Receiving Step', { requiresForm: true, secondary: true });
+  const CORRECT_WORKFLOW = act('correct_status', 'Correct Workflow Step', { requiresForm: true, secondary: true });
+
+  const SALE_EXCEPTIONS = ['CANCELLED', 'RETURN_IN_PROGRESS', 'RETURNED', 'DISPUTED', 'AUTHENTICATION_FAILED'];
+
+  const quick = (title, key) => {
+    const node = card(title, key);
+    return within(node).queryByLabelText(key.startsWith('inventory-') ? 'Change receiving status' : 'Change sale status');
+  };
+  const optionValues = (select) => Array.from(select.options).map((option) => option.value);
+  const applyButton = (title, key) => within(card(title, key)).queryByRole('button', { name: 'Apply status change' });
+
+  it('offers every receiving status on an inventory card, in either column', () => {
+    setData({
+      inventory: [
+        purchase({ id: 'inv1', receiving_status: 'PRE_ORDER', allowed_actions: [CORRECT_RECEIVING] }),
+        purchase({ id: 'inv2', receiving_status: 'ON_HAND', qty_on_hand: 2, allowed_actions: [CORRECT_RECEIVING] }),
+      ],
+    });
+    renderPage();
+
+    const incoming = quick('Incoming', 'inventory-inv1');
+    expect(optionValues(incoming)).toEqual(['PRE_ORDER', 'PURCHASED', 'INBOUND', 'ON_HAND']);
+    expect(incoming.value).toBe('PRE_ORDER');
+
+    // The same four options whatever column the card currently sits in.
+    const onHand = quick('On Hand', 'inventory-inv2');
+    expect(optionValues(onHand)).toEqual(['PRE_ORDER', 'PURCHASED', 'INBOUND', 'ON_HAND']);
+    expect(onHand.value).toBe('ON_HAND');
+
+    // Never a sale status on a purchase.
+    expect(optionValues(incoming).some((value) => SALE_EXCEPTIONS.includes(value))).toBe(false);
+  });
+
+  // The whole point of the scoping rule: three sales in the *same* status, each
+  // offered a different list because each is on a different workflow.
+  it('scopes a sale card to its own workflow path plus the exceptions', () => {
+    setData({
+      sales: [
+        saleRecord({ id: 'sale1', workflow_type: 'STANDARD_MARKETPLACE', allowed_actions: [CORRECT_WORKFLOW] }),
+        saleRecord({ id: 'sale2', workflow_type: 'DIRECT_LOCAL', allowed_actions: [CORRECT_WORKFLOW] }),
+        saleRecord({ id: 'sale3', workflow_type: 'CASHOUT', allowed_actions: [CORRECT_WORKFLOW] }),
+      ],
+    });
+    renderPage();
+
+    expect(optionValues(quick('Outbound', 'sale-sale1'))).toEqual([
+      'AWAITING_SHIPMENT', 'OUTBOUND', 'WAITING_FOR_PAYMENT', 'PAID', ...SALE_EXCEPTIONS,
+    ]);
+    expect(optionValues(quick('Outbound', 'sale-sale2'))).toEqual([
+      'AWAITING_HANDOFF', 'HANDED_OVER', 'WAITING_FOR_PAYMENT', 'PAID', ...SALE_EXCEPTIONS,
+    ]);
+    expect(optionValues(quick('Outbound', 'sale-sale3'))).toEqual([
+      'AWAITING_SHIPMENT', 'OUTBOUND', 'DELIVERED_TO_PROVIDER', 'WAITING_FOR_SCAN_IN',
+      'SCANNED_IN', 'ACCEPTED', 'WAITING_FOR_PAYMENT', 'PAID', ...SALE_EXCEPTIONS,
+    ]);
+    // No receiving status ever reaches a sale card.
+    for (const key of ['sale-sale1', 'sale-sale2', 'sale-sale3']) {
+      expect(optionValues(quick('Outbound', key))).not.toContain('PURCHASED');
+    }
+  });
+
+  // Matches the server: SALE_TRANSITIONS.correct_status validates against
+  // saleWorkflowOf(record), which falls back to the default workflow too.
+  it('falls back to the default workflow for a sale with no workflow type', () => {
+    setData({ sales: [saleRecord({ workflow_type: null, workflow_status: 'OUTBOUND', allowed_actions: [CORRECT_WORKFLOW] })] });
+    renderPage();
+    expect(optionValues(quick('Outbound', 'sale-sale1'))).toEqual([
+      'AWAITING_SHIPMENT', 'OUTBOUND', 'WAITING_FOR_PAYMENT', 'PAID', ...SALE_EXCEPTIONS,
+    ]);
+    // No workflow-type picker here -- that belongs to the Set Sale Status form.
+    expect(within(card('Outbound', 'sale-sale1')).queryByLabelText('What kind of sale was this?')).toBeNull();
+  });
+
+  // A stored status outside the record's own list (workflow_type and
+  // workflow_status disagreeing) must still be what the control displays.
+  it('still shows a stored status that is not on the record\'s own path', () => {
+    setData({ sales: [saleRecord({ workflow_type: 'DIRECT_LOCAL', workflow_status: 'OUTBOUND', allowed_actions: [CORRECT_WORKFLOW] })] });
+    renderPage();
+    const select = quick('Outbound', 'sale-sale1');
+    expect(select.value).toBe('OUTBOUND');
+    expect(Array.from(select.options).find((option) => option.value === 'OUTBOUND').disabled).toBe(true);
+    expect(applyButton('Outbound', 'sale-sale1')).toBeNull();
+  });
+
+  it('writes nothing on the select change alone, only on the apply press', async () => {
+    setData({ inventory: [purchase({ allowed_actions: [CORRECT_RECEIVING] })] });
+    renderPage();
+    expect(applyButton('Incoming', 'inventory-inv1')).toBeNull();
+
+    fireEvent.change(quick('Incoming', 'inventory-inv1'), { target: { value: 'INBOUND' } });
+    expect(mocks.apiFetch).not.toHaveBeenCalled();
+    expect(applyButton('Incoming', 'inventory-inv1')).toBeTruthy();
+
+    fireEvent.click(applyButton('Incoming', 'inventory-inv1'));
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+    const [path, options] = mocks.apiFetch.mock.calls[0];
+    expect(path).toBe('/api/inventory/inv1/actions/correct_status');
+    expect(JSON.parse(options.body)).toEqual({ receiving_status: 'INBOUND' });
+  });
+
+  it('sends a sale only its workflow status, never a workflow type', async () => {
+    setData({ sales: [saleRecord({ workflow_type: 'CASHOUT', workflow_status: 'OUTBOUND', allowed_actions: [CORRECT_WORKFLOW] })] });
+    renderPage();
+
+    fireEvent.change(quick('Outbound', 'sale-sale1'), { target: { value: 'SCANNED_IN' } });
+    fireEvent.click(applyButton('Outbound', 'sale-sale1'));
+
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+    const [path, options] = mocks.apiFetch.mock.calls[0];
+    expect(path).toBe('/api/sales/sale1/actions/correct_status');
+    // Exactly one key: no workflow_type, no correction_note.
+    expect(JSON.parse(options.body)).toEqual({ workflow_status: 'SCANNED_IN' });
+  });
+
+  it('offers no apply control while the choice still matches the stored status', () => {
+    setData({ inventory: [purchase({ allowed_actions: [CORRECT_RECEIVING] })] });
+    renderPage();
+    const select = quick('Incoming', 'inventory-inv1');
+
+    fireEvent.change(select, { target: { value: 'PURCHASED' } }); // the current one
+    expect(applyButton('Incoming', 'inventory-inv1')).toBeNull();
+
+    fireEvent.change(select, { target: { value: 'INBOUND' } });
+    expect(applyButton('Incoming', 'inventory-inv1')).toBeTruthy();
+
+    // Picking the original back resets the control away again.
+    fireEvent.change(select, { target: { value: 'PURCHASED' } });
+    expect(applyButton('Incoming', 'inventory-inv1')).toBeNull();
+    expect(mocks.apiFetch).not.toHaveBeenCalled();
+  });
+
+  it('moves the card to its new column once the refreshed record arrives', async () => {
+    setData({ inventory: [purchase({ allowed_actions: [CORRECT_RECEIVING] })] });
+    const { rerender } = renderPage();
+
+    fireEvent.change(quick('Incoming', 'inventory-inv1'), { target: { value: 'ON_HAND' } });
+    fireEvent.click(applyButton('Incoming', 'inventory-inv1'));
+
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mocks.invalidate).toHaveBeenCalled());
+    // Apply goes away immediately, so a slow refetch cannot be double-posted.
+    await waitFor(() => expect(applyButton('Incoming', 'inventory-inv1')).toBeNull());
+    expect(quick('Incoming', 'inventory-inv1').value).toBe('ON_HAND');
+
+    // What the invalidated inventory query now returns.
+    setData({ inventory: [purchase({ receiving_status: 'ON_HAND', qty_on_hand: 5, allowed_actions: [CORRECT_RECEIVING] })] });
+    rerender(ui());
+
+    expect(cardKeys('Incoming')).toEqual([]);
+    expect(cardKeys('On Hand')).toEqual(['inventory-inv1']);
+    expect(quick('On Hand', 'inventory-inv1').value).toBe('ON_HAND');
+    expect(applyButton('On Hand', 'inventory-inv1')).toBeNull();
+  });
+
+  it('keeps the choice so apply can be pressed again when the request fails', async () => {
+    mocks.apiFetch.mockResolvedValue(new Response(JSON.stringify({ error: 'Purchase changed while saving. Reload and retry.' }), { status: 409 }));
+    setData({ inventory: [purchase({ allowed_actions: [CORRECT_RECEIVING] })] });
+    renderPage();
+
+    fireEvent.change(quick('Incoming', 'inventory-inv1'), { target: { value: 'INBOUND' } });
+    fireEvent.click(applyButton('Incoming', 'inventory-inv1'));
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+
+    await waitFor(() => expect(applyButton('Incoming', 'inventory-inv1')).toBeTruthy());
+    expect(quick('Incoming', 'inventory-inv1').value).toBe('INBOUND');
+    expect(cardKeys('Incoming')).toEqual(['inventory-inv1']);
+
+    fireEvent.click(applyButton('Incoming', 'inventory-inv1'));
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledTimes(2));
+  });
+
+  // FLAGGED: `correct_status` is registered destructive: false even when the
+  // destination is an exception status, and the existing Correct Workflow Step
+  // form already lets one be picked with no extra confirmation. This dropdown
+  // follows that precedent rather than inventing a different rule, so an
+  // exception status is one select + one apply press away. The dedicated Cancel
+  // Sale / Void buttons still carry their full consequence dialogs.
+  it('lets an exception status be picked, matching the existing correction form', async () => {
+    setData({ sales: [saleRecord({ allowed_actions: [CORRECT_WORKFLOW] })] });
+    renderPage();
+
+    fireEvent.change(quick('Outbound', 'sale-sale1'), { target: { value: 'CANCELLED' } });
+    fireEvent.click(applyButton('Outbound', 'sale-sale1'));
+
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+    expect(JSON.parse(mocks.apiFetch.mock.calls[0][1].body)).toEqual({ workflow_status: 'CANCELLED' });
+    // No consequence dialog on this path, same as the form-based correction.
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('puts no dropdown on a record whose allowed actions do not include a correction', () => {
+    setData({ inventory: [purchase()] });
+    renderPage();
+    expect(quick('Incoming', 'inventory-inv1')).toBeNull();
+    expect(within(card('Incoming', 'inventory-inv1')).getByRole('button', { name: 'Mark On Hand' })).toBeTruthy();
+  });
+
+  it('leaves the Not in the workflow yet section to its own Set Status flow', () => {
+    setData({
+      inventory: [purchase({ receiving_status: null, allowed_actions: [setStatusAction('Set Receiving Status')] })],
+      sales: [saleRecord({ workflow_status: null, workflow_type: null, allowed_actions: [setStatusAction('Set Sale Status')] })],
+    });
+    renderPage();
+
+    const leftover = screen.getByRole('region', { name: 'Not in the workflow yet' });
+    expect(within(leftover).queryByLabelText('Change receiving status')).toBeNull();
+    expect(within(leftover).queryByLabelText('Change sale status')).toBeNull();
+    expect(within(leftover).getByRole('button', { name: 'Set Receiving Status…' })).toBeTruthy();
+    expect(within(leftover).getByRole('button', { name: 'Set Sale Status…' })).toBeTruthy();
+  });
+
+  // The dropdown is additive: the form-based correction must still be reachable
+  // from the same card and behave exactly as it did before.
+  it('keeps the form-based correction working alongside the dropdown', async () => {
+    setData({ sales: [saleRecord({ workflow_type: 'DIRECT_LOCAL', allowed_actions: [CORRECT_WORKFLOW] })] });
+    renderPage();
+
+    fireEvent.click(within(card('Outbound', 'sale-sale1')).getByRole('button', { name: 'More actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Correct Workflow Step…' }));
+    await screen.findByRole('dialog', { name: 'Correct Workflow Step' });
+
+    // The form keeps its own placeholder-first option list; the dropdown has not
+    // replaced or reshaped it.
+    expect(optionValues(screen.getByLabelText('Workflow step'))).toEqual([
+      '', 'AWAITING_HANDOFF', 'HANDED_OVER', 'WAITING_FOR_PAYMENT', 'PAID', ...SALE_EXCEPTIONS,
+    ]);
+    fireEvent.change(screen.getByLabelText('Workflow step'), { target: { value: 'PAID' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+    const [path, options] = mocks.apiFetch.mock.calls[0];
+    expect(path).toBe('/api/sales/sale1/actions/correct_status');
+    expect(JSON.parse(options.body)).toEqual({ workflow_status: 'PAID' });
+  });
 });
