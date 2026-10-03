@@ -32,6 +32,21 @@ export const SALE_EXCEPTION_STATUSES = ['CANCELLED', 'RETURN_IN_PROGRESS', 'RETU
 
 export const DEFAULT_SALE_WORKFLOW = 'STANDARD_MARKETPLACE';
 
+export const SALE_WORKFLOW_TYPES = ['STANDARD_MARKETPLACE', 'AUTH_MARKETPLACE', 'CASHOUT', 'DIRECT_LOCAL'];
+
+// The workflow type is stored, never shown as a raw constant. The registry has no
+// labels for these (the API only ever sends per-status labels), so they live here
+// in the frontend's own vocabulary half, worded as the question the "what kind of
+// sale was this?" dropdown is actually asking.
+export const SALE_WORKFLOW_LABELS = {
+  STANDARD_MARKETPLACE: 'Marketplace sale (ship to buyer)',
+  AUTH_MARKETPLACE: 'Marketplace sale with authentication',
+  CASHOUT: 'Cash-out / instant payout',
+  DIRECT_LOCAL: 'Direct or local sale (hand over in person)',
+};
+
+export const workflowLabel = (workflowType) => SALE_WORKFLOW_LABELS[workflowType] || workflowType || '';
+
 // Mirrors statusTransitions.DISPLAY_LABELS (see the drift guard above).
 export const DISPLAY_LABELS = {
   // Inventory receiving

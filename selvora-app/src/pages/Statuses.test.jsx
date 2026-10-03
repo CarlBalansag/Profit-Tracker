@@ -360,4 +360,61 @@ describe('Statuses board', () => {
     expect(cardKeys('Outbound')).toEqual([]);
     expect(within(leftover).getAllByText('No action needed')).toHaveLength(2);
   });
+
+  // What the API actually sends for these rows: one primary `correct_status`
+  // descriptor flagged `initial`. The section must render it as a real button,
+  // not swallow it into a More menu, or the row stays unfixable.
+  const setStatusAction = (label) => act('correct_status', label, { requiresForm: true, initial: true });
+
+  it('offers a visible Set Status button on every record with no stored status', () => {
+    setData({
+      inventory: [purchase({ receiving_status: null, allowed_actions: [setStatusAction('Set Receiving Status')] })],
+      sales: [saleRecord({ workflow_status: null, workflow_type: null, allowed_actions: [setStatusAction('Set Sale Status')] })],
+    });
+    renderPage();
+
+    const leftover = screen.getByRole('region', { name: 'Not in the workflow yet' });
+    expect(within(leftover).getByRole('button', { name: 'Set Receiving Status…' })).toBeTruthy();
+    expect(within(leftover).getByRole('button', { name: 'Set Sale Status…' })).toBeTruthy();
+    expect(within(leftover).queryByRole('button', { name: 'More actions' })).toBeNull();
+    expect(within(leftover).queryByText('No action needed')).toBeNull();
+    expect(within(leftover).getAllByText('No status yet')).toHaveLength(2);
+  });
+
+  it('sets the status from the card and the record joins a column once refreshed', async () => {
+    setData({ inventory: [purchase({ receiving_status: null, allowed_actions: [setStatusAction('Set Receiving Status')] })] });
+    const { rerender } = renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set Receiving Status…' }));
+    await screen.findByRole('dialog', { name: 'Set Receiving Status' });
+    fireEvent.change(screen.getByLabelText('Where is this purchase now?'), { target: { value: 'INBOUND' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+    const [path, options] = mocks.apiFetch.mock.calls[0];
+    expect(path).toBe('/api/inventory/inv1/actions/correct_status');
+    expect(JSON.parse(options.body)).toEqual({ receiving_status: 'INBOUND' });
+
+    setData({ inventory: [purchase({ receiving_status: 'INBOUND', allowed_actions: [] })] });
+    rerender(ui());
+
+    expect(cardKeys('Incoming')).toEqual(['inventory-inv1']);
+    expect(screen.queryByRole('region', { name: 'Not in the workflow yet' })).toBeNull();
+  });
+
+  it('sends the workflow type with the status for a sale that had neither', async () => {
+    setData({ sales: [saleRecord({ workflow_status: null, workflow_type: null, allowed_actions: [setStatusAction('Set Sale Status')] })] });
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set Sale Status…' }));
+    await screen.findByRole('dialog', { name: 'Set Sale Status' });
+    fireEvent.change(screen.getByLabelText('What kind of sale was this?'), { target: { value: 'DIRECT_LOCAL' } });
+    fireEvent.change(screen.getByLabelText('Where is it now?'), { target: { value: 'AWAITING_HANDOFF' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+    const [path, options] = mocks.apiFetch.mock.calls[0];
+    expect(path).toBe('/api/sales/sale1/actions/correct_status');
+    expect(JSON.parse(options.body)).toEqual({ workflow_type: 'DIRECT_LOCAL', workflow_status: 'AWAITING_HANDOFF' });
+  });
 });

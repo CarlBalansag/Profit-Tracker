@@ -5,10 +5,13 @@ import {
   INVENTORY_RECEIVING_STATUSES,
   SALE_STATUSES_BY_WORKFLOW,
   SALE_EXCEPTION_STATUSES,
+  SALE_WORKFLOW_TYPES,
+  SALE_WORKFLOW_LABELS,
   STATUS_ORDER,
   displayLabel,
   availabilityLabel,
   correctableSaleStatuses,
+  workflowLabel,
 } from './statusWorkflow';
 
 // The browser cannot import the API's CommonJS registry, so statusWorkflow.js
@@ -30,6 +33,19 @@ describe('statusWorkflow mirrors the API status registry', () => {
   it('has the same sale workflow paths and exception statuses', () => {
     expect(SALE_STATUSES_BY_WORKFLOW).toEqual(registry.SALE_STATUSES_BY_WORKFLOW);
     expect(SALE_EXCEPTION_STATUSES).toEqual(registry.SALE_EXCEPTION_STATUSES);
+  });
+
+  // The workflow-type dropdown on the "set a status" form is built from this
+  // list, and the server validates the chosen value against the registry's own,
+  // so an option missing here is unreachable and an extra one is a guaranteed 400.
+  it('has the same sale workflow types, each with a readable label', () => {
+    expect(SALE_WORKFLOW_TYPES).toEqual(registry.SALE_WORKFLOW_TYPES);
+    for (const type of SALE_WORKFLOW_TYPES) {
+      expect(SALE_WORKFLOW_LABELS[type], type).toBeTruthy();
+      expect(workflowLabel(type), type).not.toBe(type);
+    }
+    expect(Object.keys(SALE_WORKFLOW_LABELS).sort()).toEqual([...SALE_WORKFLOW_TYPES].sort());
+    expect(workflowLabel(undefined)).toBe('');
   });
 
   it('orders every known status exactly once, with no unknown keys', () => {

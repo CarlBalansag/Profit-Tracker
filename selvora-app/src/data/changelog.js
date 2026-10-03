@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.53',
+    date: '2026-10-02',
+    notes: 'Purchases and sales with no status yet can now be given one straight from the Statuses page.',
+  },
+  {
     version: '0.52',
     date: '2026-10-02',
     notes: 'The Statuses page is now a three-column board: incoming purchases, items on hand, and sales on their way out.',

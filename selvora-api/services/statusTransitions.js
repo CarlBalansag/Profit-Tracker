@@ -91,9 +91,20 @@ const transitionError = (status, message) => Object.assign(new Error(message), {
 //                 Save button is the confirmation, so no extra "Are you sure?".
 //   destructive   needs an explicit confirmation explaining the consequence.
 //   secondary     belongs in the "More" menu rather than the primary row.
+//   initial       optional, present only when true: this record has no status at
+//                 all yet, so the action sets the first one rather than
+//                 correcting an existing one. The UI uses it to pick the "set a
+//                 status" form over the "correct from X to Y" one. It is added
+//                 only when set so every other descriptor keeps its exact
+//                 five-key shape.
 
-const act = (action, label, { requiresForm = false, destructive = false, secondary = false } = {}) =>
-  ({ action, label, requiresForm, destructive, secondary });
+const act = (action, label, { requiresForm = false, destructive = false, secondary = false, initial = false } = {}) =>
+  ({ action, label, requiresForm, destructive, secondary, ...(initial ? { initial: true } : {}) });
+
+// "This record has no status this registry recognises -- set one by hand."
+// Deliberately NOT secondary: it is the only action such a record has, so
+// hiding it behind the "More" menu is what left these rows unfixable.
+const setInitialStatus = (label) => act('correct_status', label, { requiresForm: true, initial: true });
 
 // Mark Paid is always a form (payment date, amount, optional reference) -- there
 // is deliberately no one-click Mark Paid anywhere in this registry.
@@ -146,9 +157,12 @@ function inventoryActions(record = {}) {
         correct,
       ];
     default:
-      // No receiving status yet (legacy row awaiting the backfill) or an
-      // unrecognized value: offer nothing rather than guessing.
-      return [];
+      // No receiving status yet (a legacy row the backfill could not resolve) or
+      // an unrecognized value. The registry used to offer nothing here rather
+      // than guess, which left the row permanently stuck with no way to act on
+      // it. It still does not guess -- it hands the decision to the user, who is
+      // the only one who knows where the purchase actually got to.
+      return [setInitialStatus('Set Receiving Status')];
   }
 }
 
@@ -213,7 +227,12 @@ function saleActions(record = {}) {
     case 'CANCELLED':
       return [act('correct_status', 'Correct Workflow Step', { requiresForm: true, secondary: true })];
     default:
-      return [];
+      // Same as the inventory default: a sale whose workflow status is missing or
+      // unrecognized (the ambiguous rows scripts/migrateStatusWorkflow.js leaves
+      // alone) gets one primary action to set it by hand. Its form also offers
+      // the workflow type, because a sale with no workflow_status usually has no
+      // workflow_type either and the two have to be chosen together.
+      return [setInitialStatus('Set Sale Status')];
   }
 }
 
@@ -381,12 +400,32 @@ const SALE_TRANSITIONS = {
     data: { workflow_status: 'CANCELLED', voided_at: now },
     restores: record.quantity,
   }),
+  // `workflow_type` in the payload is optional and only ever sent by the "set a
+  // status on a sale that has none" form. A sale the backfill could not resolve
+  // usually has no workflow_type either, so saleWorkflowOf would fall back to
+  // DEFAULT_SALE_WORKFLOW and validate the chosen status against the wrong path
+  // (and leave the sale labelled as a standard marketplace sale it never was).
+  // When it is supplied, it decides the valid status list and is written in the
+  // same guarded update as the status, so the pair can never land half-applied.
+  // When it is absent the behaviour is byte-identical to before: the record's own
+  // workflow decides, and `data` carries workflow_status alone.
   correct_status: (record, payload) => {
-    const valid = [...SALE_STATUSES_BY_WORKFLOW[saleWorkflowOf(record)], ...SALE_EXCEPTION_STATUSES];
+    const requested = payload.workflow_type;
+    const explicit = requested !== undefined && requested !== null && requested !== '';
+    if (explicit && !SALE_STATUSES_BY_WORKFLOW[requested]) {
+      throw transitionError(400, 'A valid sale workflow is required');
+    }
+    const workflow = explicit ? requested : saleWorkflowOf(record);
+    const valid = [...SALE_STATUSES_BY_WORKFLOW[workflow], ...SALE_EXCEPTION_STATUSES];
     if (!valid.includes(payload.workflow_status)) {
       throw transitionError(400, 'A valid workflow status is required');
     }
-    return { data: { workflow_status: payload.workflow_status } };
+    return {
+      data: {
+        workflow_status: payload.workflow_status,
+        ...(explicit ? { workflow_type: workflow } : {}),
+      },
+    };
   },
 };
 

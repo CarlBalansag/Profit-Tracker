@@ -57,7 +57,7 @@ const ContextualActions = ({ record, kind, actions, onSuccess, className = '' })
       setDialog({ mode: 'paid', descriptor });
       return;
     }
-    if (descriptor.requiresForm && actionNeedsFormFields(descriptor.action, kind, record)) {
+    if (descriptor.requiresForm && actionNeedsFormFields(descriptor.action, kind, record, descriptor)) {
       setDialog({ mode: 'form', descriptor });
       return;
     }
@@ -176,6 +176,7 @@ const ContextualActions = ({ record, kind, actions, onSuccess, className = '' })
           label={dialog.descriptor.label}
           kind={kind}
           record={record}
+          descriptor={dialog.descriptor}
           consequence={dialog.descriptor.destructive ? consequenceFor(dialog.descriptor.action, kind, record) : null}
           busy={busy(dialog.descriptor)}
           onSubmit={submitDialog}

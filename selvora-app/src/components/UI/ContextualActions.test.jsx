@@ -230,6 +230,116 @@ describe('ContextualActions', () => {
     expect(mocks.apiFetch).not.toHaveBeenCalled();
   });
 
+  // ─── Records with no status yet ──────────────────────────────────────────────
+  // allowedActions' default branch (no recognized status) now returns one
+  // primary `correct_status` descriptor flagged `initial`, so these rows can be
+  // given a first status instead of being stranded with nothing to click.
+  const SET_RECEIVING_STATUS = [act('correct_status', 'Set Receiving Status', { requiresForm: true, initial: true })];
+  const SET_SALE_STATUS = [act('correct_status', 'Set Sale Status', { requiresForm: true, initial: true })];
+
+  const unresolvedPurchase = { id: 'inv1', receiving_status: null, qty_purchased: 5, qty_on_hand: 5, allowed_actions: SET_RECEIVING_STATUS };
+  const unresolvedSale = { id: 'sale1', workflow_status: null, workflow_type: null, quantity: 2, allowed_actions: SET_SALE_STATUS };
+
+  it('renders Set Status as a visible button, never hidden in the More menu', () => {
+    renderActions(unresolvedPurchase, 'inventory');
+    expect(screen.getByRole('button', { name: 'Set Receiving Status…' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull();
+    expect(screen.queryByText('No action needed')).toBeNull();
+
+    cleanup();
+    renderActions(unresolvedSale, 'sale');
+    expect(screen.getByRole('button', { name: 'Set Sale Status…' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull();
+  });
+
+  it('sets a receiving status on a purchase that has none', async () => {
+    renderActions(unresolvedPurchase, 'inventory');
+    fireEvent.click(screen.getByRole('button', { name: 'Set Receiving Status…' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Set Receiving Status' });
+    // The framing asks where the purchase is, not what to correct it from.
+    expect(dialog.textContent).not.toMatch(/correct/i);
+    const select = screen.getByLabelText('Where is this purchase now?');
+    expect(Array.from(select.options).map((o) => o.value))
+      .toEqual(['', 'PRE_ORDER', 'PURCHASED', 'INBOUND', 'ON_HAND']);
+    expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(true);
+
+    fireEvent.change(select, { target: { value: 'ON_HAND' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+    const [path, options] = mocks.apiFetch.mock.calls[0];
+    expect(path).toBe('/api/inventory/inv1/actions/correct_status');
+    expect(JSON.parse(options.body)).toEqual({ receiving_status: 'ON_HAND' });
+  });
+
+  it('asks a statusless sale for its workflow type and status, and sends both', async () => {
+    renderActions(unresolvedSale, 'sale');
+    fireEvent.click(screen.getByRole('button', { name: 'Set Sale Status…' }));
+    await screen.findByRole('dialog', { name: 'Set Sale Status' });
+
+    const kindSelect = screen.getByLabelText('What kind of sale was this?');
+    expect(Array.from(kindSelect.options).map((o) => o.value))
+      .toEqual(['', 'STANDARD_MARKETPLACE', 'AUTH_MARKETPLACE', 'CASHOUT', 'DIRECT_LOCAL']);
+    // Readable labels, not the stored constants.
+    expect(Array.from(kindSelect.options).map((o) => o.textContent)).toContain('Cash-out / instant payout');
+
+    // The status list is empty until the kind of sale is chosen -- it is what
+    // decides which statuses even exist.
+    const statusSelect = screen.getByLabelText('Where is it now?');
+    expect(Array.from(statusSelect.options).map((o) => o.value)).toEqual(['']);
+
+    fireEvent.change(kindSelect, { target: { value: 'CASHOUT' } });
+    expect(Array.from(statusSelect.options).map((o) => o.value)).toEqual([
+      '', 'AWAITING_SHIPMENT', 'OUTBOUND', 'DELIVERED_TO_PROVIDER', 'WAITING_FOR_SCAN_IN',
+      'SCANNED_IN', 'ACCEPTED', 'WAITING_FOR_PAYMENT', 'PAID',
+      'CANCELLED', 'RETURN_IN_PROGRESS', 'RETURNED', 'DISPUTED', 'AUTHENTICATION_FAILED',
+    ]);
+    expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(true);
+
+    fireEvent.change(statusSelect, { target: { value: 'SCANNED_IN' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+    const [path, options] = mocks.apiFetch.mock.calls[0];
+    expect(path).toBe('/api/sales/sale1/actions/correct_status');
+    expect(JSON.parse(options.body)).toEqual({ workflow_type: 'CASHOUT', workflow_status: 'SCANNED_IN' });
+  });
+
+  // A status picked for one workflow must not survive a change of workflow --
+  // the server would reject the pair, and silently sending it would be worse.
+  it('clears a chosen status when the kind of sale changes under it', async () => {
+    renderActions(unresolvedSale, 'sale');
+    fireEvent.click(screen.getByRole('button', { name: 'Set Sale Status…' }));
+    await screen.findByRole('dialog', { name: 'Set Sale Status' });
+
+    fireEvent.change(screen.getByLabelText('What kind of sale was this?'), { target: { value: 'CASHOUT' } });
+    fireEvent.change(screen.getByLabelText('Where is it now?'), { target: { value: 'SCANNED_IN' } });
+    expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false);
+
+    fireEvent.change(screen.getByLabelText('What kind of sale was this?'), { target: { value: 'DIRECT_LOCAL' } });
+    expect(screen.getByLabelText('Where is it now?').value).toBe('');
+    expect(Array.from(screen.getByLabelText('Where is it now?').options).map((o) => o.value))
+      .not.toContain('SCANNED_IN');
+    expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(true);
+    expect(mocks.apiFetch).not.toHaveBeenCalled();
+  });
+
+  // The already-known-status correction keeps its original single-dropdown form.
+  it('leaves the ordinary Correct Workflow Step form unchanged', async () => {
+    renderActions(sale, 'sale');
+    openMore();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Correct Workflow Step…' }));
+
+    await screen.findByRole('dialog', { name: 'Correct Workflow Step' });
+    expect(screen.queryByLabelText('What kind of sale was this?')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Workflow step'), { target: { value: 'PAID' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+    expect(JSON.parse(mocks.apiFetch.mock.calls[0][1].body)).toEqual({ workflow_status: 'PAID' });
+  });
+
   it('keeps the dialog open when the action fails', async () => {
     mocks.apiFetch.mockResolvedValue(new Response(JSON.stringify({ error: 'Tracking number is required' }), { status: 400 }));
     renderActions(purchase, 'inventory');

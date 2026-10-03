@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const harness = require('../../qa/harness.cjs');
 const {
   INVENTORY_RECEIVING_STATUSES,
+  SALE_WORKFLOW_TYPES,
   SALE_STATUSES_BY_WORKFLOW,
   SALE_EXCEPTION_STATUSES,
   EXCLUDED_FROM_FINANCIALS,
@@ -32,6 +33,10 @@ describe('status registry vocabulary', () => {
     expect(SALE_STATUSES_BY_WORKFLOW.CASHOUT).toEqual(['AWAITING_SHIPMENT', 'OUTBOUND', 'DELIVERED_TO_PROVIDER', 'WAITING_FOR_SCAN_IN', 'SCANNED_IN', 'ACCEPTED', 'WAITING_FOR_PAYMENT', 'PAID']);
     expect(SALE_STATUSES_BY_WORKFLOW.DIRECT_LOCAL).toEqual(['AWAITING_HANDOFF', 'HANDED_OVER', 'WAITING_FOR_PAYMENT', 'PAID']);
     expect(SALE_EXCEPTION_STATUSES).toEqual(['CANCELLED', 'RETURN_IN_PROGRESS', 'RETURNED', 'DISPUTED', 'AUTHENTICATION_FAILED']);
+    // validation/schemas.js validates an incoming workflow_type against
+    // SALE_WORKFLOW_TYPES, so a workflow with a path but no entry in that list
+    // would be rejected at the request boundary and unreachable from the UI.
+    expect(SALE_WORKFLOW_TYPES).toEqual(Object.keys(SALE_STATUSES_BY_WORKFLOW));
     // Every workflow ends on PAID, and every status in every list has a label.
     for (const path of Object.values(SALE_STATUSES_BY_WORKFLOW)) expect(path.at(-1)).toBe('PAID');
     for (const status of [...Object.values(SALE_STATUSES_BY_WORKFLOW).flat(), ...SALE_EXCEPTION_STATUSES, ...INVENTORY_RECEIVING_STATUSES]) {
@@ -77,10 +82,24 @@ describe('allowedActions for inventory receiving states', () => {
     expect(names(soldOut, 'inventory')).toContain('list_item');
   });
 
-  it('offers nothing for a legacy row the backfill has not reached, and for an unknown kind', () => {
-    expect(allowedActions(inventory({ receiving_status: null }), 'inventory')).toEqual([]);
-    expect(allowedActions(inventory({ receiving_status: 'SHIPPED_IN' }), 'inventory')).toEqual([]);
+  // A row the backfill could not resolve used to get no actions at all, which
+  // left it permanently stuck on the Statuses board. It now gets exactly one:
+  // the user setting the receiving step by hand. Still no guess -- just a way in.
+  it('offers a legacy row the backfill has not reached a way to set its status', () => {
+    for (const current of [null, undefined, '', 'SHIPPED_IN']) {
+      const descriptors = allowedActions(inventory({ receiving_status: current }), 'inventory');
+      expect(descriptors, String(current)).toEqual([
+        { action: 'correct_status', label: 'Set Receiving Status', requiresForm: true, destructive: false, secondary: false, initial: true },
+      ]);
+      // Primary, not a "More" menu entry: it is the only action there is.
+      expect(descriptors[0].secondary, String(current)).toBe(false);
+      expect(descriptors.filter((entry) => !entry.secondary)).toHaveLength(1);
+    }
+  });
+
+  it('still offers nothing for an unknown record kind', () => {
     expect(allowedActions(inventory({ receiving_status: 'ON_HAND' }), 'nonsense')).toEqual([]);
+    expect(allowedActions(inventory({ receiving_status: null }), 'nonsense')).toEqual([]);
   });
 });
 
@@ -120,11 +139,21 @@ describe('allowedActions for every sale workflow', () => {
     expect(find(sale('RETURN_IN_PROGRESS'), 'sale', 'mark_returned')).toMatchObject({ requiresForm: true, destructive: true });
   });
 
-  it('offers only a correction for terminal exception states and nothing for an unmigrated sale', () => {
+  it('offers only a correction for terminal exception states', () => {
     for (const status of ['RETURNED', 'DISPUTED', 'CANCELLED']) {
       expect(names(sale(status), 'sale'), status).toEqual(['correct_status']);
     }
-    expect(allowedActions(sale(null), 'sale')).toEqual([]);
+  });
+
+  it('offers an unmigrated or ambiguous sale one primary action to set its status', () => {
+    for (const current of [null, undefined, '', 'PURCHASED', 'COMPLETED']) {
+      // workflow_type is deliberately absent too: these rows usually have neither.
+      const descriptors = allowedActions({ id: 'sale', quantity: 1, workflow_status: current }, 'sale');
+      expect(descriptors, String(current)).toEqual([
+        { action: 'correct_status', label: 'Set Sale Status', requiresForm: true, destructive: false, secondary: false, initial: true },
+      ]);
+      expect(descriptors[0].secondary, String(current)).toBe(false);
+    }
   });
 });
 
@@ -397,6 +426,71 @@ describe('applyTransition — sale', () => {
     expect((await run('sale', record, 'correct_status', { workflow_status: 'WAITING_FOR_PAYMENT' })).to).toBe('WAITING_FOR_PAYMENT');
     const cashout = seedSale({ workflow_status: 'CANCELLED', workflow_type: 'CASHOUT' });
     expect((await run('sale', cashout, 'correct_status', { workflow_status: 'SCANNED_IN' })).to).toBe('SCANNED_IN');
+  });
+
+  // --- correct_status on a sale whose workflow is unknown ---------------------
+  describe('correct_status with an explicit workflow type', () => {
+    it('sets the workflow type and the status together in one update', async () => {
+      const record = seedSale({ workflow_type: null, workflow_status: null });
+      const result = await run('sale', record, 'correct_status', { workflow_type: 'CASHOUT', workflow_status: 'SCANNED_IN' });
+      expect(result.to).toBe('SCANNED_IN');
+      expect(result.data).toMatchObject({ workflow_type: 'CASHOUT', workflow_status: 'SCANNED_IN' });
+      expect(harness.db.sales[0]).toMatchObject({ workflow_type: 'CASHOUT', workflow_status: 'SCANNED_IN' });
+      // Both land or neither does, so the row can never claim a status its own
+      // workflow does not contain.
+      expect(SALE_STATUSES_BY_WORKFLOW[harness.db.sales[0].workflow_type]).toContain(harness.db.sales[0].workflow_status);
+    });
+
+    it('accepts an exception status under any chosen workflow, and writes the legacy column with it', async () => {
+      const record = seedSale({ workflow_type: null, workflow_status: null, status: 'PURCHASED' });
+      expect((await run('sale', record, 'correct_status', { workflow_type: 'DIRECT_LOCAL', workflow_status: 'CANCELLED' })).to).toBe('CANCELLED');
+      expect(harness.db.sales[0]).toMatchObject({ workflow_type: 'DIRECT_LOCAL', workflow_status: 'CANCELLED', status: 'CANCELLED' });
+    });
+
+    it('rejects a workflow type outside the vocabulary rather than falling back to the default', async () => {
+      const record = seedSale({ workflow_type: null, workflow_status: null });
+      for (const bad of ['NOT_A_WORKFLOW', 'standard_marketplace', 'CASHOUT ']) {
+        await expect(run('sale', record, 'correct_status', { workflow_type: bad, workflow_status: 'PAID' }), bad)
+          .rejects.toThrow(/valid sale workflow/);
+      }
+      expect(harness.db.sales[0]).toMatchObject({ workflow_type: null, workflow_status: null });
+    });
+
+    it('rejects a status that the chosen workflow does not contain', async () => {
+      const record = seedSale({ workflow_type: null, workflow_status: null });
+      // SCANNED_IN is CASHOUT-only; AWAITING_HANDOFF is DIRECT_LOCAL-only.
+      await expect(run('sale', record, 'correct_status', { workflow_type: 'DIRECT_LOCAL', workflow_status: 'SCANNED_IN' }))
+        .rejects.toThrow(/valid workflow status/);
+      await expect(run('sale', record, 'correct_status', { workflow_type: 'STANDARD_MARKETPLACE', workflow_status: 'AWAITING_HANDOFF' }))
+        .rejects.toThrow(/valid workflow status/);
+      expect(harness.db.sales[0]).toMatchObject({ workflow_type: null, workflow_status: null });
+    });
+
+    // Backward compatibility: every pre-existing caller sends workflow_status
+    // alone, and must keep behaving exactly as it did -- including leaving
+    // workflow_type out of the update entirely rather than writing the fallback.
+    it('behaves identically to before when no workflow type is sent', async () => {
+      const known = seedSale({ workflow_type: 'CASHOUT', workflow_status: 'CANCELLED' });
+      const result = await run('sale', known, 'correct_status', { workflow_status: 'SCANNED_IN' });
+      expect(result.data).toEqual({ workflow_status: 'SCANNED_IN' });
+      expect(Object.keys(result.data)).not.toContain('workflow_type');
+      expect(harness.db.sales[0]).toMatchObject({ workflow_type: 'CASHOUT', workflow_status: 'SCANNED_IN' });
+
+      // An empty or null workflow_type is "not supplied", not "invalid".
+      for (const absent of [undefined, null, '']) {
+        const row = seedSale({ workflow_type: 'CASHOUT', workflow_status: 'CANCELLED' });
+        const res = await run('sale', row, 'correct_status', { workflow_type: absent, workflow_status: 'SCANNED_IN' });
+        expect(res.data, String(absent)).toEqual({ workflow_status: 'SCANNED_IN' });
+        expect(harness.db.sales[0].workflow_type).toBe('CASHOUT');
+      }
+
+      // With no stored workflow_type either, the default path still decides which
+      // statuses are valid, exactly as it did before this change.
+      const unknown = seedSale({ workflow_type: null, workflow_status: null });
+      await expect(run('sale', unknown, 'correct_status', { workflow_status: 'SCANNED_IN' })).rejects.toThrow(/valid workflow status/);
+      expect((await run('sale', unknown, 'correct_status', { workflow_status: 'PAID' })).to).toBe('PAID');
+      expect(harness.db.sales[0].workflow_type).toBeNull();
+    });
   });
 
   it('rejects an unknown kind, a missing record, and a read-only action', async () => {

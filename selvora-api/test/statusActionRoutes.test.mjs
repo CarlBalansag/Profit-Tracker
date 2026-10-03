@@ -214,6 +214,39 @@ describe('POST /api/sales/:id/actions/:action', () => {
     expect((await act('sales', harness.ids.sale, 'void_sale')).status).toBe(409);
     expect(harness.db.inventory[0].qty_on_hand).toBe(5);
   });
+
+  // The request schema allowlists keys and strips the rest, so workflow_type
+  // reaching the service at all is the thing worth asserting here.
+  it('sets a workflow type and status together on a sale that had neither', async () => {
+    seedSale({ workflow_type: null, workflow_status: null });
+    expect(statusTransitions.allowedActions(harness.db.sales[0], 'sale'))
+      .toEqual([{ action: 'correct_status', label: 'Set Sale Status', requiresForm: true, destructive: false, secondary: false, initial: true }]);
+
+    const res = await act('sales', harness.ids.sale, 'correct_status', {
+      workflow_type: 'CASHOUT', workflow_status: 'SCANNED_IN',
+    });
+    expect(res.status).toBe(200);
+    expect(harness.db.sales[0]).toMatchObject({ workflow_type: 'CASHOUT', workflow_status: 'SCANNED_IN' });
+    expect(names(res.body.allowed_actions)[0]).toBe('mark_accepted');
+  });
+
+  it('rejects a workflow type outside the vocabulary without writing the status', async () => {
+    seedSale({ workflow_type: null, workflow_status: null });
+    const res = await act('sales', harness.ids.sale, 'correct_status', {
+      workflow_type: 'NOT_A_WORKFLOW', workflow_status: 'PAID',
+    });
+    expect(res.status).toBe(400);
+    expect(harness.db.sales[0]).toMatchObject({ workflow_type: null, workflow_status: null });
+  });
+
+  it('rejects a status that belongs to a different workflow than the one chosen', async () => {
+    seedSale({ workflow_type: null, workflow_status: null });
+    const res = await act('sales', harness.ids.sale, 'correct_status', {
+      workflow_type: 'DIRECT_LOCAL', workflow_status: 'SCANNED_IN',
+    });
+    expect(res.status).toBe(400);
+    expect(harness.db.sales[0]).toMatchObject({ workflow_type: null, workflow_status: null });
+  });
 });
 
 describe('allowed_actions on existing GET responses', () => {
@@ -248,9 +281,25 @@ describe('allowed_actions on existing GET responses', () => {
     expect(res.body[0]).toMatchObject({ status: 'SOLD', quantity: 2, unit_price: 150 });
   });
 
-  it('is an empty list for a row the backfill has not reached, rather than a guess', async () => {
+  // Still not a guess: a row the backfill could not resolve gets exactly one
+  // action, and it is the user setting the status by hand.
+  it('offers a row the backfill has not reached one primary action to set its status', async () => {
     const res = await get('/api/inventory');
-    expect(res.body.find((row) => row.id === harness.ids.inventory).allowed_actions).toEqual([]);
+    const row = res.body.find((entry) => entry.id === harness.ids.inventory);
+    expect(row.allowed_actions).toEqual([
+      { action: 'correct_status', label: 'Set Receiving Status', requiresForm: true, destructive: false, secondary: false, initial: true },
+    ]);
+  });
+
+  it('accepts that status being set, so an unresolved row is no longer stuck', async () => {
+    // Explicitly null rather than an absent key: the real column exists and is
+    // NULL on these rows, and the in-memory double compares values strictly
+    // (undefined would not match the transition's `IS NULL` concurrency guard).
+    Object.assign(harness.db.inventory[0], { receiving_status: null });
+    const res = await act('inventory', harness.ids.inventory, 'correct_status', { receiving_status: 'ON_HAND' });
+    expect(res.status).toBe(200);
+    expect(harness.db.inventory[0].receiving_status).toBe('ON_HAND');
+    expect(names(res.body.allowed_actions)).toContain('list_item');
   });
 });
 

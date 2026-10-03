@@ -8,7 +8,9 @@
 
 import {
   INVENTORY_RECEIVING_STATUSES,
+  SALE_WORKFLOW_TYPES,
   correctableSaleStatuses,
+  workflowLabel,
 } from './statusWorkflow';
 
 // ─── Form fields ─────────────────────────────────────────────────────────────
@@ -18,34 +20,74 @@ import {
 // transition would discard are deliberately NOT listed -- a form that collects a
 // value the server throws away is worse than no field at all.
 //
-// Field spec: { name, label, type, required?, hint?, options?, min?, max? }
-export function fieldsForAction(action, kind, record = {}) {
+// Field spec: { name, label, type, required?, hint?, options?, optionsFor?,
+//               optionLabel?, dependsOn?, min?, max? }
+//   options      a fixed list of stored values.
+//   optionsFor   (values) => list, for an option list that depends on another
+//                field in the same form. Paired with `dependsOn` so the
+//                dependent value is cleared when its parent changes.
+//   optionLabel  how to label a stored value; defaults to the status label map.
+//
+// `descriptor` is the action descriptor the API attached to the record. Only its
+// `initial` flag matters here: it marks the variant of `correct_status` offered to
+// a record that has no status at all, which asks for a first status instead of
+// framing the form as correcting a step the record never reached.
+export function fieldsForAction(action, kind, record = {}, descriptor = {}) {
   switch (action) {
     case 'add_tracking':
     case 'add_outbound_tracking':
       return [{ name: 'tracking_number', label: 'Tracking number', type: 'text', required: true }];
 
     case 'correct_status':
-      return kind === 'inventory'
-        ? [
-            {
-              name: 'receiving_status',
-              label: 'Receiving step',
-              type: 'select',
-              required: true,
-              options: INVENTORY_RECEIVING_STATUSES,
-            },
-            { name: 'correction_note', label: 'Why (optional)', type: 'text' },
-          ]
-        : [
-            {
-              name: 'workflow_status',
-              label: 'Workflow step',
-              type: 'select',
-              required: true,
-              options: correctableSaleStatuses(record.workflow_type),
-            },
-          ];
+      if (kind === 'inventory') {
+        return [
+          {
+            name: 'receiving_status',
+            label: descriptor.initial ? 'Where is this purchase now?' : 'Receiving step',
+            type: 'select',
+            required: true,
+            options: INVENTORY_RECEIVING_STATUSES,
+            hint: descriptor.initial
+              ? 'This purchase has no receiving step stored yet. Pick the one it is actually in.'
+              : undefined,
+          },
+          { name: 'correction_note', label: descriptor.initial ? 'Note (optional)' : 'Why (optional)', type: 'text' },
+        ];
+      }
+      // A sale with no status usually has no stored workflow_type either, so the
+      // kind of sale has to be chosen first -- it is what decides which statuses
+      // are even valid. The server accepts both keys in one payload and writes
+      // them together.
+      if (descriptor.initial) {
+        return [
+          {
+            name: 'workflow_type',
+            label: 'What kind of sale was this?',
+            type: 'select',
+            required: true,
+            options: SALE_WORKFLOW_TYPES,
+            optionLabel: workflowLabel,
+          },
+          {
+            name: 'workflow_status',
+            label: 'Where is it now?',
+            type: 'select',
+            required: true,
+            dependsOn: 'workflow_type',
+            optionsFor: (values) => (values.workflow_type ? correctableSaleStatuses(values.workflow_type) : []),
+            hint: 'Pick the kind of sale first — it decides which statuses apply.',
+          },
+        ];
+      }
+      return [
+        {
+          name: 'workflow_status',
+          label: 'Workflow step',
+          type: 'select',
+          required: true,
+          options: correctableSaleStatuses(record.workflow_type),
+        },
+      ];
 
     case 'restore_inventory':
       return [
@@ -82,8 +124,8 @@ export function fieldsForAction(action, kind, record = {}) {
   }
 }
 
-export const actionNeedsFormFields = (action, kind, record) =>
-  fieldsForAction(action, kind, record).length > 0;
+export const actionNeedsFormFields = (action, kind, record, descriptor) =>
+  fieldsForAction(action, kind, record, descriptor).length > 0;
 
 // ─── Consequence copy ────────────────────────────────────────────────────────
 // The plan requires a confirmation that states what actually happens, never a

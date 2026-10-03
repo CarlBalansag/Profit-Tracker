@@ -291,7 +291,7 @@ export default function Statuses() {
                   <span className="ml-2 text-xs font-medium text-gray-500">{unassigned.length}</span>
                 </h2>
                 <p className="text-xs text-gray-500 mt-1">
-                  These records have no workflow status stored, so they belong to no column. Set one from the record itself.
+                  These records have no workflow status stored, so they belong to no column. Set one on the card and the record joins the board.
                 </p>
               </div>
               <CardList records={unassigned} empty="" />

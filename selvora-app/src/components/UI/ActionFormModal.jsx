@@ -27,10 +27,14 @@ const initialValues = (fields, record) => {
   return values;
 };
 
-const ActionFormModal = ({ open, action, label, kind, record, consequence, busy = false, onSubmit, onClose }) => {
+// A field's own option list, or the one derived from the values entered so far
+// (the sale status list depends on the chosen workflow type).
+const optionsOf = (field, values) => (field.optionsFor ? field.optionsFor(values) : field.options) || [];
+
+const ActionFormModal = ({ open, action, label, kind, record, descriptor, consequence, busy = false, onSubmit, onClose }) => {
   const firstRef = useRef(null);
   const modalRef = useModalKeyboard(open, () => { if (!busy) onClose?.(); }, firstRef);
-  const fields = useMemo(() => fieldsForAction(action, kind, record), [action, kind, record]);
+  const fields = useMemo(() => fieldsForAction(action, kind, record, descriptor), [action, kind, record, descriptor]);
   const [values, setValues] = useState(() => initialValues(fields, record));
 
   if (!open) return null;
@@ -89,17 +93,27 @@ const ActionFormModal = ({ open, action, label, kind, record, consequence, busy 
               id,
               ref: index === 0 ? firstRef : undefined,
               value: values[field.name] ?? '',
-              onChange: (e) => setValues((prev) => ({ ...prev, [field.name]: e.target.value })),
+              // Changing a field that others derive their options from clears
+              // those, so a status chosen for one workflow can never be submitted
+              // against another.
+              onChange: (e) => setValues((prev) => {
+                const next = { ...prev, [field.name]: e.target.value };
+                for (const dependent of fields) {
+                  if (dependent.dependsOn === field.name) next[dependent.name] = '';
+                }
+                return next;
+              }),
               className: fieldClass,
             };
+            const optionLabel = field.optionLabel || displayLabel;
             return (
               <div key={field.name}>
                 <label className={labelClass} htmlFor={id}>{field.label}</label>
                 {field.type === 'select' ? (
                   <select {...common}>
                     <option value="">Select…</option>
-                    {field.options.map((option) => (
-                      <option key={option} value={option}>{displayLabel(option)}</option>
+                    {optionsOf(field, values).map((option) => (
+                      <option key={option} value={option}>{optionLabel(option)}</option>
                     ))}
                   </select>
                 ) : (

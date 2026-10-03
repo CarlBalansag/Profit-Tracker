@@ -1,6 +1,7 @@
 const { z } = require('zod');
 const { taxDetails } = require('./scheduleC');
 const { decimal, parseAmount } = require('../services/money');
+const { SALE_WORKFLOW_TYPES } = require('../services/statusTransitions');
 
 const emptyToUndefined = (value) => (value === '' ? undefined : value);
 const emptyToNull = (value) => (value === '' ? null : value);
@@ -29,6 +30,13 @@ const INVENTORY_STATUSES = ['Pre Order', 'On Hand', 'PURCHASED', 'SHIPPED_IN', '
 const SALE_STATUSES = ['SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
 const inventoryStatus = z.preprocess(emptyToUndefined, z.enum(INVENTORY_STATUSES).optional());
 const saleStatus = z.preprocess(emptyToUndefined, z.enum(SALE_STATUSES).optional());
+
+// The status-workflow vocabulary, read from the registry rather than retyped so
+// a workflow added there cannot be rejected here. Unlike receiving_status and
+// workflow_status (plain strings this schema type-checks and the service
+// validates against the record's own workflow), the workflow type is a closed set
+// that does not depend on the record, so it is checked at the boundary too.
+const optionalSaleWorkflowType = z.preprocess(emptyToUndefined, z.enum(SALE_WORKFLOW_TYPES).optional());
 
 const money = z.preprocess(
   emptyToUndefined,
@@ -228,6 +236,12 @@ const updateSale = z.object({
 // `paid_date`/`amount`/`reference` are the plan's wording for the Mark Paid form;
 // `paid_at`/`paid_amount`/`paid_reference` are the stored column names. Both are
 // accepted and the route normalizes them onto the column names.
+//
+// `workflow_type` is only ever sent alongside `workflow_status` by the "set a
+// status on a sale that has none" form, where the sale's workflow is unknown and
+// has to be chosen at the same time. Without it listed here the key would be
+// stripped before the service saw it (this schema is deliberately not
+// .passthrough()) and the sale would be filed under the default workflow.
 const statusActionBody = z.object({
   tracking_number: optionalString,
   received_at: optionalDateString,
@@ -237,6 +251,7 @@ const statusActionBody = z.object({
   correction_note: optionalString,
   receiving_status: optionalString,
   workflow_status: optionalString,
+  workflow_type: optionalSaleWorkflowType,
   paid_at: optionalDateString,
   paid_date: optionalDateString,
   paid_amount: decimalAmount({ optional: true }),
