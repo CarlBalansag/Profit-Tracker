@@ -266,11 +266,17 @@ async function migrateStatusWorkflow({ prisma, args = [], fileSystem = fs, outpu
   // One transaction so a failure part-way leaves no half-backfilled table.
   // Each write is guarded on the legacy status the decision was made from, so a
   // row edited after it was read is skipped rather than overwritten.
+  // Each decision is its own network round-trip to the database, which can run
+  // well past Prisma's 5s default interactive-transaction timeout once there
+  // are more than a couple dozen rows (seen in practice against a remote Neon
+  // database: the transaction expired mid-run with 107 rows). The timeout
+  // below scales with row count instead of guessing a single fixed value.
   let written = 0;
   let skipped = 0;
+  const applicable = decisions.filter((decision) => !decision.ambiguous);
+  const timeout = Math.max(10_000, applicable.length * 500);
   await prisma.$transaction(async (tx) => {
-    for (const decision of decisions) {
-      if (decision.ambiguous) continue;
+    for (const decision of applicable) {
       const model = decision.table === 'Inventory' ? tx.inventory : tx.sales;
       const result = await model.updateMany({
         where: { id: decision.id, status: decision.legacy_status },
@@ -279,7 +285,7 @@ async function migrateStatusWorkflow({ prisma, args = [], fileSystem = fs, outpu
       if (result.count === 1) written += 1;
       else skipped += 1;
     }
-  });
+  }, { timeout });
 
   outputLog(JSON.stringify({ ...summary, written, skippedChangedRows: skipped }));
   return { ...summary, written, skippedChangedRows: skipped };
