@@ -7,14 +7,13 @@ import MarkPaidModal from './MarkPaidModal';
 import ActionFormModal from './ActionFormModal';
 import { actionNeedsFormFields, consequenceFor, NAVIGATE_ACTIONS, actionButtonLabel } from '../../data/statusActions';
 
-// bg-[#16181d] is declared explicitly here (not just inherited from the panel
-// behind it) so each item always has its own real, non-transparent background
-// rather than `transparent`/`rgba(0,0,0,0)` -- some OS/browser accessibility
-// tools read an element's own background-color (not what's actually painted
-// through an ancestor) when deciding whether text needs a contrast fix, and a
-// "transparent" reading on reddish text can trigger one even though the text
-// already has plenty of real contrast against the panel it sits on.
-const MENU_ITEM = 'w-full text-left px-3 py-2 text-xs font-medium text-gray-300 bg-[#16181d] hover:bg-white/5 disabled:opacity-50 transition-colors';
+const MENU_ITEM_BASE = 'w-full text-left px-3 py-2 text-xs font-medium disabled:opacity-50 transition-colors';
+// Each variant declares its own full background + text color (not just a text
+// tint over an inherited background) so every item always has a real,
+// non-transparent, intentional background rather than relying on the panel
+// behind it to show through.
+const MENU_ITEM = `${MENU_ITEM_BASE} text-gray-300 bg-[#16181d] hover:bg-white/5`;
+const MENU_ITEM_DESTRUCTIVE = `${MENU_ITEM_BASE} text-white bg-red-600 hover:bg-red-700`;
 
 /**
  * The trigger + dropdown for a record's secondary actions -- corrections,
@@ -119,7 +118,7 @@ const MoreActionsMenu = ({ record, kind, actions, onSuccess, className = '' }) =
                 role="menuitem"
                 disabled={pendingAction !== null}
                 onClick={() => activate(descriptor)}
-                className={`${MENU_ITEM} ${descriptor.destructive ? 'text-red-300 hover:bg-red-500/10' : ''}`}
+                className={descriptor.destructive ? MENU_ITEM_DESTRUCTIVE : MENU_ITEM}
               >
                 {busy(descriptor) ? 'Working…' : actionButtonLabel(descriptor)}
               </button>
