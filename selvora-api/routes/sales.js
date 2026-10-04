@@ -101,6 +101,11 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
       if (advanced.legacy_status) resolvedStatus = advanced.legacy_status;
       workflowData = { ...workflowData, ...advanced.data };
     }
+    // The workflow status starts its life right now, so the "last status
+    // updated" stamp starts with it rather than being NULL until the first
+    // action. A legacy status with no new-column equivalent resolves
+    // workflow_status to null, and such a sale gets no stamp either.
+    if (workflowData.workflow_status) workflowData.workflow_status_changed_at = new Date();
     const sale = await prisma.$transaction(async (tx) => {
       const stockClaim = await tx.inventory.updateMany({
         where: {
@@ -173,6 +178,9 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
       const advanced = statusTransitions.trackingAttached('sale', existing, tracking_number);
       if (advanced.legacy_status) resolvedStatus = advanced.legacy_status;
       Object.assign(workflowData, advanced.data);
+      // An auto-advance here is a real workflow-status change, so it carries the
+      // same "last status updated" stamp an action endpoint would write.
+      if (advanced.data.workflow_status) workflowData.workflow_status_changed_at = new Date();
     }
     const updated = await prisma.$transaction(async (tx) => {
       // Claim the inventory row first, using the same lock order as the

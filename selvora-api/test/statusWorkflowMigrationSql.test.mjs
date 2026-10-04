@@ -11,7 +11,7 @@ import { Client } from 'pg';
 // buyerInvoiceOwnershipMigration.test.mjs), scoped to the tables this
 // migration touches. This is what makes the hand-authored migration
 // DB-verified rather than only eyeballed.
-let pg, client, migration;
+let pg, client, migration, changedAtMigration;
 
 beforeAll(async () => {
   const socket = createServer(); await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
@@ -22,6 +22,7 @@ beforeAll(async () => {
   client = new Client({ connectionString: `postgresql://postgres:isolated-qa-only@127.0.0.1:${port}/status_workflow_qa` });
   await client.connect();
   migration = await readFile(new URL('../prisma/migrations/20261001010000_add_status_workflow_columns/migration.sql', import.meta.url), 'utf8');
+  changedAtMigration = await readFile(new URL('../prisma/migrations/20261003000000_add_status_changed_at/migration.sql', import.meta.url), 'utf8');
 }, 60000);
 afterAll(async () => { if (client) await client.end(); if (pg) await pg.stop(); });
 
@@ -106,6 +107,34 @@ describe('status-workflow migration SQL in an isolated PostgreSQL engine', () =>
     // paid_amount is exact-decimal from the start: NUMERIC(19,2) rounds on store.
     expect(sale).toMatchObject({ workflow_status: 'PAID', paid_amount: '288.01', paid_reference: 'PP-991' });
     // The pre-existing trigger still mirrors the legacy Float column.
+    expect(sale.unit_price_decimal).toBe('150.00');
+  });
+
+  // --- "Last status updated" follow-up migration ---------------------------
+  it('adds both status-changed-at columns as nullable timestamps, leaving existing rows NULL', async () => {
+    await client.query(migration);
+    await client.query(changedAtMigration);
+
+    expect((await columns('Inventory')).receiving_status_changed_at)
+      .toMatchObject({ data_type: 'timestamp without time zone', is_nullable: 'YES', column_default: null });
+    expect((await columns('Sales')).workflow_status_changed_at)
+      .toMatchObject({ data_type: 'timestamp without time zone', is_nullable: 'YES', column_default: null });
+
+    // No backfill: a pre-existing row keeps NULL until its next status change.
+    expect((await client.query(`SELECT status, receiving_status, receiving_status_changed_at FROM "Inventory"`)).rows)
+      .toEqual([{ status: 'LISTED', receiving_status: null, receiving_status_changed_at: null }]);
+    expect((await client.query(`SELECT status, workflow_status, workflow_status_changed_at FROM "Sales"`)).rows)
+      .toEqual([{ status: 'SOLD', workflow_status: null, workflow_status_changed_at: null }]);
+
+    // And both accept a stamp alongside the status, with the currency trigger
+    // (which only touches the "_decimal" mirrors) still working.
+    await client.query(`UPDATE "Inventory" SET receiving_status='ON_HAND', receiving_status_changed_at='2026-10-03T15:30:00Z' WHERE id='inv';`);
+    await client.query(`UPDATE "Sales" SET workflow_status='PAID', workflow_status_changed_at='2026-10-03T15:30:00Z', unit_price=150.004 WHERE id='sale';`);
+    expect((await client.query(`SELECT receiving_status_changed_at FROM "Inventory"`)).rows[0].receiving_status_changed_at)
+      .toBeInstanceOf(Date);
+    const [sale] = (await client.query(`SELECT workflow_status, workflow_status_changed_at, unit_price_decimal FROM "Sales"`)).rows;
+    expect(sale.workflow_status).toBe('PAID');
+    expect(sale.workflow_status_changed_at).toBeInstanceOf(Date);
     expect(sale.unit_price_decimal).toBe('150.00');
   });
 

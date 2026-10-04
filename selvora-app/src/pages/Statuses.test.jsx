@@ -226,6 +226,66 @@ describe('Statuses board', () => {
     expect(within(node).getByText('Cancelled')).toBeTruthy();
   });
 
+  // ─── "Last status updated" on the card ─────────────────────────────────────
+  // The stamp sits on the item-name row, right-aligned, as an age rather than a
+  // calendar date (see relativeTime in data/statusWorkflow.js for why).
+  const stampOf = (title, key) => card(title, key).querySelector('[data-status-changed]');
+
+  it('shows how long ago each card\'s status changed, on the item-name row', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-03T15:30:00.000Z'));
+    setData({
+      inventory: [purchase({ receiving_status_changed_at: '2026-10-03T13:30:00.000Z', allowed_actions: [] })],
+      sales: [saleRecord({ workflow_status_changed_at: '2026-10-01T15:30:00.000Z', allowed_actions: [] })],
+    });
+    renderPage();
+
+    const purchaseStamp = stampOf('Incoming', 'inventory-inv1');
+    expect(purchaseStamp.textContent).toBe('2h ago');
+    expect(stampOf('Outbound', 'sale-sale1').textContent).toBe('2d ago');
+
+    // Same row as the product name, with the name still truncating and the stamp
+    // pinned to the right of it.
+    const nameRow = purchaseStamp.parentElement;
+    expect(nameRow.className).toContain('justify-between');
+    expect(within(nameRow).getByText('Widget')).toBeTruthy();
+    expect(nameRow.querySelector('p').className).toContain('truncate');
+    expect(purchaseStamp.className).toContain('shrink-0');
+    vi.useRealTimers();
+  });
+
+  it('shows no timestamp at all on a record whose status has never been stamped', () => {
+    setData({
+      // A legacy row the status-workflow backfill never reached: the column is
+      // NULL, and a fabricated "just now" would be worse than nothing.
+      inventory: [purchase({ receiving_status_changed_at: null, allowed_actions: [] })],
+      sales: [saleRecord({ allowed_actions: [] })], // field absent entirely
+    });
+    renderPage();
+
+    expect(stampOf('Incoming', 'inventory-inv1')).toBeNull();
+    expect(stampOf('Outbound', 'sale-sale1')).toBeNull();
+    // The rest of the card is unaffected.
+    expect(within(card('Incoming', 'inventory-inv1')).getByText('Widget')).toBeTruthy();
+    expect(within(card('Incoming', 'inventory-inv1')).getByText('Purchased')).toBeTruthy();
+  });
+
+  it('stamps a completed and an unassigned card the same way as a board card', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-03T15:30:00.000Z'));
+    setData({
+      inventory: [purchase({ receiving_status: null, receiving_status_changed_at: '2026-10-03T15:29:45.000Z', allowed_actions: [] })],
+      sales: [saleRecord({ workflow_status: 'PAID', workflow_status_changed_at: '2026-10-03T12:30:00.000Z', allowed_actions: [] })],
+    });
+    renderPage();
+
+    const leftover = screen.getByRole('region', { name: 'Not in the workflow yet' });
+    expect(leftover.querySelector('[data-status-changed]').textContent).toBe('just now');
+    expect(screen.getByRole('region', { name: 'Completed' }).querySelector('[data-status-changed]').textContent)
+      .toBe('3h ago');
+    vi.useRealTimers();
+  });
+
   // ─── Per-column filter strips ──────────────────────────────────────────────
   it('gives each column its own strip scoped to that column\'s statuses and counts', () => {
     setData({

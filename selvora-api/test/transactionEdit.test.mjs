@@ -44,6 +44,19 @@ describe('atomic expanded transaction edits', () => {
     expect(created).toMatchObject({ workflow_type: 'STANDARD_MARKETPLACE', workflow_status: 'AWAITING_SHIPMENT' });
   });
 
+  // Same gap, one column later: a sale created here must also start with a
+  // "status last updated" stamp, or it shows no timestamp on the Statuses board
+  // until its first action while an identical sale from POST /api/sales does.
+  it('stamps an inline-created sale\'s workflow_status_changed_at alongside its first status', async () => {
+    const before = Date.now();
+    const body = { inventory: { qty_purchased: 5 }, sales: [], newSale: { quantity: 2, unit_price: '50.00' } };
+    expect((await write(body)).status).toBe(200);
+    const created = harness.db.sales[harness.db.sales.length - 1];
+    expect(created.workflow_status).toBe('AWAITING_SHIPMENT');
+    expect(created.workflow_status_changed_at).toBeInstanceOf(Date);
+    expect(created.workflow_status_changed_at.getTime()).toBeGreaterThanOrEqual(before);
+  });
+
   it('preserves all purchase data if an inline new sale fails, then permits retry', async () => {
     const original = structuredClone({ inventory: harness.db.inventory, sales: harness.db.sales });
     harness.faults['sales.create'] = true;

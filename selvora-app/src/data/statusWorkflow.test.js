@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DISPLAY_LABELS,
   INVENTORY_RECEIVING_STATUSES,
@@ -11,6 +11,7 @@ import {
   displayLabel,
   availabilityLabel,
   correctableSaleStatuses,
+  relativeTime,
   workflowLabel,
 } from './statusWorkflow';
 
@@ -64,6 +65,92 @@ describe('statusWorkflow mirrors the API status registry', () => {
     expect(availabilityLabel({})).toBe('Sold Out');
   });
 
+});
+
+// `relativeTime` formats receiving_status_changed_at / workflow_status_changed_at
+// for the Statuses board. It is deliberately relative rather than an absolute
+// calendar date for anything under a week: a date-only value rendered through
+// toLocaleDateString can land on the wrong local day (the app's known UTC-midnight
+// bug), and "when did this last move?" is the question a board card is answering.
+describe('relativeTime', () => {
+  const NOW = new Date('2026-10-03T15:30:00.000Z');
+  const ago = (ms) => new Date(NOW.getTime() - ms).toISOString();
+  const MINUTE = 60 * 1000;
+  const HOUR = 60 * MINUTE;
+  const DAY = 24 * HOUR;
+
+  const at = (now = NOW) => { vi.useFakeTimers(); vi.setSystemTime(now); };
+  afterEach(() => vi.useRealTimers());
+
+  it('renders nothing at all for a missing or unusable timestamp', () => {
+    at();
+    // A record with no stamp must show no timestamp -- never "just now", never
+    // an empty-looking date.
+    for (const absent of [null, undefined, '', 0, false, NaN]) {
+      expect(relativeTime(absent), String(absent)).toBe('');
+    }
+    expect(relativeTime('not a date')).toBe('');
+    expect(relativeTime(new Date('nonsense'))).toBe('');
+  });
+
+  it('says "just now" for anything under a minute old', () => {
+    at();
+    expect(relativeTime(ago(0))).toBe('just now');
+    expect(relativeTime(ago(30 * 1000))).toBe('just now');
+    expect(relativeTime(ago(MINUTE - 1))).toBe('just now');
+    // A timestamp slightly in the future (server/browser clock skew) reads as
+    // the newest bucket rather than a negative age.
+    expect(relativeTime(new Date(NOW.getTime() + 5 * MINUTE).toISOString())).toBe('just now');
+  });
+
+  it('counts whole minutes from one minute up to the hour', () => {
+    at();
+    expect(relativeTime(ago(MINUTE))).toBe('1m ago');
+    expect(relativeTime(ago(45 * MINUTE))).toBe('45m ago');
+    expect(relativeTime(ago(HOUR - 1))).toBe('59m ago');
+  });
+
+  it('counts whole hours from one hour up to the day', () => {
+    at();
+    expect(relativeTime(ago(HOUR))).toBe('1h ago');
+    expect(relativeTime(ago(5 * HOUR + 30 * MINUTE))).toBe('5h ago');
+    expect(relativeTime(ago(DAY - 1))).toBe('23h ago');
+  });
+
+  it('counts whole days from one day up to a week', () => {
+    at();
+    expect(relativeTime(ago(DAY))).toBe('1d ago');
+    expect(relativeTime(ago(3 * DAY))).toBe('3d ago');
+    expect(relativeTime(ago(7 * DAY - 1))).toBe('6d ago');
+  });
+
+  it('falls back to a short absolute date once past a week', () => {
+    at();
+    for (const age of [7 * DAY, 30 * DAY, 400 * DAY]) {
+      const formatted = relativeTime(ago(age));
+      // "Sep 26" shape: a month abbreviation and a day number, never an age.
+      expect(formatted, String(age)).toMatch(/^[A-Z][a-z]{2}\.? \d{1,2}$/);
+      expect(formatted, String(age)).not.toMatch(/ago|just now/);
+    }
+  });
+
+  it('accepts a Date as well as an ISO string', () => {
+    at();
+    expect(relativeTime(new Date(NOW.getTime() - 2 * HOUR))).toBe('2h ago');
+  });
+
+  // No module-level state: the answer depends only on the clock at call time, so
+  // the same stamp ages as the page stays open.
+  it('re-reads the clock on every call rather than capturing it once', () => {
+    const stamp = ago(0);
+    at();
+    expect(relativeTime(stamp)).toBe('just now');
+    vi.setSystemTime(new Date(NOW.getTime() + 3 * HOUR));
+    expect(relativeTime(stamp)).toBe('3h ago');
+  });
+});
+
+describe('statusWorkflow correction lists', () => {
   it('offers only a sale workflow\'s own path plus the exceptions as corrections', () => {
     expect(correctableSaleStatuses('DIRECT_LOCAL')).toEqual([
       ...registry.SALE_STATUSES_BY_WORKFLOW.DIRECT_LOCAL,

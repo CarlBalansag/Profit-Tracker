@@ -59,7 +59,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       select: {
         id: true, product_name: true, category: true, status: true,
         // Status-workflow columns, needed to compute allowed_actions below.
-        receiving_status: true, is_listed: true,
+        receiving_status: true, receiving_status_changed_at: true, is_listed: true,
         vendor_id: true, payment_method_id: true,
         purchase_date: true, received_date: true,
         unit_purchase_cost: true, qty_purchased: true, qty_on_hand: true,
@@ -75,7 +75,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
           select: {
             id: true, platform_id: true, quantity: true, unit_price: true, commission_fee: true,
             sale_shipping: true, sale_date: true, payout_date: true, status: true,
-            workflow_type: true, workflow_status: true,
+            workflow_type: true, workflow_status: true, workflow_status_changed_at: true,
             taxable: true, sale_tax_collected: true, customer_tax_exempt: true, exemption_type: true,
             unit_price_decimal: true, commission_fee_decimal: true, sale_shipping_decimal: true, sale_tax_collected_decimal: true,
             platform: { select: { id: true, name: true, type: true, tax_exempt_place: true } },
@@ -145,6 +145,14 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
       if (advanced.legacy_status) resolvedStatus = advanced.legacy_status;
       workflowData = { ...workflowData, ...advanced.data };
     }
+    // The receiving status starts its life right now, so the "last status
+    // updated" stamp starts with it rather than being NULL until the first
+    // action. One clock for the purchase and for any sale created with it, so
+    // the two cannot be stamped microseconds apart. A legacy status with no
+    // new-column equivalent sets no receiving_status at all, and so gets no
+    // stamp either.
+    const statusChangedAt = new Date();
+    if (workflowData.receiving_status) workflowData.receiving_status_changed_at = statusChangedAt;
     await requireOwned('platform', vendor_id, req.user.id, 'Vendor');
     await requireOwned('paymentMethod', payment_method_id, req.user.id, 'Payment method');
 
@@ -200,6 +208,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
                 status: 'SOLD',
                 workflow_type: saleWorkflow,
                 workflow_status: statusTransitions.legacyWorkflowStatus('SOLD', saleWorkflow),
+                workflow_status_changed_at: statusChangedAt,
                 taxable: taxable !== undefined ? (taxable === true || taxable === 'true') : true,
                 sale_tax_collected: parseFloat(sale_tax_collected) || 0,
                 customer_tax_exempt: customer_tax_exempt === true || customer_tax_exempt === 'true',
@@ -366,6 +375,9 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
       const advanced = statusTransitions.trackingAttached('inventory', existing, tracking_number);
       if (advanced.legacy_status) data.status = advanced.legacy_status;
       Object.assign(data, advanced.data);
+      // An auto-advance here is a real receiving-status change, so it carries the
+      // same "last status updated" stamp an action endpoint would write.
+      if (advanced.data.receiving_status) data.receiving_status_changed_at = new Date();
     }
     if (cashback_rate !== undefined)         data.cashback_rate = parseFloat(cashback_rate);
     if (cashback_earned !== undefined)       data.cashback_earned = parseFloat(cashback_earned) || 0;

@@ -10,6 +10,7 @@ import {
   SALE_STATUS_ORDER,
   SALE_EXCEPTION_STATUSES,
   displayLabel,
+  relativeTime,
   statusVisual,
 } from '../data/statusWorkflow';
 
@@ -73,6 +74,12 @@ const COLUMNS = [
 
 const statusKeyOf = (record) => (isInventory(record) ? record.receiving_status : record.workflow_status);
 
+// When this record's status last changed. Null on a row created before the
+// column existed, and on one whose only edits never touched its status.
+const statusChangedAtOf = (record) => (isInventory(record)
+  ? record.receiving_status_changed_at
+  : record.workflow_status_changed_at);
+
 // A fully sold on-hand batch is deliberately off the board, so it must not fall
 // through into the "not in the workflow yet" list either.
 const isSoldOutOnHand = (record) => isInventory(record)
@@ -122,6 +129,7 @@ function RecordCard({ record, quickStatus = false }) {
   const statusKey = statusKeyOf(record);
   const visual = statusVisual(statusKey);
   const exception = exceptionTagOf(record);
+  const changedAt = relativeTime(statusChangedAtOf(record));
   const hasSecondaryActions = (record.allowed_actions || []).some((entry) => entry.secondary);
 
   return (
@@ -136,7 +144,17 @@ function RecordCard({ record, quickStatus = false }) {
       ].join(' ')}
     >
       <div className="min-w-0">
-        <p className="text-sm font-medium text-gray-100 truncate">{productNameOf(record)}</p>
+        {/* How long ago this card's status last changed, right-aligned on the
+            name row. Rendered only when the record actually has a stamp -- an
+            older row simply shows nothing there. */}
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm font-medium text-gray-100 truncate">{productNameOf(record)}</p>
+          {changedAt && (
+            <span data-status-changed className="text-[10px] text-gray-500 shrink-0 whitespace-nowrap">
+              {changedAt}
+            </span>
+          )}
+        </div>
         <p className="text-[11px] font-semibold" style={{ color: visual.color }}>
           {statusKey ? displayLabel(statusKey) : 'No status yet'}
         </p>

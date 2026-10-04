@@ -84,6 +84,10 @@ async function editTransaction(prisma, inventoryId, userId, payload) {
         if (advanced.legacy_status) resolvedStatus = advanced.legacy_status;
         workflowData = { ...workflowData, ...advanced.data };
       }
+      // Same as the POST handler: the workflow status starts its life here, so
+      // the "last status updated" stamp starts with it instead of staying NULL
+      // until this sale's first action.
+      if (workflowData.workflow_status) workflowData.workflow_status_changed_at = new Date();
       await tx.sales.create({
         data: {
           ...writable(payload.newSale, createSale),

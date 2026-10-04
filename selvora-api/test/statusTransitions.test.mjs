@@ -217,6 +217,7 @@ const seedSale = (overrides = {}) => {
   Object.assign(harness.db.inventory[0], { receiving_status: 'ON_HAND', is_listed: false, qty_on_hand: 3 });
   Object.assign(harness.db.sales[0], {
     quantity: 2, workflow_type: 'STANDARD_MARKETPLACE', workflow_status: 'WAITING_FOR_PAYMENT',
+    workflow_status_changed_at: null,
     paid_at: null, cancelled_at: null, voided_at: null, delivered_at: null, returned_at: null,
     return_requested_at: null, disputed_at: null, ...overrides,
   });
@@ -472,7 +473,7 @@ describe('applyTransition — sale', () => {
     it('behaves identically to before when no workflow type is sent', async () => {
       const known = seedSale({ workflow_type: 'CASHOUT', workflow_status: 'CANCELLED' });
       const result = await run('sale', known, 'correct_status', { workflow_status: 'SCANNED_IN' });
-      expect(result.data).toEqual({ workflow_status: 'SCANNED_IN' });
+      expect(result.data).toEqual({ workflow_status: 'SCANNED_IN', workflow_status_changed_at: expect.any(Date) });
       expect(Object.keys(result.data)).not.toContain('workflow_type');
       expect(harness.db.sales[0]).toMatchObject({ workflow_type: 'CASHOUT', workflow_status: 'SCANNED_IN' });
 
@@ -480,7 +481,7 @@ describe('applyTransition — sale', () => {
       for (const absent of [undefined, null, '']) {
         const row = seedSale({ workflow_type: 'CASHOUT', workflow_status: 'CANCELLED' });
         const res = await run('sale', row, 'correct_status', { workflow_type: absent, workflow_status: 'SCANNED_IN' });
-        expect(res.data, String(absent)).toEqual({ workflow_status: 'SCANNED_IN' });
+        expect(res.data, String(absent)).toEqual({ workflow_status: 'SCANNED_IN', workflow_status_changed_at: expect.any(Date) });
         expect(harness.db.sales[0].workflow_type).toBe('CASHOUT');
       }
 
@@ -498,5 +499,129 @@ describe('applyTransition — sale', () => {
     await expect(run('sale', {}, 'mark_paid')).rejects.toThrow(/stored record is required/);
     await expect(run('sale', seedSale({ workflow_status: 'OUTBOUND' }), 'check_tracking')).rejects.toThrow(/not a stored state transition/);
     await expect(run('sale', seedSale(), 'teleport')).rejects.toThrow(/not available/);
+  });
+});
+
+// --- "Last status updated" --------------------------------------------------
+// receiving_status_changed_at / workflow_status_changed_at answer "when did this
+// card last move?", which is what the Statuses board shows on every card. The
+// rule is deliberately narrow: a transition stamps it only when its own `data`
+// writes the status field, from the same `now` the other milestones use. A
+// transition that corrects some other field is not a status change.
+
+describe('applyTransition — last status change timestamp', () => {
+  const NOW = '2026-10-02T15:30:00.000Z';
+  const EARLIER = new Date('2026-09-01T08:00:00.000Z');
+
+  const seedInventory = (receiving_status, overrides = {}) => {
+    Object.assign(harness.db.inventory[0], {
+      receiving_status, is_listed: false, qty_on_hand: 3, qty_purchased: 5,
+      receiving_status_changed_at: null, cancelled_at: null, ...overrides,
+    });
+    return { ...harness.db.inventory[0] };
+  };
+
+  it('stamps receiving_status_changed_at with the transition clock on every receiving status change', async () => {
+    const cases = [
+      ['PRE_ORDER', 'mark_purchased', {}, 'PURCHASED'],
+      ['PURCHASED', 'add_tracking', { tracking_number: 'T1' }, 'INBOUND'],
+      ['INBOUND', 'mark_on_hand', {}, 'ON_HAND'],
+      ['INBOUND', 'mark_delivered', {}, 'ON_HAND'],
+      ['ON_HAND', 'correct_status', { receiving_status: 'INBOUND' }, 'INBOUND'],
+    ];
+    for (const [from, action, payload, to] of cases) {
+      const result = await run('inventory', seedInventory(from), action, { ...payload, now: NOW });
+      expect(result.to, action).toBe(to);
+      // One clock for the whole transition: the stamp is the same instant as the
+      // other milestone the transition writes, not a second `new Date()`.
+      expect(result.data.receiving_status_changed_at.toISOString(), action).toBe(NOW);
+      expect(harness.db.inventory[0].receiving_status_changed_at.toISOString(), action).toBe(NOW);
+      if (action === 'mark_on_hand' || action === 'mark_delivered') {
+        expect(harness.db.inventory[0].received_at.toISOString(), action).toBe(NOW);
+      }
+    }
+  });
+
+  // The whole point of keying on the status field rather than "any write":
+  // adjusting quantity on hand is a correction, not a status change, so the
+  // board must keep showing when the status itself last moved.
+  it('never touches receiving_status_changed_at for a transition that leaves the status alone', async () => {
+    const unchanged = [
+      ['ON_HAND', 'restore_inventory', { qty_on_hand: 4 }],
+      ['ON_HAND', 'list_item', {}],
+      ['PURCHASED', 'cancel', {}],
+    ];
+    for (const [from, action, payload] of unchanged) {
+      const record = seedInventory(from, { receiving_status_changed_at: EARLIER });
+      const result = await run('inventory', record, action, { ...payload, now: NOW });
+      expect(result.data.receiving_status_changed_at, action).toBeUndefined();
+      expect(harness.db.inventory[0].receiving_status_changed_at.toISOString(), action).toBe(EARLIER.toISOString());
+      expect(harness.db.inventory[0].receiving_status, action).toBe(from);
+    }
+    // ...and the corrections themselves still landed.
+    const listed = seedInventory('ON_HAND', { is_listed: true, receiving_status_changed_at: EARLIER });
+    await run('inventory', listed, 'unlist', { now: NOW });
+    expect(harness.db.inventory[0]).toMatchObject({ is_listed: false, receiving_status: 'ON_HAND' });
+    expect(harness.db.inventory[0].receiving_status_changed_at.toISOString()).toBe(EARLIER.toISOString());
+  });
+
+  // A row the backfill never reached has no stamp at all; it gets one the first
+  // time a status is actually set on it, and nothing is backfilled before that.
+  it('gives a never-stamped legacy row its first stamp when a status is finally set', async () => {
+    const legacy = seedInventory(null);
+    expect(harness.db.inventory[0].receiving_status_changed_at).toBeNull();
+    await run('inventory', legacy, 'correct_status', { receiving_status: 'PURCHASED', now: NOW });
+    expect(harness.db.inventory[0]).toMatchObject({ receiving_status: 'PURCHASED' });
+    expect(harness.db.inventory[0].receiving_status_changed_at.toISOString()).toBe(NOW);
+  });
+
+  it('stamps workflow_status_changed_at with the transition clock on every sale status change', async () => {
+    const cases = [
+      [{ workflow_status: 'AWAITING_SHIPMENT' }, 'add_outbound_tracking', { tracking_number: 'T2' }, 'OUTBOUND'],
+      [{ workflow_status: 'OUTBOUND' }, 'mark_delivered', {}, 'WAITING_FOR_PAYMENT'],
+      [{}, 'mark_paid', { paid_at: NOW, paid_amount: '288.00' }, 'PAID'],
+      [{}, 'void_sale', {}, 'CANCELLED'],
+      [{}, 'cancel_sale', {}, 'CANCELLED'],
+      [{ workflow_status: 'PAID' }, 'report_return', {}, 'RETURN_IN_PROGRESS'],
+      [{ workflow_status: 'CANCELLED' }, 'correct_status', { workflow_status: 'WAITING_FOR_PAYMENT' }, 'WAITING_FOR_PAYMENT'],
+    ];
+    for (const [seed, action, payload, to] of cases) {
+      const result = await run('sale', seedSale(seed), action, { ...payload, now: NOW });
+      expect(result.to, action).toBe(to);
+      expect(result.data.workflow_status_changed_at.toISOString(), action).toBe(NOW);
+      expect(harness.db.sales[0].workflow_status_changed_at.toISOString(), action).toBe(NOW);
+    }
+  });
+
+  // mark_paid before a local handoff records the payment but deliberately keeps
+  // the sale on AWAITING_HANDOFF, so there is no status change to stamp.
+  it('does not stamp a sale transition that records a payment without moving the status', async () => {
+    const prepaid = seedSale({
+      workflow_status: 'AWAITING_HANDOFF', workflow_type: 'DIRECT_LOCAL', workflow_status_changed_at: EARLIER,
+    });
+    const result = await run('sale', prepaid, 'mark_paid', { paid_at: NOW, paid_amount: '120.00', now: NOW });
+    expect(result.to).toBe('AWAITING_HANDOFF');
+    expect(result.data.workflow_status_changed_at).toBeUndefined();
+    expect(harness.db.sales[0].paid_at.toISOString()).toBe(NOW);
+    expect(harness.db.sales[0].workflow_status_changed_at.toISOString()).toBe(EARLIER.toISOString());
+
+    // The handoff that follows does move the status, and stamps it.
+    const handed = await run('sale', { ...harness.db.sales[0], user_id: harness.ids.user }, 'mark_handed_over', { now: NOW });
+    expect(handed.to).toBe('PAID');
+    expect(harness.db.sales[0].workflow_status_changed_at.toISOString()).toBe(NOW);
+  });
+
+  // The stamp rides in the same guarded updateMany as the status, so a rejected
+  // transition cannot leave a record claiming it just moved.
+  it('writes no stamp at all when the guarded update is rejected', async () => {
+    const stale = seedSale({ workflow_status_changed_at: EARLIER });
+    harness.db.sales[0].workflow_status = 'PAID'; // a concurrent request won
+    await expect(run('sale', stale, 'void_sale', { now: NOW })).rejects.toThrow(/changed while saving/);
+    expect(harness.db.sales[0].workflow_status_changed_at.toISOString()).toBe(EARLIER.toISOString());
+
+    const staleInventory = seedInventory('PURCHASED', { receiving_status_changed_at: EARLIER });
+    harness.db.inventory[0].receiving_status = 'ON_HAND';
+    await expect(run('inventory', staleInventory, 'mark_on_hand', { now: NOW })).rejects.toThrow(/changed while saving/);
+    expect(harness.db.inventory[0].receiving_status_changed_at.toISOString()).toBe(EARLIER.toISOString());
   });
 });

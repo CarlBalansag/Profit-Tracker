@@ -332,6 +332,27 @@ describe('outbound auto-advance through the transition service', () => {
     expect(res.body).toMatchObject({ workflow_type: 'STANDARD_MARKETPLACE', workflow_status: 'OUTBOUND' });
   });
 
+  it('stamps workflow_status_changed_at when a tracking number advances a new sale at creation', async () => {
+    const res = await post('/api/sales', {
+      inventory_id: harness.ids.inventory, platform_id: harness.ids.platform,
+      quantity: 1, unit_price: 50, tracking_number: FEDEX,
+    });
+    expect(res.status).toBe(200);
+    expect(harness.db.sales.find((s) => s.id === res.body.id)).toMatchObject({ workflow_status: 'OUTBOUND' });
+    expect(harness.db.sales.find((s) => s.id === res.body.id).workflow_status_changed_at).toBeInstanceOf(Date);
+  });
+
+  it('stamps workflow_status_changed_at when a tracking number advances a sale after the fact', async () => {
+    Object.assign(harness.db.sales[0], {
+      workflow_type: 'STANDARD_MARKETPLACE', workflow_status: 'AWAITING_SHIPMENT',
+      status: 'SOLD', tracking_number: null, workflow_status_changed_at: null,
+    });
+    const res = await put(`/api/sales/${harness.ids.sale}`, { tracking_number: FEDEX });
+    expect(res.status).toBe(200);
+    expect(harness.db.sales[0].workflow_status).toBe('OUTBOUND');
+    expect(harness.db.sales[0].workflow_status_changed_at).toBeInstanceOf(Date);
+  });
+
   it('copies the platform\'s workflow preset onto a new sale instead of reading it later', async () => {
     harness.db.platform.find((p) => p.id === harness.ids.platform).workflow_preset = 'CASHOUT';
     const res = await post('/api/sales', {
@@ -343,5 +364,92 @@ describe('outbound auto-advance through the transition service', () => {
     // Changing the platform's preset afterwards must not rewrite the sale.
     harness.db.platform.find((p) => p.id === harness.ids.platform).workflow_preset = 'DIRECT_LOCAL';
     expect(harness.db.sales.find((s) => s.id === res.body.id).workflow_type).toBe('CASHOUT');
+  });
+});
+
+// --- "Last status updated" at creation ---------------------------------------
+// A brand-new record must not start life with a NULL stamp: it has a status from
+// the moment it exists, so it has a "status last changed" moment too. Without
+// this, every freshly added purchase and sale would show no timestamp at all on
+// the Statuses board until its first action.
+
+describe('creation stamps the last-status-updated timestamp', () => {
+  const inventoryRow = (id) => harness.db.inventory.find((row) => row.id === id);
+  const saleRow = (id) => harness.db.sales.find((row) => row.id === id);
+
+  it('stamps a new purchase alongside the receiving status it is created with', async () => {
+    const before = Date.now();
+    const res = await post('/api/inventory', {
+      product_name: 'Stamped at creation', vendor_id: harness.ids.vendor,
+      unit_purchase_cost: 10, qty_purchased: 2,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.receiving_status).toBe('PURCHASED');
+    const stamp = inventoryRow(res.body.id).receiving_status_changed_at;
+    expect(stamp).toBeInstanceOf(Date);
+    expect(stamp.getTime()).toBeGreaterThanOrEqual(before);
+    // The response carries it too (as JSON, so an ISO string), which is what the
+    // board shows without a refetch.
+    expect(res.body.receiving_status_changed_at).toBe(stamp.toISOString());
+  });
+
+  it('stamps a purchase created with a tracking number from its advanced status', async () => {
+    const res = await post('/api/inventory', {
+      product_name: 'Created inbound', vendor_id: harness.ids.vendor,
+      unit_purchase_cost: 10, qty_purchased: 1, tracking_number: UPS,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.receiving_status).toBe('INBOUND');
+    expect(inventoryRow(res.body.id).receiving_status_changed_at).toBeInstanceOf(Date);
+  });
+
+  // A legacy status with no unambiguous new-column equivalent leaves
+  // receiving_status NULL on purpose, and a NULL status has no "changed at"
+  // moment to record -- the board renders no timestamp for it rather than a
+  // misleading one.
+  it('leaves the stamp NULL when the chosen legacy status maps to no receiving status', async () => {
+    const res = await post('/api/inventory', {
+      product_name: 'Ambiguous legacy status', vendor_id: harness.ids.vendor,
+      unit_purchase_cost: 10, qty_purchased: 1, status: 'COMPLETED',
+    });
+    expect(res.status).toBe(200);
+    expect(inventoryRow(res.body.id).receiving_status).toBeUndefined();
+    expect(inventoryRow(res.body.id).receiving_status_changed_at).toBeUndefined();
+  });
+
+  it('stamps the sale a purchase is created with, from the same moment as the purchase', async () => {
+    const res = await post('/api/inventory', {
+      product_name: 'Bought and sold at once', vendor_id: harness.ids.vendor,
+      unit_purchase_cost: 10, qty_purchased: 2, sale_price: 40, qty_sold: 1,
+      sale_tab: 'marketplace', marketplace_platform_id: harness.ids.platform,
+    });
+    expect(res.status).toBe(200);
+    const sale = harness.db.sales.find((row) => row.inventory_id === res.body.id);
+    expect(sale).toMatchObject({ workflow_status: 'AWAITING_SHIPMENT' });
+    expect(sale.workflow_status_changed_at).toBeInstanceOf(Date);
+    // One clock for the whole request, so the purchase and its sale agree.
+    expect(sale.workflow_status_changed_at.toISOString())
+      .toBe(inventoryRow(res.body.id).receiving_status_changed_at.toISOString());
+  });
+
+  it('stamps a new sale alongside the workflow status it is created with', async () => {
+    const res = await post('/api/sales', {
+      inventory_id: harness.ids.inventory, platform_id: harness.ids.platform, quantity: 1, unit_price: 50,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.workflow_status).toBe('AWAITING_SHIPMENT');
+    const stamp = saleRow(res.body.id).workflow_status_changed_at;
+    expect(stamp).toBeInstanceOf(Date);
+    expect(res.body.workflow_status_changed_at).toBe(stamp.toISOString());
+  });
+
+  it('leaves a new sale\'s stamp NULL when its legacy status maps to no workflow status', async () => {
+    const res = await post('/api/sales', {
+      inventory_id: harness.ids.inventory, platform_id: harness.ids.platform,
+      quantity: 1, unit_price: 50, status: 'COMPLETED',
+    });
+    expect(res.status).toBe(200);
+    expect(saleRow(res.body.id).workflow_status).toBeNull();
+    expect(saleRow(res.body.id).workflow_status_changed_at).toBeUndefined();
   });
 });

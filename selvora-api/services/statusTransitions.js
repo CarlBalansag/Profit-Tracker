@@ -527,7 +527,19 @@ async function applyTransition(tx, kind, record, action, payload = {}) {
   // equivalent writes both columns in the one guarded statement below. Without
   // this, a sale voided through an action endpoint restores its inventory but
   // keeps counting as realized revenue everywhere.
-  const data = kind === 'sale' ? { ...change, ...legacySaleStatusPatch(change.workflow_status) } : change;
+  // "Last status updated": stamped in the SAME guarded update, from the same
+  // `now` as the other milestones (paid_at, delivered_at, ...), so the stored
+  // status and the time it was reached can never disagree.
+  //
+  // Keyed on the transition actually putting the status field in `data` -- this
+  // tracks status changes, not edits. restore_inventory (a qty_on_hand
+  // correction), list_item/unlist and cancel all leave the status alone, so they
+  // leave the timestamp alone too.
+  const statusField = kind === 'inventory' ? 'receiving_status' : 'workflow_status';
+  const data = {
+    ...(kind === 'sale' ? { ...change, ...legacySaleStatusPatch(change.workflow_status) } : change),
+    ...(change[statusField] !== undefined ? { [`${statusField}_changed_at`]: now } : {}),
+  };
   const from = currentStatus;
   const to = (kind === 'inventory' ? data.receiving_status : data.workflow_status) ?? from;
 

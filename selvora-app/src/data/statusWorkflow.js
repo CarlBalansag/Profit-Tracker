@@ -77,6 +77,35 @@ export const DISPLAY_LABELS = {
 
 export const displayLabel = (status) => DISPLAY_LABELS[status] || status || 'No status yet';
 
+// "Status last updated", as an age rather than a calendar date.
+//
+// Deliberately relative, not `toLocaleDateString()` on its own: date-only values
+// stored as UTC midnight can render as the previous calendar day in a negative
+// UTC offset (a known, separate, app-wide bug). receiving_status_changed_at /
+// workflow_status_changed_at are real timestamps with a real time of day, so
+// phrasing recent activity as an age sidesteps that class of bug entirely.
+// Past a week it falls back to a short absolute date, where "which exact day"
+// is low-stakes.
+//
+// Pure apart from reading the clock at call time (no module-level state), and
+// returns '' for a missing or unparseable value so a record with no stamp
+// renders nothing at all rather than a fake "just now".
+export const relativeTime = (value) => {
+  if (!value) return '';
+  const then = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(then.getTime())) return '';
+  // A future timestamp (clock skew between server and browser) reads as the
+  // newest bucket rather than a negative age.
+  const minutes = Math.floor((new Date().getTime() - then.getTime()) / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return then.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
 // qty_on_hand, not a stored status -- same rule as statusTransitions.availabilityLabel.
 export const availabilityLabel = (inventory = {}) =>
   Number(inventory.qty_on_hand) > 0 ? 'Available' : 'Sold Out';

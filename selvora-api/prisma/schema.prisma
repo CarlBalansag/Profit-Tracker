@@ -117,6 +117,9 @@ model Inventory {
   // a later checkpoint moves routes onto these fields. A NULL receiving_status
   // means "not yet backfilled" -- see scripts/migrateStatusWorkflow.js.
   receiving_status      String?
+  // When receiving_status last changed. NULL for a row that has not had a
+  // status change since the column was added -- there is no backfill.
+  receiving_status_changed_at DateTime?
   is_listed             Boolean        @default(false)
   received_at           DateTime?
   cancelled_at          DateTime?
@@ -172,6 +175,9 @@ model Sales {
   // preset later never rewrites old sales.
   workflow_type       String?
   workflow_status     String?
+  // When workflow_status last changed. NULL for a row that has not had a status
+  // change since the column was added -- there is no backfill.
+  workflow_status_changed_at DateTime?
   delivered_at        DateTime?
   paid_at             DateTime?
   paid_amount         Decimal?  @db.Decimal(19, 2)
