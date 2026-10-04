@@ -62,29 +62,6 @@ function getRowProfit(txn) {
   return (Number(txn.revenue) || 0) - (Number(txn.cost) || 0);
 }
 
-function getMetricMeaning(label) {
-  const meanings = {
-    'Total Cost': 'Total Cost is the full amount spent to buy inventory, including item cost, tax, and inbound shipping.',
-    'Sale Revenue': 'Sale Revenue is the money received from sold items after marketplace or platform fees.',
-    Cashback: 'Cashback is money earned back from the payment card or payment method used for sold inventory.',
-    'Net Profit': 'Net Profit is what remains after sold-item cost is covered, with cashback added back in.',
-    'Gross Profit': 'Gross Profit is the difference between sale revenue and the cost basis of the sold item.',
-    'Avg ROI': 'Avg ROI shows how much return you earned compared with the cost basis of sold items.',
-    'Commission Fees': 'Commission Fees are marketplace or platform fees taken out of sales.',
-    'Net Margin': 'Net Margin shows what percentage of sale revenue remains as net profit.',
-    'Avg Sale Price': 'Avg Sale Price is the average revenue received per sold item.',
-    'Avg Cost/Unit': 'Avg Cost/Unit is the average cost basis for each sold item.',
-    'Total Tax Paid': 'Total Tax Paid is the purchase sales tax paid across inventory.',
-    'Inventory Value': 'Inventory Value is the cost of unsold stock still on hand.',
-    'Sales Velocity': 'Sales Velocity shows how quickly items are selling in the selected time range.',
-    'Inventory Qty': 'Inventory Qty is the total number of items you currently have on hand.',
-    'Active Listings': 'Active Listings is the total number of items currently listed for sale.',
-    'Units Sold': 'Units Sold is the total quantity of items sold in the selected time range.',
-  };
-
-  return meanings[label] || `${label} explains what this metric means in the selected dashboard view.`;
-}
-
 function normalizeDashboardStats(rawStats, recent) {
   const stats = { ...EMPTY_STATS, ...(rawStats || {}) };
   const hasSoldOnlyFields = rawStats && Object.prototype.hasOwnProperty.call(rawStats, 'soldCost')
@@ -201,7 +178,7 @@ const Dashboard = () => {
     tax: { label: 'Tax', value: `$${(stats.totalTax || 0).toFixed(0)}`, icon: Zap, accent: true },
     inventory: { label: 'Inventory', value: `$${(stats.inventoryValue || 0).toFixed(0)}`, icon: Store, accent: false },
     qty: { label: 'Qty', value: String(stats.inventoryQty || 0), icon: Layers, accent: true },
-    avgSale: { label: 'Avg Sale', value: `$${(stats.salesCount ? stats.totalRevenue / stats.salesCount : 0).toFixed(0)}`, icon: TrendingUp, accent: false },
+    avgSale: { label: 'Avg Sale', value: `$${(stats.unitsSold ? stats.totalRevenue / stats.unitsSold : 0).toFixed(0)}`, icon: TrendingUp, accent: false },
     netProfit: { label: 'Net Profit', value: `$${(stats.profit || 0).toFixed(0)}`, icon: Zap, accent: true },
   };
 
@@ -235,6 +212,7 @@ const Dashboard = () => {
                 icon={def.icon}
                 color={colorOverride}
                 formula={def.formula}
+                description={def.description}
                 uiStyle={preferences.style}
                 onClick={() => navigate('/transactions', { state: { dateFilter, cardScope: def.scope, platformMode: modeFilter !== 'All' ? modeFilter : undefined } })}
               />
@@ -1286,7 +1264,7 @@ function GlassCircularPipeline({ cards, overflowCards = [], pipeline, modeFilter
   );
 }
 
-function StatCard({ id, title, modeTag, value, subtext, icon, color, formula = [], onClick, uiStyle = 'neon-dark' }) {
+function StatCard({ id, title, modeTag, value, subtext, icon, color, formula = [], description, onClick, uiStyle = 'neon-dark' }) {
   const [open, setOpen] = useState(false);
   const [popoverPosition, setPopoverPosition] = useState('bottom');
   const [popoverCoords, setPopoverCoords] = useState(null);
@@ -1415,7 +1393,7 @@ function StatCard({ id, title, modeTag, value, subtext, icon, color, formula = [
                 </div>
                 <div>
                   <p className="text-[9px] font-medium uppercase tracking-[0.7px] text-[var(--text-muted)]">Meaning</p>
-                  <p className="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]">{getMetricMeaning(title)}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]">{description || `${title} is available in the selected dashboard view.`}</p>
                 </div>
               </div>
             </div>,
@@ -1433,17 +1411,12 @@ function PipelineCard({ icon, count, label, statusKey, modeFilter, dateFilter, o
   const isEmpty = Number(count) === 0;
   const isAccentStatus = ['PURCHASED', 'SHIPPED_IN', 'On Hand'].includes(statusKey);
   const isYellowStatus = statusKey === 'Pre Order';
-  const isCompleted = statusKey === 'COMPLETED';
-  const carbonBorder = isCompleted
-    ? 'border-b-2 [border-bottom-color:var(--green)]'
-    : isAccentStatus
+  const carbonBorder = isAccentStatus
       ? 'border-b-2 [border-bottom-color:var(--accent)]'
       : isYellowStatus
         ? 'border-b-2 [border-bottom-color:var(--yellow)]'
         : 'border-b-2 border-b-transparent';
-  const carbonValue = isCompleted
-    ? 'text-[var(--green)]'
-    : isAccentStatus
+  const carbonValue = isAccentStatus
       ? 'text-[var(--accent)]'
       : isYellowStatus
         ? 'text-[var(--yellow)]'

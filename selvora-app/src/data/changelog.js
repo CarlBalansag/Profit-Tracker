@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.51',
+    date: '2026-10-03',
+    notes: 'Dashboard settings now explain each option, use accurate per-unit averages, and omit the duplicate Completed status.',
+  },
+  {
     version: '0.50',
     date: '2026-10-01',
     notes: 'Fixed the Expense form losing focus while typing in the Name or Amount fields.',
