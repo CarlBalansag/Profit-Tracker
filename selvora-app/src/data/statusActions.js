@@ -182,3 +182,17 @@ export function consequenceFor(action, kind, record = {}) {
       return 'This changes the record and the totals built on it.';
   }
 }
+
+// Shared between ContextualActions (primary buttons) and MoreActionsMenu (the
+// secondary dropdown) -- see the file header for why this lives here instead
+// of being exported from either component file.
+// record_sale is an allowed action with no transition of its own -- creating a
+// sale has its own route and quantity accounting, which is the Record Sale
+// page. So it links there instead of POSTing to the action endpoint.
+export const NAVIGATE_ACTIONS = { record_sale: '/add-sale' };
+
+// "Mark Paid…" / "Add Tracking…" -- the ellipsis is what tells the user a form
+// opens rather than the action firing. There is never a bare one-click
+// "Mark Paid" button anywhere.
+export const actionButtonLabel = (descriptor) =>
+  (descriptor.requiresForm && !NAVIGATE_ACTIONS[descriptor.action] ? `${descriptor.label}…` : descriptor.label);

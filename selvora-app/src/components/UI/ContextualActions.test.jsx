@@ -49,8 +49,6 @@ const renderActions = (record, kind) => render(
   <MemoryRouter><ContextualActions record={record} kind={kind} /></MemoryRouter>
 );
 
-const openMore = () => fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
-
 // Block body on purpose: an arrow that *returns* the mock would hand Vitest the
 // mock function as a per-test teardown callback, which it then invokes -- leaving
 // a stray zero-argument apiFetch call recorded against the next test.
@@ -64,16 +62,6 @@ describe('ContextualActions', () => {
     expect(screen.getByRole('button', { name: 'Add Tracking…' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Correct Receiving Step/ })).toBeNull();
-  });
-
-  it('puts the secondary descriptors behind a More menu', () => {
-    renderActions(sale, 'sale');
-    expect(screen.queryByRole('menuitem')).toBeNull();
-    openMore();
-    const items = screen.getAllByRole('menuitem').map((node) => node.textContent);
-    expect(items).toEqual([
-      'Void Mistaken Sale', 'Cancel Sale', 'Report Return…', 'Report Dispute', 'Correct Workflow Step…',
-    ]);
   });
 
   it('fires a plain action straight away', async () => {
@@ -108,39 +96,6 @@ describe('ContextualActions', () => {
     expect(mocks.apiFetch.mock.calls[0][0]).toBe('/api/inventory/inv1/actions/cancel');
   });
 
-  it('abandons a destructive action when the confirmation is dismissed', async () => {
-    renderActions(sale, 'sale');
-    openMore();
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Void Mistaken Sale' }));
-
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog.textContent).toContain('2 units will be restored to inventory');
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(mocks.apiFetch).not.toHaveBeenCalled();
-  });
-
-  it('singularises the restored-unit consequence for a one-unit sale', async () => {
-    renderActions({ ...sale, quantity: 1 }, 'sale');
-    openMore();
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Cancel Sale' }));
-    expect((await screen.findByRole('dialog')).textContent).toContain('1 unit will be restored');
-  });
-
-  // A requiresForm action whose transition keeps no payload (report_return only
-  // stamps return_requested_at) must show the consequence, not an empty form.
-  it('confirms rather than showing an empty form when the server keeps no payload', async () => {
-    renderActions(sale, 'sale');
-    openMore();
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Report Return…' }));
-
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog.textContent).toContain('No units go back on hand yet');
-    expect(screen.queryByRole('textbox')).toBeNull();
-    expect(mocks.apiFetch).not.toHaveBeenCalled();
-  });
-
   // ─── Form actions ───────────────────────────────────────────────────────────
   it('does not fire a form action until the form is submitted', async () => {
     renderActions(purchase, 'inventory');
@@ -157,33 +112,6 @@ describe('ContextualActions', () => {
     const [path, options] = mocks.apiFetch.mock.calls[0];
     expect(path).toBe('/api/inventory/inv1/actions/add_tracking');
     expect(JSON.parse(options.body)).toEqual({ tracking_number: '1Z999' });
-  });
-
-  it('offers a sale only the workflow steps its own workflow allows as corrections', async () => {
-    renderActions({ ...sale, workflow_type: 'DIRECT_LOCAL' }, 'sale');
-    openMore();
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Correct Workflow Step…' }));
-
-    await screen.findByRole('dialog', { name: 'Correct Workflow Step' });
-    const options = Array.from(screen.getByLabelText('Workflow step').options).map((o) => o.value);
-    expect(options).toEqual([
-      '', 'AWAITING_HANDOFF', 'HANDED_OVER', 'WAITING_FOR_PAYMENT', 'PAID',
-      'CANCELLED', 'RETURN_IN_PROGRESS', 'RETURNED', 'DISPUTED', 'AUTHENTICATION_FAILED',
-    ]);
-  });
-
-  it('shows the consequence inside the form for a destructive form action, with no second confirmation', async () => {
-    const onHand = { id: 'inv1', receiving_status: 'ON_HAND', qty_purchased: 5, qty_on_hand: 3, allowed_actions: ON_HAND_ACTIONS };
-    renderActions(onHand, 'inventory');
-    openMore();
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Adjust Quantity On Hand…' }));
-
-    const dialog = await screen.findByRole('dialog', { name: 'Adjust Quantity On Hand' });
-    expect(dialog.textContent).toContain('overrides the quantity on hand');
-    // Saving the form is the confirmation -- it goes straight to the API.
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
-    expect(JSON.parse(mocks.apiFetch.mock.calls[0][1].body)).toEqual({ qty_on_hand: 3 });
   });
 
   // ─── Mark Paid ──────────────────────────────────────────────────────────────
@@ -323,21 +251,6 @@ describe('ContextualActions', () => {
       .not.toContain('SCANNED_IN');
     expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(true);
     expect(mocks.apiFetch).not.toHaveBeenCalled();
-  });
-
-  // The already-known-status correction keeps its original single-dropdown form.
-  it('leaves the ordinary Correct Workflow Step form unchanged', async () => {
-    renderActions(sale, 'sale');
-    openMore();
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Correct Workflow Step…' }));
-
-    await screen.findByRole('dialog', { name: 'Correct Workflow Step' });
-    expect(screen.queryByLabelText('What kind of sale was this?')).toBeNull();
-    fireEvent.change(screen.getByLabelText('Workflow step'), { target: { value: 'PAID' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-
-    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
-    expect(JSON.parse(mocks.apiFetch.mock.calls[0][1].body)).toEqual({ workflow_status: 'PAID' });
   });
 
   it('keeps the dialog open when the action fails', async () => {

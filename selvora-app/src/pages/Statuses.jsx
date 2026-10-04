@@ -3,6 +3,7 @@ import { ListChecks, Truck, Package, Send, CheckCircle2, ChevronLeft, ChevronRig
 import { useInventory, useSales } from '../hooks/useApi';
 import StatusPipeline from '../components/UI/StatusPipeline';
 import ContextualActions from '../components/UI/ContextualActions';
+import MoreActionsMenu from '../components/UI/MoreActionsMenu';
 import QuickStatusSelect from '../components/UI/QuickStatusSelect';
 import {
   INVENTORY_RECEIVING_STATUSES,
@@ -121,6 +122,7 @@ function RecordCard({ record, quickStatus = false }) {
   const statusKey = statusKeyOf(record);
   const visual = statusVisual(statusKey);
   const exception = exceptionTagOf(record);
+  const hasSecondaryActions = (record.allowed_actions || []).some((entry) => entry.secondary);
 
   return (
     <li
@@ -159,7 +161,16 @@ function RecordCard({ record, quickStatus = false }) {
 
       <div className="mt-2.5 pt-2.5 border-t border-white/5 space-y-2">
         <ContextualActions record={record} kind={record.__kind} />
-        {quickStatus && <QuickStatusSelect record={record} kind={record.__kind} />}
+        {/* The quick status dropdown and the More menu share one row so the
+            dots never sit alone on their own line -- MoreActionsMenu renders
+            nothing when there are no secondary actions, so this row is skipped
+            entirely unless there is something in it. */}
+        {(quickStatus || hasSecondaryActions) && (
+          <div className="flex items-center gap-1.5">
+            {quickStatus && <QuickStatusSelect record={record} kind={record.__kind} className="flex-1 min-w-0" />}
+            <MoreActionsMenu record={record} kind={record.__kind} />
+          </div>
+        )}
       </div>
     </li>
   );

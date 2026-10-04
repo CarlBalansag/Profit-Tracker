@@ -1,23 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MoreVertical } from 'lucide-react';
 import useRecordActions from '../../hooks/useRecordActions';
 import ConfirmDialog from './ConfirmDialog';
 import MarkPaidModal from './MarkPaidModal';
 import ActionFormModal from './ActionFormModal';
-import { actionNeedsFormFields, consequenceFor } from '../../data/statusActions';
-
-// `record_sale` is an allowed action but has no transition of its own -- creating
-// a sale has its own route and quantity accounting, which is the Record Sale
-// page. So it links there instead of POSTing to the action endpoint.
-const NAVIGATE_ACTIONS = { record_sale: '/add-sale' };
+import { actionNeedsFormFields, consequenceFor, NAVIGATE_ACTIONS, actionButtonLabel } from '../../data/statusActions';
 
 const BUTTON_PRIMARY = 'px-2.5 h-7 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium transition-colors whitespace-nowrap';
 const BUTTON_DESTRUCTIVE = 'px-2.5 h-7 rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 disabled:opacity-50 text-xs font-medium transition-colors whitespace-nowrap';
-const MENU_ITEM = 'w-full text-left px-3 py-2 text-xs font-medium text-gray-300 hover:bg-white/5 disabled:opacity-50 transition-colors';
 
 /**
- * Primary action buttons for a record plus a "More" menu for the secondary ones.
+ * The primary action buttons for a record -- the 1-2 most relevant things to
+ * do right now. Secondary (less-common, correction, or destructive) actions
+ * live in the sibling MoreActionsMenu component instead, so a card's primary
+ * row never grows past a couple of buttons.
  *
  * Takes the descriptors the API already attached to the record
  * (`record.allowed_actions`, added in checkpoint 2) -- it never derives them.
@@ -33,26 +29,13 @@ const MENU_ITEM = 'w-full text-left px-3 py-2 text-xs font-medium text-gray-300 
 const ContextualActions = ({ record, kind, actions, onSuccess, className = '' }) => {
   const descriptors = actions || record?.allowed_actions || [];
   const { runAction, pendingAction } = useRecordActions({ kind, record, onSuccess });
-  const [menuOpen, setMenuOpen] = useState(false);
   const [dialog, setDialog] = useState(null); // { mode: 'confirm'|'form'|'paid', descriptor }
-  const menuRef = useRef(null);
-
-  useEffect(() => {
-    if (!menuOpen) return undefined;
-    const close = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [menuOpen]);
 
   const primary = descriptors.filter((d) => !d.secondary);
-  const secondary = descriptors.filter((d) => d.secondary);
 
   // Nothing is ever fired straight from a click unless the registry says the
   // action needs neither a form nor a confirmation.
   const activate = (descriptor) => {
-    setMenuOpen(false);
     if (descriptor.action === 'mark_paid') {
       setDialog({ mode: 'paid', descriptor });
       return;
@@ -78,17 +61,16 @@ const ContextualActions = ({ record, kind, actions, onSuccess, className = '' })
     if (updated) setDialog(null);
   };
 
-  // "Mark Paid…" / "Add Tracking…" — the ellipsis is what tells the user a form
-  // opens rather than the action firing. There is never a bare one-click
-  // "Mark Paid" button anywhere.
-  const buttonLabel = (descriptor) =>
-    (descriptor.requiresForm && !NAVIGATE_ACTIONS[descriptor.action] ? `${descriptor.label}…` : descriptor.label);
-
   const busy = (descriptor) => pendingAction === descriptor.action;
 
+  // Nothing at all for this record, anywhere -- not even behind the More menu.
   if (descriptors.length === 0) {
     return <span className={`text-xs text-gray-600 ${className}`}>No action needed</span>;
   }
+  // Secondary-only: there is nothing to put in the primary row, but the record
+  // does have actions available (MoreActionsMenu renders them elsewhere), so
+  // this is not the same as "nothing at all" above.
+  if (primary.length === 0) return null;
 
   return (
     <div className={`flex items-center gap-1.5 flex-wrap ${className}`}>
@@ -109,53 +91,10 @@ const ContextualActions = ({ record, kind, actions, onSuccess, className = '' })
             onClick={() => activate(descriptor)}
             className={descriptor.destructive ? BUTTON_DESTRUCTIVE : BUTTON_PRIMARY}
           >
-            {busy(descriptor) ? 'Working…' : buttonLabel(descriptor)}
+            {busy(descriptor) ? 'Working…' : actionButtonLabel(descriptor)}
           </button>
         );
       })}
-
-      {secondary.length > 0 && (
-        <div className="relative" ref={menuRef}>
-          <button
-            type="button"
-            aria-label="More actions"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((open) => !open)}
-            className="flex items-center justify-center w-7 h-7 rounded-lg border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
-          >
-            <MoreVertical className="w-3.5 h-3.5" />
-          </button>
-          {menuOpen && (
-            <div
-              role="menu"
-              className="absolute right-0 top-full mt-1 w-56 z-40 rounded-lg bg-[#16181d] border border-white/10 shadow-xl py-1 overflow-hidden"
-            >
-              {secondary.map((descriptor) => {
-                const to = NAVIGATE_ACTIONS[descriptor.action];
-                if (to) {
-                  return (
-                    <Link key={descriptor.action} to={to} role="menuitem" className={`block ${MENU_ITEM}`} onClick={() => setMenuOpen(false)}>
-                      {descriptor.label}
-                    </Link>
-                  );
-                }
-                return (
-                  <button
-                    key={descriptor.action}
-                    type="button"
-                    role="menuitem"
-                    disabled={pendingAction !== null}
-                    onClick={() => activate(descriptor)}
-                    className={`${MENU_ITEM} ${descriptor.destructive ? 'text-red-300 hover:bg-red-500/10' : ''}`}
-                  >
-                    {buttonLabel(descriptor)}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
 
       {dialog?.mode === 'confirm' && (
         <ConfirmDialog
