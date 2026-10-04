@@ -658,4 +658,69 @@ describe('Statuses board', () => {
     expect(path).toBe('/api/sales/sale1/actions/correct_status');
     expect(JSON.parse(options.body)).toEqual({ workflow_status: 'PAID' });
   });
+
+  // ─── Pagination ────────────────────────────────────────────────────────────
+  describe('pagination', () => {
+    const manyPurchases = (count) => Array.from({ length: count }, (_, i) => purchase({ id: `inv${i + 1}` }));
+    const pager = (title) => inColumn(title);
+
+    it('shows no pager when a column has 15 or fewer records', () => {
+      setData({ inventory: manyPurchases(15) });
+      renderPage();
+      expect(cardKeys('Incoming')).toHaveLength(15);
+      expect(pager('Incoming').queryByText(/Page \d+ of \d+/)).toBeNull();
+    });
+
+    it('shows only the first 15 records and a pager once a column exceeds 15', () => {
+      setData({ inventory: manyPurchases(17) });
+      renderPage();
+      expect(cardKeys('Incoming')).toHaveLength(15);
+      expect(pager('Incoming').getByText('Page 1 of 2')).toBeTruthy();
+      expect(pager('Incoming').getByRole('button', { name: /Previous/ }).disabled).toBe(true);
+      expect(pager('Incoming').getByRole('button', { name: /Next/ }).disabled).toBe(false);
+    });
+
+    it('moves to the next page and shows the remaining records', () => {
+      setData({ inventory: manyPurchases(17) });
+      renderPage();
+
+      fireEvent.click(pager('Incoming').getByRole('button', { name: /Next/ }));
+
+      expect(cardKeys('Incoming')).toEqual(['inventory-inv16', 'inventory-inv17']);
+      expect(pager('Incoming').getByText('Page 2 of 2')).toBeTruthy();
+      expect(pager('Incoming').getByRole('button', { name: /Next/ }).disabled).toBe(true);
+
+      fireEvent.click(pager('Incoming').getByRole('button', { name: /Previous/ }));
+      expect(cardKeys('Incoming')).toHaveLength(15);
+      expect(pager('Incoming').getByText('Page 1 of 2')).toBeTruthy();
+    });
+
+    it('paginates each column independently', () => {
+      setData({
+        inventory: manyPurchases(16),
+        sales: [saleRecord({ id: 'sale1' })],
+      });
+      renderPage();
+
+      expect(pager('Incoming').getByText('Page 1 of 2')).toBeTruthy();
+      expect(pager('On Hand').queryByText(/Page \d+ of \d+/)).toBeNull();
+      expect(pager('Outbound').queryByText(/Page \d+ of \d+/)).toBeNull();
+    });
+
+    it('resets to page 1 when a status filter tile is applied or cleared', () => {
+      setData({ inventory: manyPurchases(17) });
+      renderPage();
+
+      fireEvent.click(pager('Incoming').getByRole('button', { name: /Next/ }));
+      expect(pager('Incoming').getByText('Page 2 of 2')).toBeTruthy();
+
+      fireEvent.click(tile('Incoming', 'Purchased'));
+      expect(cardKeys('Incoming')).toHaveLength(15);
+      expect(pager('Incoming').getByText('Page 1 of 2')).toBeTruthy();
+
+      fireEvent.click(pager('Incoming').getByRole('button', { name: /Next/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
+      expect(pager('Incoming').getByText('Page 1 of 2')).toBeTruthy();
+    });
+  });
 });

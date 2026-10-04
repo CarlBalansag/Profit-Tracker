@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ListChecks, Truck, Package, Send } from 'lucide-react';
+import { ListChecks, Truck, Package, Send, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useInventory, useSales } from '../hooks/useApi';
 import StatusPipeline from '../components/UI/StatusPipeline';
 import ContextualActions from '../components/UI/ContextualActions';
@@ -93,6 +93,8 @@ const exceptionTagOf = (record) => {
   return null;
 };
 
+const PAGE_SIZE = 15;
+
 const TAG = 'px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wide border';
 
 function Tag({ children, tone = 'neutral' }) {
@@ -169,8 +171,36 @@ function CardList({ records, empty, quickStatus = false }) {
   );
 }
 
+// A column can hold far more than fits comfortably on screen, so each one pages
+// independently at a fixed size rather than scrolling one long list.
+function Pager({ page, pageCount, onPage }) {
+  if (pageCount <= 1) return null;
+  return (
+    <div className="flex items-center justify-between px-3 py-2 border-t border-white/5">
+      <button
+        type="button"
+        disabled={page <= 0}
+        onClick={() => onPage(page - 1)}
+        className="flex items-center gap-1 px-2 h-7 rounded-lg border border-white/10 text-[11px] font-medium text-gray-300 hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+      >
+        <ChevronLeft className="w-3.5 h-3.5" /> Previous
+      </button>
+      <span className="text-[11px] text-gray-500">Page {page + 1} of {pageCount}</span>
+      <button
+        type="button"
+        disabled={page >= pageCount - 1}
+        onClick={() => onPage(page + 1)}
+        className="flex items-center gap-1 px-2 h-7 rounded-lg border border-white/10 text-[11px] font-medium text-gray-300 hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+      >
+        Next <ChevronRight className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
 function BoardColumn({ column, records }) {
   const [activeKey, setActiveKey] = useState(null);
+  const [page, setPage] = useState(0);
   const Icon = column.icon;
 
   // Only the statuses this column actually holds, in the registry's order.
@@ -190,6 +220,17 @@ function BoardColumn({ column, records }) {
   const effectiveKey = activeKey && statuses.some((status) => status.key === activeKey) ? activeKey : null;
   const shown = effectiveKey ? records.filter((record) => statusKeyOf(record) === effectiveKey) : records;
 
+  const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  // Clamped rather than reset via an effect: if a card leaves the column (an
+  // action moved it, or a filter changed) and the current page no longer
+  // exists, this falls back to the new last page on the very next render
+  // instead of showing a stale, out-of-range blank page.
+  const currentPage = Math.min(page, pageCount - 1);
+  const paged = shown.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+
+  const selectStatus = (key) => { setActiveKey(key); setPage(0); };
+  const clearFilter = () => { setActiveKey(null); setPage(0); };
+
   return (
     <section
       aria-label={column.title}
@@ -205,7 +246,7 @@ function BoardColumn({ column, records }) {
           {effectiveKey && (
             <button
               type="button"
-              onClick={() => setActiveKey(null)}
+              onClick={clearFilter}
               className="px-2 h-6 rounded-lg border border-white/10 text-[11px] font-medium text-gray-300 hover:bg-white/5 transition-colors"
             >
               Clear filter
@@ -222,7 +263,7 @@ function BoardColumn({ column, records }) {
           <StatusPipeline
             statuses={statuses}
             activeKey={effectiveKey}
-            onSelect={setActiveKey}
+            onSelect={selectStatus}
             label={`${column.title} status filters`}
             gridClassName="grid grid-cols-2 gap-2"
           />
@@ -230,10 +271,11 @@ function BoardColumn({ column, records }) {
       )}
 
       <CardList
-        records={shown}
+        records={paged}
         empty={effectiveKey ? 'Nothing in this status right now.' : column.empty}
         quickStatus
       />
+      <Pager page={currentPage} pageCount={pageCount} onPage={setPage} />
     </section>
   );
 }
