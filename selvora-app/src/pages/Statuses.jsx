@@ -10,7 +10,7 @@ import {
   SALE_STATUS_ORDER,
   SALE_EXCEPTION_STATUSES,
   displayLabel,
-  relativeTime,
+  formatStatusChangedAt,
   statusVisual,
 } from '../data/statusWorkflow';
 
@@ -129,7 +129,7 @@ function RecordCard({ record, quickStatus = false }) {
   const statusKey = statusKeyOf(record);
   const visual = statusVisual(statusKey);
   const exception = exceptionTagOf(record);
-  const changedAt = relativeTime(statusChangedAtOf(record));
+  const changedAt = formatStatusChangedAt(statusChangedAtOf(record));
   const hasSecondaryActions = (record.allowed_actions || []).some((entry) => entry.secondary);
 
   return (

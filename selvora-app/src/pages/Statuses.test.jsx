@@ -227,22 +227,23 @@ describe('Statuses board', () => {
   });
 
   // ─── "Last status updated" on the card ─────────────────────────────────────
-  // The stamp sits on the item-name row, right-aligned, as an age rather than a
-  // calendar date (see relativeTime in data/statusWorkflow.js for why).
+  // The stamp sits on the item-name row, right-aligned, as a calendar date (see
+  // formatStatusChangedAt in data/statusWorkflow.js for why a date and not an age).
   const stampOf = (title, key) => card(title, key).querySelector('[data-status-changed]');
+  const asDate = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-  it('shows how long ago each card\'s status changed, on the item-name row', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-10-03T15:30:00.000Z'));
+  it('shows the date each card\'s status last changed, on the item-name row', () => {
+    const purchaseChangedAt = '2026-10-03T13:30:00.000Z';
+    const saleChangedAt = '2026-10-01T15:30:00.000Z';
     setData({
-      inventory: [purchase({ receiving_status_changed_at: '2026-10-03T13:30:00.000Z', allowed_actions: [] })],
-      sales: [saleRecord({ workflow_status_changed_at: '2026-10-01T15:30:00.000Z', allowed_actions: [] })],
+      inventory: [purchase({ receiving_status_changed_at: purchaseChangedAt, allowed_actions: [] })],
+      sales: [saleRecord({ workflow_status_changed_at: saleChangedAt, allowed_actions: [] })],
     });
     renderPage();
 
     const purchaseStamp = stampOf('Incoming', 'inventory-inv1');
-    expect(purchaseStamp.textContent).toBe('2h ago');
-    expect(stampOf('Outbound', 'sale-sale1').textContent).toBe('2d ago');
+    expect(purchaseStamp.textContent).toBe(asDate(purchaseChangedAt));
+    expect(stampOf('Outbound', 'sale-sale1').textContent).toBe(asDate(saleChangedAt));
 
     // Same row as the product name, with the name still truncating and the stamp
     // pinned to the right of it.
@@ -251,13 +252,12 @@ describe('Statuses board', () => {
     expect(within(nameRow).getByText('Widget')).toBeTruthy();
     expect(nameRow.querySelector('p').className).toContain('truncate');
     expect(purchaseStamp.className).toContain('shrink-0');
-    vi.useRealTimers();
   });
 
   it('shows no timestamp at all on a record whose status has never been stamped', () => {
     setData({
       // A legacy row the status-workflow backfill never reached: the column is
-      // NULL, and a fabricated "just now" would be worse than nothing.
+      // NULL, and a fabricated date would be worse than nothing.
       inventory: [purchase({ receiving_status_changed_at: null, allowed_actions: [] })],
       sales: [saleRecord({ allowed_actions: [] })], // field absent entirely
     });
@@ -271,19 +271,18 @@ describe('Statuses board', () => {
   });
 
   it('stamps a completed and an unassigned card the same way as a board card', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-10-03T15:30:00.000Z'));
+    const leftoverChangedAt = '2026-10-03T15:29:45.000Z';
+    const completedChangedAt = '2026-10-03T12:30:00.000Z';
     setData({
-      inventory: [purchase({ receiving_status: null, receiving_status_changed_at: '2026-10-03T15:29:45.000Z', allowed_actions: [] })],
-      sales: [saleRecord({ workflow_status: 'PAID', workflow_status_changed_at: '2026-10-03T12:30:00.000Z', allowed_actions: [] })],
+      inventory: [purchase({ receiving_status: null, receiving_status_changed_at: leftoverChangedAt, allowed_actions: [] })],
+      sales: [saleRecord({ workflow_status: 'PAID', workflow_status_changed_at: completedChangedAt, allowed_actions: [] })],
     });
     renderPage();
 
     const leftover = screen.getByRole('region', { name: 'Not in the workflow yet' });
-    expect(leftover.querySelector('[data-status-changed]').textContent).toBe('just now');
+    expect(leftover.querySelector('[data-status-changed]').textContent).toBe(asDate(leftoverChangedAt));
     expect(screen.getByRole('region', { name: 'Completed' }).querySelector('[data-status-changed]').textContent)
-      .toBe('3h ago');
-    vi.useRealTimers();
+      .toBe(asDate(completedChangedAt));
   });
 
   // ─── Per-column filter strips ──────────────────────────────────────────────
