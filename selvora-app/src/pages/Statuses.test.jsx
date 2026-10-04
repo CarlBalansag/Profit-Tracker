@@ -440,6 +440,58 @@ describe('Statuses board', () => {
     expect(cardKeys('Outbound')).toEqual(['sale-sale3']);
   });
 
+  // A PAID sale is not its own stored status -- it is treated as fully done,
+  // and moves to Completed, 3 days after paid_at, recomputed on every render
+  // rather than written to the database anywhere.
+  it('keeps a recently paid sale in Outbound, tagged Paid, instead of Completed', () => {
+    const recent = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(); // 2 days ago
+    setData({ sales: [saleRecord({ id: 'sale1', workflow_status: 'PAID', paid_at: recent, allowed_actions: [] })] });
+    renderPage();
+
+    expect(screen.queryByRole('region', { name: 'Completed' })).toBeNull();
+    expect(cardKeys('Outbound')).toEqual(['sale-sale1']);
+    expect(within(card('Outbound', 'sale-sale1')).getByText('Paid')).toBeTruthy();
+  });
+
+  it('moves a sale into Completed once 3 days have passed since paid_at', () => {
+    const justUnder = new Date(Date.now() - (3 * 24 * 60 * 60 * 1000 - 1000)).toISOString();
+    const justOver = new Date(Date.now() - (3 * 24 * 60 * 60 * 1000 + 1000)).toISOString();
+    setData({
+      sales: [
+        saleRecord({ id: 'sale1', workflow_status: 'PAID', paid_at: justUnder, allowed_actions: [] }),
+        saleRecord({ id: 'sale2', workflow_status: 'PAID', paid_at: justOver, allowed_actions: [] }),
+      ],
+    });
+    renderPage();
+
+    expect(cardKeys('Outbound')).toEqual(['sale-sale1']);
+    expect(Array.from(screen.getByRole('region', { name: 'Completed' }).querySelectorAll('[data-record]'))
+      .map((n) => n.getAttribute('data-record'))).toEqual(['sale-sale2']);
+  });
+
+  it('treats a PAID sale with no paid_at as already settled (legacy data)', () => {
+    setData({ sales: [saleRecord({ id: 'sale1', workflow_status: 'PAID', paid_at: null, allowed_actions: [] })] });
+    renderPage();
+
+    expect(cardKeys('Outbound')).toEqual([]);
+    expect(Array.from(screen.getByRole('region', { name: 'Completed' }).querySelectorAll('[data-record]')))
+      .toHaveLength(1);
+  });
+
+  it('shows a Paid filter tile in Outbound when a recently paid sale is present', () => {
+    const recent = new Date(Date.now() - 60 * 1000).toISOString();
+    setData({
+      sales: [
+        saleRecord({ id: 'sale1', workflow_status: 'WAITING_FOR_PAYMENT', allowed_actions: [] }),
+        saleRecord({ id: 'sale2', workflow_status: 'PAID', paid_at: recent, allowed_actions: [] }),
+      ],
+    });
+    renderPage();
+
+    fireEvent.click(tile('Outbound', 'Paid'));
+    expect(cardKeys('Outbound')).toEqual(['sale-sale2']);
+  });
+
   it('paginates the Completed section at 5 per page like the board columns', () => {
     setData({
       sales: Array.from({ length: 6 }, (_, i) => saleRecord({ id: `sale${i + 1}`, workflow_status: 'PAID' })),

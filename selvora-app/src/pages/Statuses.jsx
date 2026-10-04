@@ -24,11 +24,34 @@ import {
 // mirrored in statusWorkflow.js) lands in the Incoming column automatically.
 const INCOMING_STATUSES = INVENTORY_RECEIVING_STATUSES.filter((status) => status !== 'ON_HAND');
 const ON_HAND_STATUSES = ['ON_HAND'];
-// PAID is a finished sale, not one "in flight" -- it lives in the full-width
-// Completed section below the board instead of Outbound, so it is excluded
-// from Outbound's own status set here rather than appearing in both places.
+// PAID is a finished sale, not one "in flight" -- it eventually lives in the
+// full-width Completed section below the board instead of Outbound, so it is
+// excluded from Outbound's own status set here rather than appearing in both
+// places. (The Outbound column's own `includes` below still shows a PAID sale
+// for a few days after payment -- see COMPLETED_AFTER_DAYS.)
 const OUTBOUND_STATUSES = SALE_STATUS_ORDER.filter((status) => status !== 'PAID');
-const COMPLETED_STATUSES = ['PAID'];
+
+// "Completed" is not its own stored status -- a sale stays stored as PAID
+// forever, the same way a sold-out purchase stays stored as ON_HAND and is
+// only ever *displayed* as Sold Out. A PAID sale is treated as fully done,
+// and moves into the Completed section, once this many days have passed
+// since payment; recomputed on every render from paid_at, never written to
+// the database. This gives a short window after payment (still visible in
+// Outbound, tagged Paid) where a mistake is easy to catch and correct before
+// the sale is filed away as finished business.
+const COMPLETED_AFTER_DAYS = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// A handful of legacy sales were migrated straight to PAID from the old
+// system before `paid_at` existed to measure from -- treated as already
+// settled rather than stuck in Outbound forever with no way to age out.
+const isFullyCompleted = (record) => {
+  if (!isSale(record) || record.workflow_status !== 'PAID') return false;
+  if (!record.paid_at) return true;
+  const paidAt = new Date(record.paid_at).getTime();
+  if (Number.isNaN(paidAt)) return true;
+  return Date.now() - paidAt >= COMPLETED_AFTER_DAYS * DAY_MS;
+};
 
 const isInventory = (record) => record.__kind === 'inventory';
 const isSale = (record) => record.__kind === 'sale';
@@ -64,11 +87,17 @@ const COLUMNS = [
     blurb: 'Sales in flight, waiting on payment, or needing attention.',
     empty: 'Nothing outbound right now.',
     // Every sale status across every workflow_type, forward path and exceptions
-    // alike, except PAID (that one lives in the Completed section below).
-    // Exceptions share this column (the board is exactly three columns) and are
-    // flagged on the card instead of being split out.
-    statuses: OUTBOUND_STATUSES,
-    includes: (record) => isSale(record) && OUTBOUND_STATUSES.includes(record.workflow_status),
+    // alike, plus PAID for its first few days (see COMPLETED_AFTER_DAYS) before
+    // it moves to the Completed section below. Exceptions share this column
+    // (the board is exactly three columns) and are flagged on the card instead
+    // of being split out. PAID is included here (not in OUTBOUND_STATUSES
+    // itself) purely so its filter tile can still appear -- membership is
+    // decided by `includes`, not by this list.
+    statuses: [...OUTBOUND_STATUSES, 'PAID'],
+    includes: (record) => isSale(record) && (
+      OUTBOUND_STATUSES.includes(record.workflow_status)
+      || (record.workflow_status === 'PAID' && !isFullyCompleted(record))
+    ),
   },
 ];
 
@@ -86,7 +115,7 @@ const isSoldOutOnHand = (record) => isInventory(record)
   && record.receiving_status === 'ON_HAND'
   && !(Number(record.qty_on_hand) > 0);
 
-const isCompletedSale = (record) => isSale(record) && COMPLETED_STATUSES.includes(record.workflow_status);
+const isCompletedSale = (record) => isFullyCompleted(record);
 
 const productNameOf = (record) => (isInventory(record)
   ? (record.product_name || 'Item')
@@ -335,7 +364,7 @@ function CompletedSection({ records }) {
           Completed
           <span className="text-xs font-medium text-gray-500">{records.length}</span>
         </h2>
-        <p className="text-xs text-gray-500 mt-1">Every sale that has been paid.</p>
+        <p className="text-xs text-gray-500 mt-1">Sales paid {COMPLETED_AFTER_DAYS}+ days ago, with nothing left to do.</p>
       </div>
       <CardList records={paged} empty="" quickStatus />
       <Pager page={currentPage} pageCount={pageCount} onPage={setPage} />
