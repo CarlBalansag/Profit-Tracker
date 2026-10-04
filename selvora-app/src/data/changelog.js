@@ -3,6 +3,21 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.59',
+    date: '2026-10-03',
+    notes: "Fixed the Statuses page's More actions button sitting on its own line — it now sits next to the status dropdown.",
+  },
+  {
+    version: '0.58',
+    date: '2026-10-03',
+    notes: 'The Completed and "Not in the workflow yet" sections on the Statuses page now sit side by side.',
+  },
+  {
+    version: '0.57',
+    date: '2026-10-03',
+    notes: 'Statuses board columns now show 5 items per page, and the status label moved under the item name on each card.',
+  },
+  {
     version: '0.56',
     date: '2026-10-03',
     notes: 'Added a Completed section to the Statuses page listing every sale that has been paid.',
