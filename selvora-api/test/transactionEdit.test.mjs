@@ -37,6 +37,13 @@ describe('atomic expanded transaction edits', () => {
     expect(harness.db.sales).toHaveLength(2);
   });
 
+  it('gives an inline-created sale the same workflow_type/workflow_status a POST /api/sales create would, so it is not invisible on the Statuses board', async () => {
+    const body = { inventory: { qty_purchased: 5 }, sales: [], newSale: { quantity: 2, unit_price: '50.00' } };
+    expect((await write(body)).status).toBe(200);
+    const created = harness.db.sales[harness.db.sales.length - 1];
+    expect(created).toMatchObject({ workflow_type: 'STANDARD_MARKETPLACE', workflow_status: 'AWAITING_SHIPMENT' });
+  });
+
   it('preserves all purchase data if an inline new sale fails, then permits retry', async () => {
     const original = structuredClone({ inventory: harness.db.inventory, sales: harness.db.sales });
     harness.faults['sales.create'] = true;

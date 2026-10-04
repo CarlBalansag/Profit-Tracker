@@ -1,5 +1,6 @@
 const { updateInventory, updateSale, createSale } = require('../validation/schemas');
 const { requireOwned } = require('./ownership');
+const statusTransitions = require('./statusTransitions');
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const dateValue = value => value ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00.000Z` : value) : null;
@@ -28,8 +29,10 @@ async function editTransaction(prisma, inventoryId, userId, payload) {
   if (new Set(ids).size !== ids.length) throw fail(400, 'A sale can only appear once');
   await requireOwned('platform', payload.inventory.vendor_id, userId, 'Vendor');
   await requireOwned('paymentMethod', payload.inventory.payment_method_id, userId, 'Payment method');
+  let newSalePlatform = null;
   for (const sale of [...payload.sales, ...(payload.newSale ? [payload.newSale] : [])]) {
-    await requireOwned('platform', sale.platform_id, userId, 'Sale platform');
+    const ownedPlatform = await requireOwned('platform', sale.platform_id, userId, 'Sale platform');
+    if (sale === payload.newSale) newSalePlatform = ownedPlatform;
     await requireOwned('buyer', sale.buyer_id, userId, 'Buyer');
   }
   return prisma.$transaction(async tx => {
@@ -65,11 +68,29 @@ async function editTransaction(prisma, inventoryId, userId, payload) {
       if (saleClaim.count !== 1) throw fail(409, 'Sale changed while saving. Reload and retry.');
     }
     if (payload.newSale) {
+      // Mirrors routes/sales.js's POST handler: a sale created here (the
+      // Transactions page's inline "mark as sold" edit) must get the same
+      // workflow_type/workflow_status as one created through the dedicated
+      // Record Sale form, or it silently drops out of every Statuses column.
+      const workflow_type = statusTransitions.resolveSaleWorkflow(newSalePlatform && newSalePlatform.workflow_preset);
+      let resolvedStatus = payload.newSale.status || 'SOLD';
+      let workflowData = { workflow_type, workflow_status: statusTransitions.legacyWorkflowStatus(resolvedStatus, workflow_type) };
+      if (!payload.newSale.status && payload.newSale.tracking_number) {
+        const advanced = statusTransitions.trackingAttached(
+          'sale',
+          { status: resolvedStatus, quantity: payload.newSale.quantity ?? 1, ...workflowData },
+          payload.newSale.tracking_number,
+        );
+        if (advanced.legacy_status) resolvedStatus = advanced.legacy_status;
+        workflowData = { ...workflowData, ...advanced.data };
+      }
       await tx.sales.create({
         data: {
           ...writable(payload.newSale, createSale),
           inventory_id: inventoryId,
           sale_date: dateValue(payload.newSale.sale_date) || new Date(),
+          status: resolvedStatus,
+          ...workflowData,
         },
       });
     }
