@@ -3,51 +3,6 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
-    version: '0.59',
-    date: '2026-10-03',
-    notes: "Fixed the Statuses page's More actions button sitting on its own line — it now sits next to the status dropdown.",
-  },
-  {
-    version: '0.58',
-    date: '2026-10-03',
-    notes: 'The Completed and "Not in the workflow yet" sections on the Statuses page now sit side by side.',
-  },
-  {
-    version: '0.57',
-    date: '2026-10-03',
-    notes: 'Statuses board columns now show 5 items per page, and the status label moved under the item name on each card.',
-  },
-  {
-    version: '0.56',
-    date: '2026-10-03',
-    notes: 'Added a Completed section to the Statuses page listing every sale that has been paid.',
-  },
-  {
-    version: '0.55',
-    date: '2026-10-03',
-    notes: 'Each column on the Statuses board now shows 15 items at a time with Previous/Next buttons instead of one long list.',
-  },
-  {
-    version: '0.54',
-    date: '2026-10-03',
-    notes: 'Every card on the Statuses board now has a quick status dropdown, showing only the statuses that make sense for that purchase or sale.',
-  },
-  {
-    version: '0.53',
-    date: '2026-10-02',
-    notes: 'Purchases and sales with no status yet can now be given one straight from the Statuses page.',
-  },
-  {
-    version: '0.52',
-    date: '2026-10-02',
-    notes: 'The Statuses page is now a three-column board: incoming purchases, items on hand, and sales on their way out.',
-  },
-  {
-    version: '0.51',
-    date: '2026-10-02',
-    notes: "Added a new Statuses page to see and manage every order's status in one place.",
-  },
-  {
     version: '0.50',
     date: '2026-10-01',
     notes: 'Fixed the Expense form losing focus while typing in the Name or Amount fields.',
