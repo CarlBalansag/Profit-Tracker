@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ListChecks, Truck, Package, Send, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ListChecks, Truck, Package, Send, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useInventory, useSales } from '../hooks/useApi';
 import StatusPipeline from '../components/UI/StatusPipeline';
 import ContextualActions from '../components/UI/ContextualActions';
@@ -22,6 +22,11 @@ import {
 // mirrored in statusWorkflow.js) lands in the Incoming column automatically.
 const INCOMING_STATUSES = INVENTORY_RECEIVING_STATUSES.filter((status) => status !== 'ON_HAND');
 const ON_HAND_STATUSES = ['ON_HAND'];
+// PAID is a finished sale, not one "in flight" -- it lives in the full-width
+// Completed section below the board instead of Outbound, so it is excluded
+// from Outbound's own status set here rather than appearing in both places.
+const OUTBOUND_STATUSES = SALE_STATUS_ORDER.filter((status) => status !== 'PAID');
+const COMPLETED_STATUSES = ['PAID'];
 
 const isInventory = (record) => record.__kind === 'inventory';
 const isSale = (record) => record.__kind === 'sale';
@@ -57,10 +62,11 @@ const COLUMNS = [
     blurb: 'Sales in flight, waiting on payment, or needing attention.',
     empty: 'Nothing outbound right now.',
     // Every sale status across every workflow_type, forward path and exceptions
-    // alike. Exceptions share this column (the board is exactly three columns)
-    // and are flagged on the card instead of being split out.
-    statuses: SALE_STATUS_ORDER,
-    includes: (record) => isSale(record) && SALE_STATUS_ORDER.includes(record.workflow_status),
+    // alike, except PAID (that one lives in the Completed section below).
+    // Exceptions share this column (the board is exactly three columns) and are
+    // flagged on the card instead of being split out.
+    statuses: OUTBOUND_STATUSES,
+    includes: (record) => isSale(record) && OUTBOUND_STATUSES.includes(record.workflow_status),
   },
 ];
 
@@ -71,6 +77,8 @@ const statusKeyOf = (record) => (isInventory(record) ? record.receiving_status :
 const isSoldOutOnHand = (record) => isInventory(record)
   && record.receiving_status === 'ON_HAND'
   && !(Number(record.qty_on_hand) > 0);
+
+const isCompletedSale = (record) => isSale(record) && COMPLETED_STATUSES.includes(record.workflow_status);
 
 const productNameOf = (record) => (isInventory(record)
   ? (record.product_name || 'Item')
@@ -280,6 +288,34 @@ function BoardColumn({ column, records }) {
   );
 }
 
+// A full-width log of every sale that has reached PAID -- the normal completed
+// sale state. These are deliberately excluded from Outbound (see
+// OUTBOUND_STATUSES above) so a finished sale doesn't linger in a column meant
+// for things still in flight.
+function CompletedSection({ records }) {
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const paged = records.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+
+  if (records.length === 0) return null;
+
+  return (
+    <section aria-label="Completed" className="card bg-[#0f1115] rounded-xl border border-white/6">
+      <div className="px-4 py-3.5 border-b border-white/6">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          Completed
+          <span className="text-xs font-medium text-gray-500">{records.length}</span>
+        </h2>
+        <p className="text-xs text-gray-500 mt-1">Every sale that has been paid.</p>
+      </div>
+      <CardList records={paged} empty="" quickStatus />
+      <Pager page={currentPage} pageCount={pageCount} onPage={setPage} />
+    </section>
+  );
+}
+
 export default function Statuses() {
   const { data: inventory = [], isLoading: loadingInventory } = useInventory();
   const { data: sales = [], isLoading: loadingSales } = useSales();
@@ -291,18 +327,20 @@ export default function Statuses() {
     ...sales.map((sale) => ({ ...sale, __kind: 'sale' })),
   ], [inventory, sales]);
 
-  const { byColumn, unassigned } = useMemo(() => {
+  const { byColumn, completed, unassigned } = useMemo(() => {
     const grouped = new Map(COLUMNS.map((column) => [column.id, []]));
+    const completedList = [];
     const leftover = [];
     for (const record of records) {
       const column = COLUMNS.find((candidate) => candidate.includes(record));
       if (column) grouped.get(column.id).push(record);
+      else if (isCompletedSale(record)) completedList.push(record);
       // Legacy rows the status-workflow backfill has not reached have no stored
       // status at all. They belong to no column, but hiding them would make them
       // unfixable, so they get a plain list under the board instead.
       else if (!isSoldOutOnHand(record)) leftover.push(record);
     }
-    return { byColumn: grouped, unassigned: leftover };
+    return { byColumn: grouped, completed: completedList, unassigned: leftover };
   }, [records]);
 
   return (
@@ -330,6 +368,8 @@ export default function Statuses() {
               <BoardColumn key={column.id} column={column} records={byColumn.get(column.id)} />
             ))}
           </div>
+
+          <CompletedSection records={completed} />
 
           {unassigned.length > 0 && (
             <section aria-label="Not in the workflow yet" className="card bg-[#0f1115] rounded-xl border border-white/6">

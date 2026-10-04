@@ -152,7 +152,7 @@ describe('Statuses board', () => {
   });
 
   // ─── Right column: Outbound ────────────────────────────────────────────────
-  it('puts a sale in Outbound whatever its workflow_type or forward status', () => {
+  it('puts a sale in Outbound whatever its workflow_type or forward status, except PAID', () => {
     setData({
       sales: [
         saleRecord({ id: 'sale1', workflow_status: 'AWAITING_SHIPMENT', allowed_actions: [] }),
@@ -160,12 +160,15 @@ describe('Statuses board', () => {
         saleRecord({ id: 'sale3', workflow_status: 'AUTHENTICATING', workflow_type: 'AUTH_MARKETPLACE', allowed_actions: [] }),
         saleRecord({ id: 'sale4', workflow_status: 'SCANNED_IN', workflow_type: 'CASHOUT', allowed_actions: [] }),
         saleRecord({ id: 'sale5', workflow_status: 'HANDED_OVER', workflow_type: 'DIRECT_LOCAL', allowed_actions: [] }),
+        // A finished sale lives in Completed, not Outbound -- see the dedicated
+        // "Completed section" tests below.
         saleRecord({ id: 'sale6', workflow_status: 'PAID', allowed_actions: [] }),
       ],
     });
     renderPage();
 
-    expect(cardKeys('Outbound')).toHaveLength(6);
+    expect(cardKeys('Outbound')).toHaveLength(5);
+    expect(cardKeys('Outbound')).not.toContain('sale-sale6');
     expect(cardKeys('Incoming')).toEqual([]);
     expect(cardKeys('On Hand')).toEqual([]);
   });
@@ -343,6 +346,53 @@ describe('Statuses board', () => {
     expect(cardKeys('Outbound')).toEqual(['sale-sale1']);
     expect(card('Outbound', 'sale-sale1').getAttribute('data-exception')).toBe('true');
     expect(inColumn('Outbound').getByText('Exception')).toBeTruthy();
+  });
+
+  // ─── Completed section ──────────────────────────────────────────────────────
+  it('does not render the Completed section when there is nothing paid', () => {
+    setData({ sales: [saleRecord({ workflow_status: 'OUTBOUND', allowed_actions: [] })] });
+    renderPage();
+    expect(screen.queryByRole('region', { name: 'Completed' })).toBeNull();
+  });
+
+  it('lists every PAID sale in a full-width Completed section below the board', () => {
+    setData({
+      sales: [
+        saleRecord({ id: 'sale1', workflow_status: 'PAID', allowed_actions: [] }),
+        saleRecord({ id: 'sale2', workflow_status: 'PAID', workflow_type: 'CASHOUT', allowed_actions: [] }),
+        saleRecord({ id: 'sale3', workflow_status: 'WAITING_FOR_PAYMENT', allowed_actions: [] }),
+      ],
+    });
+    renderPage();
+
+    const completedSection = inColumn('Completed');
+    expect(Array.from(screen.getByRole('region', { name: 'Completed' }).querySelectorAll('[data-record]'))
+      .map((n) => n.getAttribute('data-record'))).toEqual(['sale-sale1', 'sale-sale2']);
+    expect(completedSection.getByText('2')).toBeTruthy();
+    expect(cardKeys('Outbound')).toEqual(['sale-sale3']);
+  });
+
+  it('paginates the Completed section at 15 per page like the board columns', () => {
+    setData({
+      sales: Array.from({ length: 16 }, (_, i) => saleRecord({ id: `sale${i + 1}`, workflow_status: 'PAID' })),
+    });
+    renderPage();
+
+    const completed = () => inColumn('Completed');
+    expect(Array.from(screen.getByRole('region', { name: 'Completed' }).querySelectorAll('[data-record]'))).toHaveLength(15);
+    expect(completed().getByText('Page 1 of 2')).toBeTruthy();
+
+    fireEvent.click(completed().getByRole('button', { name: /Next/ }));
+    expect(Array.from(screen.getByRole('region', { name: 'Completed' }).querySelectorAll('[data-record]'))).toHaveLength(1);
+  });
+
+  it('still offers the quick status dropdown and actions on a completed card for corrections', () => {
+    setData({ sales: [saleRecord({ workflow_status: 'PAID', allowed_actions: [act('correct_status', 'Correct Workflow Step', { requiresForm: true, secondary: true })] })] });
+    renderPage();
+
+    const node = screen.getByRole('region', { name: 'Completed' }).querySelector('[data-record="sale-sale1"]');
+    expect(within(node).getByLabelText('Change sale status')).toBeTruthy();
+    expect(within(node).getByRole('button', { name: 'More actions' })).toBeTruthy();
   });
 
   // ─── Records with no stored status ─────────────────────────────────────────
