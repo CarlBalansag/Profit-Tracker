@@ -208,8 +208,14 @@ function saleActions(record = {}) {
     case 'WAITING_FOR_PAYMENT':
       return [markPaid(), ...saleCorrections({ outbound: workflow !== 'DIRECT_LOCAL' })];
     case 'PAID':
-      // No normal action required. A paid sale is still correctable.
-      return saleCorrections({ outbound: true, paid: true });
+      // No normal action required. A paid sale is still correctable, and can
+      // be marked complete right away instead of waiting out the Statuses
+      // board's automatic 3-days-after-paid_at window -- offered only once,
+      // since a sale already marked complete has nothing left to accelerate.
+      return [
+        ...(record.completed_at ? [] : [act('mark_completed', 'Mark Completed')]),
+        ...saleCorrections({ outbound: true, paid: true }),
+      ];
     case 'AUTHENTICATION_FAILED':
       // Inventory is NOT restored merely because authentication failed -- only
       // once the returned item physically arrives and is accepted.
@@ -375,6 +381,12 @@ const SALE_TRANSITIONS = {
   },
   // Reopening never deletes the original payment -- paid_at stays.
   reopen_sale: () => ({ data: { workflow_status: 'WAITING_FOR_PAYMENT' } }),
+  // Fast-tracks the Statuses board's Completed section instead of waiting out
+  // the automatic 3-days-after-paid_at window. workflow_status stays PAID --
+  // this is purely "a user says this is done", not a status change, and
+  // paid_at (the real payment date used in financial reporting) is never
+  // touched by it.
+  mark_completed: (record, payload, now) => ({ data: { completed_at: now } }),
   // A return request does not restore inventory; mark_returned does, once the
   // item has physically arrived.
   report_return: (record, payload, now) => ({

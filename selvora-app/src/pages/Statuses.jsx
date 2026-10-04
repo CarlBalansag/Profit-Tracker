@@ -47,6 +47,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // settled rather than stuck in Outbound forever with no way to age out.
 const isFullyCompleted = (record) => {
   if (!isSale(record) || record.workflow_status !== 'PAID') return false;
+  // The mark_completed action: a user saying "this one's done" outright,
+  // skipping the wait instead of the board inferring it from paid_at's age.
+  if (record.completed_at) return true;
   if (!record.paid_at) return true;
   const paidAt = new Date(record.paid_at).getTime();
   if (Number.isNaN(paidAt)) return true;

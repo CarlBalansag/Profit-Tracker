@@ -104,18 +104,25 @@ describe('allowedActions for inventory receiving states', () => {
 });
 
 describe('allowedActions for every sale workflow', () => {
-  it.each(['STANDARD_MARKETPLACE', 'AUTH_MARKETPLACE', 'CASHOUT'])('%s starts on Add Outbound Tracking and ends with no normal action', (workflow) => {
+  it.each(['STANDARD_MARKETPLACE', 'AUTH_MARKETPLACE', 'CASHOUT'])('%s starts on Add Outbound Tracking and ends on Mark Completed', (workflow) => {
     expect(names(sale('AWAITING_SHIPMENT', workflow), 'sale')[0]).toBe('add_outbound_tracking');
     expect(names(sale('OUTBOUND', workflow), 'sale')[0]).toBe('check_tracking');
     expect(names(sale('WAITING_FOR_PAYMENT', workflow), 'sale')[0]).toBe('mark_paid');
-    expect(allowedActions(sale('PAID', workflow), 'sale').filter((entry) => !entry.secondary)).toEqual([]);
+    expect(allowedActions(sale('PAID', workflow), 'sale').filter((entry) => !entry.secondary)).toEqual([
+      expect.objectContaining({ action: 'mark_completed', secondary: false }),
+    ]);
+    // Already marked complete: nothing left to accelerate.
+    expect(allowedActions(sale('PAID', workflow, { completed_at: new Date() }), 'sale').filter((entry) => !entry.secondary))
+      .toEqual([]);
   });
 
   it('DIRECT_LOCAL uses handoff wording and can take payment before the handoff', () => {
     expect(names(sale('AWAITING_HANDOFF', 'DIRECT_LOCAL'), 'sale').slice(0, 2)).toEqual(['mark_handed_over', 'mark_paid']);
     expect(names(sale('HANDED_OVER', 'DIRECT_LOCAL'), 'sale')[0]).toBe('mark_paid');
     expect(names(sale('WAITING_FOR_PAYMENT', 'DIRECT_LOCAL'), 'sale')[0]).toBe('mark_paid');
-    expect(allowedActions(sale('PAID', 'DIRECT_LOCAL'), 'sale').filter((entry) => !entry.secondary)).toEqual([]);
+    expect(allowedActions(sale('PAID', 'DIRECT_LOCAL'), 'sale').filter((entry) => !entry.secondary)).toEqual([
+      expect.objectContaining({ action: 'mark_completed', secondary: false }),
+    ]);
   });
 
   it('AUTH_MARKETPLACE offers Mark Passed and Mark Failed while authenticating', () => {
@@ -354,6 +361,18 @@ describe('applyTransition — sale', () => {
     expect((await run('sale', paid, 'reopen_sale')).to).toBe('WAITING_FOR_PAYMENT');
     expect(harness.db.sales[0].paid_at).toBeInstanceOf(Date);
     expect(harness.db.sales[0].paid_amount).toBe('288.00');
+  });
+
+  it('marks a paid sale complete without touching workflow_status or paid_at', async () => {
+    const paid = seedSale({ workflow_status: 'PAID', paid_at: new Date('2026-09-10T00:00:00Z'), paid_amount: '288.00' });
+    const result = await run('sale', paid, 'mark_completed');
+    expect(result.to).toBe('PAID');
+    expect(harness.db.sales[0].completed_at).toBeInstanceOf(Date);
+    expect(harness.db.sales[0].paid_at).toEqual(new Date('2026-09-10T00:00:00Z'));
+    // Already-completed is no longer an available action -- nothing left to
+    // accelerate, and the registry gate rejects a repeat attempt.
+    await expect(run('sale', { ...harness.db.sales[0], user_id: harness.ids.user }, 'mark_completed'))
+      .rejects.toThrow(/not available/);
   });
 
   it('does not restore inventory when a return is only requested, and does once it arrives', async () => {

@@ -187,6 +187,10 @@ model Sales {
   return_requested_at DateTime?
   returned_at         DateTime?
   disputed_at         DateTime?
+  // Set only by the mark_completed action -- lets a user skip the Statuses
+  // board's automatic "Completed 3 days after paid_at" wait when they already
+  // know a PAID sale is fully done. workflow_status itself never changes.
+  completed_at        DateTime?
   taxable             Boolean   @default(true)
   sale_tax_collected  Float     @default(0)
   sale_tax_collected_decimal Decimal? @db.Decimal(19, 2)

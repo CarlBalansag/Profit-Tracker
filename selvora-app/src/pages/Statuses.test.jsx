@@ -469,6 +469,39 @@ describe('Statuses board', () => {
       .map((n) => n.getAttribute('data-record'))).toEqual(['sale-sale2']);
   });
 
+  it('moves a recently paid sale into Completed immediately once marked complete by hand', () => {
+    const recent = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(); // still well inside 3 days
+    setData({
+      sales: [saleRecord({
+        id: 'sale1', workflow_status: 'PAID', paid_at: recent, completed_at: new Date().toISOString(), allowed_actions: [],
+      })],
+    });
+    renderPage();
+
+    expect(cardKeys('Outbound')).toEqual([]);
+    expect(Array.from(screen.getByRole('region', { name: 'Completed' }).querySelectorAll('[data-record]')))
+      .toHaveLength(1);
+  });
+
+  it('offers Mark Completed on a recently paid sale and fires it straight away', async () => {
+    const recent = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    setData({
+      sales: [saleRecord({
+        id: 'sale1', workflow_status: 'PAID', paid_at: recent,
+        allowed_actions: [act('mark_completed', 'Mark Completed')],
+      })],
+    });
+    renderPage();
+
+    const button = within(card('Outbound', 'sale-sale1')).getByRole('button', { name: 'Mark Completed' });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+    const [path, options] = mocks.apiFetch.mock.calls[0];
+    expect(path).toBe('/api/sales/sale1/actions/mark_completed');
+    expect(JSON.parse(options.body)).toEqual({});
+  });
+
   it('treats a PAID sale with no paid_at as already settled (legacy data)', () => {
     setData({ sales: [saleRecord({ id: 'sale1', workflow_status: 'PAID', paid_at: null, allowed_actions: [] })] });
     renderPage();
