@@ -195,14 +195,23 @@ describe('Statuses board', () => {
     });
     renderPage();
 
-    // No fourth column: all six live in Outbound.
-    expect(cardKeys('Outbound')).toHaveLength(6);
-    for (const key of ['sale2', 'sale3', 'sale4', 'sale5', 'sale6']) {
+    // No fourth column: all six live in Outbound (spread across two pages at
+    // 5 per page -- the column header's own count is independent of paging).
+    expect(inColumn('Outbound').getByText('6')).toBeTruthy();
+    for (const key of ['sale2', 'sale3', 'sale4', 'sale5']) {
       const node = card('Outbound', `sale-${key}`);
       expect(node.getAttribute('data-exception')).toBe('true');
       expect(node.className).toContain('border-red-500/40');
       expect(within(node).getByText('Exception')).toBeTruthy();
     }
+    fireEvent.click(inColumn('Outbound').getByRole('button', { name: /Next/ }));
+    {
+      const node = card('Outbound', 'sale-sale6');
+      expect(node.getAttribute('data-exception')).toBe('true');
+      expect(node.className).toContain('border-red-500/40');
+      expect(within(node).getByText('Exception')).toBeTruthy();
+    }
+    fireEvent.click(inColumn('Outbound').getByRole('button', { name: /Previous/ }));
     // The healthy sale carries neither the tag nor the accent.
     const healthy = card('Outbound', 'sale-sale1');
     expect(healthy.getAttribute('data-exception')).toBeNull();
@@ -372,14 +381,14 @@ describe('Statuses board', () => {
     expect(cardKeys('Outbound')).toEqual(['sale-sale3']);
   });
 
-  it('paginates the Completed section at 15 per page like the board columns', () => {
+  it('paginates the Completed section at 5 per page like the board columns', () => {
     setData({
-      sales: Array.from({ length: 16 }, (_, i) => saleRecord({ id: `sale${i + 1}`, workflow_status: 'PAID' })),
+      sales: Array.from({ length: 6 }, (_, i) => saleRecord({ id: `sale${i + 1}`, workflow_status: 'PAID' })),
     });
     renderPage();
 
     const completed = () => inColumn('Completed');
-    expect(Array.from(screen.getByRole('region', { name: 'Completed' }).querySelectorAll('[data-record]'))).toHaveLength(15);
+    expect(Array.from(screen.getByRole('region', { name: 'Completed' }).querySelectorAll('[data-record]'))).toHaveLength(5);
     expect(completed().getByText('Page 1 of 2')).toBeTruthy();
 
     fireEvent.click(completed().getByRole('button', { name: /Next/ }));
@@ -714,40 +723,40 @@ describe('Statuses board', () => {
     const manyPurchases = (count) => Array.from({ length: count }, (_, i) => purchase({ id: `inv${i + 1}` }));
     const pager = (title) => inColumn(title);
 
-    it('shows no pager when a column has 15 or fewer records', () => {
-      setData({ inventory: manyPurchases(15) });
+    it('shows no pager when a column has 5 or fewer records', () => {
+      setData({ inventory: manyPurchases(5) });
       renderPage();
-      expect(cardKeys('Incoming')).toHaveLength(15);
+      expect(cardKeys('Incoming')).toHaveLength(5);
       expect(pager('Incoming').queryByText(/Page \d+ of \d+/)).toBeNull();
     });
 
-    it('shows only the first 15 records and a pager once a column exceeds 15', () => {
-      setData({ inventory: manyPurchases(17) });
+    it('shows only the first 5 records and a pager once a column exceeds 5', () => {
+      setData({ inventory: manyPurchases(7) });
       renderPage();
-      expect(cardKeys('Incoming')).toHaveLength(15);
+      expect(cardKeys('Incoming')).toHaveLength(5);
       expect(pager('Incoming').getByText('Page 1 of 2')).toBeTruthy();
       expect(pager('Incoming').getByRole('button', { name: /Previous/ }).disabled).toBe(true);
       expect(pager('Incoming').getByRole('button', { name: /Next/ }).disabled).toBe(false);
     });
 
     it('moves to the next page and shows the remaining records', () => {
-      setData({ inventory: manyPurchases(17) });
+      setData({ inventory: manyPurchases(7) });
       renderPage();
 
       fireEvent.click(pager('Incoming').getByRole('button', { name: /Next/ }));
 
-      expect(cardKeys('Incoming')).toEqual(['inventory-inv16', 'inventory-inv17']);
+      expect(cardKeys('Incoming')).toEqual(['inventory-inv6', 'inventory-inv7']);
       expect(pager('Incoming').getByText('Page 2 of 2')).toBeTruthy();
       expect(pager('Incoming').getByRole('button', { name: /Next/ }).disabled).toBe(true);
 
       fireEvent.click(pager('Incoming').getByRole('button', { name: /Previous/ }));
-      expect(cardKeys('Incoming')).toHaveLength(15);
+      expect(cardKeys('Incoming')).toHaveLength(5);
       expect(pager('Incoming').getByText('Page 1 of 2')).toBeTruthy();
     });
 
     it('paginates each column independently', () => {
       setData({
-        inventory: manyPurchases(16),
+        inventory: manyPurchases(6),
         sales: [saleRecord({ id: 'sale1' })],
       });
       renderPage();
@@ -758,14 +767,14 @@ describe('Statuses board', () => {
     });
 
     it('resets to page 1 when a status filter tile is applied or cleared', () => {
-      setData({ inventory: manyPurchases(17) });
+      setData({ inventory: manyPurchases(7) });
       renderPage();
 
       fireEvent.click(pager('Incoming').getByRole('button', { name: /Next/ }));
       expect(pager('Incoming').getByText('Page 2 of 2')).toBeTruthy();
 
       fireEvent.click(tile('Incoming', 'Purchased'));
-      expect(cardKeys('Incoming')).toHaveLength(15);
+      expect(cardKeys('Incoming')).toHaveLength(5);
       expect(pager('Incoming').getByText('Page 1 of 2')).toBeTruthy();
 
       fireEvent.click(pager('Incoming').getByRole('button', { name: /Next/ }));

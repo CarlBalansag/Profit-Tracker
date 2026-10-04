@@ -101,7 +101,7 @@ const exceptionTagOf = (record) => {
   return null;
 };
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 5;
 
 const TAG = 'px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wide border';
 
@@ -133,14 +133,12 @@ function RecordCard({ record, quickStatus = false }) {
           : 'border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.04]',
       ].join(' ')}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-100 truncate">{productNameOf(record)}</p>
-          <p className="text-xs text-gray-500 truncate">{counterpartOf(record)}</p>
-        </div>
-        <span className="text-[11px] font-semibold text-right shrink-0" style={{ color: visual.color }}>
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-gray-100 truncate">{productNameOf(record)}</p>
+        <p className="text-[11px] font-semibold" style={{ color: visual.color }}>
           {statusKey ? displayLabel(statusKey) : 'No status yet'}
-        </span>
+        </p>
+        <p className="text-xs text-gray-500 truncate">{counterpartOf(record)}</p>
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
