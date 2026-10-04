@@ -7,7 +7,14 @@ import MarkPaidModal from './MarkPaidModal';
 import ActionFormModal from './ActionFormModal';
 import { actionNeedsFormFields, consequenceFor, NAVIGATE_ACTIONS, actionButtonLabel } from '../../data/statusActions';
 
-const MENU_ITEM = 'w-full text-left px-3 py-2 text-xs font-medium text-gray-300 hover:bg-white/5 disabled:opacity-50 transition-colors';
+// bg-[#16181d] is declared explicitly here (not just inherited from the panel
+// behind it) so each item always has its own real, non-transparent background
+// rather than `transparent`/`rgba(0,0,0,0)` -- some OS/browser accessibility
+// tools read an element's own background-color (not what's actually painted
+// through an ancestor) when deciding whether text needs a contrast fix, and a
+// "transparent" reading on reddish text can trigger one even though the text
+// already has plenty of real contrast against the panel it sits on.
+const MENU_ITEM = 'w-full text-left px-3 py-2 text-xs font-medium text-gray-300 bg-[#16181d] hover:bg-white/5 disabled:opacity-50 transition-colors';
 
 /**
  * The trigger + dropdown for a record's secondary actions -- corrections,
