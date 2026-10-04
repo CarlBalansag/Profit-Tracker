@@ -91,7 +91,11 @@ const MoreActionsMenu = ({ record, kind, actions, onSuccess, className = '' }) =
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full mt-1 w-56 z-40 rounded-lg bg-[#16181d] border border-white/10 shadow-xl py-1 overflow-hidden"
+          // select-none: menu items are controls to click, not text to select
+          // -- without it, a click that drags even slightly can leave a text
+          // selection highlighted across them (in whatever selection color the
+          // browser/OS uses, which need not be the default blue).
+          className="absolute right-0 top-full mt-1 w-56 z-40 rounded-lg bg-[#16181d] border border-white/10 shadow-xl py-1 overflow-hidden select-none"
         >
           {descriptors.map((descriptor) => {
             const to = NAVIGATE_ACTIONS[descriptor.action];
