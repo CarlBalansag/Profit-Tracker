@@ -366,8 +366,14 @@ export default function Shipping() {
   const rateLimitMinutes = rateLimited ? Math.max(1, Math.ceil((new Date(rateLimit.resetAt).getTime() - Date.now()) / 60000)) : null;
 
   // Scoped before the tracked/untracked split below, so that split only ever
-  // operates inside the window above.
-  const inboundRows = inventory.filter(inv => INBOUND_RECEIVING_STATUSES.includes(inv.receiving_status)).map(inv => ({
+  // operates inside the window above. qty_on_hand > 0 excludes a purchase
+  // that sold out before ever being marked received (recorded via the
+  // Transactions page, not this page) -- its receiving_status never leaves
+  // PRE_ORDER/PURCHASED/INBOUND, but there's nothing left to receive, and its
+  // story is already told by the sale that consumed it (same rule the
+  // Statuses board applies to its own Incoming column).
+  const inboundRows = inventory.filter(inv => INBOUND_RECEIVING_STATUSES.includes(inv.receiving_status)
+    && Number(inv.qty_on_hand) > 0).map(inv => ({
     id: inv.id,
     product: inv.product_name,
     counterpart: inv.vendor?.name || 'Direct',

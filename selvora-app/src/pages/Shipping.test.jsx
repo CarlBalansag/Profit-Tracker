@@ -21,7 +21,7 @@ const UPS = '1Z999AA10123456784';
 
 const purchase = (overrides = {}) => ({
   id: 'inv1', product_name: 'Widget', receiving_status: 'PURCHASED',
-  purchase_date: '2026-09-01T12:00:00.000Z', qty_purchased: 2,
+  purchase_date: '2026-09-01T12:00:00.000Z', qty_purchased: 2, qty_on_hand: 2,
   vendor: { name: 'Store' }, tracking_number: null, allowed_actions: [],
   ...overrides,
 });
@@ -110,6 +110,26 @@ describe('Inbound Shipping', () => {
     expect(inSection(INBOUND).queryByText('Received with tracking')).toBeNull();
     openNeedsTab(INBOUND);
     expect(inSection(INBOUND).queryByText('Received without tracking')).toBeNull();
+  });
+
+  // A purchase can sell out before ever being marked received -- recorded via
+  // the Transactions page's inline sale edit, not this page. Its
+  // receiving_status never leaves PRE_ORDER/PURCHASED/INBOUND, so without also
+  // checking qty_on_hand this would sit in Inbound forever showing a stale
+  // "needs tracking" row for stock that's already fully sold and whose own
+  // sale is already further along (possibly already Completed) elsewhere.
+  it('excludes a PURCHASED purchase that sold out before ever being received', () => {
+    setData({
+      inventory: [
+        purchase({ id: 'inv1', receiving_status: 'PURCHASED', qty_on_hand: 0, product_name: 'Sold out before arrival' }),
+      ],
+      sales: [saleRecord({ id: 'sale1', workflow_status: 'PAID' })],
+    });
+    render(<Shipping />);
+    expect(tabCount(INBOUND, TRACKED)).toBe('0');
+    expect(tabCount(INBOUND, NEEDS)).toBe('0');
+    openNeedsTab(INBOUND);
+    expect(inSection(INBOUND).queryByText('Sold out before arrival')).toBeNull();
   });
 
   it('excludes a purchase with no stored receiving_status at all', () => {
