@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ListChecks, Truck, Package, Send, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ListChecks, Truck, Package, Send, CheckCircle2, ChevronLeft, ChevronRight, ArrowUpDown } from 'lucide-react';
 import { useInventory, useSales } from '../hooks/useApi';
 import StatusPipeline from '../components/UI/StatusPipeline';
 import ContextualActions from '../components/UI/ContextualActions';
@@ -94,6 +94,25 @@ const statusKeyOf = (record) => (isInventory(record) ? record.receiving_status :
 const statusChangedAtOf = (record) => (isInventory(record)
   ? record.receiving_status_changed_at
   : record.workflow_status_changed_at);
+
+// Sorts by the same date each card displays (statusChangedAtOf), so the order
+// on screen always matches what a viewer is actually reading. A record with
+// no stamp always sorts last regardless of direction -- there is no
+// meaningful "oldest" or "newest" position for something that was never dated.
+const sortByStatusChanged = (records, direction) => {
+  const withTime = records.map((record) => {
+    const raw = statusChangedAtOf(record);
+    const time = raw ? new Date(raw).getTime() : NaN;
+    return { record, time: Number.isNaN(time) ? null : time };
+  });
+  withTime.sort((a, b) => {
+    if (a.time === null && b.time === null) return 0;
+    if (a.time === null) return 1;
+    if (b.time === null) return -1;
+    return direction === 'oldest' ? a.time - b.time : b.time - a.time;
+  });
+  return withTime.map((entry) => entry.record);
+};
 
 // A fully sold on-hand batch is deliberately off the board, so it must not fall
 // through into the "not in the workflow yet" list either.
@@ -253,9 +272,27 @@ function Pager({ page, pageCount, onPage }) {
   );
 }
 
+// Toggles which end of sortByStatusChanged a column reads from -- one button,
+// not a two-option picker, since there are only ever two directions.
+function SortToggle({ direction, onToggle }) {
+  const next = direction === 'newest' ? 'oldest' : 'newest';
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(next)}
+      title={`Showing ${direction} first. Switch to ${next} first.`}
+      className="flex items-center gap-1 px-2 h-6 rounded-lg border border-white/10 text-[11px] font-medium text-gray-300 hover:bg-white/5 transition-colors shrink-0"
+    >
+      <ArrowUpDown className="w-3 h-3" />
+      {direction === 'newest' ? 'Newest' : 'Oldest'}
+    </button>
+  );
+}
+
 function BoardColumn({ column, records }) {
   const [activeKey, setActiveKey] = useState(null);
   const [page, setPage] = useState(0);
+  const [sort, setSort] = useState('newest');
   const Icon = column.icon;
 
   // Only the statuses this column actually holds, in the registry's order.
@@ -273,7 +310,8 @@ function BoardColumn({ column, records }) {
   // A tile can disappear between renders (the last record in it moved on), which
   // would otherwise leave the column stuck on an empty filter with no way back.
   const effectiveKey = activeKey && statuses.some((status) => status.key === activeKey) ? activeKey : null;
-  const shown = effectiveKey ? records.filter((record) => statusKeyOf(record) === effectiveKey) : records;
+  const filtered = effectiveKey ? records.filter((record) => statusKeyOf(record) === effectiveKey) : records;
+  const shown = useMemo(() => sortByStatusChanged(filtered, sort), [filtered, sort]);
 
   const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
   // Clamped rather than reset via an effect: if a card leaves the column (an
@@ -285,6 +323,7 @@ function BoardColumn({ column, records }) {
 
   const selectStatus = (key) => { setActiveKey(key); setPage(0); };
   const clearFilter = () => { setActiveKey(null); setPage(0); };
+  const changeSort = (next) => { setSort(next); setPage(0); };
 
   return (
     <section
@@ -298,15 +337,18 @@ function BoardColumn({ column, records }) {
             {column.title}
             <span className="text-xs font-medium text-gray-500">{records.length}</span>
           </h2>
-          {effectiveKey && (
-            <button
-              type="button"
-              onClick={clearFilter}
-              className="px-2 h-6 rounded-lg border border-white/10 text-[11px] font-medium text-gray-300 hover:bg-white/5 transition-colors"
-            >
-              Clear filter
-            </button>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <SortToggle direction={sort} onToggle={changeSort} />
+            {effectiveKey && (
+              <button
+                type="button"
+                onClick={clearFilter}
+                className="px-2 h-6 rounded-lg border border-white/10 text-[11px] font-medium text-gray-300 hover:bg-white/5 transition-colors"
+              >
+                Clear filter
+              </button>
+            )}
+          </div>
         </div>
         <p className="text-xs text-gray-500 mt-1">
           {effectiveKey ? `${displayLabel(effectiveKey)} · ${shown.length} of ${records.length}` : column.blurb}
@@ -341,20 +383,26 @@ function BoardColumn({ column, records }) {
 // for things still in flight.
 function CompletedSection({ records }) {
   const [page, setPage] = useState(0);
-  const pageCount = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
+  const [sort, setSort] = useState('newest');
+  const sorted = useMemo(() => sortByStatusChanged(records, sort), [records, sort]);
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount - 1);
-  const paged = records.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+  const paged = sorted.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+  const changeSort = (next) => { setSort(next); setPage(0); };
 
   if (records.length === 0) return null;
 
   return (
     <section aria-label="Completed" className="card bg-[#0f1115] rounded-xl border border-white/6">
       <div className="px-4 py-3.5 border-b border-white/6">
-        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          Completed
-          <span className="text-xs font-medium text-gray-500">{records.length}</span>
-        </h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            Completed
+            <span className="text-xs font-medium text-gray-500">{records.length}</span>
+          </h2>
+          <SortToggle direction={sort} onToggle={changeSort} />
+        </div>
         <p className="text-xs text-gray-500 mt-1">Sales paid {COMPLETED_AFTER_DAYS}+ days ago, with nothing left to do.</p>
       </div>
       <CardList records={paged} empty="" quickStatus />

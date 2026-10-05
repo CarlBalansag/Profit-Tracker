@@ -902,6 +902,108 @@ describe('Statuses board', () => {
     expect(select.selectedOptions[0].textContent).toBe('Paid');
   });
 
+  // ─── Sort by status-changed date ───────────────────────────────────────────
+  // Sorts by the exact date each card itself displays (statusChangedAtOf), so
+  // the on-screen order always matches what a viewer is reading.
+  describe('sort by date', () => {
+    const toggle = (title) => inColumn(title).getByRole('button', { name: /Newest|Oldest/ });
+    const at = (daysAgo) => new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
+
+    it('defaults to newest first', () => {
+      setData({
+        inventory: [
+          purchase({ id: 'inv1', receiving_status_changed_at: at(5) }),
+          purchase({ id: 'inv2', receiving_status_changed_at: at(1) }),
+          purchase({ id: 'inv3', receiving_status_changed_at: at(3) }),
+        ],
+      });
+      renderPage();
+
+      expect(cardKeys('Incoming')).toEqual(['inventory-inv2', 'inventory-inv3', 'inventory-inv1']);
+      expect(toggle('Incoming').textContent).toContain('Newest');
+    });
+
+    it('flips to oldest first when toggled', () => {
+      setData({
+        inventory: [
+          purchase({ id: 'inv1', receiving_status_changed_at: at(5) }),
+          purchase({ id: 'inv2', receiving_status_changed_at: at(1) }),
+          purchase({ id: 'inv3', receiving_status_changed_at: at(3) }),
+        ],
+      });
+      renderPage();
+
+      fireEvent.click(toggle('Incoming'));
+      expect(toggle('Incoming').textContent).toContain('Oldest');
+      expect(cardKeys('Incoming')).toEqual(['inventory-inv1', 'inventory-inv3', 'inventory-inv2']);
+
+      fireEvent.click(toggle('Incoming'));
+      expect(toggle('Incoming').textContent).toContain('Newest');
+      expect(cardKeys('Incoming')).toEqual(['inventory-inv2', 'inventory-inv3', 'inventory-inv1']);
+    });
+
+    it('keeps a record with no stamp last in either direction', () => {
+      setData({
+        inventory: [
+          purchase({ id: 'inv1', receiving_status_changed_at: null }),
+          purchase({ id: 'inv2', receiving_status_changed_at: at(1) }),
+        ],
+      });
+      renderPage();
+
+      expect(cardKeys('Incoming')).toEqual(['inventory-inv2', 'inventory-inv1']);
+      fireEvent.click(toggle('Incoming'));
+      expect(cardKeys('Incoming')).toEqual(['inventory-inv2', 'inventory-inv1']);
+    });
+
+    it('sorts each column independently', () => {
+      setData({
+        inventory: [
+          purchase({ id: 'inv1', receiving_status_changed_at: at(5) }),
+          purchase({ id: 'inv2', receiving_status_changed_at: at(1) }),
+        ],
+        sales: [
+          saleRecord({ id: 'sale1', workflow_status_changed_at: at(5) }),
+          saleRecord({ id: 'sale2', workflow_status_changed_at: at(1) }),
+        ],
+      });
+      renderPage();
+
+      fireEvent.click(toggle('Incoming'));
+      expect(cardKeys('Incoming')).toEqual(['inventory-inv1', 'inventory-inv2']);
+      expect(cardKeys('Outbound')).toEqual(['sale-sale2', 'sale-sale1']);
+    });
+
+    it('sorts the Completed section too', () => {
+      setData({
+        sales: [
+          saleRecord({ id: 'sale1', workflow_status: 'PAID', paid_at: null, workflow_status_changed_at: at(5) }),
+          saleRecord({ id: 'sale2', workflow_status: 'PAID', paid_at: null, workflow_status_changed_at: at(1) }),
+        ],
+      });
+      renderPage();
+
+      const completed = () => inColumn('Completed');
+      const keys = () => Array.from(screen.getByRole('region', { name: 'Completed' }).querySelectorAll('[data-record]'))
+        .map((n) => n.getAttribute('data-record'));
+      expect(keys()).toEqual(['sale-sale2', 'sale-sale1']);
+      fireEvent.click(completed().getByRole('button', { name: /Newest|Oldest/ }));
+      expect(keys()).toEqual(['sale-sale1', 'sale-sale2']);
+    });
+
+    it('resets to page 1 when the sort direction changes', () => {
+      const many = Array.from({ length: 6 }, (_, i) => purchase({ id: `inv${i + 1}`, receiving_status_changed_at: at(i) }));
+      setData({ inventory: many });
+      renderPage();
+
+      fireEvent.click(inColumn('Incoming').getByRole('button', { name: /Next/ }));
+      expect(inColumn('Incoming').getByText('Page 2 of 2')).toBeTruthy();
+
+      fireEvent.click(toggle('Incoming'));
+      expect(inColumn('Incoming').getByText('Page 1 of 2')).toBeTruthy();
+    });
+  });
+
   // ─── Pagination ────────────────────────────────────────────────────────────
   describe('pagination', () => {
     const manyPurchases = (count) => Array.from({ length: count }, (_, i) => purchase({ id: `inv${i + 1}` }));
