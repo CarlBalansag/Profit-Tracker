@@ -151,6 +151,30 @@ describe('Statuses board', () => {
     expect(screen.queryByRole('region', { name: 'Not in the workflow yet' })).toBeNull();
   });
 
+  // A purchase can sell out before ever being marked received -- recorded via
+  // the Transactions page's inline sale edit, not the board's own Record
+  // Sale (which only offers selling from On Hand). Its receiving_status
+  // never leaves PURCHASED/PRE_ORDER/INBOUND, so without also checking
+  // qty_on_hand here it would sit in Incoming forever showing stale
+  // "units to receive" actions for stock that's already fully sold.
+  it('drops a PURCHASED/PRE_ORDER/INBOUND purchase from Incoming once qty_on_hand reaches 0', () => {
+    setData({
+      inventory: [
+        purchase({ id: 'inv1', receiving_status: 'PURCHASED', qty_on_hand: 0, allowed_actions: [] }),
+        purchase({ id: 'inv2', receiving_status: 'PRE_ORDER', qty_on_hand: 0, allowed_actions: [] }),
+        purchase({ id: 'inv3', receiving_status: 'INBOUND', qty_on_hand: 0, allowed_actions: [] }),
+      ],
+      sales: [saleRecord({ id: 'sale1', allowed_actions: [] })],
+    });
+    renderPage();
+
+    expect(cardKeys('Incoming')).toEqual([]);
+    expect(cardKeys('On Hand')).toEqual([]);
+    expect(screen.queryByRole('region', { name: 'Not in the workflow yet' })).toBeNull();
+    // The linked sale is unaffected -- its own story is told in Outbound.
+    expect(cardKeys('Outbound')).toEqual(['sale-sale1']);
+  });
+
   // ─── Right column: Outbound ────────────────────────────────────────────────
   it('puts a sale in Outbound whatever its workflow_type or forward status, except PAID', () => {
     setData({

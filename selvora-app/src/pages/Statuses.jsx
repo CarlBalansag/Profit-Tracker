@@ -50,7 +50,17 @@ const COLUMNS = [
     blurb: 'Purchases working their way toward you.',
     empty: 'Nothing incoming right now.',
     statuses: INCOMING_STATUSES,
-    includes: (record) => isInventory(record) && INCOMING_STATUSES.includes(record.receiving_status),
+    // qty_on_hand === 0 leaves the board on purpose, same as On Hand below: a
+    // purchase that sold out before ever being marked received (recorded via
+    // the Transactions page, not the board's own Record Sale, which only
+    // offers selling from On Hand) has nothing left to act on here either --
+    // its story is told by the sale(s) that consumed it, already visible in
+    // Outbound/Completed. Without this, a fully-sold purchase would sit here
+    // forever showing stale "units to receive" actions for stock that no
+    // longer exists.
+    includes: (record) => isInventory(record)
+      && INCOMING_STATUSES.includes(record.receiving_status)
+      && Number(record.qty_on_hand) > 0,
   },
   {
     id: 'on-hand',
@@ -59,9 +69,6 @@ const COLUMNS = [
     blurb: 'Units you are holding, ready to list or sell.',
     empty: 'Nothing on hand right now.',
     statuses: ON_HAND_STATUSES,
-    // qty_on_hand === 0 leaves the board on purpose: a fully sold batch has
-    // nothing left to act on here, and the rest of those units' story is told by
-    // the sales that consumed them, which are already in Outbound.
     includes: (record) => isInventory(record)
       && record.receiving_status === 'ON_HAND'
       && Number(record.qty_on_hand) > 0,
@@ -120,11 +127,11 @@ const sortByDate = (records, direction) => {
   return withTime.map((entry) => entry.record);
 };
 
-// A fully sold on-hand batch is deliberately off the board, so it must not fall
-// through into the "not in the workflow yet" list either.
-const isSoldOutOnHand = (record) => isInventory(record)
-  && record.receiving_status === 'ON_HAND'
-  && !(Number(record.qty_on_hand) > 0);
+// A fully sold purchase -- whether it sold out after arriving (ON_HAND) or
+// before (any other receiving status, sold via the Transactions page) -- is
+// deliberately off the board, so it must not fall through into the "not in
+// the workflow yet" list either.
+const isSoldOutInventory = (record) => isInventory(record) && !(Number(record.qty_on_hand) > 0);
 
 const isCompletedSale = (record) => isFullyCompleted(record);
 
@@ -439,7 +446,7 @@ export default function Statuses() {
       // Legacy rows the status-workflow backfill has not reached have no stored
       // status at all. They belong to no column, but hiding them would make them
       // unfixable, so they get a plain list under the board instead.
-      else if (!isSoldOutOnHand(record)) leftover.push(record);
+      else if (!isSoldOutInventory(record)) leftover.push(record);
     }
     return { byColumn: grouped, completed: completedList, unassigned: leftover };
   }, [records]);
