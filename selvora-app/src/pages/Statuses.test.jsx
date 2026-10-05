@@ -479,8 +479,25 @@ describe('Statuses board', () => {
     renderPage();
 
     expect(cardKeys('Outbound')).toEqual([]);
-    expect(Array.from(screen.getByRole('region', { name: 'Completed' }).querySelectorAll('[data-record]')))
-      .toHaveLength(1);
+    const completedRegion = screen.getByRole('region', { name: 'Completed' });
+    expect(Array.from(completedRegion.querySelectorAll('[data-record]'))).toHaveLength(1);
+    // workflow_status is still, and will always be, PAID -- mark_completed
+    // never touches it -- so the card's own label has to be computed the same
+    // way column membership is, or it would still read "Paid" here. Scoped to
+    // the card, not the whole region: the section heading also says "Completed".
+    const node = completedRegion.querySelector('[data-record="sale-sale1"]');
+    expect(within(node).getByText('Completed')).toBeTruthy();
+    expect(within(node).queryByText('Paid')).toBeNull();
+  });
+
+  it('labels a card Completed, not Paid, once it ages past the 3-day window too', () => {
+    const justOver = new Date(Date.now() - (3 * 24 * 60 * 60 * 1000 + 1000)).toISOString();
+    setData({ sales: [saleRecord({ id: 'sale1', workflow_status: 'PAID', paid_at: justOver, allowed_actions: [] })] });
+    renderPage();
+
+    const node = screen.getByRole('region', { name: 'Completed' }).querySelector('[data-record="sale-sale1"]');
+    expect(within(node).getByText('Completed')).toBeTruthy();
+    expect(within(node).queryByText('Paid')).toBeNull();
   });
 
   it('offers Mark Completed on a recently paid sale and fires it straight away', async () => {

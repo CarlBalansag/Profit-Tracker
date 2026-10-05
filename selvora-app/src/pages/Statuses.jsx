@@ -163,6 +163,11 @@ function RecordCard({ record, quickStatus = false }) {
   const exception = exceptionTagOf(record);
   const changedAt = formatStatusChangedAt(statusChangedAtOf(record));
   const hasSecondaryActions = (record.allowed_actions || []).some((entry) => entry.secondary);
+  // The stored workflow_status never becomes anything but PAID -- Completed is
+  // a displayed label over it (same principle as Sold Out over ON_HAND), so
+  // the card's own label has to be computed the same way the board's column
+  // membership is, or a fully-completed sale would still read "Paid".
+  const statusLabel = isFullyCompleted(record) ? 'Completed' : (statusKey ? displayLabel(statusKey) : 'No status yet');
 
   return (
     <li
@@ -188,7 +193,7 @@ function RecordCard({ record, quickStatus = false }) {
           )}
         </div>
         <p className="text-[11px] font-semibold" style={{ color: visual.color }}>
-          {statusKey ? displayLabel(statusKey) : 'No status yet'}
+          {statusLabel}
         </p>
         <p className="text-xs text-gray-500 truncate">{counterpartOf(record)}</p>
       </div>
