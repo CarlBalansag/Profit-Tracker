@@ -9,8 +9,10 @@ import {
   INVENTORY_RECEIVING_STATUSES,
   SALE_STATUS_ORDER,
   SALE_EXCEPTION_STATUSES,
+  COMPLETED_AFTER_DAYS,
   displayLabel,
   formatStatusChangedAt,
+  isFullyCompleted,
   statusVisual,
 } from '../data/statusWorkflow';
 
@@ -31,30 +33,11 @@ const ON_HAND_STATUSES = ['ON_HAND'];
 // for a few days after payment -- see COMPLETED_AFTER_DAYS.)
 const OUTBOUND_STATUSES = SALE_STATUS_ORDER.filter((status) => status !== 'PAID');
 
-// "Completed" is not its own stored status -- a sale stays stored as PAID
-// forever, the same way a sold-out purchase stays stored as ON_HAND and is
-// only ever *displayed* as Sold Out. A PAID sale is treated as fully done,
-// and moves into the Completed section, once this many days have passed
-// since payment; recomputed on every render from paid_at, never written to
-// the database. This gives a short window after payment (still visible in
-// Outbound, tagged Paid) where a mistake is easy to catch and correct before
-// the sale is filed away as finished business.
-const COMPLETED_AFTER_DAYS = 3;
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-// A handful of legacy sales were migrated straight to PAID from the old
-// system before `paid_at` existed to measure from -- treated as already
-// settled rather than stuck in Outbound forever with no way to age out.
-const isFullyCompleted = (record) => {
-  if (!isSale(record) || record.workflow_status !== 'PAID') return false;
-  // The mark_completed action: a user saying "this one's done" outright,
-  // skipping the wait instead of the board inferring it from paid_at's age.
-  if (record.completed_at) return true;
-  if (!record.paid_at) return true;
-  const paidAt = new Date(record.paid_at).getTime();
-  if (Number.isNaN(paidAt)) return true;
-  return Date.now() - paidAt >= COMPLETED_AFTER_DAYS * DAY_MS;
-};
+// isFullyCompleted (imported above) gives a short window after payment
+// (still visible in Outbound, tagged Paid) where a mistake is easy to catch
+// and correct before the sale is filed away as finished business -- see
+// data/statusWorkflow.js for the full rationale, shared with the quick
+// status dropdown and the card's own label so all three agree by construction.
 
 const isInventory = (record) => record.__kind === 'inventory';
 const isSale = (record) => record.__kind === 'sale';

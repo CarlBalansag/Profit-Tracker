@@ -100,6 +100,29 @@ export const formatStatusChangedAt = (value) => {
 export const availabilityLabel = (inventory = {}) =>
   Number(inventory.qty_on_hand) > 0 ? 'Available' : 'Sold Out';
 
+// "Completed" is not its own stored status -- a sale stays stored as PAID
+// forever, the same way a sold-out purchase stays stored as ON_HAND. Whether
+// a PAID sale counts as fully done is computed here from paid_at (or an
+// explicit mark_completed stamp) so every place that needs the answer --
+// the Statuses board's column membership, a card's own displayed label, the
+// quick status dropdown -- agrees with each other by construction rather
+// than by each one separately reimplementing the same rule.
+export const COMPLETED_AFTER_DAYS = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// A handful of legacy sales were migrated straight to PAID from the old
+// system before paid_at existed to measure from -- treated as already
+// settled rather than stuck waiting forever with no way to age out.
+export const isFullyCompleted = (record = {}) => {
+  if (record.workflow_status !== 'PAID') return false;
+  // A user saying "this one's done" outright, skipping the wait.
+  if (record.completed_at) return true;
+  if (!record.paid_at) return true;
+  const paidAt = new Date(record.paid_at).getTime();
+  if (Number.isNaN(paidAt)) return true;
+  return Date.now() - paidAt >= COMPLETED_AFTER_DAYS * DAY_MS;
+};
+
 // Presentational only: which tile icon and accent colour a status gets.
 export const STATUS_VISUALS = {
   PRE_ORDER: { icon: Clock, color: '#a78bfa' },

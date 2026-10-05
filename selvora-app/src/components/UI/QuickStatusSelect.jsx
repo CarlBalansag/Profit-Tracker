@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Check } from 'lucide-react';
 import useRecordActions from '../../hooks/useRecordActions';
-import { displayLabel } from '../../data/statusWorkflow';
+import { displayLabel, isFullyCompleted } from '../../data/statusWorkflow';
 import { QUICK_STATUS_FIELD, quickStatusOptions } from '../../data/statusActions';
 
 /**
@@ -82,6 +82,13 @@ const QuickStatusSelect = ({ record, kind, onSuccess, className = '' }) => {
   // list is exactly what the scoping rule forbids.
   const showsCurrentOutsideList = !options.includes(current);
 
+  // workflow_status stays PAID forever -- Completed is a displayed label over
+  // it (data/statusWorkflow.js's isFullyCompleted), not a real option this
+  // control could ever send to the server. Only the PAID entry's own text
+  // changes; re-selecting it is still a real, valid (no-op) choice.
+  const completed = kind === 'sale' && current === 'PAID' && isFullyCompleted(record);
+  const optionLabel = (status) => (completed && status === 'PAID' ? 'Completed' : displayLabel(status));
+
   const apply = async () => {
     if (!dirty || busy) return;
     // No correction_note on this path: the field is optional server-side, and the
@@ -107,10 +114,10 @@ const QuickStatusSelect = ({ record, kind, onSuccess, className = '' }) => {
         className={SELECT}
       >
         {showsCurrentOutsideList && (
-          <option value={current} disabled>{displayLabel(current)}</option>
+          <option value={current} disabled>{optionLabel(current)}</option>
         )}
         {options.map((option) => (
-          <option key={option} value={option}>{displayLabel(option)}</option>
+          <option key={option} value={option}>{optionLabel(option)}</option>
         ))}
       </select>
 
@@ -118,7 +125,7 @@ const QuickStatusSelect = ({ record, kind, onSuccess, className = '' }) => {
         <button
           type="button"
           aria-label="Apply status change"
-          title={`Change to ${displayLabel(selected)}`}
+          title={`Change to ${optionLabel(selected)}`}
           disabled={busy}
           onClick={apply}
           className={APPLY}

@@ -879,6 +879,29 @@ describe('Statuses board', () => {
     expect(JSON.parse(options.body)).toEqual({ workflow_status: 'PAID' });
   });
 
+  // workflow_status is still, and will always be, PAID on a fully-completed
+  // sale -- only the PAID *option's own label* changes, matching the card's
+  // own label (see "shows Completed, not Paid" tests above). Re-picking it is
+  // still a real, valid (no-op) choice, not a fake disabled entry.
+  it('labels the Paid option Completed in the quick dropdown once fully completed', () => {
+    setData({ sales: [saleRecord({ workflow_status: 'PAID', paid_at: null, allowed_actions: [CORRECT_WORKFLOW] })] });
+    renderPage();
+
+    const select = quick('Completed', 'sale-sale1');
+    expect(select.value).toBe('PAID');
+    expect(select.selectedOptions[0].textContent).toBe('Completed');
+    expect(Array.from(select.options).find((o) => o.value === 'PAID').disabled).toBe(false);
+  });
+
+  it('still labels the Paid option Paid in the quick dropdown for a recently paid sale', () => {
+    const recent = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    setData({ sales: [saleRecord({ workflow_status: 'PAID', paid_at: recent, allowed_actions: [CORRECT_WORKFLOW] })] });
+    renderPage();
+
+    const select = quick('Outbound', 'sale-sale1');
+    expect(select.selectedOptions[0].textContent).toBe('Paid');
+  });
+
   // ─── Pagination ────────────────────────────────────────────────────────────
   describe('pagination', () => {
     const manyPurchases = (count) => Array.from({ length: count }, (_, i) => purchase({ id: `inv${i + 1}` }));
