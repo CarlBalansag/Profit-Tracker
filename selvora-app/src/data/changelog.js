@@ -3,6 +3,21 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.57',
+    date: '2026-10-04',
+    notes: 'Dashboard and Cash Flow status counts (Scanned In, Delivered, Listed, and more) now correctly include items moved using the new Statuses board.',
+  },
+  {
+    version: '0.56',
+    date: '2026-10-04',
+    notes: 'The "Not in the workflow yet" list on the Statuses page now always shows, even when empty, matching the rest of the board.',
+  },
+  {
+    version: '0.55',
+    date: '2026-10-04',
+    notes: 'Sales marked Completed now show up on the Statuses board where they belong, instead of disappearing.',
+  },
+  {
     version: '0.54',
     date: '2026-10-04',
     notes: 'You can now fix a tracking number you already entered, right from the Shipping page or a Statuses card, instead of being stuck with the wrong one.',
