@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { ListChecks, Truck, Package, Send, CheckCircle2, ChevronLeft, ChevronRight, ArrowUpDown, RefreshCw } from 'lucide-react';
-import { useInventory, useSales } from '../hooks/useApi';
+import { ListChecks, Truck, Package, Send, CheckCircle2, ChevronLeft, ChevronRight, ArrowUpDown, RefreshCw, Pencil, Check, X } from 'lucide-react';
+import { toast } from 'sonner';
+import { useInventory, useSales, useInvalidate, apiFetch } from '../hooks/useApi';
 import useRecordActions from '../hooks/useRecordActions';
 import StatusPipeline from '../components/UI/StatusPipeline';
 import ContextualActions from '../components/UI/ContextualActions';
@@ -227,6 +228,134 @@ function Tag({ children, tone = 'neutral' }) {
   return <span className={`${TAG} ${tones[tone]}`}>{children}</span>;
 }
 
+// ─── The card's tracking number, correctable in place ────────────────────────
+// `kind` -> REST collection, for the plain record PUT below (the same mapping
+// hooks/useRecordActions.js uses for the action endpoints).
+const RECORD_PATH = { inventory: '/api/inventory', sale: '/api/sales' };
+
+// The board never used to show a tracking number on a single card at all -- its
+// presence was only implied by the `check_tracking` action being offered. Offering
+// an edit affordance over an invisible value would be meaningless, so the number
+// itself is now displayed, with the same carrier chip + monospace treatment
+// GroupedRecordCard's collapsed header already uses for a shared number. The two
+// therefore read identically, and an expanded group's members simply each show
+// their own copy of the number they share.
+//
+// Rendered only when the record already HAS a number: putting a first one on is
+// the `add_tracking` / `add_outbound_tracking` action's job, offered through
+// ContextualActions and unchanged by this.
+//
+// The write is the ordinary PUT /api/{inventory,sales}/:id -- not an action
+// endpoint. Both routes accept `tracking_number` and exempt *replacing* an
+// existing value from the add-tracking status gate on purpose, so correcting a
+// number stays possible at any point in the record's life and needs no new
+// backend support. pages/Shipping.jsx saves through exactly the same call.
+//
+// Following QuickStatusSelect's rule rather than inventing a modal: an explicit
+// apply press writes, never a raw input change, and the caches invalidated are
+// the same three every other action on this board refreshes.
+function TrackingNumberRow({ record }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(record.tracking_number || '');
+  const [saving, setSaving] = useState(false);
+  const invalidate = useInvalidate();
+
+  const chip = detectCarrier(record.tracking_number);
+
+  const startEdit = () => { setValue(record.tracking_number || ''); setEditing(true); };
+  // Dismissing throws the draft away -- the card goes straight back to showing the
+  // stored number, with nothing sent.
+  const cancelEdit = () => { setValue(record.tracking_number || ''); setEditing(false); };
+
+  const save = async () => {
+    const next = value.trim();
+    // An empty value is not a removal: clearing tracking entirely is a separate,
+    // unbuilt feature, so this only ever swaps one number for another.
+    if (!next || saving) return;
+    setSaving(true);
+    try {
+      const response = await apiFetch(`${RECORD_PATH[record.__kind]}/${record.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tracking_number: next }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || body.message || `Request failed (${response.status})`);
+      }
+      invalidate.inventory();
+      invalidate.sales();
+      invalidate.dashboard();
+      toast.success('Tracking number updated.');
+      setEditing(false);
+    } catch (err) {
+      // The typed value is deliberately kept so the apply press can simply be
+      // repeated, same as QuickStatusSelect does on a failed status change.
+      toast.error(`Could not update the tracking number: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!record.tracking_number) return null;
+
+  if (editing) {
+    return (
+      <div className="mt-2 flex items-center gap-1.5">
+        <input
+          type="text"
+          aria-label="Tracking number"
+          value={value}
+          disabled={saving}
+          onChange={(event) => setValue(event.target.value)}
+          placeholder="Enter tracking number…"
+          className="min-w-0 flex-1 h-7 rounded-lg bg-[#0d0d18] border border-white/10 px-2 text-xs text-gray-200 font-mono focus:outline-none focus:border-indigo-500/50 disabled:opacity-50 transition-colors"
+        />
+        <button
+          type="button"
+          aria-label="Save tracking number"
+          title="Save tracking number"
+          disabled={saving || !value.trim()}
+          onClick={save}
+          className="flex items-center justify-center w-7 h-7 shrink-0 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white transition-colors"
+        >
+          <Check className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          aria-label="Cancel tracking number edit"
+          title="Cancel"
+          disabled={saving}
+          onClick={cancelEdit}
+          className="flex items-center justify-center w-7 h-7 shrink-0 rounded-lg border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 disabled:opacity-50 transition-colors"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      {chip && (
+        <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border ${chip.color}`}>
+          {chip.label}
+        </span>
+      )}
+      <span className="text-xs text-gray-400 font-mono break-all">{record.tracking_number}</span>
+      <button
+        type="button"
+        aria-label="Edit tracking number"
+        title="Edit tracking number"
+        onClick={startEdit}
+        className="flex items-center justify-center w-5 h-5 shrink-0 rounded text-gray-500 hover:text-white hover:bg-white/10 transition-colors"
+      >
+        <Pencil className="w-3 h-3" />
+      </button>
+    </div>
+  );
+}
+
 // `quickStatus` adds the inline status dropdown. Only the three board columns set
 // it: a record under "Not in the workflow yet" has no status to change and no
 // workflow to scope a list from, so it keeps its dedicated Set Status form alone.
@@ -286,6 +415,10 @@ function RecordCard({ record, quickStatus = false }) {
           <Tag>{units(Number(record.quantity) || 0)}</Tag>
         )}
       </div>
+
+      {/* Its own row under the tags, not squeezed in beside them: a tracking number
+          is long enough to wrap, and the edit control needs to stay next to it. */}
+      <TrackingNumberRow record={record} />
 
       <div className="mt-2.5 pt-2.5 border-t border-white/5 space-y-2">
         <ContextualActions record={record} kind={record.__kind} />

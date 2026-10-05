@@ -1,5 +1,6 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { toast } from 'sonner';
 import Shipping from './Shipping';
 
 const mocks = vi.hoisted(() => ({
@@ -258,5 +259,136 @@ describe('the two sections stay independent', () => {
       method: 'PUT',
       body: JSON.stringify({ tracking_number: UPS }),
     }));
+  });
+});
+
+// A wrong tracking number used to be permanent on this page: the "Needs Tracking #"
+// row that could enter one disappears the moment a number exists. The Tracked row
+// now edits it in place through the very same PUT.
+describe('correcting a tracking number on a Tracked row', () => {
+  const FEDEX = '390244304011';
+  const editButton = (title) => inSection(title).queryByRole('button', { name: 'Edit tracking number' });
+  const input = (title) => inSection(title).getByLabelText('Tracking number');
+  const saveButton = (title) => inSection(title).getByRole('button', { name: /Save/ });
+  const cancelButton = (title) => inSection(title).getByRole('button', { name: 'Cancel' });
+
+  const trackedPurchase = (overrides = {}) =>
+    purchase({ receiving_status: 'INBOUND', tracking_number: UPS, ...overrides });
+
+  it('offers the edit button on a tracked row and nothing to edit before a number exists', () => {
+    setData({ inventory: [trackedPurchase()] });
+    render(<Shipping />);
+    expect(editButton(INBOUND)).toBeTruthy();
+
+    // The untracked row has no number yet -- adding a first one is still the
+    // Needs Tracking # tab's own input, not an edit affordance.
+    openNeedsTab(INBOUND);
+    expect(editButton(INBOUND)).toBeNull();
+  });
+
+  it('reveals an input pre-filled with the current number, replacing the read-only display', () => {
+    setData({ inventory: [trackedPurchase()] });
+    render(<Shipping />);
+    expect(inSection(INBOUND).getByText(UPS)).toBeTruthy();
+
+    fireEvent.click(editButton(INBOUND));
+    expect(input(INBOUND).value).toBe(UPS);
+    // The read-only number (and its copy chip) give way to the editor.
+    expect(inSection(INBOUND).queryByText(UPS)).toBeNull();
+    expect(editButton(INBOUND)).toBeNull();
+    expect(mocks.apiFetch).not.toHaveBeenCalled();
+  });
+
+  it('refuses to save an emptied value — this corrects a number, it does not remove one', () => {
+    setData({ inventory: [trackedPurchase()] });
+    render(<Shipping />);
+    fireEvent.click(editButton(INBOUND));
+
+    expect(saveButton(INBOUND).disabled).toBe(false);
+    fireEvent.change(input(INBOUND), { target: { value: '' } });
+    expect(saveButton(INBOUND).disabled).toBe(true);
+    fireEvent.change(input(INBOUND), { target: { value: '   ' } });
+    expect(saveButton(INBOUND).disabled).toBe(true);
+
+    fireEvent.click(saveButton(INBOUND));
+    expect(mocks.apiFetch).not.toHaveBeenCalled();
+  });
+
+  it('PUTs the corrected number, refreshes the cache and confirms, then closes the editor', async () => {
+    setData({ inventory: [trackedPurchase({ id: 'inv7' })] });
+    render(<Shipping />);
+
+    fireEvent.click(editButton(INBOUND));
+    fireEvent.change(input(INBOUND), { target: { value: ` ${FEDEX} ` } });
+    fireEvent.click(saveButton(INBOUND));
+
+    // The same plain record endpoint the Needs Tracking # row already uses --
+    // no new action or endpoint is involved in an edit.
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledWith('/api/inventory/inv7', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ tracking_number: FEDEX }),
+    })));
+    await waitFor(() => expect(mocks.invalidate).toHaveBeenCalled());
+    expect(toast.success).toHaveBeenCalledWith('Tracking number saved');
+    await waitFor(() => expect(inSection(INBOUND).queryByLabelText('Tracking number')).toBeNull());
+    expect(editButton(INBOUND)).toBeTruthy();
+  });
+
+  it('edits an outbound sale through the sales endpoint', async () => {
+    setData({ sales: [saleRecord({ id: 'sale7', workflow_status: 'OUTBOUND', tracking_number: UPS })] });
+    render(<Shipping />);
+
+    fireEvent.click(editButton(OUTBOUND));
+    fireEvent.change(input(OUTBOUND), { target: { value: FEDEX } });
+    fireEvent.click(saveButton(OUTBOUND));
+
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledWith('/api/sales/sale7', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ tracking_number: FEDEX }),
+    })));
+  });
+
+  it('discards the edit on Cancel, leaving the stored number untouched', () => {
+    setData({ inventory: [trackedPurchase()] });
+    render(<Shipping />);
+
+    fireEvent.click(editButton(INBOUND));
+    fireEvent.change(input(INBOUND), { target: { value: FEDEX } });
+    fireEvent.click(cancelButton(INBOUND));
+
+    expect(mocks.apiFetch).not.toHaveBeenCalled();
+    expect(inSection(INBOUND).getByText(UPS)).toBeTruthy();
+    expect(inSection(INBOUND).queryByText(FEDEX)).toBeNull();
+    // Re-opening starts from the stored number again, not the abandoned draft.
+    fireEvent.click(editButton(INBOUND));
+    expect(input(INBOUND).value).toBe(UPS);
+  });
+
+  it('keeps the editor open with the typed value when the save fails', async () => {
+    mocks.apiFetch.mockResolvedValue(new Response('{}', { status: 400 }));
+    setData({ inventory: [trackedPurchase()] });
+    render(<Shipping />);
+
+    fireEvent.click(editButton(INBOUND));
+    fireEvent.change(input(INBOUND), { target: { value: FEDEX } });
+    fireEvent.click(saveButton(INBOUND));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(input(INBOUND).value).toBe(FEDEX);
+  });
+
+  // Out of scope on purpose: rewriting a number shared by several records means
+  // updating every member of the package at once, which needs backend support
+  // that does not exist yet. One assertion is enough.
+  it('puts no edit button on a collapsed group sharing one tracking number', () => {
+    setData({
+      inventory: [
+        trackedPurchase({ id: 'inv1' }),
+        trackedPurchase({ id: 'inv2' }),
+      ],
+    });
+    render(<Shipping />);
+    expect(tabCount(INBOUND, TRACKED)).toBe('2');
+    expect(inSection(INBOUND).queryAllByRole('button', { name: 'Edit tracking number' })).toHaveLength(0);
   });
 });

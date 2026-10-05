@@ -1421,4 +1421,148 @@ describe('Statuses board', () => {
       expect(pager('Incoming').getByText('Page 1 of 2')).toBeTruthy();
     });
   });
+
+  // ─── Correcting a tracking number on a card ────────────────────────────────
+  // A card used to show no tracking number at all -- its presence was only
+  // implied by the Check Tracking action. It is displayed now, and correctable in
+  // place through the plain record PUT (no action endpoint, no backend change:
+  // both routes exempt *replacing* an existing number from the add-tracking
+  // status gate).
+  describe('tracking number editing', () => {
+    const TN = '1Z999AA10123456784';
+    const NEXT = '390244304011';
+    const CHECK = act('check_tracking', 'Check Tracking');
+
+    const editButton = (title, key) => within(card(title, key)).queryByRole('button', { name: 'Edit tracking number' });
+    const input = (title, key) => within(card(title, key)).getByLabelText('Tracking number');
+    const applyEdit = (title, key) => within(card(title, key)).queryByRole('button', { name: 'Save tracking number' });
+    const dismissEdit = (title, key) => within(card(title, key)).getByRole('button', { name: 'Cancel tracking number edit' });
+
+    it('shows the tracking number with its carrier chip and an edit button', () => {
+      setData({ inventory: [purchase({ receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] })] });
+      renderPage();
+
+      const node = card('Incoming', 'inventory-inv1');
+      expect(within(node).getByText(TN)).toBeTruthy();
+      expect(within(node).getByText('UPS')).toBeTruthy();
+      expect(editButton('Incoming', 'inventory-inv1')).toBeTruthy();
+    });
+
+    it('shows neither the number nor an edit button on a record without one', () => {
+      setData({ inventory: [purchase({ receiving_status: 'PURCHASED', tracking_number: null })] });
+      renderPage();
+
+      // Putting a FIRST number on is still the add_tracking action's job.
+      expect(editButton('Incoming', 'inventory-inv1')).toBeNull();
+      expect(within(card('Incoming', 'inventory-inv1')).queryByLabelText('Tracking number')).toBeNull();
+    });
+
+    it('treats an empty-string tracking number as no number at all', () => {
+      setData({ inventory: [purchase({ receiving_status: 'PURCHASED', tracking_number: '' })] });
+      renderPage();
+      expect(editButton('Incoming', 'inventory-inv1')).toBeNull();
+    });
+
+    it('writes nothing on the input change alone, only on the apply press', async () => {
+      setData({ inventory: [purchase({ id: 'inv4', receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] })] });
+      renderPage();
+
+      fireEvent.click(editButton('Incoming', 'inventory-inv4'));
+      expect(input('Incoming', 'inventory-inv4').value).toBe(TN);
+      fireEvent.change(input('Incoming', 'inventory-inv4'), { target: { value: ` ${NEXT} ` } });
+      expect(mocks.apiFetch).not.toHaveBeenCalled();
+
+      fireEvent.click(applyEdit('Incoming', 'inventory-inv4'));
+      await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+      const [path, options] = mocks.apiFetch.mock.calls[0];
+      // The plain record endpoint, not /actions/:action.
+      expect(path).toBe('/api/inventory/inv4');
+      expect(options.method).toBe('PUT');
+      expect(JSON.parse(options.body)).toEqual({ tracking_number: NEXT });
+      await waitFor(() => expect(mocks.invalidate).toHaveBeenCalled());
+      // The editor closes once the write lands.
+      await waitFor(() => expect(editButton('Incoming', 'inventory-inv4')).toBeTruthy());
+    });
+
+    it('edits a sale through the sales endpoint', async () => {
+      setData({ sales: [saleRecord({ id: 'sale4', workflow_status: 'OUTBOUND', tracking_number: TN, allowed_actions: [CHECK] })] });
+      renderPage();
+
+      fireEvent.click(editButton('Outbound', 'sale-sale4'));
+      fireEvent.change(input('Outbound', 'sale-sale4'), { target: { value: NEXT } });
+      fireEvent.click(applyEdit('Outbound', 'sale-sale4'));
+
+      await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+      const [path, options] = mocks.apiFetch.mock.calls[0];
+      expect(path).toBe('/api/sales/sale4');
+      expect(JSON.parse(options.body)).toEqual({ tracking_number: NEXT });
+    });
+
+    it('refuses an emptied value — this corrects a number, it does not remove one', () => {
+      setData({ inventory: [purchase({ receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] })] });
+      renderPage();
+
+      fireEvent.click(editButton('Incoming', 'inventory-inv1'));
+      expect(applyEdit('Incoming', 'inventory-inv1').disabled).toBe(false);
+
+      fireEvent.change(input('Incoming', 'inventory-inv1'), { target: { value: '   ' } });
+      expect(applyEdit('Incoming', 'inventory-inv1').disabled).toBe(true);
+      fireEvent.click(applyEdit('Incoming', 'inventory-inv1'));
+      expect(mocks.apiFetch).not.toHaveBeenCalled();
+    });
+
+    it('leaves the stored number untouched when the edit is dismissed', () => {
+      setData({ inventory: [purchase({ receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] })] });
+      renderPage();
+
+      fireEvent.click(editButton('Incoming', 'inventory-inv1'));
+      fireEvent.change(input('Incoming', 'inventory-inv1'), { target: { value: NEXT } });
+      fireEvent.click(dismissEdit('Incoming', 'inventory-inv1'));
+
+      expect(mocks.apiFetch).not.toHaveBeenCalled();
+      const node = card('Incoming', 'inventory-inv1');
+      expect(within(node).getByText(TN)).toBeTruthy();
+      expect(within(node).queryByText(NEXT)).toBeNull();
+      // Re-opening starts from the stored number, not the abandoned draft.
+      fireEvent.click(editButton('Incoming', 'inventory-inv1'));
+      expect(input('Incoming', 'inventory-inv1').value).toBe(TN);
+    });
+
+    it('keeps the editor open with the typed value when the save fails', async () => {
+      mocks.apiFetch.mockResolvedValue(new Response(JSON.stringify({ error: 'nope' }), { status: 400 }));
+      setData({ inventory: [purchase({ receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] })] });
+      renderPage();
+
+      fireEvent.click(editButton('Incoming', 'inventory-inv1'));
+      fireEvent.change(input('Incoming', 'inventory-inv1'), { target: { value: NEXT } });
+      fireEvent.click(applyEdit('Incoming', 'inventory-inv1'));
+
+      await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+      await waitFor(() => expect(input('Incoming', 'inventory-inv1').value).toBe(NEXT));
+      expect(editButton('Incoming', 'inventory-inv1')).toBeNull();
+    });
+
+    // Out of scope on purpose: rewriting a number shared by several records means
+    // updating every member at once, which needs backend support that does not
+    // exist yet. A member reached inside an expanded group is just a normal card,
+    // so it keeps its own edit -- that correctly takes that one record out of the
+    // package.
+    it('puts no edit control on a collapsed group, only on its expanded members', () => {
+      setData({
+        inventory: [
+          purchase({ id: 'inv1', receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] }),
+          purchase({ id: 'inv2', receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] }),
+        ],
+      });
+      renderPage();
+
+      const node = column('Incoming').querySelector(`[data-group="${TN}"]`);
+      expect(node).toBeTruthy();
+      expect(within(node).queryAllByRole('button', { name: 'Edit tracking number' })).toHaveLength(0);
+
+      fireEvent.click(within(node).getAllByRole('button', { expanded: false })[0]);
+      expect(editButton('Incoming', 'inventory-inv1')).toBeTruthy();
+      expect(editButton('Incoming', 'inventory-inv2')).toBeTruthy();
+    });
+  });
 });

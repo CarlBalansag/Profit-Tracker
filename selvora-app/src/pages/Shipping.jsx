@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useInventory, useSales, useInvalidate, apiFetch } from '../hooks/useApi';
 import { detectCarrier, carrierTrackingUrl } from '../utils/carrier';
 import { toast } from 'sonner';
-import { Truck, RefreshCw, ExternalLink, Save, ChevronRight } from 'lucide-react';
+import { Truck, RefreshCw, ExternalLink, Save, ChevronRight, Pencil } from 'lucide-react';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 function timeAgo(iso) {
@@ -98,10 +98,40 @@ const CELL_FIRST = 'block md:table-cell px-4 pt-3 md:py-3';
 const CELL_MID = 'block md:table-cell px-4 py-2 md:py-3';
 const CELL_LAST = 'block md:table-cell px-4 pb-3 md:py-3 md:text-right';
 
+// The tracking-number input and its Save button, shared by the "Needs Tracking #"
+// row (first-time add) and the Tracked row's inline correction so the two look and
+// behave identically.
+const TRACKING_INPUT = 'flex-1 min-w-0 bg-[#0d0d18] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500/50';
+const TRACKING_SAVE = 'flex items-center justify-center gap-1.5 px-3 h-7 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium transition-colors shrink-0';
+const TRACKING_FORM = 'flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-1 md:mt-0 md:max-w-sm';
+
 // ─── One row in the "Tracked" view ───────────────────────────────────────────────
-function TrackedRow({ row, onCheck, checking, checkDisabled }) {
+// The tracking number is editable in place: a wrong number is otherwise permanent
+// here, since the only other entry point (the "Needs Tracking #" tab) is gone the
+// moment a number exists. The save is the ordinary PUT /api/{inventory,sales}/:id
+// the Needs tab already uses -- both routes exempt *replacing* an existing number
+// from the add-tracking status gate on purpose, so no new endpoint is involved.
+//
+// Single rows only. A GroupedTrackedRow's collapsed header deliberately has no
+// edit control: changing a shared number means rewriting every member of the
+// package in one go, which needs backend support that does not exist yet.
+function TrackedRow({ row, onCheck, checking, checkDisabled, onSave, saving }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(row.trackingNumber || '');
   const chip = detectCarrier(row.trackingNumber);
   const url = carrierTrackingUrl(chip?.label, row.trackingNumber);
+
+  const startEdit = () => { setValue(row.trackingNumber || ''); setEditing(true); };
+  // Cancel throws the draft away: the row goes back to showing the stored number
+  // exactly as it was, with nothing sent.
+  const cancelEdit = () => { setValue(row.trackingNumber || ''); setEditing(false); };
+  // Only a successful save closes the editor, so a failed one keeps the typed
+  // value around to retry instead of silently discarding it.
+  const submitEdit = async () => {
+    const saved = await onSave(row.id, value);
+    if (saved) setEditing(false);
+  };
+
   return (
     <tr className={ROW_CLASS}>
       <td className={CELL_FIRST}>
@@ -110,17 +140,63 @@ function TrackedRow({ row, onCheck, checking, checkDisabled }) {
       </td>
       <td className={CELL_MID}>
         <CellLabel>Tracking #</CellLabel>
-        {chip && (
-          <button
-            type="button"
-            title={`Copy: ${row.trackingNumber}`}
-            onClick={() => { navigator.clipboard.writeText(row.trackingNumber); toast.success('Tracking number copied'); }}
-            className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border cursor-pointer hover:opacity-80 transition-opacity ${chip.color}`}
-          >
-            {chip.label}
-          </button>
+        {editing ? (
+          <div className={TRACKING_FORM}>
+            <input
+              type="text"
+              aria-label="Tracking number"
+              value={value}
+              onChange={e => setValue(e.target.value)}
+              placeholder="Enter tracking number…"
+              className={TRACKING_INPUT}
+            />
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={submitEdit}
+                /* An empty value is not a removal: clearing tracking entirely is a
+                   separate feature, so this only ever replaces one number with
+                   another -- same rule the Needs Tracking # row applies. */
+                disabled={saving || !value.trim()}
+                className={TRACKING_SAVE}
+              >
+                <Save className="w-3.5 h-3.5" /> Save
+              </button>
+              <button
+                type="button"
+                onClick={cancelEdit}
+                disabled={saving}
+                className="px-2 h-7 rounded-lg border border-white/10 text-xs font-medium text-gray-300 hover:bg-white/5 disabled:opacity-50 transition-colors shrink-0"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {chip && (
+              <button
+                type="button"
+                title={`Copy: ${row.trackingNumber}`}
+                onClick={() => { navigator.clipboard.writeText(row.trackingNumber); toast.success('Tracking number copied'); }}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border cursor-pointer hover:opacity-80 transition-opacity ${chip.color}`}
+              >
+                {chip.label}
+              </button>
+            )}
+            <div className="flex items-start gap-1 mt-1">
+              <p className="text-xs text-gray-400 font-mono break-all">{row.trackingNumber}</p>
+              <button
+                type="button"
+                aria-label="Edit tracking number"
+                title="Edit tracking number"
+                onClick={startEdit}
+                className="p-1 -mt-0.5 rounded hover:bg-white/10 text-gray-500 hover:text-white transition-colors shrink-0"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+            </div>
+          </>
         )}
-        <p className="text-xs text-gray-400 mt-1 font-mono break-all">{row.trackingNumber}</p>
       </td>
       <td className={CELL_MID}>
         <CellLabel>Status</CellLabel>
@@ -246,18 +322,18 @@ function UntrackedRow({ row, onSave, saving }) {
       </td>
       <td className="block md:table-cell px-4 pb-3 md:py-3" colSpan={2}>
         <CellLabel>Add Tracking #</CellLabel>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-1 md:mt-0 md:max-w-sm">
+        <div className={TRACKING_FORM}>
           <input
             type="text"
             value={value}
             onChange={e => setValue(e.target.value)}
             placeholder="Enter tracking number…"
-            className="flex-1 min-w-0 bg-[#0d0d18] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500/50"
+            className={TRACKING_INPUT}
           />
           <button
             onClick={() => onSave(row.id, value)}
             disabled={saving || !value.trim()}
-            className="flex items-center justify-center gap-1.5 px-3 h-7 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium transition-colors shrink-0"
+            className={TRACKING_SAVE}
           >
             <Save className="w-3.5 h-3.5" /> Save
           </button>
@@ -334,7 +410,7 @@ function ShippingSection({ title, subtitle, rows, onSave, onCheck, checkingIds, 
             )}
             {view === 'tracked'
               ? trackedGroups.map(items => items.length === 1
-                  ? <TrackedRow key={items[0].id} row={items[0]} onCheck={onCheck} checking={checkingIds.has(items[0].id)} checkDisabled={checkDisabled} />
+                  ? <TrackedRow key={items[0].id} row={items[0]} onCheck={onCheck} checking={checkingIds.has(items[0].id)} checkDisabled={checkDisabled} onSave={onSave} saving={savingId === items[0].id} />
                   : <GroupedTrackedRow key={items[0].trackingNumber} items={items} onCheck={onCheck} checkingIds={checkingIds} checkDisabled={checkDisabled} />)
               : current.map(row => <UntrackedRow key={row.id} row={row} onSave={onSave} saving={savingId === row.id} />)}
           </tbody>
@@ -393,6 +469,9 @@ export default function Shipping() {
     trackingInfo: sale.tracking_info || null,
   }));
 
+  // Returns true only when the write landed. The Tracked row's inline editor uses
+  // that to decide whether to close (a failed save keeps the typed value so it can
+  // simply be retried); the Needs Tracking # row ignores it, exactly as before.
   const saveTracking = async (endpoint, id, invalidateFn, trackingNumber) => {
     setSavingId(id);
     try {
@@ -404,8 +483,10 @@ export default function Shipping() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       invalidateFn();
       toast.success('Tracking number saved');
+      return true;
     } catch (err) {
       toast.error('Failed to save tracking number: ' + err.message);
+      return false;
     } finally {
       setSavingId(null);
     }

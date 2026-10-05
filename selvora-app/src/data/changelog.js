@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.54',
+    date: '2026-10-04',
+    notes: 'You can now fix a tracking number you already entered, right from the Shipping page or a Statuses card, instead of being stuck with the wrong one.',
+  },
+  {
     version: '0.53',
     date: '2026-10-04',
     notes: 'Purchases and sales that share a tracking number now show as one combined card on the Statuses page, which you can open to see each item.',
