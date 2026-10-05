@@ -167,6 +167,18 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
     await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
     const qtyDiff = existing.quantity - newQty;
 
+    // Adding a tracking number for the FIRST time *is* the add_outbound_tracking
+    // business action, so it is only valid where that action is: a sale still
+    // awaiting shipment. Editing, replacing or clearing a number the sale already
+    // has is deliberately NOT gated -- correcting tracking after delivery has to
+    // stay possible. A sale with no workflow_status at all (one the backfill could
+    // not resolve) is not gated either: there is no stored state to judge it
+    // against, and its legacy column must keep advancing exactly as it does today.
+    if (tracking_number && !existing.tracking_number && existing.workflow_status
+      && !statusTransitions.isActionAllowed(existing, 'sale', 'add_outbound_tracking')) {
+      return res.status(400).json({ error: 'A tracking number cannot be added to a sale that is not awaiting shipment' });
+    }
+
     // Adding a tracking number to a still-unshipped sale automatically
     // advances its status — never overrides an explicit status change in the
     // same request, and never touches a sale that's already further along.

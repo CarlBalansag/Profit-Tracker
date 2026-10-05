@@ -31,6 +31,22 @@ const STATUS_COLORS = {
   'Unknown': 'text-gray-400',
 };
 
+// ─── Which records belong on this page ──────────────────────────────────────────
+// Shipping is the tracking-number desk, not a ledger. A record belongs here only
+// while it sits in the window where a tracking number is what it is waiting on:
+//   inbound  PRE_ORDER / PURCHASED (no number yet) and INBOUND (number, in transit)
+//   outbound AWAITING_SHIPMENT (no number yet) and OUTBOUND (number, in transit)
+// Everything past that window (a received purchase, a paid sale), beside it (a
+// DIRECT_LOCAL handoff, which never ships) or off it (any exception status) drops
+// out, so a long-settled sale stops cluttering the list forever.
+//
+// A row with no stored receiving_status/workflow_status at all — the pre-workflow
+// backfill gap — is excluded as well: there is no way to tell whether it is in a
+// trackable window, and the Statuses page, not this one, is where a record's
+// missing status gets resolved.
+const INBOUND_RECEIVING_STATUSES = ['PRE_ORDER', 'PURCHASED', 'INBOUND'];
+const OUTBOUND_WORKFLOW_STATUSES = ['AWAITING_SHIPMENT', 'OUTBOUND'];
+
 const NOT_TRACKABLE_MESSAGE = {
   not_configured: 'Carrier API not set up',
   restricted: 'Carrier restricts this number',
@@ -312,7 +328,7 @@ function ShippingSection({ title, subtitle, rows, onSave, onCheck, checkingIds, 
             {current.length === 0 && (
               <tr>
                 <td colSpan={4} className="block md:table-cell px-4 py-8 text-center text-sm text-gray-500">
-                  {view === 'tracked' ? 'No tracked shipments yet.' : 'Everything here has a tracking number.'}
+                  {view === 'tracked' ? 'Nothing in transit right now.' : 'Nothing is waiting on a tracking number.'}
                 </td>
               </tr>
             )}
@@ -349,7 +365,9 @@ export default function Shipping() {
   const rateLimited = Boolean(rateLimit && rateLimit.remaining <= 0);
   const rateLimitMinutes = rateLimited ? Math.max(1, Math.ceil((new Date(rateLimit.resetAt).getTime() - Date.now()) / 60000)) : null;
 
-  const inboundRows = inventory.map(inv => ({
+  // Scoped before the tracked/untracked split below, so that split only ever
+  // operates inside the window above.
+  const inboundRows = inventory.filter(inv => INBOUND_RECEIVING_STATUSES.includes(inv.receiving_status)).map(inv => ({
     id: inv.id,
     product: inv.product_name,
     counterpart: inv.vendor?.name || 'Direct',
@@ -359,7 +377,7 @@ export default function Shipping() {
     trackingInfo: inv.tracking_info || null,
   }));
 
-  const outboundRows = sales.map(sale => ({
+  const outboundRows = sales.filter(sale => OUTBOUND_WORKFLOW_STATUSES.includes(sale.workflow_status)).map(sale => ({
     id: sale.id,
     product: sale.inventory?.product_name || 'Item',
     counterpart: sale.platform?.name || sale.buyer?.name || '—',
@@ -438,7 +456,7 @@ export default function Shipping() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
           <ShippingSection
             title="Inbound Shipping"
-            subtitle="Items being shipped to you from vendors"
+            subtitle="Purchases on their way to you — they leave this list once received"
             rows={inboundRows}
             onCheck={idOrIds => checkTracking('/api/inventory', idOrIds, invalidate.inventory)}
             onSave={(id, trackingNumber) => saveTracking('/api/inventory', id, invalidate.inventory, trackingNumber)}
@@ -448,7 +466,7 @@ export default function Shipping() {
           />
           <ShippingSection
             title="Outbound Shipping"
-            subtitle="Items you've shipped out to buyers"
+            subtitle="Sales on their way to the buyer — they leave this list once delivered"
             rows={outboundRows}
             onCheck={idOrIds => checkTracking('/api/sales', idOrIds, invalidate.sales)}
             onSave={(id, trackingNumber) => saveTracking('/api/sales', id, invalidate.sales, trackingNumber)}

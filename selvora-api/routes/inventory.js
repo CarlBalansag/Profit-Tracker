@@ -366,6 +366,17 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
     if (gift_card_amount !== undefined)      data.gift_card_amount = parseFloat(gift_card_amount) || 0;
     if (order_number !== undefined)          data.order_number = order_number || null;
     if (tracking_number !== undefined)       data.tracking_number = tracking_number || null;
+    // Adding a tracking number for the FIRST time *is* the add_tracking business
+    // action, so it is only valid where that action is: a purchase still waiting
+    // to arrive. Editing, replacing or clearing a number the purchase already has
+    // is deliberately NOT gated -- correcting tracking after delivery has to stay
+    // possible. A row with no receiving_status at all (one the backfill could not
+    // resolve) is not gated either: there is no stored state to judge it against,
+    // and its legacy column must keep advancing exactly as it does today.
+    if (tracking_number && !existing.tracking_number && existing.receiving_status
+      && !statusTransitions.isActionAllowed(existing, 'inventory', 'add_tracking')) {
+      return res.status(400).json({ error: 'A tracking number cannot be added to a purchase that has already been received' });
+    }
     // Adding a tracking number to a still-pre-shipment item automatically
     // advances its status — never overrides an explicit status change in the
     // same request, and never touches an item that's already further along.

@@ -249,7 +249,10 @@ describe('inbound auto-advance through the transition service', () => {
     expect(harness.db.inventory.find((i) => i.id === created.id).receiving_status).toBeUndefined();
   });
 
-  it('does not advance a status that is already further along', async () => {
+  // A first-time tracking number on a purchase that has already arrived is now
+  // rejected outright rather than silently stored without advancing anything --
+  // see the "first-time tracking number is gated" suite below.
+  it('rejects a first tracking number on a status that is already further along', async () => {
     const created = await harness.prisma.inventory.create({
       data: {
         user_id: harness.ids.user, product_name: 'Already completed', vendor_id: harness.ids.vendor,
@@ -257,9 +260,11 @@ describe('inbound auto-advance through the transition service', () => {
       },
     });
     const res = await put(`/api/inventory/${created.id}`, { tracking_number: UPS });
-    expect(res.status).toBe(200);
-    expect(res.body.status).toBe('COMPLETED');
-    expect(harness.db.inventory.find((i) => i.id === created.id).receiving_status).toBe('ON_HAND');
+    expect(res.status).toBe(400);
+    const row = harness.db.inventory.find((i) => i.id === created.id);
+    expect(row.status).toBe('COMPLETED');
+    expect(row.receiving_status).toBe('ON_HAND');
+    expect(row.tracking_number).toBeUndefined();
   });
 
   it('respects an explicit status change in the same request instead of auto-advancing', async () => {
@@ -314,12 +319,13 @@ describe('outbound auto-advance through the transition service', () => {
     expect(harness.db.sales[0]).toMatchObject({ status: 'SHIPPED_OUT', workflow_status: 'OUTBOUND' });
   });
 
-  it('does not advance a sale status that is already further along', async () => {
+  it('rejects a first tracking number on a sale status that is already further along', async () => {
     Object.assign(harness.db.sales[0], { status: 'PAID', workflow_status: 'PAID' });
     const res = await put(`/api/sales/${harness.ids.sale}`, { tracking_number: FEDEX });
-    expect(res.status).toBe(200);
-    expect(res.body.status).toBe('PAID');
+    expect(res.status).toBe(400);
+    expect(harness.db.sales[0].status).toBe('PAID');
     expect(harness.db.sales[0].workflow_status).toBe('PAID');
+    expect(harness.db.sales[0].tracking_number).toBeUndefined();
   });
 
   it('advances a brand-new sale created with a tracking number already set', async () => {
@@ -364,6 +370,132 @@ describe('outbound auto-advance through the transition service', () => {
     // Changing the platform's preset afterwards must not rewrite the sale.
     harness.db.platform.find((p) => p.id === harness.ids.platform).workflow_preset = 'DIRECT_LOCAL';
     expect(harness.db.sales.find((s) => s.id === res.body.id).workflow_type).toBe('CASHOUT');
+  });
+});
+
+// --- First-time tracking number is gated to the right state -------------------
+// Setting a tracking number on a record that has none *is* the
+// add_tracking/add_outbound_tracking business action, so the PUT routes reject it
+// outside the states that offer that action instead of storing it anyway. Editing,
+// replacing and clearing a number the record already has stay allowed in every
+// status: correcting tracking after delivery is a legitimate fix.
+
+describe('first-time tracking number is gated to the states that allow it', () => {
+  const seedInventory = (overrides) => harness.prisma.inventory.create({
+    data: {
+      user_id: harness.ids.user, product_name: 'Gated purchase', vendor_id: harness.ids.vendor,
+      unit_purchase_cost: 10, qty_purchased: 1, qty_on_hand: 1, ...overrides,
+    },
+  });
+
+  it('rejects a first tracking number on an ON_HAND purchase and stores nothing', async () => {
+    const created = await seedInventory({ status: 'On Hand', receiving_status: 'ON_HAND' });
+    const res = await put(`/api/inventory/${created.id}`, { tracking_number: UPS });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/already been received/);
+    const row = harness.db.inventory.find((i) => i.id === created.id);
+    expect(row.tracking_number).toBeUndefined();
+    expect(row.receiving_status).toBe('ON_HAND');
+    expect(row.status).toBe('On Hand');
+  });
+
+  it('rejects a first tracking number even when other fields are sent alongside it', async () => {
+    const created = await seedInventory({ status: 'On Hand', receiving_status: 'ON_HAND', order_number: 'ORD-1' });
+    const res = await put(`/api/inventory/${created.id}`, { tracking_number: UPS, order_number: 'ORD-2' });
+    expect(res.status).toBe(400);
+    // The whole request is refused, so the unrelated edit is not applied either.
+    expect(harness.db.inventory.find((i) => i.id === created.id).order_number).toBe('ORD-1');
+  });
+
+  it('allows a first tracking number on PURCHASED and PRE_ORDER, and advances them', async () => {
+    for (const [legacy, receiving] of [['PURCHASED', 'PURCHASED'], ['Pre Order', 'PRE_ORDER']]) {
+      const created = await seedInventory({ status: legacy, receiving_status: receiving });
+      const res = await put(`/api/inventory/${created.id}`, { tracking_number: UPS });
+      expect(res.status).toBe(200);
+      expect(harness.db.inventory.find((i) => i.id === created.id)).toMatchObject({
+        status: 'SHIPPED_IN', receiving_status: 'INBOUND', tracking_number: UPS,
+      });
+    }
+  });
+
+  it('allows replacing a tracking number an ON_HAND purchase already has', async () => {
+    const created = await seedInventory({ status: 'On Hand', receiving_status: 'ON_HAND', tracking_number: '9400111899223856928499' });
+    const res = await put(`/api/inventory/${created.id}`, { tracking_number: UPS });
+    expect(res.status).toBe(200);
+    const row = harness.db.inventory.find((i) => i.id === created.id);
+    expect(row.tracking_number).toBe(UPS);
+    // A correction is not a status change.
+    expect(row.receiving_status).toBe('ON_HAND');
+    expect(row.status).toBe('On Hand');
+  });
+
+  it('allows clearing a tracking number in any status', async () => {
+    for (const receiving of ['ON_HAND', 'INBOUND']) {
+      const created = await seedInventory({ status: 'On Hand', receiving_status: receiving, tracking_number: UPS });
+      for (const blank of [null, '']) {
+        const res = await put(`/api/inventory/${created.id}`, { tracking_number: blank });
+        expect(res.status).toBe(200);
+        expect(harness.db.inventory.find((i) => i.id === created.id).tracking_number).toBeNull();
+      }
+    }
+  });
+
+  it('leaves a purchase with no receiving_status at all ungated', async () => {
+    // Nothing to judge it against, and its legacy column must keep advancing.
+    const created = await seedInventory({ status: 'On Hand' });
+    const res = await put(`/api/inventory/${created.id}`, { tracking_number: UPS });
+    expect(res.status).toBe(200);
+    expect(harness.db.inventory.find((i) => i.id === created.id).tracking_number).toBe(UPS);
+  });
+
+  it('rejects a first tracking number on a PAID sale and stores nothing', async () => {
+    Object.assign(harness.db.sales[0], { status: 'PAID', workflow_status: 'PAID', tracking_number: null });
+    const res = await put(`/api/sales/${harness.ids.sale}`, { tracking_number: FEDEX });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/not awaiting shipment/);
+    expect(harness.db.sales[0].tracking_number).toBeNull();
+    expect(harness.db.sales[0].workflow_status).toBe('PAID');
+  });
+
+  it('rejects a first tracking number on a DIRECT_LOCAL sale, which never ships', async () => {
+    Object.assign(harness.db.sales[0], {
+      status: 'SOLD', workflow_type: 'DIRECT_LOCAL', workflow_status: 'AWAITING_HANDOFF', tracking_number: null,
+    });
+    const res = await put(`/api/sales/${harness.ids.sale}`, { tracking_number: FEDEX });
+    expect(res.status).toBe(400);
+    expect(harness.db.sales[0].workflow_status).toBe('AWAITING_HANDOFF');
+    expect(harness.db.sales[0].tracking_number).toBeNull();
+  });
+
+  it('allows a first tracking number on an AWAITING_SHIPMENT sale, and advances it', async () => {
+    Object.assign(harness.db.sales[0], {
+      status: 'SOLD', workflow_type: 'STANDARD_MARKETPLACE', workflow_status: 'AWAITING_SHIPMENT', tracking_number: null,
+    });
+    const res = await put(`/api/sales/${harness.ids.sale}`, { tracking_number: FEDEX });
+    expect(res.status).toBe(200);
+    expect(harness.db.sales[0]).toMatchObject({
+      status: 'SHIPPED_OUT', workflow_status: 'OUTBOUND', tracking_number: FEDEX,
+    });
+  });
+
+  it('allows replacing and clearing a tracking number a PAID sale already has', async () => {
+    Object.assign(harness.db.sales[0], { status: 'PAID', workflow_status: 'PAID', tracking_number: '999999999999' });
+    const replaced = await put(`/api/sales/${harness.ids.sale}`, { tracking_number: UPS });
+    expect(replaced.status).toBe(200);
+    expect(harness.db.sales[0].tracking_number).toBe(UPS);
+    expect(harness.db.sales[0].workflow_status).toBe('PAID');
+
+    const cleared = await put(`/api/sales/${harness.ids.sale}`, { tracking_number: null });
+    expect(cleared.status).toBe(200);
+    expect(harness.db.sales[0].tracking_number).toBeNull();
+  });
+
+  it('leaves a sale with no workflow_status at all ungated', async () => {
+    Object.assign(harness.db.sales[0], { status: 'SOLD', workflow_status: null, tracking_number: null });
+    const res = await put(`/api/sales/${harness.ids.sale}`, { tracking_number: FEDEX });
+    expect(res.status).toBe(200);
+    expect(harness.db.sales[0].tracking_number).toBe(FEDEX);
+    expect(harness.db.sales[0].status).toBe('SHIPPED_OUT');
   });
 });
 
