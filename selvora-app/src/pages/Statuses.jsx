@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { ListChecks, Truck, Package, Send, CheckCircle2, ChevronLeft, ChevronRight, ArrowUpDown } from 'lucide-react';
+import { ListChecks, Truck, Package, Send, CheckCircle2, ChevronLeft, ChevronRight, ArrowUpDown, RefreshCw } from 'lucide-react';
 import { useInventory, useSales } from '../hooks/useApi';
+import useRecordActions from '../hooks/useRecordActions';
 import StatusPipeline from '../components/UI/StatusPipeline';
 import ContextualActions from '../components/UI/ContextualActions';
 import MoreActionsMenu from '../components/UI/MoreActionsMenu';
 import QuickStatusSelect from '../components/UI/QuickStatusSelect';
+import { detectCarrier } from '../utils/carrier';
 import {
   INVENTORY_RECEIVING_STATUSES,
   SALE_STATUS_ORDER,
@@ -50,6 +52,10 @@ const COLUMNS = [
     blurb: 'Purchases working their way toward you.',
     empty: 'Nothing incoming right now.',
     statuses: INCOMING_STATUSES,
+    // Records here are in transit, so several of them can be one physical
+    // package -- see groupByTracking below. On Hand is not in transit (nothing
+    // there is waiting on a carrier), so it deliberately does not group.
+    group: true,
     // qty_on_hand === 0 leaves the board on purpose, same as On Hand below: a
     // purchase that sold out before ever being marked received (recorded via
     // the Transactions page, not the board's own Record Sale, which only
@@ -87,6 +93,9 @@ const COLUMNS = [
     // itself) purely so its filter tile can still appear -- membership is
     // decided by `includes`, not by this list.
     statuses: [...OUTBOUND_STATUSES, 'PAID'],
+    // Same package rule as Incoming: sales shipped together under one tracking
+    // number collapse into one card.
+    group: true,
     includes: (record) => isSale(record) && (
       OUTBOUND_STATUSES.includes(record.workflow_status)
       || (record.workflow_status === 'PAID' && !isFullyCompleted(record))
@@ -127,6 +136,51 @@ const sortByDate = (records, direction) => {
   return withTime.map((entry) => entry.record);
 };
 
+// ─── Tracking-number groups ──────────────────────────────────────────────────
+// Several records can be one physical package: a vendor ships three purchases
+// under one label, or three sales go out in one box. pages/Shipping.jsx already
+// collapses those into a single row with one Check Status button; this is the
+// same idea (and deliberately the same function name) for the board's cards,
+// operating on board record objects instead of that page's flattened rows.
+//
+// Returns an array of groups, each an array of 1+ records -- one "visual unit".
+//
+// Only a *truthy* tracking_number groups. Two records that merely both lack a
+// number are not the same package, so each stays its own group of 1 and renders
+// exactly as an ungrouped card always has.
+//
+// The match is the exact stored string, deliberately not a trimmed or
+// case-folded one: the server's shared refresh (refreshSharedTracking) matches
+// the number exactly too, so a looser match here would collapse rows that one
+// carrier check would then *not* all update.
+//
+// SORT POSITION. Called on the column's already-sorted records, so each group
+// lands where its first sorted member sits: under "Newest" that is the group's
+// most recent member, under "Oldest" its oldest. A group's sort key is therefore
+// always the member the chosen direction actually asks about -- a package is as
+// new as its newest item and as old as its oldest -- rather than one fixed end
+// that would bury a group's oldest member behind a newer sibling's date when
+// sorting oldest-first. Deterministic either way, and members keep the column's
+// sort order inside the group too.
+const groupByTracking = (records) => {
+  const groups = [];
+  const byNumber = new Map();
+  for (const record of records) {
+    const key = record.tracking_number || null;
+    if (!key) { groups.push([record]); continue; }
+    const existing = byNumber.get(key);
+    if (existing) { existing.push(record); continue; }
+    const group = [record];
+    byNumber.set(key, group);
+    groups.push(group);
+  }
+  return groups;
+};
+
+// The ungrouped shape: every record as its own visual unit, for the lists that
+// never group (On Hand, Completed, and the no-status leftovers).
+const asUnits = (records) => records.map((record) => [record]);
+
 // A fully sold purchase -- whether it sold out after arriving (ON_HAND) or
 // before (any other receiving status, sold via the Transactions page) -- is
 // deliberately off the board, so it must not fall through into the "not in
@@ -146,6 +200,10 @@ const counterpartOf = (record) => (isInventory(record)
   : (record.platform?.name || record.buyer?.name || '—'));
 
 const units = (count) => `${count} unit${Number(count) === 1 ? '' : 's'}`;
+
+// The unit count a card shows for this record: a purchase's whole batch, a
+// sale's quantity. Used to total a tracking-number group's combined units.
+const unitCountOf = (record) => Number(isInventory(record) ? record.qty_purchased : record.quantity) || 0;
 
 // Sales in an exception status, and purchases that were cancelled, get the same
 // red accent plus a tag. One treatment for both keeps "this one is off the happy
@@ -246,14 +304,137 @@ function RecordCard({ record, quickStatus = false }) {
   );
 }
 
-function CardList({ records, empty, quickStatus = false }) {
+// ─── One collapsed card for a tracking-number group ──────────────────────────
+// Shows only what the whole package shares -- product (or "N items" when they
+// differ), combined units, the tracking number with its carrier chip -- plus one
+// Check Tracking button and a chevron. Expanding reveals each member as a normal
+// RecordCard, with its own full ContextualActions / MoreActionsMenu /
+// QuickStatusSelect: nothing about an individual record changes by being in a
+// group, only the collapsed summary above it is new.
+//
+// THE ONE CHECK. The button runs the ordinary per-record `check_tracking` action
+// (the same descriptor path ContextualActions uses on a single card) for ONE
+// representative member. The server's /track route does a single carrier lookup
+// and applies the result to every purchase and sale of this user sharing that
+// exact number -- refreshSharedTracking in selvora-api/services/tracking.js --
+// and useRecordActions already invalidates the inventory/sales/dashboard caches,
+// so the other members pick up the same tracking_info on the refetch. Firing one
+// request per member would be the same carrier answer bought several times over.
+function GroupedRecordCard({ records, quickStatus = false }) {
+  const [expanded, setExpanded] = useState(false);
+  const first = records[0];
+  const chip = detectCarrier(first.tracking_number);
+  const combinedUnits = records.reduce((sum, record) => sum + unitCountOf(record), 0);
+  const productNames = new Set(records.map(productNameOf));
+  const title = productNames.size === 1 ? productNameOf(first) : `${records.length} items`;
+  // An exception inside a collapsed group would otherwise be invisible until the
+  // group is opened, so the header carries the same accent and tag a single card
+  // would -- it is the reason to open it. The first member's tag wins ("Exception"
+  // for a sale, "Cancelled" for a purchase); the members themselves each still
+  // carry their own once expanded.
+  const exception = records.map((record) => exceptionTagOf(record)).find(Boolean) || null;
+
+  // The check runs against the first member that actually offers the action: a
+  // PRE_ORDER purchase sharing the number has no check_tracking of its own, so
+  // it cannot represent the group. No member offering it means no button.
+  const representative = records.find((record) => (record.allowed_actions || [])
+    .some((entry) => entry.action === 'check_tracking')) || null;
+  const descriptor = (representative?.allowed_actions || [])
+    .find((entry) => entry.action === 'check_tracking');
+  const { runAction, pendingAction } = useRecordActions({
+    kind: representative?.__kind,
+    record: representative,
+  });
+  const checking = pendingAction === 'check_tracking';
+
+  return (
+    <li
+      data-group={first.tracking_number}
+      data-exception={exception ? 'true' : undefined}
+      className={[
+        'rounded-xl border transition-colors',
+        exception
+          ? 'border-red-500/40 bg-red-500/[0.06]'
+          : 'border-white/[0.08] bg-white/[0.02]',
+      ].join(' ')}
+    >
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+        className="w-full text-left px-3 pt-3 pb-2 flex items-start gap-2 hover:bg-white/[0.03] rounded-t-xl transition-colors"
+      >
+        <ChevronRight
+          className={`w-3.5 h-3.5 mt-0.5 text-gray-500 shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}
+        />
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-gray-100 truncate">{title}</p>
+          <p className="text-[11px] text-gray-500">
+            {`${records.length} records · ${units(combinedUnits)} combined`}
+          </p>
+        </div>
+      </button>
+
+      <div className="px-3 pb-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {exception && <Tag tone="bad">{exception}</Tag>}
+          {chip && (
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border ${chip.color}`}>
+              {chip.label}
+            </span>
+          )}
+          <span className="text-xs text-gray-400 font-mono break-all">{first.tracking_number}</span>
+        </div>
+
+        {descriptor && (
+          <button
+            type="button"
+            disabled={checking}
+            onClick={() => runAction('check_tracking', {}, descriptor)}
+            className="inline-flex items-center justify-center gap-1.5 px-2.5 h-7 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium transition-colors whitespace-nowrap"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${checking ? 'animate-spin' : ''}`} />
+            {checking ? 'Checking…' : descriptor.label}
+          </button>
+        )}
+      </div>
+
+      {/* Each member is the exact same RecordCard an ungrouped record gets --
+          same actions, same quick status dropdown, same More menu -- only
+          nested and indented under the summary above. */}
+      {expanded && (
+        <ul className="pl-5 pr-3 pb-3 pt-3 space-y-2.5 border-t border-white/5">
+          {records.map((record) => (
+            <RecordCard key={`${record.__kind}-${record.id}`} record={record} quickStatus={quickStatus} />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+// Each entry in `units` is one visual unit: a lone record, or 2+ records sharing
+// a tracking number. A unit of 1 renders exactly as every card always has, so
+// the lists that never group simply pass asUnits(records).
+function CardList({ units: visualUnits, empty, quickStatus = false }) {
   return (
     <ul className="px-3 pb-3 pt-3 space-y-2.5">
-      {records.length === 0 ? (
+      {visualUnits.length === 0 ? (
         <li className="px-1 py-6 text-center text-xs text-gray-500">{empty}</li>
-      ) : records.map((record) => (
-        <RecordCard key={`${record.__kind}-${record.id}`} record={record} quickStatus={quickStatus} />
-      ))}
+      ) : visualUnits.map((unit) => (unit.length === 1
+        ? (
+          <RecordCard
+            key={`${unit[0].__kind}-${unit[0].id}`}
+            record={unit[0]}
+            quickStatus={quickStatus}
+          />
+        ) : (
+          <GroupedRecordCard
+            key={`group-${unit[0].__kind}-${unit[0].tracking_number}`}
+            records={unit}
+            quickStatus={quickStatus}
+          />
+        )))}
     </ul>
   );
 }
@@ -326,13 +507,22 @@ function BoardColumn({ column, records }) {
   const filtered = effectiveKey ? records.filter((record) => statusKeyOf(record) === effectiveKey) : records;
   const shown = useMemo(() => sortByDate(filtered, sort), [filtered, sort]);
 
-  const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  // filter -> sort -> GROUP -> page. Grouping before paging is what keeps a
+  // tracking-number group whole: the page size counts visual units, so a
+  // 7-record package fills one of the page's 5 slots exactly as a single card
+  // would, instead of spilling its last members onto the next page.
+  const visualUnits = useMemo(
+    () => (column.group ? groupByTracking(shown) : asUnits(shown)),
+    [shown, column.group],
+  );
+
+  const pageCount = Math.max(1, Math.ceil(visualUnits.length / PAGE_SIZE));
   // Clamped rather than reset via an effect: if a card leaves the column (an
   // action moved it, or a filter changed) and the current page no longer
   // exists, this falls back to the new last page on the very next render
   // instead of showing a stale, out-of-range blank page.
   const currentPage = Math.min(page, pageCount - 1);
-  const paged = shown.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+  const paged = visualUnits.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
 
   const selectStatus = (key) => { setActiveKey(key); setPage(0); };
   const clearFilter = () => { setActiveKey(null); setPage(0); };
@@ -381,7 +571,7 @@ function BoardColumn({ column, records }) {
       )}
 
       <CardList
-        records={paged}
+        units={paged}
         empty={effectiveKey ? 'Nothing in this status right now.' : column.empty}
         quickStatus
       />
@@ -418,7 +608,9 @@ function CompletedSection({ records }) {
         </div>
         <p className="text-xs text-gray-500 mt-1">Sales paid {COMPLETED_AFTER_DAYS}+ days ago, with nothing left to do.</p>
       </div>
-      <CardList records={paged} empty="" quickStatus />
+      {/* Completed is not "in transit", so it never groups by tracking number --
+          every record stays its own card. */}
+      <CardList units={asUnits(paged)} empty="" quickStatus />
       <Pager page={currentPage} pageCount={pageCount} onPage={setPage} />
     </section>
   );
@@ -491,7 +683,7 @@ export default function Statuses() {
                     These records have no workflow status stored, so they belong to no column. Set one on the card and the record joins the board.
                   </p>
                 </div>
-                <CardList records={unassigned} empty="" />
+                <CardList units={asUnits(unassigned)} empty="" />
               </section>
             )}
           </div>

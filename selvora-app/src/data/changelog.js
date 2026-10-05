@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.53',
+    date: '2026-10-04',
+    notes: 'Purchases and sales that share a tracking number now show as one combined card on the Statuses page, which you can open to see each item.',
+  },
+  {
     version: '0.52',
     date: '2026-10-04',
     notes: 'The Shipping page now only lists purchases and sales that are actually on the way, instead of keeping everything forever.',

@@ -1030,6 +1030,333 @@ describe('Statuses board', () => {
     });
   });
 
+  // ─── Tracking-number grouping ──────────────────────────────────────────────
+  // Several records can be one physical package (a vendor ships three purchases
+  // under one label; three sales go out in one box). Incoming and Outbound
+  // collapse those into one card with a single Check Tracking button, the same
+  // idea pages/Shipping.jsx already applies to its rows. On Hand and Completed
+  // are not "in transit" and never group.
+  describe('tracking-number grouping', () => {
+    const TN = '1Z999AA10123456784'; // UPS, per utils/carrier.js
+    const CHECK = act('check_tracking', 'Check Tracking');
+    const groups = (title) => Array.from(column(title).querySelectorAll('[data-group]'))
+      .map((node) => node.getAttribute('data-group'));
+    const group = (title, trackingNumber) => column(title).querySelector(`[data-group="${trackingNumber}"]`);
+    const toggleGroup = (title, trackingNumber) => within(group(title, trackingNumber))
+      .getAllByRole('button', { expanded: false })[0];
+
+    it('collapses purchases sharing a tracking number into one card in Incoming', () => {
+      setData({
+        inventory: [
+          purchase({ id: 'inv1', receiving_status: 'INBOUND', tracking_number: TN, qty_purchased: 2, allowed_actions: [CHECK] }),
+          purchase({ id: 'inv2', receiving_status: 'INBOUND', tracking_number: TN, qty_purchased: 3, allowed_actions: [CHECK] }),
+          purchase({ id: 'inv3', receiving_status: 'INBOUND', tracking_number: TN, qty_purchased: 4, allowed_actions: [CHECK] }),
+        ],
+      });
+      renderPage();
+
+      // One visual unit, and no individual cards until it is expanded.
+      expect(groups('Incoming')).toEqual([TN]);
+      expect(cardKeys('Incoming')).toEqual([]);
+
+      const node = group('Incoming', TN);
+      expect(within(node).getByText('Widget')).toBeTruthy();                 // same product throughout
+      expect(within(node).getByText('3 records · 9 units combined')).toBeTruthy();
+      expect(within(node).getByText(TN)).toBeTruthy();
+      expect(within(node).getByText('UPS')).toBeTruthy();                    // carrier from utils/carrier
+      // Exactly one tracking action for the whole package.
+      expect(within(node).getAllByRole('button', { name: 'Check Tracking' })).toHaveLength(1);
+      // Counts elsewhere still count records, not visual units.
+      expect(strip('Incoming').getAllByRole('button').map((b) => b.textContent)).toEqual(['Inbound3']);
+    });
+
+    it('names a mixed-product group by its size instead of one member\'s product', () => {
+      setData({
+        inventory: [
+          purchase({ id: 'inv1', receiving_status: 'INBOUND', product_name: 'Widget', tracking_number: TN, allowed_actions: [CHECK] }),
+          purchase({ id: 'inv2', receiving_status: 'INBOUND', product_name: 'Gadget', tracking_number: TN, allowed_actions: [CHECK] }),
+        ],
+      });
+      renderPage();
+
+      expect(within(group('Incoming', TN)).getByText('2 items')).toBeTruthy();
+      expect(within(group('Incoming', TN)).queryByText('Widget')).toBeNull();
+    });
+
+    it('groups sales sharing a tracking number in Outbound', () => {
+      setData({
+        sales: [
+          saleRecord({ id: 'sale1', workflow_status: 'OUTBOUND', tracking_number: TN, quantity: 1, allowed_actions: [CHECK] }),
+          saleRecord({ id: 'sale2', workflow_status: 'OUTBOUND', tracking_number: TN, quantity: 2, allowed_actions: [CHECK] }),
+        ],
+      });
+      renderPage();
+
+      expect(groups('Outbound')).toEqual([TN]);
+      expect(within(group('Outbound', TN)).getByText('2 records · 3 units combined')).toBeTruthy();
+    });
+
+    // Two records that merely both lack a number are not the same package.
+    it('never groups records with no tracking number', () => {
+      setData({
+        inventory: [
+          purchase({ id: 'inv1', receiving_status: 'PURCHASED', allowed_actions: [] }),
+          purchase({ id: 'inv2', receiving_status: 'PURCHASED', tracking_number: null, allowed_actions: [] }),
+          purchase({ id: 'inv3', receiving_status: 'PURCHASED', tracking_number: '', allowed_actions: [] }),
+        ],
+        sales: [
+          saleRecord({ id: 'sale1', workflow_status: 'AWAITING_SHIPMENT', allowed_actions: [] }),
+          saleRecord({ id: 'sale2', workflow_status: 'AWAITING_SHIPMENT', tracking_number: null, allowed_actions: [] }),
+        ],
+      });
+      renderPage();
+
+      expect(groups('Incoming')).toEqual([]);
+      expect(groups('Outbound')).toEqual([]);
+      expect(cardKeys('Incoming')).toEqual(['inventory-inv1', 'inventory-inv2', 'inventory-inv3']);
+      expect(cardKeys('Outbound')).toEqual(['sale-sale1', 'sale-sale2']);
+    });
+
+    // A group of 1 is not a group: no chevron, no summary, just the card.
+    it('leaves a lone record with a tracking number as a normal card', () => {
+      setData({
+        inventory: [purchase({ id: 'inv1', receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] })],
+      });
+      renderPage();
+
+      expect(groups('Incoming')).toEqual([]);
+      expect(cardKeys('Incoming')).toEqual(['inventory-inv1']);
+      // Its own per-record action, from ContextualActions as always.
+      expect(within(card('Incoming', 'inventory-inv1')).getByRole('button', { name: 'Check Tracking' })).toBeTruthy();
+    });
+
+    it('groups only within a column, never across kinds or columns', () => {
+      setData({
+        inventory: [
+          purchase({ id: 'inv1', receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] }),
+          purchase({ id: 'inv2', receiving_status: 'ON_HAND', tracking_number: TN, allowed_actions: [] }),
+        ],
+        sales: [saleRecord({ id: 'sale1', workflow_status: 'OUTBOUND', tracking_number: TN, allowed_actions: [CHECK] })],
+      });
+      renderPage();
+
+      // One member each: nothing collapses, and the purchase never joins the sale.
+      expect(groups('Incoming')).toEqual([]);
+      expect(groups('On Hand')).toEqual([]);
+      expect(groups('Outbound')).toEqual([]);
+      expect(cardKeys('Incoming')).toEqual(['inventory-inv1']);
+      expect(cardKeys('On Hand')).toEqual(['inventory-inv2']);
+      expect(cardKeys('Outbound')).toEqual(['sale-sale1']);
+    });
+
+    it('never groups the Completed section, even on a shared tracking number', () => {
+      setData({
+        sales: [
+          saleRecord({ id: 'sale1', workflow_status: 'PAID', paid_at: null, tracking_number: TN, allowed_actions: [] }),
+          saleRecord({ id: 'sale2', workflow_status: 'PAID', paid_at: null, tracking_number: TN, allowed_actions: [] }),
+        ],
+      });
+      renderPage();
+
+      const completed = screen.getByRole('region', { name: 'Completed' });
+      expect(completed.querySelectorAll('[data-group]')).toHaveLength(0);
+      expect(Array.from(completed.querySelectorAll('[data-record]')).map((n) => n.getAttribute('data-record')))
+        .toEqual(['sale-sale1', 'sale-sale2']);
+    });
+
+    it('expands to each member as a full normal card with its own working actions', async () => {
+      setData({
+        inventory: [
+          purchase({ id: 'inv1', receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK, CORRECT_RECEIVING] }),
+          purchase({ id: 'inv2', receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [act('mark_on_hand', 'Mark On Hand')] }),
+        ],
+      });
+      renderPage();
+
+      expect(cardKeys('Incoming')).toEqual([]);
+      fireEvent.click(toggleGroup('Incoming', TN));
+
+      // Both members, each as the same RecordCard an ungrouped record gets.
+      expect(cardKeys('Incoming')).toEqual(['inventory-inv1', 'inventory-inv2']);
+      expect(quick('Incoming', 'inventory-inv1')).toBeTruthy();
+      // The card's own status label (the quick dropdown has an Inbound option too).
+      expect(within(card('Incoming', 'inventory-inv1')).getByText('Inbound', { selector: 'p' })).toBeTruthy();
+
+      // One member's own action is reachable and fires for that member alone.
+      const button = within(card('Incoming', 'inventory-inv2')).getByRole('button', { name: 'Mark On Hand' });
+      fireEvent.click(button);
+      await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+      expect(mocks.apiFetch.mock.calls[0][0]).toBe('/api/inventory/inv2/actions/mark_on_hand');
+
+      // And it collapses again.
+      fireEvent.click(within(group('Incoming', TN)).getAllByRole('button', { expanded: true })[0]);
+      expect(cardKeys('Incoming')).toEqual([]);
+    });
+
+    // One carrier lookup per package: the server's /track route applies the
+    // result to every row sharing the number (refreshSharedTracking), so the
+    // collapsed card fires the ordinary per-record action for one member only.
+    it('fires one tracking check for a single representative member', async () => {
+      setData({
+        sales: [
+          saleRecord({ id: 'sale1', workflow_status: 'OUTBOUND', tracking_number: TN, allowed_actions: [CHECK] }),
+          saleRecord({ id: 'sale2', workflow_status: 'OUTBOUND', tracking_number: TN, allowed_actions: [CHECK] }),
+          saleRecord({ id: 'sale3', workflow_status: 'OUTBOUND', tracking_number: TN, allowed_actions: [CHECK] }),
+        ],
+      });
+      renderPage();
+
+      fireEvent.click(within(group('Outbound', TN)).getByRole('button', { name: 'Check Tracking' }));
+
+      await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+      // check_tracking is not a stored transition -- it goes to /track, the same
+      // endpoint a single card's own Check Tracking button uses.
+      expect(mocks.apiFetch.mock.calls[0][0]).toBe('/api/sales/sale1/track');
+      await waitFor(() => expect(mocks.invalidate).toHaveBeenCalled());
+    });
+
+    it('represents the group with a member that actually offers the check', async () => {
+      setData({
+        inventory: [
+          // Shares the package but is not INBOUND yet, so it has no check of its own.
+          purchase({ id: 'inv1', receiving_status: 'PURCHASED', tracking_number: TN, allowed_actions: [act('mark_inbound', 'Mark Inbound')] }),
+          purchase({ id: 'inv2', receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] }),
+        ],
+      });
+      renderPage();
+
+      fireEvent.click(within(group('Incoming', TN)).getByRole('button', { name: 'Check Tracking' }));
+      await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
+      expect(mocks.apiFetch.mock.calls[0][0]).toBe('/api/inventory/inv2/track');
+    });
+
+    it('offers no tracking button when no member allows the check', () => {
+      setData({
+        inventory: [
+          purchase({ id: 'inv1', receiving_status: 'PURCHASED', tracking_number: TN, allowed_actions: [] }),
+          purchase({ id: 'inv2', receiving_status: 'PURCHASED', tracking_number: TN, allowed_actions: [] }),
+        ],
+      });
+      renderPage();
+
+      expect(groups('Incoming')).toEqual([TN]);
+      expect(within(group('Incoming', TN)).queryByRole('button', { name: 'Check Tracking' })).toBeNull();
+    });
+
+    it('flags an exception hiding inside a collapsed group on the header', () => {
+      setData({
+        sales: [
+          saleRecord({ id: 'sale1', workflow_status: 'OUTBOUND', tracking_number: TN, allowed_actions: [] }),
+          saleRecord({ id: 'sale2', workflow_status: 'DISPUTED', tracking_number: TN, allowed_actions: [] }),
+        ],
+      });
+      renderPage();
+
+      const node = group('Outbound', TN);
+      expect(node.getAttribute('data-exception')).toBe('true');
+      expect(node.className).toContain('border-red-500/40');
+      expect(within(node).getByText('Exception')).toBeTruthy();
+    });
+
+    // ─── Pagination: a group is one slot, never split across two pages ────────
+    it('counts a group as one slot and never splits it across pages', () => {
+      // 4 lone purchases + a 3-member package = 5 visual units, one page. Without
+      // grouping these 7 records would need two pages and the package would
+      // straddle them.
+      setData({
+        inventory: [
+          ...Array.from({ length: 4 }, (_, i) => purchase({ id: `solo${i + 1}`, receiving_status: 'PURCHASED', allowed_actions: [] })),
+          purchase({ id: 'inv1', receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] }),
+          purchase({ id: 'inv2', receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] }),
+          purchase({ id: 'inv3', receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] }),
+        ],
+      });
+      renderPage();
+
+      expect(inColumn('Incoming').queryByText(/Page \d+ of \d+/)).toBeNull();
+      expect(groups('Incoming')).toEqual([TN]);
+      expect(cardKeys('Incoming')).toHaveLength(4); // the four singletons
+
+      // Expanded, all three members are on this one page together.
+      fireEvent.click(toggleGroup('Incoming', TN));
+      expect(cardKeys('Incoming')).toEqual(expect.arrayContaining([
+        'inventory-inv1', 'inventory-inv2', 'inventory-inv3',
+      ]));
+      expect(inColumn('Incoming').queryByText(/Page \d+ of \d+/)).toBeNull();
+    });
+
+    it('pages by visual unit, so a 6-unit column still needs two pages', () => {
+      setData({
+        inventory: [
+          ...Array.from({ length: 5 }, (_, i) => purchase({ id: `solo${i + 1}`, receiving_status: 'PURCHASED', allowed_actions: [] })),
+          purchase({ id: 'inv1', receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] }),
+          purchase({ id: 'inv2', receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] }),
+        ],
+      });
+      renderPage();
+
+      expect(inColumn('Incoming').getByText('Page 1 of 2')).toBeTruthy();
+      expect(groups('Incoming')).toEqual([]); // the package is on page 2
+
+      fireEvent.click(inColumn('Incoming').getByRole('button', { name: /Next/ }));
+      expect(groups('Incoming')).toEqual([TN]);
+      expect(cardKeys('Incoming')).toEqual([]);
+    });
+
+    // ─── Sorting with a mix of groups and singletons ──────────────────────────
+    // A group's members can have genuinely different dates, so the group sorts by
+    // whichever member the current direction asks about: its newest under
+    // "Newest", its oldest under "Oldest".
+    it('sorts groups and singletons together in both directions', () => {
+      const at = (daysAgo) => new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
+      setData({
+        sales: [
+          saleRecord({ id: 'solo-new', workflow_status: 'OUTBOUND', sale_date: at(1), allowed_actions: [] }),
+          saleRecord({ id: 'solo-mid', workflow_status: 'OUTBOUND', sale_date: at(5), allowed_actions: [] }),
+          saleRecord({ id: 'solo-old', workflow_status: 'OUTBOUND', sale_date: at(20), allowed_actions: [] }),
+          // The package spans the middle: newest member 3 days old, oldest 10.
+          saleRecord({ id: 'pkg1', workflow_status: 'OUTBOUND', sale_date: at(10), tracking_number: TN, allowed_actions: [CHECK] }),
+          saleRecord({ id: 'pkg2', workflow_status: 'OUTBOUND', sale_date: at(3), tracking_number: TN, allowed_actions: [CHECK] }),
+        ],
+      });
+      renderPage();
+
+      // Newest first: the group sits on its newest member (3 days) -- after the
+      // 1-day singleton, before the 5-day one.
+      const order = () => Array.from(column('Outbound').querySelectorAll('[data-group], [data-record]'))
+        .map((node) => node.getAttribute('data-group') || node.getAttribute('data-record'));
+      expect(order()).toEqual(['sale-solo-new', TN, 'sale-solo-mid', 'sale-solo-old']);
+
+      fireEvent.click(inColumn('Outbound').getByRole('button', { name: /Newest|Oldest/ }));
+      // Oldest first: the group now sits on its oldest member (10 days) -- after
+      // the 20-day singleton, before the 5-day one.
+      expect(order()).toEqual(['sale-solo-old', TN, 'sale-solo-mid', 'sale-solo-new']);
+      // Members keep the column's direction inside the group too.
+      fireEvent.click(toggleGroup('Outbound', TN));
+      expect(cardKeys('Outbound').filter((key) => key.startsWith('sale-pkg')))
+        .toEqual(['sale-pkg1', 'sale-pkg2']);
+    });
+
+    it('still applies a status filter tile across grouped records', () => {
+      setData({
+        inventory: [
+          purchase({ id: 'inv1', receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] }),
+          purchase({ id: 'inv2', receiving_status: 'INBOUND', tracking_number: TN, allowed_actions: [CHECK] }),
+          purchase({ id: 'inv3', receiving_status: 'PURCHASED', allowed_actions: [] }),
+        ],
+      });
+      renderPage();
+
+      expect(groups('Incoming')).toEqual([TN]);
+      fireEvent.click(tile('Incoming', 'Purchased'));
+      expect(groups('Incoming')).toEqual([]);
+      expect(cardKeys('Incoming')).toEqual(['inventory-inv3']);
+
+      fireEvent.click(inColumn('Incoming').getByRole('button', { name: 'Clear filter' }));
+      expect(groups('Incoming')).toEqual([TN]);
+    });
+  });
+
   // ─── Pagination ────────────────────────────────────────────────────────────
   describe('pagination', () => {
     const manyPurchases = (count) => Array.from({ length: count }, (_, i) => purchase({ id: `inv${i + 1}` }));
