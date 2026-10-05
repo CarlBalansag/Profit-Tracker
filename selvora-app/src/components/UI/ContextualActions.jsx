@@ -6,8 +6,13 @@ import MarkPaidModal from './MarkPaidModal';
 import ActionFormModal from './ActionFormModal';
 import { actionNeedsFormFields, consequenceFor, NAVIGATE_ACTIONS, actionButtonLabel } from '../../data/statusActions';
 
-const BUTTON_PRIMARY = 'px-2.5 h-7 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium transition-colors whitespace-nowrap';
-const BUTTON_DESTRUCTIVE = 'px-2.5 h-7 rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 disabled:opacity-50 text-xs font-medium transition-colors whitespace-nowrap';
+// inline-flex items-center justify-center: a <button> centers its text by
+// default in most browsers, but the record_sale action renders as a <Link>
+// (an <a> tag) with this same class -- without explicit centering, its text
+// sits at the tag's normal line-height position instead, visibly misaligned
+// next to a real <button> in the same row.
+const BUTTON_PRIMARY = 'inline-flex items-center justify-center px-2.5 h-7 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium transition-colors whitespace-nowrap';
+const BUTTON_DESTRUCTIVE = 'inline-flex items-center justify-center px-2.5 h-7 rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 disabled:opacity-50 text-xs font-medium transition-colors whitespace-nowrap';
 
 /**
  * The primary action buttons for a record -- the 1-2 most relevant things to
