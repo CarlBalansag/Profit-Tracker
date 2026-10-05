@@ -95,13 +95,19 @@ const statusChangedAtOf = (record) => (isInventory(record)
   ? record.receiving_status_changed_at
   : record.workflow_status_changed_at);
 
-// Sorts by the same date each card displays (statusChangedAtOf), so the order
-// on screen always matches what a viewer is actually reading. A record with
-// no stamp always sorts last regardless of direction -- there is no
-// meaningful "oldest" or "newest" position for something that was never dated.
-const sortByStatusChanged = (records, direction) => {
+// purchase_date / sale_date -- required fields, set at creation, so every
+// record has one. Used for sorting instead of statusChangedAtOf (the "X ago"
+// text on the card): that field is only populated going forward from when it
+// was added, so most existing records have none yet and a sort by it has
+// nothing to reorder. This one works for every record immediately.
+const transactionDateOf = (record) => (isInventory(record) ? record.purchase_date : record.sale_date);
+
+// A record with no date (malformed data; never expected for a required field)
+// always sorts last regardless of direction, rather than being placed
+// arbitrarily by a NaN comparison.
+const sortByDate = (records, direction) => {
   const withTime = records.map((record) => {
-    const raw = statusChangedAtOf(record);
+    const raw = transactionDateOf(record);
     const time = raw ? new Date(raw).getTime() : NaN;
     return { record, time: Number.isNaN(time) ? null : time };
   });
@@ -272,7 +278,7 @@ function Pager({ page, pageCount, onPage }) {
   );
 }
 
-// Toggles which end of sortByStatusChanged a column reads from -- one button,
+// Toggles which end of sortByDate a column reads from -- one button,
 // not a two-option picker, since there are only ever two directions.
 function SortToggle({ direction, onToggle }) {
   const next = direction === 'newest' ? 'oldest' : 'newest';
@@ -311,7 +317,7 @@ function BoardColumn({ column, records }) {
   // would otherwise leave the column stuck on an empty filter with no way back.
   const effectiveKey = activeKey && statuses.some((status) => status.key === activeKey) ? activeKey : null;
   const filtered = effectiveKey ? records.filter((record) => statusKeyOf(record) === effectiveKey) : records;
-  const shown = useMemo(() => sortByStatusChanged(filtered, sort), [filtered, sort]);
+  const shown = useMemo(() => sortByDate(filtered, sort), [filtered, sort]);
 
   const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
   // Clamped rather than reset via an effect: if a card leaves the column (an
@@ -384,7 +390,7 @@ function BoardColumn({ column, records }) {
 function CompletedSection({ records }) {
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState('newest');
-  const sorted = useMemo(() => sortByStatusChanged(records, sort), [records, sort]);
+  const sorted = useMemo(() => sortByDate(records, sort), [records, sort]);
   const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount - 1);
   const paged = sorted.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);

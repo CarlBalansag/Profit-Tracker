@@ -902,9 +902,11 @@ describe('Statuses board', () => {
     expect(select.selectedOptions[0].textContent).toBe('Paid');
   });
 
-  // ─── Sort by status-changed date ───────────────────────────────────────────
-  // Sorts by the exact date each card itself displays (statusChangedAtOf), so
-  // the on-screen order always matches what a viewer is reading.
+  // ─── Sort by date ───────────────────────────────────────────────────────────
+  // Sorts by purchase_date / sale_date -- required fields set at creation, so
+  // every record has one, unlike receiving_status_changed_at /
+  // workflow_status_changed_at (only populated going forward from when those
+  // columns were added, so most existing records have no value there yet).
   describe('sort by date', () => {
     const toggle = (title) => inColumn(title).getByRole('button', { name: /Newest|Oldest/ });
     const at = (daysAgo) => new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
@@ -912,9 +914,9 @@ describe('Statuses board', () => {
     it('defaults to newest first', () => {
       setData({
         inventory: [
-          purchase({ id: 'inv1', receiving_status_changed_at: at(5) }),
-          purchase({ id: 'inv2', receiving_status_changed_at: at(1) }),
-          purchase({ id: 'inv3', receiving_status_changed_at: at(3) }),
+          purchase({ id: 'inv1', purchase_date: at(5) }),
+          purchase({ id: 'inv2', purchase_date: at(1) }),
+          purchase({ id: 'inv3', purchase_date: at(3) }),
         ],
       });
       renderPage();
@@ -926,9 +928,9 @@ describe('Statuses board', () => {
     it('flips to oldest first when toggled', () => {
       setData({
         inventory: [
-          purchase({ id: 'inv1', receiving_status_changed_at: at(5) }),
-          purchase({ id: 'inv2', receiving_status_changed_at: at(1) }),
-          purchase({ id: 'inv3', receiving_status_changed_at: at(3) }),
+          purchase({ id: 'inv1', purchase_date: at(5) }),
+          purchase({ id: 'inv2', purchase_date: at(1) }),
+          purchase({ id: 'inv3', purchase_date: at(3) }),
         ],
       });
       renderPage();
@@ -942,11 +944,11 @@ describe('Statuses board', () => {
       expect(cardKeys('Incoming')).toEqual(['inventory-inv2', 'inventory-inv3', 'inventory-inv1']);
     });
 
-    it('keeps a record with no stamp last in either direction', () => {
+    it('keeps a record with no date last in either direction', () => {
       setData({
         inventory: [
-          purchase({ id: 'inv1', receiving_status_changed_at: null }),
-          purchase({ id: 'inv2', receiving_status_changed_at: at(1) }),
+          purchase({ id: 'inv1', purchase_date: null }),
+          purchase({ id: 'inv2', purchase_date: at(1) }),
         ],
       });
       renderPage();
@@ -959,12 +961,12 @@ describe('Statuses board', () => {
     it('sorts each column independently', () => {
       setData({
         inventory: [
-          purchase({ id: 'inv1', receiving_status_changed_at: at(5) }),
-          purchase({ id: 'inv2', receiving_status_changed_at: at(1) }),
+          purchase({ id: 'inv1', purchase_date: at(5) }),
+          purchase({ id: 'inv2', purchase_date: at(1) }),
         ],
         sales: [
-          saleRecord({ id: 'sale1', workflow_status_changed_at: at(5) }),
-          saleRecord({ id: 'sale2', workflow_status_changed_at: at(1) }),
+          saleRecord({ id: 'sale1', sale_date: at(5) }),
+          saleRecord({ id: 'sale2', sale_date: at(1) }),
         ],
       });
       renderPage();
@@ -977,8 +979,8 @@ describe('Statuses board', () => {
     it('sorts the Completed section too', () => {
       setData({
         sales: [
-          saleRecord({ id: 'sale1', workflow_status: 'PAID', paid_at: null, workflow_status_changed_at: at(5) }),
-          saleRecord({ id: 'sale2', workflow_status: 'PAID', paid_at: null, workflow_status_changed_at: at(1) }),
+          saleRecord({ id: 'sale1', workflow_status: 'PAID', paid_at: null, sale_date: at(5) }),
+          saleRecord({ id: 'sale2', workflow_status: 'PAID', paid_at: null, sale_date: at(1) }),
         ],
       });
       renderPage();
@@ -992,7 +994,7 @@ describe('Statuses board', () => {
     });
 
     it('resets to page 1 when the sort direction changes', () => {
-      const many = Array.from({ length: 6 }, (_, i) => purchase({ id: `inv${i + 1}`, receiving_status_changed_at: at(i) }));
+      const many = Array.from({ length: 6 }, (_, i) => purchase({ id: `inv${i + 1}`, purchase_date: at(i) }));
       setData({ inventory: many });
       renderPage();
 
