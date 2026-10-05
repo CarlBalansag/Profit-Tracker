@@ -380,7 +380,7 @@ describe('correcting a tracking number on a Tracked row', () => {
   // Out of scope on purpose: rewriting a number shared by several records means
   // updating every member of the package at once, which needs backend support
   // that does not exist yet. One assertion is enough.
-  it('puts no edit button on a collapsed group sharing one tracking number', () => {
+  it('puts no edit button on a collapsed group\'s own header', () => {
     setData({
       inventory: [
         trackedPurchase({ id: 'inv1' }),
@@ -390,5 +390,34 @@ describe('correcting a tracking number on a Tracked row', () => {
     render(<Shipping />);
     expect(tabCount(INBOUND, TRACKED)).toBe('2');
     expect(inSection(INBOUND).queryAllByRole('button', { name: 'Edit tracking number' })).toHaveLength(0);
+  });
+
+  // Expanding the group is a different story: each member is a full TrackedRow,
+  // so correcting one item's own number is an ordinary single-record edit --
+  // same PUT, same behaviour as a standalone tracked row.
+  it('offers a working edit button on each member once the group is expanded', async () => {
+    setData({
+      inventory: [
+        trackedPurchase({ id: 'inv1', product_name: 'First' }),
+        trackedPurchase({ id: 'inv2', product_name: 'Second' }),
+      ],
+    });
+    render(<Shipping />);
+
+    // Still none while collapsed.
+    expect(inSection(INBOUND).queryAllByRole('button', { name: 'Edit tracking number' })).toHaveLength(0);
+
+    fireEvent.click(inSection(INBOUND).getByText('2 items'));
+    const edits = inSection(INBOUND).queryAllByRole('button', { name: 'Edit tracking number' });
+    expect(edits).toHaveLength(2);
+
+    fireEvent.click(edits[1]);
+    fireEvent.change(inSection(INBOUND).getByLabelText('Tracking number'), { target: { value: FEDEX } });
+    fireEvent.click(inSection(INBOUND).getByRole('button', { name: /Save/ }));
+
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledWith('/api/inventory/inv2', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ tracking_number: FEDEX }),
+    })));
   });
 });

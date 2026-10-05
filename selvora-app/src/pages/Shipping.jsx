@@ -112,9 +112,13 @@ const TRACKING_FORM = 'flex flex-col sm:flex-row items-stretch sm:items-center g
 // the Needs tab already uses -- both routes exempt *replacing* an existing number
 // from the add-tracking status gate on purpose, so no new endpoint is involved.
 //
-// Single rows only. A GroupedTrackedRow's collapsed header deliberately has no
-// edit control: changing a shared number means rewriting every member of the
-// package in one go, which needs backend support that does not exist yet.
+// A GroupedTrackedRow's collapsed header deliberately has no edit control:
+// changing a shared number means rewriting every member of the package in one
+// go, which needs backend support that does not exist yet. An expanded
+// member, though, is a full TrackedRow (below) and gets the real edit
+// control -- correcting one item's number there is an ordinary single-record
+// edit, and if the result no longer matches its siblings it correctly leaves
+// the group on the next render instead of being held together artificially.
 function TrackedRow({ row, onCheck, checking, checkDisabled, onSave, saving }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(row.trackingNumber || '');
@@ -236,7 +240,7 @@ function groupByTracking(rows) {
 }
 
 // ─── A collapsible row for multiple entries sharing one tracking number ──────────
-function GroupedTrackedRow({ items, onCheck, checkingIds, checkDisabled }) {
+function GroupedTrackedRow({ items, onCheck, checkingIds, checkDisabled, onSave, savingId }) {
   const [expanded, setExpanded] = useState(false);
   const first = items[0];
   const chip = detectCarrier(first.trackingNumber);
@@ -295,13 +299,22 @@ function GroupedTrackedRow({ items, onCheck, checkingIds, checkDisabled }) {
           </div>
         </td>
       </tr>
+      {/* Each member is the exact same TrackedRow a standalone tracked item
+          gets -- same Check Status, same edit-the-tracking-number pencil --
+          just revealed under the shared-number summary above. Editing one
+          member's number here is a normal single-record edit: if the new
+          value no longer matches its siblings, it correctly leaves the group
+          on the next render instead of being force-kept together. */}
       {expanded && items.map(item => (
-        <tr key={item.id} className="block md:table-row mb-2 last:mb-3 md:mb-0 md:border-b md:border-white/5 bg-white/[0.015]">
-          <td className="block md:table-cell pl-10 pr-4 py-2" colSpan={4}>
-            <p className="text-xs text-gray-300">{item.product}</p>
-            <p className="text-[11px] text-gray-600">{item.counterpart}{item.qty ? ` · ${item.qty} units` : ''}</p>
-          </td>
-        </tr>
+        <TrackedRow
+          key={item.id}
+          row={item}
+          onCheck={onCheck}
+          checking={checkingIds.has(item.id)}
+          checkDisabled={checkDisabled}
+          onSave={onSave}
+          saving={savingId === item.id}
+        />
       ))}
     </>
   );
@@ -411,7 +424,7 @@ function ShippingSection({ title, subtitle, rows, onSave, onCheck, checkingIds, 
             {view === 'tracked'
               ? trackedGroups.map(items => items.length === 1
                   ? <TrackedRow key={items[0].id} row={items[0]} onCheck={onCheck} checking={checkingIds.has(items[0].id)} checkDisabled={checkDisabled} onSave={onSave} saving={savingId === items[0].id} />
-                  : <GroupedTrackedRow key={items[0].trackingNumber} items={items} onCheck={onCheck} checkingIds={checkingIds} checkDisabled={checkDisabled} />)
+                  : <GroupedTrackedRow key={items[0].trackingNumber} items={items} onCheck={onCheck} checkingIds={checkingIds} checkDisabled={checkDisabled} onSave={onSave} savingId={savingId} />)
               : current.map(row => <UntrackedRow key={row.id} row={row} onSave={onSave} saving={savingId === row.id} />)}
           </tbody>
         </table>
