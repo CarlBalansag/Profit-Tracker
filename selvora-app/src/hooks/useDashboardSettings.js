@@ -25,14 +25,17 @@ const DEFAULT_STAT_CARD_ORDER = {
   roi: 5,
 };
 
-function mergeWithDefaults(stored, defaults) {
-  // Merge statCards: keep stored order/visibility, append any new ids from defaults
+export function mergeDashboardSettings(stored, defaults = DEFAULT_DASHBOARD_SETTINGS) {
+  // Keep supported saved items in their chosen order, drop retired ids, and
+  // append any newly introduced options from the current defaults.
   const mergeList = (storedList, defaultList) => {
-    const storedIds = new Set(storedList.map(i => i.id));
+    const defaultIds = new Set(defaultList.map(i => i.id));
+    const retained = storedList.filter(item => defaultIds.has(item.id));
+    const storedIds = new Set(retained.map(i => i.id));
     const missing = defaultList
       .filter(d => !storedIds.has(d.id))
-      .map((d, i) => ({ ...d, order: storedList.length + i }));
-    return [...storedList, ...missing];
+      .map((d, i) => ({ ...d, order: retained.length + i }));
+    return [...retained, ...missing];
   };
 
   const merged = {
@@ -74,7 +77,7 @@ export function useDashboardSettings(uiStyle = 'neon-dark') {
       const raw = localStorage.getItem(storageKey)
         || (uiStyle === 'neon-dark' ? localStorage.getItem(STORAGE_KEY_PREFIX) : null);
       if (!raw) return { ...DEFAULT_DASHBOARD_SETTINGS, version: SETTINGS_VERSION };
-      return mergeWithDefaults(JSON.parse(raw), DEFAULT_DASHBOARD_SETTINGS);
+      return mergeDashboardSettings(JSON.parse(raw));
     } catch {
       return { ...DEFAULT_DASHBOARD_SETTINGS, version: SETTINGS_VERSION };
     }
@@ -88,7 +91,7 @@ export function useDashboardSettings(uiStyle = 'neon-dark') {
         const raw = localStorage.getItem(storageKey)
           || (uiStyle === 'neon-dark' ? localStorage.getItem(STORAGE_KEY_PREFIX) : null);
         return raw
-          ? mergeWithDefaults(JSON.parse(raw), DEFAULT_DASHBOARD_SETTINGS)
+          ? mergeDashboardSettings(JSON.parse(raw))
           : { ...DEFAULT_DASHBOARD_SETTINGS, version: SETTINGS_VERSION };
       } catch {
         return { ...DEFAULT_DASHBOARD_SETTINGS, version: SETTINGS_VERSION };
@@ -105,7 +108,7 @@ export function useDashboardSettings(uiStyle = 'neon-dark') {
       .then(res => (res.ok ? res.json() : null))
       .then(payload => {
         if (cancelled || !payload?.settings) return;
-        const merged = mergeWithDefaults(payload.settings, DEFAULT_DASHBOARD_SETTINGS);
+        const merged = mergeDashboardSettings(payload.settings);
         setSettings(merged);
         localStorage.setItem(storageKey, JSON.stringify(merged));
       })
@@ -119,7 +122,7 @@ export function useDashboardSettings(uiStyle = 'neon-dark') {
 
   const saveSettings = useCallback((newSettings) => {
     const versionedSettings = {
-      ...mergeWithDefaults({ ...newSettings, version: SETTINGS_VERSION }, DEFAULT_DASHBOARD_SETTINGS),
+      ...mergeDashboardSettings({ ...newSettings, version: SETTINGS_VERSION }),
       version: SETTINGS_VERSION,
     };
     setSettings(versionedSettings);

@@ -46,29 +46,7 @@ function normalizeGlassLayoutOrder(glass = {}) {
   return [...existing, ...[...valid].filter(id => !existing.includes(id))];
 }
 
-function getMetricMeaning(label) {
-  const meanings = {
-    'Total Cost': 'Total Cost is the full amount spent to buy inventory, including item cost, tax, and inbound shipping.',
-    'Sale Revenue': 'Sale Revenue is the money received from sold items after marketplace or platform fees.',
-    Cashback: 'Cashback is money earned back from the payment card or payment method used for sold inventory.',
-    'Net Profit': 'Net Profit is what remains after sold-item cost is covered, with cashback added back in.',
-    'Gross Profit': 'Gross Profit is the difference between sale revenue and the cost basis of the sold item.',
-    'Avg ROI': 'Avg ROI shows how much return you earned compared with the cost basis of sold items.',
-    'Commission Fees': 'Commission Fees are marketplace or platform fees taken out of sales.',
-    'Net Margin': 'Net Margin shows what percentage of sale revenue remains as net profit.',
-    'Avg Sale Price': 'Avg Sale Price is the average revenue received per sold item.',
-    'Avg Cost/Unit': 'Avg Cost/Unit is the average cost basis for each sold item.',
-    'Total Tax Paid': 'Total Tax Paid is the purchase sales tax paid across inventory.',
-    'Inventory Value': 'Inventory Value is the cost of unsold stock still on hand.',
-    'Sales Velocity': 'Sales Velocity shows how quickly items are selling in the selected time range.',
-    Tax: 'Tax is the purchase sales tax paid on inventory.',
-    'Sold Cost Basis': 'Sold Cost Basis is the item cost, allocated tax, and allocated inbound shipping for items that have sold.',
-  };
-
-  return meanings[label] || `${label} explains what this metric means in the selected dashboard view.`;
-}
-
-function FormulaPopup({ formula, label, onClose }) {
+function FormulaPopup({ formula = [], label, description, onClose }) {
   const ref = useModalKeyboard(true, onClose);
   const calculation = formula.join(' ');
 
@@ -87,13 +65,15 @@ function FormulaPopup({ formula, label, onClose }) {
     >
       <p className="text-xs font-semibold uppercase tracking-wider text-blue-300">{label}</p>
       <div className="mt-3 space-y-3">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Calculation</p>
-          <p className="mt-1 text-xs font-semibold leading-relaxed text-white">{calculation}</p>
-        </div>
+        {formula.length > 0 && (
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Calculation</p>
+            <p className="mt-1 text-xs font-semibold leading-relaxed text-white">{calculation}</p>
+          </div>
+        )}
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">What It Means</p>
-          <p className="mt-1 text-xs leading-relaxed text-gray-300">{getMetricMeaning(label)}</p>
+          <p className="mt-1 text-xs leading-relaxed text-gray-300">{description || `${label} is available in the selected dashboard view.`}</p>
         </div>
       </div>
       <ul className="hidden" aria-hidden="true">
@@ -112,6 +92,7 @@ function CardRow({ item, def, onToggle, onMoveUp, onMoveDown, isFirst, isLast })
   const Icon = def.icon;
   const [showInfo, setShowInfo] = useState(false);
   const hasFormula = Array.isArray(def.formula) && def.formula.length > 0;
+  const hasInfo = hasFormula || Boolean(def.description);
   const iconStyle = typeof def.color === 'string' && def.color.startsWith('#') ? { color: def.color } : undefined;
 
   return (
@@ -145,13 +126,14 @@ function CardRow({ item, def, onToggle, onMoveUp, onMoveDown, isFirst, isLast })
 
       <span className={`min-w-0 flex-1 truncate text-sm ${item.visible ? 'text-gray-300' : 'text-gray-400'}`}>{def.label}</span>
 
-      {hasFormula && (
+      {hasInfo && (
         <button
           onClick={() => setShowInfo(v => !v)}
           className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors ${
             showInfo ? 'bg-purple-500/10 text-purple-400' : 'text-gray-500 hover:bg-white/[0.04] hover:text-gray-300'
           }`}
           type="button"
+          title={`About ${def.label}`}
         >
           <Info className="h-3 w-3" />
         </button>
@@ -169,8 +151,8 @@ function CardRow({ item, def, onToggle, onMoveUp, onMoveDown, isFirst, isLast })
         {item.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
       </button>
 
-      {showInfo && hasFormula && (
-        <FormulaPopup formula={def.formula} label={def.label} onClose={() => setShowInfo(false)} />
+      {showInfo && hasInfo && (
+        <FormulaPopup formula={def.formula} label={def.label} description={def.description} onClose={() => setShowInfo(false)} />
       )}
     </div>
   );

@@ -8,6 +8,11 @@ export const CHANGELOG = [
     notes: 'The Shipping page now only lists purchases and sales that are actually on the way, instead of keeping everything forever.',
   },
   {
+    version: '0.51',
+    date: '2026-10-03',
+    notes: 'Dashboard settings now explain each option, use accurate per-unit averages, and omit the duplicate Completed status.',
+  },
+  {
     version: '0.50',
     date: '2026-10-01',
     notes: 'Fixed the Expense form losing focus while typing in the Name or Amount fields.',
