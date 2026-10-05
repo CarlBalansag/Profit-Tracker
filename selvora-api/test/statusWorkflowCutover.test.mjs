@@ -137,7 +137,7 @@ describe('legacy -> new status mapping agrees with the backfill script', () => {
     }
   });
 
-  it('maps every sale status the backfill maps, and leaves COMPLETED alone', () => {
+  it('maps every sale status the backfill maps, except COMPLETED which the live routes resolve unconditionally', () => {
     for (const legacyStatus of LEGACY_SALE_STATUSES) {
       const decision = mapSaleRow({ id: 's', status: legacyStatus, payout_date: null, platform: { type: 'Marketplace' } });
       const mapped = legacyWorkflowStatus(legacyStatus, 'STANDARD_MARKETPLACE');
@@ -152,10 +152,22 @@ describe('legacy -> new status mapping agrees with the backfill script', () => {
         expect(legacyWorkflowStatus(legacyStatus, 'AUTH_MARKETPLACE')).toBe(decision.data.workflow_status);
         continue;
       }
+      if (legacyStatus === 'COMPLETED') {
+        // Live create/update routes resolve COMPLETED to PAID unconditionally --
+        // isFullyCompleted() treats a PAID sale with no paid_at as already done,
+        // so there's nothing to lose by resolving it right away. The one-time
+        // historical backfill is deliberately more conservative: without a
+        // payout_date in the past as independent evidence a payout happened, it
+        // flags the row ambiguous instead of guessing. The two intentionally
+        // diverge here.
+        expect(mapped).toBe('PAID');
+        expect(decision.ambiguous).toBe(true);
+        continue;
+      }
       expect(decision.ambiguous, legacyStatus).toBe(false);
       expect(mapped, legacyStatus).toBe(decision.data.workflow_status);
     }
-    expect(legacyWorkflowStatus('COMPLETED', 'STANDARD_MARKETPLACE')).toBeNull();
+    expect(legacyWorkflowStatus('COMPLETED', 'STANDARD_MARKETPLACE')).toBe('PAID');
     expect(legacyWorkflowStatus('not a status', 'STANDARD_MARKETPLACE')).toBeNull();
   });
 
@@ -576,9 +588,13 @@ describe('creation stamps the last-status-updated timestamp', () => {
   });
 
   it('leaves a new sale\'s stamp NULL when its legacy status maps to no workflow status', async () => {
+    // AUTHENTICATION is the live carve-out: it has a base mapping
+    // (AUTHENTICATING) but the test harness's default platform has no
+    // workflow_preset, so it resolves to STANDARD_MARKETPLACE, whose path
+    // has no authenticating step -- the mapping genuinely declines here.
     const res = await post('/api/sales', {
       inventory_id: harness.ids.inventory, platform_id: harness.ids.platform,
-      quantity: 1, unit_price: 50, status: 'COMPLETED',
+      quantity: 1, unit_price: 50, status: 'AUTHENTICATION',
     });
     expect(res.status).toBe(200);
     expect(saleRow(res.body.id).workflow_status).toBeNull();

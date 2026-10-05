@@ -634,6 +634,12 @@ const LEGACY_TO_WORKFLOW_STATUS = {
   SHIPPED_OUT: 'OUTBOUND',
   AUTHENTICATION: 'AUTHENTICATING',
   PAID: 'PAID',
+  // Legacy COMPLETED has no status of its own in the new vocabulary -- it maps
+  // to PAID, same as legacy PAID itself. isFullyCompleted() already treats a
+  // PAID sale with no paid_at as done, so this lands it straight in the
+  // board's derived Completed section instead of workflow_status staying null
+  // (which silently dropped the sale into "Not in the workflow yet").
+  COMPLETED: 'PAID',
   RETURNED: 'RETURNED',
   DISPUTED: 'DISPUTED',
   CANCELLED: 'CANCELLED',
@@ -687,6 +693,71 @@ const WORKFLOW_TO_LEGACY_SALE_STATUS = {
 function legacySaleStatusPatch(workflowStatus) {
   const status = WORKFLOW_TO_LEGACY_SALE_STATUS[workflowStatus];
   return status ? { status } : {};
+}
+
+// ---------------------------------------------------------------------------
+// Status Pipeline bucket (Dashboard / CashFlow / CreditCard, display only)
+// ---------------------------------------------------------------------------
+// The Status Pipeline predates this registry and still groups every record
+// into the original fixed set of legacy-vocabulary buckets (pipelineCounts'
+// keys in routes/analytics.js: 'Pre Order', 'On Hand', PURCHASED, SHIPPED,
+// DELIVERED, SCANNED_IN, LISTED, SOLD, PAID, COMPLETED, RETURNED, DISPUTED,
+// CANCELLED, PENDING_PAYMENT, IN_TRANSIT_OUT, AUTHENTICATION). None of the
+// action-transition functions above write the legacy `status` column (except
+// the 3 financial-exclusion statuses dual-written above for isRealizedSale's
+// sake), so a record advanced through the new board would otherwise never
+// leave the bucket its legacy status happened to be in when the board took
+// over -- these two maps are what let the pipeline keep counting it
+// correctly. Purely a display reduction: nothing here is ever written to a
+// column.
+const RECEIVING_TO_PIPELINE_BUCKET = {
+  PRE_ORDER: 'Pre Order',
+  PURCHASED: 'PURCHASED',
+  INBOUND: 'SHIPPED',
+  ON_HAND: 'On Hand',
+};
+
+// Every forward-path and exception sale status, across all four workflows,
+// folded onto the one fixed bucket set the pipeline has always shown. Several
+// new statuses share a bucket where the old vocabulary never distinguished
+// them (e.g. every "en route to the next party" status becomes
+// IN_TRANSIT_OUT -- a bucket the legacy bucketing already defines but which
+// legacy SHIPPED_OUT, spelled differently from this key, never actually
+// reached). PAID covers the new system's derived "Completed" too:
+// workflow_status stays PAID even once a sale displays as Completed on the
+// Statuses board (see isFullyCompleted in the frontend's
+// data/statusWorkflow.js) -- COMPLETED stays a legacy-only bucket for rows
+// that predate the status-workflow rollout.
+const WORKFLOW_TO_PIPELINE_BUCKET = {
+  AWAITING_SHIPMENT: 'SOLD',
+  AWAITING_HANDOFF: 'SOLD',
+  OUTBOUND: 'IN_TRANSIT_OUT',
+  WAITING_FOR_SCAN_IN: 'IN_TRANSIT_OUT',
+  DELIVERED_TO_AUTHENTICATOR: 'DELIVERED',
+  DELIVERED_TO_PROVIDER: 'DELIVERED',
+  HANDED_OVER: 'DELIVERED',
+  ACCEPTED: 'DELIVERED',
+  SCANNED_IN: 'SCANNED_IN',
+  AUTHENTICATING: 'AUTHENTICATION',
+  WAITING_FOR_PAYMENT: 'PENDING_PAYMENT',
+  PAID: 'PAID',
+  CANCELLED: 'CANCELLED',
+  RETURN_IN_PROGRESS: 'RETURNED',
+  RETURNED: 'RETURNED',
+  AUTHENTICATION_FAILED: 'RETURNED',
+  DISPUTED: 'DISPUTED',
+};
+
+// Returns the pipeline bucket key for a record's *new* status column, or null
+// when it has none (an unmigrated legacy row) -- callers fall back to their
+// existing legacy-status bucketing in that case, unchanged.
+function pipelineBucketOf(record = {}, kind) {
+  if (kind === 'inventory') {
+    const base = RECEIVING_TO_PIPELINE_BUCKET[record.receiving_status];
+    if (!base) return null;
+    return record.is_listed ? 'LISTED' : base;
+  }
+  return WORKFLOW_TO_PIPELINE_BUCKET[record.workflow_status] || null;
 }
 
 // The retired services/statusHierarchy.autoShippedStatus table, verbatim. It is
@@ -753,4 +824,6 @@ module.exports = {
   legacyWorkflowStatus,
   resolveSaleWorkflow,
   trackingAttached,
+  // Status Pipeline bucket bridge (display only, see above)
+  pipelineBucketOf,
 };

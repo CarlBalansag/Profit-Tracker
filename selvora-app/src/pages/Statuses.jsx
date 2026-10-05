@@ -805,20 +805,18 @@ export default function Statuses() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5 items-start">
             <CompletedSection records={completed} />
 
-            {unassigned.length > 0 && (
-              <section aria-label="Not in the workflow yet" className="card bg-[#0f1115] rounded-xl border border-white/6">
-                <div className="px-4 py-3.5 border-b border-white/6">
-                  <h2 className="text-sm font-semibold text-white">
-                    Not in the workflow yet
-                    <span className="ml-2 text-xs font-medium text-gray-500">{unassigned.length}</span>
-                  </h2>
-                  <p className="text-xs text-gray-500 mt-1">
-                    These records have no workflow status stored, so they belong to no column. Set one on the card and the record joins the board.
-                  </p>
-                </div>
-                <CardList units={asUnits(unassigned)} empty="" />
-              </section>
-            )}
+            <section aria-label="Not in the workflow yet" className="card bg-[#0f1115] rounded-xl border border-white/6">
+              <div className="px-4 py-3.5 border-b border-white/6">
+                <h2 className="text-sm font-semibold text-white">
+                  Not in the workflow yet
+                  <span className="ml-2 text-xs font-medium text-gray-500">{unassigned.length}</span>
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  These records have no workflow status stored, so they belong to no column. Set one on the card and the record joins the board.
+                </p>
+              </div>
+              <CardList units={asUnits(unassigned)} empty="Nothing unassigned right now." />
+            </section>
           </div>
         </>
       )}

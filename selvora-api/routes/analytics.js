@@ -4,6 +4,7 @@ const prisma = require('../prisma');
 const { validateQuery } = require('../middleware/validate');
 const { analyticsDashboardQuery } = require('../validation/schemas');
 const { Decimal, decimal, isRealizedSale, batchCost, allocatedCost, effectiveCashbackRate, inventoryCashback, saleEconomics } = require('../services/decimalFinance');
+const { pipelineBucketOf } = require('../services/statusTransitions');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -145,7 +146,10 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     let listedQty = 0;
     allInventories.forEach(inv => {
       inventoryQty += inv.qty_on_hand;
-      if (inv.status === 'LISTED') {
+      // is_listed is the status-workflow column for this; a row the rollout
+      // hasn't reached yet (receiving_status null) has none, so it still falls
+      // back to the legacy status string.
+      if (inv.is_listed || (!inv.receiving_status && inv.status === 'LISTED')) {
         listedQty += inv.qty_on_hand;
       }
     });
@@ -212,9 +216,21 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     // Unsold units go into their inventory status bucket (default PURCHASED).
     // Always use allInventories (ignores date filter) so items purchased before the
     // date window still show up in the pipeline — pipeline reflects current stock state.
+    //
+    // A record the status-workflow rollout has reached (receiving_status /
+    // workflow_status set) is bucketed from that column via pipelineBucketOf,
+    // since the action endpoints behind the Statuses board generally don't
+    // keep the legacy `status` string in sync (see statusTransitions.js) — the
+    // legacy string is only read as a fallback for a row the rollout hasn't
+    // touched yet, exactly as before.
     if (mode === 'All') {
       allInventories.forEach(inv => {
         if (inv.qty_on_hand > 0) {
+          const bucket = pipelineBucketOf(inv, 'inventory');
+          if (bucket) {
+            pipelineCounts[bucket] += inv.qty_on_hand;
+            return;
+          }
           const rawSt = inv.status || 'PURCHASED';
           let st = rawSt.toUpperCase();
           if (st === 'PRE ORDER') st = 'Pre Order';
@@ -231,6 +247,11 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
 
     // For sales, we count by status
     sales.forEach(sale => {
+      const bucket = pipelineBucketOf(sale, 'sale');
+      if (bucket) {
+        pipelineCounts[bucket] += sale.quantity;
+        return;
+      }
       let st = (sale.status || '').toUpperCase();
       if (st === 'PRE ORDER') st = 'Pre Order';
       if (st === 'ON HAND') st = 'On Hand';

@@ -148,7 +148,7 @@ describe('Statuses board', () => {
     expect(cardKeys('Incoming')).toEqual([]);
     expect(cardKeys('Outbound')).toEqual([]);
     expect(inColumn('On Hand').getByText('Nothing on hand right now.')).toBeTruthy();
-    expect(screen.queryByRole('region', { name: 'Not in the workflow yet' })).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Not in the workflow yet' })).getByText('Nothing unassigned right now.')).toBeTruthy();
   });
 
   // A purchase can sell out before ever being marked received -- recorded via
@@ -170,7 +170,7 @@ describe('Statuses board', () => {
 
     expect(cardKeys('Incoming')).toEqual([]);
     expect(cardKeys('On Hand')).toEqual([]);
-    expect(screen.queryByRole('region', { name: 'Not in the workflow yet' })).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Not in the workflow yet' })).getByText('Nothing unassigned right now.')).toBeTruthy();
     // The linked sale is unaffected -- its own story is told in Outbound.
     expect(cardKeys('Outbound')).toEqual(['sale-sale1']);
   });
@@ -643,7 +643,7 @@ describe('Statuses board', () => {
     rerender(ui());
 
     expect(cardKeys('Incoming')).toEqual(['inventory-inv1']);
-    expect(screen.queryByRole('region', { name: 'Not in the workflow yet' })).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Not in the workflow yet' })).getByText('Nothing unassigned right now.')).toBeTruthy();
   });
 
   it('sends the workflow type with the status for a sale that had neither', async () => {
