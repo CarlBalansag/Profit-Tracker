@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import {
+  CHART_SERIES_REGISTRY,
   DEFAULT_DASHBOARD_SETTINGS,
   PIPELINE_CARD_REGISTRY,
   STAT_CARD_REGISTRY,
@@ -81,5 +82,20 @@ describe('dashboard pipeline registry', () => {
     expect(PIPELINE_CARD_REGISTRY.RETURNED).toBeDefined();
     expect(PIPELINE_CARD_REGISTRY.DISPUTED).toBeDefined();
     expect(PIPELINE_CARD_REGISTRY.CANCELLED).toBeDefined();
+  });
+});
+
+// The trend-chart "About X" popup (DashboardSettingsModal's FormulaPopup) falls
+// back to a generic "is available in the selected dashboard view" sentence when
+// a registry entry has no description -- every chart series needs a real one so
+// that fallback never shows, same bar as the summary and pipeline cards above.
+describe('dashboard chart series registry', () => {
+  it('describes every series in plain language', () => {
+    expect(Object.values(CHART_SERIES_REGISTRY).every(series => Boolean(series.description))).toBe(true);
+    const quickInfoText = Object.values(CHART_SERIES_REGISTRY)
+      .flatMap(series => [series.description, ...(series.formula || [])])
+      .join(' ');
+    expect(quickInfoText)
+      .not.toMatch(/\b(realized|cost basis|allocated)\b/i);
   });
 });
