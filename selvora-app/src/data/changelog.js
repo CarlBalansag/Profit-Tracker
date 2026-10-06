@@ -3,44 +3,24 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
-    version: '0.59',
+    version: '0.54',
     date: '2026-10-06',
     notes: 'Dashboard quick info now explains summary numbers and status cards in clearer, everyday language.',
   },
   {
-    version: '0.58',
+    version: '0.53',
     date: '2026-10-06',
     notes: 'Dashboard status cards now match the new workflow while keeping your existing visibility and order choices.',
   },
   {
-    version: '0.57',
-    date: '2026-10-04',
-    notes: 'Dashboard and Cash Flow status counts (Scanned In, Delivered, Listed, and more) now correctly include items moved using the new Statuses board.',
-  },
-  {
-    version: '0.56',
-    date: '2026-10-04',
-    notes: 'The "Not in the workflow yet" list on the Statuses page now always shows, even when empty, matching the rest of the board.',
-  },
-  {
-    version: '0.55',
-    date: '2026-10-04',
-    notes: 'Sales marked Completed now show up on the Statuses board where they belong, instead of disappearing.',
-  },
-  {
-    version: '0.54',
-    date: '2026-10-04',
-    notes: 'You can now fix a tracking number you already entered, right from the Shipping page or a Statuses card, instead of being stuck with the wrong one.',
-  },
-  {
-    version: '0.53',
-    date: '2026-10-04',
-    notes: 'Purchases and sales that share a tracking number now show as one combined card on the Statuses page, which you can open to see each item.',
-  },
-  {
+    // This single entry replaces what was previously six separate version
+    // bumps (0.52-0.57), one per commit made while this feature was still on
+    // its branch. It only actually reached main in one push, on this date --
+    // see AGENTS.md: a version bump belongs to an actual push to main, not to
+    // each commit along the way.
     version: '0.52',
     date: '2026-10-04',
-    notes: 'The Shipping page now only lists purchases and sales that are actually on the way, instead of keeping everything forever.',
+    notes: 'Added a new Statuses page to track every purchase and sale in one place, with grouped and correctable tracking numbers, accurate status counts, and properly tracked completed sales, plus matching updates to the Shipping page.',
   },
   {
     version: '0.51',
