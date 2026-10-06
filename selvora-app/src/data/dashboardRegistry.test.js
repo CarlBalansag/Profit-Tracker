@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url);
 const { pipelineBucketOf } = require('../../../selvora-api/services/statusTransitions.js');
 
 describe('dashboard summary card registry', () => {
-  it('keeps every supported summary option and describes each one', () => {
+  it('keeps every supported summary option and describes each one in plain language', () => {
     expect(Object.keys(STAT_CARD_REGISTRY)).toEqual([
       'totalCost',
       'totalCashback',
@@ -28,6 +28,11 @@ describe('dashboard summary card registry', () => {
       'unitsSold',
     ]);
     expect(Object.values(STAT_CARD_REGISTRY).every(card => Boolean(card.description))).toBe(true);
+    const quickInfoText = Object.values(STAT_CARD_REGISTRY)
+      .flatMap(card => [card.description, ...(card.formula || [])])
+      .join(' ');
+    expect(quickInfoText)
+      .not.toMatch(/\b(realized|cost basis|allocated)\b/i);
   });
 
   it('labels aggregate return as ROI and calculates averages per sold unit', () => {
@@ -67,6 +72,8 @@ describe('dashboard pipeline registry', () => {
     expect(PIPELINE_CARD_REGISTRY.SHIPPED_OUT).toBeUndefined();
     expect(DEFAULT_DASHBOARD_SETTINGS.pipelineCards.some(card => card.id === 'COMPLETED')).toBe(false);
     expect(Object.values(PIPELINE_CARD_REGISTRY).every(card => Boolean(card.description))).toBe(true);
+    expect(Object.values(PIPELINE_CARD_REGISTRY).map(card => card.description).join(' '))
+      .not.toMatch(/\b(fulfillment|currently traveling)\b/i);
     expect(PIPELINE_CARD_REGISTRY.SHIPPED.label).toBe('Inbound');
     expect(PIPELINE_CARD_REGISTRY.IN_TRANSIT_OUT.label).toBe('Outbound / In Progress');
     expect(PIPELINE_CARD_REGISTRY.PENDING_PAYMENT.label).toBe('Waiting for Payment');

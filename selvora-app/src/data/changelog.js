@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.59',
+    date: '2026-10-06',
+    notes: 'Dashboard quick info now explains summary numbers and status cards in clearer, everyday language.',
+  },
+  {
     version: '0.58',
     date: '2026-10-06',
     notes: 'Dashboard status cards now match the new workflow while keeping your existing visibility and order choices.',
