@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.55',
+    date: '2026-10-06',
+    notes: 'Analytics now shows how much each Cashout or Marketplace platform has paid you, spend by vendor, profit by category, and your cashback rate over time.',
+  },
+  {
     version: '0.54',
     date: '2026-10-06',
     notes: 'Dashboard quick info now explains summary numbers and status cards in clearer, everyday language.',

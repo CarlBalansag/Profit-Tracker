@@ -4,4 +4,3 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| feature/analytics-insights | Add new analytics/insights breakdowns (per-platform payout, per-vendor spend, category profitability, etc. — scope being finalized with user feedback before implementation) | `selvora-app/src/pages/Analytics.jsx`, `selvora-api/routes/analytics.js`, new chart components under `selvora-app/src/components/Dashboard/` or `Analytics/` | In progress | 2026-10-06 |
