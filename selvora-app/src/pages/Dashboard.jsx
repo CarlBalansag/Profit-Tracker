@@ -245,8 +245,6 @@ const Dashboard = () => {
                   label={def.label}
                   color={def.color}
                   statusKey={cardConfig.id}
-                  modeFilter={modeFilter}
-                  dateFilter={dateFilter}
                   onNavigate={navigate}
                   uiStyle={preferences.style}
                 />
@@ -505,8 +503,6 @@ const Dashboard = () => {
           key="pipeline"
           cards={visiblePipelineCards}
           pipeline={pipeline}
-          modeFilter={modeFilter}
-          dateFilter={dateFilter}
           onNavigate={navigate}
         />
       );
@@ -1165,7 +1161,7 @@ function GlassTopMetricCard({ title, value, subtext, highlight, large, onClick }
     </button>
   );
 }
-function GlassCircularPipeline({ cards, overflowCards = [], pipeline, modeFilter, dateFilter, onNavigate }) {
+function GlassCircularPipeline({ cards, overflowCards = [], pipeline, onNavigate }) {
   const activeCards = cards
     .map(card => {
       const def = PIPELINE_CARD_REGISTRY[card.id];
@@ -1189,13 +1185,7 @@ function GlassCircularPipeline({ cards, overflowCards = [], pipeline, modeFilter
     { angle: Math.PI, labelY: 29 },
   ];
 
-  const navigateTo = (card) => onNavigate('/transactions', {
-    state: {
-      status: card.id,
-      dateFilter: dateFilter || undefined,
-      platformMode: modeFilter && modeFilter !== 'All' ? modeFilter : undefined,
-    },
-  });
+  const navigateTo = () => onNavigate('/statuses');
 
   return (
     <div className="h-full rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-6 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
@@ -1405,11 +1395,11 @@ function StatCard({ id, title, modeTag, value, subtext, icon, color, formula = [
   );
 }
 
-function PipelineCard({ icon, count, label, statusKey, modeFilter, dateFilter, onNavigate, uiStyle = 'neon-dark' }) {
+function PipelineCard({ icon, count, label, statusKey, onNavigate, uiStyle = 'neon-dark' }) {
   const isGlass = uiStyle === 'glassmorphism-brown';
   const IconComponent = icon;
   const isEmpty = Number(count) === 0;
-  const isAccentStatus = ['PURCHASED', 'SHIPPED_IN', 'On Hand'].includes(statusKey);
+  const isAccentStatus = ['PURCHASED', 'SHIPPED', 'On Hand'].includes(statusKey);
   const isYellowStatus = statusKey === 'Pre Order';
   const carbonBorder = isAccentStatus
       ? 'border-b-2 [border-bottom-color:var(--accent)]'
@@ -1423,12 +1413,8 @@ function PipelineCard({ icon, count, label, statusKey, modeFilter, dateFilter, o
         : 'text-[var(--text-primary)]';
   return (
     <div
-      onClick={() => onNavigate('/transactions', { state: {
-        status: statusKey,
-        dateFilter: dateFilter || undefined,
-        platformMode: modeFilter && modeFilter !== 'All' ? modeFilter : undefined,
-      }})}
-      title={`${count} unit${count === 1 ? '' : 's'} currently in "${label}" status. Click to view them in Transactions.`}
+      onClick={() => onNavigate('/statuses')}
+      title={`${count} unit${count === 1 ? '' : 's'} currently in "${label}" status. Click to open Statuses.`}
       className={isGlass
         ? "group relative min-h-[160px] cursor-pointer overflow-hidden rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-5 text-left shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-colors hover:border-[#d8a65a]/18 hover:bg-[#1d1f21]/78"
         : `flex items-center gap-3 rounded-md p-3 cursor-pointer transition-colors ${isEmpty ? 'bg-transparent opacity-30' : `bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] ${carbonBorder}`}`

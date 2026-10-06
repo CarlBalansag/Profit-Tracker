@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { apiFetch } from './useApi';
-import { DEFAULT_DASHBOARD_SETTINGS } from '../data/dashboardRegistry';
+import { DEFAULT_DASHBOARD_SETTINGS, PIPELINE_CARD_ID_ALIASES } from '../data/dashboardRegistry';
 
 const STORAGE_KEY_PREFIX = 'dashboard_settings';
 const SETTINGS_VERSION = 6;
@@ -38,12 +38,23 @@ export function mergeDashboardSettings(stored, defaults = DEFAULT_DASHBOARD_SETT
     return [...retained, ...missing];
   };
 
+  const migratePipelineIds = (items) => {
+    const seen = new Set();
+    return items
+      .map(item => ({ ...item, id: PIPELINE_CARD_ID_ALIASES[item.id] || item.id }))
+      .filter(item => {
+        if (seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      });
+  };
+
   const merged = {
     version: stored.version ?? 1,
     defaultDateFilter: stored.defaultDateFilter ?? defaults.defaultDateFilter,
     dashboardSections: mergeList(stored.dashboardSections ?? [], defaults.dashboardSections),
     statCards: mergeList(stored.statCards ?? [], defaults.statCards),
-    pipelineCards: mergeList(stored.pipelineCards ?? [], defaults.pipelineCards),
+    pipelineCards: mergeList(migratePipelineIds(stored.pipelineCards ?? []), defaults.pipelineCards),
     chartSeries: mergeList(stored.chartSeries ?? [], defaults.chartSeries),
     recentSalesColumns: mergeList(stored.recentSalesColumns ?? [], defaults.recentSalesColumns),
     glass: {

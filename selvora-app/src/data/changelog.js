@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.58',
+    date: '2026-10-06',
+    notes: 'Dashboard status cards now match the new workflow while keeping your existing visibility and order choices.',
+  },
+  {
     version: '0.57',
     date: '2026-10-04',
     notes: 'Dashboard and Cash Flow status counts (Scanned In, Delivered, Listed, and more) now correctly include items moved using the new Statuses board.',

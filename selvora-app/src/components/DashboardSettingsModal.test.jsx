@@ -23,12 +23,14 @@ describe('DashboardSettingsModal metric explanations', () => {
     expect(screen.getByText(/not an average of individual sale percentages/i)).toBeInTheDocument();
   });
 
-  it('explains pipeline statuses and does not offer Completed', () => {
+  it('explains current pipeline statuses without offering retired options', () => {
     renderSettings();
 
-    fireEvent.click(screen.getByTitle('About Paid'));
+    fireEvent.click(screen.getByTitle('About Waiting for Payment'));
 
-    expect(screen.getByText(/payment or payout has been received/i)).toBeInTheDocument();
+    expect(screen.getByText(/awaiting payment or payout/i)).toBeInTheDocument();
     expect(screen.queryByText('Completed')).not.toBeInTheDocument();
+    expect(screen.queryByText('Shipped In')).not.toBeInTheDocument();
+    expect(screen.queryByText('Shipped Out')).not.toBeInTheDocument();
   });
 });

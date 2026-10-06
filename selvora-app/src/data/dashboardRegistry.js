@@ -150,20 +150,29 @@ export const STAT_CARD_REGISTRY = {
 
 // ── Pipeline Card Registry ─────────────────────────────────────────────────────
 export const PIPELINE_CARD_REGISTRY = {
-  'Pre Order':     { label: 'Pre Ordered',    icon: Clock,         color: 'indigo', description: 'Units ordered before the vendor has released or fulfilled them.' },
-  'On Hand':       { label: 'On Hand',        icon: Package,       color: 'teal',   description: 'Unsold units that have been received and are physically available.' },
-  PURCHASED:       { label: 'Purchased',      icon: ShoppingBag,   color: 'blue',   description: 'Units ordered from a vendor but not yet tracked as an inbound shipment.' },
-  SHIPPED_IN:      { label: 'Shipped In',     icon: Send,          color: 'purple', description: 'Units currently traveling inbound from the vendor.' },
-  DELIVERED:       { label: 'Delivered',      icon: Package,       color: 'orange', description: 'Inbound units delivered to the destination but not yet moved to the next stage.' },
-  SCANNED_IN:      { label: 'Scanned In',     icon: ScanLine,      color: 'cyan',   description: 'Units scanned into inventory or acknowledged by a supported cash-out workflow.' },
-  LISTED:          { label: 'Listed',         icon: ListChecks,    color: 'amber',  description: 'Unsold units currently listed for sale.' },
-  SOLD:            { label: 'Sold',           icon: DollarSign,    color: 'green',  description: 'Sold units waiting for the next fulfillment step.' },
-  SHIPPED_OUT:     { label: 'Shipped Out',    icon: Truck,         color: 'sky',    description: 'Sold units traveling to a buyer, marketplace, authenticator, or cash-out provider.' },
-  AUTHENTICATION:  { label: 'Authenticating', icon: Shield,        color: 'violet', description: 'Units undergoing marketplace authentication.' },
-  PAID:            { label: 'Paid',           icon: CircleCheck,   color: 'emerald', description: 'Sales for which payment or payout has been received.' },
-  RETURNED:        { label: 'Returned',       icon: Undo2,         color: 'red',    description: 'Units returned by a buyer or selling platform.' },
-  DISPUTED:        { label: 'Disputed',       icon: AlertTriangle, color: 'rose',   description: 'Sales with an active payment or transaction dispute.' },
-  CANCELLED:       { label: 'Cancelled',      icon: XCircle,       color: 'gray',   description: 'Sales that were cancelled and remain available for historical tracking.' },
+  'Pre Order':      { label: 'Pre Ordered',              icon: Clock,         color: 'indigo', description: 'Units ordered before the vendor has released or fulfilled them.' },
+  PURCHASED:        { label: 'Purchased',                icon: ShoppingBag,   color: 'blue',   description: 'Units ordered from a vendor but not yet tracked as an inbound shipment.' },
+  SHIPPED:          { label: 'Inbound',                  icon: Send,          color: 'purple', description: 'Units currently traveling inbound from the vendor.' },
+  'On Hand':        { label: 'On Hand',                  icon: Package,       color: 'teal',   description: 'Unsold units that have been received and are physically available.' },
+  LISTED:           { label: 'Listed',                   icon: ListChecks,    color: 'amber',  description: 'On-hand units currently listed for sale.' },
+  SOLD:             { label: 'Sold — Waiting to Fulfill', icon: DollarSign,    color: 'green',  description: 'Sold units waiting to be shipped or handed over.' },
+  IN_TRANSIT_OUT:   { label: 'Outbound / In Progress',   icon: Truck,         color: 'sky',    description: 'Sold units traveling to the next party or waiting for a provider scan-in.' },
+  DELIVERED:        { label: 'Delivered / Accepted',     icon: Package,       color: 'orange', description: 'Sales delivered to an authenticator or provider, handed over locally, or accepted by a provider.' },
+  SCANNED_IN:       { label: 'Scanned In',               icon: ScanLine,      color: 'cyan',   description: 'Cash-out units that the provider has scanned into its facility.' },
+  AUTHENTICATION:   { label: 'Authenticating',           icon: Shield,        color: 'violet', description: 'Units undergoing marketplace authentication.' },
+  PENDING_PAYMENT:  { label: 'Waiting for Payment',      icon: CircleCheck,   color: 'amber',  description: 'Completed fulfillment awaiting payment or payout.' },
+  PAID:             { label: 'Paid',                     icon: CircleCheck,   color: 'emerald', description: 'Sales for which payment or payout has been received.' },
+  RETURNED:         { label: 'Returned / Failed',        icon: Undo2,         color: 'red',    description: 'Returns in progress, completed returns, or failed authentications.' },
+  DISPUTED:         { label: 'Disputed',                 icon: AlertTriangle, color: 'rose',   description: 'Sales with an active payment or transaction dispute.' },
+  CANCELLED:        { label: 'Cancelled',                icon: XCircle,       color: 'gray',   description: 'Sales that were cancelled and remain available for historical tracking.' },
+};
+
+// Saved dashboard preferences used the legacy status names before the workflow
+// migration. Mapping them here preserves each user's visibility and order while
+// the dashboard adopts the aggregate keys now returned by analytics.
+export const PIPELINE_CARD_ID_ALIASES = {
+  SHIPPED_IN: 'SHIPPED',
+  SHIPPED_OUT: 'IN_TRANSIT_OUT',
 };
 
 export const CHART_SERIES_REGISTRY = {
@@ -261,19 +270,20 @@ export const DEFAULT_DASHBOARD_SETTINGS = {
   ],
   pipelineCards: [
     { id: 'Pre Order',       visible: true,  order: 0 },
-    { id: 'On Hand',         visible: true,  order: 1 },
-    { id: 'PURCHASED',      visible: true,  order: 2 },
-    { id: 'SHIPPED_IN',     visible: true,  order: 3 },
-    { id: 'DELIVERED',      visible: true,  order: 4 },
-    { id: 'SCANNED_IN',     visible: true,  order: 5 },
-    { id: 'LISTED',         visible: true,  order: 6 },
-    { id: 'SOLD',           visible: true,  order: 7 },
-    { id: 'SHIPPED_OUT',    visible: true,  order: 8 },
-    { id: 'AUTHENTICATION', visible: true,  order: 9 },
-    { id: 'PAID',           visible: true,  order: 10 },
-    { id: 'RETURNED',       visible: false, order: 11 },
-    { id: 'DISPUTED',       visible: false, order: 12 },
-    { id: 'CANCELLED',      visible: false, order: 13 },
+    { id: 'PURCHASED',       visible: true,  order: 1 },
+    { id: 'SHIPPED',         visible: true,  order: 2 },
+    { id: 'On Hand',         visible: true,  order: 3 },
+    { id: 'LISTED',          visible: true,  order: 4 },
+    { id: 'SOLD',            visible: true,  order: 5 },
+    { id: 'IN_TRANSIT_OUT',  visible: true,  order: 6 },
+    { id: 'DELIVERED',       visible: true,  order: 7 },
+    { id: 'SCANNED_IN',      visible: true,  order: 8 },
+    { id: 'AUTHENTICATION',  visible: true,  order: 9 },
+    { id: 'PENDING_PAYMENT', visible: true,  order: 10 },
+    { id: 'PAID',            visible: true,  order: 11 },
+    { id: 'RETURNED',        visible: false, order: 12 },
+    { id: 'DISPUTED',        visible: false, order: 13 },
+    { id: 'CANCELLED',       visible: false, order: 14 },
   ],
   chartSeries: [
     { id: 'totalCost',    visible: true,  order: 0 },

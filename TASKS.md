@@ -4,4 +4,3 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| fix/dashboard-status-customizer-sync | Align customizable dashboard pipeline options with the merged status workflow and preserve saved preferences | `selvora-app/src/data/dashboardRegistry.js`, `selvora-app/src/hooks/useDashboardSettings.js`, `selvora-app/src/pages/Dashboard.jsx`, dashboard settings/registry tests, `selvora-app/src/data/changelog.js` | In progress | 2026-10-06 |
