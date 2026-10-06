@@ -3,7 +3,7 @@ import { useDashboard } from '../hooks/useApi';
 import {
   DollarSign, ShoppingCart, TrendingUp, Percent, Gift,
   CreditCard, Store, Package, BarChart2, Download, RotateCcw,
-  LayoutGrid, Users, Table, PieChart as PieIcon
+  LayoutGrid, Users, Table, PieChart as PieIcon, Truck
 } from 'lucide-react';
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -19,6 +19,12 @@ const MODE_OPTIONS = [
 
 function fmt(n) { return (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtPct(n) { return (n ?? 0).toFixed(2) + '%'; }
+
+const PLATFORM_TYPE_COLOR = { Marketplace: 'var(--accent)', Cashout: 'var(--chart-2)', Direct: 'var(--text-muted)' };
+// Share of attempted sales on a platform that were returned, disputed, or
+// cancelled -- a quiet problem until it's visible, so this gets harder to
+// miss the higher it climbs rather than one flat color throughout.
+const exceptionColor = (pct) => (pct >= 15 ? 'var(--red)' : pct >= 5 ? 'var(--yellow)' : 'var(--green)');
 
 const THEME = {
   accent: 'var(--accent)',
@@ -64,6 +70,9 @@ function Analytics() {
   const s = data?.stats ?? {};
   const trend = data?.trend ?? [];
   const topCards = data?.topCards ?? [];
+  const platformBreakdown = data?.platformBreakdown ?? [];
+  const vendorBreakdown = data?.vendorBreakdown ?? [];
+  const categoryBreakdown = data?.categoryBreakdown ?? [];
 
   // Backend now returns per-period deltas, keyed YYYY-MM (monthly) or YYYY-MM-DD (daily).
   // Group/aggregate by month for charts that need monthly granularity.
@@ -72,16 +81,28 @@ function Analytics() {
     const byMonth = new Map();
     trend.forEach(pt => {
       const month = pt.date.slice(0, 7); // YYYY-MM
-      const existing = byMonth.get(month) || { name: month, revenue: 0, profit: 0, cashback: 0 };
+      const existing = byMonth.get(month) || { name: month, revenue: 0, profit: 0, cashback: 0, cost: 0 };
       byMonth.set(month, {
         name: month,
         revenue:  existing.revenue  + (pt.totalRevenue || 0),
         profit:   existing.profit   + (pt.netProfit    || 0),
         cashback: existing.cashback + (pt.cashback     || 0),
+        // totalCost is the purchase-side cost the same period's cashback was
+        // earned on, so cashback/cost here is the actual period rate, not an
+        // average of averages.
+        cost:     existing.cost     + (pt.totalCost    || 0),
       });
     });
     return Array.from(byMonth.values());
   })();
+
+  // Cashback rate per period, computed client-side from monthlyTrend rather
+  // than a new backend field -- the inputs (cashback, cost) are already in
+  // the trend series the Overview tab already uses.
+  const cashbackRateTrend = monthlyTrend.map(pt => ({
+    name: pt.name,
+    rate: pt.cost > 0 ? (pt.cashback / pt.cost) * 100 : 0,
+  }));
 
   // Purchase tax is already allocated inside soldCost; do not count it twice.
   const expenseData = [
@@ -240,6 +261,7 @@ function Analytics() {
         {[
           { id: 'overview',    label: 'Overview',      icon: BarChart2 },
           { id: 'breakdowns',  label: 'Breakdowns',    icon: PieIcon },
+          { id: 'channels',    label: 'Channels',      icon: Truck },
           { id: 'payments',    label: 'Payments',      icon: CreditCard },
           { id: 'detail',      label: 'Recent Sales',  icon: Table },
         ].map(tab => (
@@ -392,6 +414,152 @@ function Analytics() {
           ) : (
             <div className="py-10 text-center text-gray-600 text-sm">{loading ? 'Loading…' : 'No data'}</div>
           )}
+        </div>
+      )}
+
+      {/* ── Channels Tab ─────────────────────────────────────────────────────── */}
+      {activeTab === 'channels' && (
+        <div className="space-y-6">
+          {/* Platform Payouts */}
+          <div className="p-5 rounded-xl border border-gray-800 bg-[#16161E]">
+            <div className="mb-4">
+              <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider">Platform Payouts</h3>
+              <p className="text-xs text-gray-500 mt-1">How much each Cashout or Marketplace channel has actually paid you, after its commission.</p>
+            </div>
+            {platformBreakdown.length > 0 ? (
+              <>
+                <div className="h-[200px] w-full mb-6">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={platformBreakdown} margin={{ top: 5, right: 20, left: 0, bottom: 20 }} barSize={36}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={THEME.borderHover} vertical={false} />
+                      <XAxis dataKey="name" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dy={10} />
+                      <YAxis stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
+                      <Tooltip contentStyle={{ backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`, borderRadius: '8px' }} itemStyle={{ color: THEME.textPrimary }} formatter={v => `$${fmt(v)}`} />
+                      <Bar dataKey="revenue" name="Paid to You" radius={[4, 4, 0, 0]}>
+                        {platformBreakdown.map((entry, i) => <Cell key={i} fill={PLATFORM_TYPE_COLOR[entry.type] || THEME.chart1} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-3">
+                  {platformBreakdown.map(p => (
+                    <div key={p.id ?? p.name} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-gray-100">{p.name}</span>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border" style={{ color: PLATFORM_TYPE_COLOR[p.type] || THEME.chart1, borderColor: PLATFORM_TYPE_COLOR[p.type] || THEME.chart1 }}>{p.type}</span>
+                        </div>
+                        <span className={`text-sm font-bold ${p.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{p.profit >= 0 ? '+' : ''}${fmt(p.profit)} profit</span>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                        <div><span className="text-gray-500">Paid to you </span><span className="text-white font-medium">${fmt(p.revenue)}</span></div>
+                        <div><span className="text-gray-500">Commission </span><span className="text-yellow-400 font-medium">${fmt(p.commission)}</span></div>
+                        <div><span className="text-gray-500">Units </span><span className="text-gray-200 font-medium">{p.unitsSold}</span></div>
+                        <div><span className="text-gray-500">Avg payout </span><span className="text-gray-200 font-medium">{p.avgPayoutDays != null ? `${p.avgPayoutDays}d` : '—'}</span></div>
+                      </div>
+                      {(p.returnedCount + p.disputedCount + p.cancelledCount) > 0 && (
+                        <div className="mt-2 text-[11px]" style={{ color: exceptionColor(p.exceptionRatePct) }}>
+                          {p.exceptionRatePct.toFixed(1)}% of attempted sales here were returned, disputed, or cancelled
+                          {' '}({p.returnedCount} returned · {p.disputedCount} disputed · {p.cancelledCount} cancelled)
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="py-10 text-center text-gray-600 text-sm">{loading ? 'Loading…' : 'No sales in this period'}</div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Vendor Spend */}
+            <div className="p-5 rounded-xl border border-gray-800 bg-[#16161E]">
+              <div className="mb-4">
+                <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider">Vendor Spend</h3>
+                <p className="text-xs text-gray-500 mt-1">Where your purchase dollars are going.</p>
+              </div>
+              {vendorBreakdown.length > 0 ? (
+                <div className="space-y-3">
+                  {vendorBreakdown.map(v => {
+                    const maxSpend = vendorBreakdown[0]?.spend || 1;
+                    return (
+                      <div key={v.id ?? v.name}>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-gray-300 font-medium">{v.name}</span>
+                          <span className="text-gray-500">{v.purchases} purchase{v.purchases !== 1 ? 's' : ''} · <span className="text-white font-medium">${fmt(v.spend)}</span></span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-gray-800 overflow-hidden">
+                          <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${(v.spend / maxSpend) * 100}%` }} />
+                        </div>
+                        <div className="mt-1 text-[11px] text-gray-500">${fmt(v.avgCostPerUnit)} avg / unit</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-10 text-center text-gray-600 text-sm">{loading ? 'Loading…' : 'No purchases in this period'}</div>
+              )}
+            </div>
+
+            {/* Category Profitability */}
+            <div className="p-5 rounded-xl border border-gray-800 bg-[#16161E]">
+              <div className="mb-4">
+                <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider">Category Profitability</h3>
+                <p className="text-xs text-gray-500 mt-1">Which product categories are actually worth buying.</p>
+              </div>
+              {categoryBreakdown.length > 0 ? (
+                <>
+                  <div className="h-[220px] w-full mb-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={categoryBreakdown} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }} barSize={16}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={THEME.borderHover} horizontal={false} />
+                        <XAxis type="number" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
+                        <YAxis type="category" dataKey="category" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} width={90} />
+                        <Tooltip contentStyle={{ backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`, borderRadius: '8px' }} itemStyle={{ color: THEME.textPrimary }} formatter={(v, n, p) => [`$${fmt(v)} (${fmtPct(p.payload.margin)} margin)`, 'Profit']} />
+                        <Bar dataKey="profit" name="Profit" radius={[0, 4, 4, 0]}>
+                          {categoryBreakdown.map((entry, i) => <Cell key={i} fill={entry.profit >= 0 ? THEME.green : THEME.red} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="space-y-2">
+                    {categoryBreakdown.map(c => (
+                      <div key={c.category} className="flex items-center justify-between text-xs">
+                        <span className="text-gray-300 font-medium">{c.category}</span>
+                        <span className="text-gray-500">{c.unitsSold} sold · {fmtPct(c.margin)} margin · <span className={`font-medium ${c.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>${fmt(c.profit)}</span></span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="py-10 text-center text-gray-600 text-sm">{loading ? 'Loading…' : 'No sold items in this period'}</div>
+              )}
+            </div>
+          </div>
+
+          {/* Cashback Rate Trend */}
+          <div className="p-5 rounded-xl border border-gray-800 bg-[#16161E]">
+            <div className="mb-4">
+              <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider">Cashback Rate Trend</h3>
+              <p className="text-xs text-gray-500 mt-1">Effective cashback earned as a percentage of purchase spend, by period.</p>
+            </div>
+            <div className="h-[200px] w-full">
+              {cashbackRateTrend.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={cashbackRateTrend} margin={{ top: 5, right: 20, left: 0, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={THEME.borderHover} vertical={false} />
+                    <XAxis dataKey="name" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dy={10} />
+                    <YAxis stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `${v.toFixed(1)}%`} />
+                    <Tooltip contentStyle={{ backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`, borderRadius: '8px' }} itemStyle={{ color: THEME.textPrimary }} formatter={v => `${v.toFixed(2)}%`} />
+                    <Line type="monotone" dataKey="rate" name="Cashback Rate" stroke={THEME.accent} strokeWidth={2} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-600 text-sm">{loading ? 'Loading…' : 'No data for this period'}</div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

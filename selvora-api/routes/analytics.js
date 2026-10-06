@@ -192,6 +192,143 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       .map(card => ({ ...card, amount: money(card.amount) }))
       .sort((a, b) => b.amount - a.amount);
 
+    // ── Platform breakdown: how much each sales channel (Cashout or
+    // Marketplace platform, or "Direct" when a sale has none) has actually
+    // paid out, alongside its commission, profit, payout speed, and exception
+    // rate. Built from the same mode/date-filtered `sales`/`saleAlloc` arrays
+    // as every other stat above, so it automatically respects both filters.
+    const platformMap = new Map();
+    const platformKeyOf = (sale) => sale.platform_id || 'direct';
+    const ensurePlatform = (sale) => {
+      const key = platformKeyOf(sale);
+      if (!platformMap.has(key)) {
+        platformMap.set(key, {
+          id: sale.platform_id || null,
+          name: sale.platform?.name || (sale.platform_id ? 'Unknown Platform' : 'Direct'),
+          type: sale.platform?.type || 'Direct',
+          revenue: zero(), cost: zero(), commission: zero(), cashback: zero(),
+          unitsSold: 0, salesCount: 0,
+          paidDaysTotal: 0, paidCount: 0,
+          returnedCount: 0, disputedCount: 0, cancelledCount: 0, exceptionCount: 0,
+        });
+      }
+      return platformMap.get(key);
+    };
+    saleAlloc.forEach(({ sale, saleCost, saleRevenue, saleCashback }) => {
+      const p = ensurePlatform(sale);
+      p.revenue = p.revenue.plus(saleRevenue);
+      p.cost = p.cost.plus(saleCost);
+      p.commission = p.commission.plus(sale.commission_fee || 0);
+      p.cashback = p.cashback.plus(saleCashback);
+      p.unitsSold += sale.quantity;
+      p.salesCount += 1;
+      if (sale.paid_at) {
+        const days = (new Date(sale.paid_at) - new Date(sale.sale_date)) / (24 * 60 * 60 * 1000);
+        if (Number.isFinite(days) && days >= 0) { p.paidDaysTotal += days; p.paidCount += 1; }
+      }
+    });
+    // Exceptions come from the OTHER side of isRealizedSale -- every sale in
+    // the filtered window that function excludes is exactly a returned,
+    // disputed, or cancelled one, so this is the complement of saleAlloc
+    // rather than a second, separately-filtered query.
+    sales.filter(s => !isRealizedSale(s)).forEach(sale => {
+      const p = ensurePlatform(sale);
+      p.exceptionCount += 1;
+      const status = String(sale.workflow_status || sale.status || '').toUpperCase();
+      if (status === 'RETURNED' || status === 'RETURN_IN_PROGRESS') p.returnedCount += 1;
+      else if (status === 'DISPUTED') p.disputedCount += 1;
+      else if (status === 'CANCELLED') p.cancelledCount += 1;
+    });
+    const platformBreakdown = Array.from(platformMap.values())
+      .map(p => ({
+        id: p.id,
+        name: p.name,
+        type: p.type,
+        revenue: money(p.revenue),
+        cost: money(p.cost),
+        commission: money(p.commission),
+        profit: money(p.revenue.minus(p.cost).plus(p.cashback)),
+        unitsSold: p.unitsSold,
+        salesCount: p.salesCount,
+        avgPayoutDays: p.paidCount > 0 ? Math.round((p.paidDaysTotal / p.paidCount) * 10) / 10 : null,
+        returnedCount: p.returnedCount,
+        disputedCount: p.disputedCount,
+        cancelledCount: p.cancelledCount,
+        exceptionRatePct: (p.salesCount + p.exceptionCount) > 0
+          ? money(new Decimal(p.exceptionCount).div(p.salesCount + p.exceptionCount).times(100))
+          : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    // ── Vendor breakdown: spend per sourcing vendor. Mirrors the
+    // totalCost/soldCost All-vs-channel-mode split above -- in All mode this
+    // is every purchase; scoped to a sales channel, it's only the cost of
+    // units that actually sold through that channel (same reasoning as the
+    // top-of-route "mode !== 'All'" cutover for totalCost).
+    const vendorMap = new Map();
+    const ensureVendor = (inv) => {
+      const key = inv.vendor_id || 'direct';
+      if (!vendorMap.has(key)) {
+        vendorMap.set(key, {
+          id: inv.vendor_id || null,
+          name: inv.vendor?.name || 'No Vendor',
+          spend: zero(), units: 0, purchases: 0,
+        });
+      }
+      return vendorMap.get(key);
+    };
+    if (mode === 'All') {
+      inventories.forEach(inv => {
+        const v = ensureVendor(inv);
+        v.spend = v.spend.plus(batchCost(inv));
+        v.units += Number(inv.qty_purchased) || 0;
+        v.purchases += 1;
+      });
+    } else {
+      saleAlloc.forEach(({ inv, saleCost, sale }) => {
+        const v = ensureVendor(inv);
+        v.spend = v.spend.plus(saleCost);
+        v.units += sale.quantity;
+        v.purchases += 1;
+      });
+    }
+    const vendorBreakdown = Array.from(vendorMap.values())
+      .map(v => ({
+        id: v.id,
+        name: v.name,
+        spend: money(v.spend),
+        units: v.units,
+        purchases: v.purchases,
+        avgCostPerUnit: v.units > 0 ? money(v.spend.div(v.units)) : 0,
+      }))
+      .sort((a, b) => b.spend - a.spend);
+
+    // ── Category breakdown: profitability by product category. Sold-side
+    // only (same scope as Gross/Net Profit above) -- a category's margin is
+    // only meaningful once units in it have actually sold.
+    const categoryMap = new Map();
+    saleAlloc.forEach(({ inv, saleCost, saleRevenue, grossProfit, saleCashback, sale }) => {
+      const key = inv.category || 'Uncategorized';
+      if (!categoryMap.has(key)) {
+        categoryMap.set(key, { category: key, revenue: zero(), cost: zero(), profit: zero(), unitsSold: 0 });
+      }
+      const c = categoryMap.get(key);
+      c.revenue = c.revenue.plus(saleRevenue);
+      c.cost = c.cost.plus(saleCost);
+      c.profit = c.profit.plus(grossProfit).plus(saleCashback);
+      c.unitsSold += sale.quantity;
+    });
+    const categoryBreakdown = Array.from(categoryMap.values())
+      .map(c => ({
+        category: c.category,
+        revenue: money(c.revenue),
+        cost: money(c.cost),
+        profit: money(c.profit),
+        margin: c.revenue.greaterThan(0) ? money(c.profit.div(c.revenue).times(100)) : 0,
+        unitsSold: c.unitsSold,
+      }))
+      .sort((a, b) => b.profit - a.profit);
+
     // Status Pipeline Strategy
     // Unsold inventory goes into PURCHASED. Sales dictate the rest.
     const pipelineCounts = {
@@ -375,6 +512,9 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
         avgCashbackRate: totalCost.greaterThan(0) ? money(totalCashback.div(totalCost).times(100)) : 0
       },
       topCards,
+      platformBreakdown,
+      vendorBreakdown,
+      categoryBreakdown,
       pipelineCounts,
       trend,
       trendMeta,
