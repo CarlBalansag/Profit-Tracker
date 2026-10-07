@@ -14,10 +14,20 @@ const { decimal } = require('../services/money');
 const { saleEconomics, allocatedCost, batchCost, isRealizedSale } = require('../services/decimalFinance');
 const { payoutStatus } = require('../services/payoutStatus');
 const { markSalesPaid } = require('../services/markSalesPaid');
+const statusTransitions = require('../services/statusTransitions');
 
 const toDateOnly = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 const toNum = (d) => (d === null || d === undefined ? 0 : (typeof d.toNumber === 'function' ? d.toNumber() : Number(d)));
 const localNoon = (dateStr) => new Date(`${dateStr}T12:00:00.000Z`);
+
+// Rejects a syntactically-plausible but non-existent date (e.g. 2026-02-30),
+// not just the YYYY-MM-DD shape -- same check validation/schemas.js's
+// calendarDate uses, reimplemented here since that one isn't exported.
+const strictDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD').refine((value) => {
+  const [year, month, day] = value.split('-').map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+}, 'date must be a real calendar date');
 
 function jsonResult(data) {
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
@@ -59,6 +69,41 @@ async function findPaymentMethod(userId, name) {
   const all = await prisma.paymentMethod.findMany({ where: { user_id: userId }, select: { name: true } });
   const names = all.map((m) => m.name).join(', ') || '(none set up yet)';
   throw Object.assign(new Error(`No payment method named "${trimmed}". Existing methods: ${names}`), { toolError: true });
+}
+
+// Platforms (a sale's buyer) are never auto-created by update_sale/add_sale --
+// unlike a purchase's vendor, picking the wrong existing marketplace/cashout
+// by typo would misattribute a sale's payout, so the caller must name one
+// that already exists. `client` lets this run inside a transaction.
+async function findPlatformByName(userId, name, client = prisma) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) throw Object.assign(new Error('platform is required'), { toolError: true });
+  const existing = await client.platform.findFirst({
+    where: { user_id: userId, name: { equals: trimmed, mode: 'insensitive' } },
+  });
+  if (existing) return existing;
+  const all = await client.platform.findMany({ where: { user_id: userId }, select: { name: true, type: true } });
+  const names = all.map((p) => `${p.name} (${p.type})`).join(', ') || '(none set up yet)';
+  throw Object.assign(new Error(`No platform named "${trimmed}". Existing: ${names}`), { toolError: true });
+}
+
+// Records one ChangeLog row per changed field. `client` is the transaction
+// client the caller is already inside, so this commits/rolls back with it.
+async function recordChanges(client, userId, tableName, recordId, changes) {
+  if (!changes.length) return;
+  const now = new Date();
+  await client.changeLog.createMany({
+    data: changes.map(({ field, oldValue, newValue }) => ({
+      user_id: userId,
+      table_name: tableName,
+      record_id: recordId,
+      field,
+      old_value: oldValue === null || oldValue === undefined ? null : String(oldValue),
+      new_value: newValue === null || newValue === undefined ? null : String(newValue),
+      source: 'mcp',
+      created_at: now,
+    })),
+  });
 }
 
 function buildServer(userId, apiKeyId) {
@@ -114,6 +159,7 @@ function buildServer(userId, apiKeyId) {
         payout_account: s.payout_account || null,
         payout_reference: s.paid_reference || null,
         payout_short_amount: s.payout_short_amount !== null ? toNum(s.payout_short_amount) : 0,
+        notes: s.notes || null,
       };
     }));
   });
@@ -142,6 +188,7 @@ function buildServer(userId, apiKeyId) {
       store: inv.vendor?.name || null,
       status: inv.receiving_status || inv.status,
       days_held: Math.max(0, Math.floor((now - new Date(inv.purchase_date).getTime()) / 86400000)),
+      notes: inv.notes || null,
     })));
   });
 
@@ -345,6 +392,241 @@ function buildServer(userId, apiKeyId) {
       });
     } catch (err) {
       return errorResult(err.message || 'Failed to add expense');
+    }
+  });
+
+  server.registerTool('update_sale', {
+    description: 'Edit an existing sale\'s price, fees, shipping, quantity, sale date, platform (buyer), or notes. Never touches payout fields (paid_at, paid_amount, payout_account, payout_reference, payout_short_amount) -- use mark_sale_paid for those. Every changed field is recorded and reviewable via list_changes.',
+    inputSchema: z.object({
+      sale_id: z.string().uuid(),
+      price: z.number().nonnegative().optional().describe('Per-unit sale price.'),
+      fees: z.number().nonnegative().optional().describe('Marketplace/cashout commission.'),
+      shipping: z.number().nonnegative().optional().describe('Outbound shipping cost.'),
+      qty: z.number().int().min(1).optional(),
+      sale_date: strictDate.optional(),
+      platform: z.string().min(1).optional().describe('Existing marketplace/cashout name -- the sale\'s buyer. Must already exist (see list_sales for names in use).'),
+      notes: z.string().max(2000).optional(),
+    }).strict(),
+  }, async ({ sale_id, price, fees, shipping, qty, sale_date, platform, notes }) => {
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const existing = await tx.sales.findUnique({ where: { id: sale_id }, include: { inventory: true } });
+        if (!existing || existing.inventory.user_id !== userId) {
+          throw Object.assign(new Error('Sale not found or access denied'), { toolError: true });
+        }
+
+        let platformId = existing.platform_id;
+        if (platform !== undefined) platformId = (await findPlatformByName(userId, platform, tx)).id;
+
+        const newQty = qty !== undefined ? qty : existing.quantity;
+        const qtyDiff = existing.quantity - newQty;
+        if (qtyDiff < 0) {
+          const claim = await tx.inventory.updateMany({
+            where: { id: existing.inventory_id, qty_on_hand: { gte: -qtyDiff } },
+            data: { qty_on_hand: { decrement: -qtyDiff } },
+          });
+          if (claim.count !== 1) throw Object.assign(new Error('Insufficient quantity on hand for this update'), { toolError: true });
+        } else if (qtyDiff > 0) {
+          await tx.inventory.update({ where: { id: existing.inventory_id }, data: { qty_on_hand: { increment: qtyDiff } } });
+        }
+
+        const data = {};
+        const changes = [];
+        if (price !== undefined && price !== existing.unit_price) { data.unit_price = price; changes.push({ field: 'unit_price', oldValue: existing.unit_price, newValue: price }); }
+        if (fees !== undefined && fees !== existing.commission_fee) { data.commission_fee = fees; changes.push({ field: 'commission_fee', oldValue: existing.commission_fee, newValue: fees }); }
+        if (shipping !== undefined && shipping !== existing.sale_shipping) { data.sale_shipping = shipping; changes.push({ field: 'sale_shipping', oldValue: existing.sale_shipping, newValue: shipping }); }
+        if (qty !== undefined && newQty !== existing.quantity) { data.quantity = newQty; changes.push({ field: 'quantity', oldValue: existing.quantity, newValue: newQty }); }
+        if (sale_date !== undefined) {
+          const oldDate = toDateOnly(existing.sale_date);
+          if (sale_date !== oldDate) { data.sale_date = localNoon(sale_date); changes.push({ field: 'sale_date', oldValue: oldDate, newValue: sale_date }); }
+        }
+        if (platform !== undefined && platformId !== existing.platform_id) { data.platform_id = platformId; changes.push({ field: 'platform_id', oldValue: existing.platform_id, newValue: platformId }); }
+        if (notes !== undefined && notes !== (existing.notes || '')) { data.notes = notes; changes.push({ field: 'notes', oldValue: existing.notes, newValue: notes }); }
+
+        if (Object.keys(data).length === 0) return existing;
+
+        const claim = await tx.sales.updateMany({ where: { id: sale_id, quantity: existing.quantity }, data });
+        if (claim.count !== 1) throw Object.assign(new Error('Sale changed while saving. Reload and retry.'), { status: 409 });
+
+        await recordChanges(tx, userId, 'Sales', sale_id, changes);
+        return tx.sales.findUnique({ where: { id: sale_id } });
+      });
+      await logWrite(userId, apiKeyId, 'update_sale', { sale_id, price, fees, shipping, qty, sale_date, platform, notes });
+      return jsonResult({
+        id: result.id,
+        qty: result.quantity,
+        price: toNum(result.unit_price),
+        fees: toNum(result.commission_fee),
+        shipping: toNum(result.sale_shipping),
+        sale_date: toDateOnly(result.sale_date),
+        platform_id: result.platform_id,
+        notes: result.notes,
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to update sale');
+    }
+  });
+
+  server.registerTool('update_purchase', {
+    description: 'Edit an existing purchase\'s quantity, unit cost, purchase date, store, or notes. Total cost is derived (unit_cost x qty plus any tax/shipping/fees already on the purchase), not a separate field -- adjust unit_cost or qty to change it.',
+    inputSchema: z.object({
+      purchase_id: z.string().uuid(),
+      qty: z.number().int().min(1).optional().describe('Quantity purchased. Cannot be set below the amount already sold from this purchase.'),
+      unit_cost: z.number().nonnegative().optional(),
+      purchase_date: strictDate.optional(),
+      store: z.string().min(1).optional().describe('Vendor name -- created automatically if new, same as add_purchase.'),
+      notes: z.string().max(2000).optional(),
+    }).strict(),
+  }, async ({ purchase_id, qty, unit_cost, purchase_date, store, notes }) => {
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const existing = await tx.inventory.findUnique({ where: { id: purchase_id } });
+        if (!existing || existing.user_id !== userId) {
+          throw Object.assign(new Error('Purchase not found or access denied'), { toolError: true });
+        }
+
+        let vendorId = existing.vendor_id;
+        if (store !== undefined) {
+          const trimmed = store.trim();
+          if (!trimmed) throw Object.assign(new Error('store cannot be empty'), { toolError: true });
+          let vendor = await tx.platform.findFirst({ where: { user_id: userId, name: { equals: trimmed, mode: 'insensitive' } } });
+          if (!vendor) vendor = await tx.platform.create({ data: { user_id: userId, name: trimmed, type: 'Vendor', fee_pct: 0 } });
+          vendorId = vendor.id;
+        }
+
+        let newQtyPurchased = existing.qty_purchased;
+        let newQtyOnHand = existing.qty_on_hand;
+        if (qty !== undefined) {
+          const sold = existing.qty_purchased - existing.qty_on_hand;
+          if (qty < sold) throw Object.assign(new Error(`Cannot set qty below ${sold}, the amount already sold from this purchase`), { toolError: true });
+          newQtyPurchased = qty;
+          newQtyOnHand = qty - sold;
+        }
+
+        const data = {};
+        const changes = [];
+        if (unit_cost !== undefined && unit_cost !== existing.unit_purchase_cost) { data.unit_purchase_cost = unit_cost; changes.push({ field: 'unit_purchase_cost', oldValue: existing.unit_purchase_cost, newValue: unit_cost }); }
+        if (qty !== undefined && newQtyPurchased !== existing.qty_purchased) {
+          data.qty_purchased = newQtyPurchased;
+          data.qty_on_hand = newQtyOnHand;
+          changes.push({ field: 'qty_purchased', oldValue: existing.qty_purchased, newValue: newQtyPurchased });
+          changes.push({ field: 'qty_on_hand', oldValue: existing.qty_on_hand, newValue: newQtyOnHand });
+        }
+        if (purchase_date !== undefined) {
+          const oldDate = toDateOnly(existing.purchase_date);
+          if (purchase_date !== oldDate) { data.purchase_date = localNoon(purchase_date); changes.push({ field: 'purchase_date', oldValue: oldDate, newValue: purchase_date }); }
+        }
+        if (store !== undefined && vendorId !== existing.vendor_id) { data.vendor_id = vendorId; changes.push({ field: 'vendor_id', oldValue: existing.vendor_id, newValue: vendorId }); }
+        if (notes !== undefined && notes !== (existing.notes || '')) { data.notes = notes; changes.push({ field: 'notes', oldValue: existing.notes, newValue: notes }); }
+
+        if (Object.keys(data).length === 0) return existing;
+
+        const claim = await tx.inventory.updateMany({ where: { id: purchase_id, qty_on_hand: existing.qty_on_hand }, data });
+        if (claim.count !== 1) throw Object.assign(new Error('Purchase changed while saving. Reload and retry.'), { status: 409 });
+
+        await recordChanges(tx, userId, 'Inventory', purchase_id, changes);
+        return tx.inventory.findUnique({ where: { id: purchase_id } });
+      });
+      await logWrite(userId, apiKeyId, 'update_purchase', { purchase_id, qty, unit_cost, purchase_date, store, notes });
+      return jsonResult({
+        id: result.id,
+        item: result.product_name,
+        qty: result.qty_purchased,
+        qty_on_hand: result.qty_on_hand,
+        unit_cost: toNum(result.unit_purchase_cost),
+        purchase_date: toDateOnly(result.purchase_date),
+        notes: result.notes,
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to update purchase');
+    }
+  });
+
+  server.registerTool('add_sale', {
+    description: 'Log a new sale against an existing purchase. The platform (marketplace/cashout -- the sale\'s buyer) must already exist.',
+    inputSchema: z.object({
+      inventory_id: z.string().uuid(),
+      qty: z.number().int().min(1),
+      sale_price: z.number().nonnegative().describe('Per-unit sale price.'),
+      fees: z.number().nonnegative().optional().describe('Marketplace/cashout commission. Defaults to 0.'),
+      sale_date: strictDate,
+      platform: z.string().min(1).describe('Existing marketplace/cashout name -- the sale\'s buyer.'),
+      notes: z.string().max(2000).optional(),
+    }).strict(),
+  }, async ({ inventory_id, qty, sale_price, fees, sale_date, platform, notes }) => {
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const inv = await tx.inventory.findUnique({ where: { id: inventory_id } });
+        if (!inv || inv.user_id !== userId) {
+          throw Object.assign(new Error('Purchase not found or access denied'), { toolError: true });
+        }
+        const platformRecord = await findPlatformByName(userId, platform, tx);
+        const claim = await tx.inventory.updateMany({
+          where: { id: inventory_id, qty_on_hand: { gte: qty } },
+          data: { qty_on_hand: { decrement: qty } },
+        });
+        if (claim.count !== 1) throw Object.assign(new Error('Insufficient quantity on hand'), { toolError: true });
+
+        const workflowType = statusTransitions.resolveSaleWorkflow(platformRecord.workflow_preset);
+        return tx.sales.create({
+          data: {
+            inventory_id,
+            platform_id: platformRecord.id,
+            quantity: qty,
+            unit_price: sale_price,
+            commission_fee: fees || 0,
+            sale_date: localNoon(sale_date),
+            status: 'SOLD',
+            workflow_type: workflowType,
+            workflow_status: statusTransitions.legacyWorkflowStatus('SOLD', workflowType),
+            workflow_status_changed_at: new Date(),
+            notes: notes || null,
+          },
+        });
+      });
+      await logWrite(userId, apiKeyId, 'add_sale', { inventory_id, qty, sale_price, fees, sale_date, platform, notes });
+      return jsonResult({
+        id: result.id,
+        inventory_id: result.inventory_id,
+        qty: result.quantity,
+        sale_price: toNum(result.unit_price),
+        fees: toNum(result.commission_fee),
+        sale_date: toDateOnly(result.sale_date),
+        platform_id: result.platform_id,
+        notes: result.notes,
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to add sale');
+    }
+  });
+
+  server.registerTool('list_changes', {
+    description: 'List recent field-level changes made by update_sale/update_purchase, most recent first, so an edit can be reviewed (and manually reversed using old_value).',
+    inputSchema: z.object({
+      limit: z.number().int().min(1).max(500).optional().describe('Omit to return every matching change.'),
+      record_id: z.string().uuid().optional().describe('Limit to the change history of one sale or purchase.'),
+    }).strict(),
+  }, async ({ limit, record_id }) => {
+    try {
+      const where = { user_id: userId };
+      if (record_id) where.record_id = record_id;
+      const changes = await prisma.changeLog.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        ...(limit ? { take: limit } : {}),
+      });
+      return jsonResult(changes.map((c) => ({
+        id: c.id,
+        table: c.table_name,
+        record_id: c.record_id,
+        field: c.field,
+        old_value: c.old_value,
+        new_value: c.new_value,
+        source: c.source,
+        changed_at: c.created_at.toISOString(),
+      })));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to list changes');
     }
   });
 

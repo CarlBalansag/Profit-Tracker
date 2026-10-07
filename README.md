@@ -153,7 +153,8 @@ User
   ├── ProductNote
   ├── CalendarEvent
   ├── ApiKey                                      (hashed MCP bearer tokens, see MCP Server below)
-  └── McpWriteLog                                 (audit trail of every MCP write)
+  ├── McpWriteLog                                 (audit trail of every MCP write)
+  └── ChangeLog                                   (field-level edit history from update_sale/update_purchase)
 EbayPriceCache (product name → last sold price, TTL)
 AuthIntent, MigrationApproval, AuthAttemptBucket   (stateless auth-flow support, no FK to User)
 ```
@@ -215,9 +216,9 @@ Content-Type: application/json
 Accept: application/json, text/event-stream
 ```
 
-That's the real custom domain the frontend's Netlify redirects proxy to (`selvora-app/netlify.toml`) — not the raw Render URL. The `Accept` header listing both content types is required by the Streamable HTTP spec even though this server always responds with a single JSON body (`enableJsonResponse: true`), never SSE. Every write (`mark_sale_paid`, `add_purchase`, `add_expense`) is recorded in `McpWriteLog` with a timestamp, tool name, and payload — nothing is ever silently applied.
+That's the real custom domain the frontend's Netlify redirects proxy to (`selvora-app/netlify.toml`) — not the raw Render URL. The `Accept` header listing both content types is required by the Streamable HTTP spec even though this server always responds with a single JSON body (`enableJsonResponse: true`), never SSE. Every write is recorded in `McpWriteLog` with a timestamp, tool name, and payload; `update_sale`/`update_purchase` additionally record one `ChangeLog` row per changed field (old value, new value), reviewable via `list_changes` — nothing is ever silently applied.
 
-A sale's "buyer" is the marketplace/cashout `Platform` it was recorded against (`Sales.platform_id` — the same value `platform_id`/`cashout_platform_id`/`marketplace_platform_id` already capture when a sale is created in the web UI), not a separate contact list. There is no tool to create or correct a buyer after the fact: set the right platform when the sale is recorded, the same way every other field on a sale is set.
+A sale's "buyer" is the marketplace/cashout `Platform` it was recorded against (`Sales.platform_id` — the same value `platform_id`/`cashout_platform_id`/`marketplace_platform_id` already capture when a sale is created in the web UI), not a separate contact list. `update_sale`'s `platform` param corrects it after the fact by name; nothing auto-creates a platform on an edit (unlike a purchase's vendor/store) — a typo would misattribute a sale's payout, so the name must already exist.
 
 ### Tools
 
@@ -227,11 +228,17 @@ Read-only:
 - `list_expenses(start_date?, end_date?, category?)`
 - `get_cashflow_summary()` — owed to you, spend, and on-hand value, by buyer (the sale's marketplace/cashout)
 - `get_unpaid_by_buyer()`
+- `list_changes(limit?, record_id?)` — field-level edit history written by `update_sale`/`update_purchase` (table, record id, field, old value, new value, timestamp), most recent first. Pass `record_id` to see one sale's or purchase's history. A wrong edit is corrected by calling `update_sale`/`update_purchase` again with the `old_value` shown here — there is no automatic revert.
 
 Write (no delete tools exist for any of these):
 - `mark_sale_paid(sale_ids[], payout_date, payout_amount, payout_account?, payout_reference?)` — marks several sales paid from one deposit; works on a sale in `OUTBOUND`, `WAITING_FOR_PAYMENT`, `AWAITING_HANDOFF`, or `HANDED_OVER` (payment can land before carrier delivery/handoff is confirmed), and sets `workflow_status` to `PAID`. If `payout_amount` is less than the combined expected revenue of the given sales, the shortfall is split across them proportionally and recorded (`payout_short_amount`) rather than silently absorbed.
 - `add_purchase(item, qty, unit_cost, store, card_used, purchase_date, tax_exempt?)` — `store` (vendor) is created automatically if new; `card_used` must already exist as a Payment Method (cashback/limit settings are never guessed).
 - `add_expense(description, amount, date, category?, paid_from_account)` — `paid_from_account` must already exist as a Payment Method.
+- `add_sale(inventory_id, qty, sale_price, fees?, sale_date, platform, notes?)` — logs a new sale against an existing purchase, claiming stock the same way the web UI's Record Sale does (rejects an oversell). `platform` must already exist.
+- `update_sale(sale_id, price?, fees?, shipping?, qty?, sale_date?, platform?, notes?)` — edits an existing sale. **Never accepts payout fields** (`paid_at`/`paid_amount`/`payout_account`/`payout_reference`/`payout_short_amount` aren't in its schema at all, which is validated `.strict()` — passing them, or any other unknown field, is rejected rather than silently ignored). Changing `qty` adjusts the purchase's `qty_on_hand` by the difference, oversell-checked the same as a new sale.
+- `update_purchase(purchase_id, qty?, unit_cost?, purchase_date?, store?, notes?)` — edits an existing purchase. `qty` can't drop below what's already sold from it. Total cost is derived (`unit_cost × qty` plus any tax/shipping/fees already on the row), not a separate settable field.
+
+All three new write tools validate dates strictly (a real calendar date, not just the `YYYY-MM-DD` shape — `2026-02-30` is rejected) and reject any field not in their schema.
 
 All amounts are returned as plain numbers and all dates as `YYYY-MM-DD` strings. Every tool is scoped to the calling token's own user — see `test/mcpTenantIsolation.test.mjs` for the end-to-end proof (two separate users/tokens, through the real auth middleware, confirming no tool leaks or mutates another user's data).
 
