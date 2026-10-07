@@ -37,4 +37,13 @@ describe('Firebase login page', () => {
     fireEvent.click(screen.getByText('Is this free to use?'));
     expect(screen.getByText(/Returning accounts can sign in; new registration is not open yet/i)).toBeInTheDocument();
   });
+
+  it('passes migration mode to the login form only when ?migrate=1 is present', () => {
+    mount();
+    expect(screen.getByTestId('firebase-login-form').dataset.migration).toBe('false');
+    cleanup();
+
+    mount('/login?migrate=1');
+    expect(screen.getByTestId('firebase-login-form').dataset.migration).toBe('true');
+  });
 });

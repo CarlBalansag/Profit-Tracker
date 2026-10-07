@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import FirebaseLoginForm from '../components/Auth/FirebaseLoginForm';
 import { signupEnabled } from '../services/firebaseAuth';
 import { TrendingUp, CreditCard, Wallet, BarChart2, ArrowRight, CheckCircle, ChevronDown, ShoppingBag, LogIn } from 'lucide-react';
@@ -83,6 +84,12 @@ function Pill({ status }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const Login = () => {
   const [faqOpen, setFaqOpen] = useState(null);
+  // One-off, unlisted entry point for a legacy account's owner to migrate to
+  // Firebase (?migrate=1) -- see scripts/approveFirebaseMigration.js. Not
+  // linked from anywhere in the app; this is deliberately link-only until a
+  // real self-service migration page is built.
+  const [searchParams] = useSearchParams();
+  const migration = searchParams.get('migrate') === '1';
   const handleLogin = () => {
     const input = document.getElementById('login-email');
     input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -138,7 +145,7 @@ const Login = () => {
           </p>
 
           <div className="flex flex-wrap gap-3 items-center">
-            <FirebaseLoginForm />
+            <FirebaseLoginForm migration={migration} />
             <a href="#how" className="inline-flex items-center gap-1.5 text-[13px] text-white/35 hover:text-white/60 transition-colors">
               How it works <ArrowRight size={13} />
             </a>
