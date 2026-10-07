@@ -117,6 +117,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
       sale_tab,
       cashout_platform_id,
       marketplace_platform_id,
+      buyer_id,
       commission_fee,
       sale_shipping,
       sale_date,
@@ -165,6 +166,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
       : null;
     const salePlatform = await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
     const saleWorkflow = statusTransitions.resolveSaleWorkflow(salePlatform && salePlatform.workflow_preset);
+    await requireOwned('buyer', buyer_id, req.user.id, 'Buyer');
 
     const inventory = await prisma.$transaction(async (tx) => {
       const created = await tx.inventory.create({
@@ -199,6 +201,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
             data: {
                 inventory_id: created.id,
                 platform_id,
+                buyer_id: buyer_id || null,
                 quantity: saleQty,
                 unit_price: parseFloat(sale_price),
                 commission_fee: parseFloat(commission_fee) || 0,

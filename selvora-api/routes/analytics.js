@@ -5,6 +5,7 @@ const { validateQuery } = require('../middleware/validate');
 const { analyticsDashboardQuery } = require('../validation/schemas');
 const { Decimal, decimal, isRealizedSale, batchCost, allocatedCost, effectiveCashbackRate, inventoryCashback, saleEconomics } = require('../services/decimalFinance');
 const { pipelineBucketOf } = require('../services/statusTransitions');
+const { payoutStatus } = require('../services/payoutStatus');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -484,7 +485,15 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       commission: money(decimal(s.commission_fee_decimal ?? s.commission_fee)),
       cashback: money(saleCashback),
       profit: money(saleRevenue.minus(saleCost).plus(saleCashback)),
-      status: s.status,
+      // workflow_status (set by the mark_paid action) takes precedence over
+      // the legacy status column, same precedence services/decimalFinance.js
+      // and the pipeline bucket already use -- a sale marked paid through the
+      // new action never again looks "Pending" here just because its legacy
+      // column was never touched.
+      status: s.workflow_status || s.status,
+      payout_status: payoutStatus(s),
+      payout_account: s.payout_account || null,
+      payout_short_amount: s.payout_short_amount ? money(decimal(s.payout_short_amount)) : 0,
       date: s.sale_date,
     }));
 

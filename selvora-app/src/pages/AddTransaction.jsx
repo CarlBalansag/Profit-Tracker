@@ -6,7 +6,7 @@ import {
   Paperclip, X, Hash, MapPin, ChevronDown, CheckCircle2, StickyNote, AlertTriangle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { usePaymentMethods, usePlatforms, useInvalidate, apiFetch, useProductNote, useProductNoteMutations, useProductNames, useRecentTransaction } from '../hooks/useApi';
+import { usePaymentMethods, usePlatforms, useBuyers, useInvalidate, apiFetch, useProductNote, useProductNoteMutations, useProductNames, useRecentTransaction } from '../hooks/useApi';
 import { MAX_RECEIPT_BYTES, RECEIPT_ACCEPT, saveInventoryWithReceipt, validateReceiptFile } from '../hooks/receiptUpload';
 
 // ── Stable module-level components (MUST be outside the component to avoid focus loss) ──
@@ -62,6 +62,7 @@ const AddTransaction = () => {
     sale_tab: 'cashout',
     cashout_platform_id: '',
     marketplace_platform_id: '',
+    buyer_id: '',
     sale_date: '',
     qty_sold: 1,
     note: '',
@@ -91,10 +92,40 @@ const AddTransaction = () => {
 
   const { data: paymentMethods = [] } = usePaymentMethods();
   const { data: platforms = [] } = usePlatforms();
+  const { data: buyers = [] } = useBuyers();
   const { data: productNames = [] } = useProductNames();
   const invalidate = useInvalidate();
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [pendingReceiptInventoryId, setPendingReceiptInventoryId] = useState(null);
+  const [addingBuyer, setAddingBuyer] = useState(false);
+  const [newBuyerName, setNewBuyerName] = useState('');
+  const [savingBuyer, setSavingBuyer] = useState(false);
+
+  // Who actually paid for this sale (a marketplace buyer, a cashout service,
+  // or a person) -- separate from the Platform selected above, which is
+  // where the item was listed/sold.
+  const addBuyer = async () => {
+    const name = newBuyerName.trim();
+    if (!name || savingBuyer) return;
+    setSavingBuyer(true);
+    try {
+      const res = await apiFetch('/api/buyers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) throw new Error('Failed to add buyer');
+      const created = await res.json();
+      invalidate.buyers();
+      setFormData(p => ({ ...p, buyer_id: created.id }));
+      setNewBuyerName('');
+      setAddingBuyer(false);
+    } catch (err) {
+      toast.error(err.message || 'Failed to add buyer');
+    } finally {
+      setSavingBuyer(false);
+    }
+  };
 
   // Autocomplete state for product name field
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -900,6 +931,46 @@ const AddTransaction = () => {
                       .map(p => <option key={p.id} value={p.id}>{p.name}</option>)
                     }
                   </select>
+                </Field>
+
+                {/* Buyer / who actually paid — separate from the platform above */}
+                <Field label="Buyer (who paid)">
+                  {!addingBuyer ? (
+                    <select
+                      value={formData.buyer_id}
+                      onChange={e => {
+                        if (e.target.value === '__add_new__') { setAddingBuyer(true); return; }
+                        setFormData(p => ({ ...p, buyer_id: e.target.value }));
+                      }}
+                      className={`${inputCls('green')} appearance-none`}
+                    >
+                      <option value="">Select buyer...</option>
+                      {buyers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      <option value="__add_new__">+ Add new buyer...</option>
+                    </select>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        type="text" autoFocus value={newBuyerName}
+                        onChange={e => setNewBuyerName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addBuyer(); } }}
+                        placeholder="e.g. Windy City, Blake..."
+                        className={inputCls('green')}
+                      />
+                      <button
+                        type="button" onClick={addBuyer} disabled={savingBuyer || !newBuyerName.trim()}
+                        className="px-3 py-2 rounded-lg bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-xs font-semibold whitespace-nowrap"
+                      >
+                        {savingBuyer ? 'Adding...' : 'Add'}
+                      </button>
+                      <button
+                        type="button" onClick={() => { setAddingBuyer(false); setNewBuyerName(''); }}
+                        className="px-3 py-2 rounded-lg border border-white/10 text-gray-400 hover:text-white text-xs"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
                 </Field>
 
                 {/* Sale Price, Qty Sold — row 1 */}

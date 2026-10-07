@@ -24,6 +24,10 @@ const ebayPriceRouter = require('./routes/ebayPrice');
 const goalsRouter = require('./routes/goals');
 const productNotesRouter = require('./routes/productNotes');
 const calendarEventsRouter = require('./routes/calendarEvents');
+const buyersRouter = require('./routes/buyers');
+const apiKeysRouter = require('./routes/apiKeys');
+const mcpRouter = require('./routes/mcp');
+const { apiKeyAuth } = require('./middleware/apiKeyAuth');
 
 const app = express();
 const isProd = process.env.NODE_ENV === 'production';
@@ -52,6 +56,13 @@ app.use(cors({
 // A 5 MiB receipt expands to roughly 6.7 MiB when sent as base64 JSON.
 app.use('/auth/firebase', firebaseAuth.preflight, express.json({ limit: '16kb' }));
 app.use(express.json({ limit: '7mb' }));
+
+// MCP server for the AI finance assistant — mounted here, ahead of the CSRF
+// check and the Firebase session guard below, because neither applies to it:
+// a bearer-token client has no browser cookie to forge and no session to
+// read. apiKeyAuth is this path's entire auth story; it never falls through
+// to firebaseAuth.guard.
+app.use('/mcp', apiKeyAuth, mcpRouter);
 
 // CSRF protection: every state-changing request from the SPA must include this header.
 // Browsers never attach custom headers to cross-origin simple requests, so its presence
@@ -138,6 +149,8 @@ app.use('/api/ebay-price', ebayPriceRouter);
 app.use('/api/goals', goalsRouter);
 app.use('/api/product-notes', productNotesRouter);
 app.use('/api/calendar-events', calendarEventsRouter);
+app.use('/api/buyers', buyersRouter);
+app.use('/api/api-keys', apiKeysRouter);
 
 // Health Check
 app.get('/health', (req, res) => {

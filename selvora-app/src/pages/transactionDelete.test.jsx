@@ -20,6 +20,7 @@ vi.mock('../hooks/useApi', () => ({
   useInventory: () => ({ data: [purchase], isLoading: false, refetch: vi.fn() }),
   usePlatforms: () => ({ data: [] }),
   usePaymentMethods: () => ({ data: [] }),
+  useBuyers: () => ({ data: [] }),
   useInvalidate: () => invalidate,
   apiFetch: (...args) => apiFetch(...args),
 }));

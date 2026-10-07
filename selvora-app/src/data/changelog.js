@@ -3,6 +3,26 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.60',
+    date: '2026-10-07',
+    notes: 'Payment methods can now be marked as personal, so the app can track what the business owes you back.',
+  },
+  {
+    version: '0.59',
+    date: '2026-10-07',
+    notes: 'Added a Settings page for connecting an AI assistant to read and update your reselling data.',
+  },
+  {
+    version: '0.58',
+    date: '2026-10-07',
+    notes: 'You can now pick who actually paid you (a buyer) when recording or editing a sale.',
+  },
+  {
+    version: '0.57',
+    date: '2026-10-07',
+    notes: 'Cash Flow now shows Paid, Partial, or Pending accurately instead of always showing Pending.',
+  },
+  {
     version: '0.56',
     date: '2026-10-06',
     notes: "Fixed Edit Transaction failing to save for a handful of old sales with a leftover invalid status.",

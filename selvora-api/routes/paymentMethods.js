@@ -55,7 +55,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 router.post('/', isAuthenticated, validateBody(paymentMethod), async (req, res, next) => {
   try {
     const { name, type, default_cashback_rate, preset_card_id, category_rates,
-            statement_close_day, due_day, credit_limit, min_payment_pct } = req.body;
+            statement_close_day, due_day, credit_limit, min_payment_pct, is_personal } = req.body;
     const method = await prisma.paymentMethod.create({
       data: {
         user_id: req.user.id,
@@ -68,6 +68,7 @@ router.post('/', isAuthenticated, validateBody(paymentMethod), async (req, res, 
         due_day: due_day ? parseInt(due_day) : null,
         credit_limit: credit_limit ? parseFloat(credit_limit) : null,
         min_payment_pct: min_payment_pct ? parseFloat(min_payment_pct) : null,
+        is_personal: is_personal === true || is_personal === 'true',
       }
     });
     await publishCalendarFeed(req.user.id);
@@ -82,7 +83,7 @@ router.put('/:id', isAuthenticated, validateBody(paymentMethod), async (req, res
   try {
     const { id } = req.params;
     const { name, type, default_cashback_rate, preset_card_id, category_rates,
-            statement_close_day, due_day, credit_limit, min_payment_pct } = req.body;
+            statement_close_day, due_day, credit_limit, min_payment_pct, is_personal } = req.body;
 
     const existing = await prisma.paymentMethod.findUnique({ where: { id } });
     if (!existing || existing.user_id !== req.user.id) {
@@ -103,6 +104,7 @@ router.put('/:id', isAuthenticated, validateBody(paymentMethod), async (req, res
         due_day: due_day !== undefined ? (due_day ? parseInt(due_day) : null) : existing.due_day,
         credit_limit: credit_limit !== undefined ? (credit_limit ? parseFloat(credit_limit) : null) : existing.credit_limit,
         min_payment_pct: min_payment_pct !== undefined ? (min_payment_pct ? parseFloat(min_payment_pct) : null) : existing.min_payment_pct,
+        is_personal: is_personal !== undefined ? (is_personal === true || is_personal === 'true') : existing.is_personal,
       }
     });
     await publishCalendarFeed(req.user.id);
