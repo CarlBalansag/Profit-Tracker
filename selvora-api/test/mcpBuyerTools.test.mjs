@@ -72,31 +72,6 @@ describe('update_sale_buyer', () => {
   });
 });
 
-describe('set_account_personal', () => {
-  it('flags an existing payment method personal', async () => {
-    const { data } = await callTool('set_account_personal', { account_name: 'QA Credit Card', is_personal: true });
-    expect(data.is_personal).toBe(true);
-    expect(harness.db.paymentMethod[0].is_personal).toBe(true);
-  });
-
-  it('can unflag it again', async () => {
-    harness.db.paymentMethod[0].is_personal = true;
-    const { data } = await callTool('set_account_personal', { account_name: 'QA Credit Card', is_personal: false });
-    expect(data.is_personal).toBe(false);
-  });
-
-  it('is case-insensitive on the account name', async () => {
-    const { data } = await callTool('set_account_personal', { account_name: 'qa credit card', is_personal: true });
-    expect(data.name).toBe('QA Credit Card');
-  });
-
-  it('returns a tool error (never creates one) for an unknown account', async () => {
-    const { isError } = await callTool('set_account_personal', { account_name: 'Does Not Exist', is_personal: true });
-    expect(isError).toBe(true);
-    expect(harness.db.paymentMethod).toHaveLength(1);
-  });
-});
-
 describe('mark_sale_paid now allows OUTBOUND (and still allows WAITING_FOR_PAYMENT)', () => {
   it('pays an OUTBOUND sale and sets workflow_status to PAID', async () => {
     harness.db.sales[0].workflow_status = 'OUTBOUND';

@@ -46,7 +46,7 @@ beforeEach(async () => {
   // A second, fully independent user with their own card, purchase, sale, and
   // expense -- none of it reachable through user A's (harness.ids.user) token.
   harness.db.user.push({ id: USER_B, username: 'User B', email: 'userb@example.com', tutorial_seen: true, calendar_token: 'b-token', accounting_preferences: null });
-  harness.db.paymentMethod.push({ id: USER_B_CARD, user_id: USER_B, name: 'User B Card', type: 'Credit', default_cashback_rate: 0, category_rates: '[]', is_personal: false });
+  harness.db.paymentMethod.push({ id: USER_B_CARD, user_id: USER_B, name: 'User B Card', type: 'Credit', default_cashback_rate: 0, category_rates: '[]' });
   harness.db.inventory.push({
     id: USER_B_INVENTORY, user_id: USER_B, product_name: 'User B Item', vendor_id: null, payment_method_id: USER_B_CARD,
     unit_purchase_cost: 50, qty_purchased: 1, qty_on_hand: 1, status: 'PURCHASED', purchase_date: new Date(), created_at: new Date(), tax_exempt: false,
@@ -141,16 +141,27 @@ describe('MCP write tools reject a foreign id instead of silently no-op-ing', ()
     expect(harness.db.sales.find((s) => s.id === USER_B_SALE).buyer_id).toBeNull();
   });
 
-  it("set_account_personal with user A's token cannot flag user B's card", async () => {
-    const res = await callTool(tokenA, 'set_account_personal', { account_name: 'User B Card', is_personal: true });
-    expect(res.isError).toBe(true);
-    expect(harness.db.paymentMethod.find((m) => m.id === USER_B_CARD).is_personal).toBe(false);
-  });
-
   it("add_purchase with user A's token never attaches to user B's card even by exact name", async () => {
     const res = await callTool(tokenA, 'add_purchase', {
       item: 'X', qty: 1, unit_cost: 1, store: 'Some Store', card_used: 'User B Card', purchase_date: '2026-10-08',
     });
     expect(res.isError).toBe(true);
+  });
+
+  it("add_expense with user A's token never attaches to user B's card even by exact name", async () => {
+    const res = await callTool(tokenA, 'add_expense', {
+      description: 'X', amount: 1, date: '2026-10-08', paid_from_account: 'User B Card',
+    });
+    expect(res.isError).toBe(true);
+    expect(harness.db.expense.some((e) => e.description === 'X')).toBe(false);
+  });
+});
+
+describe('get_unpaid_by_buyer never mixes buyers across users', () => {
+  it("counts user B's unpaid sale only under user B's token", async () => {
+    const asA = await callTool(tokenA, 'get_unpaid_by_buyer', {});
+    const asB = await callTool(tokenB, 'get_unpaid_by_buyer', {});
+    expect(asA.data.reduce((sum, b) => sum + b.owed, 0)).not.toBeCloseTo(80, 2);
+    expect(asB.data.reduce((sum, b) => sum + b.owed, 0)).toBeCloseTo(80, 2);
   });
 });

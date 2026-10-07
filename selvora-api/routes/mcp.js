@@ -10,7 +10,7 @@ const { z } = require('zod');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const prisma = require('../prisma');
-const { decimal, Decimal } = require('../services/money');
+const { decimal } = require('../services/money');
 const { saleEconomics, allocatedCost, batchCost, isRealizedSale } = require('../services/decimalFinance');
 const { payoutStatus } = require('../services/payoutStatus');
 const { markSalesPaid } = require('../services/markSalesPaid');
@@ -172,16 +172,13 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('get_cashflow_summary', {
-    description: 'Overall cash-flow snapshot: owed to you (sold but unpaid/short-paid), spend, on-hand inventory value, and how much the reselling business owes your personal account, broken down by buyer.',
+    description: 'Overall cash-flow snapshot: owed to you (sold but unpaid/short-paid), spend, and on-hand inventory value, broken down by buyer.',
     inputSchema: {},
   }, async () => {
-    const [inventories, sales, expenses, personalMethods] = await Promise.all([
+    const [inventories, sales] = await Promise.all([
       prisma.inventory.findMany({ where: { user_id: userId } }),
       prisma.sales.findMany({ where: { inventory: { user_id: userId } }, include: { inventory: true, buyer: true } }),
-      prisma.expense.findMany({ where: { user_id: userId } }),
-      prisma.paymentMethod.findMany({ where: { user_id: userId, is_personal: true }, select: { id: true } }),
     ]);
-    const personalIds = new Set(personalMethods.map((m) => m.id));
     const spent = inventories.reduce((sum, inv) => sum.plus(batchCost(inv)), decimal(0));
     const onHand = inventories.reduce((sum, inv) => sum.plus(allocatedCost(inv, inv.qty_on_hand)), decimal(0));
 
@@ -201,24 +198,11 @@ function buildServer(userId, apiKeyId) {
       byBuyer.set(name, entry);
     }
 
-    // "Owed to personal account": unreimbursed spend on any purchase/expense
-    // paid from a personal-flagged PaymentMethod, less every expense logged
-    // under the "Owner Reimbursement" category (see PaymentMethod.is_personal
-    // in prisma/schema.prisma).
-    let personalSpend = decimal(0);
-    for (const inv of inventories) if (personalIds.has(inv.payment_method_id)) personalSpend = personalSpend.plus(batchCost(inv));
-    for (const exp of expenses) if (personalIds.has(exp.payment_method_id)) personalSpend = personalSpend.plus(decimal(exp.amount));
-    const reimbursed = expenses
-      .filter((e) => String(e.category || '').trim().toLowerCase() === 'owner reimbursement')
-      .reduce((sum, e) => sum.plus(decimal(e.amount)), decimal(0));
-    const owedToPersonal = Decimal.max(0, personalSpend.minus(reimbursed));
-
     return jsonResult({
       owed_to_me: toNum(owed.toDecimalPlaces(2)),
       coming_back: toNum(comingBack.toDecimalPlaces(2)),
       spent: toNum(spent.toDecimalPlaces(2)),
       on_hand_value: toNum(onHand.toDecimalPlaces(2)),
-      owed_to_personal_account: toNum(owedToPersonal.toDecimalPlaces(2)),
       by_buyer: [...byBuyer.values()].map((b) => ({
         buyer: b.buyer,
         revenue: toNum(b.revenue.toDecimalPlaces(2)),
@@ -308,31 +292,6 @@ function buildServer(userId, apiKeyId) {
       return jsonResult({ id: result.id, buyer_id: result.buyer_id });
     } catch (err) {
       return errorResult(err.message || 'Failed to update sale buyer');
-    }
-  });
-
-  server.registerTool('set_account_personal', {
-    description: 'Flag (or unflag) a payment method as a personal account/card funding the business, so get_cashflow_summary\'s owed_to_personal_account can include it. The account must already exist.',
-    inputSchema: {
-      account_name: z.string().min(1).describe('Existing payment method name, e.g. "Wells Fargo Debit Card".'),
-      is_personal: z.boolean(),
-    },
-  }, async ({ account_name, is_personal }) => {
-    try {
-      const trimmed = account_name.trim();
-      const method = await prisma.paymentMethod.findFirst({
-        where: { user_id: userId, name: { equals: trimmed, mode: 'insensitive' } },
-      });
-      if (!method) {
-        const all = await prisma.paymentMethod.findMany({ where: { user_id: userId }, select: { name: true } });
-        const names = all.map((m) => m.name).join(', ') || '(none set up yet)';
-        throw Object.assign(new Error(`No payment method named "${trimmed}". Existing methods: ${names}`), { toolError: true });
-      }
-      const updated = await prisma.paymentMethod.update({ where: { id: method.id }, data: { is_personal } });
-      await logWrite(userId, apiKeyId, 'set_account_personal', { account_name, is_personal });
-      return jsonResult({ id: updated.id, name: updated.name, is_personal: updated.is_personal });
-    } catch (err) {
-      return errorResult(err.message || 'Failed to update account');
     }
   });
 

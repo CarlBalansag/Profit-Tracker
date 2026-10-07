@@ -209,13 +209,13 @@ It reuses the exact Prisma client/DB pool already tuned for Neon (the session po
 ### Endpoint
 
 ```
-POST https://<your-render-api-domain>/mcp
+POST https://api.profittracker.carltechs.com/mcp
 Authorization: Bearer <your-api-key>
 Content-Type: application/json
 Accept: application/json, text/event-stream
 ```
 
-(`https://profit-tracker-tcqo.onrender.com/mcp` for the deployed instance — swap in your own Render domain, or the custom domain it's mapped to, if different.) The `Accept` header listing both content types is required by the Streamable HTTP spec even though this server always responds with a single JSON body (`enableJsonResponse: true`), never SSE. Every write (`mark_sale_paid`, `add_purchase`, `add_expense`) is recorded in `McpWriteLog` with a timestamp, tool name, and payload — nothing is ever silently applied.
+That's the real custom domain the frontend's Netlify redirects proxy to (`selvora-app/netlify.toml`) — not the raw Render URL. The `Accept` header listing both content types is required by the Streamable HTTP spec even though this server always responds with a single JSON body (`enableJsonResponse: true`), never SSE. Every write (`mark_sale_paid`, `update_sale_buyer`, `add_purchase`, `add_expense`) is recorded in `McpWriteLog` with a timestamp, tool name, and payload — nothing is ever silently applied.
 
 ### Tools
 
@@ -223,15 +223,16 @@ Read-only:
 - `list_sales(start_date?, end_date?, buyer?, payout_status?, limit?)`
 - `list_inventory(status?)`
 - `list_expenses(start_date?, end_date?, category?)`
-- `get_cashflow_summary()` — owed to you, spend, on-hand value, and `owed_to_personal_account`, by buyer
+- `get_cashflow_summary()` — owed to you, spend, and on-hand value, by buyer
 - `get_unpaid_by_buyer()`
 
 Write (no delete tools exist for any of these):
-- `mark_sale_paid(sale_ids[], payout_date, payout_amount, payout_account?, payout_reference?)` — marks several sales paid from one deposit; if `payout_amount` is less than the combined expected revenue of the given sales, the shortfall is split across them proportionally and recorded (`payout_short_amount`) rather than silently absorbed.
+- `mark_sale_paid(sale_ids[], payout_date, payout_amount, payout_account?, payout_reference?, buyer?)` — marks several sales paid from one deposit; works on a sale in `OUTBOUND` or `WAITING_FOR_PAYMENT` (payment can land before carrier delivery is confirmed), and sets `workflow_status` to `PAID`. If `payout_amount` is less than the combined expected revenue of the given sales, the shortfall is split across them proportionally and recorded (`payout_short_amount`) rather than silently absorbed. `buyer`, if given, is created if new and attached to every sale in the batch.
+- `update_sale_buyer(sale_id, buyer)` — sets/corrects which buyer a sale is attributed to, independent of its payment status (for backfilling a sale that was already paid before its buyer was known). The buyer is created if new.
 - `add_purchase(item, qty, unit_cost, store, card_used, purchase_date, tax_exempt?)` — `store` (vendor) is created automatically if new; `card_used` must already exist as a Payment Method (cashback/limit settings are never guessed).
 - `add_expense(description, amount, date, category?, paid_from_account)` — `paid_from_account` must already exist as a Payment Method.
 
-All amounts are returned as plain numbers and all dates as `YYYY-MM-DD` strings.
+All amounts are returned as plain numbers and all dates as `YYYY-MM-DD` strings. Every tool is scoped to the calling token's own user — see `test/mcpTenantIsolation.test.mjs` for the end-to-end proof (two separate users/tokens, through the real auth middleware, confirming no tool leaks or mutates another user's data).
 
 ### Running locally
 
