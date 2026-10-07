@@ -28,6 +28,7 @@ const USER_B_INVENTORY = 'bbbbbbbb-bbbb-4bbb-8bbb-000000000001';
 const USER_B_SALE = 'bbbbbbbb-bbbb-4bbb-8bbb-000000000002';
 const USER_B_EXPENSE = 'bbbbbbbb-bbbb-4bbb-8bbb-000000000003';
 const USER_B_CARD = 'bbbbbbbb-bbbb-4bbb-8bbb-000000000004';
+const USER_B_PLATFORM = 'bbbbbbbb-bbbb-4bbb-8bbb-000000000005';
 
 let server;
 let baseUrl;
@@ -47,12 +48,13 @@ beforeEach(async () => {
   // expense -- none of it reachable through user A's (harness.ids.user) token.
   harness.db.user.push({ id: USER_B, username: 'User B', email: 'userb@example.com', tutorial_seen: true, calendar_token: 'b-token', accounting_preferences: null });
   harness.db.paymentMethod.push({ id: USER_B_CARD, user_id: USER_B, name: 'User B Card', type: 'Credit', default_cashback_rate: 0, category_rates: '[]' });
+  harness.db.platform.push({ id: USER_B_PLATFORM, user_id: USER_B, name: 'User B Platform', type: 'Cashout', fee_pct: 0 });
   harness.db.inventory.push({
     id: USER_B_INVENTORY, user_id: USER_B, product_name: 'User B Item', vendor_id: null, payment_method_id: USER_B_CARD,
     unit_purchase_cost: 50, qty_purchased: 1, qty_on_hand: 1, status: 'PURCHASED', purchase_date: new Date(), created_at: new Date(), tax_exempt: false,
   });
   harness.db.sales.push({
-    id: USER_B_SALE, inventory_id: USER_B_INVENTORY, platform_id: null, buyer_id: null, quantity: 1, unit_price: 80,
+    id: USER_B_SALE, inventory_id: USER_B_INVENTORY, platform_id: USER_B_PLATFORM, buyer_id: null, quantity: 1, unit_price: 80,
     commission_fee: 0, sale_shipping: 0, sale_tax_collected: 0, taxable: true, customer_tax_exempt: false, status: 'SOLD',
     workflow_status: 'WAITING_FOR_PAYMENT', sale_date: new Date(), payout_date: null,
     paid_at: null, paid_amount: null, paid_reference: null, payout_account: null, payout_short_amount: null,
@@ -123,6 +125,13 @@ describe('MCP read tools never leak across users', () => {
     expect(asA.data.map((s) => s.id)).not.toContain(USER_B_SALE);
     expect(asB.data.map((s) => s.id)).toEqual([USER_B_SALE]);
   });
+
+  it("list_sales buyer (the sale's platform) never surfaces or matches user B's platform under user A's token", async () => {
+    const all = await callTool(tokenA, 'list_sales', {});
+    expect(all.data.some((s) => s.buyer === 'User B Platform')).toBe(false);
+    const filtered = await callTool(tokenA, 'list_sales', { buyer: 'User B Platform' });
+    expect(filtered.data).toEqual([]);
+  });
 });
 
 describe('MCP write tools reject a foreign id instead of silently no-op-ing', () => {
@@ -133,12 +142,6 @@ describe('MCP write tools reject a foreign id instead of silently no-op-ing', ()
     expect(res.isError).toBe(true);
     const stillUnpaid = harness.db.sales.find((s) => s.id === USER_B_SALE);
     expect(stillUnpaid.paid_at).toBeNull();
-  });
-
-  it("update_sale_buyer with user A's token cannot attribute user B's sale", async () => {
-    const res = await callTool(tokenA, 'update_sale_buyer', { sale_id: USER_B_SALE, buyer: 'Hijacker' });
-    expect(res.isError).toBe(true);
-    expect(harness.db.sales.find((s) => s.id === USER_B_SALE).buyer_id).toBeNull();
   });
 
   it("add_purchase with user A's token never attaches to user B's card even by exact name", async () => {

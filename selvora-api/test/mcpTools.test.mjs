@@ -52,13 +52,31 @@ describe('MCP read tools', () => {
     expect(unpaid.data).toHaveLength(0);
   });
 
-  it('list_sales filters by buyer name, case-insensitively', async () => {
-    harness.db.buyer.push({ id: 'buyer-1', user_id: harness.ids.user, name: 'Windy City' });
-    harness.db.sales[0].buyer_id = 'buyer-1';
+  it('list_sales filters by buyer name (the sale\'s marketplace/cashout), case-insensitively', async () => {
+    harness.db.platform.push({ id: 'cashout-1', user_id: harness.ids.user, name: 'Windy City', type: 'Cashout', fee_pct: 0 });
+    harness.db.sales[0].platform_id = 'cashout-1';
     const match = await callTool('list_sales', { buyer: 'windy' });
     expect(match.data).toHaveLength(1);
+    expect(match.data[0].buyer).toBe('Windy City');
+    expect(match.data[0].buyer_type).toBe('Cashout');
     const noMatch = await callTool('list_sales', { buyer: 'tradepost' });
     expect(noMatch.data).toHaveLength(0);
+  });
+
+  it('list_sales returns every sale by default, with no implicit limit', async () => {
+    for (let i = 0; i < 150; i++) {
+      harness.db.sales.push({ ...harness.db.sales[0], id: `extra-${i}` });
+    }
+    const { data } = await callTool('list_sales', {});
+    expect(data).toHaveLength(151);
+  });
+
+  it('list_sales still honors an explicit limit', async () => {
+    for (let i = 0; i < 10; i++) {
+      harness.db.sales.push({ ...harness.db.sales[0], id: `extra-${i}` });
+    }
+    const { data } = await callTool('list_sales', { limit: 3 });
+    expect(data).toHaveLength(3);
   });
 
   it('list_inventory reports total cost and days held', async () => {
@@ -75,17 +93,17 @@ describe('MCP read tools', () => {
     expect(noMatch.data).toHaveLength(0);
   });
 
-  it('get_cashflow_summary reports owed_to_me for an unpaid sale and groups by buyer', async () => {
-    harness.db.buyer.push({ id: 'buyer-1', user_id: harness.ids.user, name: 'Blake' });
-    harness.db.sales[0].buyer_id = 'buyer-1';
+  it('get_cashflow_summary reports owed_to_me for an unpaid sale and groups by buyer (the sale\'s marketplace/cashout)', async () => {
+    harness.db.platform.push({ id: 'cashout-1', user_id: harness.ids.user, name: 'Blake', type: 'Cashout', fee_pct: 0 });
+    harness.db.sales[0].platform_id = 'cashout-1';
     const { data } = await callTool('get_cashflow_summary', {});
     expect(data.owed_to_me).toBeCloseTo(150 * 2 - 15 - 12, 2);
     expect(data.by_buyer).toEqual([{ buyer: 'Blake', revenue: expect.any(Number), owed: expect.any(Number) }]);
   });
 
   it('get_unpaid_by_buyer only includes buyers with an outstanding balance', async () => {
-    harness.db.buyer.push({ id: 'buyer-1', user_id: harness.ids.user, name: 'Blake' });
-    harness.db.sales[0].buyer_id = 'buyer-1';
+    harness.db.platform.push({ id: 'cashout-1', user_id: harness.ids.user, name: 'Blake', type: 'Cashout', fee_pct: 0 });
+    harness.db.sales[0].platform_id = 'cashout-1';
     harness.db.sales[0].paid_at = new Date();
     const { data } = await callTool('get_unpaid_by_buyer', {});
     expect(data).toEqual([]);
