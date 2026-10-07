@@ -336,6 +336,7 @@ const markPaidBatch = z.object({
   payout_amount: decimalAmount(),
   payout_account: optionalString,
   payout_reference: optionalString,
+  buyer: optionalString,
 });
 
 const account = z.object({

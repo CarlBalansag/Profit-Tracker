@@ -6,6 +6,7 @@ const prisma = require('../prisma');
 const { Decimal, decimal } = require('./money');
 const { saleEconomics } = require('./decimalFinance');
 const statusTransitions = require('./statusTransitions');
+const { findOrCreateBuyer } = require('./buyers');
 
 const requestError = (status, message) => Object.assign(new Error(message), { status });
 
@@ -29,13 +30,17 @@ function allocateByWeight(total, weights) {
 }
 
 // payoutDate: Date. payoutAmount: string|number. payoutAccount/payoutReference: string|null.
-async function markSalesPaid({ userId, saleIds, payoutDate, payoutAmount, payoutAccount, payoutReference }) {
+// buyerName (optional): attributes every sale in the batch to this buyer (created
+// if new) in the same transaction -- the common case is "I got paid by X", which
+// tells you who paid in the same breath as the deposit itself.
+async function markSalesPaid({ userId, saleIds, payoutDate, payoutAmount, payoutAccount, payoutReference, buyerName }) {
   if (!Array.isArray(saleIds) || saleIds.length === 0) throw requestError(400, 'sale_ids must be a non-empty array');
   const uniqueIds = [...new Set(saleIds)];
   const deposit = decimal(payoutAmount);
   if (deposit.isNegative()) throw requestError(400, 'payout_amount cannot be negative');
 
   return prisma.$transaction(async (tx) => {
+    const buyer = buyerName ? await findOrCreateBuyer(userId, buyerName, tx) : null;
     const sales = await tx.sales.findMany({
       where: { id: { in: uniqueIds } },
       include: { inventory: true },
@@ -74,6 +79,7 @@ async function markSalesPaid({ userId, saleIds, payoutDate, payoutAmount, payout
         payout_account: payoutAccount || null,
         payout_short_amount: shortfall.gt(0) ? shortfall.toNumber() : null,
       };
+      if (buyer) data.buyer_id = buyer.id;
       // Mirrors statusTransitions.SALE_TRANSITIONS.mark_paid: payment before
       // handoff is recorded but a DIRECT_LOCAL sale stays actionable until the
       // item actually changes hands.

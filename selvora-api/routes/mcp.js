@@ -14,6 +14,7 @@ const { decimal, Decimal } = require('../services/money');
 const { saleEconomics, allocatedCost, batchCost, isRealizedSale } = require('../services/decimalFinance');
 const { payoutStatus } = require('../services/payoutStatus');
 const { markSalesPaid } = require('../services/markSalesPaid');
+const { findOrCreateBuyer } = require('../services/buyers');
 
 const toDateOnly = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 const toNum = (d) => (d === null || d === undefined ? 0 : (typeof d.toNumber === 'function' ? d.toNumber() : Number(d)));
@@ -258,8 +259,9 @@ function buildServer(userId, apiKeyId) {
       payout_amount: z.number().nonnegative(),
       payout_account: z.string().optional().describe('e.g. "Chase College", "PayPal", "eBay"'),
       payout_reference: z.string().optional(),
+      buyer: z.string().optional().describe('Who paid, e.g. "Windy City", "Blake". Created automatically if new; applied to every sale in this batch.'),
     },
-  }, async ({ sale_ids, payout_date, payout_amount, payout_account, payout_reference }) => {
+  }, async ({ sale_ids, payout_date, payout_amount, payout_account, payout_reference, buyer }) => {
     try {
       const updated = await markSalesPaid({
         userId,
@@ -268,8 +270,9 @@ function buildServer(userId, apiKeyId) {
         payoutAmount: payout_amount,
         payoutAccount: payout_account || null,
         payoutReference: payout_reference || null,
+        buyerName: buyer || null,
       });
-      await logWrite(userId, apiKeyId, 'mark_sale_paid', { sale_ids, payout_date, payout_amount, payout_account, payout_reference });
+      await logWrite(userId, apiKeyId, 'mark_sale_paid', { sale_ids, payout_date, payout_amount, payout_account, payout_reference, buyer });
       return jsonResult(updated.map((s) => ({
         id: s.id,
         payout_status: payoutStatus(s),
@@ -278,9 +281,58 @@ function buildServer(userId, apiKeyId) {
         payout_account: s.payout_account,
         payout_date: toDateOnly(s.paid_at),
         payout_reference: s.paid_reference,
+        buyer_id: s.buyer_id,
       })));
     } catch (err) {
       return errorResult(err.message || 'Failed to mark sales paid');
+    }
+  });
+
+  server.registerTool('update_sale_buyer', {
+    description: 'Set or correct which buyer a sale is attributed to, independent of its payment status (use this to backfill a sale that was already marked paid before its buyer was known). The buyer is created automatically if new.',
+    inputSchema: {
+      sale_id: z.string().uuid(),
+      buyer: z.string().min(1).describe('Who paid, e.g. "Windy City", "Blake".'),
+    },
+  }, async ({ sale_id, buyer }) => {
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const sale = await tx.sales.findUnique({ where: { id: sale_id }, include: { inventory: true } });
+        if (!sale || sale.inventory.user_id !== userId) {
+          throw Object.assign(new Error('Sale not found or access denied'), { toolError: true });
+        }
+        const buyerRecord = await findOrCreateBuyer(userId, buyer, tx);
+        return tx.sales.update({ where: { id: sale_id }, data: { buyer_id: buyerRecord.id } });
+      });
+      await logWrite(userId, apiKeyId, 'update_sale_buyer', { sale_id, buyer });
+      return jsonResult({ id: result.id, buyer_id: result.buyer_id });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to update sale buyer');
+    }
+  });
+
+  server.registerTool('set_account_personal', {
+    description: 'Flag (or unflag) a payment method as a personal account/card funding the business, so get_cashflow_summary\'s owed_to_personal_account can include it. The account must already exist.',
+    inputSchema: {
+      account_name: z.string().min(1).describe('Existing payment method name, e.g. "Wells Fargo Debit Card".'),
+      is_personal: z.boolean(),
+    },
+  }, async ({ account_name, is_personal }) => {
+    try {
+      const trimmed = account_name.trim();
+      const method = await prisma.paymentMethod.findFirst({
+        where: { user_id: userId, name: { equals: trimmed, mode: 'insensitive' } },
+      });
+      if (!method) {
+        const all = await prisma.paymentMethod.findMany({ where: { user_id: userId }, select: { name: true } });
+        const names = all.map((m) => m.name).join(', ') || '(none set up yet)';
+        throw Object.assign(new Error(`No payment method named "${trimmed}". Existing methods: ${names}`), { toolError: true });
+      }
+      const updated = await prisma.paymentMethod.update({ where: { id: method.id }, data: { is_personal } });
+      await logWrite(userId, apiKeyId, 'set_account_personal', { account_name, is_personal });
+      return jsonResult({ id: updated.id, name: updated.name, is_personal: updated.is_personal });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to update account');
     }
   });
 

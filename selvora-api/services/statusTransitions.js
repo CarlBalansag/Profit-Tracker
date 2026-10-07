@@ -180,7 +180,12 @@ function saleActions(record = {}) {
     case 'HANDED_OVER':
       return [markPaid(), ...saleCorrections({ outbound: true })];
     case 'OUTBOUND':
-      return [act('check_tracking', 'Check Tracking'), ...saleCorrections({ outbound: true })];
+      // Payment can legitimately land before the carrier confirms delivery (a
+      // direct deal, or a marketplace that pays out on ship-confirmation) --
+      // same reasoning as AWAITING_HANDOFF/HANDED_OVER above. mark_paid still
+      // jumps straight to PAID from here (SALE_TRANSITIONS.mark_paid's "not
+      // AWAITING_HANDOFF" check already covers OUTBOUND).
+      return [act('check_tracking', 'Check Tracking'), markPaid(), ...saleCorrections({ outbound: true })];
     case 'DELIVERED_TO_AUTHENTICATOR':
       return [
         act('check_tracking', 'Check Tracking'),

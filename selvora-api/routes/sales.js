@@ -286,7 +286,7 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
 // Shared with the MCP mark_sale_paid tool via services/markSalesPaid.js.
 router.post('/mark-paid-batch', isAuthenticated, validateBody(markPaidBatch), async (req, res, next) => {
   try {
-    const { sale_ids, payout_date, payout_amount, payout_account, payout_reference } = req.body;
+    const { sale_ids, payout_date, payout_amount, payout_account, payout_reference, buyer } = req.body;
     const updated = await markSalesPaid({
       userId: req.user.id,
       saleIds: sale_ids,
@@ -294,6 +294,7 @@ router.post('/mark-paid-batch', isAuthenticated, validateBody(markPaidBatch), as
       payoutAmount: payout_amount,
       payoutAccount: payout_account || null,
       payoutReference: payout_reference || null,
+      buyerName: buyer || null,
     });
     await publishCalendarFeed(req.user.id);
     res.json(updated.map((sale) => withActions(exactSale(sale))));
