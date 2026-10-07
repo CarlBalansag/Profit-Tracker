@@ -14,7 +14,6 @@ const { decimal } = require('../services/money');
 const { saleEconomics, allocatedCost, batchCost, isRealizedSale } = require('../services/decimalFinance');
 const { payoutStatus } = require('../services/payoutStatus');
 const { markSalesPaid } = require('../services/markSalesPaid');
-const { findOrCreateBuyer } = require('../services/buyers');
 
 const toDateOnly = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 const toNum = (d) => (d === null || d === undefined ? 0 : (typeof d.toNumber === 'function' ? d.toNumber() : Number(d)));
@@ -68,13 +67,13 @@ function buildServer(userId, apiKeyId) {
   // ------------------------------------------------------------------ reads
 
   server.registerTool('list_sales', {
-    description: 'List sales with optional filters. Dates are YYYY-MM-DD.',
+    description: 'List sales with optional filters. Dates are YYYY-MM-DD. "buyer" is the marketplace/cashout the sale went through (e.g. eBay, Windy City) -- the same platform picked when the sale was recorded, not a separate contact.',
     inputSchema: {
       start_date: z.string().optional().describe('YYYY-MM-DD, inclusive'),
       end_date: z.string().optional().describe('YYYY-MM-DD, inclusive'),
-      buyer: z.string().optional().describe('Filter by buyer name (case-insensitive, partial match)'),
+      buyer: z.string().optional().describe('Filter by the sale\'s marketplace/cashout name (case-insensitive, partial match)'),
       payout_status: z.enum(['unpaid', 'partial', 'paid']).optional(),
-      limit: z.number().int().min(1).max(500).optional(),
+      limit: z.number().int().min(1).max(500).optional().describe('Omit to return every matching sale.'),
     },
   }, async ({ start_date, end_date, buyer, payout_status: payoutFilter, limit }) => {
     const where = { inventory: { user_id: userId } };
@@ -85,12 +84,12 @@ function buildServer(userId, apiKeyId) {
     }
     const sales = await prisma.sales.findMany({
       where,
-      include: { inventory: { include: { vendor: true } }, buyer: true },
+      include: { inventory: { include: { vendor: true } }, platform: true },
       orderBy: { sale_date: 'desc' },
-      take: limit || 100,
+      ...(limit ? { take: limit } : {}),
     });
     const filtered = sales.filter((s) => {
-      if (buyer && !(s.buyer?.name || '').toLowerCase().includes(buyer.toLowerCase())) return false;
+      if (buyer && !(s.platform?.name || '').toLowerCase().includes(buyer.toLowerCase())) return false;
       if (payoutFilter && payoutStatus(s) !== payoutFilter) return false;
       return true;
     });
@@ -101,7 +100,8 @@ function buildServer(userId, apiKeyId) {
         item: s.inventory.product_name,
         qty: s.quantity,
         sale_date: toDateOnly(s.sale_date),
-        buyer: s.buyer?.name || null,
+        buyer: s.platform?.name || null,
+        buyer_type: s.platform?.type || null,
         store_bought: s.inventory.vendor?.name || null,
         cost: toNum(cost.toDecimalPlaces(2)),
         sale_amount: toNum(decimal(s.unit_price).times(s.quantity).toDecimalPlaces(2)),
@@ -172,12 +172,12 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('get_cashflow_summary', {
-    description: 'Overall cash-flow snapshot: owed to you (sold but unpaid/short-paid), spend, and on-hand inventory value, broken down by buyer.',
+    description: 'Overall cash-flow snapshot: owed to you (sold but unpaid/short-paid), spend, and on-hand inventory value, broken down by buyer (the sale\'s marketplace/cashout).',
     inputSchema: {},
   }, async () => {
     const [inventories, sales] = await Promise.all([
       prisma.inventory.findMany({ where: { user_id: userId } }),
-      prisma.sales.findMany({ where: { inventory: { user_id: userId } }, include: { inventory: true, buyer: true } }),
+      prisma.sales.findMany({ where: { inventory: { user_id: userId } }, include: { inventory: true, platform: true } }),
     ]);
     const spent = inventories.reduce((sum, inv) => sum.plus(batchCost(inv)), decimal(0));
     const onHand = inventories.reduce((sum, inv) => sum.plus(allocatedCost(inv, inv.qty_on_hand)), decimal(0));
@@ -191,7 +191,7 @@ function buildServer(userId, apiKeyId) {
       const status = payoutStatus(sale);
       const owedForThis = status === 'unpaid' ? revenue : status === 'partial' ? decimal(sale.payout_short_amount || 0) : decimal(0);
       owed = owed.plus(owedForThis);
-      const name = sale.buyer?.name || 'Unknown';
+      const name = sale.platform?.name || 'Unknown';
       const entry = byBuyer.get(name) || { buyer: name, revenue: decimal(0), owed: decimal(0) };
       entry.revenue = entry.revenue.plus(revenue);
       entry.owed = entry.owed.plus(owedForThis);
@@ -212,17 +212,17 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('get_unpaid_by_buyer', {
-    description: 'Totals of sold-but-unpaid (and short-paid) sales, grouped by buyer.',
+    description: 'Totals of sold-but-unpaid (and short-paid) sales, grouped by buyer (the sale\'s marketplace/cashout).',
     inputSchema: {},
   }, async () => {
-    const sales = await prisma.sales.findMany({ where: { inventory: { user_id: userId } }, include: { inventory: true, buyer: true } });
+    const sales = await prisma.sales.findMany({ where: { inventory: { user_id: userId } }, include: { inventory: true, platform: true } });
     const byBuyer = new Map();
     for (const sale of sales.filter(isRealizedSale)) {
       const status = payoutStatus(sale);
       if (status === 'paid') continue;
       const { revenue } = saleEconomics(sale.inventory, sale);
       const owedForThis = status === 'unpaid' ? revenue : decimal(sale.payout_short_amount || 0);
-      const name = sale.buyer?.name || 'Unknown';
+      const name = sale.platform?.name || 'Unknown';
       const entry = byBuyer.get(name) || { buyer: name, owed: decimal(0), sale_count: 0 };
       entry.owed = entry.owed.plus(owedForThis);
       entry.sale_count += 1;
@@ -243,9 +243,8 @@ function buildServer(userId, apiKeyId) {
       payout_amount: z.number().nonnegative(),
       payout_account: z.string().optional().describe('e.g. "Chase College", "PayPal", "eBay"'),
       payout_reference: z.string().optional(),
-      buyer: z.string().optional().describe('Who paid, e.g. "Windy City", "Blake". Created automatically if new; applied to every sale in this batch.'),
     },
-  }, async ({ sale_ids, payout_date, payout_amount, payout_account, payout_reference, buyer }) => {
+  }, async ({ sale_ids, payout_date, payout_amount, payout_account, payout_reference }) => {
     try {
       const updated = await markSalesPaid({
         userId,
@@ -254,9 +253,8 @@ function buildServer(userId, apiKeyId) {
         payoutAmount: payout_amount,
         payoutAccount: payout_account || null,
         payoutReference: payout_reference || null,
-        buyerName: buyer || null,
       });
-      await logWrite(userId, apiKeyId, 'mark_sale_paid', { sale_ids, payout_date, payout_amount, payout_account, payout_reference, buyer });
+      await logWrite(userId, apiKeyId, 'mark_sale_paid', { sale_ids, payout_date, payout_amount, payout_account, payout_reference });
       return jsonResult(updated.map((s) => ({
         id: s.id,
         payout_status: payoutStatus(s),
@@ -265,33 +263,9 @@ function buildServer(userId, apiKeyId) {
         payout_account: s.payout_account,
         payout_date: toDateOnly(s.paid_at),
         payout_reference: s.paid_reference,
-        buyer_id: s.buyer_id,
       })));
     } catch (err) {
       return errorResult(err.message || 'Failed to mark sales paid');
-    }
-  });
-
-  server.registerTool('update_sale_buyer', {
-    description: 'Set or correct which buyer a sale is attributed to, independent of its payment status (use this to backfill a sale that was already marked paid before its buyer was known). The buyer is created automatically if new.',
-    inputSchema: {
-      sale_id: z.string().uuid(),
-      buyer: z.string().min(1).describe('Who paid, e.g. "Windy City", "Blake".'),
-    },
-  }, async ({ sale_id, buyer }) => {
-    try {
-      const result = await prisma.$transaction(async (tx) => {
-        const sale = await tx.sales.findUnique({ where: { id: sale_id }, include: { inventory: true } });
-        if (!sale || sale.inventory.user_id !== userId) {
-          throw Object.assign(new Error('Sale not found or access denied'), { toolError: true });
-        }
-        const buyerRecord = await findOrCreateBuyer(userId, buyer, tx);
-        return tx.sales.update({ where: { id: sale_id }, data: { buyer_id: buyerRecord.id } });
-      });
-      await logWrite(userId, apiKeyId, 'update_sale_buyer', { sale_id, buyer });
-      return jsonResult({ id: result.id, buyer_id: result.buyer_id });
-    } catch (err) {
-      return errorResult(err.message || 'Failed to update sale buyer');
     }
   });
 

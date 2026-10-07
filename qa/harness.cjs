@@ -53,7 +53,15 @@ for(const model of Object.keys(db)) {
     calls.push({model,op,args:structuredClone(args)});
     if(faults[model+'.'+op])throw new Error('Injected '+model+'.'+op+' failure');
     const rows=db[model].filter(x=>matches(model,x,args.where));
-    if(op==='findMany')return rows.map(x=>project(model,x,args));
+    if(op==='findMany'){
+      if(args.orderBy){
+        const [[key,dir]]=Object.entries(args.orderBy);
+        rows.sort((a,b)=>a[key]<b[key]?-1:a[key]>b[key]?1:0);
+        if(dir==='desc')rows.reverse();
+      }
+      const sliced=typeof args.take==='number'?rows.slice(0,args.take):rows;
+      return sliced.map(x=>project(model,x,args));
+    }
     if(op==='findUnique'||op==='findFirst')return project(model,rows[0],args);
     if(op==='create'||op==='createMany'||(op==='upsert'&&!rows.length)) {
       const data=op==='upsert'?args.create:args.data;
