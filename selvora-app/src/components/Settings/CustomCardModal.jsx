@@ -13,6 +13,7 @@ const INITIAL_STATE = {
   due_day: '',
   credit_limit: '',
   min_payment_pct: '',
+  is_personal: false,
 };
 
 export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
@@ -74,6 +75,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
       due_day: formData.due_day ? parseInt(formData.due_day) : null,
       credit_limit: formData.credit_limit ? parseFloat(formData.credit_limit) : null,
       min_payment_pct: formData.min_payment_pct ? parseFloat(formData.min_payment_pct) : null,
+      is_personal: Boolean(formData.is_personal),
     };
 
     setSaving(true);
@@ -249,6 +251,23 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
               </div>
             </div>
           </div>
+
+          {/* Personal account flag — drives the "owed to personal account" calculation */}
+          <label className="flex items-start gap-3 p-3 rounded-lg border border-gray-800 bg-[#0A0A0F] cursor-pointer">
+            <input
+              type="checkbox"
+              name="is_personal"
+              checked={!!formData.is_personal}
+              onChange={(e) => setFormData(prev => ({ ...prev, is_personal: e.target.checked }))}
+              className="mt-0.5 w-4 h-4 accent-purple-500"
+            />
+            <span>
+              <span className="block text-xs font-bold text-gray-300">This is a personal account/card</span>
+              <span className="block text-[11px] text-gray-600 mt-0.5">
+                Purchases and expenses paid from here count toward how much the business owes you back.
+              </span>
+            </span>
+          </label>
 
         </div>
 

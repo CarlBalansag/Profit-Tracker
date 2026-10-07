@@ -99,7 +99,7 @@ function toDateInput(val) {
 }
 
 // ─── Main Modal ────────────────────────────────────────────────────────────────
-export default function TransactionDetailModal({ row, onClose, onSaved, platforms = EMPTY_LIST, paymentMethods = EMPTY_LIST }) {
+export default function TransactionDetailModal({ row, onClose, onSaved, platforms = EMPTY_LIST, paymentMethods = EMPTY_LIST, buyers = EMPTY_LIST }) {
   const [form, setForm] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -155,6 +155,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
               commission_fee:  s.commission_fee ?? 0,
               sale_shipping:   s.sale_shipping ?? 0,
               platform_id:     s.platform_id ?? '',
+              buyer_id:        s.buyer_id ?? '',
               status:          s.status ?? 'SOLD',
               // Read-only here (the save projection below deliberately omits
               // it): isRealizedSale reads both status columns, so without it
@@ -263,6 +264,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             commission_fee:     Number(s.commission_fee),
             sale_shipping:      Number(s.sale_shipping),
             platform_id:        s.platform_id || null,
+            buyer_id:           s.buyer_id || null,
             // A handful of sale rows predate the sale-status validation
             // (ideas.md ISSUES #3) and still carry an inventory-only legacy
             // value like PURCHASED, which the backend's SALE_STATUSES enum
@@ -541,6 +543,18 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                                   value={sale.status}
                                   onChange={v => setSale(i, 'status', v)}
                                   options={SALE_STATUSES.map(s => ({ id: s, name: s }))}
+                                />
+                              </Field>
+                            </div>
+
+                            {/* Row 2b: Buyer -- who actually paid, separate from the platform above */}
+                            <div className="grid grid-cols-1 gap-3">
+                              <Field label="Buyer (who paid)">
+                                <Sel
+                                  value={sale.buyer_id}
+                                  onChange={v => setSale(i, 'buyer_id', v)}
+                                  options={buyers}
+                                  placeholder="Select buyer…"
                                 />
                               </Field>
                             </div>

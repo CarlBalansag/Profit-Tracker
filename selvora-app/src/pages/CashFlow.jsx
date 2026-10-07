@@ -7,8 +7,10 @@ function fmt(n) {
   return (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-const UNPAID_STATUSES = new Set(['SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'DELIVERED', 'SCANNED_IN']);
-const PAID_STATUSES   = new Set(['PAID', 'COMPLETED']);
+// payout_status comes from the server (services/payoutStatus.js) -- it is
+// the one place "paid vs. unpaid" is decided, so this page never has to
+// re-derive it from raw workflow/legacy status strings.
+const PAYOUT_LABELS = { unpaid: 'Pending', partial: 'Partial', paid: 'Paid' };
 
 function CashFlow() {
   const [includeCashback, setIncludeCashback] = useState(false);
@@ -24,10 +26,14 @@ function CashFlow() {
   const inTransitValue = s.inventoryValue ?? 0;
   // Money that came back from sales
   const soldRevenue    = s.totalRevenue ?? 0;
-  // Total owed = unpaid sale revenue (SOLD but not PAID/COMPLETED)
-  const owedRevenue = txns
-    .filter(t => UNPAID_STATUSES.has((t.status || '').toUpperCase()))
-    .reduce((sum, t) => sum + (t.revenue ?? 0), 0);
+  // Total owed = full revenue of unpaid sales, plus just the outstanding
+  // shortfall of any sale that was short-paid (most of a partial payout
+  // already landed, so only the remainder is still "owed").
+  const owedRevenue = txns.reduce((sum, t) => {
+    if (t.payout_status === 'unpaid') return sum + (t.revenue ?? 0);
+    if (t.payout_status === 'partial') return sum + (t.payout_short_amount ?? 0);
+    return sum;
+  }, 0);
 
   // Total spending out = purchase spend
   const spendingOut = s.totalCost ?? 0;
@@ -194,9 +200,14 @@ function CashFlow() {
                       <div className="flex items-center gap-3">
                         <span className="font-bold text-white text-sm">{buyer.name}</span>
                         <span className="text-xs text-gray-500">{buyer.items} sale{buyer.items !== 1 ? 's' : ''}</span>
-                        {buyer.sales.some(t => UNPAID_STATUSES.has((t.status || '').toUpperCase())) && (
+                        {buyer.sales.some(t => t.payout_status === 'unpaid') && (
                           <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-500/10 text-yellow-500 border border-yellow-500/20">
                             <Bell size={10} /> Pending
+                          </div>
+                        )}
+                        {!buyer.sales.some(t => t.payout_status === 'unpaid') && buyer.sales.some(t => t.payout_status === 'partial') && (
+                          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                            <Bell size={10} /> Partial
                           </div>
                         )}
                       </div>
@@ -230,6 +241,7 @@ function CashFlow() {
                           <th className="text-right pb-2">Cost</th>
                           <th className="text-right pb-2">Revenue</th>
                           <th className="text-right pb-2">Profit</th>
+                          <th className="text-right pb-2">Paid Via</th>
                           <th className="text-right pb-2">Status</th>
                         </tr>
                       </thead>
@@ -243,12 +255,18 @@ function CashFlow() {
                             <td className={`py-2 text-right font-semibold ${(t.profit ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                               {(t.profit ?? 0) >= 0 ? '+' : ''}${fmt(t.profit)}
                             </td>
+                            <td className="py-2 text-right text-gray-500">{t.payout_account || '—'}</td>
                             <td className="py-2 text-right">
                               <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                PAID_STATUSES.has((t.status || '').toUpperCase())
+                                t.payout_status === 'paid'
                                   ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                  : t.payout_status === 'partial'
+                                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                                   : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
-                              }`}>{t.status}</span>
+                              }`}>
+                                {PAYOUT_LABELS[t.payout_status] || t.status}
+                                {t.payout_status === 'partial' ? ` ($${fmt(t.payout_short_amount)} short)` : ''}
+                              </span>
                             </td>
                           </tr>
                         ))}

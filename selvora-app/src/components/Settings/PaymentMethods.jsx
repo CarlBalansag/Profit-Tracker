@@ -57,6 +57,7 @@ export const PaymentMethods = () => {
               statement_close_day: card.statement_close_day ?? null,
               due_day: card.due_day ?? null,
               min_payment_pct: card.min_payment_pct ?? null,
+              is_personal: card.is_personal ?? false,
             };
           });
           setSavedCards(mapped);
@@ -116,6 +117,7 @@ export const PaymentMethods = () => {
           due_day: processedCard.due_day ?? null,
           credit_limit: processedCard.credit_limit ?? null,
           min_payment_pct: processedCard.min_payment_pct ?? null,
+          is_personal: processedCard.is_personal ?? false,
         })
       });
       await requireSuccessfulResponse(res, isEditing ? 'Could not update card' : 'Could not add card');
@@ -227,7 +229,12 @@ export const PaymentMethods = () => {
                 <div className="flex items-center gap-3">
                    <IssuerLogo issuer={card.issuer} brand={card.brand} className="w-10 h-10" />
                    <div>
-                      <h3 className="text-sm font-bold text-white leading-tight">{card.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-white leading-tight">{card.name}</h3>
+                        {card.is_personal && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-purple-500/10 text-purple-400 border border-purple-500/20">Personal</span>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-500 capitalize">{card.issuer}{card.type === 'debit' ? ' (Debit)' : ''}</p>
                    </div>
                 </div>

@@ -35,6 +35,43 @@ model User {
   schedule_c_enabled     Boolean          @default(false)
   buyers                 Buyer[]
   invoices               Invoice[]
+  api_keys               ApiKey[]
+  mcp_write_logs         McpWriteLog[]
+}
+
+// A per-user bearer token for the MCP server (AI assistant access), separate
+// from the browser session auth in firebaseAuth.js/LocalCredential. Only the
+// sha256 hash is stored -- the raw token is shown to the user exactly once,
+// at creation/rotation time, and is not recoverable afterward.
+model ApiKey {
+  id           String    @id @default(uuid())
+  user_id      String
+  user         User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  name         String?
+  key_hash     String    @unique
+  // First 8 chars of the raw token, kept in the clear so the Settings UI can
+  // show "which key is this" without ever displaying the full secret again.
+  key_prefix   String
+  created_at   DateTime  @default(now())
+  last_used_at DateTime?
+  revoked_at   DateTime?
+
+  @@index([user_id])
+}
+
+// Durable audit trail for every write the MCP server performs, since Render's
+// own process logs scroll away. Deliberately minimal: who, which tool, what
+// payload, when. Never used for reads, so it carries no query-shaping fields.
+model McpWriteLog {
+  id         String   @id @default(uuid())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  api_key_id String?
+  tool       String
+  payload    Json
+  created_at DateTime @default(now())
+
+  @@index([user_id, created_at])
 }
 
 model FirebaseIdentity {
@@ -182,6 +219,16 @@ model Sales {
   paid_at             DateTime?
   paid_amount         Decimal?  @db.Decimal(19, 2)
   paid_reference      String?
+  // Which bank/payout rail the money actually landed in (e.g. "Chase College",
+  // "PayPal"). Separate from paid_reference, which is a free-text note about
+  // the specific deposit, not the account it hit.
+  payout_account      String?
+  // Set only when a bulk mark-paid deposit was smaller than this sale's share
+  // of the sales it covered (see services/markSalesPaid.js). NULL/0 means this
+  // sale was paid in full -- paid_amount already reflects any shortfall, this
+  // column exists purely so a short pay stays visible instead of looking like
+  // a normal full payment.
+  payout_short_amount Decimal?  @db.Decimal(19, 2)
   cancelled_at        DateTime?
   voided_at           DateTime?
   return_requested_at DateTime?
@@ -271,6 +318,11 @@ model PaymentMethod {
   credit_limit_decimal  Decimal?    @db.Decimal(19, 2)
   min_payment_pct       Float?      // minimum payment as % of balance (e.g. 2.0 = 2%)
   min_payment_pct_decimal Decimal?  @db.Decimal(9, 6)
+  // True for a personal account/card fronting business purchases (e.g. a
+  // personal checking account used to buy inventory). Drives the "owed to
+  // personal account" calculation: unreimbursed spend on personal-flagged
+  // methods, minus Expenses with category "Owner Reimbursement".
+  is_personal           Boolean     @default(false)
   inventories           Inventory[]
   expenses              Expense[]
   recurring_expenses    RecurringExpense[]

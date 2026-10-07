@@ -1,6 +1,6 @@
 import { allocatedCost, allocatedCashback, effectiveCashbackRate, saleEconomics, isRealizedSale } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
-import { useInventory, usePlatforms, usePaymentMethods, useInvalidate, apiFetch} from '../hooks/useApi';
+import { useInventory, usePlatforms, usePaymentMethods, useBuyers, useInvalidate, apiFetch} from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
 import { toast } from 'sonner';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -110,6 +110,7 @@ const Transactions = () => {
   const { data: transactions = [], isLoading, refetch: refetchTransactions } = useInventory();
   const { data: platforms = [] } = usePlatforms();
   const { data: paymentMethods = [] } = usePaymentMethods();
+  const { data: buyers = [] } = useBuyers();
   const invalidate = useInvalidate();
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
@@ -1307,6 +1308,7 @@ const Transactions = () => {
         row={expandedRow}
         platforms={platforms}
         paymentMethods={paymentMethods}
+        buyers={buyers}
         onClose={() => setExpandedRow(null)}
         onSaved={refetchTransactions}
       />

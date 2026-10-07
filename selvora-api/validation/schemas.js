@@ -156,6 +156,7 @@ const createInventory = z.object({
   sale_tab: optionalString,
   cashout_platform_id: id,
   marketplace_platform_id: id,
+  buyer_id: id,
   commission_fee: decimalAmount({ defaultValue: 0 }),
   sale_shipping: decimalAmount({ defaultValue: 0 }),
   sale_tax_collected: decimalAmount({ defaultValue: 0 }),
@@ -288,6 +289,7 @@ const paymentMethod = z.object({
   due_day: optionalDay.nullable(),
   credit_limit: decimalAmount({ optional: true }).nullable(),
   min_payment_pct: decimalAmount({ scale: 6, optional: true }).nullable(),
+  is_personal: optionalBoolish,
 }).passthrough();
 
 const platform = z.object({
@@ -315,6 +317,25 @@ const platformBatch = z.object({
     type: optionalString,
     category: optionalString,
   }).passthrough()).min(1),
+});
+
+const buyer = z.object({
+  name: requiredString('name'),
+  avg_days_to_payout: optionalNonNegativeInt,
+}).passthrough();
+
+const updateBuyer = buyer.partial();
+
+// Body for POST /api/sales/mark-paid-batch (and the MCP mark_sale_paid tool,
+// which validates with this same schema). Deliberately not .passthrough() --
+// an MCP client's payload is attacker-adjacent in a way the browser's own
+// fetch calls are not, so unknown keys are stripped rather than passed through.
+const markPaidBatch = z.object({
+  sale_ids: z.array(requiredId).min(1, 'sale_ids must include at least one sale'),
+  payout_date: dateString,
+  payout_amount: decimalAmount(),
+  payout_account: optionalString,
+  payout_reference: optionalString,
 });
 
 const account = z.object({
@@ -432,6 +453,9 @@ module.exports = {
   platform,
   updatePlatform,
   platformBatch,
+  buyer,
+  updateBuyer,
+  markPaidBatch,
   account,
   updateAccount,
   recurringExpense,

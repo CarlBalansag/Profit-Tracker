@@ -18,6 +18,7 @@ vi.mock('../hooks/useApi', () => ({
   useInventory: () => ({ data: [purchase] }),
   usePlatforms: () => ({ data: [{ id: 'vendor', name: 'Store', type: 'Vendor' }, { id: 'market', name: 'Market', type: 'Marketplace' }] }),
   usePaymentMethods: () => ({ data: [{ id: 'card', name: 'Card' }] }),
+  useBuyers: () => ({ data: [] }),
   useInvalidate: () => ({ all: mocks.invalidate }),
   apiFetch: mocks.fetch,
 }));

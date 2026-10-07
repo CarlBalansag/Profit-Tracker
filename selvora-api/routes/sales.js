@@ -8,6 +8,8 @@ const { requireOwned } = require('../services/ownership');
 const { checkTrackingRateLimit, refreshSharedTracking } = require('../services/tracking');
 const statusTransitions = require('../services/statusTransitions');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
+const { markPaidBatch } = require('../validation/schemas');
+const { markSalesPaid } = require('../services/markSalesPaid');
 
 // Task 8 read cutover: substitute each Decimal column's exact value into its
 // paired Float field, for a sale and its nested inventory/platform (if included).
@@ -275,6 +277,26 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
     });
     await publishCalendarFeed(req.user.id);
     res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/sales/mark-paid-batch - mark several sales paid from one deposit.
+// Shared with the MCP mark_sale_paid tool via services/markSalesPaid.js.
+router.post('/mark-paid-batch', isAuthenticated, validateBody(markPaidBatch), async (req, res, next) => {
+  try {
+    const { sale_ids, payout_date, payout_amount, payout_account, payout_reference } = req.body;
+    const updated = await markSalesPaid({
+      userId: req.user.id,
+      saleIds: sale_ids,
+      payoutDate: parseLocalDate(payout_date),
+      payoutAmount: payout_amount,
+      payoutAccount: payout_account || null,
+      payoutReference: payout_reference || null,
+    });
+    await publishCalendarFeed(req.user.id);
+    res.json(updated.map((sale) => withActions(exactSale(sale))));
   } catch (err) {
     next(err);
   }

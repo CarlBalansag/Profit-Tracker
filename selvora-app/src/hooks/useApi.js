@@ -60,6 +60,17 @@ export const usePlatforms = () =>
     staleTime: 1000 * 60 * 30,
   });
 
+// ─── Buyers ───────────────────────────────────────────────────────────────────
+// Who a sale was actually paid by/through (a marketplace's buyer, a cashout
+// service, or a person) — separate from Platform, which is where it was
+// listed/sold. Rarely changes — 30-minute cache is safe.
+export const useBuyers = () =>
+  useQuery({
+    queryKey: ['buyers'],
+    queryFn: () => fetcher('/api/buyers'),
+    staleTime: 1000 * 60 * 30,
+  });
+
 // ─── Payment Methods ──────────────────────────────────────────────────────────
 // Payment methods rarely change — 30-minute cache is safe. Invalidated on settings save.
 export const usePaymentMethods = () =>
@@ -228,12 +239,14 @@ export const useInvalidate = () => {
     inventory:       () => qc.invalidateQueries({ queryKey: ['inventory'] }),
     sales:           () => qc.invalidateQueries({ queryKey: ['sales'] }),
     platforms:       () => qc.invalidateQueries({ queryKey: ['platforms'] }),
+    buyers:          () => qc.invalidateQueries({ queryKey: ['buyers'] }),
     dashboard:       () => qc.invalidateQueries({ queryKey: ['dashboard'] }),
     expenses:        () => qc.invalidateQueries({ queryKey: ['expenses'] }),
     paymentMethods:  () => qc.invalidateQueries({ queryKey: ['payment-methods'] }),
     creditCard:      () => qc.invalidateQueries({ queryKey: ['creditcard'], exact: false }),
     productNote:     (name) => qc.invalidateQueries({ queryKey: ['product-note', name?.trim().toLowerCase()] }),
     calendarEvents:  () => qc.invalidateQueries({ queryKey: ['calendar-events'] }),
+    apiKeys:         () => qc.invalidateQueries({ queryKey: ['api-keys'] }),
     all:             () => qc.invalidateQueries(),
   };
 };

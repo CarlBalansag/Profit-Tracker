@@ -12,6 +12,7 @@ vi.mock('../hooks/useApi', () => ({
   useInventory: () => ({ data: mocks.inventory }),
   usePlatforms: () => ({ data: mocks.platforms }),
   usePaymentMethods: () => ({ data: mocks.cards }),
+  useBuyers: () => ({ data: [] }),
   useProductNames: () => ({ data: [] }),
   useRecentTransaction: () => ({ data: null }),
   useProductNote: () => ({ data: null }),
