@@ -4,4 +4,3 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| feature/mcp-scope-fix | Remove set_account_personal (out of scope), close tenant-isolation test gaps, verify mark_sale_paid/update_sale_buyer against exact spec | selvora-api/routes/mcp.js, selvora-api/test/mcpBuyerAndPersonalTools.test.mjs, selvora-api/test/mcpTenantIsolation.test.mjs | In progress | 2026-10-08 |
