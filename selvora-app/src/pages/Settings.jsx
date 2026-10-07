@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-  User, Database, FileJson, Bell, Palette, ExternalLink, ArrowLeft
+  User, Database, FileJson, Bell, Palette, ExternalLink, ArrowLeft, Bot
 } from 'lucide-react';
 import { PaymentMethods } from '../components/Settings/PaymentMethods';
+import { ApiKeys } from '../components/Settings/ApiKeys';
 import { Vendors } from '../components/Settings/Vendors';
 import { Cashouts } from '../components/Settings/Cashouts';
 import { Marketplaces } from '../components/Settings/Marketplaces';
@@ -29,6 +30,7 @@ function Settings() {
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'datasetup', label: 'Data Setup', icon: Database },
     { id: 'data', label: 'Data', icon: FileJson },
+    { id: 'ai-assistant', label: 'AI Assistant', icon: Bot },
     ...(SCHEDULE_C_ENABLED ? [{ id: 'tax', label: 'Schedule C', icon: FileJson }] : []),
     { id: 'notifications', label: 'Notifications', icon: Bell, disabled: true, tag: 'Soon' },
     { id: 'appearance', label: 'Appearance', icon: Palette },
@@ -157,6 +159,9 @@ function Settings() {
               </div>
             </div>
           )}
+
+          {/* AI ASSISTANT TAB */}
+          {activeTab === 'ai-assistant' && <ApiKeys />}
 
           {/* TAX TAB */}
           {SCHEDULE_C_ENABLED && activeTab === 'tax' && <ScheduleCSettings />}

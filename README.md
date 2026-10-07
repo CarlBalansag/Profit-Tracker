@@ -142,15 +142,18 @@ User
   ├── LocalCredential                             (legacy local password, migration path only)
   ├── Inventory (purchases)
   │     └── Sales (per-unit sale events) ── Buyer
-  ├── PaymentMethod (credit/debit cards with cashback rates)
+  │           (paid_at/paid_amount/paid_reference/payout_account/payout_short_amount track payouts)
+  ├── PaymentMethod (credit/debit cards with cashback rates; is_personal flags owner-funded accounts)
   ├── Platform (vendors, marketplaces, cashout platforms)
   │     └── Account (seller accounts per platform)
   ├── Expense (one-off)
   ├── RecurringExpense → generates Expense entries
-  ├── Buyer → Invoice
+  ├── Buyer → Invoice                             (who a sale was actually paid by/through)
   ├── Goal (profit/revenue/units targets)
   ├── ProductNote
-  └── CalendarEvent
+  ├── CalendarEvent
+  ├── ApiKey                                      (hashed MCP bearer tokens, see MCP Server below)
+  └── McpWriteLog                                 (audit trail of every MCP write)
 EbayPriceCache (product name → last sold price, TTL)
 AuthIntent, MigrationApproval, AuthAttemptBucket   (stateless auth-flow support, no FK to User)
 ```
@@ -165,7 +168,9 @@ Every model above except `User`, `Account`, `Buyer`, `ProductNote`, `CalendarEve
 |--------|-----------|
 | Auth | `POST /auth/firebase/intent`, `POST /auth/firebase/session`, `POST /auth/firebase/link`, `POST /auth/firebase/account-check`, `POST /auth/firebase/logout-all`, `GET/PATCH /auth/me`, `POST /auth/logout` |
 | Inventory | `GET/POST /api/inventory`, `GET /api/inventory/product-names`, `GET /api/inventory/recent-by-name`, `GET/PUT/DELETE /api/inventory/:id`, `PUT /api/inventory/:id/transaction`, `POST /api/inventory/:id/track` |
-| Sales | `GET/POST /api/sales`, `PUT/DELETE /api/sales/:id`, `POST /api/sales/:id/track` |
+| Sales | `GET/POST /api/sales`, `PUT/DELETE /api/sales/:id`, `POST /api/sales/:id/track`, `POST /api/sales/mark-paid-batch` (mark several sales paid from one deposit) |
+| Buyers | Full CRUD `/api/buyers` (who a sale was actually paid by/through) |
+| API Keys | Full CRUD `/api/api-keys` (session-authed; manages MCP bearer tokens — see MCP Server below) |
 | Analytics | `GET /api/analytics/dashboard?mode&date` |
 | Credit Card | `GET /api/creditcard/dashboard?month=YYYY-MM` |
 | Expenses | Full CRUD `/api/expenses` |
@@ -183,7 +188,64 @@ Every model above except `User`, `Account`, `Buyer`, `ProductNote`, `CalendarEve
 | eBay Price | `GET/POST /api/ebay-price` |
 | Health | `GET /health` |
 
-All `/api/*` endpoints require a valid Firebase session cookie. All mutation endpoints are validated with Zod schemas; related IDs are ownership-checked before being attached to a record.
+All `/api/*` endpoints require a valid Firebase session cookie. All mutation endpoints are validated with Zod schemas; related IDs are ownership-checked before being attached to a record. The one exception is `POST /mcp` (below), which uses a bearer-token API key instead of a session cookie.
+
+---
+
+## MCP Server (AI Assistant Access)
+
+An MCP (Model Context Protocol) server lets an AI assistant — e.g. Claude, configured with an MCP connector — read and update your reselling data directly over HTTP, without ever logging in through the browser. It's mounted on the existing API (`selvora-api`) at `POST /mcp`, using the official [`@modelcontextprotocol/sdk`](https://www.npmjs.com/package/@modelcontextprotocol/sdk) over Streamable HTTP in stateless mode (no server-held session — safe across restarts/redeploys). See `selvora-api/routes/mcp.js`.
+
+### Why it's on the same server, not a separate one
+
+It reuses the exact Prisma client/DB pool already tuned for Neon (the session pool is deliberately capped at 3 connections with pruning disabled, specifically to avoid waking Neon's auto-suspended compute — a second service would mean a second pool competing for that same budget), and the MCP tools call the same `requireOwned`/finance helpers the web routes use, so there's one source of truth for how revenue/profit is computed. For a single-user tool talking to one AI assistant, that outweighs the extra isolation a separate deployment would give.
+
+### Auth: per-user API key (not your login)
+
+`POST /mcp` is authenticated by `middleware/apiKeyAuth.js` via `Authorization: Bearer <token>`, checked against a per-user key stored only as a SHA-256 hash (`ApiKey.key_hash`) — the raw token is shown to you exactly once, when it's created or rotated, and is unrecoverable after that. This is deliberately separate from the Firebase session cookie used everywhere else in the app.
+
+**Create or rotate a key:** sign into the app normally, go to **Settings → AI Assistant**, and click **Generate Key** (or **Rotate** on an existing key, which immediately invalidates the old token and issues a new one). Copy the token shown — it will not be shown again. Give this token to your AI assistant's MCP client configuration as the bearer token; never your account password.
+
+### Endpoint
+
+```
+POST https://<your-render-api-domain>/mcp
+Authorization: Bearer <your-api-key>
+Content-Type: application/json
+Accept: application/json, text/event-stream
+```
+
+(`https://profit-tracker-tcqo.onrender.com/mcp` for the deployed instance — swap in your own Render domain, or the custom domain it's mapped to, if different.) The `Accept` header listing both content types is required by the Streamable HTTP spec even though this server always responds with a single JSON body (`enableJsonResponse: true`), never SSE. Every write (`mark_sale_paid`, `add_purchase`, `add_expense`) is recorded in `McpWriteLog` with a timestamp, tool name, and payload — nothing is ever silently applied.
+
+### Tools
+
+Read-only:
+- `list_sales(start_date?, end_date?, buyer?, payout_status?, limit?)`
+- `list_inventory(status?)`
+- `list_expenses(start_date?, end_date?, category?)`
+- `get_cashflow_summary()` — owed to you, spend, on-hand value, and `owed_to_personal_account`, by buyer
+- `get_unpaid_by_buyer()`
+
+Write (no delete tools exist for any of these):
+- `mark_sale_paid(sale_ids[], payout_date, payout_amount, payout_account?, payout_reference?)` — marks several sales paid from one deposit; if `payout_amount` is less than the combined expected revenue of the given sales, the shortfall is split across them proportionally and recorded (`payout_short_amount`) rather than silently absorbed.
+- `add_purchase(item, qty, unit_cost, store, card_used, purchase_date, tax_exempt?)` — `store` (vendor) is created automatically if new; `card_used` must already exist as a Payment Method (cashback/limit settings are never guessed).
+- `add_expense(description, amount, date, category?, paid_from_account)` — `paid_from_account` must already exist as a Payment Method.
+
+All amounts are returned as plain numbers and all dates as `YYYY-MM-DD` strings.
+
+### Running locally
+
+```bash
+cd selvora-api
+npm install
+npm start          # the API, including /mcp, now listens on PORT (default 3000)
+```
+
+Generate a key from the running app's Settings → AI Assistant page (pointed at your local API via `VITE_API_URL`), then point your MCP client at `http://localhost:3000/mcp` with that key as the bearer token.
+
+### Deploying
+
+No separate deployment: `/mcp` ships with every deploy of the existing `selvora-api` Render service (same `npm start`, same environment variables — see [Environment Variables](#environment-variables)). Nothing extra to configure.
 
 ---
 
