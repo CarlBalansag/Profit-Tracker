@@ -263,7 +263,16 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             commission_fee:     Number(s.commission_fee),
             sale_shipping:      Number(s.sale_shipping),
             platform_id:        s.platform_id || null,
-            status:             s.status,
+            // A handful of sale rows predate the sale-status validation
+            // (ideas.md ISSUES #3) and still carry an inventory-only legacy
+            // value like PURCHASED, which the backend's SALE_STATUSES enum
+            // rejects. Loading one into this editor and saving ANY other
+            // field -- platform, cost, quantity -- round-tripped that
+            // invalid value and failed the whole save. Omitting it here
+            // (JSON.stringify drops undefined keys) leaves the backend's
+            // existing writable() semantics to keep the stored status
+            // untouched when it isn't actually being changed.
+            status:             SALE_STATUSES.includes(s.status) ? s.status : undefined,
             sale_date:          s.sale_date || undefined,
             payout_date:        s.payout_date || null,
             taxable:            s.taxable,

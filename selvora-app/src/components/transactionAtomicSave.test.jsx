@@ -64,4 +64,26 @@ describe('expanded editor atomic save', () => {
     finish(response(purchase));
     await waitFor(() => expect(close).toHaveBeenCalledOnce());
   });
+
+  // A handful of sale rows predate the sale-status validation (ideas.md
+  // ISSUES #3) and still carry an inventory-only legacy value like
+  // PURCHASED. Loading one into this editor and saving ANY other field used
+  // to round-trip that invalid value back to the server and fail the whole
+  // save -- see TransactionDetailModal.jsx's save payload.
+  it('omits an invalid legacy sale status instead of round-tripping it back to a failing save', async () => {
+    const legacyPurchase = {
+      ...purchase,
+      sales: [{ ...purchase.sales[0], status: 'PURCHASED' }],
+    };
+    mocks.fetch.mockResolvedValueOnce(response(legacyPurchase)).mockResolvedValueOnce(response(legacyPurchase));
+    render(<TransactionDetailModal row={{ rawId: legacyPurchase.id }} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await waitFor(() => expect(screen.getByDisplayValue('Saved purchase')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Update Transaction' }));
+    await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(2));
+
+    const payload = JSON.parse(mocks.fetch.mock.calls[1][1].body);
+    expect(payload.sales[0].status).toBeUndefined();
+    expect(mocks.error).not.toHaveBeenCalled();
+  });
 });

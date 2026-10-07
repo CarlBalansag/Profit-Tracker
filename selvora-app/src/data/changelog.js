@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.56',
+    date: '2026-10-06',
+    notes: "Fixed Edit Transaction failing to save for a handful of old sales with a leftover invalid status.",
+  },
+  {
     version: '0.55',
     date: '2026-10-06',
     notes: 'Analytics now shows how much each Cashout or Marketplace platform has paid you, spend by vendor, profit by category, and your cashback rate over time.',
