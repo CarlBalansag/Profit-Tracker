@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.61',
+    date: '2026-10-08',
+    notes: 'Mark Paid now works once a sale has shipped, even before delivery — and your AI assistant can assign buyers and flag personal accounts too.',
+  },
+  {
     version: '0.60',
     date: '2026-10-07',
     notes: 'Payment methods can now be marked as personal, so the app can track what the business owes you back.',
