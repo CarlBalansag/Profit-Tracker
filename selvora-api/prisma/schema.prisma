@@ -37,6 +37,7 @@ model User {
   invoices               Invoice[]
   api_keys               ApiKey[]
   mcp_write_logs         McpWriteLog[]
+  change_logs            ChangeLog[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -72,6 +73,26 @@ model McpWriteLog {
   created_at DateTime @default(now())
 
   @@index([user_id, created_at])
+}
+
+// One row per changed field, written by update_sale/update_purchase (MCP).
+// Deliberately field-level rather than a payload blob like McpWriteLog, so a
+// specific edit can be reviewed and (manually) reversed -- old_value is
+// exactly what a corrective update needs to put back.
+model ChangeLog {
+  id         String   @id @default(uuid())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  table_name String
+  record_id  String
+  field      String
+  old_value  String?
+  new_value  String?
+  source     String   @default("mcp")
+  created_at DateTime @default(now())
+
+  @@index([user_id, created_at])
+  @@index([user_id, record_id])
 }
 
 model FirebaseIdentity {
@@ -179,6 +200,7 @@ model Inventory {
   category              String?
   receipt_url           String?
   tax_exempt            Boolean        @default(false)
+  notes                 String?
   created_at            DateTime       @default(now())
   sales                 Sales[]
 
@@ -245,6 +267,7 @@ model Sales {
   exemption_type      String?
   tracking_number     String?
   tracking_info       Json?
+  notes               String?
 
   @@index([inventory_id])
   @@index([platform_id])

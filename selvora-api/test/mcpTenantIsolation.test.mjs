@@ -158,6 +158,41 @@ describe('MCP write tools reject a foreign id instead of silently no-op-ing', ()
     expect(res.isError).toBe(true);
     expect(harness.db.expense.some((e) => e.description === 'X')).toBe(false);
   });
+
+  it("update_sale with user A's token cannot edit user B's sale", async () => {
+    const res = await callTool(tokenA, 'update_sale', { sale_id: USER_B_SALE, price: 1 });
+    expect(res.isError).toBe(true);
+    expect(harness.db.sales.find((s) => s.id === USER_B_SALE).unit_price).toBe(80);
+  });
+
+  it("update_sale with user A's token cannot re-platform a sale onto user B's platform, even by exact name", async () => {
+    const res = await callTool(tokenA, 'update_sale', { sale_id: harness.ids.sale, platform: 'User B Platform' });
+    expect(res.isError).toBe(true);
+  });
+
+  it("update_purchase with user A's token cannot edit user B's purchase", async () => {
+    const res = await callTool(tokenA, 'update_purchase', { purchase_id: USER_B_INVENTORY, unit_cost: 1 });
+    expect(res.isError).toBe(true);
+    expect(harness.db.inventory.find((i) => i.id === USER_B_INVENTORY).unit_purchase_cost).toBe(50);
+  });
+
+  it("add_sale with user A's token cannot create a sale against user B's purchase", async () => {
+    const before = harness.db.sales.length;
+    const res = await callTool(tokenA, 'add_sale', {
+      inventory_id: USER_B_INVENTORY, qty: 1, sale_price: 1, sale_date: '2026-10-08', platform: 'QA Marketplace',
+    });
+    expect(res.isError).toBe(true);
+    expect(harness.db.sales).toHaveLength(before);
+    expect(harness.db.inventory.find((i) => i.id === USER_B_INVENTORY).qty_on_hand).toBe(1);
+  });
+
+  it("list_changes with user A's token never returns user B's change history", async () => {
+    await callTool(tokenB, 'update_sale', { sale_id: USER_B_SALE, price: 99 });
+    const asA = await callTool(tokenA, 'list_changes', {});
+    expect(asA.data.some((c) => c.record_id === USER_B_SALE)).toBe(false);
+    const asB = await callTool(tokenB, 'list_changes', {});
+    expect(asB.data.some((c) => c.record_id === USER_B_SALE)).toBe(true);
+  });
 });
 
 describe('get_unpaid_by_buyer never mixes buyers across users', () => {
