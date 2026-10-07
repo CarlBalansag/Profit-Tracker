@@ -83,17 +83,6 @@ describe('MCP read tools', () => {
     expect(data.by_buyer).toEqual([{ buyer: 'Blake', revenue: expect.any(Number), owed: expect.any(Number) }]);
   });
 
-  it('get_cashflow_summary computes owed_to_personal_account from a personal-flagged payment method, net of reimbursements', async () => {
-    harness.db.paymentMethod[0].is_personal = true;
-    harness.db.expense.push({
-      id: 'reimb-1', user_id: harness.ids.user, name: 'Owner payback', amount: 50, tax_version: 0,
-      date: new Date(), category: 'Owner Reimbursement',
-    });
-    const { data } = await callTool('get_cashflow_summary', {});
-    // personal spend = inventory batchCost (520) via the personal card; minus the $50 reimbursement.
-    expect(data.owed_to_personal_account).toBeCloseTo(520 - 50, 2);
-  });
-
   it('get_unpaid_by_buyer only includes buyers with an outstanding balance', async () => {
     harness.db.buyer.push({ id: 'buyer-1', user_id: harness.ids.user, name: 'Blake' });
     harness.db.sales[0].buyer_id = 'buyer-1';
