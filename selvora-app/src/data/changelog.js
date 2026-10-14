@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.66',
+    date: '2026-10-14',
+    notes: 'Fixed the Credit Card page on narrow phones — numbers no longer get cut off, and the cashback badges now scroll instead of getting hidden.',
+  },
+  {
     version: '0.65',
     date: '2026-10-14',
     notes: 'Fixed the welcome tour on small screens — steps now scroll into view, stay fully on screen, and the menu opens automatically when a step points to it.',

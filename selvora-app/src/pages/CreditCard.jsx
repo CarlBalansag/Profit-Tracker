@@ -235,6 +235,7 @@ function CreditCard() {
       padding: '3px 10px', borderRadius: 20, border: `1px solid ${border}`,
       background: bg, color, fontSize: 10, fontWeight: 700,
       letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+      flexShrink: 0,
     }}>
       {label}
     </span>
@@ -298,12 +299,12 @@ function CreditCard() {
         ) : (
           <>
             {/* ── Hero ── */}
-            <div style={{
-              display: 'grid', gridTemplateColumns: '1fr 1fr',
-              borderBottom: '1px solid var(--border-default)',
-            }}>
+            <div
+              className="grid grid-cols-1 sm:grid-cols-2"
+              style={{ borderBottom: '1px solid var(--border-default)' }}
+            >
               {/* Left: net to pay */}
-              <div style={{ padding: '28px 24px', borderRight: '1px solid var(--border-default)' }}>
+              <div className="sm:border-r border-[color:var(--border-default)]" style={{ padding: '28px 24px' }}>
                 <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
                   Net to Pay · {activeCard?.name ?? 'All Cards'}
                 </div>
@@ -517,7 +518,7 @@ function CreditCard() {
           background: 'var(--bg-surface)', flexShrink: 0, gap: 8,
         }}>
           {/* Left: summary pills */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflowX: 'auto' }}>
             {cashbackEarned > 0 && pill(`Earned $${fmt(cashbackEarned)}`, 'var(--green)', 'var(--green-bg)', 'var(--green-soft)')}
             {cashbackToRedeem > 0 && pill(`Redeem $${fmt(cashbackToRedeem)}`, 'var(--red)', 'var(--red-bg)', 'var(--red)')}
             {cashbackToKeep > 0 && pill(`This Card · Keep $${fmt(cashbackToKeep)}`, 'var(--accent)', 'var(--accent-bg)', 'var(--accent-soft)', `Cashback to keep for ${activeCard?.name || 'this card'} only this month, not the combined total shown at the top.`)}
