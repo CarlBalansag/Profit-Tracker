@@ -26,7 +26,7 @@ const Shell = ({ children }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const { preferences } = useUiPreferences();
   const { user } = useAuth();
-  const { start } = useTutorial();
+  const { start, active: tutorialActive, currentStep: tutorialStep } = useTutorial();
   const isGlass = preferences.style === 'glassmorphism-brown';
   const isCarbonWorkspace = !isGlass;
 
@@ -37,6 +37,16 @@ const Shell = ({ children }) => {
       return () => clearTimeout(timer);
     }
   }, [user, start]);
+
+  // Tutorial steps that spotlight a sidebar item are invisible on mobile unless
+  // the drawer is open (it's translate-x-full off-canvas by default there).
+  // Force it open for those steps, closed for every other step. No-op on
+  // desktop, where isSidebarOpen doesn't affect layout.
+  useEffect(() => {
+    if (tutorialActive) {
+      setIsSidebarOpen(Boolean(tutorialStep?.target?.startsWith('sidebar-')));
+    }
+  }, [tutorialActive, tutorialStep]);
 
   return (
     <div className={clsx(

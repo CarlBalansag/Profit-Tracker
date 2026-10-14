@@ -5,9 +5,7 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 const PADDING = 10; // px around the spotlight target
 
-function getRect(targetId) {
-  if (!targetId) return null;
-  const el = document.querySelector(`[data-tutorial-id="${targetId}"]`);
+function getRect(el) {
   if (!el) return null;
   const r = el.getBoundingClientRect();
   return {
@@ -29,7 +27,7 @@ function TooltipCard({ rect, placement, step, onNext, onBack, onSkip, stepIndex,
   // Compute tooltip position
   let style = {};
   const TIP_W = 340;
-  const TIP_H = 200; // approx
+  const TIP_H = 300; // approx — generous upper bound; actual height varies with body text length
   const vw = window.innerWidth;
   const vh = window.innerHeight;
 
@@ -77,6 +75,20 @@ function TooltipCard({ rect, placement, step, onNext, onBack, onSkip, stepIndex,
       width: TIP_W,
     };
     if (style.top < 16) style.top = rect.bottom + 12;
+  }
+
+  // Safety net: a spotlight target can be taller/wider than the viewport, or
+  // sit flush against an edge (e.g. a mobile drawer that fills most of a
+  // narrow screen, leaving no room for 'right' placement's left-flip
+  // fallback), which makes the flip-if-offscreen checks above insufficient
+  // on their own. Always keep the card fully within the viewport as a final step.
+  if (placement !== 'center') {
+    if (typeof style.top === 'number') {
+      style.top = Math.max(16, Math.min(vh - TIP_H - 16, style.top));
+    }
+    if (typeof style.left === 'number') {
+      style.left = Math.max(16, Math.min(vw - TIP_W - 16, style.left));
+    }
   }
 
   const progress = ((stepIndex + 1) / totalSteps) * 100;
@@ -150,6 +162,7 @@ export const SpotlightOverlay = () => {
   const rafRef = useRef(null);
   const navigatingRef = useRef(false);
   const navTimerRef = useRef(null);
+  const scrolledStepRef = useRef(null);
 
   // Navigate to the step's page if needed
   useEffect(() => {
@@ -171,11 +184,25 @@ export const SpotlightOverlay = () => {
     // Do NOT cancel the timer on cleanup — let it fire after navigation settles
   }, [active, currentStep, navigate, location.pathname, location.search]);
 
-  // Track target element position with rAF
+  // Track target element position with rAF. Keeps polling through the
+  // navigation window (rather than bailing out without rescheduling) —
+  // otherwise the loop never resumes on its own once navigation settles,
+  // leaving the tooltip rendered at the *previous* step's stale position
+  // until some later, unrelated step change happens to restart it.
   const updateRect = useCallback(() => {
-    if (!active || !currentStep || navigatingRef.current) return;
-    const r = getRect(currentStep.target);
-    setRect(r);
+    if (!active || !currentStep) return;
+    if (!navigatingRef.current) {
+      const el = currentStep.target
+        ? document.querySelector(`[data-tutorial-id="${currentStep.target}"]`)
+        : null;
+      // Scroll the target into view once per step — it may be below the
+      // fold on a long mobile page, since nothing else brings it into view there.
+      if (el && scrolledStepRef.current !== currentStep.id) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        scrolledStepRef.current = currentStep.id;
+      }
+      setRect(getRect(el));
+    }
     rafRef.current = requestAnimationFrame(updateRect);
   }, [active, currentStep]);
 

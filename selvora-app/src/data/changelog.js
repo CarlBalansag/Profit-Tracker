@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.65',
+    date: '2026-10-14',
+    notes: 'Fixed the welcome tour on small screens — steps now scroll into view, stay fully on screen, and the menu opens automatically when a step points to it.',
+  },
+  {
     version: '0.64',
     date: '2026-10-13',
     notes: 'Fixed the Payment Methods page in Settings cutting off the "Perks" stat card on small screens.',
