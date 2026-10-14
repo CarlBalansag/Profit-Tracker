@@ -92,14 +92,14 @@ Goal: find real problems, not guess at them. Use Playwright MCP to load each pag
 
 ## Phase 3 — Final verification pass
 
-- [ ] Re-walk every route above at 320, 375, 390, 430, 768, 1024, 1440 in one pass, screenshot diffed against Phase 0 baseline
-- [ ] No horizontal scroll on `<body>` anywhere (check via DevTools `document.documentElement.scrollWidth` vs `innerWidth`)
-- [ ] All modals usable (open/close/submit) at 375px
-- [ ] Sidebar drawer open/close + nav works at 375px and collapses correctly back to desktop at 1024px+
-- [ ] Forms: no input causes horizontal overflow, labels/buttons remain tappable (min ~44px touch target)
-- [ ] `npm run lint` and `npm run build` clean in `selvora-app/`
-- [ ] `npm run test` (vitest) still passes — this task shouldn't touch logic, so existing tests should be unaffected; investigate any new failure
-- [ ] Desktop regression screenshot pass at 1440px confirms no visual change from Phase 0 baseline
+- [ ] Re-walk every route above at 320, 375, 390, 430, 768, 1024, 1440 in one pass, screenshot diffed against Phase 0 baseline — 375px and 1440px done for every route; 320px and 768/1024px done for the routes most likely to regress (the ones already fixed, plus Dashboard, Inventory, Guide as spot-checks for the header-squeeze pattern). 390px and 430px not yet explicitly sampled anywhere. Not yet a single clean re-walk pass of literally everything.
+- [ ] No horizontal scroll on `<body>` anywhere (check via DevTools `document.documentElement.scrollWidth` vs `innerWidth`) — not yet done as a dedicated systematic check (relied on visual screenshot review instead, which would have caught most cases but isn't the same as the explicit DOM measurement this item asks for).
+- [ ] All modals usable (open/close/submit) at 375px — ActionFormModal, ConfirmDialog, MoreActionsMenu, MarkPaidModal, DashboardSettingsModal, CalendarEventModal, VersionHistoryModal all opened/closed cleanly. Not yet checked: QuickAddModal, CustomCardModal, ApiKeys modal, TransactionDetailModal's read-only view (if distinct from the inline edit form already checked).
+- [x] Sidebar drawer open/close + nav works at 375px and collapses correctly back to desktop at 1024px+ — verified at 375px, 768px (still drawer mode, confirmed), and 1024px (confirmed static/always-visible, `lg` breakpoint boundary), both themes.
+- [ ] Forms: no input causes horizontal overflow, labels/buttons remain tappable (min ~44px touch target) — spot-checked (AddTransaction, Expenses modal, MarkPaidModal) look fine; not a systematic tap-target measurement pass across every form.
+- [~] `npm run lint` and `npm run build` clean in `selvora-app/` — build is clean throughout (zero errors after every change). Lint has 39 pre-existing errors unrelated to this pass (confirmed via git-stash comparison that none were introduced by any of my edits) — not "clean" in absolute terms, but not a regression either; fixing them is out of scope for this task.
+- [x] `npm run test` (vitest) still passes — 297/297 passing, reconfirmed after every single commit in this pass.
+- [~] Desktop regression screenshot pass at 1440px confirms no visual change from Phase 0 baseline — every page/component actually touched by a fix has an explicit before/after 1440px comparison confirming pixel-identical output. Not a full re-screenshot of every untouched route for diffing (none were expected to change, since all fixes used `sm:`/`lg:`-scoped classes or were mobile-only in effect).
 
 ## Session resume checklist
 
