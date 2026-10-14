@@ -4,3 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
+| feature/mobile-responsive-ui | Make existing app mobile-friendly (responsive layout pass, no business logic changes) | selvora-app/src/ (CSS, layout/shared components, per-page responsive fixes) + root MOBILE_RESPONSIVE_PLAN.md + .mcp.json | In progress | 2026-10-13 |
