@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.63',
+    date: '2026-10-13',
+    notes: 'Fixed a mobile bug where tapping "Recent Sales" on the Analytics page could shift the whole screen sideways and cut off text.',
+  },
+  {
     version: '0.62',
     date: '2026-10-13',
     notes: 'Fixed several mobile layout issues: the menu now closes after you tap a page, the add-purchase form no longer cuts off tax/shipping/fee amounts, the credit card date no longer overlaps its badge, and tapping "more" on a busy calendar day now opens a readable list.',

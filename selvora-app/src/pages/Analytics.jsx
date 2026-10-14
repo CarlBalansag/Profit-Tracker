@@ -257,7 +257,7 @@ function Analytics() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 p-1 rounded-xl border border-gray-800 bg-[#16161E]">
+      <div className="flex items-center gap-1 p-1 rounded-xl border border-gray-800 bg-[#16161E] overflow-x-auto">
         {[
           { id: 'overview',    label: 'Overview',      icon: BarChart2 },
           { id: 'breakdowns',  label: 'Breakdowns',    icon: PieIcon },
@@ -268,7 +268,7 @@ function Analytics() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+            className={`flex-1 min-w-[110px] flex items-center justify-center gap-2 py-2.5 text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
               activeTab === tab.id ? 'bg-gray-800 text-white shadow-sm' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
             }`}
           >
