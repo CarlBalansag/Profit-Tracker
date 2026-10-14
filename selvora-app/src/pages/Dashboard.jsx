@@ -842,14 +842,14 @@ const Dashboard = () => {
 
       {/* Welcome Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-in fade-in duration-300">
-        <div>
+        <div className="shrink-0">
           <h1 className={isGlass ? "text-3xl 3xl:text-4xl font-light tracking-tight text-[#e8e2d6]" : "text-[18px] font-medium tracking-[-0.3px] text-[var(--text-primary)]"}>Welcome back, {user?.username || 'User'}</h1>
           <p className={isGlass ? "text-white/25 text-[11px] mt-1 flex items-center gap-1" : "text-[var(--text-muted)] text-[11px] mt-1 flex items-center gap-1"}>
             <Clock className="w-3 h-3" /> {lastUpdated ? `Updated at ${lastUpdated.toLocaleTimeString()}` : 'Loading...'}
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2">
 
           {/* Share Card + Settings — shown first on mobile (order-first), normal order on desktop */}
           <div className="flex items-center gap-2 order-first sm:order-last">
