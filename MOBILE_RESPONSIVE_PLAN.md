@@ -27,18 +27,26 @@ This file is the single source of truth for resuming this work across sessions. 
 
 Goal: find real problems, not guess at them. Use Playwright MCP to load each page at 375px and 1440px, screenshot to a local scratch folder (not inline in chat), and note overflow/broken nav/unreadable text/overlapping elements. Batch pages together in one browser session (reuse the session, don't restart per page) to save tokens.
 
-- [ ] Start dev server, confirm it boots in this worktree
-- [ ] Playwright: walk all routes below at 375px width, screenshot + note issues per page in the table below (one pass, concise notes only)
-- [ ] Playwright: spot-check the same routes at 1440px to confirm nothing is currently broken on desktop (baseline before any edits)
-- [ ] Fill in "Known issues" column below from audit before starting Phase 1/2 fixes
+- [x] Start dev server, confirm it boots in this worktree — also had to bring up `selvora-api` (Prisma generate, `NODE_ENV=development` + `FRONTEND_URL=http://localhost:5174` in local `.env` only) to get past the Firebase login gate. See "Environment setup notes" below.
+- [x] Playwright: walk all routes below at 375px width, screenshot + note issues per page in the table below (one pass, concise notes only) — all routes covered except `/schedule-c` (feature-flagged off, redirects to `/`) and `Forecast.jsx` (unrouted, not audited)
+- [ ] Playwright: spot-check the same routes at 1440px to confirm nothing is currently broken on desktop (baseline before any edits) — only 3 of ~19 routes spot-checked so far (AddTransaction, CreditCard, Settings), to confirm the bugs found are mobile-only. Remaining routes not yet spot-checked.
+- [x] Fill in "Known issues" column below from audit before starting Phase 1/2 fixes — first pass done; not yet exhaustive (didn't open every modal, every Settings sub-tab, or test 320/390/430/768/1024 widths yet)
+
+### Environment setup notes (for next session / resume)
+
+- `selvora-app/.env.local` and `selvora-api/.env` are already present in this worktree, copied from production. **`selvora-api/.env` was production config** (`NODE_ENV=production`, live Neon DB, live Firebase service account, `FRONTEND_URL=https://profittracker.carltechs.com`) — confirmed with the user before touching it.
+- Changed locally (gitignored, worktree-only, never commit): `FRONTEND_URL=http://localhost:5174` (Vite picked 5174, not 5173 — port was already in use) and `NODE_ENV=development`. Production mode has a hard guard in `selvora-api/services/firebase.js:10` that refuses to boot at all unless `FRONTEND_URL` is HTTPS, and separately sets cookies `Secure`+`SameSite=None` which Chrome won't store over plain HTTP — so `NODE_ENV=development` is required for any local login testing against this backend.
+- Despite `NODE_ENV=development` setting `ssl: false` explicitly on the session-store Postgres pool (`selvora-api/index.js:85`), it still connected fine to Neon — the connection string's own `sslmode=require` took effect regardless.
+- To start both servers: `cd selvora-api && npm install && npx prisma generate && npm run start` (port 3000), then `cd selvora-app && npm run dev` (port 5173 or next free port — check `FRONTEND_URL` matches whatever port Vite actually picks).
+- This points at the real dev/production database — be careful not to create/edit/delete real records during audits; this pass has been read-only/view-only.
 
 ## Phase 1 — Shared components (fix once, benefits every page)
 
 | Component | File | Status | Known issues (fill in during audit) |
 |---|---|---|---|
 | Shell / mobile header | `src/components/Layout/Shell.jsx` | [ ] | |
-| Sidebar (neon-dark drawer) | `src/components/Layout/Sidebar.jsx` | [ ] | |
-| Sidebar (glassmorphism dock) | `src/components/Layout/Sidebar.jsx` (glass branch) | [ ] | |
+| Sidebar (neon-dark drawer) | `src/components/Layout/Sidebar.jsx` | [ ] | **Fixed:** drawer wasn't auto-closing after clicking a nav link. Added an `onClick` handler on the `<aside>` (event delegation: closes `isOpen` when the click target is inside an `<a>`) so it closes on any nav-link tap without touching every `NavItem` call site. Verified at 375px (closes correctly) and 1440px (no regression — `isOpen` doesn't affect desktop layout anyway via `lg:static lg:translate-x-0`). Other breakpoints (320/390/430/768/1024) not yet swept. |
+| Sidebar (glassmorphism dock) | `src/components/Layout/Sidebar.jsx` (glass branch) | [ ] | Same close-on-nav-click fix applied and verified: switched theme to Glassmorphism Brown via Settings → Appearance, confirmed at 375px the icon dock opens and auto-closes correctly on nav-link tap. Switched back to Neon Dark (default) afterward. |
 | Table (shared data table) | `src/components/UI/Table.jsx` | [ ] | Likely needs horizontal-scroll or card-view fallback on narrow screens |
 | StatCard | `src/components/UI/StatCard.jsx` | [ ] | |
 | ActionFormModal | `src/components/UI/ActionFormModal.jsx` | [ ] | Modal sizing/positioning on small viewports |
@@ -60,27 +68,27 @@ Goal: find real problems, not guess at them. Use Playwright MCP to load each pag
 
 | Route | Page file | Status | Known issues |
 |---|---|---|---|
-| `/login` | `src/pages/Login.jsx` | [ ] | |
-| `/` | `src/pages/Dashboard.jsx` | [ ] | |
-| `/add-transaction` | `src/pages/AddTransaction.jsx` | [ ] | |
-| `/add-sale` | `src/pages/AddSale.jsx` | [ ] | |
-| `/transactions` | `src/pages/Transactions.jsx` | [ ] | |
-| `/inventory` | `src/pages/Inventory.jsx` | [ ] | |
-| `/shipping` | `src/pages/Shipping.jsx` | [ ] | |
-| `/statuses` | `src/pages/Statuses.jsx` | [ ] | |
-| `/expenses` | `src/pages/Expenses.jsx` | [ ] | |
-| `/schedule-c` (flagged) | `src/pages/ScheduleC.jsx` | [ ] | |
-| `/receipts` | `src/pages/Receipts.jsx` | [ ] | |
-| `/invoices` (unrouted currently — check `App.jsx`) | `src/pages/Invoices.jsx` | [ ] | |
-| `/analytics` | `src/pages/Analytics.jsx` | [ ] | Chart-heavy, likely the hardest page |
-| `/cashflow` | `src/pages/CashFlow.jsx` | [ ] | |
-| `/creditcard` | `src/pages/CreditCard.jsx` | [ ] | |
-| `/settings` | `src/pages/Settings.jsx` | [ ] | Many tabs/sub-panels, test each tab |
-| `/tax-exempt` | `src/pages/TaxExempt.jsx` | [ ] | |
-| `/guide` | `src/pages/Guide.jsx` | [ ] | |
-| `/goals` | `src/pages/Goals.jsx` | [ ] | |
-| `/calendar` | `src/pages/Calendar.jsx` | [ ] | FullCalendar — known hard case on mobile, may need agenda/list view |
-| (not routed in `App.jsx`) | `src/pages/Forecast.jsx` | [ ] | Confirm if dead code or pending feature before touching |
+| `/login` | `src/pages/Login.jsx` | [ ] | Audited at 375px, looked clean. Not yet spot-checked at 1440 or other mobile widths. |
+| `/` | `src/pages/Dashboard.jsx` | [x] | Corrected after re-investigation: no overlap bug. The faded Status Pipeline tiles are intentional (`PipelineCard` applies `opacity-30` to zero-count tiles by design, confirmed present at 1440px too). "Recent Sales" `<table>` already scrolls correctly inside its own `overflow-x-auto` wrapper, same pattern as Receipts — confirmed via screenshot after scrolling the correct inner container (`h-full overflow-auto theme-scrollbar`, nested inside `.carbon-workspace`). No fix needed. |
+| `/add-transaction` | `src/pages/AddTransaction.jsx` | [ ] | **Fixed:** Tax/Shipping Cost/Fees grid and Payment Method/Cashback Rate/Cashback Amount grid (second instance of the same `grid-cols-3` bug, found while fixing the first) both changed to `grid-cols-1 sm:grid-cols-3`. Verified at 375px (stacks cleanly, full `$0.00` visible) and 1440px (unchanged, still 3-up) — also re-confirmed under the Glassmorphism Brown theme. Other breakpoints not yet swept. |
+| `/add-sale` | `src/pages/AddSale.jsx` | [ ] | Clean at 375px (card list). |
+| `/transactions` | `src/pages/Transactions.jsx` | [ ] | Mostly clean at 375px; filter chip labels truncate ("All Payment Metho...", "Search produ...") — acceptable, not breaking layout. Didn't scroll through full list/table below the fold yet. |
+| `/inventory` | `src/pages/Inventory.jsx` | [ ] | Clean at 375px (stat cards + search, fold only). |
+| `/shipping` | `src/pages/Shipping.jsx` | [ ] | Clean at 375px. |
+| `/statuses` | `src/pages/Statuses.jsx` | [ ] | Clean at 375px (kanban-style cards stack fine). |
+| `/expenses` | `src/pages/Expenses.jsx` | [ ] | Clean at 375px. |
+| `/schedule-c` (flagged) | `src/pages/ScheduleC.jsx` | [ ] | `SCHEDULE_C_ENABLED` is off — route redirects to `/`. Not auditable until flag is on; skipped. |
+| `/receipts` | `src/pages/Receipts.jsx` | [ ] | Table is cramped at 375px — only the "Item" column visible, horizontal scroll needed for the rest ("Type" column barely visible). Functional but a card-view candidate. |
+| `/invoices` | `src/pages/Invoices.jsx` | [ ] | Now routed in `App.jsx` (plan's old note that it was unrouted is stale). Clean at 375px (empty state). |
+| `/analytics` | `src/pages/Analytics.jsx` | [ ] | Chart renders fine visually at 375px despite a transient Recharts console warning (`width(-1) height(-1)` before ResizeObserver settles) — not a visible bug. Only audited the fold + one scroll position; tabs (Breakdowns/Channels/Payment) not yet checked. |
+| `/cashflow` | `src/pages/CashFlow.jsx` | [ ] | Clean at 375px. |
+| `/creditcard` | `src/pages/CreditCard.jsx` | [ ] | **Fixed:** topbar changed from fixed `height: 52` to `minHeight: 52` + `flexWrap: 'wrap'` + `rowGap: 8`, so the badge pills drop to their own row instead of overlapping the title/month-nav when space is tight. Verified at 375px (clean, legible) and 1440px (unchanged, single row). |
+| `/settings` | `src/pages/Settings.jsx` | [ ] | Profile tab clean at 375px. "Change Firebase password" panel renders above the "Settings" heading/tabs — confirmed this ordering also exists at 1440px, so it's pre-existing structure, not a mobile regression; left alone. **Unrelated pre-existing bug found (not fixed, out of scope — CSS-only task, this is a React logic bug):** opening Settings → Appearance logs 3 console errors — "Encountered two children with the same key" (`#c9a84a`, `#4aaa78`, `#c9a04a`) — in the Color Theme picker, likely `src/components/Settings/UiPreferences.jsx` mapping `COLOR_THEME_OPTIONS` with a non-unique key (possibly a duplicate hex value used as the `key` prop). Reproduction: navigate to `/settings`, click "Appearance" tab, check console. Other tabs (Data Setup, Data, AI Assistant) not yet opened/tested. |
+| `/tax-exempt` | `src/pages/TaxExempt.jsx` | [ ] | Minor: "Tax Exempt" heading + "All Years"/"All Quarters" filter buttons wrap awkwardly at 375px (buttons drop to their own line) — cramped but not broken. Rest of page (stat cards) clean. |
+| `/guide` | `src/pages/Guide.jsx` | [ ] | Clean at 375px. |
+| `/goals` | `src/pages/Goals.jsx` | [ ] | Clean at 375px. |
+| `/calendar` | `src/pages/Calendar.jsx` | [ ] | Month grid itself renders well at 375px. **Fixed:** the "+N more" link was using FullCalendar's own built-in `moreLinkClick="popover"`, which bypassed the app's existing well-built `CalendarEventPopover` component (a proper centered modal, already wired up for `eventClick`) and rendered FullCalendar's unstyled native popover instead — pinned near the clicked cell with no mobile awareness, overlapping the fixed "Add Event" button and clipping off-screen. Changed `moreLinkClick` to a custom handler (`handleMoreLinkClick`, using a new `toDateStr` helper) that reuses the same popover component `eventClick` already uses. Verified at 375px (centered, scrollable, fully legible, closeable) and 1440px (same, arguably nicer than FullCalendar's old native popover there too). Week view not yet tested. |
+| (not routed in `App.jsx`) | `src/pages/Forecast.jsx` | [ ] | Confirmed still unrouted — not audited, per plan instruction to confirm before touching. |
 
 ## Phase 3 — Final verification pass
 

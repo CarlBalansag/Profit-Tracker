@@ -110,6 +110,10 @@ function toMonthStr(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function toDateStr(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 function SubscribePanel({ onClose }) {
   const { data, isLoading } = useCalendarToken();
   const [copied, setCopied] = useState(false);
@@ -215,6 +219,12 @@ export default function Calendar() {
 
   const handleDateClick = (info) => {
     setModal({ open: true, event: null, defaultDate: info.dateStr });
+  };
+
+  const handleMoreLinkClick = (info) => {
+    const date = toDateStr(info.date);
+    const eventsOnDay = [...autoEvents, ...manualEvents].filter(e => e.date === date);
+    setPopover({ date, events: eventsOnDay });
   };
 
   const changeView = (newView) => {
@@ -335,7 +345,7 @@ export default function Calendar() {
               showNonCurrentDates={false}
               fixedWeekCount={false}
               dayMaxEvents={4}
-              moreLinkClick="popover"
+              moreLinkClick={handleMoreLinkClick}
               nowIndicator
             />
           </div>

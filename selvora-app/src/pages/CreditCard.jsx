@@ -245,9 +245,9 @@ function CreditCard() {
 
       {/* ── Topbar ── */}
       <div style={{
-        height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 20px', borderBottom: '1px solid var(--border-default)',
-        background: 'var(--bg-surface)', flexShrink: 0, gap: 16,
+        minHeight: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '8px 20px', borderBottom: '1px solid var(--border-default)',
+        background: 'var(--bg-surface)', flexShrink: 0, gap: 16, flexWrap: 'wrap', rowGap: 8,
       }}>
         {/* Left: title + month nav */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>

@@ -28,10 +28,13 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
           />
         )}
 
-        <aside className={clsx(
-          "fixed left-4 top-1/2 z-50 -translate-y-1/2 transition-transform duration-300 lg:translate-x-0",
-          isOpen ? "translate-x-0" : "-translate-x-24 lg:translate-x-0"
-        )}>
+        <aside
+          className={clsx(
+            "fixed left-4 top-1/2 z-50 -translate-y-1/2 transition-transform duration-300 lg:translate-x-0",
+            isOpen ? "translate-x-0" : "-translate-x-24 lg:translate-x-0"
+          )}
+          onClick={(e) => { if (e.target.closest('a')) setIsOpen(false); }}
+        >
           <div className="flex flex-col items-center gap-1 rounded-[24px] border border-white/[0.07] bg-[#181a1c]/[0.88] px-2 py-3 shadow-[0_12px_32px_rgba(0,0,0,0.28)] backdrop-blur-sm">
             <button
               onClick={() => navigate('/')}
@@ -76,12 +79,15 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
         />
       )}
       
-      <aside className={clsx(
-        "fixed inset-y-0 left-0 z-50 flex flex-col transition-all duration-300 ease-in-out lg:static lg:translate-x-0 border-r border-[color:var(--border-default)]",
-        isOpen ? "translate-x-0" : "-translate-x-full",
-        isCollapsed ? "w-[72px]" : "w-64 lg:w-56 3xl:w-60",
-        "[background:linear-gradient(180deg,var(--sidebar-bg-start)_0%,var(--sidebar-bg-end)_100%)]"
-      )}>
+      <aside
+        className={clsx(
+          "fixed inset-y-0 left-0 z-50 flex flex-col transition-all duration-300 ease-in-out lg:static lg:translate-x-0 border-r border-[color:var(--border-default)]",
+          isOpen ? "translate-x-0" : "-translate-x-full",
+          isCollapsed ? "w-[72px]" : "w-64 lg:w-56 3xl:w-60",
+          "[background:linear-gradient(180deg,var(--sidebar-bg-start)_0%,var(--sidebar-bg-end)_100%)]"
+        )}
+        onClick={(e) => { if (e.target.closest('a')) setIsOpen(false); }}
+      >
         <div className={clsx("flex items-center py-5 border-b border-[color:var(--border-default)]", isCollapsed ? "justify-center px-0 flex-col gap-2" : "gap-3 px-4")}>
           <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-lg bg-[var(--accent)]">
             <span className="text-white font-semibold text-xl">P</span>

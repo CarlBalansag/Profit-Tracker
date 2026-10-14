@@ -633,7 +633,7 @@ const AddTransaction = () => {
                 </Field>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Field label="Tax">{dollarInput('sales_tax', '0.00', 'blue')}</Field>
                 <Field label="Shipping Cost">{dollarInput('shipping_cost_inbound', '0.00', 'blue')}</Field>
                 <Field label="Fees">{dollarInput('fees', '0.00', 'blue')}</Field>
@@ -781,7 +781,7 @@ const AddTransaction = () => {
               </div>
 
               {/* Row 1: Payment Method, Cashback Rate, Cashback Amount */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Field label="Payment Method">
                   <select
                     name="payment_method_id" value={formData.payment_method_id} onChange={handleChange}

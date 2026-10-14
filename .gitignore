@@ -15,3 +15,7 @@ selvora-app/.env.local
 
 # Local Netlify folder
 .netlify
+
+# Scratch audit screenshots / Playwright MCP output (mobile-responsive pass)
+/audit/
+/.playwright-mcp/

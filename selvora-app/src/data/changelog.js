@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.62',
+    date: '2026-10-13',
+    notes: 'Fixed several mobile layout issues: the menu now closes after you tap a page, the add-purchase form no longer cuts off tax/shipping/fee amounts, the credit card date no longer overlaps its badge, and tapping "more" on a busy calendar day now opens a readable list.',
+  },
+  {
     version: '0.61',
     date: '2026-10-08',
     notes: 'Mark Paid now works once a sale has shipped, even before delivery — and your AI assistant can assign buyers and flag personal accounts too.',
