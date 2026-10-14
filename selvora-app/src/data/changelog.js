@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.64',
+    date: '2026-10-13',
+    notes: 'Fixed the Payment Methods page in Settings cutting off the "Perks" stat card on small screens.',
+  },
+  {
     version: '0.63',
     date: '2026-10-13',
     notes: 'Fixed a mobile bug where tapping "Recent Sales" on the Analytics page could shift the whole screen sideways and cut off text.',

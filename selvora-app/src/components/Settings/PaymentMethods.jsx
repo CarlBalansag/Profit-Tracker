@@ -182,16 +182,16 @@ export const PaymentMethods = () => {
             <h2 className="text-xl font-bold text-white flex items-center gap-2"><Crown size={20} className="text-yellow-500" /> Build your elite wallet stack</h2>
             <p className="text-sm text-gray-400 mt-1">Track utilization, available spend, and centralize every perk you can exploit.</p>
          </div>
-         <div className="flex gap-4">
-            <div className="bg-[#0A0A0F] border border-gray-800 rounded-lg p-3 min-w-30">
+         <div className="flex gap-4 overflow-x-auto">
+            <div className="bg-[#0A0A0F] border border-gray-800 rounded-lg p-3 min-w-30 flex-shrink-0">
                <div className="text-xs text-gray-500 font-medium">Total Credit Limit</div>
                <div className="text-lg font-bold text-white mt-1">${totalCreditLimit.toFixed(2)}</div>
             </div>
-            <div className="bg-[#0A0A0F] border border-gray-800 rounded-lg p-3 min-w-30">
+            <div className="bg-[#0A0A0F] border border-gray-800 rounded-lg p-3 min-w-30 flex-shrink-0">
                <div className="text-xs text-gray-500 font-medium">Total Tracked Spend</div>
                <div className="text-lg font-bold text-[#6DDBA9] mt-1">${totalTrackedSpend.toFixed(2)}</div>
             </div>
-            <div className="bg-[#0A0A0F] border border-gray-800 rounded-lg p-3 min-w-30">
+            <div className="bg-[#0A0A0F] border border-gray-800 rounded-lg p-3 min-w-30 flex-shrink-0">
                <div className="text-xs text-gray-500 font-medium">Perks · Active</div>
                <div className="text-sm font-bold text-yellow-500 mt-1">0 perks · {savedCards.length} cards</div>
             </div>
