@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.68',
+    date: '2026-10-18',
+    notes: 'Fixed the Tax Exempt page shifting sideways on narrow phones — the page header and the tabs/search row now stack cleanly instead of overflowing.',
+  },
+  {
     version: '0.67',
     date: '2026-10-14',
     notes: 'Fixed the Dashboard greeting wrapping awkwardly onto three lines on tablet-sized screens.',

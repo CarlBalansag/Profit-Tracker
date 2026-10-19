@@ -153,7 +153,7 @@ const TaxExempt = () => {
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <ShieldCheck className="w-6 h-6 text-blue-400" />
@@ -161,7 +161,7 @@ const TaxExempt = () => {
           </h1>
           <p className="text-gray-400 text-sm mt-1">Transactions marked as tax exempt</p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2">
           <select
             value={filterYear}
             onChange={e => setFilterYear(e.target.value)}
@@ -260,9 +260,9 @@ const TaxExempt = () => {
       </div>
 
       {/* Chrome-style tabs + Search row */}
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 sm:gap-4">
         {/* Tabs */}
-        <div className="flex gap-1 p-1 rounded-xl bg-[#111318] border border-white/5 w-max">
+        <div className="flex gap-1 p-1 rounded-xl bg-[#111318] border border-white/5 w-max overflow-x-auto max-w-full">
           {tabs.map(({ id, label, icon, count }) => {
             const active = tab === id;
             return (
