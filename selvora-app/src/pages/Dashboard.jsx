@@ -18,6 +18,7 @@ import {
 import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import ProfitRevenueTrendChart from '../components/Dashboard/ProfitRevenueTrendChart';
 import MonthlyProfitSpendChart from '../components/Dashboard/MonthlyProfitSpendChart';
+import PageNav from '../components/UI/PageNav';
 
 const GLASS_BASE_LAYOUT_ITEMS = ['statCards', 'radarGraph', 'trendChart', 'paymentMethods', 'recentSales'];
 
@@ -111,6 +112,8 @@ const Dashboard = () => {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [trendMode, setTrendMode] = useState('period'); // 'period' | 'cumulative'
   const [chartView, setChartView] = useState('line'); // 'line' | 'bar'
+  const [pipelinePage, setPipelinePage] = useState(0); // mobile-only Status Pipeline pagination
+  const [topCardsPage, setTopCardsPage] = useState(0); // mobile-only Top Cards pagination
 
   const { data, isLoading, isError, error, refetch } = useDashboard(modeFilter, dateFilter);
   const { data: goals = [] } = useGoals();
@@ -191,7 +194,7 @@ const Dashboard = () => {
       return (
         <div key="statCards" data-tutorial-id="dashboard-stats" className={isGlass
           ? `grid grid-cols-1 sm:grid-cols-2 ${statColClass} gap-3 3xl:gap-4 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both`
-          : "grid min-w-0 grid-cols-1 gap-3 overflow-x-auto pb-1 sm:grid-cols-2 lg:grid-cols-none animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both"
+          : "grid min-w-0 grid-cols-1 gap-3 overflow-x-auto pb-4 sm:grid-cols-2 lg:grid-cols-none animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both"
         } style={!isGlass ? {
           gridTemplateColumns: visibleStatCards.length > 0
             ? `minmax(360px, 1.4fr) repeat(${Math.max(0, visibleStatCards.length - 1)}, minmax(210px, 1fr))`
@@ -224,6 +227,29 @@ const Dashboard = () => {
 
     if (sectionId === 'pipeline') {
       if (!showPipeline || visiblePipelineCards.length === 0) return null;
+      const pipelinePerPage = 4;
+      const pipelinePageCount = Math.ceil(visiblePipelineCards.length / pipelinePerPage);
+      const safePipelinePage = Math.min(pipelinePage, pipelinePageCount - 1);
+      const mobilePipelineCards = visiblePipelineCards.slice(
+        safePipelinePage * pipelinePerPage,
+        safePipelinePage * pipelinePerPage + pipelinePerPage
+      );
+      const renderPipelineCard = cardConfig => {
+        const def = PIPELINE_CARD_REGISTRY[cardConfig.id];
+        if (!def) return null;
+        return (
+          <PipelineCard
+            key={cardConfig.id}
+            icon={def.icon}
+            count={pipeline[cardConfig.id] || 0}
+            label={def.label}
+            color={def.color}
+            statusKey={cardConfig.id}
+            onNavigate={navigate}
+            uiStyle={preferences.style}
+          />
+        );
+      };
       return (
         <div key="pipeline" data-tutorial-id="dashboard-pipeline" className={isGlass
           ? "rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.22)] animate-in fade-in duration-300 fill-mode-both"
@@ -233,23 +259,18 @@ const Dashboard = () => {
           <p className={isGlass ? "mb-3 px-0.5 text-[10px] text-white/18" : "text-[10px] text-[var(--text-muted)] mb-4"}>
             Units currently in each stage right now — not a cumulative total. See "Units Sold" below for all units sold in this period regardless of their current status.
           </p>
-          <div className={isGlass ? "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"}>
-            {visiblePipelineCards.map(cardConfig => {
-              const def = PIPELINE_CARD_REGISTRY[cardConfig.id];
-              if (!def) return null;
-              return (
-                <PipelineCard
-                  key={cardConfig.id}
-                  icon={def.icon}
-                  count={pipeline[cardConfig.id] || 0}
-                  label={def.label}
-                  color={def.color}
-                  statusKey={cardConfig.id}
-                  onNavigate={navigate}
-                  uiStyle={preferences.style}
-                />
-              );
-            })}
+
+          {/* Mobile (below lg): 4 cards at a time, paginated */}
+          <div className="lg:hidden">
+            <div className={isGlass ? "grid grid-cols-2 gap-4" : "grid grid-cols-2 gap-3"}>
+              {mobilePipelineCards.map(renderPipelineCard)}
+            </div>
+            <PageNav count={pipelinePageCount} index={safePipelinePage} onChange={setPipelinePage} isGlass={isGlass} />
+          </div>
+
+          {/* Desktop (lg+): show every card at once, unchanged from before */}
+          <div className={isGlass ? "hidden lg:grid grid-cols-3 2xl:grid-cols-4 gap-4" : "hidden lg:grid grid-cols-5 gap-3"}>
+            {visiblePipelineCards.map(renderPipelineCard)}
           </div>
         </div>
       );
@@ -339,30 +360,52 @@ const Dashboard = () => {
                   onNavigate={() => navigate('/goals')}
                 />
               )}
-              {showPaymentMethods && (
-                <div className={isGlass
-                  ? "rounded-[20px] p-5 bg-[#181a1c]/72 border border-white/[0.06] shadow-[0_10px_30px_rgba(0,0,0,0.22)]"
-                  : "rounded-[9px] p-4 bg-[var(--bg-surface)] border border-[color:var(--border-default)]"
-                }>
-                  <h3 className={isGlass ? "mb-4 text-[10px] font-medium uppercase tracking-[0.22em] text-white/25" : "text-[11px] font-medium uppercase tracking-[0.8px] text-[var(--text-muted)] mb-3"}>{isGlass ? 'Payment Methods' : 'Top Cards'}</h3>
-                  <div className="space-y-3">
-                    {topCards.length === 0 ? (
-                      <p className={isGlass ? "text-xs text-white/20" : "text-xs text-[var(--text-muted)]"}>No payment data yet.</p>
-                    ) : (isGlass ? topCards.slice(0, 5) : topCards).map((card, i) => (
-                      <div key={i} className={isGlass ? "flex items-center justify-between rounded-2xl border border-white/[0.045] bg-white/[0.02] px-4 py-3" : "flex items-center justify-between gap-3 rounded-md bg-[var(--bg-elevated)] px-3 py-2.5"}>
-                        <div className="flex items-center gap-3">
-                          <CreditCard className={isGlass ? "w-4 h-4 text-[#d8a65a]" : "w-4 h-4 text-[var(--text-secondary)]"} />
-                          <div className="min-w-0">
-                            <p className={isGlass ? "text-sm text-[#e8e2d6]" : `text-[11px] truncate max-w-[160px] ${i === 0 ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{card.name}</p>
-                            <p className={isGlass ? "text-xs text-white/20" : "text-[9px] text-[var(--text-muted)]"}>{card.txns} txns</p>
-                          </div>
-                        </div>
-                        <p className={isGlass ? "text-sm font-medium text-[#d8a65a]" : `text-[11px] font-semibold tabular-nums ${i === 0 ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>${card.amount.toFixed(0)}</p>
+              {showPaymentMethods && (() => {
+                const topCardsPerPage = 3;
+                const sourceCards = isGlass ? topCards.slice(0, 5) : topCards;
+                const topCardsPageCount = Math.max(1, Math.ceil(sourceCards.length / topCardsPerPage));
+                const safeTopCardsPage = Math.min(topCardsPage, topCardsPageCount - 1);
+                const mobileTopCards = sourceCards.slice(
+                  safeTopCardsPage * topCardsPerPage,
+                  safeTopCardsPage * topCardsPerPage + topCardsPerPage
+                );
+                const renderCardRow = (card, i) => (
+                  <div key={i} className={isGlass ? "flex items-center justify-between rounded-2xl border border-white/[0.045] bg-white/[0.02] px-4 py-3" : "flex items-center justify-between gap-3 rounded-md bg-[var(--bg-elevated)] px-3 py-2.5"}>
+                    <div className="flex items-center gap-3">
+                      <CreditCard className={isGlass ? "w-4 h-4 text-[#d8a65a]" : "w-4 h-4 text-[var(--text-secondary)]"} />
+                      <div className="min-w-0">
+                        <p className={isGlass ? "text-sm text-[#e8e2d6]" : `text-[11px] truncate max-w-[160px] ${i === 0 ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{card.name}</p>
+                        <p className={isGlass ? "text-xs text-white/20" : "text-[9px] text-[var(--text-muted)]"}>{card.txns} txns</p>
                       </div>
-                    ))}
+                    </div>
+                    <p className={isGlass ? "text-sm font-medium text-[#d8a65a]" : `text-[11px] font-semibold tabular-nums ${i === 0 ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>${card.amount.toFixed(0)}</p>
                   </div>
-                </div>
-              )}
+                );
+                return (
+                  <div className={isGlass
+                    ? "rounded-[20px] p-5 bg-[#181a1c]/72 border border-white/[0.06] shadow-[0_10px_30px_rgba(0,0,0,0.22)]"
+                    : "rounded-[9px] p-4 bg-[var(--bg-surface)] border border-[color:var(--border-default)]"
+                  }>
+                    <h3 className={isGlass ? "mb-4 text-[10px] font-medium uppercase tracking-[0.22em] text-white/25" : "text-[11px] font-medium uppercase tracking-[0.8px] text-[var(--text-muted)] mb-3"}>{isGlass ? 'Payment Methods' : 'Top Cards'}</h3>
+                    {sourceCards.length === 0 ? (
+                      <p className={isGlass ? "text-xs text-white/20" : "text-xs text-[var(--text-muted)]"}>No payment data yet.</p>
+                    ) : (
+                      <>
+                        {/* Mobile (below lg): 3 cards at a time, paginated */}
+                        <div className="lg:hidden space-y-3">
+                          {mobileTopCards.map((card, i) => renderCardRow(card, safeTopCardsPage * topCardsPerPage + i))}
+                          <PageNav count={topCardsPageCount} index={safeTopCardsPage} onChange={setTopCardsPage} isGlass={isGlass} />
+                        </div>
+
+                        {/* Desktop (lg+): show every card at once, unchanged from before */}
+                        <div className="hidden lg:block space-y-3">
+                          {sourceCards.map((card, i) => renderCardRow(card, i))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
@@ -380,7 +423,7 @@ const Dashboard = () => {
           {recent.length === 0 ? (
             <p className={isGlass ? "text-white/20 text-sm text-center py-6" : "text-gray-500 text-sm text-center py-6"}>No recent sales found.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto pb-4">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className={isGlass ? "border-b border-white/10 text-xs font-semibold text-gray-500 uppercase tracking-wider" : "border-b border-[color:var(--border-default)] text-[9px] font-medium uppercase tracking-[0.8px] text-[var(--text-muted)]"}>
@@ -1106,44 +1149,7 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate })
         </div>
 
         {/* Nav arrows + dot indicators */}
-        {count > 1 && (
-          <div className="flex items-center justify-between mt-4">
-            <button
-              onClick={() => setIdx(i => ((i - 1) + count) % count)}
-              className={`w-7 h-7 flex items-center justify-center rounded-full text-lg transition-colors ${
-                isGlass
-                  ? 'text-white/20 hover:text-white/50 hover:bg-white/[0.06]'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
-              }`}
-              aria-label="Previous goal"
-            >‹</button>
-
-            <div className="flex items-center gap-1.5">
-              {allGoals.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setIdx(i)}
-                  className={`rounded-full transition-all ${
-                    i === safeIdx
-                      ? `w-4 h-1.5 ${isGlass ? 'bg-[#d8a65a]' : 'bg-[var(--accent)]'}`
-                      : `w-1.5 h-1.5 ${isGlass ? 'bg-white/[0.15]' : 'bg-[var(--border-default)]'}`
-                  }`}
-                  aria-label={`Go to goal ${i + 1}`}
-                />
-              ))}
-            </div>
-
-            <button
-              onClick={() => setIdx(i => (i + 1) % count)}
-              className={`w-7 h-7 flex items-center justify-center rounded-full text-lg transition-colors ${
-                isGlass
-                  ? 'text-white/20 hover:text-white/50 hover:bg-white/[0.06]'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
-              }`}
-              aria-label="Next goal"
-            >›</button>
-          </div>
-        )}
+        <PageNav count={count} index={safeIdx} onChange={setIdx} isGlass={isGlass} label="goal" />
       </div>
     </div>
   );
