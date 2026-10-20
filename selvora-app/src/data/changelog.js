@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.72',
+    date: '2026-10-19',
+    notes: 'Added a quick fade-in when paging through Goals, Status Pipeline, or Top Cards on the Dashboard.',
+  },
+  {
     version: '0.71',
     date: '2026-10-19',
     notes: 'On narrow screens, the Dashboard’s Status Pipeline and Top Cards now page through a few at a time instead of a long list. Also made the Dashboard’s two scroll bars easier to grab without accidentally clicking what’s above them.',

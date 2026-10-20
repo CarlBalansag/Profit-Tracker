@@ -684,6 +684,13 @@
   .stagger-children > *:nth-child(4) { animation-delay: 0.2s; }
   .stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
   .stagger-children > *:nth-child(6) { animation-delay: 0.3s; }
+
+  /* Brief fade + rise applied to a page's content when a PageNav
+     switches pages -- paired with a React `key` change so the browser
+     replays it on every switch instead of only on first mount. */
+  .page-transition {
+    animation: fadeInUp 0.22s ease forwards;
+  }
 }
 
 @keyframes fadeInUp {

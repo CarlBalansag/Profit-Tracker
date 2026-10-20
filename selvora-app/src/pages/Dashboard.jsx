@@ -262,7 +262,7 @@ const Dashboard = () => {
 
           {/* Mobile (below lg): 4 cards at a time, paginated */}
           <div className="lg:hidden">
-            <div className={isGlass ? "grid grid-cols-2 gap-4" : "grid grid-cols-2 gap-3"}>
+            <div key={safePipelinePage} className={isGlass ? "grid grid-cols-2 gap-4 page-transition" : "grid grid-cols-2 gap-3 page-transition"}>
               {mobilePipelineCards.map(renderPipelineCard)}
             </div>
             <PageNav count={pipelinePageCount} index={safePipelinePage} onChange={setPipelinePage} isGlass={isGlass} />
@@ -392,8 +392,10 @@ const Dashboard = () => {
                     ) : (
                       <>
                         {/* Mobile (below lg): 3 cards at a time, paginated */}
-                        <div className="lg:hidden space-y-3">
-                          {mobileTopCards.map((card, i) => renderCardRow(card, safeTopCardsPage * topCardsPerPage + i))}
+                        <div className="lg:hidden">
+                          <div key={safeTopCardsPage} className="space-y-3 page-transition">
+                            {mobileTopCards.map((card, i) => renderCardRow(card, safeTopCardsPage * topCardsPerPage + i))}
+                          </div>
                           <PageNav count={topCardsPageCount} index={safeTopCardsPage} onChange={setTopCardsPage} isGlass={isGlass} />
                         </div>
 
@@ -1092,7 +1094,7 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate })
       {/* Carousel — grows to fill remaining height */}
       <div className="flex flex-col flex-1 min-h-0">
         {/* Big ring + label centred */}
-        <div className="flex flex-col items-center justify-center flex-1 gap-3">
+        <div key={safeIdx} className="flex flex-col items-center justify-center flex-1 gap-3 page-transition">
           {/* Ring */}
           <div className="relative">
             <MiniProgressRing pct={progressPct} size={96} stroke={7} color={ringColor} isGlass={isGlass} />
