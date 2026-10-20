@@ -185,7 +185,7 @@ const TaxExempt = () => {
       </div>
 
       {/* Top row — 4 primary metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="card p-4">
           <div className="flex items-center mb-1">
             <p className="text-[10px] text-gray-500 uppercase tracking-wider">Tax-Exempt Sales</p>

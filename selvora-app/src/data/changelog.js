@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.70',
+    date: '2026-10-19',
+    notes: 'Fixed the Tax Exempt page’s top revenue number spilling past its card on narrow phones.',
+  },
+  {
     version: '0.69',
     date: '2026-10-19',
     notes: 'Fixed two more sideways-scrolling glitches on small phones: a brief shift while the Tax Exempt page loads, and the date-range buttons on the Analytics page.',
