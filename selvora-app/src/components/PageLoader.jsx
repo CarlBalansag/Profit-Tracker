@@ -87,7 +87,7 @@ function TaxExemptSkeleton() {
   return (
     <div className="p-6 space-y-4 max-w-6xl mx-auto animate-in fade-in duration-300">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="space-y-2">
           <Sk className="h-8 w-36" />
           <Sk className="h-4 w-52" />
@@ -106,7 +106,7 @@ function TaxExemptSkeleton() {
         {Array(4).fill(0).map((_, i) => <Sk key={i} className="h-16" />)}
       </div>
       {/* Tabs + search */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <Sk className="h-10 w-48" />
         <Sk className="h-9 w-52" />
       </div>

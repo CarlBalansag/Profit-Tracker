@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.69',
+    date: '2026-10-19',
+    notes: 'Fixed two more sideways-scrolling glitches on small phones: a brief shift while the Tax Exempt page loads, and the date-range buttons on the Analytics page.',
+  },
+  {
     version: '0.68',
     date: '2026-10-18',
     notes: 'Fixed the Tax Exempt page shifting sideways on narrow phones — the page header and the tabs/search row now stack cleanly instead of overflowing.',

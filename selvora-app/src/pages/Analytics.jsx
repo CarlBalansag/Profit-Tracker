@@ -167,7 +167,7 @@ function Analytics() {
       </div>
 
       {/* Date Range Tabs */}
-      <div className="flex gap-1 p-1 rounded-xl bg-[#111318] border border-white/5 w-max">
+      <div className="flex gap-1 p-1 rounded-xl bg-[#111318] border border-white/5 w-max overflow-x-auto max-w-full">
         {DATE_OPTIONS.map(opt => (
           <button
             key={opt}
