@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.75',
+    date: '2026-10-21',
+    notes: 'Changing your password now opens a small popup from your Profile instead of a plain form always sitting at the top of Settings.',
+  },
+  {
     version: '0.74',
     date: '2026-10-21',
     notes: 'Added a built-in guide to Settings > AI Assistant showing everything your assistant can read and update, plus setup steps.',
