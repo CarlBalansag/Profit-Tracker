@@ -17,87 +17,8 @@ export const UI_STYLE_OPTIONS = [
   },
 ];
 
-export const COLOR_THEME_OPTIONS = [
-  {
-    id: 'copper',
-    name: 'Copper',
-    description: 'Warm copper accent with earthy tones',
-    vibe: 'Premium, editorial, commerce-oriented',
-    swatch: '#cc7a45',
-    colors: {
-      surface: '#121212',
-      border: 'rgba(255, 255, 255, 0.04)',
-      accent: '#cc7a45',
-      green: '#5aab6e',
-      chart: '#7a94b4',
-      yellow: '#c4a84e',
-    },
-  },
-  {
-    id: 'arctic',
-    name: 'Arctic',
-    description: 'Cool ice blue, clean and sharp',
-    vibe: 'Professional SaaS, Stripe/Linear-like',
-    swatch: '#5a9cc2',
-    colors: {
-      surface: '#111114',
-      border: 'rgba(255, 255, 255, 0.04)',
-      accent: '#5a9cc2',
-      green: '#54a872',
-      chart: '#c9a84a',
-      yellow: '#c9a84a',
-    },
-  },
-  {
-    id: 'jade',
-    name: 'Jade',
-    description: 'Rich green accent, natural feel',
-    vibe: 'Organic, finance-forward, profit-themed',
-    swatch: '#4aaa78',
-    colors: {
-      surface: '#111211',
-      border: 'rgba(255, 255, 255, 0.04)',
-      accent: '#4aaa78',
-      green: '#4aaa78',
-      chart: '#6888b8',
-      yellow: '#c4a248',
-    },
-  },
-  {
-    id: 'dusk',
-    name: 'Dusk',
-    description: 'Soft violet accent, modern edge',
-    vibe: 'Distinctive, design-tool aesthetic',
-    swatch: '#8a72c2',
-    colors: {
-      surface: '#121214',
-      border: 'rgba(255, 255, 255, 0.04)',
-      accent: '#8a72c2',
-      green: '#58a870',
-      chart: '#c9a04a',
-      yellow: '#c9a04a',
-    },
-  },
-  {
-    id: 'signal',
-    name: 'Signal',
-    description: 'Bold red-orange, direct and energetic',
-    vibe: 'Bold, action-oriented, high-contrast',
-    swatch: '#c2614a',
-    colors: {
-      surface: '#131212',
-      border: 'rgba(255, 255, 255, 0.04)',
-      accent: '#c2614a',
-      green: '#55a86a',
-      chart: '#5a8cc2',
-      yellow: '#c4a44a',
-    },
-  },
-];
-
 const DEFAULT_UI_PREFERENCES = {
   style: 'neon-dark',
-  colorTheme: 'copper',
 };
 
 function mergePreferences(stored) {
@@ -114,16 +35,12 @@ function mergePreferences(stored) {
     next.style = DEFAULT_UI_PREFERENCES.style;
   }
 
-  if (!COLOR_THEME_OPTIONS.some((option) => option.id === next.colorTheme)) {
-    next.colorTheme = DEFAULT_UI_PREFERENCES.colorTheme;
-  }
-
   return next;
 }
 
 function applyColorTheme(preferences) {
   if (typeof document === 'undefined') return;
-  document.documentElement.dataset.theme = preferences.colorTheme || DEFAULT_UI_PREFERENCES.colorTheme;
+  document.documentElement.dataset.theme = 'copper';
   document.documentElement.dataset.uiStyle = preferences.style || DEFAULT_UI_PREFERENCES.style;
 }
 
