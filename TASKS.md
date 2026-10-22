@@ -4,3 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
+| main | UI Redesign — Step 1: Main Application Layout (Dashboard shell) | `selvora-app/src/components/Layout/Shell.jsx`, `selvora-app/src/index.css` | In progress | 2026-10-22 |
