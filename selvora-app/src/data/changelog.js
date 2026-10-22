@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.77',
+    date: '2026-10-21',
+    notes: 'Fixed the Glassmorphism Brown dashboard so the Goals card no longer stretches to fill the whole screen, pushing everything else out of view until you scrolled.',
+  },
+  {
     version: '0.76',
     date: '2026-10-21',
     notes: 'Signing in after clicking your verification email link now continues on its own, instead of needing an extra "Continue" click.',
