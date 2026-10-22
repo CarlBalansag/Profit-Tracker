@@ -638,6 +638,31 @@
   background: var(--border-hover);
 }
 
+/* Light-theme scrollbar for the premium Dashboard (replaces .theme-scrollbar
+   there, since that class's colors are dark-theme only). */
+.dp-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(17, 17, 17, 0.15) transparent;
+}
+
+.dp-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.dp-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dp-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(17, 17, 17, 0.15);
+  border-radius: 10px;
+}
+
+.dp-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(17, 17, 17, 0.28);
+}
+
 /* Modal Scrollbar Optimization */
 .modal-scrollbar {
   scrollbar-width: thin;
