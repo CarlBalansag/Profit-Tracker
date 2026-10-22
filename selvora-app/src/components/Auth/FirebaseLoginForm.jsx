@@ -97,7 +97,18 @@ export default function FirebaseLoginForm({ migration = false }) {
       <button type="submit" disabled={pending || (mode === 'reset' && cooldown > 0)} className="rounded bg-[#5865F2] p-2 disabled:opacity-50">{pending ? 'Please wait…' : mode === 'signup' ? 'Create account' : mode === 'reset' ? 'Send reset email' : 'Sign in'}</button></>}
     {providerUser && <><p>Account email: {providerUser.email}</p>
       {migration && <p>Firebase UID for the owner’s approval: <code>{providerUser.uid}</code></p>}
-      <button type="button" disabled={pending} onClick={() => run(async () => { await reload(providerUser); if (!providerUser.emailVerified) throw new Error('Your email is not verified yet.'); await finish(providerUser, migration ? 'migration' : mode === 'signup' ? 'signup' : 'login'); })} className="rounded bg-[#5865F2] p-2">{migration ? 'Complete approved migration' : 'Continue after verification'}</button>
+      {migration
+        ? <button type="button" disabled={pending} onClick={() => run(async () => { await reload(providerUser); if (!providerUser.emailVerified) throw new Error('Your email is not verified yet.'); await finish(providerUser, 'migration'); })} className="rounded bg-[#5865F2] p-2">Complete approved migration</button>
+        : <>
+          {/* No manual "Continue" button here: the polling effect above already
+              moves on by itself within a few seconds of the link being clicked,
+              so a button whose only job is to do that early just reads as a
+              confusing extra step. The link below is a fallback for a
+              backgrounded tab, where browsers can throttle the poll. */}
+          <p>Waiting for verification — this continues automatically once you click the link in your email.</p>
+          <button type="button" disabled={pending} onClick={() => run(async () => { await reload(providerUser); if (!providerUser.emailVerified) throw new Error('Your email is not verified yet.'); await finish(providerUser, mode === 'signup' ? 'signup' : 'login'); })} className="block underline text-sm">Already verified? Check now</button>
+        </>
+      }
       <button type="button" disabled={pending || cooldown > 0} onClick={() => run(async () => { await sendEmailVerification(providerUser, emailActionSettings()); setCooldown(60); setMessage('Verification email sent.'); })} className="block underline">{cooldown ? `Resend in ${cooldown}s` : 'Resend verification'}</button>
       {!migration && signupEnabled && mode !== 'signup' && <button type="button" disabled={pending} onClick={() => run(async () => { await reload(providerUser); if (!providerUser.emailVerified) throw new Error('Verify your email first.'); await finish(providerUser, 'signup'); })} className="block underline">Register this verified account</button>}
       <button type="button" disabled={pending} onClick={() => run(async () => { await signOut(providerUser.auth); setProviderUser(null); setCurrent(''); })} className="block underline">Cancel and sign in again</button></>}
