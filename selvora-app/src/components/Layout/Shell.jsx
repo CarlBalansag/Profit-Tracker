@@ -7,15 +7,18 @@ import { useAuth } from '../../context/AuthContext';
 import { useTutorial } from '../../context/TutorialContext';
 import { SpotlightOverlay } from '../Tutorial/SpotlightOverlay';
 
-const Header = ({ onMenuClick }) => {
+const Header = ({ onMenuClick, isGlass }) => {
   return (
-    <header className="lg:hidden flex items-center gap-4 px-4 py-3 border-b border-white/10">
-      <button className="text-gray-400 hover:text-white" onClick={onMenuClick}>
+    <header className={clsx(
+      "lg:hidden flex items-center gap-4 px-4 py-3",
+      isGlass ? "border-b border-white/10" : "border-b border-[color:var(--dp-border)] bg-[var(--dp-card-bg)]"
+    )}>
+      <button className={isGlass ? "text-gray-400 hover:text-white" : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]"} onClick={onMenuClick}>
         <Menu size={24} />
       </button>
       <div className="flex items-center gap-2">
-        <div className="w-7 h-7 rounded bg-[var(--accent)] flex items-center justify-center text-white font-bold text-xs">P</div>
-        <span className="font-bold text-white">Profit Tracker</span>
+        <div className={clsx("w-7 h-7 rounded flex items-center justify-center text-[#ffffff] font-bold text-xs", isGlass ? "bg-[var(--accent)]" : "bg-[var(--dp-accent)]")}>P</div>
+        <span className={isGlass ? "font-bold text-white" : "font-bold text-[var(--dp-text-primary)]"}>Profit Tracker</span>
       </div>
     </header>
   );
@@ -65,9 +68,9 @@ const Shell = ({ children }) => {
           "flex-1 flex flex-col min-w-0 overflow-hidden",
           isGlass
             ? "relative bg-[radial-gradient(ellipse_at_20%_20%,rgba(216,166,90,0.035)_0%,transparent_42%),radial-gradient(ellipse_at_80%_80%,rgba(125,140,160,0.035)_0%,transparent_42%),#111315] lg:pl-[76px]"
-            : "bg-[var(--bg-base)]"
+            : "bg-[var(--dp-bg)]"
         )}>
-        <Header onMenuClick={() => setIsSidebarOpen(true)} />
+        <Header onMenuClick={() => setIsSidebarOpen(true)} isGlass={isGlass} />
         <div className={clsx(
           "flex-1 overflow-y-auto theme-scrollbar",
           isGlass ? "p-4 sm:p-6 lg:p-7" : "p-3 sm:p-4 lg:p-6",
