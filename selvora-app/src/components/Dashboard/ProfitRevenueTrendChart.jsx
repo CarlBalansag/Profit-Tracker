@@ -180,7 +180,7 @@ function buildOptions(points, chartSeries, uiStyle = 'neon-dark', containerWidth
       },
       itemStyle: {
         color: seriesColor,
-        borderColor: isGlass ? '#17140f' : readThemeVar('--bg-base', '#0b0b0b'),
+        borderColor: isGlass ? '#17140f' : readThemeVar('--dp-card-bg', '#FFFFFF'),
         borderWidth: isGlass ? 1.5 : 1,
         opacity: muted ? 0.55 : 1,
       },
@@ -222,22 +222,24 @@ function buildOptions(points, chartSeries, uiStyle = 'neon-dark', containerWidth
       trigger: 'axis',
       axisPointer: {
         type: 'cross',
-        crossStyle: { color: isGlass ? 'rgba(216, 166, 90, 0.18)' : readThemeVar('--border-hover', 'rgba(255,255,255,0.08)') },
-        lineStyle: { color: isGlass ? 'rgba(216, 166, 90, 0.18)' : readThemeVar('--border-hover', 'rgba(255,255,255,0.08)'), type: 'dashed' },
+        crossStyle: { color: isGlass ? 'rgba(216, 166, 90, 0.18)' : readThemeVar('--dp-border', 'rgba(17,17,17,0.12)') },
+        lineStyle: { color: isGlass ? 'rgba(216, 166, 90, 0.18)' : readThemeVar('--dp-border', 'rgba(17,17,17,0.12)'), type: 'dashed' },
       },
-      backgroundColor: isGlass ? 'rgba(20, 17, 14, 0.96)' : readThemeVar('--bg-surface', '#121212'),
-      borderColor: isGlass ? 'rgba(216,166,90,0.16)' : readThemeVar('--border-default', 'rgba(255,255,255,0.04)'),
+      backgroundColor: isGlass ? 'rgba(20, 17, 14, 0.96)' : readThemeVar('--dp-card-bg', '#FFFFFF'),
+      borderColor: isGlass ? 'rgba(216,166,90,0.16)' : readThemeVar('--dp-border', 'rgba(17,17,17,0.06)'),
       borderWidth: 1,
       padding: isGlass ? [12, 14] : [10, 12],
-      extraCssText: isGlass ? 'border-radius:14px;box-shadow:0 14px 36px rgba(0,0,0,0.32);' : undefined,
-      textStyle: { color: isGlass ? '#e8e2d6' : readThemeVar('--text-primary', '#d0d0d0'), fontSize: 12, fontFamily: isGlass ? 'Inter, ui-sans-serif, system-ui' : undefined },
+      extraCssText: isGlass
+        ? 'border-radius:14px;box-shadow:0 14px 36px rgba(0,0,0,0.32);'
+        : 'border-radius:14px;box-shadow:0 2px 4px rgba(16,24,40,0.06), 0 16px 40px rgba(16,24,40,0.12);',
+      textStyle: { color: isGlass ? '#e8e2d6' : readThemeVar('--dp-text-primary', '#16161A'), fontSize: 12, fontFamily: isGlass ? 'Inter, ui-sans-serif, system-ui' : undefined },
       formatter: params => {
         const dateIndex = params[0]?.dataIndex ?? 0;
-        const title = `<div style="font-family:${isGlass ? 'Georgia, serif' : 'inherit'};font-weight:600;color:${isGlass ? '#fff4dc' : readThemeVar('--text-primary', '#d0d0d0')};margin-bottom:8px">${displayDates[dateIndex] || params[0]?.axisValue || ''}</div>`;
+        const title = `<div style="font-family:${isGlass ? 'Georgia, serif' : 'inherit'};font-weight:600;color:${isGlass ? '#fff4dc' : readThemeVar('--dp-text-primary', '#16161A')};margin-bottom:8px">${displayDates[dateIndex] || params[0]?.axisValue || ''}</div>`;
         const lines = params.map(item => (
           `<div style="display:flex;align-items:center;justify-content:space-between;gap:20px;margin:5px 0;color:${isGlass ? 'rgba(232,226,214,0.62)' : 'inherit'}">
             <span>${item.marker}<span style="margin-left:2px">${item.seriesName}</span></span>
-            <strong style="color:${isGlass ? item.color : readThemeVar('--text-primary', '#d0d0d0')}">${money.format(item.value)}</strong>
+            <strong style="color:${isGlass ? item.color : readThemeVar('--dp-text-primary', '#16161A')}">${money.format(item.value)}</strong>
           </div>`
         ));
         return title + lines.join('');
@@ -252,7 +254,7 @@ function buildOptions(points, chartSeries, uiStyle = 'neon-dark', containerWidth
       itemGap: 8,
       icon: 'circle',
       textStyle: {
-        color: isGlass ? 'rgba(232,226,214,0.38)' : readThemeVar('--text-secondary', '#6e6e6e'),
+        color: isGlass ? 'rgba(232,226,214,0.38)' : readThemeVar('--dp-text-secondary', '#6B6B76'),
         fontSize: 9,
         fontWeight: 500,
       },
@@ -265,7 +267,7 @@ function buildOptions(points, chartSeries, uiStyle = 'neon-dark', containerWidth
       itemGap: 10,
       icon: isGlass ? 'circle' : 'path://M0 4 L18 4 L18 6 L0 6 Z',
       textStyle: {
-        color: isGlass ? 'rgba(232,226,214,0.38)' : readThemeVar('--text-secondary', '#6e6e6e'),
+        color: isGlass ? 'rgba(232,226,214,0.38)' : readThemeVar('--dp-text-secondary', '#6B6B76'),
         fontSize: isGlass ? 11 : 10,
         fontWeight: 500,
         fontFamily: isGlass ? 'Inter, ui-sans-serif, system-ui' : undefined,
@@ -298,10 +300,10 @@ function buildOptions(points, chartSeries, uiStyle = 'neon-dark', containerWidth
       type: 'category',
       boundaryGap: false,
       data: dates,
-      axisLine: { lineStyle: { color: isGlass ? 'rgba(232,226,214,0.10)' : readThemeVar('--border-default', 'rgba(255,255,255,0.04)') } },
+      axisLine: { lineStyle: { color: isGlass ? 'rgba(232,226,214,0.10)' : readThemeVar('--dp-border', 'rgba(17,17,17,0.1)') } },
       axisTick: { show: false },
       axisLabel: {
-        color: isGlass ? 'rgba(232,226,214,0.32)' : readThemeVar('--text-muted', '#404040'),
+        color: isGlass ? 'rgba(232,226,214,0.32)' : readThemeVar('--dp-text-label', '#8E8E99'),
         fontSize: 10,
         fontFamily: isGlass ? 'Inter, ui-sans-serif, system-ui' : undefined,
         margin: 8,
@@ -321,16 +323,16 @@ function buildOptions(points, chartSeries, uiStyle = 'neon-dark', containerWidth
       type: 'value',
       min: value => Math.min(0, value.min),
       splitNumber: 4,
-      axisLine: { show: true, lineStyle: { color: isGlass ? 'rgba(232,226,214,0.14)' : readThemeVar('--border-default', 'rgba(255,255,255,0.04)') } },
+      axisLine: { show: true, lineStyle: { color: isGlass ? 'rgba(232,226,214,0.14)' : readThemeVar('--dp-border', 'rgba(17,17,17,0.1)') } },
       axisTick: { show: false },
       axisLabel: {
-        color: isGlass ? 'rgba(232,226,214,0.32)' : readThemeVar('--text-muted', '#404040'),
+        color: isGlass ? 'rgba(232,226,214,0.32)' : readThemeVar('--dp-text-label', '#8E8E99'),
         fontSize: 10,
         fontFamily: isGlass ? 'Inter, ui-sans-serif, system-ui' : undefined,
         formatter: value => money.format(value),
       },
       splitLine: {
-        lineStyle: { color: isGlass ? 'rgba(232,226,214,0.07)' : readThemeVar('--border-default', 'rgba(255,255,255,0.04)'), type: 'dashed' },
+        lineStyle: { color: isGlass ? 'rgba(232,226,214,0.07)' : readThemeVar('--dp-border', 'rgba(17,17,17,0.06)'), type: 'dashed' },
       },
     },
     series,
@@ -395,22 +397,25 @@ export default function ProfitRevenueTrendChart({ stats, trend, trendMeta = null
 
   useEffect(() => () => instanceRef.current?.dispose(), []);
 
+  const isGlassStyle = uiStyle === 'glassmorphism-brown';
+
   if (failed) {
     return (
-      <div className="flex h-full min-h-[280px] items-center justify-center rounded-lg border border-dashed border-white/10 bg-black/20 text-sm text-gray-500">
+      <div className={isGlassStyle
+        ? "flex h-full min-h-[280px] items-center justify-center rounded-lg border border-dashed border-white/10 bg-black/20 text-sm text-gray-500"
+        : "flex h-full min-h-[280px] items-center justify-center rounded-lg border border-dashed border-[color:var(--dp-border)] text-sm text-[var(--dp-text-secondary)]"
+      }>
         Apache ECharts could not be loaded.
       </div>
     );
   }
-
-  const isGlassStyle = uiStyle === 'glassmorphism-brown';
 
   return (
     <div className="relative h-full min-h-[280px] w-full flex flex-col">
       {/* Period / Cumulative tab toggle */}
       {onTrendModeChange && (
         <div className="flex justify-end px-1 pb-1 shrink-0">
-          <div className={`flex gap-0.5 p-0.5 rounded-lg ${isGlassStyle ? 'bg-white/[0.04] border border-white/[0.06]' : 'bg-[var(--bg-elevated)] border border-[color:var(--border-default)]'}`}>
+          <div className={`flex gap-0.5 p-0.5 rounded-lg ${isGlassStyle ? 'bg-white/[0.04] border border-white/[0.06]' : 'bg-[var(--dp-card-bg)] dp-elevated'}`}>
             {[['period', 'Period'], ['cumulative', 'Cumulative']].map(([val, label]) => (
               <button
                 key={val}
@@ -420,10 +425,10 @@ export default function ProfitRevenueTrendChart({ stats, trend, trendMeta = null
                   trendMode === val
                     ? isGlassStyle
                       ? 'bg-white/[0.08] text-[#e8e2d6] border border-white/[0.10]'
-                      : 'bg-[var(--accent-bg)] text-[var(--accent)] border border-[color:var(--accent)]/30'
+                      : 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent)] border border-transparent'
                     : isGlassStyle
                       ? 'text-white/25 hover:text-white/50 border border-transparent'
-                      : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] border border-transparent'
+                      : 'text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] border border-transparent'
                 }`}
               >
                 {label}
@@ -435,7 +440,10 @@ export default function ProfitRevenueTrendChart({ stats, trend, trendMeta = null
       <div ref={chartRef} className="flex-1 min-h-[280px] w-full" />
       {isEmpty && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="rounded-lg border border-white/10 bg-[#0d1118]/85 px-4 py-2 text-xs text-gray-500 shadow-xl">
+          <div className={isGlassStyle
+            ? "rounded-lg border border-white/10 bg-[#0d1118]/85 px-4 py-2 text-xs text-gray-500 shadow-xl"
+            : "rounded-lg bg-[var(--dp-card-bg)] dp-elevated-hover px-4 py-2 text-xs text-[var(--dp-text-secondary)]"
+          }>
             Profit lines appear after sales data is recorded.
           </div>
         </div>

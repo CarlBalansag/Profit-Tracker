@@ -10,7 +10,7 @@ export default function PageNav({ count, index, onChange, isGlass = false, label
 
   const arrowClass = isGlass
     ? 'text-white/20 hover:text-white/50 hover:bg-white/[0.06]'
-    : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]';
+    : 'text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] hover:bg-[var(--dp-bg)]';
 
   return (
     <div className="flex items-center justify-between mt-4">
@@ -29,8 +29,8 @@ export default function PageNav({ count, index, onChange, isGlass = false, label
             onClick={() => onChange(i)}
             className={`rounded-full transition-all ${
               i === safeIndex
-                ? `w-4 h-1.5 ${isGlass ? 'bg-[#d8a65a]' : 'bg-[var(--accent)]'}`
-                : `w-1.5 h-1.5 ${isGlass ? 'bg-white/[0.15]' : 'bg-[var(--border-default)]'}`
+                ? `w-4 h-1.5 ${isGlass ? 'bg-[#d8a65a]' : 'bg-[var(--dp-accent)]'}`
+                : `w-1.5 h-1.5 ${isGlass ? 'bg-white/[0.15]' : 'bg-[var(--dp-border)]'}`
             }`}
             aria-label={`Go to ${label} ${i + 1}`}
           />

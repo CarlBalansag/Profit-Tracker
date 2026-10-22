@@ -64,13 +64,13 @@ function buildOptions(points, uiStyle) {
   const BLUE   = isGlass ? '#5b8fc7' : '#60a5fa';
   const AMBER  = isGlass ? '#c9a84c' : '#fbbf24';
 
-  const textMuted      = isGlass ? 'rgba(232,226,214,0.32)' : readThemeVar('--text-muted', '#606060');
-  const textPrimary    = isGlass ? '#e8e2d6'                : readThemeVar('--text-primary', '#d0d0d0');
-  const textSecondary  = isGlass ? 'rgba(232,226,214,0.38)' : readThemeVar('--text-secondary', '#6e6e6e');
-  const borderColor    = isGlass ? 'rgba(232,226,214,0.08)' : readThemeVar('--border-default', 'rgba(255,255,255,0.04)');
-  const tooltipBg      = isGlass ? 'rgba(20,17,14,0.96)'   : readThemeVar('--bg-surface', '#121212');
-  const tooltipBorder  = isGlass ? 'rgba(216,166,90,0.16)' : readThemeVar('--border-default', 'rgba(255,255,255,0.04)');
-  const splitLineColor = isGlass ? 'rgba(232,226,214,0.07)' : readThemeVar('--border-default', 'rgba(255,255,255,0.04)');
+  const textMuted      = isGlass ? 'rgba(232,226,214,0.32)' : readThemeVar('--dp-text-label', '#8E8E99');
+  const textPrimary    = isGlass ? '#e8e2d6'                : readThemeVar('--dp-text-primary', '#16161A');
+  const textSecondary  = isGlass ? 'rgba(232,226,214,0.38)' : readThemeVar('--dp-text-secondary', '#6B6B76');
+  const borderColor    = isGlass ? 'rgba(232,226,214,0.08)' : readThemeVar('--dp-border', 'rgba(17,17,17,0.06)');
+  const tooltipBg      = isGlass ? 'rgba(20,17,14,0.96)'   : readThemeVar('--dp-card-bg', '#FFFFFF');
+  const tooltipBorder  = isGlass ? 'rgba(216,166,90,0.16)' : readThemeVar('--dp-border', 'rgba(17,17,17,0.06)');
+  const splitLineColor = isGlass ? 'rgba(232,226,214,0.07)' : readThemeVar('--dp-border', 'rgba(17,17,17,0.06)');
 
   const labels      = points.map(p => formatMonthLabel(p.date));
   const profitData  = points.map(p => Math.round(p.netProfit));
@@ -103,7 +103,9 @@ function buildOptions(points, uiStyle) {
       borderColor: tooltipBorder,
       borderWidth: 1,
       padding: [10, 14],
-      extraCssText: isGlass ? 'border-radius:12px;box-shadow:0 14px 36px rgba(0,0,0,0.32);' : undefined,
+      extraCssText: isGlass
+        ? 'border-radius:12px;box-shadow:0 14px 36px rgba(0,0,0,0.32);'
+        : 'border-radius:12px;box-shadow:0 2px 4px rgba(16,24,40,0.06), 0 16px 40px rgba(16,24,40,0.12);',
       textStyle: { color: textPrimary, fontSize: 12 },
       formatter: params => {
         const label = params[0]?.axisValue ?? '';
@@ -183,6 +185,7 @@ export default function MonthlyProfitSpendChart({ trend = [], uiStyle = 'neon-da
   const chartRef = useRef(null);
   const instanceRef = useRef(null);
   const [failed, setFailed] = useState(false);
+  const isGlassStyle = uiStyle === 'glassmorphism-brown';
 
   const points = toMonthlyBuckets(trend);
   const isEmpty = points.length === 0 || points.every(
@@ -223,7 +226,10 @@ export default function MonthlyProfitSpendChart({ trend = [], uiStyle = 'neon-da
 
   if (failed) {
     return (
-      <div className="flex h-full min-h-[260px] items-center justify-center text-sm text-gray-500">
+      <div className={isGlassStyle
+        ? "flex h-full min-h-[260px] items-center justify-center text-sm text-gray-500"
+        : "flex h-full min-h-[260px] items-center justify-center text-sm text-[var(--dp-text-secondary)]"
+      }>
         Chart could not be loaded.
       </div>
     );
@@ -234,7 +240,10 @@ export default function MonthlyProfitSpendChart({ trend = [], uiStyle = 'neon-da
       <div ref={chartRef} className="h-full w-full min-h-[260px]" />
       {isEmpty && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="rounded-lg border border-white/10 bg-[#0d1118]/85 px-4 py-2 text-xs text-gray-500 shadow-xl">
+          <div className={isGlassStyle
+            ? "rounded-lg border border-white/10 bg-[#0d1118]/85 px-4 py-2 text-xs text-gray-500 shadow-xl"
+            : "rounded-lg bg-[var(--dp-card-bg)] dp-elevated-hover px-4 py-2 text-xs text-[var(--dp-text-secondary)]"
+          }>
             Monthly data appears after sales are recorded.
           </div>
         </div>
