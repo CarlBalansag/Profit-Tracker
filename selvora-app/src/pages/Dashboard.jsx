@@ -830,6 +830,7 @@ const Dashboard = () => {
             isGlass={isGlass}
             dateFilter={dateFilter}
             onNavigate={() => navigate('/goals')}
+            fillHeight={false}
           />
         )}
 
@@ -1022,7 +1023,7 @@ function MiniProgressRing({ pct, size = 56, stroke = 5, color, isGlass }) {
   );
 }
 
-function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate }) {
+function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate, fillHeight = true }) {
   const [idx, setIdx] = useState(0);
   const goalsWithTarget = goals.filter(g => getTargetForFilter(g, dateFilter).value != null);
   const allGoals = goalsWithTarget.length > 0 ? goalsWithTarget : goals;
@@ -1069,7 +1070,7 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate })
     : `$${Math.round(v).toLocaleString()}`;
 
   return (
-    <div className={`flex flex-col animate-in slide-in-from-bottom-4 duration-500 fade-in fill-mode-both h-full ${
+    <div className={`flex flex-col animate-in slide-in-from-bottom-4 duration-500 fade-in fill-mode-both ${fillHeight ? 'h-full' : ''} ${
       isGlass
         ? 'rounded-[20px] p-5 bg-[#181a1c]/72 border border-white/[0.06] shadow-[0_10px_30px_rgba(0,0,0,0.22)]'
         : 'rounded-[9px] p-4 bg-[var(--bg-surface)] border border-[color:var(--border-default)]'
