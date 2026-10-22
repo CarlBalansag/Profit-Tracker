@@ -54,6 +54,25 @@ describe('QA-20/QA-23 regression: card modals do not close/clear before save suc
     expect(mocks.invalidatePaymentMethods).toHaveBeenCalled();
   });
 
+  it('sends the entered Last 4 Digits in the save request', async () => {
+    render(<PaymentMethods />);
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: /Custom/ }));
+    expect(await screen.findByText('Add Card')).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText('e.g., Chase Freedom Flex'), { target: { value: 'My Card' } });
+    fireEvent.change(screen.getByPlaceholderText('0000'), { target: { value: '1234' } });
+
+    const created = { id: 'c1', name: 'My Card', type: 'Credit Card', default_cashback_rate: 0, last4: '1234', category_rates: [] };
+    mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify(created), { status: 200 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create Card' }));
+
+    await waitFor(() => expect(screen.queryByText('Add Card')).toBeNull());
+    const [, options] = mocks.apiFetch.mock.calls.at(-1);
+    expect(JSON.parse(options.body).last4).toBe('1234');
+  });
+
   it('does not close the Custom Card modal on Escape while a save is in flight', async () => {
     render(<PaymentMethods />);
     await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalled());
