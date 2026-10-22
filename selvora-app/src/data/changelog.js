@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.78',
+    date: '2026-10-21',
+    notes: 'On the Glassmorphism Brown dashboard, the Goals card now sits next to Payment Cards as a pair of side-by-side cards instead of its own full-width row.',
+  },
+  {
     version: '0.77',
     date: '2026-10-21',
     notes: 'Fixed the Glassmorphism Brown dashboard so the Goals card no longer stretches to fill the whole screen, pushing everything else out of view until you scrolled.',

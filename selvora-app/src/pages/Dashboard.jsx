@@ -611,9 +611,10 @@ const Dashboard = () => {
     }
 
     if (sectionId === 'paymentMethods') {
-      if (!showPaymentMethods) return null;
-      return (
-        <div key="paymentMethods" className="h-full rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-6 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
+      if (!showPaymentMethods && !showGoalsWidget) return null;
+
+      const paymentCardsCard = (
+        <div className="h-full rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-6 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
           <h3 className="mb-5 text-[10px] font-bold uppercase tracking-[0.22em] text-white/22">Payment Cards</h3>
           <div className="space-y-3">
             {topCards.length === 0 ? (
@@ -642,6 +643,36 @@ const Dashboard = () => {
               );
             })}
           </div>
+        </div>
+      );
+
+      if (!showPaymentMethods) {
+        return (
+          <DashboardGoalsWidget
+            key="paymentMethods"
+            goals={activeGoals}
+            stats={stats}
+            isGlass={isGlass}
+            dateFilter={dateFilter}
+            onNavigate={() => navigate('/goals')}
+          />
+        );
+      }
+
+      if (!showGoalsWidget) {
+        return <div key="paymentMethods">{paymentCardsCard}</div>;
+      }
+
+      return (
+        <div key="paymentMethods" className="grid h-full grid-cols-2 gap-4">
+          {paymentCardsCard}
+          <DashboardGoalsWidget
+            goals={activeGoals}
+            stats={stats}
+            isGlass={isGlass}
+            dateFilter={dateFilter}
+            onNavigate={() => navigate('/goals')}
+          />
         </div>
       );
     }
@@ -822,17 +853,6 @@ const Dashboard = () => {
             </button>
           </div>
         </div>
-
-        {dashboardSections.some(s => s.id === 'goals') && goals.filter(g => g.active).length > 0 && (
-          <DashboardGoalsWidget
-            goals={goals.filter(g => g.active)}
-            stats={stats}
-            isGlass={isGlass}
-            dateFilter={dateFilter}
-            onNavigate={() => navigate('/goals')}
-            fillHeight={false}
-          />
-        )}
 
         <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-12">
           {glassLayoutOrder.map((itemId, index) => {
@@ -1023,7 +1043,7 @@ function MiniProgressRing({ pct, size = 56, stroke = 5, color, isGlass }) {
   );
 }
 
-function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate, fillHeight = true }) {
+function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate }) {
   const [idx, setIdx] = useState(0);
   const goalsWithTarget = goals.filter(g => getTargetForFilter(g, dateFilter).value != null);
   const allGoals = goalsWithTarget.length > 0 ? goalsWithTarget : goals;
@@ -1070,7 +1090,7 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate, f
     : `$${Math.round(v).toLocaleString()}`;
 
   return (
-    <div className={`flex flex-col animate-in slide-in-from-bottom-4 duration-500 fade-in fill-mode-both ${fillHeight ? 'h-full' : ''} ${
+    <div className={`flex flex-col animate-in slide-in-from-bottom-4 duration-500 fade-in fill-mode-both h-full ${
       isGlass
         ? 'rounded-[20px] p-5 bg-[#181a1c]/72 border border-white/[0.06] shadow-[0_10px_30px_rgba(0,0,0,0.22)]'
         : 'rounded-[9px] p-4 bg-[var(--bg-surface)] border border-[color:var(--border-default)]'
