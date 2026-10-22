@@ -5,3 +5,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
 | chore/remove-dead-code-and-deps | Remove confirmed-unused npm dependencies, orphaned source files, and stale superseded docs (no behavior change) | selvora-app/package.json, selvora-api/package.json, selvora-app/src/components/UI/{StatCard,Table}.jsx, selvora-app/src/pages/Forecast.jsx, selvora-api/services/discord{StrategyOptions,TokenExchange}.js, root selvora-v2-glass-workspace.jsx + structure.txt + AUTH_DEPLOYMENT_CHECKLIST.md, qa/*.cjs one-off scripts | In progress | 2026-10-19 |
+| fix/glass-dashboard-goals-height | Fix Glassmorphism Brown Dashboard: standalone Goals widget stretched to full page height on desktop, pushing stat cards/chart below the fold | selvora-app/src/pages/Dashboard.jsx | In progress | 2026-10-21 |
