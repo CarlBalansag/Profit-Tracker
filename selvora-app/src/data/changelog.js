@@ -3,6 +3,16 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.80',
+    date: '2026-10-21',
+    notes: 'Redesigned the main Dashboard with a clean, modern light look — rounded white cards, soft shadows, and a bold highlight for your Net Profit.',
+  },
+  {
+    version: '0.79',
+    date: '2026-10-21',
+    notes: 'Simplified Settings > Appearance by removing the extra accent color choices, so there\'s now one consistent color scheme.',
+  },
+  {
     version: '0.78',
     date: '2026-10-21',
     notes: 'On the Glassmorphism Brown dashboard, the Goals card now sits next to Payment Cards as a pair of side-by-side cards instead of its own full-width row.',

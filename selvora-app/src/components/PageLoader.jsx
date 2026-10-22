@@ -16,22 +16,40 @@ function Sk({ className = '', style }) {
   );
 }
 
+// Shimmering skeleton block — light-background variant, used only by the
+// premium Dashboard skeleton, which sits on var(--dp-bg) instead of the
+// app's dark background.
+function SkLight({ className = '', style }) {
+  return (
+    <div
+      className={`rounded-[24px] relative overflow-hidden ${className}`}
+      style={{
+        backgroundColor: 'rgba(17,17,17,0.045)',
+        backgroundImage: 'linear-gradient(90deg, transparent 25%, rgba(17,17,17,0.07) 50%, transparent 75%)',
+        backgroundSize: '400% 100%',
+        animation: 'sk-shimmer 1.4s ease-in-out infinite',
+        ...style,
+      }}
+    />
+  );
+}
+
 // ─── Full-page loader layouts per page type ────────────────────────────────────
 
 function DashboardSkeleton() {
   return (
-    <div className="p-6 space-y-5 max-w-full animate-in fade-in duration-300">
-      <Sk className="h-8 w-48" />
+    <div className="h-full w-full p-6 space-y-5 max-w-full animate-in fade-in duration-300 bg-[var(--dp-bg)]">
+      <SkLight className="h-8 w-48" />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {Array(4).fill(0).map((_, i) => <Sk key={i} className="h-28" />)}
+        {Array(4).fill(0).map((_, i) => <SkLight key={i} className="h-28" />)}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Sk className="h-64 lg:col-span-2" />
-        <Sk className="h-64" />
+        <SkLight className="h-64 lg:col-span-2" />
+        <SkLight className="h-64" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Sk className="h-48" />
-        <Sk className="h-48" />
+        <SkLight className="h-48" />
+        <SkLight className="h-48" />
       </div>
     </div>
   );

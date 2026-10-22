@@ -1,6 +1,6 @@
 import React from 'react';
 import { Check, LayoutDashboard, Layers } from 'lucide-react';
-import { COLOR_THEME_OPTIONS, UI_STYLE_OPTIONS, useUiPreferences } from '../../hooks/useUiPreferences';
+import { UI_STYLE_OPTIONS, useUiPreferences } from '../../hooks/useUiPreferences';
 
 const STYLE_ICONS = {
   'neon-dark': LayoutDashboard,
@@ -49,10 +49,6 @@ export function UiPreferences() {
 
   const selectStyle = (style) => {
     savePreferences({ ...preferences, style });
-  };
-
-  const selectColorTheme = (colorTheme) => {
-    savePreferences({ ...preferences, colorTheme });
   };
 
   return (
@@ -104,58 +100,6 @@ export function UiPreferences() {
           );
         })}
       </div>
-
-      {preferences.style === 'neon-dark' && (
-        <div className="space-y-4 pt-2">
-          <div>
-            <h2 className="text-sm font-semibold text-white">Color Theme</h2>
-            <p className="text-sm text-gray-400 mt-1">Choose an accent color palette for your dashboard</p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
-            {COLOR_THEME_OPTIONS.map((theme) => {
-              const isSelected = preferences.colorTheme === theme.id;
-              const swatches = [theme.colors.accent, theme.colors.green, theme.colors.chart, theme.colors.yellow];
-
-              return (
-                <button
-                  key={theme.id}
-                  type="button"
-                  onClick={() => selectColorTheme(theme.id)}
-                  className="relative text-left rounded-xl p-3 transition-colors"
-                  style={{
-                    background: theme.colors.surface,
-                    border: `${isSelected ? 2 : 1}px solid ${isSelected ? theme.colors.accent : theme.colors.border}`,
-                  }}
-                >
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold" style={{ color: '#ddd8d2' }}>{theme.name}</h3>
-                    <span
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${isSelected ? 'text-white' : 'text-transparent'}`}
-                      style={{
-                        background: isSelected ? theme.colors.accent : 'transparent',
-                        borderColor: isSelected ? theme.colors.accent : theme.colors.border,
-                      }}
-                    >
-                      <Check size={12} strokeWidth={3} />
-                    </span>
-                  </div>
-
-                  <div className="mb-3 flex gap-1">
-                    {swatches.map((color) => (
-                      <span
-                        key={color}
-                        className="h-4 w-6 rounded-[3px]"
-                        style={{ background: color }}
-                      />
-                    ))}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       <div className="rounded-xl border border-white/10 bg-[#12121A] p-4">
         <p className="text-xs uppercase tracking-[0.16em] text-gray-500 font-bold mb-2">Selected UI</p>

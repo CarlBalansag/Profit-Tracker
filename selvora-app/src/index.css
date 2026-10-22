@@ -52,6 +52,26 @@
     --glass-red-soft: rgba(201, 131, 116, 0.12);
     --glass-yellow: #c9a85f;
     --glass-yellow-soft: rgba(201, 168, 95, 0.12);
+
+    /* Dashboard — premium light redesign (dark-mode variants to follow) */
+    --dp-bg: #F7F7F9;
+    --dp-card-bg: #FFFFFF;
+    --dp-card-radius: 24px;
+    --dp-card-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+    --dp-card-shadow-hover: 0 14px 38px rgba(0, 0, 0, 0.07);
+    --dp-card-padding: 24px;
+    --dp-border: rgba(17, 17, 17, 0.06);
+    --dp-text-primary: #16161A;
+    --dp-text-secondary: #6B6B76;
+    --dp-text-label: #8E8E99;
+    --dp-accent: #FF512F;
+    --dp-accent-bg: rgba(255, 81, 47, 0.08);
+    --dp-accent-gradient: linear-gradient(135deg, #FF512F 0%, #DD2476 100%);
+    --dp-green-bg: #E3F5EA;
+    --dp-green-text: #1A9A50;
+    --dp-red-bg: #FCE8E8;
+    --dp-red-text: #D23B3B;
+    --dp-hover-bg: #FAFAFB;
   }
 
   :root[data-theme="copper"] {
@@ -81,122 +101,6 @@
     --chart-4: #c4a84e;
     --sidebar-bg-start: #121212;
     --sidebar-bg-end: #0b0b0b;
-  }
-
-  :root[data-theme="arctic"] {
-    --bg-base: #0a0a0c;
-    --bg-surface: #111114;
-    --bg-elevated: #1a1a1e;
-    --bg-hover: #232328;
-    --border-default: rgba(255, 255, 255, 0.04);
-    --border-hover: rgba(255, 255, 255, 0.08);
-    --accent: #5a9cc2;
-    --accent-soft: #4882a6;
-    --accent-muted: #4882a6;
-    --accent-bg: rgba(90, 156, 194, 0.10);
-    --text-primary: #d4d8dc;
-    --text-secondary: #7a8290;
-    --text-muted: #424852;
-    --green: #54a872;
-    --green-soft: #449660;
-    --green-muted: #449660;
-    --green-bg: rgba(84, 168, 114, 0.10);
-    --red: #c45858;
-    --red-bg: rgba(196, 88, 88, 0.10);
-    --yellow: #c9a84a;
-    --chart-1: #5a9cc2;
-    --chart-2: #54a872;
-    --chart-3: #c9a84a;
-    --chart-4: #9a7abf;
-    --sidebar-bg-start: #111114;
-    --sidebar-bg-end: #0a0a0c;
-  }
-
-  :root[data-theme="jade"] {
-    --bg-base: #0a0b0a;
-    --bg-surface: #111211;
-    --bg-elevated: #191a19;
-    --bg-hover: #222322;
-    --border-default: rgba(255, 255, 255, 0.04);
-    --border-hover: rgba(255, 255, 255, 0.08);
-    --accent: #4aaa78;
-    --accent-soft: #3c9266;
-    --accent-muted: #3c9266;
-    --accent-bg: rgba(74, 170, 120, 0.10);
-    --text-primary: #d2d8d4;
-    --text-secondary: #788278;
-    --text-muted: #434843;
-    --green: #4aaa78;
-    --green-soft: #3c9266;
-    --green-muted: #3c9266;
-    --green-bg: rgba(74, 170, 120, 0.10);
-    --red: #c25555;
-    --red-bg: rgba(194, 85, 85, 0.10);
-    --yellow: #c4a248;
-    --chart-1: #4aaa78;
-    --chart-2: #6888b8;
-    --chart-3: #c4a248;
-    --chart-4: #b07ac2;
-    --sidebar-bg-start: #111211;
-    --sidebar-bg-end: #0a0b0a;
-  }
-
-  :root[data-theme="dusk"] {
-    --bg-base: #0b0a0c;
-    --bg-surface: #121214;
-    --bg-elevated: #1b1a1e;
-    --bg-hover: #242328;
-    --border-default: rgba(255, 255, 255, 0.04);
-    --border-hover: rgba(255, 255, 255, 0.08);
-    --accent: #8a72c2;
-    --accent-soft: #7360a8;
-    --accent-muted: #7360a8;
-    --accent-bg: rgba(138, 114, 194, 0.10);
-    --text-primary: #d6d4da;
-    --text-secondary: #807a8a;
-    --text-muted: #48444e;
-    --green: #58a870;
-    --green-soft: #489460;
-    --green-muted: #489460;
-    --green-bg: rgba(88, 168, 112, 0.10);
-    --red: #c25252;
-    --red-bg: rgba(194, 82, 82, 0.10);
-    --yellow: #c9a04a;
-    --chart-1: #8a72c2;
-    --chart-2: #58a870;
-    --chart-3: #c9a04a;
-    --chart-4: #5a92b8;
-    --sidebar-bg-start: #121214;
-    --sidebar-bg-end: #0b0a0c;
-  }
-
-  :root[data-theme="signal"] {
-    --bg-base: #0b0a0a;
-    --bg-surface: #131212;
-    --bg-elevated: #1b1919;
-    --bg-hover: #242121;
-    --border-default: rgba(255, 255, 255, 0.04);
-    --border-hover: rgba(255, 255, 255, 0.08);
-    --accent: #c2614a;
-    --accent-soft: #a85040;
-    --accent-muted: #a85040;
-    --accent-bg: rgba(194, 97, 74, 0.10);
-    --text-primary: #dad6d4;
-    --text-secondary: #8a7e7a;
-    --text-muted: #4e4644;
-    --green: #55a86a;
-    --green-soft: #48945c;
-    --green-muted: #48945c;
-    --green-bg: rgba(85, 168, 106, 0.10);
-    --red: #c2614a;
-    --red-bg: rgba(194, 97, 74, 0.10);
-    --yellow: #c4a44a;
-    --chart-1: #c2614a;
-    --chart-2: #55a86a;
-    --chart-3: #5a8cc2;
-    --chart-4: #c4a44a;
-    --sidebar-bg-start: #131212;
-    --sidebar-bg-end: #0b0a0a;
   }
 
   :root[data-ui-style="glassmorphism-brown"] {
@@ -245,6 +149,17 @@
 }
 
 @layer components {
+  /* Dashboard premium card shadow — a plain class, not a `shadow-*` Tailwind
+     utility: the legacy `.carbon-workspace [class*="shadow-"]` override below
+     strips background-image/box-shadow off ANY element whose className
+     contains that substring, which would otherwise nuke these classes too. */
+  .dp-elevated {
+    box-shadow: var(--dp-card-shadow);
+  }
+  .dp-elevated-hover:hover {
+    box-shadow: var(--dp-card-shadow-hover);
+  }
+
   .card {
     @apply rounded-2xl border border-white/[0.04];
     background: rgba(255, 255, 255, 0.02);

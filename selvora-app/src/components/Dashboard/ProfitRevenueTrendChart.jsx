@@ -337,7 +337,7 @@ function buildOptions(points, chartSeries, uiStyle = 'neon-dark', containerWidth
   };
 }
 
-export default function ProfitRevenueTrendChart({ stats, trend, trendMeta = null, recent, dateFilter, chartSeries, uiStyle = 'neon-dark', colorTheme = 'copper', trendMode = 'period', onTrendModeChange }) {
+export default function ProfitRevenueTrendChart({ stats, trend, trendMeta = null, recent, dateFilter, chartSeries, uiStyle = 'neon-dark', trendMode = 'period', onTrendModeChange }) {
   const chartRef = useRef(null);
   const instanceRef = useRef(null);
   const [failed, setFailed] = useState(false);
@@ -367,7 +367,7 @@ export default function ProfitRevenueTrendChart({ stats, trend, trendMeta = null
     return () => {
       cancelled = true;
     };
-  }, [points, chartSeries, uiStyle, colorTheme, containerWidth]);
+  }, [points, chartSeries, uiStyle, containerWidth]);
 
   useEffect(() => {
     const el = chartRef.current;
