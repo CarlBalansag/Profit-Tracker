@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.74',
+    date: '2026-10-21',
+    notes: 'Added a built-in guide to Settings > AI Assistant showing everything your assistant can read and update, plus setup steps.',
+  },
+  {
     version: '0.73',
     date: '2026-10-21',
     notes: 'Your AI assistant can now check shipping status, update tracking numbers, and see what you still owe on each credit card. Also fixed the "Last 4 Digits" field on a card not actually saving.',
