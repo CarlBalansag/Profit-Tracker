@@ -60,7 +60,6 @@ function Settings() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-10">
-      {activeTab === 'profile' && <FirebaseAccount />}
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white tracking-tight">Settings</h1>
@@ -108,6 +107,9 @@ function Settings() {
                  <div>
                     <h3 className="font-bold text-white">{user?.username || 'Unknown'}</h3>
                     <p className="text-xs text-gray-500">Signed in with Firebase</p>
+                    <div className="mt-1.5">
+                      <FirebaseAccount />
+                    </div>
                  </div>
               </div>
 
