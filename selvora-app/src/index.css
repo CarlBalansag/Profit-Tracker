@@ -54,11 +54,11 @@
     --glass-yellow-soft: rgba(201, 168, 95, 0.12);
 
     /* Dashboard — premium light redesign (dark-mode variants to follow) */
-    --dp-bg: #F7F7F9;
+    --dp-bg: #EEF0F3;
     --dp-card-bg: #FFFFFF;
     --dp-card-radius: 24px;
-    --dp-card-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
-    --dp-card-shadow-hover: 0 14px 38px rgba(0, 0, 0, 0.07);
+    --dp-card-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.08);
+    --dp-card-shadow-hover: 0 2px 4px rgba(16, 24, 40, 0.06), 0 16px 40px rgba(16, 24, 40, 0.12);
     --dp-card-padding: 24px;
     --dp-border: rgba(17, 17, 17, 0.06);
     --dp-text-primary: #16161A;

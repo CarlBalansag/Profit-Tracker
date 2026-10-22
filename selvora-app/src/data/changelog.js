@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.81',
+    date: '2026-10-21',
+    notes: 'Gave the Dashboard sidebar a matching light look, darkened the page background slightly, and added a softer shadow under cards so they stand out.',
+  },
+  {
     version: '0.80',
     date: '2026-10-21',
     notes: 'Redesigned the main Dashboard with a clean, modern light look — rounded white cards, soft shadows, and a bold highlight for your Net Profit.',
