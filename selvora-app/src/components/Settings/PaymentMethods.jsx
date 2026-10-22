@@ -113,6 +113,7 @@ export const PaymentMethods = () => {
           name: processedCard.name,
           type: processedCard.type,
           default_cashback_rate: processedCard.baseRate,
+          last4: processedCard.last4 || null,
           statement_close_day: processedCard.statement_close_day ?? null,
           due_day: processedCard.due_day ?? null,
           credit_limit: processedCard.credit_limit ?? null,

@@ -54,7 +54,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 // POST new payment method
 router.post('/', isAuthenticated, validateBody(paymentMethod), async (req, res, next) => {
   try {
-    const { name, type, default_cashback_rate, preset_card_id, category_rates,
+    const { name, type, default_cashback_rate, preset_card_id, last4, category_rates,
             statement_close_day, due_day, credit_limit, min_payment_pct, is_personal } = req.body;
     const method = await prisma.paymentMethod.create({
       data: {
@@ -63,6 +63,7 @@ router.post('/', isAuthenticated, validateBody(paymentMethod), async (req, res, 
         type,
         default_cashback_rate: parseFloat(default_cashback_rate) || 0,
         preset_card_id: preset_card_id || null,
+        last4: last4 || null,
         category_rates: category_rates ? JSON.stringify(category_rates) : null,
         statement_close_day: statement_close_day ? parseInt(statement_close_day) : null,
         due_day: due_day ? parseInt(due_day) : null,
@@ -82,7 +83,7 @@ router.post('/', isAuthenticated, validateBody(paymentMethod), async (req, res, 
 router.put('/:id', isAuthenticated, validateBody(paymentMethod), async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, type, default_cashback_rate, preset_card_id, category_rates,
+    const { name, type, default_cashback_rate, preset_card_id, last4, category_rates,
             statement_close_day, due_day, credit_limit, min_payment_pct, is_personal } = req.body;
 
     const existing = await prisma.paymentMethod.findUnique({ where: { id } });
@@ -97,6 +98,7 @@ router.put('/:id', isAuthenticated, validateBody(paymentMethod), async (req, res
         type,
         default_cashback_rate: parseFloat(default_cashback_rate) || 0,
         preset_card_id: preset_card_id ?? existing.preset_card_id,
+        last4: last4 !== undefined ? (last4 || null) : existing.last4,
         category_rates: category_rates !== undefined
           ? JSON.stringify(category_rates)
           : existing.category_rates,

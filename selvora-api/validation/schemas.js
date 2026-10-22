@@ -17,6 +17,11 @@ const optionalString = z.preprocess(
 const id = z.preprocess(emptyToNull, z.string().trim().uuid().nullable().optional());
 const requiredId = z.string().trim().uuid();
 
+const optionalLast4 = z.preprocess(
+  emptyToNull,
+  z.string().trim().regex(/^\d{4}$/, 'Must be exactly 4 digits').nullable().optional()
+);
+
 // An Inventory record legitimately holds any status in its full lifecycle
 // (confirmed by Inventory.jsx's own status-badge map and existing tests --
 // e.g. a purchase can be directly marked COMPLETED or CANCELLED with no
@@ -284,6 +289,7 @@ const paymentMethod = z.object({
   type: requiredString('type'),
   default_cashback_rate: decimalAmount({ scale: 6, defaultValue: 0 }),
   preset_card_id: optionalString,
+  last4: optionalLast4,
   category_rates: z.array(categoryRate).optional(),
   statement_close_day: optionalDay.nullable(),
   due_day: optionalDay.nullable(),
