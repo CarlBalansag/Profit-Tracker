@@ -31,7 +31,6 @@ const Shell = ({ children }) => {
   const { user } = useAuth();
   const { start, active: tutorialActive, currentStep: tutorialStep } = useTutorial();
   const isGlass = preferences.style === 'glassmorphism-brown';
-  const isCarbonWorkspace = !isGlass;
 
   // Auto-start tutorial on first login
   useEffect(() => {
@@ -52,30 +51,41 @@ const Shell = ({ children }) => {
   }, [tutorialActive, tutorialStep]);
 
   return (
+    /* Step 1 — shell uses h-screen + overflow-hidden so it truly fills the
+       viewport and the sidebar + content scroll independently without
+       causing body-level overflow. */
     <div className={clsx(
-      "flex h-full w-full",
+      "flex h-screen w-full overflow-hidden",
       isGlass && "bg-[#111315] text-[#e8e2d6]"
     )}>
-      <Sidebar 
-        isOpen={isSidebarOpen} 
-        setIsOpen={setIsSidebarOpen} 
-        isCollapsed={isSidebarCollapsed} 
-        setIsCollapsed={setIsSidebarCollapsed} 
+      <Sidebar
+        isOpen={isSidebarOpen}
+        setIsOpen={setIsSidebarOpen}
+        isCollapsed={isSidebarCollapsed}
+        setIsCollapsed={setIsSidebarCollapsed}
         uiStyle={preferences.style}
       />
-      
-        <main className={clsx(
-          "flex-1 flex flex-col min-w-0 overflow-hidden",
-          isGlass
-            ? "relative bg-[radial-gradient(ellipse_at_20%_20%,rgba(216,166,90,0.035)_0%,transparent_42%),radial-gradient(ellipse_at_80%_80%,rgba(125,140,160,0.035)_0%,transparent_42%),#111315] lg:pl-[76px]"
-            : "bg-[var(--dp-bg)]"
-        )}>
+
+      {/* Main content column — flex-1 so it takes remaining width;
+          min-w-0 prevents flex children from overflowing their container. */}
+      <main className={clsx(
+        "flex flex-col flex-1 min-w-0 overflow-hidden",
+        isGlass
+          ? "relative bg-[radial-gradient(ellipse_at_20%_20%,rgba(216,166,90,0.035)_0%,transparent_42%),radial-gradient(ellipse_at_80%_80%,rgba(125,140,160,0.035)_0%,transparent_42%),#111315] lg:pl-[76px]"
+          : "bg-[var(--dp-bg)]"
+      )}>
+        {/* Mobile top bar — hidden on lg+ */}
         <Header onMenuClick={() => setIsSidebarOpen(true)} isGlass={isGlass} />
+
+        {/* Content region. min-h-0 ensures the flex child can shrink so
+            each page component controls its own scroll boundary.
+            No overflow-y here — pages (Dashboard, Inventory, etc.) each
+            have their own scroll container via h-full overflow-auto. */}
         <div className={clsx(
-          "flex-1 overflow-y-auto theme-scrollbar",
-          isGlass ? "p-4 sm:p-6 lg:p-7" : "p-3 sm:p-4 lg:p-6",
-          isGlass && "glass-workspace",
-          isCarbonWorkspace && "carbon-workspace"
+          "flex-1 min-h-0 overflow-hidden",
+          isGlass
+            ? "glass-workspace"
+            : "carbon-workspace"
         )}>
           {children}
         </div>
