@@ -20,7 +20,7 @@ describe('Firebase email UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create account', exact: true }));
     expect(await screen.findByText(/Verify your email/)).toBeInTheDocument(); expect(mocks.exchange).not.toHaveBeenCalled(); expect(mocks.send).toHaveBeenCalled();
     firebaseUser.emailVerified = true;
-    fireEvent.click(screen.getByRole('button', { name: 'Continue after verification' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Already verified? Check now' }));
     await waitFor(() => expect(mocks.exchange).toHaveBeenCalledWith(firebaseUser, 'signup', ''));
     expect(mocks.setUser).toHaveBeenCalledWith({ id: 'existing-neon-user' });
   });
@@ -28,8 +28,8 @@ describe('Firebase email UI', () => {
     mount(); fill(); let resolve; mocks.signin.mockReturnValue(new Promise(done => { resolve = done; }));
     const button = screen.getByRole('button', { name: 'Sign in', exact: true }); fireEvent.click(button); fireEvent.click(button);
     await waitFor(() => expect(mocks.signin).toHaveBeenCalledTimes(1)); resolve({ user: firebaseUser });
-    expect(await screen.findByRole('button', { name: 'Continue after verification' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Continue after verification' }));
+    expect(await screen.findByText(/Waiting for verification/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Already verified? Check now' }));
     expect(await screen.findByText('Your email is not verified yet.')).toBeInTheDocument(); expect(mocks.setUser).not.toHaveBeenCalled();
   });
   it('rejects mismatched signup passwords before provider writes', async () => {
@@ -69,7 +69,7 @@ describe('Firebase email UI', () => {
     try {
       mount(); fill();
       fireEvent.click(screen.getByRole('button', { name: 'Sign in', exact: true }));
-      expect(await screen.findByRole('button', { name: 'Continue after verification' })).toBeInTheDocument();
+      expect(await screen.findByText(/Waiting for verification/)).toBeInTheDocument();
       expect(mocks.exchange).not.toHaveBeenCalled();
 
       // Simulate the user verifying in another tab: reload() now reports it.
@@ -88,7 +88,7 @@ describe('Firebase email UI', () => {
     try {
       mount(); fill();
       fireEvent.click(screen.getByRole('button', { name: 'Sign in', exact: true }));
-      expect(await screen.findByRole('button', { name: 'Continue after verification' })).toBeInTheDocument();
+      expect(await screen.findByText(/Waiting for verification/)).toBeInTheDocument();
 
       mocks.reload.mockRejectedValueOnce(new Error('transient network hiccup'));
       await vi.advanceTimersByTimeAsync(4000);

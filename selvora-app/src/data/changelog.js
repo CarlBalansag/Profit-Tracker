@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.76',
+    date: '2026-10-21',
+    notes: 'Signing in after clicking your verification email link now continues on its own, instead of needing an extra "Continue" click.',
+  },
+  {
     version: '0.75',
     date: '2026-10-21',
     notes: 'Changing your password now opens a small popup from your Profile instead of a plain form always sitting at the top of Settings.',
