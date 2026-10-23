@@ -194,7 +194,7 @@ const Dashboard = () => {
       return (
         <div key="statCards" data-tutorial-id="dashboard-stats" className={isGlass
           ? `grid grid-cols-1 sm:grid-cols-2 ${statColClass} gap-3 3xl:gap-4 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both`
-          : "grid min-w-0 grid-cols-1 gap-4 overflow-x-auto pb-4 sm:grid-cols-2 lg:grid-cols-none animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both"
+          : "grid min-w-0 grid-cols-1 gap-4 overflow-x-auto dp-scrollbar pb-4 sm:grid-cols-2 lg:grid-cols-none animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both"
         } style={!isGlass ? {
           gridTemplateColumns: visibleStatCards.length > 0
             ? `minmax(360px, 1.4fr) repeat(${Math.max(0, visibleStatCards.length - 1)}, minmax(210px, 1fr))`
@@ -424,7 +424,7 @@ const Dashboard = () => {
           {recent.length === 0 ? (
             <p className={isGlass ? "text-white/20 text-sm text-center py-6" : "text-[var(--dp-text-secondary)] text-sm text-center py-6"}>No recent sales found.</p>
           ) : (
-            <div className="overflow-x-auto pb-4">
+            <div className={isGlass ? "overflow-x-auto pb-4" : "overflow-x-auto dp-scrollbar pb-4"}>
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className={isGlass ? "border-b border-white/10 text-xs font-semibold text-gray-500 uppercase tracking-wider" : "border-b border-[color:var(--dp-border)] text-[10px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>
