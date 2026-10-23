@@ -18,7 +18,6 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
   const navigate = useNavigate();
   const { logout, user } = useAuth();
 
-  // ── Glassmorphism sidebar — unchanged from original ───────────────────────
   if (uiStyle === 'glassmorphism-brown') {
     return (
       <>
@@ -70,80 +69,50 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
     );
   }
 
-  // ── Carbon / default sidebar — Step 2 redesign ────────────────────────────
   return (
     <>
       {/* Mobile overlay */}
       {isOpen && (
-        <div
+        <div 
           className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm lg:hidden"
           onClick={() => setIsOpen(false)}
         />
       )}
-
+      
       <aside
         className={clsx(
-          // Step 2: unified width (no lg breakpoint split), slimmer collapsed state.
-          // All existing color/shadow tokens preserved unchanged.
-          "fixed inset-y-0 left-0 z-50 flex flex-col",
-          "transition-all duration-300 ease-in-out",
-          "lg:static lg:translate-x-0",
-          "border-r border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] dp-elevated",
+          "fixed inset-y-0 left-0 z-50 flex flex-col transition-all duration-300 ease-in-out lg:static lg:translate-x-0 border-r border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] dp-elevated",
           isOpen ? "translate-x-0" : "-translate-x-full",
-          // Step 2: 232 px expanded (was 256 / 224 px breakpoint split),
-          //          56 px collapsed (was 72 px) — slimmer collapsed rail
-          isCollapsed ? "w-[56px]" : "w-[232px]"
+          isCollapsed ? "w-[72px]" : "w-64 lg:w-56 3xl:w-60"
         )}
         onClick={(e) => { if (e.target.closest('a')) setIsOpen(false); }}
       >
-        {/* ── Brand header ───────────────────────────────────────────────── */}
-        <div
-          className={clsx(
-            // Step 2: py-4 (was py-5) — slightly tighter header row
-            "flex items-center py-4 border-b border-[color:var(--dp-border)]",
-            isCollapsed ? "justify-center px-0 flex-col gap-2" : "gap-3 px-4"
-          )}
-        >
-          {/* Step 2: logo mark — rounded-xl (was rounded-lg), w-9 h-9 (was w-10 h-10),
-              text-lg (was text-xl). Rounder and proportionally scaled to the header. */}
-          <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl bg-[var(--dp-accent)]">
-            <span className="text-[#ffffff] font-semibold text-lg">P</span>
+        <div className={clsx("flex items-center py-5 border-b border-[color:var(--dp-border)]", isCollapsed ? "justify-center px-0 flex-col gap-2" : "gap-3 px-4")}>
+          <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-lg bg-[var(--dp-accent)]">
+            <span className="text-[#ffffff] font-semibold text-xl">P</span>
           </div>
 
           {!isCollapsed && (
             <div className="flex-1 min-w-0">
-              {/* Step 2: text-[15px] (was text-[17px]), tracking-[-0.4px] (was -0.3px) */}
-              <h1 className="text-[15px] font-semibold text-[var(--dp-text-primary)] tracking-[-0.4px] leading-tight">
-                Profit Tracker
-              </h1>
-              <p className="text-[9px] text-[var(--dp-text-label)] uppercase tracking-[1px] mt-0.5">
-                Reselling
-              </p>
+              <h1 className="text-[17px] font-medium text-[var(--dp-text-primary)] tracking-[-0.3px]">Profit Tracker</h1>
+              <p className="text-[9px] text-[var(--dp-text-label)] uppercase tracking-[1.2px]">Reselling</p>
             </div>
           )}
 
-          {/* Mobile close */}
-          <button
-            className="lg:hidden p-1.5 text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] rounded-lg hover:bg-[var(--dp-hover-bg)]"
-            onClick={() => setIsOpen(false)}
-          >
-            <X size={18} />
+          <button className="lg:hidden p-1.5 text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] rounded-md hover:bg-[var(--dp-hover-bg)]" onClick={() => setIsOpen(false)}>
+            <X size={20} />
           </button>
 
-          {/* Desktop collapse toggle */}
           <button
-            className="hidden lg:flex items-center justify-center p-1.5 text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] rounded-lg hover:bg-[var(--dp-hover-bg)]"
+            className="hidden lg:block p-1.5 text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] rounded-md hover:bg-[var(--dp-hover-bg)]"
             onClick={() => setIsCollapsed(!isCollapsed)}
             title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {isCollapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
+            {isCollapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
           </button>
         </div>
 
-        {/* ── Main navigation ─────────────────────────────────────────────── */}
-        {/* Step 2: py-3 (was py-4), space-y-5 (was space-y-4) for more
-            breathing room between section groups */}
-        <nav className="flex-1 py-3 px-2 space-y-5 overflow-y-auto overflow-x-hidden theme-scrollbar">
+        <nav className="flex-1 py-4 px-2 space-y-4 overflow-y-auto overflow-x-hidden">
           <SidebarSection title="Core" isCollapsed={isCollapsed} tutorialId="sidebar-section-core">
             <NavItem icon={LayoutDashboard} label="Dashboard" to="/" isCollapsed={isCollapsed} />
             <NavItem icon={CirclePlus} label="Add Transaction" to="/add-transaction" isCollapsed={isCollapsed} tutorialId="sidebar-add-transaction" />
@@ -168,100 +137,53 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <NavItem icon={Target} label="Goals" to="/goals" isCollapsed={isCollapsed} />
             <NavItem icon={CalendarDays} label="Calendar" to="/calendar" isCollapsed={isCollapsed} />
           </SidebarSection>
+
         </nav>
 
-        {/* ── Footer utility links ────────────────────────────────────────── */}
-        <div className="px-2 py-2 border-t border-[color:var(--dp-border)]">
-          {/* Changelog / What's New */}
+        <div className="p-2 border-t border-[color:var(--dp-border)]">
           <button
             onClick={() => setShowChangelog(true)}
             title={isCollapsed ? `v${CURRENT_VERSION} — What's New` : undefined}
-            className={clsx(
-              // Step 2: rounded-xl (was rounded-md), no border-l-2
-              "flex items-center rounded-xl text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors",
-              isCollapsed
-                ? "w-9 h-9 justify-center mx-auto"
-                : "w-full gap-2.5 py-2 px-3"
-            )}
-          >
-            <Sparkles size={15} className="flex-shrink-0" />
-            {!isCollapsed && <span className="truncate text-[13px]">v{CURRENT_VERSION}</span>}
+            className={clsx("flex items-center rounded-md border-l-2 border-transparent text-sm text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-2.5 py-2 px-3")}>
+            <Sparkles size={16} />
+            {!isCollapsed && <span className="truncate">v{CURRENT_VERSION}</span>}
           </button>
-
-          {/* Data Setup */}
           <button
             data-tutorial-id="sidebar-datasetup"
             onClick={() => navigate('/settings', { state: { tab: 'datasetup' } })}
-            className={clsx(
-              "flex items-center rounded-xl text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors",
-              isCollapsed
-                ? "w-9 h-9 justify-center mx-auto"
-                : "w-full gap-2.5 py-2 px-3"
-            )}
-          >
-            <Settings size={15} className="flex-shrink-0" />
-            {!isCollapsed && <span className="truncate text-[13px]">Data Setup</span>}
+            className={clsx("flex items-center rounded-md border-l-2 border-transparent text-sm text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-2.5 py-2 px-3")}>
+            <Settings size={16} />
+            {!isCollapsed && <span className="truncate">Data Setup</span>}
           </button>
-
-          {/* Guide */}
           <NavItem icon={BookOpen} label="Guide" to="/guide" isCollapsed={isCollapsed} tutorialId="sidebar-guide" />
         </div>
 
-        {/* ── Profile / account ──────────────────────────────────────────── */}
-        <div className="px-2 py-2 border-t border-[color:var(--dp-border)] relative">
+        <div className="p-2 border-t border-[color:var(--dp-border)] relative">
           <button
-            className={clsx(
-              // Step 2: rounded-xl (was rounded-md)
-              "flex items-center rounded-xl hover:bg-[var(--dp-hover-bg)] transition-colors",
-              isCollapsed
-                ? "w-9 h-9 justify-center mx-auto"
-                : "w-full gap-3 py-2 px-3 text-left"
-            )}
+            className={clsx("flex items-center rounded-md hover:bg-[var(--dp-hover-bg)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-3 py-2 px-3 text-left")}
             onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
           >
-            {/* Step 2: avatar is rounded-lg (was rounded-full) for geometric
-                consistency; w-7 h-7 (was w-8 h-8) scaled to the tighter row */}
-            <div className="w-7 h-7 rounded-lg bg-[var(--dp-bg)] flex-shrink-0 text-[var(--dp-accent)] flex items-center justify-center text-[11px] font-bold">
-              {(user?.username || '?').slice(0, 2).toUpperCase()}
-            </div>
+            <div className="w-8 h-8 rounded-full bg-[var(--dp-bg)] flex-shrink-0 text-[var(--dp-accent)] flex items-center justify-center text-xs font-semibold">{(user?.username || '?').slice(0, 2).toUpperCase()}</div>
             {!isCollapsed && (
               <>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium text-[var(--dp-text-primary)] truncate leading-tight">
-                    {user?.username || 'Account'}
-                  </p>
-                  <p className="text-[10px] text-[var(--dp-text-label)] leading-tight">Online</p>
+                  <p className="text-sm font-medium text-[var(--dp-text-primary)] truncate">{user?.username || 'Account'}</p>
+                  <p className="text-xs text-[var(--dp-text-label)]">Online</p>
                 </div>
-                <ChevronDown
-                  size={14}
-                  className={clsx(
-                    "text-[var(--dp-text-label)] transition-transform flex-shrink-0",
-                    isProfileMenuOpen ? "rotate-180" : ""
-                  )}
-                />
+                <ChevronDown size={16} className={clsx("text-[var(--dp-text-label)] transition-transform", isProfileMenuOpen ? "rotate-180" : "")} />
               </>
             )}
           </button>
 
-          {/* Profile pop-up — layout and colors identical to original */}
           {isProfileMenuOpen && (
-            <div className="absolute bottom-full left-2 right-2 mb-2 bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated-hover rounded-xl py-1.5 z-50 overflow-hidden">
-              <NavLink
-                to="/settings"
-                className="flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors"
-                onClick={() => setIsProfileMenuOpen(false)}
-              >
-                <Settings size={15} className="text-[var(--dp-text-secondary)]" />
-                Settings
-              </NavLink>
-              <div className="h-px w-full bg-[var(--dp-border)] my-1" />
-              <button
-                className="flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium text-[var(--dp-red-text)] hover:bg-[var(--dp-red-bg)] w-full text-left transition-colors"
-                onClick={() => { setIsProfileMenuOpen(false); logout(); }}
-              >
-                <PanelLeftClose size={15} className="rotate-180 text-[var(--dp-red-text)] opacity-80" />
-                Sign Out
-              </button>
+            <div className="absolute bottom-full left-2 right-2 mb-2 bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated-hover rounded-lg py-2 z-50 overflow-hidden">
+               <NavLink to="/settings" className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
+                 <Settings size={16} className="text-[var(--dp-text-secondary)]" /> Settings
+               </NavLink>
+               <div className="h-px w-full bg-[var(--dp-border)] my-1"></div>
+               <button className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[var(--dp-red-text)] hover:bg-[var(--dp-red-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); logout(); }}>
+                 <PanelLeftClose size={16} className="rotate-180 text-[var(--dp-red-text)] opacity-80" /> Sign Out
+               </button>
             </div>
           )}
         </div>
@@ -272,51 +194,27 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
   );
 };
 
-// ── SidebarSection ──────────────────────────────────────────────────────────────
-// Step 2 changes vs original:
-//   • Section label: text-[10px] (was text-[9px]), tracking-[0.1em] (was 1.2px)
-//     font-semibold (was font-medium) — slightly more readable, more deliberate
-//   • Chevron size: 12 (was 14) — proportionally scaled to the smaller label
-//   • Item spacing: space-y-0.5 (was space-y-1) — tighter within each group
-//   • Collapsed top margin: mt-3 (was mt-4)
-//   • Section collapse toggle logic is completely unchanged
 const SidebarSection = ({ title, children, isCollapsed, tutorialId }) => {
   const [isSectionOpen, setIsSectionOpen] = useState(true);
 
   return (
-    <div
-      data-tutorial-id={tutorialId}
-      className={clsx("space-y-0.5", isCollapsed ? "mt-3 first:mt-0" : "")}
-    >
+    <div data-tutorial-id={tutorialId} className={clsx("space-y-1", isCollapsed ? "mt-4 first:mt-0" : "")}>
       {!isCollapsed && (
         <button
           onClick={() => setIsSectionOpen(!isSectionOpen)}
-          className="w-full flex items-center justify-between px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] transition-colors"
+          className="w-full flex items-center justify-between px-3 py-1 text-[9px] font-medium uppercase tracking-[1.2px] text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] transition-colors"
         >
           <span>{title}</span>
-          {isSectionOpen
-            ? <ChevronDown size={12} className="flex-shrink-0" />
-            : <ChevronRight size={12} className="flex-shrink-0" />
-          }
+          {isSectionOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
       )}
-      <div className={clsx("space-y-0.5", !isSectionOpen && !isCollapsed ? "hidden" : "block")}>
+      <div className={clsx("space-y-1", !isSectionOpen && !isCollapsed ? "hidden" : "block")}>
         {children}
       </div>
     </div>
   );
 };
 
-// ── NavItem ─────────────────────────────────────────────────────────────────────
-// Step 2 changes vs original:
-//   • rounded-xl  (was rounded-md)  — rounder pill shape
-//   • NO border-l-2 active indicator — dropped entirely; active state is
-//     communicated by accent bg + accent text alone, without a border stripe
-//   • gap-2.5 (was gap-3) — tighter icon-to-label spacing
-//   • py-2 (was py-2.5) — slightly reduced item height
-//   • text-[13px] (was text-sm / 14px) — scaled to the tighter layout
-//   • icon size={16} (was 18) — proportionally scaled to the smaller item
-//   • collapsed: explicit w-9 h-9 with mx-auto for perfect rail centering
 const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId }) => (
   <NavLink
     to={to}
@@ -324,22 +222,19 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId }) => (
     data-tutorial-id={tutorialId}
     className={({ isActive }) =>
       clsx(
-        "flex items-center rounded-xl transition-colors",
-        isCollapsed
-          ? "w-9 h-9 justify-center mx-auto"
-          : "gap-2.5 px-3 py-2 text-[13px] font-medium",
+        "flex items-center rounded-md border-l-2 transition-colors",
+        isCollapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5 text-sm font-medium",
         isActive
-          ? "text-[var(--dp-accent)] bg-[var(--dp-accent-bg)] pointer-events-none"
-          : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)]"
+          ? "text-[var(--dp-accent)] bg-[var(--dp-accent-bg)] [border-left-color:var(--dp-accent)] pointer-events-none"
+          : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] border-l-transparent"
       )
     }
   >
-    <Icon size={16} className="flex-shrink-0" />
+    <Icon size={18} className="flex-shrink-0" />
     {!isCollapsed && <span className="truncate flex-1 disabled-link">{label}</span>}
   </NavLink>
 );
 
-// ── Glass sidebar sub-components — completely unchanged from original ────────────
 const GlassNavItem = ({ icon: Icon, label, to }) => (
   <NavLink
     to={to}
