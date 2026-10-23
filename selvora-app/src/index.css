@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
+@import "./styles/colorPalette.css";
 
 @layer base {
   :root {
@@ -53,25 +54,26 @@
     --glass-yellow: #c9a85f;
     --glass-yellow-soft: rgba(201, 168, 95, 0.12);
 
-    /* Dashboard — premium light redesign (dark-mode variants to follow) */
-    --dp-bg: #EEF0F3;
-    --dp-card-bg: #FFFFFF;
+    /* Dashboard — premium light redesign. Colors come from colorPalette.css;
+       only structural values (radius/shadow/padding) are set directly here. */
+    --dp-bg: var(--color-background);
+    --dp-card-bg: var(--color-surface);
     --dp-card-radius: 24px;
     --dp-card-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.08);
     --dp-card-shadow-hover: 0 2px 4px rgba(16, 24, 40, 0.06), 0 16px 40px rgba(16, 24, 40, 0.12);
     --dp-card-padding: 24px;
-    --dp-border: rgba(17, 17, 17, 0.06);
-    --dp-text-primary: #16161A;
-    --dp-text-secondary: #6B6B76;
-    --dp-text-label: #8E8E99;
-    --dp-accent: #FF512F;
-    --dp-accent-bg: rgba(255, 81, 47, 0.08);
-    --dp-accent-gradient: linear-gradient(135deg, #FF512F 0%, #DD2476 100%);
-    --dp-green-bg: #E3F5EA;
-    --dp-green-text: #1A9A50;
-    --dp-red-bg: #FCE8E8;
-    --dp-red-text: #D23B3B;
-    --dp-hover-bg: #FAFAFB;
+    --dp-border: var(--color-border);
+    --dp-text-primary: var(--color-text-primary);
+    --dp-text-secondary: var(--color-text-secondary);
+    --dp-text-label: var(--color-text-label);
+    --dp-accent: var(--color-accent);
+    --dp-accent-bg: var(--color-accent-bg);
+    --dp-accent-gradient: var(--color-accent-gradient);
+    --dp-green-bg: var(--color-success-bg);
+    --dp-green-text: var(--color-success-text);
+    --dp-red-bg: var(--color-danger-bg);
+    --dp-red-text: var(--color-danger-text);
+    --dp-hover-bg: var(--color-hover);
   }
 
   :root[data-theme="copper"] {
@@ -262,15 +264,18 @@
     color: var(--text-primary);
   }
 
-  .carbon-workspace h1 {
+  /* :not([class*="dp-"]) exempts the premium-light design system's own
+     headings (text-[var(--dp-text-*)] etc.) — this legacy dark-theme reset
+     is only meant for pages that haven't been redesigned yet. */
+  .carbon-workspace h1:not([class*="dp-"]) {
     color: var(--text-primary) !important;
     font-size: 18px !important;
     font-weight: 500 !important;
     letter-spacing: -0.3px !important;
   }
 
-  .carbon-workspace h2,
-  .carbon-workspace h3 {
+  .carbon-workspace h2:not([class*="dp-"]),
+  .carbon-workspace h3:not([class*="dp-"]) {
     color: var(--text-primary) !important;
     font-weight: 500 !important;
   }
