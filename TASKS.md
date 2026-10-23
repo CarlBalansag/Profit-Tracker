@@ -4,4 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| chore/remove-dead-code-and-deps | Remove confirmed-unused npm dependencies, orphaned source files, and stale superseded docs (no behavior change) | selvora-app/package.json, selvora-api/package.json, selvora-app/src/components/UI/{StatCard,Table}.jsx, selvora-app/src/pages/Forecast.jsx, selvora-api/services/discord{StrategyOptions,TokenExchange}.js, root selvora-v2-glass-workspace.jsx + structure.txt + AUTH_DEPLOYMENT_CHECKLIST.md, qa/*.cjs one-off scripts | In progress | 2026-10-19 |
+| ui/overhaul | Big UI overhaul (dependency/dead-code cleanup + full redesign pass across Dashboard, sidebar, shell layout, count-up numbers, etc.) staying off main until the whole overhaul is done and tested on localhost | selvora-app/src (broad), selvora-app/package.json, selvora-api/package.json, selvora-api/services/discord{StrategyOptions,TokenExchange}.js | In progress | 2026-10-23 |
