@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.84',
+    date: '2026-10-23',
+    notes: 'Fixed the sidebar title wrapping onto two lines at some window sizes, and matched its scrollbar to the light theme.',
+  },
+  {
     version: '0.83',
     date: '2026-10-23',
     notes: 'Shrank the sidebar menu text slightly and fixed a stray black scrollbar on the Dashboard so it matches the light theme.',
