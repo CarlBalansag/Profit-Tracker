@@ -93,18 +93,18 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
   const isEditing = !!cardToEdit;
 
   const inputClass = (field) => clsx(
-    "w-full bg-[#0A0A0F] border rounded-lg px-4 py-3 text-sm text-gray-200 focus:outline-none focus:border-gray-500 transition-colors placeholder:text-gray-600",
-    errors[field] ? "border-red-500/50" : "border-gray-800"
+    "w-full bg-[var(--dp-card-bg)] border rounded-lg px-4 py-3 text-sm text-[var(--dp-text-primary)] focus:outline-none focus:border-[var(--dp-accent)] transition-colors placeholder:text-[var(--dp-text-muted)]",
+    errors[field] ? "border-red-500/50" : "border-[color:var(--dp-border)]"
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div ref={modalRef} className="bg-[#12121A] border border-gray-800 rounded-xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--dp-modal-backdrop)] backdrop-blur-xs">
+      <div ref={modalRef} className="bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-xl w-full max-w-xl dp-elevated overflow-hidden flex flex-col max-h-[90vh] text-[var(--dp-text-primary)]">
 
         {/* Header */}
-        <div className="flex justify-between items-center p-4 border-b border-gray-800/50">
-          <h2 className="text-lg font-bold text-white">{isEditing ? 'Edit Card' : 'Add Card'}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+        <div className="flex justify-between items-center p-4 border-b border-[color:var(--dp-border)]">
+          <h2 className="text-lg font-bold text-[var(--dp-text-primary)]">{isEditing ? 'Edit Card' : 'Add Card'}</h2>
+          <button onClick={onClose} className="text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors">
             <X size={20} />
           </button>
         </div>

@@ -628,7 +628,7 @@ const AddTransaction = () => {
                 <Field label="Date">
                   <input
                     type="date" name="purchase_date" value={formData.purchase_date} onChange={handleChange}
-                    className={`${inputCls('blue')} [color-scheme:dark]`}
+                    className={inputCls('blue')}
                   />
                 </Field>
               </div>
@@ -1043,7 +1043,7 @@ const AddTransaction = () => {
                     <input
                       type="date" name="sale_date"
                       value={formData.sale_date} onChange={handleChange}
-                      className={`${inputCls('green')} [color-scheme:dark]`}
+                      className={inputCls('green')}
                     />
                   </Field>
 
@@ -1051,7 +1051,7 @@ const AddTransaction = () => {
                     <input
                       type="date" name="payout_date"
                       value={formData.payout_date} onChange={handleChange}
-                      className={`${inputCls('green')} [color-scheme:dark]`}
+                      className={inputCls('green')}
                     />
                   </Field>
                 </div>

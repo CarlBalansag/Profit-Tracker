@@ -58,41 +58,41 @@ export const QuickAddModal = ({ isOpen, onClose, onAddCards, existingCardIds = [
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div ref={modalRef} className="bg-[#12121A] border border-gray-800 rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--dp-modal-backdrop)] backdrop-blur-xs">
+      <div ref={modalRef} className="bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-xl w-full max-w-2xl dp-elevated overflow-hidden flex flex-col max-h-[85vh] text-[var(--dp-text-primary)]">
         
         {/* Header */}
-        <div className="flex justify-between items-center p-4 border-b border-gray-800/50">
-          <h2 className="text-lg font-bold text-white">Quick Add Cards</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+        <div className="flex justify-between items-center p-4 border-b border-[color:var(--dp-border)]">
+          <h2 className="text-lg font-bold text-[var(--dp-text-primary)]">Quick Add Cards</h2>
+          <button onClick={onClose} className="text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors">
             <X size={20} />
           </button>
         </div>
 
         {/* Controls */}
-        <div className="p-4 space-y-4 border-b border-gray-800/50 relative">
+        <div className="p-4 space-y-4 border-b border-[color:var(--dp-border)] relative">
           <div className="flex gap-3">
             <div className="relative flex-1">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--dp-text-muted)]" />
               <input 
                 type="text" 
                 placeholder="Search cards..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-[#0A0A0F] border border-gray-800 rounded-lg pl-9 pr-4 py-2 text-sm text-gray-300 focus:outline-none focus:border-gray-600"
+                className="w-full bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg pl-9 pr-4 py-2 text-sm text-[var(--dp-text-primary)] focus:outline-none focus:border-[var(--dp-accent)]"
               />
             </div>
             
             <div className="relative w-48">
               <button 
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="w-full flex items-center justify-between bg-[#0A0A0F] border border-gray-800 rounded-lg px-4 py-2 text-sm text-gray-300 focus:outline-none"
+                className="w-full flex items-center justify-between bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg px-4 py-2 text-sm text-[var(--dp-text-primary)] focus:outline-none"
               >
                 <span className="truncate">{selectedIssuer}</span>
               </button>
               
               {isDropdownOpen && (
-                <div className="absolute top-full right-0 mt-2 w-48 bg-[#12121A] border border-gray-800 rounded-lg shadow-xl z-10 py-1 max-h-60 overflow-y-auto">
+                <div className="absolute top-full right-0 mt-2 w-48 bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg dp-elevated z-10 py-1 max-h-60 overflow-y-auto">
                   {ISSUERS.map(issuer => (
                      <button
                        key={issuer}

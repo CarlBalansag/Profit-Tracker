@@ -89,16 +89,16 @@ export default function CalendarEventModal({ open, event, defaultDate, onClose }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-[var(--dp-modal-backdrop)] backdrop-blur-xs" onClick={onClose} />
 
       {/* Modal */}
-      <div ref={modalRef} className="relative z-10 w-full max-w-md bg-[#15171d] border border-white/[0.08] rounded-2xl shadow-2xl">
+      <div ref={modalRef} className="relative z-10 w-full max-w-md bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-2xl dp-elevated text-[var(--dp-text-primary)]">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
-          <h2 className="text-base font-semibold text-gray-100">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[color:var(--dp-border)]">
+          <h2 className="text-base font-semibold text-[var(--dp-text-primary)]">
             {isEdit ? 'Edit Event' : 'New Event'}
           </h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-white/[0.06] transition-colors">
+          <button onClick={onClose} className="p-1.5 rounded-lg text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors">
             <X size={18} />
           </button>
         </div>
@@ -106,50 +106,50 @@ export default function CalendarEventModal({ open, event, defaultDate, onClose }
         {/* Body */}
         <div className="px-5 py-4 space-y-4">
           {error && (
-            <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+            <p className="text-sm text-[var(--dp-red-text)] bg-[var(--dp-red-bg)] border border-[color:var(--dp-red-text)]/20 rounded-lg px-3 py-2">
               {error}
             </p>
           )}
 
           {/* Title */}
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Title <span className="text-red-400">*</span></label>
+            <label className="block text-xs font-medium text-[var(--dp-text-secondary)] mb-1.5">Title <span className="text-[var(--dp-red-text)]">*</span></label>
             <input
               type="text"
               value={form.title}
               onChange={set('title')}
               placeholder="e.g. Drop day, Restock trip..."
               maxLength={200}
-              className="w-full bg-[#1e2028] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]/30 transition-colors"
+              className="w-full bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2 text-sm text-[var(--dp-text-primary)] placeholder-[color:var(--dp-text-muted)] focus:outline-none focus:border-[var(--dp-accent)] transition-colors"
             />
           </div>
 
           {/* Dates */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5">Date <span className="text-red-400">*</span></label>
+              <label className="block text-xs font-medium text-[var(--dp-text-secondary)] mb-1.5">Date <span className="text-[var(--dp-red-text)]">*</span></label>
               <input
                 type="date"
                 value={form.date}
                 onChange={set('date')}
-                className="w-full bg-[#1e2028] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]/30 transition-colors"
+                className="w-full bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2 text-sm text-[var(--dp-text-primary)] focus:outline-none focus:border-[var(--dp-accent)] transition-colors"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5">End Date <span className="text-gray-600">(optional)</span></label>
+              <label className="block text-xs font-medium text-[var(--dp-text-secondary)] mb-1.5">End Date <span className="text-[var(--dp-text-muted)]">(optional)</span></label>
               <input
                 type="date"
                 value={form.end_date}
                 onChange={set('end_date')}
                 min={form.date}
-                className="w-full bg-[#1e2028] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]/30 transition-colors"
+                className="w-full bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2 text-sm text-[var(--dp-text-primary)] focus:outline-none focus:border-[var(--dp-accent)] transition-colors"
               />
             </div>
           </div>
 
           {/* Color */}
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-2">Color</label>
+            <label className="block text-xs font-medium text-[var(--dp-text-secondary)] mb-2">Color</label>
             <div className="flex gap-2">
               {COLOR_OPTIONS.map(c => (
                 <button
@@ -160,7 +160,7 @@ export default function CalendarEventModal({ open, event, defaultDate, onClose }
                   className="w-7 h-7 rounded-full transition-all focus:outline-none"
                   style={{
                     backgroundColor: c.hex,
-                    boxShadow: form.color === c.value ? `0 0 0 2px #15171d, 0 0 0 4px ${c.hex}` : 'none',
+                    boxShadow: form.color === c.value ? `0 0 0 2px var(--dp-card-bg), 0 0 0 4px ${c.hex}` : 'none',
                     transform: form.color === c.value ? 'scale(1.15)' : 'scale(1)',
                   }}
                 />
@@ -170,27 +170,27 @@ export default function CalendarEventModal({ open, event, defaultDate, onClose }
 
           {/* Notes */}
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Notes <span className="text-gray-600">(optional)</span></label>
+            <label className="block text-xs font-medium text-[var(--dp-text-secondary)] mb-1.5">Notes <span className="text-[var(--dp-text-muted)]">(optional)</span></label>
             <textarea
               value={form.notes}
               onChange={set('notes')}
               rows={3}
               maxLength={1000}
               placeholder="Any notes about this event..."
-              className="w-full bg-[#1e2028] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]/30 transition-colors resize-none"
+              className="w-full bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2 text-sm text-[var(--dp-text-primary)] placeholder-[color:var(--dp-text-muted)] focus:outline-none focus:border-[var(--dp-accent)] transition-colors resize-none"
             />
-            <p className="text-xs text-gray-600 mt-1 text-right">{form.notes.length}/1000</p>
+            <p className="text-xs text-[var(--dp-text-muted)] mt-1 text-right">{form.notes.length}/1000</p>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-4 border-t border-white/[0.06]">
+        <div className="flex items-center justify-between px-5 py-4 border-t border-[color:var(--dp-border)]">
           <div>
             {isEdit && (
               <button
                 onClick={handleDelete}
                 disabled={isPending}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[var(--dp-red-text)] hover:opacity-80 rounded-lg transition-colors disabled:opacity-50"
               >
                 <Trash2 size={14} />
                 Delete
@@ -201,15 +201,14 @@ export default function CalendarEventModal({ open, event, defaultDate, onClose }
             <button
               onClick={onClose}
               disabled={isPending}
-              className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-200 hover:bg-white/[0.05] rounded-lg transition-colors disabled:opacity-50"
+              className="px-4 py-1.5 text-sm text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] rounded-lg transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
               disabled={isPending}
-              className="px-4 py-1.5 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50"
-              style={{ backgroundColor: 'var(--accent)' }}
+              className="px-4 py-1.5 text-sm font-medium text-[#ffffff] bg-[var(--dp-accent)] rounded-lg transition-colors disabled:opacity-50"
             >
               {isPending ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Event'}
             </button>

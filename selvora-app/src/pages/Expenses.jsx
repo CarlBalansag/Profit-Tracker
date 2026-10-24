@@ -127,24 +127,24 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div ref={modalRef} className="relative w-full max-w-md rounded-2xl bg-[#16181d] border border-white/10 shadow-2xl">
+      <div className="absolute inset-0 bg-[var(--dp-modal-backdrop)] backdrop-blur-xs" onClick={onClose} />
+      <div ref={modalRef} className="relative w-full max-w-md rounded-2xl bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated text-[var(--dp-text-primary)]">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/[0.06]">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-[color:var(--dp-border)]">
           <div className="flex items-center gap-2.5">
             <div className={`flex items-center justify-center w-8 h-8 rounded-lg bg-${accent}-500/15 border border-${accent}-500/25`}>
               {form.recurring
                 ? <RefreshCw className="w-4 h-4 text-emerald-400" />
                 : <Receipt   className="w-4 h-4 text-purple-400" />}
             </div>
-            <h2 className="text-base font-semibold text-white">
+            <h2 className="text-base font-semibold text-[var(--dp-text-primary)]">
               {initial
                 ? (form.recurring ? 'Edit Recurring' : 'Edit Expense')
                 : 'Add Expense'}
             </h2>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+          <button onClick={onClose} className="text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>

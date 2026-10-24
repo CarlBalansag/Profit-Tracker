@@ -37,17 +37,17 @@ const ConfirmDialog = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="presentation">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { if (!busy) onClose?.(); }} />
+      <div className="absolute inset-0 bg-[var(--dp-modal-backdrop)] backdrop-blur-xs" onClick={() => { if (!busy) onClose?.(); }} />
       <div
         ref={modalRef}
         role="dialog"
         aria-modal="true"
         aria-label={title || 'Confirm action'}
-        className="relative w-full max-w-sm rounded-2xl bg-[#16181d] border border-white/10 shadow-2xl flex flex-col"
+        className="relative w-full max-w-sm rounded-2xl bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated flex flex-col text-[var(--dp-text-primary)]"
       >
-        <div className="flex items-start justify-between px-5 pt-5 pb-4 border-b border-white/[0.06]">
-          <h2 className="text-base font-semibold text-white flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+        <div className="flex items-start justify-between px-5 pt-5 pb-4 border-b border-[color:var(--dp-border)]">
+          <h2 className="text-base font-semibold text-[var(--dp-text-primary)] flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-[var(--dp-warning-text)] shrink-0" />
             {title || 'Confirm action'}
           </h2>
           <button
@@ -55,7 +55,7 @@ const ConfirmDialog = ({
             aria-label="Close"
             disabled={busy}
             onClick={onClose}
-            className="text-gray-500 hover:text-white transition-colors disabled:opacity-40"
+            className="text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors disabled:opacity-40"
           >
             <X className="w-4 h-4" />
           </button>

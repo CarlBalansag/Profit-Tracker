@@ -1044,7 +1044,7 @@ const Transactions = () => {
                       case 'date': return (
                         <td key="date" className="px-4 py-3.5">
                           {isEditing && editData.isSale ? (
-                            <input type="date" value={editData.sale_date || ''} onChange={e => setEditData(d => ({ ...d, sale_date: e.target.value }))} className="bg-[#0d0d18] border border-indigo-500/40 rounded px-1.5 py-0.5 text-xs text-white [color-scheme:dark]" title="Sale Date" />
+                            <input type="date" value={editData.sale_date || ''} onChange={e => setEditData(d => ({ ...d, sale_date: e.target.value }))} className="bg-[#0d0d18] border border-indigo-500/40 rounded px-1.5 py-0.5 text-xs text-white" title="Sale Date" />
                           ) : (
                             <span className="text-xs text-gray-400 bg-white/[0.04] px-2 py-1 rounded-md whitespace-nowrap">{row.date}</span>
                           )}

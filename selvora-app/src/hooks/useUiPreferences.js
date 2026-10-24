@@ -40,7 +40,6 @@ function mergePreferences(stored) {
 
 function applyColorTheme(preferences) {
   if (typeof document === 'undefined') return;
-  document.documentElement.dataset.theme = 'copper';
   document.documentElement.dataset.uiStyle = preferences.style || DEFAULT_UI_PREFERENCES.style;
 }
 

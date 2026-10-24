@@ -61,18 +61,18 @@ function FormulaPopup({ formula = [], label, description, onClose }) {
   return (
     <div
       ref={ref}
-      className="absolute right-8 top-1/2 z-10 w-64 -translate-y-1/2 rounded-xl border border-white/10 bg-[#1c1f28] p-4 shadow-2xl"
+      className="absolute right-8 top-1/2 z-10 w-64 -translate-y-1/2 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] p-4 dp-elevated"
     >
-      <p className="text-xs font-semibold uppercase tracking-wider text-blue-300">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wider text-[var(--dp-accent)]">{label}</p>
       <div className="mt-3 space-y-3">
         {formula.length > 0 && (
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Calculation</p>
-            <p className="mt-1 text-xs font-semibold leading-relaxed text-white">{calculation}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--dp-text-label)]">Calculation</p>
+            <p className="mt-1 text-xs font-semibold leading-relaxed text-[var(--dp-text-primary)]">{calculation}</p>
           </div>
         )}
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">What It Means</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--dp-text-label)]">What It Means</p>
           <p className="mt-1 text-xs leading-relaxed text-gray-300">{description || `${label} is available in the selected dashboard view.`}</p>
         </div>
       </div>
@@ -748,17 +748,17 @@ export default function DashboardSettingsModal({ settings, onClose, onSave, uiSt
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-[var(--dp-modal-backdrop)] backdrop-blur-xs" onClick={onClose} />
 
-      <div ref={modalRef} className="relative flex h-[90vh] sm:h-[80vh] w-full sm:w-[min(1180px,92vw)] flex-col overflow-hidden sm:rounded-2xl border border-white/[0.08] bg-[#0a0a0b] shadow-2xl">
-        <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-4 sm:px-6 py-4">
+      <div ref={modalRef} className="relative flex h-[90vh] sm:h-[80vh] w-full sm:w-[min(1180px,92vw)] flex-col overflow-hidden sm:rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] dp-elevated text-[var(--dp-text-primary)]">
+        <div className="flex shrink-0 items-center justify-between border-b border-[color:var(--dp-border)] px-4 sm:px-6 py-4">
           <div>
-            <h2 className="text-base font-semibold text-white">Dashboard Settings</h2>
-            <p className="mt-0.5 text-[11px] text-gray-500">Customize dashboard layout, cards, and chart visibility.</p>
+            <h2 className="text-base font-semibold text-[var(--dp-text-primary)]">Dashboard Settings</h2>
+            <p className="mt-0.5 text-[11px] text-[var(--dp-text-secondary)]">Customize dashboard layout, cards, and chart visibility.</p>
           </div>
           <button
             onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white/10 hover:text-white"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--dp-text-secondary)] transition-colors hover:bg-[var(--dp-hover-bg)] hover:text-[var(--dp-text-primary)]"
             type="button"
           >
             <X className="h-4 w-4" />

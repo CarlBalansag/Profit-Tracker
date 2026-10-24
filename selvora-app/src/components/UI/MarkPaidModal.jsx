@@ -48,28 +48,28 @@ const MarkPaidModal = ({ open, sale, busy = false, onSubmit, onClose }) => {
     });
   };
 
-  const field = 'w-full bg-[#0d0d18] border border-white/10 rounded-lg px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500/50';
-  const labelClass = 'block text-[11px] uppercase font-semibold text-gray-500 tracking-wider mb-1';
+  const field = 'w-full bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg px-2.5 py-1.5 text-sm text-[var(--dp-text-primary)] focus:outline-none focus:border-[var(--dp-accent)]';
+  const labelClass = 'block text-[11px] uppercase font-semibold text-[var(--dp-text-secondary)] tracking-wider mb-1';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="presentation">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { if (!busy) onClose?.(); }} />
+      <div className="absolute inset-0 bg-[var(--dp-modal-backdrop)] backdrop-blur-xs" onClick={() => { if (!busy) onClose?.(); }} />
       <form
         ref={modalRef}
         onSubmit={submit}
         role="dialog"
         aria-modal="true"
         aria-label="Mark Paid"
-        className="relative w-full max-w-sm rounded-2xl bg-[#16181d] border border-white/10 shadow-2xl flex flex-col"
+        className="relative w-full max-w-sm rounded-2xl bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated flex flex-col text-[var(--dp-text-primary)]"
       >
-        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-white/[0.06]">
-          <h2 className="text-base font-semibold text-white">Mark Paid</h2>
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-[color:var(--dp-border)]">
+          <h2 className="text-base font-semibold text-[var(--dp-text-primary)]">Mark Paid</h2>
           <button
             type="button"
             aria-label="Close"
             disabled={busy}
             onClick={onClose}
-            className="text-gray-500 hover:text-white transition-colors disabled:opacity-40"
+            className="text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors disabled:opacity-40"
           >
             <X className="w-4 h-4" />
           </button>

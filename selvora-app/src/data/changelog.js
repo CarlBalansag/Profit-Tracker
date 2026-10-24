@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.89',
+    date: '2026-10-23',
+    notes: 'Brought the entire website into the premium light color palette.',
+  },
+  {
     version: '0.88',
     date: '2026-10-23',
     notes: 'Made the Dashboard Goals widget about 10% smaller overall — ring, icon, and text.',

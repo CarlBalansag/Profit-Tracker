@@ -32,7 +32,7 @@ function Input({ value, onChange, type = 'text', placeholder = '', className = '
       placeholder={placeholder}
       readOnly={readOnly}
       aria-label={ariaLabel}
-      className={`w-full bg-[#0f1014] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500/60 transition-colors ${readOnly ? 'opacity-60 cursor-default' : ''} ${className}`}
+      className={`w-full bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2 text-sm text-[var(--dp-text-primary)] placeholder-[color:var(--dp-text-muted)] focus:outline-none focus:border-[var(--dp-accent)] transition-colors ${readOnly ? 'opacity-60 cursor-default' : ''} ${className}`}
     />
   );
 }
@@ -41,7 +41,7 @@ function Input({ value, onChange, type = 'text', placeholder = '', className = '
 function DollarInput({ value, onChange, placeholder = '0.00', accentClass = 'focus:border-green-500/60', ariaLabel }) {
   return (
     <div className="relative">
-      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--dp-text-secondary)] text-sm">$</span>
       <input
         type="number"
         step="0.01"
@@ -49,7 +49,7 @@ function DollarInput({ value, onChange, placeholder = '0.00', accentClass = 'foc
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={ariaLabel}
-        className={`w-full bg-[#0f1014] border border-white/[0.08] rounded-lg pl-7 pr-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none transition-colors ${accentClass}`}
+        className={`w-full bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg pl-7 pr-3 py-2 text-sm text-[var(--dp-text-primary)] placeholder-[color:var(--dp-text-muted)] focus:outline-none transition-colors ${accentClass}`}
       />
     </div>
   );
@@ -61,7 +61,7 @@ function Sel({ value, onChange, options = [], placeholder }) {
     <select
       value={value ?? ''}
       onChange={e => onChange(e.target.value)}
-      className="w-full bg-[#0f1014] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500/60 transition-colors appearance-none"
+      className="w-full bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2 text-sm text-[var(--dp-text-primary)] focus:outline-none focus:border-[var(--dp-accent)] transition-colors appearance-none"
     >
       {placeholder && <option value="">{placeholder}</option>}
       {options.map(o => (
@@ -74,7 +74,7 @@ function Sel({ value, onChange, options = [], placeholder }) {
 // ─── Read-only value box ───────────────────────────────────────────────────────
 function ReadBox({ value, className = '' }) {
   return (
-    <div className={`w-full bg-white/[0.02] border border-white/[0.05] rounded-lg px-3 py-2 text-sm ${className}`}>
+    <div className={`w-full bg-[var(--dp-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2 text-sm text-[var(--dp-text-primary)] ${className}`}>
       {value}
     </div>
   );
@@ -300,12 +300,12 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={dismiss} />
+      <div className="absolute inset-0 bg-[var(--dp-modal-backdrop)] backdrop-blur-xs" onClick={dismiss} />
 
       {/* Panel */}
       <div
         ref={modalRef}
-        className="relative w-full max-w-[640px] max-h-[90vh] sm:max-h-[90vh] h-full sm:h-auto bg-[#15171d] border border-white/[0.08] sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        className="relative w-full max-w-[640px] max-h-[90vh] sm:max-h-[90vh] h-full sm:h-auto bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] sm:rounded-2xl dp-elevated flex flex-col overflow-hidden text-[var(--dp-text-primary)]"
         style={{ animation: 'fadeInScale 0.2s ease-out' }}
       >
         <style>{`
@@ -316,14 +316,14 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
         `}</style>
 
         {/* ── Header ── */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/[0.06] shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[color:var(--dp-border)] shrink-0">
           <div>
-            <h2 className="text-base font-semibold text-white">Edit Transaction</h2>
-            <p className="text-[11px] text-gray-500 mt-0.5">Make changes and click Update to save.</p>
+            <h2 className="text-base font-semibold text-[var(--dp-text-primary)]">Edit Transaction</h2>
+            <p className="text-[11px] text-[var(--dp-text-secondary)] mt-0.5">Make changes and click Update to save.</p>
           </div>
           <button
             onClick={dismiss}
-            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 text-gray-500 hover:text-white transition-colors"
+            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--dp-hover-bg)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -356,7 +356,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                 <Sel value={form.vendor_id} onChange={v => applyCashbackDefault(form.payment_method_id, v)} options={vendors} placeholder="Select vendor…" />
               </Field>
               <Field label="Purchase Date">
-                <Input type="date" value={form.purchase_date} onChange={v => set('purchase_date', v)} className="[color-scheme:dark]" />
+                <Input type="date" value={form.purchase_date} onChange={v => set('purchase_date', v)} />
               </Field>
               <Field label="Category">
                 <Input value={form.category} onChange={v => set('category', v)} placeholder="e.g. Electronics" />
@@ -566,7 +566,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                                   type="date"
                                   value={sale.sale_date}
                                   onChange={v => setSale(i, 'sale_date', v)}
-                                  className="[color-scheme:dark] focus:border-green-500/60"
+                                  className="focus:border-green-500/60"
                                 />
                               </Field>
                               <Field label="Payout Date">
@@ -574,7 +574,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                                   type="date"
                                   value={sale.payout_date}
                                   onChange={v => setSale(i, 'payout_date', v)}
-                                  className="[color-scheme:dark] focus:border-green-500/60"
+                                  className="focus:border-green-500/60"
                                 />
                               </Field>
                             </div>

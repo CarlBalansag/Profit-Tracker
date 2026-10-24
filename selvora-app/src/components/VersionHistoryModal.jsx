@@ -14,24 +14,24 @@ const VersionHistoryModal = ({ open, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div ref={modalRef} className="relative w-full max-w-sm rounded-2xl bg-[#16181d] border border-white/10 shadow-2xl max-h-[80vh] flex flex-col">
+      <div className="absolute inset-0 bg-[var(--dp-modal-backdrop)] backdrop-blur-xs" onClick={onClose} />
+      <div ref={modalRef} className="relative w-full max-w-sm rounded-2xl bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated max-h-[80vh] flex flex-col text-[var(--dp-text-primary)]">
 
-        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-white/[0.06]">
-          <h2 className="text-base font-semibold text-white">What's New</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-[color:var(--dp-border)]">
+          <h2 className="text-base font-semibold text-[var(--dp-text-primary)]">What's New</h2>
+          <button onClick={onClose} className="text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-4 overflow-y-auto">
+        <div className="px-5 py-4 space-y-4 overflow-y-auto dp-scrollbar">
           {CHANGELOG.map((entry) => (
             <div key={entry.version}>
               <div className="flex items-baseline gap-2">
-                <span className="text-sm font-semibold text-[var(--accent)]">v{entry.version}</span>
-                <span className="text-[11px] text-gray-500">{formatDate(entry.date)}</span>
+                <span className="text-sm font-semibold text-[var(--dp-accent)]">v{entry.version}</span>
+                <span className="text-[11px] text-[var(--dp-text-muted)]">{formatDate(entry.date)}</span>
               </div>
-              <p className="text-xs text-gray-400 mt-0.5">{entry.notes}</p>
+              <p className="text-xs text-[var(--dp-text-secondary)] mt-0.5">{entry.notes}</p>
             </div>
           ))}
         </div>

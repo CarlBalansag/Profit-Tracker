@@ -36,7 +36,7 @@ function App() {
       <TutorialProvider>
       <Toaster
         position="bottom-right"
-        theme="dark"
+        theme="light"
         richColors
         expand={false}
         duration={3500}

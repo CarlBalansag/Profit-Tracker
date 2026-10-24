@@ -24,17 +24,17 @@ function PreviewModal({ dataUrl, onClose }) {
   const isPdf = isPdfUrl(dataUrl);
   const modalRef = useModalKeyboard(true, onClose);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div ref={modalRef} className="relative max-w-3xl w-full max-h-[90vh] rounded-xl overflow-hidden bg-[#16181d] border border-white/10 shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-          <span className="text-sm font-medium text-white">Receipt Preview</span>
-          <button onClick={onClose} className="p-1 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--dp-modal-backdrop)] backdrop-blur-xs" onClick={onClose}>
+      <div ref={modalRef} className="relative max-w-3xl w-full max-h-[90vh] rounded-xl overflow-hidden bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated text-[var(--dp-text-primary)]" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[color:var(--dp-border)]">
+          <span className="text-sm font-medium text-[var(--dp-text-primary)]">Receipt Preview</span>
+          <button onClick={onClose} className="p-1 rounded hover:bg-[var(--dp-hover-bg)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="overflow-auto max-h-[80vh] p-2 flex items-center justify-center bg-black/30">
+        <div className="overflow-auto max-h-[80vh] p-2 flex items-center justify-center bg-[var(--dp-bg)]">
           {isPdf ? (
-            <iframe src={dataUrl} title="Receipt PDF" className="w-full h-[75vh] rounded border border-white/10" />
+            <iframe src={dataUrl} title="Receipt PDF" className="w-full h-[75vh] rounded border border-[color:var(--dp-border)]" />
           ) : (
             <img src={dataUrl} alt="Receipt" className="max-w-full max-h-[75vh] object-contain rounded" />
           )}

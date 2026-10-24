@@ -410,11 +410,11 @@ const AddSale = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <div>
                       <label className="block text-xs font-medium text-gray-400 mb-1.5">Sale Date</label>
-                      <input name="sale_date" type="date" value={formData.sale_date} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 [color-scheme:dark]" />
+                      <input name="sale_date" type="date" value={formData.sale_date} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50" />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-400 mb-1.5">Expected Payout Date</label>
-                      <input name="payout_date" type="date" value={formData.payout_date} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50 [color-scheme:dark]" />
+                      <input name="payout_date" type="date" value={formData.payout_date} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50" />
                     </div>
                   </div>
                 </div>

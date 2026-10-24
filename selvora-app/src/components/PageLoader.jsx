@@ -1,13 +1,13 @@
 import React from 'react';
 
-// Shimmering skeleton block
+// Shimmering skeleton block — defaults to the light theme palette
 function Sk({ className = '', style }) {
   return (
     <div
       className={`rounded-lg relative overflow-hidden ${className}`}
       style={{
-        backgroundColor: 'rgba(255,255,255,0.07)',
-        backgroundImage: 'linear-gradient(90deg, transparent 25%, rgba(255,255,255,0.15) 50%, transparent 75%)',
+        backgroundColor: 'rgba(17,17,17,0.045)',
+        backgroundImage: 'linear-gradient(90deg, transparent 25%, rgba(17,17,17,0.07) 50%, transparent 75%)',
         backgroundSize: '400% 100%',
         animation: 'sk-shimmer 1.4s ease-in-out infinite',
         ...style,

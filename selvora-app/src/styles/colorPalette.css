@@ -18,11 +18,13 @@
 
   /* Borders */
   --color-border: rgba(17, 17, 17, 0.06);
+  --color-border-hover: rgba(17, 17, 17, 0.12);
 
   /* Text */
   --color-text-primary: #16161A;
   --color-text-secondary: #16161A;
   --color-text-label: #16161A;
+  --color-text-muted: #6B7280;
 
   /* Accent (brand) */
   --color-accent: #7C3AED;
@@ -34,6 +36,15 @@
   --color-success-text: #1A9A50;
   --color-danger-bg: #FCE8E8;
   --color-danger-text: #D23B3B;
+  --color-warning-bg: #FEF3C7;
+  --color-warning-text: #B45309;
+  --color-info-bg: #E0F2FE;
+  --color-info-text: #0284C7;
+  --color-neutral-bg: #F3F4F6;
+  --color-neutral-text: #6B7280;
+
+  /* Modal */
+  --color-modal-backdrop: rgba(15, 23, 42, 0.4);
 }
 
 /* ---------------------------------------------------------------------------
