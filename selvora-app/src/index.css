@@ -644,10 +644,12 @@
 }
 
 /* Light-theme scrollbar for the premium Dashboard (replaces .theme-scrollbar
-   there, since that class's colors are dark-theme only). */
+   there, since that class's colors are dark-theme only). Thumb tracks
+   --dp-accent (== --color-accent in colorPalette.css) so it always matches
+   the accent color. */
 .dp-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(17, 17, 17, 0.15) transparent;
+  scrollbar-color: color-mix(in srgb, var(--dp-accent) 35%, transparent) transparent;
 }
 
 .dp-scrollbar::-webkit-scrollbar {
@@ -660,12 +662,12 @@
 }
 
 .dp-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(17, 17, 17, 0.15);
+  background: color-mix(in srgb, var(--dp-accent) 35%, transparent);
   border-radius: 10px;
 }
 
 .dp-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(17, 17, 17, 0.28);
+  background: color-mix(in srgb, var(--dp-accent) 55%, transparent);
 }
 
 /* Modal Scrollbar Optimization */

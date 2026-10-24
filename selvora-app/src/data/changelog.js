@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.86',
+    date: '2026-10-23',
+    notes: 'Tinted the Dashboard and sidebar scrollbars with the purple accent color instead of plain grey.',
+  },
+  {
     version: '0.85',
     date: '2026-10-23',
     notes: 'Made the sidebar text and icons smaller across the board for a more compact look.',
