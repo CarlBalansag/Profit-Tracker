@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.92',
+    date: '2026-10-23',
+    notes: 'Updated KPI cards to a soft lavender hover glow and Status Pipeline cards to an expanding top accent indicator on hover.',
+  },
+  {
     version: '0.91',
     date: '2026-10-23',
     notes: 'Added a smooth purple accent hover animation with crisp white text to clickable KPI and pipeline cards on the Dashboard.',

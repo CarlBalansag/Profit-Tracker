@@ -623,38 +623,38 @@
 }
 
 /* ─── Clickable KPI & Pipeline Card Hover Effects (Light Palette) ────────── */
+/* KPI Cards: Option 2 (Soft Lavender Glow & Accent Accents) */
 .dp-clickable-card {
-  transition: transform 320ms cubic-bezier(0.16, 1, 0.3, 1),
-              box-shadow 320ms cubic-bezier(0.16, 1, 0.3, 1),
-              background 320ms cubic-bezier(0.16, 1, 0.3, 1),
-              border-color 320ms cubic-bezier(0.16, 1, 0.3, 1),
-              color 320ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 300ms cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 300ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 300ms cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform, box-shadow;
 }
 
 .carbon-workspace .dp-clickable-card:hover {
   transform: translateY(-3px);
-  background: linear-gradient(135deg, #8B5CF6 0%, #A855F7 100%) !important;
-  border-color: transparent !important;
-  box-shadow: 0 16px 32px -4px rgba(139, 92, 246, 0.38) !important;
+  background-color: color-mix(in srgb, var(--dp-accent) 7%, var(--dp-card-bg)) !important;
+  border-color: color-mix(in srgb, var(--dp-accent) 45%, var(--dp-border)) !important;
+  box-shadow: 0 14px 30px -4px rgba(124, 58, 237, 0.18) !important;
 }
 
-.carbon-workspace .dp-clickable-card:hover .dp-card-title,
-.carbon-workspace .dp-clickable-card:hover .dp-card-tag {
-  color: rgba(255, 255, 255, 0.85) !important;
+.carbon-workspace .dp-clickable-card:hover .dp-card-title {
+  color: var(--dp-text-primary) !important;
 }
 
 .carbon-workspace .dp-clickable-card:hover .dp-card-value {
-  color: #ffffff !important;
+  color: var(--dp-accent) !important;
 }
 
 .carbon-workspace .dp-clickable-card:hover .dp-card-subtext {
-  color: rgba(255, 255, 255, 0.78) !important;
+  color: var(--dp-text-secondary) !important;
 }
 
 .carbon-workspace .dp-clickable-card:hover .dp-card-icon-wrap {
-  background-color: rgba(255, 255, 255, 0.22) !important;
+  background-color: var(--dp-accent) !important;
   color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.30);
 }
 
 .carbon-workspace .dp-clickable-card:hover .dp-card-icon-wrap svg {
@@ -662,12 +662,8 @@
 }
 
 .carbon-workspace .dp-clickable-card:hover .dp-card-info-btn {
-  color: rgba(255, 255, 255, 0.70) !important;
-}
-
-.carbon-workspace .dp-clickable-card:hover .dp-card-info-btn:hover {
-  color: #ffffff !important;
-  background-color: rgba(255, 255, 255, 0.22) !important;
+  color: var(--dp-accent) !important;
+  background-color: color-mix(in srgb, var(--dp-accent) 15%, transparent) !important;
 }
 
 /* Hero Net Profit card already uses accent gradient; lifts and deepens glow on hover */
@@ -684,34 +680,55 @@
   filter: brightness(1.04);
 }
 
-/* Pipeline cards under the KPI row */
+/* Status Pipeline cards: Option 3 (Top Accent Bar & Lift) */
 .dp-clickable-pipeline {
-  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1),
-              box-shadow 300ms cubic-bezier(0.16, 1, 0.3, 1),
-              background 300ms cubic-bezier(0.16, 1, 0.3, 1),
-              border-color 300ms cubic-bezier(0.16, 1, 0.3, 1),
-              color 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+  transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 280ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 280ms cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 280ms cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform, box-shadow;
 }
 
+.dp-clickable-pipeline::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #7C3AED 0%, #A855F7 100%);
+  opacity: 0;
+  transform: scaleX(0.3);
+  transform-origin: center;
+  transition: opacity 260ms ease, transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 .carbon-workspace .dp-clickable-pipeline:hover {
-  transform: translateY(-2px);
-  background: linear-gradient(135deg, #8B5CF6 0%, #A855F7 100%) !important;
-  border-color: transparent !important;
-  box-shadow: 0 10px 24px -2px rgba(139, 92, 246, 0.32) !important;
+  transform: translateY(-3px);
+  background-color: var(--dp-card-bg) !important;
+  border-color: color-mix(in srgb, var(--dp-accent) 45%, var(--dp-border)) !important;
+  box-shadow: 0 12px 26px -4px rgba(124, 58, 237, 0.16) !important;
+}
+
+.carbon-workspace .dp-clickable-pipeline:hover::before {
+  opacity: 1;
+  transform: scaleX(1);
 }
 
 .carbon-workspace .dp-clickable-pipeline:hover .dp-pipeline-label {
-  color: rgba(255, 255, 255, 0.85) !important;
+  color: var(--dp-text-primary) !important;
 }
 
 .carbon-workspace .dp-clickable-pipeline:hover .dp-pipeline-count {
-  color: #ffffff !important;
+  color: var(--dp-accent) !important;
 }
 
 .carbon-workspace .dp-clickable-pipeline:hover .dp-pipeline-icon-wrap {
-  background-color: rgba(255, 255, 255, 0.22) !important;
+  background-color: var(--dp-accent) !important;
   color: #ffffff !important;
+  box-shadow: 0 4px 10px rgba(124, 58, 237, 0.28);
 }
 
 .carbon-workspace .dp-clickable-pipeline:hover .dp-pipeline-icon-wrap svg {

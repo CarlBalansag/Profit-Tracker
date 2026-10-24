@@ -1335,19 +1335,19 @@ function StatCard({ id, title, modeTag, value, subtext, icon, color, formula = [
     } style={!isGlass && isProfitHero ? { background: 'var(--dp-accent-gradient)' } : undefined}>
       <div className="relative z-10 flex items-start justify-between">
         <div>
-          <p className={isGlass ? "text-[10px] text-white/25 font-medium uppercase tracking-[0.2em]" : `text-[11px] font-medium uppercase tracking-[0.08em] dp-card-title ${isProfitHero ? 'text-[#ffffff]/75' : 'text-[var(--dp-text-label)]'}`}>
+          <p className={isGlass ? "text-[10px] text-white/25 font-medium uppercase tracking-[0.2em]" : `text-[11px] font-medium uppercase tracking-[0.08em] dp-card-title transition-colors duration-300 ${isProfitHero ? 'text-[#ffffff]/75' : 'text-[var(--dp-text-label)]'}`}>
             {title}
             {modeTag && (
-              <span className={isGlass ? "ml-1.5 text-[9px] font-normal normal-case tracking-normal text-[var(--text-muted)]" : `ml-1.5 text-[10px] font-normal normal-case tracking-normal dp-card-tag ${isProfitHero ? 'text-[#ffffff]/60' : 'text-[var(--dp-text-label)]'}`}>
+              <span className={isGlass ? "ml-1.5 text-[9px] font-normal normal-case tracking-normal text-[var(--text-muted)]" : `ml-1.5 text-[10px] font-normal normal-case tracking-normal dp-card-tag transition-colors duration-300 ${isProfitHero ? 'text-[#ffffff]/60' : 'text-[var(--dp-text-label)]'}`}>
                 {modeTag}
               </span>
             )}
           </p>
-          <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value ${isProfitHero ? 'text-[32px] text-[#ffffff]' : 'text-[22px] text-[var(--dp-text-primary)]'}`}>{value}</p>
-          <p className={isGlass ? "text-[10px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 dp-card-subtext ${isProfitHero ? 'text-[#ffffff]/70' : 'text-[var(--dp-text-secondary)]'}`}>{subtext}</p>
+          <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 ${isProfitHero ? 'text-[32px] text-[#ffffff]' : 'text-[22px] text-[var(--dp-text-primary)]'}`}>{value}</p>
+          <p className={isGlass ? "text-[10px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 dp-card-subtext transition-colors duration-300 ${isProfitHero ? 'text-[#ffffff]/70' : 'text-[var(--dp-text-secondary)]'}`}>{subtext}</p>
         </div>
-        <div className={isGlass ? "w-9 h-9 3xl:w-11 3xl:h-11 rounded-xl bg-white/[0.035] border border-white/[0.05] flex items-center justify-center" : `w-9 h-9 rounded-full flex items-center justify-center dp-card-icon-wrap ${isProfitHero ? 'bg-white/15 text-[#ffffff]' : 'bg-[var(--dp-bg)] text-[var(--dp-text-secondary)]'}`}>
-          <IconComponent className={isGlass ? "w-4.5 h-4.5 3xl:w-5 3xl:h-5 text-[#d8a65a]" : "w-4.5 h-4.5 3xl:w-5 3xl:h-5"} />
+        <div className={isGlass ? "w-9 h-9 3xl:w-11 3xl:h-11 rounded-xl bg-white/[0.035] border border-white/[0.05] flex items-center justify-center" : `w-9 h-9 rounded-full flex items-center justify-center dp-card-icon-wrap transition-all duration-300 ${isProfitHero ? 'bg-white/15 text-[#ffffff]' : 'bg-[var(--dp-bg)] text-[var(--dp-text-secondary)]'}`}>
+          <IconComponent className={isGlass ? "w-4.5 h-4.5 3xl:w-5 3xl:h-5 text-[#d8a65a]" : "w-4.5 h-4.5 3xl:w-5 3xl:h-5 transition-colors duration-300"} />
         </div>
       </div>
       {formula.length > 0 && (
@@ -1452,12 +1452,12 @@ function PipelineCard({ icon, count, label, statusKey, onNavigate, uiStyle = 'ne
         </>
       ) : (
         <>
-          <div className="w-9 h-9 rounded-full bg-[var(--dp-bg)] flex items-center justify-center shrink-0 dp-pipeline-icon-wrap">
-            <IconComponent className={`w-4.5 h-4.5 ${isEmpty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-secondary)]'}`} />
+          <div className="w-9 h-9 rounded-full bg-[var(--dp-bg)] flex items-center justify-center shrink-0 dp-pipeline-icon-wrap transition-all duration-300">
+            <IconComponent className={`w-4.5 h-4.5 transition-colors duration-300 ${isEmpty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-secondary)]'}`} />
           </div>
           <div>
-            <p className={`text-[11px] font-medium uppercase tracking-[0.06em] dp-pipeline-label ${isEmpty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-secondary)]'}`}>{label}</p>
-            <p className={`text-lg font-bold tabular-nums dp-pipeline-count ${isEmpty ? 'text-[var(--dp-text-label)]' : premiumValue}`}>{count}</p>
+            <p className={`text-[11px] font-medium uppercase tracking-[0.06em] dp-pipeline-label transition-colors duration-300 ${isEmpty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-secondary)]'}`}>{label}</p>
+            <p className={`text-lg font-bold tabular-nums dp-pipeline-count transition-colors duration-300 ${isEmpty ? 'text-[var(--dp-text-label)]' : premiumValue}`}>{count}</p>
           </div>
         </>
       )}
