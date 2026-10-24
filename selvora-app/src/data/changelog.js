@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.87',
+    date: '2026-10-23',
+    notes: 'Top Cards on the Dashboard now shows 3 at a time with page arrows on every screen size, instead of a long list that made that row taller than the chart next to it.',
+  },
+  {
     version: '0.86',
     date: '2026-10-23',
     notes: 'Tinted the Dashboard and sidebar scrollbars with the purple accent color instead of plain grey.',

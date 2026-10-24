@@ -113,7 +113,7 @@ const Dashboard = () => {
   const [trendMode, setTrendMode] = useState('period'); // 'period' | 'cumulative'
   const [chartView, setChartView] = useState('line'); // 'line' | 'bar'
   const [pipelinePage, setPipelinePage] = useState(0); // mobile-only Status Pipeline pagination
-  const [topCardsPage, setTopCardsPage] = useState(0); // mobile-only Top Cards pagination
+  const [topCardsPage, setTopCardsPage] = useState(0); // Top Cards pagination (3 per page, all breakpoints)
 
   const { data, isLoading, isError, error, refetch } = useDashboard(modeFilter, dateFilter);
   const { data: goals = [] } = useGoals();
@@ -390,18 +390,13 @@ const Dashboard = () => {
                       <p className={isGlass ? "text-xs text-white/20" : "text-xs text-[var(--dp-text-secondary)]"}>No payment data yet.</p>
                     ) : (
                       <>
-                        {/* Mobile (below lg): 3 cards at a time, paginated */}
-                        <div className="lg:hidden">
-                          <div key={safeTopCardsPage} className="space-y-3 page-transition">
-                            {mobileTopCards.map((card, i) => renderCardRow(card, safeTopCardsPage * topCardsPerPage + i))}
-                          </div>
-                          <PageNav count={topCardsPageCount} index={safeTopCardsPage} onChange={setTopCardsPage} isGlass={isGlass} />
+                        {/* 3 cards at a time, paginated — same on every breakpoint
+                            so this column doesn't grow taller than the chart
+                            next to it. */}
+                        <div key={safeTopCardsPage} className="space-y-3 page-transition">
+                          {mobileTopCards.map((card, i) => renderCardRow(card, safeTopCardsPage * topCardsPerPage + i))}
                         </div>
-
-                        {/* Desktop (lg+): show every card at once, unchanged from before */}
-                        <div className="hidden lg:block space-y-3">
-                          {sourceCards.map((card, i) => renderCardRow(card, i))}
-                        </div>
+                        <PageNav count={topCardsPageCount} index={safeTopCardsPage} onChange={setTopCardsPage} isGlass={isGlass} />
                       </>
                     )}
                   </div>
