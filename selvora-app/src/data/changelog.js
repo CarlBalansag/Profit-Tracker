@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.88',
+    date: '2026-10-23',
+    notes: 'Made the Dashboard Goals widget about 10% smaller overall — ring, icon, and text.',
+  },
+  {
     version: '0.87',
     date: '2026-10-23',
     notes: 'Top Cards on the Dashboard now shows 3 at a time with page arrows on every screen size, instead of a long list that made that row taller than the chart next to it.',

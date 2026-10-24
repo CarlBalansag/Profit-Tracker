@@ -1088,20 +1088,20 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate })
     <div className={`flex flex-col animate-in slide-in-from-bottom-4 duration-500 fade-in fill-mode-both h-full ${
       isGlass
         ? 'rounded-[20px] p-5 bg-[#181a1c]/72 border border-white/[0.06] shadow-[0_10px_30px_rgba(0,0,0,0.22)]'
-        : 'rounded-[24px] p-6 bg-[var(--dp-card-bg)] dp-elevated'
+        : 'rounded-[24px] p-[22px] bg-[var(--dp-card-bg)] dp-elevated'
     }`}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <Target size={13} className={isGlass ? 'text-[#d8a65a]' : 'text-[var(--dp-accent)]'} />
+          <Target size={12} className={isGlass ? 'text-[#d8a65a]' : 'text-[var(--dp-accent)]'} />
           <h3 className={isGlass
             ? 'text-[10px] font-medium uppercase tracking-[0.22em] text-white/25'
-            : 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)]'
+            : 'text-[10px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)]'
           }>Goals</h3>
         </div>
         <button
           onClick={onNavigate}
-          className={`text-[10px] transition-colors ${isGlass ? 'text-white/20 hover:text-[#d8a65a]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-accent)]'}`}
+          className={`text-[9px] transition-colors ${isGlass ? 'text-white/20 hover:text-[#d8a65a]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-accent)]'}`}
         >
           View all →
         </button>
@@ -1110,45 +1110,45 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate })
       {/* Carousel — grows to fill remaining height */}
       <div className="flex flex-col flex-1 min-h-0">
         {/* Big ring + label centred */}
-        <div key={safeIdx} className="flex flex-col items-center justify-center flex-1 gap-3 page-transition">
+        <div key={safeIdx} className="flex flex-col items-center justify-center flex-1 gap-2.5 page-transition">
           {/* Ring */}
           <div className="relative">
-            <MiniProgressRing pct={progressPct} size={96} stroke={7} color={ringColor} isGlass={isGlass} />
+            <MiniProgressRing pct={progressPct} size={86} stroke={6} color={ringColor} isGlass={isGlass} />
             <div className="absolute inset-0 flex items-center justify-center">
-              <IconComp size={20} className={isGlass ? 'text-white/30' : 'text-[var(--dp-text-secondary)]'} />
+              <IconComp size={18} className={isGlass ? 'text-white/30' : 'text-[var(--dp-text-secondary)]'} />
             </div>
           </div>
 
           {/* Metric name + pace */}
           <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-1">
-              <p className={`text-[10px] font-medium uppercase tracking-[0.06em] ${isGlass ? 'text-white/30' : 'text-[var(--dp-text-label)]'}`}>
+              <p className={`text-[9px] font-medium uppercase tracking-[0.06em] ${isGlass ? 'text-white/30' : 'text-[var(--dp-text-label)]'}`}>
                 {meta.label}
               </p>
               {paceLabel && (
-                <span className={`text-[9px] font-semibold ${paceColor}`}>{paceLabel}</span>
+                <span className={`text-[8px] font-semibold ${paceColor}`}>{paceLabel}</span>
               )}
             </div>
 
             {/* Current value */}
-            <p className={`text-[22px] font-bold tabular-nums leading-tight ${isGlass ? 'text-[#e8e2d6]' : 'text-[var(--dp-text-primary)]'}`}>
+            <p className={`text-[20px] font-bold tabular-nums leading-tight ${isGlass ? 'text-[#e8e2d6]' : 'text-[var(--dp-text-primary)]'}`}>
               {fmt(current)}
             </p>
 
             {/* Target */}
             {hasTarget ? (
-              <p className={`text-[11px] mt-0.5 ${isGlass ? 'text-white/25' : 'text-[var(--dp-text-secondary)]'}`}>
+              <p className={`text-[10px] mt-0.5 ${isGlass ? 'text-white/25' : 'text-[var(--dp-text-secondary)]'}`}>
                 of {fmt(target)} goal{dateFilter === 'All Time' && targetPeriod ? ` (${targetPeriod} target, no all-time target set)` : ''}
               </p>
             ) : (
-              <p className={`text-[11px] mt-0.5 ${isGlass ? 'text-white/20' : 'text-[var(--dp-text-secondary)]'}`}>
+              <p className={`text-[10px] mt-0.5 ${isGlass ? 'text-white/20' : 'text-[var(--dp-text-secondary)]'}`}>
                 {noTargetLabel}
               </p>
             )}
 
             {/* Percentage — the real, uncapped value; only the ring/bar fill is capped */}
             {hasTarget && (
-              <p className={`text-[28px] font-bold tabular-nums leading-none mt-3 ${
+              <p className={`text-[25px] font-bold tabular-nums leading-none mt-2.5 ${
                 progressPct >= 100 ? (isGlass ? 'text-[#4ade80]' : 'text-[var(--dp-green-text)]')
                 : progressPct >= 60  ? (isGlass ? 'text-[#6aaa8e]' : 'text-[var(--dp-green-text)]')
                 : progressPct >= 35  ? (isGlass ? 'text-amber-400' : 'text-[#D9A512]')
@@ -1158,7 +1158,7 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate })
           </div>
 
           {/* Progress bar */}
-          <div className={`w-full h-1.5 rounded-full overflow-hidden ${isGlass ? 'bg-white/[0.06]' : 'bg-[var(--dp-bg)]'}`}>
+          <div className={`w-full h-[5px] rounded-full overflow-hidden ${isGlass ? 'bg-white/[0.06]' : 'bg-[var(--dp-bg)]'}`}>
             <div
               className="h-full rounded-full transition-all duration-500"
               style={{ width: `${progressPct}%`, background: ringColor }}
