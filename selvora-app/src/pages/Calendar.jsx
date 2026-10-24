@@ -15,24 +15,24 @@ import { useModalKeyboard } from '../hooks/useModalKeyboard';
 
 // ─── Color maps ───────────────────────────────────────────────────────────────
 const TYPE_COLOR = {
-  purchase:    '#3b82f6',
-  sale:        '#22c55e',
-  payout:      '#10b981',
-  manual:      '#a855f7',
-  credit_due:  '#ef4444',
+  purchase:    '#2563eb',
+  sale:        '#16a34a',
+  payout:      '#059669',
+  manual:      '#7c3aed',
+  credit_due:  '#dc2626',
 };
 
 const NAMED_COLOR = {
-  purple: '#a855f7',
-  blue:   '#3b82f6',
-  green:  '#22c55e',
-  amber:  '#f59e0b',
-  red:    '#ef4444',
+  purple: '#7c3aed',
+  blue:   '#2563eb',
+  green:  '#16a34a',
+  amber:  '#d97706',
+  red:    '#dc2626',
 };
 
 function eventBgColor(ev) {
   if (ev.color && NAMED_COLOR[ev.color]) return NAMED_COLOR[ev.color];
-  return TYPE_COLOR[ev.type] ?? '#a855f7';
+  return TYPE_COLOR[ev.type] ?? '#7c3aed';
 }
 
 // ─── Custom event pill — dot + colored text, no background fill ───────────────
@@ -84,9 +84,9 @@ function DayCellContent({ dayNumberText, isToday }) {
       }}>
         <span style={{
           fontSize: '11px',
-          fontWeight: isToday ? 700 : 400,
-          color: isToday ? '#1a1a1a' : '#9ca3af',
-          backgroundColor: isToday ? '#eab308' : 'transparent',
+          fontWeight: isToday ? 700 : 500,
+          color: isToday ? '#ffffff' : 'var(--dp-text-secondary)',
+          backgroundColor: isToday ? 'var(--dp-accent)' : 'transparent',
           borderRadius: '50%',
           width: isToday ? '20px' : 'auto',
           height: isToday ? '20px' : 'auto',
@@ -96,7 +96,7 @@ function DayCellContent({ dayNumberText, isToday }) {
           alignItems: 'center',
           justifyContent: 'center',
           flexShrink: 0,
-          boxShadow: isToday ? '0 0 8px rgba(234,179,8,0.6)' : 'none',
+          boxShadow: isToday ? '0 2px 6px rgba(124, 58, 237, 0.35)' : 'none',
         }}>
           {dayNumberText}
         </span>
@@ -129,25 +129,25 @@ function SubscribePanel({ onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div ref={modalRef} className="relative z-10 w-full max-w-lg bg-[#15171d] border border-white/[0.08] rounded-2xl shadow-2xl p-6 space-y-4">
-        <h2 className="text-base font-semibold text-gray-100 flex items-center gap-2">
-          <Link2 size={16} className="text-[var(--accent)]" />
+      <div className="absolute inset-0 bg-[var(--dp-modal-backdrop)] backdrop-blur-xs" onClick={onClose} />
+      <div ref={modalRef} className="relative z-10 w-full max-w-lg bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-2xl dp-elevated p-6 space-y-4 text-[var(--dp-text-primary)]">
+        <h2 className="text-base font-semibold text-[var(--dp-text-primary)] flex items-center gap-2">
+          <Link2 size={16} className="text-[var(--dp-accent)]" />
           Subscribe to Calendar
         </h2>
-          <p className="text-sm text-gray-400">
-            Add your Selvora calendar to Google Calendar, Apple Calendar, or Outlook.
-            It updates automatically whenever you record sales, purchases, payouts, or calendar events.
+        <p className="text-sm text-[var(--dp-text-secondary)]">
+          Add your Selvora calendar to Google Calendar, Apple Calendar, or Outlook.
+          It updates automatically whenever you record sales, purchases, payouts, or calendar events.
         </p>
 
         {isLoading ? (
-          <div className="h-10 bg-white/[0.04] rounded-lg animate-pulse" />
+          <div className="h-10 bg-[var(--dp-hover-bg)] rounded-lg animate-pulse" />
         ) : (
-          <div className="flex items-center gap-2 bg-[#1e2028] border border-white/[0.08] rounded-lg px-3 py-2">
-            <span className="flex-1 text-xs text-gray-300 truncate font-mono">{data?.feedUrl}</span>
+          <div className="flex items-center gap-2 bg-[var(--dp-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2">
+            <span className="flex-1 text-xs text-[var(--dp-text-primary)] truncate font-mono">{data?.feedUrl}</span>
             <button
               onClick={handleCopy}
-              className="flex-shrink-0 flex items-center gap-1 text-xs text-[var(--accent)] hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/[0.06]"
+              className="flex-shrink-0 flex items-center gap-1 text-xs text-[var(--dp-accent)] hover:text-[var(--dp-text-primary)] transition-colors px-2 py-1 rounded hover:bg-[var(--dp-accent-bg)]"
             >
               {copied ? <Check size={12} /> : <Copy size={12} />}
               {copied ? 'Copied!' : 'Copy'}
@@ -155,21 +155,21 @@ function SubscribePanel({ onClose }) {
           </div>
         )}
 
-        <div className="space-y-2 text-xs text-gray-500">
-          <p className="font-medium text-gray-400">How to subscribe:</p>
-          <p><span className="text-gray-300">Google Calendar:</span> Other calendars → + → From URL → paste the link above</p>
-          <p><span className="text-gray-300">Apple Calendar:</span> File → New Calendar Subscription → paste the link above</p>
-          <p><span className="text-gray-300">Outlook:</span> Add calendar → Subscribe from web → paste the link above</p>
+        <div className="space-y-2 text-xs text-[var(--dp-text-muted)]">
+          <p className="font-medium text-[var(--dp-text-secondary)]">How to subscribe:</p>
+          <p><span className="text-[var(--dp-text-primary)] font-medium">Google Calendar:</span> Other calendars → + → From URL → paste the link above</p>
+          <p><span className="text-[var(--dp-text-primary)] font-medium">Apple Calendar:</span> File → New Calendar Subscription → paste the link above</p>
+          <p><span className="text-[var(--dp-text-primary)] font-medium">Outlook:</span> Add calendar → Subscribe from web → paste the link above</p>
         </div>
 
-        <p className="text-[10px] text-gray-600">
+        <p className="text-[10px] text-[var(--dp-text-muted)]">
           Keep this link private — anyone with it can view your calendar events. If you subscribed before this update, replace the old link with this one.
         </p>
 
         <div className="flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-200 hover:bg-white/[0.05] rounded-lg transition-colors"
+            className="px-4 py-1.5 text-sm text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] rounded-lg transition-colors border border-[color:var(--dp-border)]"
           >
             Close
           </button>
@@ -246,15 +246,15 @@ export default function Calendar() {
       {/* ── Page header ───────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-[var(--text-primary)] flex items-center gap-2">
-            <CalendarDays size={20} className="text-[var(--accent)]" />
+          <h1 className="text-xl font-semibold text-[var(--dp-text-primary)] flex items-center gap-2">
+            <CalendarDays size={20} className="text-[var(--dp-accent)]" />
             Reselling Calendar
           </h1>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">Track purchases, sales, payouts and custom events</p>
+          <p className="text-xs text-[var(--dp-text-muted)] mt-0.5">Track purchases, sales, payouts and custom events</p>
         </div>
         <button
           onClick={() => setShowSubscribe(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-white/[0.08] text-gray-300 hover:text-white hover:bg-white/[0.05] rounded-lg transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] bg-[var(--dp-card-bg)] rounded-lg transition-colors shadow-xs"
         >
           <Link2 size={13} />
           Subscribe to Calendar
@@ -262,24 +262,24 @@ export default function Calendar() {
       </div>
 
       {/* ── Calendar card ─────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-h-0 bg-[var(--bg-card,#15171d)] border border-white/[0.06] rounded-2xl overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0 bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-2xl dp-elevated overflow-hidden">
         {/* Toolbar */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] gap-2 flex-wrap">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[color:var(--dp-border)] gap-2 flex-wrap">
           {/* Nav */}
           <div className="flex items-center gap-1">
-            <button onClick={goPrev} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-white/[0.06] transition-colors"><ChevronLeft size={16} /></button>
-            <button onClick={goToday} className="px-2.5 py-1 text-xs font-medium text-gray-400 hover:text-gray-200 hover:bg-white/[0.06] rounded-lg transition-colors">Today</button>
-            <button onClick={goNext} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-white/[0.06] transition-colors"><ChevronRight size={16} /></button>
-            <span className="text-sm font-medium text-gray-200 ml-1">{monthLabel}</span>
+            <button onClick={goPrev} className="p-1.5 rounded-lg text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"><ChevronLeft size={16} /></button>
+            <button onClick={goToday} className="px-2.5 py-1 text-xs font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] rounded-lg transition-colors border border-[color:var(--dp-border)]">Today</button>
+            <button onClick={goNext} className="p-1.5 rounded-lg text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"><ChevronRight size={16} /></button>
+            <span className="text-sm font-semibold text-[var(--dp-text-primary)] ml-1">{monthLabel}</span>
           </div>
 
           {/* View toggle */}
-          <div className="flex items-center bg-white/[0.04] border border-white/[0.06] rounded-lg p-0.5">
+          <div className="flex items-center bg-[var(--dp-bg)] border border-[color:var(--dp-border)] rounded-lg p-0.5">
             {[['dayGridMonth', 'Month'], ['timeGridWeek', 'Week']].map(([v, label]) => (
               <button
                 key={v}
                 onClick={() => changeView(v)}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${view === v ? 'bg-[var(--accent)] text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${view === v ? 'bg-[var(--dp-accent)] text-[#ffffff] shadow-xs' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
               >
                 {label}
               </button>
@@ -290,25 +290,25 @@ export default function Calendar() {
         {/* Legend + Calendar */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* Legend */}
-          <div className="hidden lg:flex flex-col gap-3 px-4 py-4 border-r border-white/[0.06] min-w-[140px] w-36">
-            <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-600">Legend</p>
+          <div className="hidden lg:flex flex-col gap-3 px-4 py-4 border-r border-[color:var(--dp-border)] min-w-[140px] w-36 bg-[var(--dp-card-bg)]">
+            <p className="text-[9px] font-semibold uppercase tracking-widest text-[var(--dp-text-label)]">Legend</p>
             {[
-              { color: '#3b82f6', label: 'Purchase',  icon: ShoppingBag },
-              { color: '#22c55e', label: 'Sale',       icon: DollarSign },
-              { color: '#10b981', label: 'Payout',     icon: Banknote },
-              { color: '#a855f7', label: 'Manual',     icon: CalendarDays },
-              { color: '#ef4444', label: 'CC Due',     icon: CreditCard },
+              { color: '#2563eb', label: 'Purchase',  icon: ShoppingBag },
+              { color: '#16a34a', label: 'Sale',       icon: DollarSign },
+              { color: '#059669', label: 'Payout',     icon: Banknote },
+              { color: '#7c3aed', label: 'Manual',     icon: CalendarDays },
+              { color: '#dc2626', label: 'CC Due',     icon: CreditCard },
             ].map(({ color, label, icon: Icon }) => (
               <div key={label} className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                <span className="text-xs text-gray-400">{label}</span>
+                <span className="text-xs text-[var(--dp-text-secondary)]">{label}</span>
               </div>
             ))}
 
-            <div className="mt-auto pt-4 border-t border-white/[0.06]">
+            <div className="mt-auto pt-4 border-t border-[color:var(--dp-border)]">
               <button
                 onClick={() => setModal({ open: true, event: null, defaultDate: null })}
-                className="w-full text-xs font-medium text-[var(--accent)] hover:bg-[var(--accent-bg)] rounded-lg py-1.5 px-2 transition-colors text-left"
+                className="w-full text-xs font-medium text-[var(--dp-accent)] hover:bg-[var(--dp-accent-bg)] rounded-lg py-1.5 px-2 transition-colors text-left"
               >
                 + Add event
               </button>
@@ -316,14 +316,18 @@ export default function Calendar() {
           </div>
 
           {/* FullCalendar */}
-          <div className="flex-1 min-w-0 overflow-auto p-2 calendar-wrapper">
+          <div className="flex-1 min-w-0 overflow-auto p-2 calendar-wrapper bg-[var(--dp-card-bg)]">
             <style>{`
               .calendar-wrapper a { color: inherit; text-decoration: none; }
-              .calendar-wrapper [class*="fc-"] { font-size: 11px; color: #9ca3af; }
-              .calendar-wrapper [role="columnheader"] { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6b7280 !important; padding: 8px 0 !important; }
-              .calendar-wrapper [role="gridcell"] { border: 1px solid rgba(255,255,255,0.08) !important; min-height: 100px !important; vertical-align: top !important; }
-              .calendar-wrapper [role="gridcell"][aria-current="date"] { background-color: rgba(234,179,8,0.07) !important; box-shadow: inset 0 0 0 1px rgba(234,179,8,0.35) !important; }
-              .calendar-wrapper [class*="moreLinkText"], .calendar-wrapper [class*="moreLink"] { color: #6b7280 !important; font-size: 10px !important; }
+              .calendar-wrapper [class*="fc-"] { font-size: 11px; color: var(--dp-text-secondary); }
+              .calendar-wrapper [role="columnheader"] { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dp-text-label) !important; padding: 8px 0 !important; background: var(--dp-bg) !important; border-color: var(--dp-border) !important; }
+              .calendar-wrapper [role="gridcell"] { border: 1px solid var(--dp-border) !important; min-height: 100px !important; vertical-align: top !important; background-color: var(--dp-card-bg) !important; }
+              .calendar-wrapper [role="gridcell"][aria-current="date"] { background-color: var(--dp-accent-bg) !important; box-shadow: inset 0 0 0 1px var(--dp-accent) !important; }
+              .calendar-wrapper [class*="moreLinkText"], .calendar-wrapper [class*="moreLink"] { color: var(--dp-text-muted) !important; font-size: 10px !important; }
+              .calendar-wrapper .fc-theme-standard td, .calendar-wrapper .fc-theme-standard th { border-color: var(--dp-border) !important; }
+              .calendar-wrapper .fc-scrollgrid { border-color: var(--dp-border) !important; }
+              .calendar-wrapper .fc-daygrid-day-frame { background-color: var(--dp-card-bg); }
+              .calendar-wrapper .fc-day-other { background-color: var(--dp-bg) !important; opacity: 0.6; }
             `}</style>
             <FullCalendar
               ref={calendarRef}
@@ -356,8 +360,8 @@ export default function Calendar() {
       <div className="lg:hidden flex justify-end">
         <button
           onClick={() => setModal({ open: true, event: null, defaultDate: null })}
-          className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white rounded-xl transition-colors"
-          style={{ backgroundColor: 'var(--accent)' }}
+          className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-[#ffffff] rounded-xl transition-colors shadow-xs"
+          style={{ backgroundColor: 'var(--dp-accent)' }}
         >
           + Add Event
         </button>

@@ -39,6 +39,7 @@
     --bg-base: var(--dp-bg);
     --bg-surface: var(--dp-card-bg);
     --bg-elevated: var(--dp-card-bg);
+    --bg-card: var(--dp-card-bg);
     --bg-hover: var(--dp-hover-bg);
     --border-default: var(--dp-border);
     --border-subtle: var(--dp-border);
@@ -746,6 +747,8 @@
 /* ─── FullCalendar light theme overrides ──────────────────────────────────── */
 .calendar-wrapper .fc {
   --fc-border-color: var(--dp-border);
+  --fc-theme-standard-border-color: var(--dp-border);
+  --fc-page-bg-color: var(--dp-card-bg);
   --fc-today-bg-color: var(--dp-accent-bg);
   --fc-neutral-bg-color: var(--dp-bg);
   --fc-list-event-hover-bg-color: var(--dp-hover-bg);
@@ -753,6 +756,21 @@
   --fc-now-indicator-color: var(--dp-accent);
   color: var(--dp-text-primary);
   font-size: 0.8rem;
+  background-color: var(--dp-card-bg);
+}
+
+.calendar-wrapper .fc-theme-standard td,
+.calendar-wrapper .fc-theme-standard th {
+  border: 1px solid var(--dp-border);
+}
+
+.calendar-wrapper .fc .fc-daygrid-day-frame {
+  background-color: var(--dp-card-bg);
+}
+
+.calendar-wrapper .fc .fc-day-other .fc-daygrid-day-frame {
+  background-color: var(--dp-bg);
+  opacity: 0.65;
 }
 
 /* Day number styling */
@@ -778,6 +796,7 @@
 .calendar-wrapper .fc .fc-col-header-cell {
   background: var(--dp-bg);
   padding: 6px 0;
+  border-color: var(--dp-border);
 }
 .calendar-wrapper .fc .fc-col-header-cell-cushion {
   font-size: 0.7rem;
@@ -796,13 +815,18 @@
 }
 .calendar-wrapper .fc .fc-daygrid-dot-event:hover,
 .calendar-wrapper .fc .fc-daygrid-event:hover {
-  filter: brightness(0.92);
+  filter: brightness(0.95);
+  background-color: var(--dp-hover-bg);
 }
 
 /* "+N more" link */
 .calendar-wrapper .fc .fc-daygrid-more-link {
   color: var(--dp-text-muted);
   font-size: 0.68rem;
+  font-weight: 500;
+}
+.calendar-wrapper .fc .fc-daygrid-more-link:hover {
+  color: var(--dp-accent);
 }
 
 /* Popover that appears when clicking "+N more" */
@@ -817,18 +841,32 @@
   background: var(--dp-hover-bg);
   color: var(--dp-text-primary);
   border-radius: 12px 12px 0 0;
+  border-bottom: 1px solid var(--dp-border);
 }
 .calendar-wrapper .fc .fc-popover-close {
   color: var(--dp-text-muted);
+}
+.calendar-wrapper .fc .fc-popover-close:hover {
+  color: var(--dp-text-primary);
 }
 
 /* Time grid (week view) */
 .calendar-wrapper .fc .fc-timegrid-slot {
   height: 32px;
+  border-color: var(--dp-border);
+  background-color: var(--dp-card-bg);
+}
+.calendar-wrapper .fc .fc-timegrid-slot-minor {
+  border-top-style: dotted;
+  border-color: var(--dp-border);
 }
 .calendar-wrapper .fc .fc-timegrid-slot-label-cushion {
   color: var(--dp-text-muted);
   font-size: 0.65rem;
+}
+.calendar-wrapper .fc .fc-timegrid-slot-label {
+  border-color: var(--dp-border);
+  background-color: var(--dp-bg);
 }
 .calendar-wrapper .fc .fc-timegrid-now-indicator-line {
   border-color: var(--dp-accent);
