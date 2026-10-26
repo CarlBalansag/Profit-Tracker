@@ -17,16 +17,16 @@ jobs:
         env:
           POSTGRES_USER: qa
           POSTGRES_PASSWORD: local-test-only
-          POSTGRES_DB: selvora_qa
+          POSTGRES_DB: profittracker_qa
         ports: ['5432:5432']
         options: >-
-          --health-cmd "pg_isready -U qa -d selvora_qa"
+          --health-cmd "pg_isready -U qa -d profittracker_qa"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://qa:local-test-only@127.0.0.1:5432/selvora_qa
-      DIRECT_URL: postgresql://qa:local-test-only@127.0.0.1:5432/selvora_qa
+      DATABASE_URL: postgresql://qa:local-test-only@127.0.0.1:5432/profittracker_qa
+      DIRECT_URL: postgresql://qa:local-test-only@127.0.0.1:5432/profittracker_qa
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,27 +34,27 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: |
-            selvora-api/package-lock.json
-            selvora-app/package-lock.json
+            profit-tracker-api/package-lock.json
+            profit-tracker-app/package-lock.json
 
       # Validate the migration chain applies cleanly to a fresh database --
       # this is the exact class of failure that broke the Render deploy pipeline.
       - run: npm ci
-        working-directory: selvora-api
+        working-directory: profit-tracker-api
       - run: npx prisma validate && npx prisma migrate deploy
-        working-directory: selvora-api
+        working-directory: profit-tracker-api
       # The test suite manages its own throwaway Postgres instances (via
       # embedded-postgres) for tests that need a real database, so it does
       # not depend on the service container above.
       - run: npm test
-        working-directory: selvora-api
+        working-directory: profit-tracker-api
 
       - run: npm ci
-        working-directory: selvora-app
+        working-directory: profit-tracker-app
       # TODO: re-enable once the pre-existing lint errors (QA-25) are cleaned up.
       # - run: npm run lint
-      #   working-directory: selvora-app
+      #   working-directory: profit-tracker-app
       - run: npm test
-        working-directory: selvora-app
+        working-directory: profit-tracker-app
       - run: npm run build
-        working-directory: selvora-app
+        working-directory: profit-tracker-app

@@ -1,8 +1,8 @@
 # Mobile Responsive Pass — Progress Tracker
 
 **Branch:** `feature/mobile-responsive-ui`
-**Worktree:** `C:\Users\Carl\Desktop\Projects\selvora_clone-mobile-responsive` (main repo stays untouched at `C:\Users\Carl\Desktop\Projects\selvora_clone`)
-**Dev server:** `cd selvora-app && npm run dev` (Vite, deps already installed in this worktree)
+**Worktree:** `C:\Users\Carl\Desktop\Projects\profit-tracker-mobile-responsive` (main repo stays untouched at `C:\Users\Carl\Desktop\Projects\profit-tracker`)
+**Dev server:** `cd profit-tracker-app && npm run dev` (Vite, deps already installed in this worktree)
 **Task ledger row:** `TASKS.md` on `main` has a row for `feature/mobile-responsive-ui` — remove it when this merges.
 
 This file is the single source of truth for resuming this work across sessions. When you pick this back up: read this file top to bottom, find the first unchecked `[ ]`, and continue there. Check boxes off (`[x]`) only after the page/component has been verified with Playwright at mobile widths AND desktop (1440px) regression-checked.
@@ -14,7 +14,7 @@ This file is the single source of truth for resuming this work across sessions. 
 - Test at: 320, 375, 390, 430, 768, 1024, then 1440 regression.
 - Tailwind breakpoints in this app: `sm`=640, `md`=768, `lg`=1024, `xl`=1280, `3xl`=custom (check `tailwind.config` if used — app uses Tailwind v4 CSS-first config, check `index.css` `@theme` block if present).
 - Commit in small, logical chunks on this branch as pages/components are finished — don't wait for the whole thing to be done to commit.
-- Bump version + changelog entry (`selvora-app/src/data/changelog.js`) once at the end of this effort (or per logical milestone if the user wants incremental releases) per AGENTS.md rule 8 — this is a user-visible behavior change (mobile now works), so it qualifies.
+- Bump version + changelog entry (`profit-tracker-app/src/data/changelog.js`) once at the end of this effort (or per logical milestone if the user wants incremental releases) per AGENTS.md rule 8 — this is a user-visible behavior change (mobile now works), so it qualifies.
 
 ## Baseline findings from initial code audit (2026-10-13)
 
@@ -27,17 +27,17 @@ This file is the single source of truth for resuming this work across sessions. 
 
 Goal: find real problems, not guess at them. Use Playwright MCP to load each page at 375px and 1440px, screenshot to a local scratch folder (not inline in chat), and note overflow/broken nav/unreadable text/overlapping elements. Batch pages together in one browser session (reuse the session, don't restart per page) to save tokens.
 
-- [x] Start dev server, confirm it boots in this worktree — also had to bring up `selvora-api` (Prisma generate, `NODE_ENV=development` + `FRONTEND_URL=http://localhost:5174` in local `.env` only) to get past the Firebase login gate. See "Environment setup notes" below.
+- [x] Start dev server, confirm it boots in this worktree — also had to bring up `profit-tracker-api` (Prisma generate, `NODE_ENV=development` + `FRONTEND_URL=http://localhost:5174` in local `.env` only) to get past the Firebase login gate. See "Environment setup notes" below.
 - [x] Playwright: walk all routes below at 375px width, screenshot + note issues per page in the table below (one pass, concise notes only) — all routes covered except `/schedule-c` (feature-flagged off, redirects to `/`) and `Forecast.jsx` (unrouted, not audited)
 - [x] Playwright: spot-check the same routes at 1440px to confirm nothing is currently broken on desktop (baseline before any edits) — all Phase 2 routes now spot-checked at 1440px (not just the originally-flagged 3), each regression-confirmed clean/unchanged after fixes.
 - [x] Fill in "Known issues" column below from audit before starting Phase 1/2 fixes — all Phase 2 routes, all shared Phase 1 components/modals, and the full tutorial flow audited at 375px. As of 2026-10-19, every one of the 18 authenticated routes plus `/login` has been swept at 320/390/430/768/1024px too (via the systematic `scrollWidth`/`clientWidth` sweep documented in Phase 3), closing the earlier gap where only a handful of likely-to-regress pages had been spot-checked at those widths.
 
 ### Environment setup notes (for next session / resume)
 
-- `selvora-app/.env.local` and `selvora-api/.env` are already present in this worktree, copied from production. **`selvora-api/.env` was production config** (`NODE_ENV=production`, live Neon DB, live Firebase service account, `FRONTEND_URL=https://profittracker.carltechs.com`) — confirmed with the user before touching it.
-- Changed locally (gitignored, worktree-only, never commit): `FRONTEND_URL=http://localhost:5174` (Vite picked 5174, not 5173 — port was already in use) and `NODE_ENV=development`. Production mode has a hard guard in `selvora-api/services/firebase.js:10` that refuses to boot at all unless `FRONTEND_URL` is HTTPS, and separately sets cookies `Secure`+`SameSite=None` which Chrome won't store over plain HTTP — so `NODE_ENV=development` is required for any local login testing against this backend.
-- Despite `NODE_ENV=development` setting `ssl: false` explicitly on the session-store Postgres pool (`selvora-api/index.js:85`), it still connected fine to Neon — the connection string's own `sslmode=require` took effect regardless.
-- To start both servers: `cd selvora-api && npm install && npx prisma generate && npm run start` (port 3000), then `cd selvora-app && npm run dev` (port 5173 or next free port — check `FRONTEND_URL` matches whatever port Vite actually picks).
+- `profit-tracker-app/.env.local` and `profit-tracker-api/.env` are already present in this worktree, copied from production. **`profit-tracker-api/.env` was production config** (`NODE_ENV=production`, live Neon DB, live Firebase service account, `FRONTEND_URL=https://profittracker.carltechs.com`) — confirmed with the user before touching it.
+- Changed locally (gitignored, worktree-only, never commit): `FRONTEND_URL=http://localhost:5174` (Vite picked 5174, not 5173 — port was already in use) and `NODE_ENV=development`. Production mode has a hard guard in `profit-tracker-api/services/firebase.js:10` that refuses to boot at all unless `FRONTEND_URL` is HTTPS, and separately sets cookies `Secure`+`SameSite=None` which Chrome won't store over plain HTTP — so `NODE_ENV=development` is required for any local login testing against this backend.
+- Despite `NODE_ENV=development` setting `ssl: false` explicitly on the session-store Postgres pool (`profit-tracker-api/index.js:85`), it still connected fine to Neon — the connection string's own `sslmode=require` took effect regardless.
+- To start both servers: `cd profit-tracker-api && npm install && npx prisma generate && npm run start` (port 3000), then `cd profit-tracker-app && npm run dev` (port 5173 or next free port — check `FRONTEND_URL` matches whatever port Vite actually picks).
 - This points at the real dev/production database — be careful not to create/edit/delete real records during audits; this pass has been read-only/view-only.
 
 ## Phase 1 — Shared components (fix once, benefits every page)
@@ -97,13 +97,13 @@ Goal: find real problems, not guess at them. Use Playwright MCP to load each pag
 - [x] All modals usable (open/close/submit) at 375px — ActionFormModal, ConfirmDialog, MoreActionsMenu, MarkPaidModal, DashboardSettingsModal, CalendarEventModal, VersionHistoryModal, QuickAddModal, CustomCardModal, TransactionDetailModal all opened/closed cleanly (QuickAddModal/CustomCardModal checked 2026-10-19). ApiKeys has no separate open/close modal to test — it's an inline Settings panel; its one state-changing action ("Generate Key") was intentionally not exercised live since it would mint a real persistent credential on the user's live account (see Settings sub-forms row). TransactionDetailModal's possible read-only view confirmed (2026-10-19, via code read) to not exist as a separate view — see its Phase 1 row.
 - [x] Forms: no input causes horizontal overflow, labels/buttons remain tappable (min ~44px touch target) — horizontal overflow already covered exhaustively by the full route sweep above. For tappability (2026-10-19): ran an automated overlap-detection pass (every pair of interactive elements' bounding rects checked for real intersection) across AddTransaction, AddSale, the Expenses "Add Expense" form, MarkPaidModal, CustomCardModal, QuickAddModal, Calendar's "New Event" modal, and DashboardSettingsModal at 375px. Found two apparent overlaps (QuickAddModal's card list vs. its footer, DashboardSettingsModal's reorder buttons vs. its footer) — both verified via `document.elementFromPoint()` to be false positives: a scrollable list's last row gets visually clipped at its own `overflow-y-auto` boundary, and the sticky footer (opaque background, later in paint order) correctly captures any click in that zone. No genuine overlapping or click-intercepted targets found anywhere. Confirmed many elements sit below the ideal 44px (form inputs ~36–42px, several icon buttons ~24–34px, DashboardSettingsModal's reorder arrows ~11–13px, Calendar's color swatches ~27–31px) — none of these are mobile-specific regressions (identical sizing exists on desktop), so enlarging them is out of scope for this CSS-responsiveness-only pass per the ground rules; the one that's genuinely too small for comfortable tapping (the reorder arrows) is logged in the DashboardSettingsModal row above as a candidate for its own focused task.
 - [x] Sidebar drawer open/close + nav works at 375px and collapses correctly back to desktop at 1024px+ — verified at 375px, 768px (still drawer mode, confirmed), and 1024px (confirmed static/always-visible, `lg` breakpoint boundary), both themes.
-- [~] `npm run lint` and `npm run build` clean in `selvora-app/` — build is clean throughout (zero errors after every change). Lint has 39 pre-existing errors unrelated to this pass (confirmed via git-stash comparison that none were introduced by any of my edits) — not "clean" in absolute terms, but not a regression either; fixing them is out of scope for this task.
+- [~] `npm run lint` and `npm run build` clean in `profit-tracker-app/` — build is clean throughout (zero errors after every change). Lint has 39 pre-existing errors unrelated to this pass (confirmed via git-stash comparison that none were introduced by any of my edits) — not "clean" in absolute terms, but not a regression either; fixing them is out of scope for this task.
 - [x] `npm run test` (vitest) still passes — 297/297 passing, reconfirmed after every single commit in this pass.
 - [~] Desktop regression screenshot pass at 1440px confirms no visual change from Phase 0 baseline — every page/component actually touched by a fix has an explicit before/after 1440px comparison confirming pixel-identical output. Not a full re-screenshot of every untouched route for diffing (none were expected to change, since all fixes used `sm:`/`lg:`-scoped classes or were mobile-only in effect).
 
 ## Session resume checklist
 
-1. `cd C:\Users\Carl\Desktop\Projects\selvora_clone-mobile-responsive`
+1. `cd C:\Users\Carl\Desktop\Projects\profit-tracker-mobile-responsive`
 2. `git status` / `git log --oneline -5` to see what's already committed on this branch
 3. Re-open this file, find first unchecked box
 4. If Playwright/Chrome DevTools MCP tools aren't available in this session, they're configured in `.mcp.json` at the worktree root — may need session restart to pick up
@@ -111,8 +111,8 @@ Goal: find real problems, not guess at them. Use Playwright MCP to load each pag
 
 ## Merge checklist (when Phase 3 is fully checked off)
 
-1. Version bump + changelog entry in `selvora-app/src/data/changelog.js` (compute `+0.01` from `main`'s current top entry at merge time, not when this branch started)
+1. Version bump + changelog entry in `profit-tracker-app/src/data/changelog.js` (compute `+0.01` from `main`'s current top entry at merge time, not when this branch started)
 2. Final `npm run lint && npm run build && npm run test` clean
 3. Merge `feature/mobile-responsive-ui` into `main`
 4. Remove this task's row from `TASKS.md` on `main`
-5. Remove the worktree: `git worktree remove ../selvora_clone-mobile-responsive` (from the main repo) after merge
+5. Remove the worktree: `git worktree remove ../profit-tracker-mobile-responsive` (from the main repo) after merge

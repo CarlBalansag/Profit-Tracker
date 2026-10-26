@@ -1,7 +1,7 @@
 # Currency migration — Task 1 audit (field inventory and mapping)
 
 Audit date: 2026-09-30
-Scope: every Prisma `Float` field in `selvora-api/prisma/schema.prisma`, traced through validation, routes, shared calculation code, and frontend consumers. No schema or data was changed; all database queries in this audit were read-only.
+Scope: every Prisma `Float` field in `profit-tracker-api/prisma/schema.prisma`, traced through validation, routes, shared calculation code, and frontend consumers. No schema or data was changed; all database queries in this audit were read-only.
 
 ## Field classification
 
@@ -49,7 +49,7 @@ Sampled production data confirms the pattern: `unitsSold` goals store whole numb
 
 ### Dormant field (excluded from active migration work)
 
-**Invoice.total_amount** has no Zod schema and no Express route (`selvora-api/routes/` has no `invoices.js`, and no route file references the `Invoice` model at all). Production has 0 rows in this table (confirmed during the Render deploy diagnosis on 2026-09-29). Buyer/Invoice tenant ownership was added in Phase 2 of the branch-consolidation plan, but no create/update path exists yet. Recommendation: convert its column type for schema consistency whenever Task 3's additive-column migration runs (it's a zero-cost, zero-risk column add on an empty table), but do not build any dedicated read/write handling for it — there is nothing to migrate.
+**Invoice.total_amount** has no Zod schema and no Express route (`profit-tracker-api/routes/` has no `invoices.js`, and no route file references the `Invoice` model at all). Production has 0 rows in this table (confirmed during the Render deploy diagnosis on 2026-09-29). Buyer/Invoice tenant ownership was added in Phase 2 of the branch-consolidation plan, but no create/update path exists yet. Recommendation: convert its column type for schema consistency whenever Task 3's additive-column migration runs (it's a zero-cost, zero-risk column add on an empty table), but do not build any dedicated read/write handling for it — there is nothing to migrate.
 
 ## Key consumption points
 
@@ -58,17 +58,17 @@ Sampled production data confirms the pattern: `unitsSold` goals store whole numb
 This is the highest-leverage file in the whole migration. It does all batch-cost, allocation, cashback-rate, and profit math in raw floating point (`Number(x) * Number(y) ...`), with **no rounding at any intermediate step** — `allocatedCost` divides a batch's total cost across sold units (`batchCost(inventory) * quantity / purchased`), which routinely produces non-terminating fractions of a cent (e.g. a $10.00 cost split across 3 units). Nothing currently rounds that division; only the UI's `.toFixed(2)` calls truncate it for *display*, while any further math (e.g. summing per-unit costs across many sales in `realizedSummary`) continues to compound the unrounded value. This is the concrete mechanism behind the "small rounding errors... accumulate" problem the plan exists to fix.
 
 Consumers (9 files, all of which will need updating together in Tasks 4–5 since they share this one module):
-- Backend: `selvora-api/routes/analytics.js`, `selvora-api/routes/creditcard.js`, `selvora-api/routes/receipts.js`
-- Frontend: `selvora-app/src/components/TransactionDetailModal.jsx`, `selvora-app/src/pages/Transactions.jsx`, `selvora-app/src/pages/Inventory.jsx`, `selvora-app/src/pages/AddTransaction.jsx`, `selvora-app/src/pages/AddSale.jsx`
-- Test: `selvora-api/test/finance.test.mjs` (the only existing regression coverage for this math)
+- Backend: `profit-tracker-api/routes/analytics.js`, `profit-tracker-api/routes/creditcard.js`, `profit-tracker-api/routes/receipts.js`
+- Frontend: `profit-tracker-app/src/components/TransactionDetailModal.jsx`, `profit-tracker-app/src/pages/Transactions.jsx`, `profit-tracker-app/src/pages/Inventory.jsx`, `profit-tracker-app/src/pages/AddTransaction.jsx`, `profit-tracker-app/src/pages/AddSale.jsx`
+- Test: `profit-tracker-api/test/finance.test.mjs` (the only existing regression coverage for this math)
 
 ### Validation layer
 
-All money fields funnel through two Zod primitives in `selvora-api/validation/schemas.js`: `money` (required) and `optionalMoney`. Both just do `z.coerce.number().finite().min(0)` — no precision cap, no rejection of e.g. `10.999`. Task 2's "reject invalid, non-finite, and over-precision input" is not implemented anywhere today.
+All money fields funnel through two Zod primitives in `profit-tracker-api/validation/schemas.js`: `money` (required) and `optionalMoney`. Both just do `z.coerce.number().finite().min(0)` — no precision cap, no rejection of e.g. `10.999`. Task 2's "reject invalid, non-finite, and over-precision input" is not implemented anywhere today.
 
 ### Routes writing money fields directly
 
-`selvora-api/routes/inventory.js`, `selvora-api/routes/sales.js`, `selvora-api/routes/expenses.js`, `selvora-api/routes/recurringExpenses.js`, `selvora-api/routes/platforms.js`, `selvora-api/routes/paymentMethods.js`, `selvora-api/routes/goals.js` all pass validated values straight to Prisma with `parseFloat(...)` in a few spots (e.g. `platforms.js`'s `fee_pct: parseFloat(fee_pct) || 0`) — another float round-trip.
+`profit-tracker-api/routes/inventory.js`, `profit-tracker-api/routes/sales.js`, `profit-tracker-api/routes/expenses.js`, `profit-tracker-api/routes/recurringExpenses.js`, `profit-tracker-api/routes/platforms.js`, `profit-tracker-api/routes/paymentMethods.js`, `profit-tracker-api/routes/goals.js` all pass validated values straight to Prisma with `parseFloat(...)` in a few spots (e.g. `platforms.js`'s `fee_pct: parseFloat(fee_pct) || 0`) — another float round-trip.
 
 ### Cashback and category rate storage
 
@@ -89,7 +89,7 @@ A direct SQL check (`WHERE unit_purchase_cost != ROUND(unit_purchase_cost::numer
 
 1. **Money fields** round to 2 decimal places. **Rate fields** round to 6 decimal places, consistent with the plan's proposed `NUMERIC(9,6)`.
 2. Store exact `Decimal` values for every direct user input (purchase cost, sale price, fees, etc.) — no rounding needed since these are already 2-decimal entries.
-3. For **allocations that split a whole amount across units** (the `allocatedCost` case), use cumulative-boundary rounding: for a range covering `quantity` units starting at `offset` out of `units` total, compute `end = round(total * (offset + quantity) / units, 2)` and `start = round(total * offset / units, 2)`, and allocate `end - start`. Because consecutive ranges telescope (each range's `end` is the next range's `start`), summing every non-overlapping range from 0 to `units` always equals `total` exactly — unlike today's raw float division, which has no such guarantee and isn't rounded at all before being summed further downstream. Implemented as `allocate(total, quantity, units, offset)` in `selvora-api/services/money.js` (Task 2).
+3. For **allocations that split a whole amount across units** (the `allocatedCost` case), use cumulative-boundary rounding: for a range covering `quantity` units starting at `offset` out of `units` total, compute `end = round(total * (offset + quantity) / units, 2)` and `start = round(total * offset / units, 2)`, and allocate `end - start`. Because consecutive ranges telescope (each range's `end` is the next range's `start`), summing every non-overlapping range from 0 to `units` always equals `total` exactly — unlike today's raw float division, which has no such guarantee and isn't rounded at all before being summed further downstream. Implemented as `allocate(total, quantity, units, offset)` in `profit-tracker-api/services/money.js` (Task 2).
 4. For **derived aggregates that are not an allocation** (dashboard totals, analytics sums, cash-flow totals), sum the underlying `Decimal` values first and round once at the end for display/API output — never round intermediate per-row values before summing them, to avoid compounding rounding error across many rows.
 
 ## Exit criteria check
@@ -113,7 +113,7 @@ Task 3 status: see `CURRENCY_DECIMAL_MIGRATION_PLAN.md`.
 
 ## Addendum (Task 8): read cutover and final reconciliation report
 
-**Read cutover**: every response route that serves a money/rate field now substitutes the Decimal mirror's exact value into the paired Float field's name before serialization, via `selvora-api/services/decimalRead.js` (`withExactFields`/`withExactList`, applied per-model through a `MAPPINGS` table). This covers all 8 models with a live route: Inventory, Sales, Platform, PaymentMethod, Expense, RecurringExpense, Goal, ebay_price_cache. The API response shape is unchanged (same field names, plain JSON numbers) — only precision improves — so no frontend change was needed. Storage is untouched: the `Float` columns are still what's written, and the Task 3 sync triggers keep `_decimal` current regardless of which route performs the write. This makes the read cutover itself fully reversible (a redeploy without these changes reverts to float-precision reads) ahead of the irreversible step below.
+**Read cutover**: every response route that serves a money/rate field now substitutes the Decimal mirror's exact value into the paired Float field's name before serialization, via `profit-tracker-api/services/decimalRead.js` (`withExactFields`/`withExactList`, applied per-model through a `MAPPINGS` table). This covers all 8 models with a live route: Inventory, Sales, Platform, PaymentMethod, Expense, RecurringExpense, Goal, ebay_price_cache. The API response shape is unchanged (same field names, plain JSON numbers) — only precision improves — so no frontend change was needed. Storage is untouched: the `Float` columns are still what's written, and the Task 3 sync triggers keep `_decimal` current regardless of which route performs the write. This makes the read cutover itself fully reversible (a redeploy without these changes reverts to float-precision reads) ahead of the irreversible step below.
 
 `Invoice.total_amount`/`total_amount_decimal` is not wired into `decimalRead.js`'s `MAPPINGS` — confirmed again here that no route reads or writes the `Invoice` model at all (0 rows in production, `grep -rn "prisma.invoice"` across the backend returns nothing). Nothing to cut over until a route exists.
 

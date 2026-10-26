@@ -1,4 +1,4 @@
-# Selvora agent workflow
+# Profit Tracker agent workflow
 
 Use this workflow for every change in this repository.
 
@@ -9,7 +9,7 @@ Use this workflow for every change in this repository.
 5. For changes that affect quantities, money, inventory, sales, or related records, also test multi-item data, partial updates, repeated actions, concurrent requests where applicable, and consistency across every screen that displays the affected totals.
 6. Verify the database contract: validate request data, confirm ownership of every related ID, preserve data on failed operations, and use atomic database operations where multiple records must remain consistent.
 7. Run the relevant automated tests, lint/build checks, and browser/API checks. Add meaningful regression coverage for a bug when practical.
-8. Bump the version and add an entry to `selvora-app/src/data/changelog.js` for any change a user would notice (a feature, a visible fix, a behavior change) — not for internal refactors, QA-only changes, or docs. Increment the version by `0.01` from the current top entry, and write one short, non-technical sentence describing what changed. This feeds the "What's New" modal in the app sidebar. Compute the increment from `main`'s current top entry right before merging (not whatever it was when the branch started) — two branches bumping from the same base will otherwise collide on the same version number.
+8. Bump the version and add an entry to `profit-tracker-app/src/data/changelog.js` for any change a user would notice (a feature, a visible fix, a behavior change) — not for internal refactors, QA-only changes, or docs. Increment the version by `0.01` from the current top entry, and write one short, non-technical sentence describing what changed. This feeds the "What's New" modal in the app sidebar. Compute the increment from `main`'s current top entry right before merging (not whatever it was when the branch started) — two branches bumping from the same base will otherwise collide on the same version number.
 9. Report what changed, the use cases tested, results, and any remaining limitations. Do not claim QA is complete if a relevant scenario was not exercised.
 
 Do not fix unrelated issues discovered during QA. Record them with reproduction steps and affected files so they can become separate, focused tasks.
@@ -19,7 +19,7 @@ Do not fix unrelated issues discovered during QA. Record them with reproduction 
 Multiple agents (or an agent and a human) may be working on different tasks in this repo at the same time, each in their own branch/worktree. `TASKS.md` at the repo root is the shared ledger that keeps that from colliding. Before writing any code:
 
 1. Read `TASKS.md`. If an active row's "Files / folders" column overlaps with what this task needs to touch, stop and surface the conflict instead of proceeding — do not start parallel edits on the same files. Pick a different task, or wait for the other row to clear.
-2. Add a row for this task before the first edit: branch name, a one-line description, the specific files/folders it expects to touch, status `In progress`, and today's date. Keep the scope narrow and accurate — a vague scope (e.g. "selvora-api/") defeats the point. **Commit and push this row to `main` directly** (not the feature branch) so other agents see the claim immediately — a claim sitting unpushed on a feature branch doesn't protect anyone until that branch merges, which is too late.
+2. Add a row for this task before the first edit: branch name, a one-line description, the specific files/folders it expects to touch, status `In progress`, and today's date. Keep the scope narrow and accurate — a vague scope (e.g. "profit-tracker-api/") defeats the point. **Commit and push this row to `main` directly** (not the feature branch) so other agents see the claim immediately — a claim sitting unpushed on a feature branch doesn't protect anyone until that branch merges, which is too late.
 3. Keep the branch short-lived. Merge to `main` and delete the branch as soon as this task's QA (above) passes, rather than letting it diverge across multiple sessions — a long-lived divergent branch is expensive to reconcile later (this repo has direct history of that: see the `codex/qa-checkpoint` branch-consolidation effort in `qa/`).
 4. In the same change that merges the branch, remove that task's row from `TASKS.md` (or mark it `Done`). Don't leave finished rows behind.
 
