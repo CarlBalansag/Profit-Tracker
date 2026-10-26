@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { createRequire } = require('node:module');
 const { join } = require('node:path');
-const requireApi = createRequire(join(__dirname, '../selvora-api/package.json'));
+const requireApi = createRequire(join(__dirname, '../profit-tracker-api/package.json'));
 process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
 const { initializeApp } = requireApi('firebase-admin/app');
 const { getAuth } = requireApi('firebase-admin/auth');
@@ -53,7 +53,7 @@ async function run() {
   const newGrant = await request('/auth/firebase/intent', { purpose: 'login' });
   const newSession = await request('/auth/firebase/session', { ...newGrant.data, id_token: newToken.idToken }, newGrant.cookie); assert.equal(newSession.status, 200);
   assert.equal(newSession.data.id, resetSession.data.id);
-  const requireWeb = createRequire(join(__dirname, '../selvora-app/package.json'));
+  const requireWeb = createRequire(join(__dirname, '../profit-tracker-app/package.json'));
   const webApp = requireWeb('firebase/app'), webAuth = requireWeb('firebase/auth');
   const web = webAuth.getAuth(webApp.initializeApp({ apiKey: 'demo-test-key', projectId: 'demo-profittracker' }, 'qa-web-only'));
   webAuth.connectAuthEmulator(web, emulator, { disableWarnings: true });

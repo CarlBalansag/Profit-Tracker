@@ -1,6 +1,6 @@
 # Hosted Discord login QA — September 13, 2026
 
-**Update 2026-09-30**: moot. Discord OAuth was fully retired shortly after this QA was recorded — `/auth/discord` and `/auth/discord/callback` now just redirect to `/login` without contacting Discord (`selvora-api/index.js`), and the app's only login method today is Firebase email/password (see `qa/FIREBASE_AUTH_ROLLOUT.md`). The rate-limit/429 investigation below never reached a conclusion before the feature was replaced; left as historical record only.
+**Update 2026-09-30**: moot. Discord OAuth was fully retired shortly after this QA was recorded — `/auth/discord` and `/auth/discord/callback` now just redirect to `/login` without contacting Discord (`profit-tracker-api/index.js`), and the app's only login method today is Firebase email/password (see `qa/FIREBASE_AUTH_ROLLOUT.md`). The rate-limit/429 investigation below never reached a conclusion before the feature was replaced; left as historical record only.
 
 Scope: hosted Discord login only. Checkout based on origin/main 265e1b8. Schedule C is excluded.
 
@@ -32,10 +32,10 @@ Hosted successful OAuth, new/existing users, cancellation/retry, logout/relogin,
 
 ## Schedule C preservation
 
-Original checkout remains untouched at C:/Users/Carl/Desktop/Projects/selvora_clone.
+Original checkout remains untouched at C:/Users/Carl/Desktop/Projects/profit-tracker.
 Local branch codex/schedule-c-saved-20260913 preserves committed base 6bb6fad.
-Unfinished files and RESTORE.txt are copied to C:/Users/Carl/Desktop/Projects/selvora_schedule_c_backup_20260913.
-Login-only checkout: C:/Users/Carl/Desktop/Projects/selvora_discord_login, branch codex/discord-login-fix, based on hosted main.
+Unfinished files and RESTORE.txt are copied to C:/Users/Carl/Desktop/Projects/Profit Tracker_schedule_c_backup_20260913.
+Login-only checkout: C:/Users/Carl/Desktop/Projects/Profit Tracker_discord_login, branch codex/discord-login-fix, based on hosted main.
 
 ## Follow-up: confirmed Discord 429 and cooldown handling
 

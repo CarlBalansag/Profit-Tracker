@@ -1,6 +1,6 @@
-# Selvora Database Schema Diagram
+# Profit Tracker Database Schema Diagram
 
-Reflects `selvora-api/prisma/schema.prisma` as of 2026-09-30 (post currency-Decimal migration, post Firebase auth migration, post Buyer/Invoice tenant ownership). To regenerate a visual diagram, paste the Mermaid block below into [mermaid.live](https://mermaid.live) — the previous version of this file linked a pre-rendered diagram that encoded the stale schema below and has been removed rather than left misleading.
+Reflects `Profit Tracker-api/prisma/schema.prisma` as of 2026-09-30 (post currency-Decimal migration, post Firebase auth migration, post Buyer/Invoice tenant ownership). To regenerate a visual diagram, paste the Mermaid block below into [mermaid.live](https://mermaid.live) — the previous version of this file linked a pre-rendered diagram that encoded the stale schema below and has been removed rather than left misleading.
 
 ## Core business entities
 

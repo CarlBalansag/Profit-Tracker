@@ -2,10 +2,10 @@
 // transaction cashback are allocated by units. Legacy purchases without a
 // snapshot continue to fall back to the current stored card configuration.
 const number = value => Number.isFinite(Number(value)) ? Number(value) : 0;
-// Deliberate copy of selvora-api/services/statusTransitions.js
+// Deliberate copy of profit-tracker-api/services/statusTransitions.js
 // EXCLUDED_FROM_FINANCIALS: this module is isomorphic (the Vite frontend imports
 // it for live previews) and so cannot require a CommonJS backend service. The
-// two are pinned together by selvora-api/test/statusFinancialExclusion.test.mjs.
+// two are pinned together by profit-tracker-api/test/statusFinancialExclusion.test.mjs.
 const EXCLUDED_FROM_FINANCIALS = ['CANCELLED', 'RETURNED', 'DISPUTED'];
 const isExcludedFromFinancials = status => EXCLUDED_FROM_FINANCIALS.includes(String(status || '').toUpperCase());
 // Both status columns are checked, matching services/decimalFinance.js exactly:

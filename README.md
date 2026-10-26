@@ -1,4 +1,4 @@
-# Selvora — Reseller Profit Tracker
+# Profit Tracker — Reseller Profit Tracker
 
 > A full-stack business analytics platform built for resellers to track inventory, sales, cashback, and profit across multiple marketplaces.
 
@@ -12,7 +12,7 @@
 
 Resellers buying from vendors (Nike, Amazon, etc.) and selling on marketplaces (eBay, StockX, GOAT) need to track true per-item profit — after platform commissions, outbound shipping, purchase cost, inbound shipping, sales tax, and credit card cashback. Spreadsheets break down fast at scale.
 
-Selvora replaces that spreadsheet with a purpose-built analytics platform:
+Profit Tracker replaces that spreadsheet with a purpose-built analytics platform:
 
 - Log an inventory purchase → record a sale → instantly see net profit
 - Credit card cashback is factored into profit calculations at the item level
@@ -195,7 +195,7 @@ All `/api/*` endpoints require a valid Firebase session cookie. All mutation end
 
 ## MCP Server (AI Assistant Access)
 
-An MCP (Model Context Protocol) server lets an AI assistant — e.g. Claude, configured with an MCP connector — read and update your reselling data directly over HTTP, without ever logging in through the browser. It's mounted on the existing API (`selvora-api`) at `POST /mcp`, using the official [`@modelcontextprotocol/sdk`](https://www.npmjs.com/package/@modelcontextprotocol/sdk) over Streamable HTTP in stateless mode (no server-held session — safe across restarts/redeploys). See `selvora-api/routes/mcp.js`.
+An MCP (Model Context Protocol) server lets an AI assistant — e.g. Claude, configured with an MCP connector — read and update your reselling data directly over HTTP, without ever logging in through the browser. It's mounted on the existing API (`profit-tracker-api`) at `POST /mcp`, using the official [`@modelcontextprotocol/sdk`](https://www.npmjs.com/package/@modelcontextprotocol/sdk) over Streamable HTTP in stateless mode (no server-held session — safe across restarts/redeploys). See `profit-tracker-api/routes/mcp.js`.
 
 ### Why it's on the same server, not a separate one
 
@@ -216,7 +216,7 @@ Content-Type: application/json
 Accept: application/json, text/event-stream
 ```
 
-That's the real custom domain the frontend's Netlify redirects proxy to (`selvora-app/netlify.toml`) — not the raw Render URL. The `Accept` header listing both content types is required by the Streamable HTTP spec even though this server always responds with a single JSON body (`enableJsonResponse: true`), never SSE. Every write is recorded in `McpWriteLog` with a timestamp, tool name, and payload; `update_sale`/`update_purchase` additionally record one `ChangeLog` row per changed field (old value, new value), reviewable via `list_changes` — nothing is ever silently applied.
+That's the real custom domain the frontend's Netlify redirects proxy to (`profit-tracker-app/netlify.toml`) — not the raw Render URL. The `Accept` header listing both content types is required by the Streamable HTTP spec even though this server always responds with a single JSON body (`enableJsonResponse: true`), never SSE. Every write is recorded in `McpWriteLog` with a timestamp, tool name, and payload; `update_sale`/`update_purchase` additionally record one `ChangeLog` row per changed field (old value, new value), reviewable via `list_changes` — nothing is ever silently applied.
 
 A sale's "buyer" is the marketplace/cashout `Platform` it was recorded against (`Sales.platform_id` — the same value `platform_id`/`cashout_platform_id`/`marketplace_platform_id` already capture when a sale is created in the web UI), not a separate contact list. `update_sale`'s `platform` param corrects it after the fact by name; nothing auto-creates a platform on an edit (unlike a purchase's vendor/store) — a typo would misattribute a sale's payout, so the name must already exist.
 
@@ -250,7 +250,7 @@ All amounts are returned as plain numbers and all dates as `YYYY-MM-DD` strings.
 ### Running locally
 
 ```bash
-cd selvora-api
+cd profit-tracker-api
 npm install
 npm start          # the API, including /mcp, now listens on PORT (default 3000)
 ```
@@ -259,13 +259,13 @@ Generate a key from the running app's Settings → AI Assistant page (pointed at
 
 ### Deploying
 
-No separate deployment: `/mcp` ships with every deploy of the existing `selvora-api` Render service (same `npm start`, same environment variables — see [Environment Variables](#environment-variables)). Nothing extra to configure.
+No separate deployment: `/mcp` ships with every deploy of the existing `profit-tracker-api` Render service (same `npm start`, same environment variables — see [Environment Variables](#environment-variables)). Nothing extra to configure.
 
 ---
 
 ## Environment Variables
 
-**API (`selvora-api/.env`)** — see `selvora-api/.env.example` for the authoritative, commented list. Key groups:
+**API (`profit-tracker-api/.env`)** — see `profit-tracker-api/.env.example` for the authoritative, commented list. Key groups:
 ```
 DATABASE_URL=          # Neon pooled PostgreSQL connection string
 SESSION_SECRET=        # >= 32 character secret
@@ -294,7 +294,7 @@ USPS_CLIENT_ID= / USPS_CLIENT_SECRET=
 
 Calendar subscriptions use the configured Cloudinary account to publish a private, stable ICS feed. No `BACKEND_URL` variable is required. Keep the generated subscription link private because anyone with it can read that calendar.
 
-**Frontend (`selvora-app/.env.local`)** — see `selvora-app/.env.example`:
+**Frontend (`profit-tracker-app/.env.local`)** — see `profit-tracker-app/.env.example`:
 ```
 VITE_API_URL=                    # Leave empty when using Netlify redirects (netlify.toml)
 

@@ -4,13 +4,13 @@ Date: September 12, 2026, America/Los_Angeles.
 
 Outcome: ordinary workflows and totals pass existing checks, but three frontend issues were reproduced. No application fixes or real database writes were made. Temporary reproduction tests were removed after recording the results.
 
-**Update 2026-09-30**: SC-03 is fixed (`selvora-app/src/hooks/useModalKeyboard.js`, applied to the Schedule C `TaxEditor` and every other modal app-wide during branch consolidation). SC-01 and SC-02 are moot, not fixed: the current `ScheduleC.jsx` no longer embeds an inline `ReceiptUpload` component at all — the page now links out to the separate `/receipts` page ("Attach supporting receipts through Receipts") instead, per the later redesign described in `qa/SCHEDULE_C_REVIEW_QA.md`. The specific refresh/state-clearing race those findings described can no longer occur because that code path was removed, not patched.
+**Update 2026-09-30**: SC-03 is fixed (`profit-tracker-app/src/hooks/useModalKeyboard.js`, applied to the Schedule C `TaxEditor` and every other modal app-wide during branch consolidation). SC-01 and SC-02 are moot, not fixed: the current `ScheduleC.jsx` no longer embeds an inline `ReceiptUpload` component at all — the page now links out to the separate `/receipts` page ("Attach supporting receipts through Receipts") instead, per the later redesign described in `qa/SCHEDULE_C_REVIEW_QA.md`. The specific refresh/state-clearing race those findings described can no longer occur because that code path was removed, not patched.
 
 ## Confirmed findings
 
 ### SC-01 — Receipt upload completion discards an open tax draft (high)
 
-Affected: `selvora-app/src/pages/ScheduleC.jsx`, `ReceiptUpload` upload success callback and worksheet `refresh`.
+Affected: `profit-tracker-app/src/pages/ScheduleC.jsx`, `ReceiptUpload` upload success callback and worksheet `refresh`.
 
 Reproduction: begin uploading a receipt; while the request is pending, open another expense's inline tax editor and type a missing payee; complete the upload. The editor closes and the unsaved payee disappears. No tax PUT occurs. Reproduced with a delayed request in a temporary frontend test.
 
@@ -20,7 +20,7 @@ Proposed fix: coordinate in-flight actions and preserve tax draft state during a
 
 ### SC-02 — Uploading one receipt clears another selected file (medium)
 
-Affected: `selvora-app/src/pages/ScheduleC.jsx`, per-row `ReceiptUpload` local state and full-report refresh.
+Affected: `profit-tracker-app/src/pages/ScheduleC.jsx`, per-row `ReceiptUpload` local state and full-report refresh.
 
 Reproduction: select a receipt for Tape and another for Boxes; upload Boxes. Tape's selected file and cancel-selection control disappear after the report refresh. Reproduced in a temporary frontend test. Uploaded records remain saved; the lost file must be selected again.
 
@@ -28,7 +28,7 @@ Proposed fix: retain selected files by expense ID across report reloads or updat
 
 ### SC-03 — Tax-details dialog lacks keyboard lifecycle handling (medium)
 
-Affected: `selvora-app/src/pages/ScheduleC.jsx`, modal `TaxEditor`.
+Affected: `profit-tracker-app/src/pages/ScheduleC.jsx`, modal `TaxEditor`.
 
 Reproduction: open Review from Supporting records. In the live browser, focus remains outside the dialog. In a temporary frontend test, pressing Escape leaves the dialog open. The component also contains no focus trap or focus restoration logic; keyboard focus trapping was not separately exercised in the live browser.
 

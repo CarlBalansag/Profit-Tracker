@@ -1,7 +1,7 @@
 // Isolated QA only: actual API routers + in-memory fixtures. Never loads .env or connects to a database.
 const { createRequire } = require('node:module');
 const path = require('node:path');
-const requireApi = createRequire(path.resolve(__dirname, '../selvora-api/package.json'));
+const requireApi = createRequire(path.resolve(__dirname, '../profit-tracker-api/package.json'));
 const express = requireApi('express');
 const { randomUUID } = require('node:crypto');
 const ids = { user:'11111111-1111-4111-8111-111111111111', other:'22222222-2222-4222-8222-222222222222', inventory:'33333333-3333-4333-8333-333333333333', sale:'44444444-4444-4444-8444-444444444444', vendor:'55555555-5555-4555-8555-555555555555', card:'66666666-6666-4666-8666-666666666666', platform:'77777777-7777-4777-8777-777777777777', foreign:'88888888-8888-4888-8888-888888888888' };
@@ -110,11 +110,11 @@ function app() {
 module.exports={app,reset,ids,prisma,get db(){return db;},get calls(){return calls;},get faults(){return faults;}};
 if(require.main===module)(async()=>{
   const {pathToFileURL}=require('node:url');
-  const {createServer}=await import(pathToFileURL(path.resolve(__dirname,'../selvora-app/node_modules/vite/dist/node/index.js')));
+  const {createServer}=await import(pathToFileURL(path.resolve(__dirname,'../profit-tracker-app/node_modules/vite/dist/node/index.js')));
   // Empty API base and Sentry DSNs prevent accidental calls to production services.
   process.env.VITE_API_URL='';process.env.VITE_SENTRY_DSN='';
   const server=app();
-  const vite=await createServer({root:path.resolve(__dirname,'../selvora-app'),server:{middlewareMode:true},appType:'spa'});
+  const vite=await createServer({root:path.resolve(__dirname,'../profit-tracker-app'),server:{middlewareMode:true},appType:'spa'});
   server.use(vite.middlewares);
   server.listen(4175,'127.0.0.1',()=>console.log('QA fixture website http://127.0.0.1:4175 (in-memory only)'));
 })();

@@ -15,7 +15,7 @@ Status: email/password implementation exists locally in the isolated login workt
 
 ## Database and deployment order
 
-Take a provider restore point when available plus a private consistent snapshot and record business counts/fingerprints. Inspect actual deployed commit and migration history first. Apply only the reviewed additive SQL `selvora-api/prisma/migrations/20260914000000_firebase_auth/migration.sql` and register its checksum through the existing reviewed auth-cutover process. Do not run `db push`, destructive resets, or deploy every pending migration against production; unrelated QA/Schedule C migrations must stay excluded.
+Take a provider restore point when available plus a private consistent snapshot and record business counts/fingerprints. Inspect actual deployed commit and migration history first. Apply only the reviewed additive SQL `profit-tracker-api/prisma/migrations/20260914000000_firebase_auth/migration.sql` and register its checksum through the existing reviewed auth-cutover process. Do not run `db push`, destructive resets, or deploy every pending migration against production; unrelated QA/Schedule C migrations must stay excluded.
 
 The new code selects `User.login_disabled`, so additive schema migration must precede deploying this runtime, even while Firebase is disabled. The migration creates only five auth tables and an account-disabled flag; it does not change business foreign keys, totals or existing user IDs. Database tests exercise the actual SQL against a private local PostgreSQL database with preexisting User/PaymentMethod records.
 
@@ -56,8 +56,8 @@ App Check/Identity Platform availability, costs and enforcement require separate
 
 ## Repeatable local QA
 
-- API: `npm test` in selvora-api. Firebase tests start a private embedded PostgreSQL cluster with a random localhost port; no repository database URL is used.
-- Frontend: `npm test`, `npm run build`, focused ESLint in selvora-app. Whole affected Settings/Sidebar lint still includes reproduced preexisting violations; see the QA report.
+- API: `npm test` in profit-tracker-api. Firebase tests start a private embedded PostgreSQL cluster with a random localhost port; no repository database URL is used.
+- Frontend: `npm test`, `npm run build`, focused ESLint in profit-tracker-app. Whole affected Settings/Sidebar lint still includes reproduced preexisting violations; see the QA report.
 - Emulator: from repository root run `npx --package firebase-tools firebase emulators:start --only auth --project demo-profittracker --config qa/firebase-emulator.json`.
 - In a second interactive terminal run `node qa/firebase-local-server.cjs`; this uses only local disposable PostgreSQL and the demo emulator. Type `restart` to restart only the API while keeping its QA database intact.
 - In a third terminal run `node qa/firebase-emulator-check.cjs`. Browser fixture login is `browser-qa@example.test` with the synthetic password in that QA script; never use real credentials against the emulator.

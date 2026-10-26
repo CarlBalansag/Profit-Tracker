@@ -1,0 +1,73 @@
+/*
+ * Color Palette — single source of truth for the app's (light) theme.
+ *
+ * Change a value here and it cascades everywhere, because index.css points
+ * every `--dp-*` token the app actually uses back to one of these variables
+ * instead of hardcoding its own color.
+ *
+ * Only light mode is active right now. Dark mode is planned — see the
+ * commented-out section below. When that work starts, uncomment it and
+ * wire up a `data-theme="dark"` attribute (or a prefers-color-scheme
+ * media query) to switch between the two.
+ */
+:root {
+  /* Backgrounds */
+  --color-background: #EEF0F3;
+  --color-surface: #FFFFFF;
+  --color-hover: #FAFAFB;
+
+  /* Borders */
+  --color-border: rgba(17, 17, 17, 0.06);
+  --color-border-hover: rgba(17, 17, 17, 0.12);
+
+  /* Text */
+  --color-text-primary: #16161A;
+  --color-text-secondary: #16161A;
+  --color-text-label: #16161A;
+  --color-text-muted: #6B7280;
+
+  /* Accent (brand) */
+  --color-accent: #7C3AED;
+  --color-accent-bg: rgba(124, 58, 237, 0.08);
+  --color-accent-gradient: linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%);
+
+  /* Status */
+  --color-success-bg: #E3F5EA;
+  --color-success-text: #1A9A50;
+  --color-danger-bg: #FCE8E8;
+  --color-danger-text: #D23B3B;
+  --color-warning-bg: #FEF3C7;
+  --color-warning-text: #B45309;
+  --color-info-bg: #E0F2FE;
+  --color-info-text: #0284C7;
+  --color-neutral-bg: #F3F4F6;
+  --color-neutral-text: #6B7280;
+
+  /* Modal */
+  --color-modal-backdrop: rgba(15, 23, 42, 0.4);
+}
+
+/* ---------------------------------------------------------------------------
+ * Dark mode (planned, not active yet).
+ * ------------------------------------------------------------------------- */
+/*
+:root[data-theme="dark"] {
+  --color-background: #0b0b0b;
+  --color-surface: #121212;
+  --color-hover: #1a1a1a;
+  --color-border: rgba(255, 255, 255, 0.08);
+
+  --color-text-primary: #EDEDED;
+  --color-text-secondary: #A0A0A0;
+  --color-text-label: #8E8E99;
+
+  --color-accent: #A78BFA;
+  --color-accent-bg: rgba(167, 139, 250, 0.12);
+  --color-accent-gradient: linear-gradient(135deg, #A78BFA 0%, #7C3AED 100%);
+
+  --color-success-bg: rgba(26, 154, 80, 0.16);
+  --color-success-text: #34D399;
+  --color-danger-bg: rgba(210, 59, 59, 0.16);
+  --color-danger-text: #F87171;
+}
+*/

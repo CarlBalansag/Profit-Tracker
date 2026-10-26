@@ -1,0 +1,755 @@
+import { batchCost, effectiveCashbackRate, saleEconomics, realizedSummary, isRealizedSale } from '../../../shared/finance.mjs';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, DollarSign, Package, CreditCard, Tag, ChevronDown, ChevronUp } from 'lucide-react';
+import { useInvalidate, apiFetch} from '../hooks/useApi';
+import { requireSuccessfulResponse } from '../hooks/apiResponse';
+import { useModalKeyboard } from '../hooks/useModalKeyboard';
+import { toast } from 'sonner';
+
+const STATUSES = ['Pre Order', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
+const SALE_STATUSES = ['SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
+const EMPTY_LIST = [];
+
+// ─── Reusable field wrapper ────────────────────────────────────────────────────
+function Field({ label, children, className = '' }) {
+  return (
+    <div className={className}>
+      <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+// ─── Styled input ──────────────────────────────────────────────────────────────
+function Input({ value, onChange, type = 'text', placeholder = '', className = '', readOnly = false, ariaLabel }) {
+  return (
+    <input
+      type={type}
+      value={value ?? ''}
+      onChange={e => onChange && onChange(e.target.value)}
+      placeholder={placeholder}
+      readOnly={readOnly}
+      aria-label={ariaLabel}
+      className={`w-full bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2 text-sm text-[var(--dp-text-primary)] placeholder-[color:var(--dp-text-muted)] focus:outline-none focus:border-[var(--dp-accent)] transition-colors ${readOnly ? 'opacity-60 cursor-default' : ''} ${className}`}
+    />
+  );
+}
+
+// ─── Dollar input ──────────────────────────────────────────────────────────────
+function DollarInput({ value, onChange, placeholder = '0.00', accentClass = 'focus:border-green-500/60', ariaLabel }) {
+  return (
+    <div className="relative">
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--dp-text-secondary)] text-sm">$</span>
+      <input
+        type="number"
+        step="0.01"
+        value={value ?? ''}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        className={`w-full bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg pl-7 pr-3 py-2 text-sm text-[var(--dp-text-primary)] placeholder-[color:var(--dp-text-muted)] focus:outline-none transition-colors ${accentClass}`}
+      />
+    </div>
+  );
+}
+
+// ─── Styled select ─────────────────────────────────────────────────────────────
+function Sel({ value, onChange, options = [], placeholder }) {
+  return (
+    <select
+      value={value ?? ''}
+      onChange={e => onChange(e.target.value)}
+      className="w-full bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2 text-sm text-[var(--dp-text-primary)] focus:outline-none focus:border-[var(--dp-accent)] transition-colors appearance-none"
+    >
+      {placeholder && <option value="">{placeholder}</option>}
+      {options.map(o => (
+        <option key={o.id ?? o} value={o.id ?? o}>{o.name ?? o}</option>
+      ))}
+    </select>
+  );
+}
+
+// ─── Read-only value box ───────────────────────────────────────────────────────
+function ReadBox({ value, className = '' }) {
+  return (
+    <div className={`w-full bg-[var(--dp-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2 text-sm text-[var(--dp-text-primary)] ${className}`}>
+      {value}
+    </div>
+  );
+}
+
+// ─── Section header ────────────────────────────────────────────────────────────
+function SectionHeader({ icon: Icon, children }) {
+  return (
+    <div className="flex items-center gap-2 mb-3 pt-1">
+      {Icon && <Icon className="w-3.5 h-3.5 text-indigo-400" />}
+      <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400">
+        {children}
+      </p>
+    </div>
+  );
+}
+
+// ─── Normalise a date from the API (ISO string → YYYY-MM-DD) ─────────────────
+function toDateInput(val) {
+  if (!val) return '';
+  return val.split('T')[0];
+}
+
+// ─── Main Modal ────────────────────────────────────────────────────────────────
+export default function TransactionDetailModal({ row, onClose, onSaved, platforms = EMPTY_LIST, paymentMethods = EMPTY_LIST, buyers = EMPTY_LIST }) {
+  const [form, setForm] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const dismiss = () => { if (!savingRef.current) onClose(); };
+  const modalRef = useModalKeyboard(true, dismiss);
+  // track which sale card is expanded (index)
+  const [expandedSale, setExpandedSale] = useState(0);
+  const invalidate = useInvalidate();
+
+  const marketplaces = platforms.filter(p => p.type === 'Marketplace');
+  const cashoutPlatforms = platforms.filter(p => p.type === 'Cashout');
+  const vendors = platforms.filter(p => p.type === 'Vendor');
+
+  useEffect(() => {
+    const fetchDetail = async () => {
+      try {
+        const res = await apiFetch(`/api/inventory/${row.rawId}`, { credentials: 'include' });
+        if (res.ok) {
+          const d = await res.json();
+          const defaultCashbackRate = effectiveCashbackRate({
+            ...d,
+            payment_method: d.payment_method ?? paymentMethods.find(method => String(method.id) === String(d.payment_method_id)),
+            vendor: d.vendor ?? platforms.find(platform => String(platform.id) === String(d.vendor_id)),
+          });
+          const storedCashbackRate = d.cashback_rate ?? defaultCashbackRate;
+          const storedCashbackAmount = d.cashback_rate !== null && d.cashback_rate !== undefined
+            ? d.cashback_earned ?? 0
+            : batchCost(d) * storedCashbackRate / 100;
+          setForm({
+            product_name:            d.product_name ?? '',
+            status:                  d.status ?? 'PURCHASED',
+            vendor_id:               d.vendor_id ?? '',
+            purchase_date:           d.purchase_date ? d.purchase_date.split('T')[0] : '',
+            category:                d.category ?? '',
+            unit_purchase_cost:      d.unit_purchase_cost ?? 0,
+            qty_purchased:           d.qty_purchased ?? 1,
+            sales_tax:               d.sales_tax ?? 0,
+            shipping_cost_inbound:   d.shipping_cost_inbound ?? 0,
+            fees:                    d.fees ?? 0,
+            gift_card_amount:        d.gift_card_amount ?? 0,
+            payment_method_id:       d.payment_method_id ?? '',
+            cashback_rate:           storedCashbackRate,
+            cashback_earned:         storedCashbackAmount,
+            include_tax_in_cashback:    true,
+            include_shipping_in_cashback: true,
+            tax_exempt:              d.tax_exempt ?? false,
+            // editable sales array
+            _sales: (d.sales || []).map(s => ({
+              id:              s.id,
+              unit_price:      s.unit_price ?? 0,
+              quantity:        s.quantity ?? 1,
+              commission_fee:  s.commission_fee ?? 0,
+              sale_shipping:   s.sale_shipping ?? 0,
+              platform_id:     s.platform_id ?? '',
+              buyer_id:        s.buyer_id ?? '',
+              status:          s.status ?? 'SOLD',
+              // Read-only here (the save projection below deliberately omits
+              // it): isRealizedSale reads both status columns, so without it
+              // this editor's realized summary would disagree with the
+              // Transactions row for the same sale.
+              workflow_status: s.workflow_status ?? null,
+              sale_date:       toDateInput(s.sale_date),
+              payout_date:     toDateInput(s.payout_date),
+              taxable:         s.taxable ?? true,
+              sale_tax_collected: s.sale_tax_collected ?? 0,
+              // for display
+              _platformName: s.platform?.name || '',
+            })),
+          });
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDetail();
+  }, [row.rawId, row.status, paymentMethods, platforms]);
+
+  const set = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
+
+  const setSale = (i, key, val) => setForm(prev => {
+    const sales = [...prev._sales];
+    sales[i] = { ...sales[i], [key]: val };
+    return { ...prev, _sales: sales };
+  });
+
+  // ── Live calculations ────────────────────────────────────────────────────────
+  const subtotal    = Number(form?.unit_purchase_cost ?? 0) * Number(form?.qty_purchased ?? 1);
+  const taxAmt      = Number(form?.sales_tax ?? 0);
+  const shippingAmt = Number(form?.shipping_cost_inbound ?? 0);
+  const feesAmt     = Number(form?.fees ?? 0);
+  const giftCardAmt = Number(form?.gift_card_amount ?? 0);
+  const totalCost = batchCost(form ?? {});
+  const cbRate = Math.max(0, Number(form?.cashback_rate) || 0);
+  const cbEarned = Math.max(0, Number(form?.cashback_earned) || 0);
+
+  const applyCashbackDefault = (paymentMethodId, vendorId) => {
+    const rate = effectiveCashbackRate({
+      payment_method: paymentMethods.find(method => String(method.id) === String(paymentMethodId)),
+      vendor: platforms.find(platform => String(platform.id) === String(vendorId)),
+    });
+    setForm(prev => ({
+      ...prev,
+      payment_method_id: paymentMethodId,
+      vendor_id: vendorId,
+      cashback_rate: rate,
+      cashback_earned: batchCost(prev) * rate / 100,
+    }));
+  };
+
+  const setCashbackRate = (value) => {
+    const rate = Math.max(0, Number(value) || 0);
+    setForm(prev => ({ ...prev, cashback_rate: value, cashback_earned: batchCost(prev) * rate / 100 }));
+  };
+
+  const setCashbackAmount = (value) => {
+    const amount = Math.max(0, Number(value) || 0);
+    setForm(prev => {
+      const cost = batchCost(prev);
+      return {
+        ...prev,
+        cashback_earned: value,
+        cashback_rate: cost > 0 ? Number((amount / cost * 100).toFixed(6)) : 0,
+      };
+    });
+  };
+
+  // ── Save ─────────────────────────────────────────────────────────────────────
+  const handleSave = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      const invRes = await apiFetch(`/api/inventory/${row.rawId}/transaction`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          inventory: {
+            product_name:          form.product_name,
+            status:                form.status,
+            purchase_date:         form.purchase_date,
+            unit_purchase_cost:    Number(form.unit_purchase_cost),
+            qty_purchased:         Number(form.qty_purchased),
+            sales_tax:             Number(form.sales_tax),
+            shipping_cost_inbound: Number(form.shipping_cost_inbound),
+            fees:                  Number(form.fees),
+            gift_card_amount:      Number(form.gift_card_amount),
+            cashback_rate:         Number(form.cashback_rate),
+            cashback_earned:       cbEarned,
+            category:              form.category || null,
+            vendor_id:             form.vendor_id || null,
+            payment_method_id:     form.payment_method_id || null,
+            tax_exempt:            form.tax_exempt ?? false,
+          },
+          sales: form._sales.map(s => ({
+            id:                 s.id,
+            unit_price:         Number(s.unit_price),
+            quantity:           Number(s.quantity),
+            commission_fee:     Number(s.commission_fee),
+            sale_shipping:      Number(s.sale_shipping),
+            platform_id:        s.platform_id || null,
+            buyer_id:           s.buyer_id || null,
+            // A handful of sale rows predate the sale-status validation
+            // (ideas.md ISSUES #3) and still carry an inventory-only legacy
+            // value like PURCHASED, which the backend's SALE_STATUSES enum
+            // rejects. Loading one into this editor and saving ANY other
+            // field -- platform, cost, quantity -- round-tripped that
+            // invalid value and failed the whole save. Omitting it here
+            // (JSON.stringify drops undefined keys) leaves the backend's
+            // existing writable() semantics to keep the stored status
+            // untouched when it isn't actually being changed.
+            status:             SALE_STATUSES.includes(s.status) ? s.status : undefined,
+            sale_date:          s.sale_date || undefined,
+            payout_date:        s.payout_date || null,
+            taxable:            s.taxable,
+            sale_tax_collected: Number(s.sale_tax_collected),
+          })),
+        }),
+      });
+      await requireSuccessfulResponse(invRes, 'Transaction update failed. No changes were saved.');
+
+      invalidate.all();
+      onSaved();
+      onClose();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message || 'Transaction update failed. No changes were saved.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-[var(--dp-modal-backdrop)] backdrop-blur-xs" onClick={dismiss} />
+
+      {/* Panel */}
+      <div
+        ref={modalRef}
+        className="relative w-full max-w-[640px] max-h-[90vh] sm:max-h-[90vh] h-full sm:h-auto bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] sm:rounded-2xl dp-elevated flex flex-col overflow-hidden text-[var(--dp-text-primary)]"
+        style={{ animation: 'fadeInScale 0.2s ease-out' }}
+      >
+        <style>{`
+          @keyframes fadeInScale {
+            from { opacity: 0; transform: scale(0.96); }
+            to { opacity: 1; transform: scale(1); }
+          }
+        `}</style>
+
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[color:var(--dp-border)] shrink-0">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--dp-text-primary)]">Edit Transaction</h2>
+            <p className="text-[11px] text-[var(--dp-text-secondary)] mt-0.5">Make changes and click Update to save.</p>
+          </div>
+          <button
+            onClick={dismiss}
+            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--dp-hover-bg)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* ── Body ── */}
+        {loading || !form ? (
+          <div className="flex-1 flex items-center justify-center text-gray-500 text-sm py-16">
+            <div className="flex items-center gap-3">
+              <div className="w-5 h-5 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
+              Loading transaction…
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-5">
+
+            {/* Product Name + Status */}
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-3">
+              <Field label="Product Name *">
+                <Input value={form.product_name} onChange={v => set('product_name', v)} placeholder="Product name" />
+              </Field>
+              <Field label="Status">
+                <Sel value={form.status} onChange={v => set('status', v)} options={STATUSES.map(s => ({ id: s, name: s }))} />
+              </Field>
+            </div>
+
+            {/* Vendor / Date / Category */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Field label="Store / Vendor">
+                <Sel value={form.vendor_id} onChange={v => applyCashbackDefault(form.payment_method_id, v)} options={vendors} placeholder="Select vendor…" />
+              </Field>
+              <Field label="Purchase Date">
+                <Input type="date" value={form.purchase_date} onChange={v => set('purchase_date', v)} />
+              </Field>
+              <Field label="Category">
+                <Input value={form.category} onChange={v => set('category', v)} placeholder="e.g. Electronics" />
+              </Field>
+            </div>
+
+            <div className="border-t border-white/[0.04]" />
+
+            {/* Purchase Details */}
+            <div>
+              <SectionHeader icon={Package}>Purchase Details</SectionHeader>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                <Field label="Unit Price">
+                  <DollarInput value={form.unit_purchase_cost} onChange={v => set('unit_purchase_cost', v)} accentClass="focus:border-blue-500/60" />
+                </Field>
+                <Field label="Qty">
+                  <Input type="number" value={form.qty_purchased} onChange={v => set('qty_purchased', v)} />
+                </Field>
+                <Field label="Subtotal">
+                  <ReadBox value={`$${subtotal.toFixed(2)}`} className="text-gray-400" />
+                </Field>
+                <Field label="Tax">
+                  <DollarInput value={form.sales_tax} onChange={v => set('sales_tax', v)} accentClass="focus:border-blue-500/60" />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <Field label="Inbound Shipping">
+                  <DollarInput value={form.shipping_cost_inbound} onChange={v => set('shipping_cost_inbound', v)} accentClass="focus:border-blue-500/60" />
+                </Field>
+                <Field label="Fees">
+                  <DollarInput value={form.fees} onChange={v => set('fees', v)} accentClass="focus:border-blue-500/60" />
+                </Field>
+                <Field label="Gift Card">
+                  <DollarInput value={form.gift_card_amount} onChange={v => set('gift_card_amount', v)} accentClass="focus:border-blue-500/60" />
+                </Field>
+                <Field label="Total Cost">
+                  <ReadBox value={`$${totalCost.toFixed(2)}`} className="text-white font-semibold" />
+                </Field>
+              </div>
+              <label className="flex items-center gap-2.5 cursor-pointer select-none w-fit mt-3">
+                <input
+                  type="checkbox"
+                  checked={form.tax_exempt ?? false}
+                  onChange={e => set('tax_exempt', e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-600 accent-blue-500"
+                />
+                <span className="text-sm text-gray-300">Tax Exempt</span>
+              </label>
+            </div>
+
+            <div className="border-t border-white/[0.04]" />
+
+            {/* Payment / Cashback */}
+            <div>
+              <SectionHeader icon={CreditCard}>Payment & Cashback</SectionHeader>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Field label="Payment Method">
+                  <Sel
+                    value={form.payment_method_id}
+                    onChange={v => {
+                      applyCashbackDefault(v, form.vendor_id);
+                    }}
+                    options={paymentMethods}
+                    placeholder="Select…"
+                  />
+                </Field>
+                <Field label="Cashback %">
+                  <div className="relative">
+                    <Input value={form.cashback_rate} onChange={setCashbackRate} type="number" className="pr-8" ariaLabel="Cashback %" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">%</span>
+                  </div>
+                </Field>
+                <Field label="Cashback $">
+                  <DollarInput value={form.cashback_earned} onChange={setCashbackAmount} accentClass="focus:border-pink-500/60 text-emerald-400" ariaLabel="Cashback $" />
+                  <p className="text-[10px] text-gray-600 mt-1">Payment method default; editable for this transaction</p>
+                </Field>
+              </div>
+              <p className="text-xs text-gray-400 mt-3">Changing the payment method or vendor applies its default rate. You can override either field for this transaction.</p>
+            </div>
+
+            <div className="border-t border-white/[0.04]" />
+
+            {/* ── Sale Events (editable) ── */}
+            <div>
+              <SectionHeader icon={Tag}>
+                Sale{form._sales.length > 1 ? 's' : ''} ({form._sales.length === 0 ? 'none' : form._sales.length})
+              </SectionHeader>
+
+              {form._sales.length === 0 ? (
+                <p className="text-xs text-gray-600">No sales recorded for this item yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {form._sales.map((sale, i) => {
+                    const unitPrice = Number(sale.unit_price) || 0;
+                    const qty = Number(sale.quantity) || 1;
+                    const commission = Number(sale.commission_fee) || 0;
+                    const saleShipping = Number(sale.sale_shipping) || 0;
+                    const saleTotal = unitPrice * qty;
+                    const economics = saleEconomics(form, sale, cbRate);
+                    const totalCostForSale = economics.cost;
+                    const saleCashback = economics.cashback;
+                    const profit = isRealizedSale(sale) ? economics.netProfit : 0;
+                    const isOpen = expandedSale === i;
+
+                    return (
+                      <div key={sale.id} className="rounded-xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
+                        {/* Sale card header — always visible, click to expand */}
+                        <button
+                          type="button"
+                          onClick={() => setExpandedSale(isOpen ? null : i)}
+                          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <DollarSign className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                            <span className="text-sm font-semibold text-white">
+                              ${unitPrice.toFixed(2)} × {qty}
+                              {sale.sale_date && (
+                                <span className="text-xs text-gray-500 font-normal ml-2">
+                                  · {new Date(sale.sale_date + 'T12:00:00').toLocaleDateString()}
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className={`text-sm font-bold ${profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
+                            </span>
+                            {isOpen
+                              ? <ChevronUp className="w-3.5 h-3.5 text-gray-500" />
+                              : <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+                            }
+                          </div>
+                        </button>
+
+                        {/* Expanded edit fields */}
+                        {isOpen && (
+                          <div className="border-t border-white/[0.06] px-4 py-4 space-y-3">
+
+                            {/* Row 1: Sale Price, Qty, Commission, Sale Shipping */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                              <Field label="Sale Price">
+                                <DollarInput
+                                  value={sale.unit_price}
+                                  onChange={v => setSale(i, 'unit_price', v)}
+                                  accentClass="focus:border-green-500/60"
+                                />
+                              </Field>
+                              <Field label="Qty Sold">
+                                <Input
+                                  type="number"
+                                  value={sale.quantity}
+                                  onChange={v => setSale(i, 'quantity', v)}
+                                  className="focus:border-green-500/60"
+                                />
+                              </Field>
+                              <Field label="Commission">
+                                <DollarInput
+                                  value={sale.commission_fee}
+                                  onChange={v => setSale(i, 'commission_fee', v)}
+                                  accentClass="focus:border-green-500/60"
+                                />
+                              </Field>
+                              <Field label="Sale Shipping">
+                                <DollarInput
+                                  value={sale.sale_shipping}
+                                  onChange={v => setSale(i, 'sale_shipping', v)}
+                                  accentClass="focus:border-green-500/60"
+                                />
+                              </Field>
+                            </div>
+
+                            {/* Row 2: Platform, Status */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <Field label="Platform">
+                                <Sel
+                                  value={sale.platform_id}
+                                  onChange={v => setSale(i, 'platform_id', v)}
+                                  options={[...marketplaces, ...cashoutPlatforms]}
+                                  placeholder="Select platform…"
+                                />
+                              </Field>
+                              <Field label="Sale Status">
+                                <Sel
+                                  value={sale.status}
+                                  onChange={v => setSale(i, 'status', v)}
+                                  options={SALE_STATUSES.map(s => ({ id: s, name: s }))}
+                                />
+                              </Field>
+                            </div>
+
+                            {/* Row 2b: Buyer -- who actually paid, separate from the platform above */}
+                            <div className="grid grid-cols-1 gap-3">
+                              <Field label="Buyer (who paid)">
+                                <Sel
+                                  value={sale.buyer_id}
+                                  onChange={v => setSale(i, 'buyer_id', v)}
+                                  options={buyers}
+                                  placeholder="Select buyer…"
+                                />
+                              </Field>
+                            </div>
+
+                            {/* Row 3: Sale Date, Payout Date */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <Field label="Sale Date">
+                                <Input
+                                  type="date"
+                                  value={sale.sale_date}
+                                  onChange={v => setSale(i, 'sale_date', v)}
+                                  className="focus:border-green-500/60"
+                                />
+                              </Field>
+                              <Field label="Payout Date">
+                                <Input
+                                  type="date"
+                                  value={sale.payout_date}
+                                  onChange={v => setSale(i, 'payout_date', v)}
+                                  className="focus:border-green-500/60"
+                                />
+                              </Field>
+                            </div>
+
+                            {/* Row 4: Tax Collected + Taxable toggle */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                              <Field label="Sale Tax Collected">
+                                <DollarInput
+                                  value={sale.sale_tax_collected}
+                                  onChange={v => setSale(i, 'sale_tax_collected', v)}
+                                  accentClass="focus:border-green-500/60"
+                                />
+                              </Field>
+                              <label className="flex items-center gap-2.5 cursor-pointer select-none pb-2">
+                                <input
+                                  type="checkbox"
+                                  checked={sale.taxable ?? true}
+                                  onChange={e => setSale(i, 'taxable', e.target.checked)}
+                                  className="w-4 h-4 rounded border-gray-600 accent-green-500"
+                                />
+                                <span className="text-sm text-gray-300">Taxable Sale</span>
+                              </label>
+                            </div>
+
+                            {/* Mini profit breakdown */}
+                            <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] divide-y divide-white/[0.04] text-xs mt-1">
+                              <div className="flex justify-between px-3 py-2">
+                                <span className="text-gray-500">Revenue</span>
+                                <span className="text-green-400">${saleTotal.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between px-3 py-2">
+                                <span className="text-gray-500">Cost basis</span>
+                                <span className="text-red-400">-${totalCostForSale.toFixed(2)}</span>
+                              </div>
+                              {commission > 0 && (
+                                <div className="flex justify-between px-3 py-2">
+                                  <span className="text-gray-500">Commission</span>
+                                  <span className="text-red-400">-${commission.toFixed(2)}</span>
+                                </div>
+                              )}
+                              {saleShipping > 0 && (
+                                <div className="flex justify-between px-3 py-2">
+                                  <span className="text-gray-500">Sale shipping</span>
+                                  <span className="text-red-400">-${saleShipping.toFixed(2)}</span>
+                                </div>
+                              )}
+                              {saleCashback > 0 && (
+                                <div className="flex justify-between px-3 py-2">
+                                  <span className="text-gray-500">Cashback</span>
+                                  <span className="text-emerald-400">+${saleCashback.toFixed(2)}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between px-3 py-2 font-semibold">
+                                <span className="text-gray-300">Net Profit</span>
+                                <span className={profit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                                  {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-white/[0.04]" />
+
+            {/* ── Summary ── */}
+            <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">Summary</p>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Cost of Goods</span>
+                  <span className="text-white font-medium">${subtotal.toFixed(2)}</span>
+                </div>
+                {taxAmt > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Tax</span>
+                    <span className="text-red-400 font-medium">+${taxAmt.toFixed(2)}</span>
+                  </div>
+                )}
+                {shippingAmt > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Shipping</span>
+                    <span className="text-red-400 font-medium">+${shippingAmt.toFixed(2)}</span>
+                  </div>
+                )}
+                {feesAmt > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Fees</span>
+                    <span className="text-red-400 font-medium">+${feesAmt.toFixed(2)}</span>
+                  </div>
+                )}
+                {giftCardAmt > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Gift Card</span>
+                    <span className="text-emerald-400 font-medium">-${giftCardAmt.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm border-t border-white/[0.06] pt-2">
+                  <span className="text-gray-200 font-semibold">Total Cost</span>
+                  <span className="text-white font-bold">${totalCost.toFixed(2)}</span>
+                </div>
+                {cbEarned > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Cashback ({cbRate}%)</span>
+                    <span className="text-emerald-400 font-semibold">+${cbEarned.toFixed(2)}</span>
+                  </div>
+                )}
+                {form._sales.length > 0 && (() => {
+                  const realizedSales = form._sales.filter(isRealizedSale);
+                  const totalSaleRevenue = realizedSales.reduce((sum, s) => sum + ((Number(s.unit_price) || 0) * (Number(s.quantity) || 0)), 0);
+                  const totalCommissions = realizedSales.reduce((sum, s) => sum + (Number(s.commission_fee) || 0), 0);
+                  const totalSaleShipping = realizedSales.reduce((sum, s) => sum + (Number(s.sale_shipping) || 0), 0);
+                  const summary = realizedSummary(form, realizedSales, cbRate);
+                  const netProfit = summary.netProfit;
+                  return (
+                    <>
+                      <div className="flex justify-between text-sm border-t border-white/[0.06] pt-2">
+                        <span className="text-gray-400">Sale Revenue</span>
+                        <span className="text-green-400 font-medium">${totalSaleRevenue.toFixed(2)}</span>
+                      </div>
+                      {totalCommissions > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">Commissions</span>
+                          <span className="text-red-400 font-medium">-${totalCommissions.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {totalSaleShipping > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">Sale Shipping</span>
+                          <span className="text-red-400 font-medium">-${totalSaleShipping.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-200 font-semibold">Realized Profit + Cashback</span>
+                        <span className={`font-bold ${netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {netProfit >= 0 ? '+' : ''}${netProfit.toFixed(2)}
+                        </span>
+                      </div>
+                      {cbEarned > 0 && (
+                        <p className="text-[10px] text-gray-600">
+                          Includes ${summary.cashback.toFixed(2)} sold-unit cashback ({cbRate}%)
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* ── Footer ── */}
+        <div className="px-4 sm:px-6 py-4 border-t border-white/[0.06] flex items-center justify-end gap-3 shrink-0">
+          <button
+            onClick={dismiss}
+            className="px-5 py-2 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-white/[0.05] border border-white/[0.08] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || loading || !form}
+            className="px-5 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Update Transaction'}
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}

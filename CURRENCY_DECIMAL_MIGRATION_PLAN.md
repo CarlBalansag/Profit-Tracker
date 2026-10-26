@@ -43,7 +43,7 @@ Exit criteria: a reviewed field map and rounding policy exist before any schema 
 
 ### 2. Shared currency utilities
 
-Status: **Complete** — `selvora-api/services/money.js`, tested in `selvora-api/test/money.test.mjs`.
+Status: **Complete** — `profit-tracker-api/services/money.js`, tested in `profit-tracker-api/test/money.test.mjs`.
 
 1. Add a small server-side money utility based on Prisma `Decimal`.
 2. Provide safe parsing for request values, addition, subtraction, multiplication, allocation, and final cent rounding.
@@ -54,7 +54,7 @@ Exit criteria: all new financial calculations can call a single tested utility w
 
 ### 3. Add additive database columns and backfill
 
-Status: **Complete** — `selvora-api/prisma/migrations/20260930000000_additive_currency_decimals/migration.sql`, adopting a design already proven correct in production (see below). Comparison report and Goal-recommendation update in `qa/CURRENCY_MIGRATION_AUDIT.md`.
+Status: **Complete** — `profit-tracker-api/prisma/migrations/20260930000000_additive_currency_decimals/migration.sql`, adopting a design already proven correct in production (see below). Comparison report and Goal-recommendation update in `qa/CURRENCY_MIGRATION_AUDIT.md`.
 
 1. Add new nullable `Decimal` columns beside existing `Float` money/rate columns. Do not remove or overwrite existing columns in this task.
 2. Backfill exact two-decimal monetary values from existing data using an explicit, reviewed conversion query.
@@ -65,7 +65,7 @@ Exit criteria: backfill is complete in a staging copy and comparisons are accept
 
 ### 4. Migrate one bounded write flow: inventory purchases
 
-Status: **Complete** — `selvora-api/validation/schemas.js` (`decimalAmount` helper), applied to `createInventory`/`updateInventory`'s 6 Inventory money fields.
+Status: **Complete** — `profit-tracker-api/validation/schemas.js` (`decimalAmount` helper), applied to `createInventory`/`updateInventory`'s 6 Inventory money fields.
 
 1. Update inventory purchase validation and create/edit routes to write the new decimal fields.
 2. Keep compatibility reads while older records/clients still use original fields.
@@ -76,7 +76,7 @@ Exit criteria: purchase writes and displayed purchase costs use exact values, wi
 
 ### 5. Migrate one bounded write flow: sales
 
-Status: **Complete** — `selvora-api/validation/schemas.js`, `decimalAmount` applied to all 4 Sales money fields in `createSale`/`updateSale`, plus the inline-sale-at-purchase fields on `createInventory` (`sale_price`, `commission_fee`, `sale_shipping`, `sale_tax_collected`) for the same POST /api/inventory sale-creation path.
+Status: **Complete** — `profit-tracker-api/validation/schemas.js`, `decimalAmount` applied to all 4 Sales money fields in `createSale`/`updateSale`, plus the inline-sale-at-purchase fields on `createInventory` (`sale_price`, `commission_fee`, `sale_shipping`, `sale_tax_collected`) for the same POST /api/inventory sale-creation path.
 
 1. Convert sales price, commission, tax, shipping, and profit calculations to the shared decimal utility.
 2. Test single and multi-quantity sales, partial sales, edits, returns/cancellations, discounts, shipping, and platform fees.
@@ -86,7 +86,7 @@ Exit criteria: sales and realized-profit totals match expected cent-accurate val
 
 ### 6. Migrate expenses, recurring expenses, accounts, invoices, and goals
 
-Status: **Complete** — `selvora-api/validation/schemas.js` + `selvora-api/routes/goals.js`.
+Status: **Complete** — `profit-tracker-api/validation/schemas.js` + `profit-tracker-api/routes/goals.js`.
 
 1. Migrate expenses and recurring expenses first, including generated occurrences and cash-flow totals.
 2. Migrate account credit limits and cashback values, using the rate scale for percentages.
@@ -97,7 +97,7 @@ Exit criteria: all supporting finance flows use decimal fields and tests cover n
 
 ### 7. Migrate reports, imports, exports, and API serialization
 
-Status: **Complete** — `selvora-api/services/decimalFinance.js`, applied to `routes/analytics.js`, `routes/creditcard.js`, `routes/receipts.js`.
+Status: **Complete** — `profit-tracker-api/services/decimalFinance.js`, applied to `routes/analytics.js`, `routes/creditcard.js`, `routes/receipts.js`.
 
 1. Update analytics, dashboards, cash flow, tax-exempt reporting, and receipt totals to use exact values.
 2. Define the API contract for decimals: return normalized currency strings for money, normalized strings/rates for precision-sensitive fields, and format them in the client.
@@ -110,7 +110,7 @@ Exit criteria: every financial screen agrees with the same fixture totals and AP
 
 Status: **Partially complete** — read cutover done; column removal deliberately deferred (see below).
 
-1. ~~After a full production verification window, make decimal fields required and read only those fields.~~ Done differently: every money/rate field in every API response is now sourced from its Decimal mirror (`selvora-api/services/decimalRead.js`), without making the columns themselves required or removing the Float columns — this keeps the change fully reversible, since the plan's "full production verification window" for the irreversible column drop has not yet elapsed.
+1. ~~After a full production verification window, make decimal fields required and read only those fields.~~ Done differently: every money/rate field in every API response is now sourced from its Decimal mirror (`profit-tracker-api/services/decimalRead.js`), without making the columns themselves required or removing the Float columns — this keeps the change fully reversible, since the plan's "full production verification window" for the irreversible column drop has not yet elapsed.
 2. Run a final reconciliation report before deleting legacy columns. Done — see `qa/CURRENCY_MIGRATION_AUDIT.md` addendum. Zero unexpected-null mirrors, zero drift beyond $0.005 across every money/rate column in production.
 3. Create a separate, reversible migration to remove Float columns only after the reconciliation is approved. **Not done** — intentionally deferred pending explicit approval, since this step is irreversible and the plan gates it on a production verification window.
 4. Update the data dictionary and this file with the final schema. Will happen alongside step 3.

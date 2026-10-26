@@ -17,7 +17,7 @@ some write paths as UTC-midnight timestamps. When displayed via
 timezone — anyone in a US timezone (west of UTC) can see that UTC-midnight
 value roll back to the previous calendar day.
 
-The team already has a fix for this pattern in one place: `selvora-api`'s
+The team already has a fix for this pattern in one place: `profit-tracker-api`'s
 action-payload date parsing (`parseActionDate` in
 `services/statusTransitions.js`, and the sibling helper in
 `routes/sales.js`/`routes/inventory.js`) reads a date-only input as **local
@@ -32,20 +32,20 @@ constant.
 least 22 frontend files, found via:
 
 ```
-grep -rln "toLocaleDateString" selvora-app/src/pages selvora-app/src/components --include="*.jsx"
+grep -rln "toLocaleDateString" profit-tracker-app/src/pages profit-tracker-app/src/components --include="*.jsx"
 ```
 
 Confirmed call sites include (not exhaustive — re-run the grep above for the
 current list before starting the fix):
 
-- `selvora-app/src/pages/AddSale.jsx`
-- `selvora-app/src/pages/AddTransaction.jsx`
-- `selvora-app/src/pages/Analytics.jsx`
-- `selvora-app/src/pages/CashFlow.jsx`
-- `selvora-app/src/pages/CreditCard.jsx`
-- `selvora-app/src/pages/Dashboard.jsx`
-- `selvora-app/src/pages/Expenses.jsx`
-- `selvora-app/src/pages/Receipts.jsx`
+- `profit-tracker-app/src/pages/AddSale.jsx`
+- `profit-tracker-app/src/pages/AddTransaction.jsx`
+- `profit-tracker-app/src/pages/Analytics.jsx`
+- `profit-tracker-app/src/pages/CashFlow.jsx`
+- `profit-tracker-app/src/pages/CreditCard.jsx`
+- `profit-tracker-app/src/pages/Dashboard.jsx`
+- `profit-tracker-app/src/pages/Expenses.jsx`
+- `profit-tracker-app/src/pages/Receipts.jsx`
 
 ## What the user asked for
 

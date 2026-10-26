@@ -4,4 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| ui/overhaul | Big UI overhaul (dependency/dead-code cleanup + full redesign pass across Dashboard, sidebar, shell layout, count-up numbers, etc.) staying off main until the whole overhaul is done and tested on localhost | selvora-app/src (broad), selvora-app/package.json, selvora-api/package.json, selvora-api/services/discord{StrategyOptions,TokenExchange}.js | In progress | 2026-10-23 |
+| feat/dashboard-count-up-numbers | Animate big Dashboard numbers (stat cards, Goals widget) counting up on load/refresh/navigation, old->new on update, via framer-motion | profit-tracker-app/package.json, profit-tracker-app/src/components/UI/CountUp.jsx, profit-tracker-app/src/pages/Dashboard.jsx | In progress | 2026-10-22 |
