@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.94',
+    date: '2026-10-28',
+    notes: 'Fixed the Add Transaction page so you can scroll down to the sold section and the Add Transaction button.',
+  },
+  {
     version: '0.93',
     date: '2026-10-25',
     notes: 'Completed full brand unification to Profit Tracker across tutorials, calendars, documentation, and system services.',
