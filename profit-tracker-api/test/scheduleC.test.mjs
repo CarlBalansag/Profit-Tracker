@@ -4,7 +4,9 @@ const harness = createRequire(import.meta.url)('../../qa/harness.cjs');
 let server, base;
 beforeAll(async () => { server = harness.app().listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve)); base = `http://127.0.0.1:${server.address().port}`; });
 afterAll(() => server.close());
-beforeEach(() => harness.reset());
+// These tests cover manual-expense review; the fixture sale's own label and fee
+// (which Schedule C now includes automatically) are covered in scheduleCSaleCosts.test.mjs.
+beforeEach(() => { harness.reset(); Object.assign(harness.db.sales[0], { sale_shipping: 0, commission_fee: 0 }); });
 const request = async (path, method = 'GET', body, unauthenticated = false) => {
   const response = await fetch(`${base}/api/${path}`, { method, headers: { 'Content-Type': 'application/json', 'X-QA-Unauthenticated': String(unauthenticated) }, body: body ? JSON.stringify(body) : undefined });
   return { status: response.status, data: await response.json() };

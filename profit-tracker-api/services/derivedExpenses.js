@@ -78,6 +78,7 @@ function derivedExpenseLines(inventories = []) {
           date: sale.sale_date,
           payment_method_id: card ? card.id : null,
           payment_method: card ? { id: card.id, name: card.name, type: card.type } : null,
+          platform_name: sale.platform?.name || null,
           // No card means the marketplace took it out of the sale's payout.
           paid_from_payout: !card,
         });

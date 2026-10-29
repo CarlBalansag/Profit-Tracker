@@ -117,12 +117,12 @@ describe('GET /api/expenses/derived', () => {
     expect(response.status).toBe(401);
   });
 
-  it('does not add computed lines to GET /api/expenses, Schedule C, or the stored expense table', async () => {
+  it('does not add computed lines to GET /api/expenses or the stored expense table; Schedule C gets only the sale lines', async () => {
     const manual = await get('/api/expenses');
     expect(manual.body.map((expense) => expense.name)).toEqual(['QA Storage']);
     harness.db.user[0].schedule_c_enabled = true;
     const scheduleC = await get('/api/schedule-c?year=2026');
-    expect(scheduleC.body.rows.map((row) => row.name)).toEqual(['QA Storage']);
+    expect(scheduleC.body.rows.map((row) => row.name)).toEqual(['QA Multi-unit Sneaker · Platform fee', 'QA Multi-unit Sneaker · Shipping label', 'QA Storage']);
   });
 
   it('agrees with the Dashboard totals the same costs already feed', async () => {
