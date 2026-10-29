@@ -5,7 +5,7 @@ export const CHANGELOG = [
   {
     version: '0.94',
     date: '2026-10-28',
-    notes: 'The Expenses tab now lists the tax, shipping, and fees from your purchases and sales automatically, so you no longer need to enter shipping labels or platform fees twice.',
+    notes: 'The Expenses tab now lists the tax, shipping, and fees from your purchases and sales automatically, including gift cards as credits, so you no longer need to enter shipping labels or platform fees twice.',
   },
   {
     version: '0.93',

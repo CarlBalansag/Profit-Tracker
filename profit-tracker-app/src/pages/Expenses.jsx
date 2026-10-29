@@ -31,11 +31,17 @@ const DERIVED_CATEGORIES = [
   { value: 'PURCHASE_FEE',      label: 'Purchase Fee',     color: 'text-pink-400' },
   { value: 'SHIPPING_LABEL',    label: 'Shipping Label',   color: 'text-lime-400' },
   { value: 'SALE_PLATFORM_FEE', label: 'Platform Fee',     color: 'text-purple-400' },
+  { value: 'GIFT_CARD_CREDIT',  label: 'Gift Card Credit', color: 'text-emerald-400' },
 ];
 const CATEGORY_MAP = Object.fromEntries([...CATEGORIES, ...LEGACY_CATEGORIES, ...DERIVED_CATEGORIES].map(c => [c.value, c]));
 
 const SOURCE_LABELS = { manual: 'Manual', purchase: 'From purchase', sale: 'From sale' };
 const sumAmounts = rows => rows.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+// Gift card lines are negative credits; show them as "−$50.00", never "$-50.00".
+const formatMoney = value => {
+  const rounded = Math.round((Number(value) || 0) * 100) / 100;
+  return `${rounded < 0 ? '−' : ''}$${Math.abs(rounded).toFixed(2)}`;
+};
 
 const FREQUENCIES = [
   { value: 'weekly',   label: 'Weekly' },
@@ -512,8 +518,8 @@ const Expenses = () => {
               <span className="text-xs text-gray-500 uppercase tracking-wider">{card.label}</span>
               {card.icon}
             </div>
-            <p className="text-xl font-bold text-white">${totals[card.key].ytd.toFixed(2)}</p>
-            <p className="text-[11px] text-gray-500 mt-1">This month: ${totals[card.key].month.toFixed(2)}</p>
+            <p className="text-xl font-bold text-white">{formatMoney(totals[card.key].ytd)}</p>
+            <p className="text-[11px] text-gray-500 mt-1">This month: {formatMoney(totals[card.key].month)}</p>
           </div>
         ))}
         <div className="rounded-xl p-4 bg-white/[0.02] border border-white/10">
@@ -709,7 +715,7 @@ const Expenses = () => {
                       <td className="px-4 py-3.5 text-gray-500 text-xs max-w-[200px] truncate">
                         {exp.notes || <span className="text-gray-700">—</span>}
                       </td>
-                      <td className="px-4 py-3.5 text-right font-semibold text-red-400">${Number(exp.amount).toFixed(2)}</td>
+                      <td className={`px-4 py-3.5 text-right font-semibold whitespace-nowrap ${Number(exp.amount) < 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatMoney(exp.amount)}</td>
                       <td className="px-4 py-3.5">
                         {isDerived ? (
                           <div className="flex items-center justify-center">
@@ -740,7 +746,7 @@ const Expenses = () => {
               <tfoot>
                 <tr className="border-t border-white/[0.08] bg-white/[0.015]">
                   <td colSpan={5} className="px-4 py-3 text-xs text-gray-500">{filtered.length} expense{filtered.length !== 1 ? 's' : ''}</td>
-                  <td className="px-4 py-3 text-right text-sm font-bold text-red-400">${sumAmounts(filtered).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-right text-sm font-bold text-red-400">{formatMoney(sumAmounts(filtered))}</td>
                   <td />
                 </tr>
               </tfoot>

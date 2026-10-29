@@ -33,11 +33,12 @@ describe('GET /api/expenses/derived', () => {
   it('returns one read-only line per non-zero purchase and sale cost, labeled with the product', async () => {
     const res = await get('/api/expenses/derived');
     expect(res.status).toBe(200);
-    // Fixture: tax 40, inbound shipping 20, fees 10 on the purchase; label 12, commission 15 on the sale.
+    // Fixture: tax 40, inbound shipping 20, fees 10, gift card 50 on the purchase; label 12, commission 15 on the sale.
     expect(res.body.map((line) => [line.name, line.category, line.amount, line.source])).toEqual([
       ['QA Multi-unit Sneaker · Platform fee', 'SALE_PLATFORM_FEE', 15, 'sale'],
       ['QA Multi-unit Sneaker · Shipping label', 'SHIPPING_LABEL', 12, 'sale'],
       ['QA Multi-unit Sneaker · Purchase fee', 'PURCHASE_FEE', 10, 'purchase'],
+      ['QA Multi-unit Sneaker · Gift card', 'GIFT_CARD_CREDIT', -50, 'purchase'],
       ['QA Multi-unit Sneaker · Inbound shipping', 'INBOUND_SHIPPING', 20, 'purchase'],
       ['QA Multi-unit Sneaker · Sales tax', 'PURCHASE_TAX', 40, 'purchase'],
     ]);
@@ -53,19 +54,26 @@ describe('GET /api/expenses/derived', () => {
     expect(new Date(saleLine.date).toISOString()).toBe('2026-09-03T12:00:00.000Z');
   });
 
-  it('hides gift cards and zero-amount costs', async () => {
-    Object.assign(harness.db.inventory[0], { sales_tax: 0, fees: 0 });
+  it('skips zero-amount costs, including a zero gift card', async () => {
+    Object.assign(harness.db.inventory[0], { sales_tax: 0, fees: 0, gift_card_amount: 0 });
     harness.db.sales[0].commission_fee = 0;
     const res = await get('/api/expenses/derived');
     expect(res.body.map((line) => line.category).sort()).toEqual(['INBOUND_SHIPPING', 'SHIPPING_LABEL']);
-    expect(res.body.some((line) => /gift/i.test(line.name))).toBe(false);
+  });
+
+  it('lists a gift card as a negative credit on the purchase date with the purchase card', async () => {
+    harness.db.inventory[0].gift_card_amount = 12.5;
+    const [credit] = byCategory((await get('/api/expenses/derived')).body, 'GIFT_CARD_CREDIT');
+    expect(credit).toMatchObject({ id: `purchase:${harness.ids.inventory}:gift_card`, amount: -12.5, source: 'purchase', readonly: true, cost_type: 'Gift card' });
+    expect(new Date(credit.date).toISOString()).toBe('2026-09-01T12:00:00.000Z');
+    expect(credit.payment_method.id).toBe(harness.ids.card);
   });
 
   it.each(['CANCELLED', 'RETURNED', 'DISPUTED'])('excludes %s sales (either status column) but keeps the purchase lines', async (status) => {
     harness.db.sales[0].status = status;
     let res = await get('/api/expenses/derived');
     expect(res.body.filter((line) => line.source === 'sale')).toEqual([]);
-    expect(res.body.filter((line) => line.source === 'purchase')).toHaveLength(3);
+    expect(res.body.filter((line) => line.source === 'purchase')).toHaveLength(4);
 
     harness.db.sales[0].status = 'SOLD';
     harness.db.sales[0].workflow_status = status;
@@ -101,7 +109,7 @@ describe('GET /api/expenses/derived', () => {
     harness.db.sales.push({ ...harness.db.sales[0], id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', inventory_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' });
     const res = await get('/api/expenses/derived');
     expect(res.body.some((line) => line.name.startsWith('Private item'))).toBe(false);
-    expect(res.body).toHaveLength(5);
+    expect(res.body).toHaveLength(6);
   });
 
   it('requires authentication', async () => {
@@ -125,10 +133,10 @@ describe('GET /api/expenses/derived', () => {
     expect(sum(byCategory(lines, 'SHIPPING_LABEL'))).toBe(stats.saleShipping);
     expect(sum(byCategory(lines, 'SALE_PLATFORM_FEE'))).toBe(stats.commissionFees);
     expect(sum(byCategory(lines, 'PURCHASE_TAX'))).toBe(stats.totalTax);
-    // Purchase spend = item cost + every purchase line - gift card.
+    // Purchase spend = item cost + every purchase line (the gift card line is already negative).
     const inv = harness.db.inventory[0];
     const purchaseLines = sum(lines.filter((line) => line.source === 'purchase'));
-    expect(inv.unit_purchase_cost * inv.qty_purchased + purchaseLines - inv.gift_card_amount).toBe(stats.totalCost);
+    expect(inv.unit_purchase_cost * inv.qty_purchased + purchaseLines).toBe(stats.totalCost);
   });
 });
 

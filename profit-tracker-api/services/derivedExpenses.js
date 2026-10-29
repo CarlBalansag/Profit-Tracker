@@ -11,11 +11,13 @@
 const { decimal, isRealizedSale } = require('./decimalFinance');
 const { withExactFields, MAPPINGS } = require('./decimalRead');
 
-// Gift cards are intentionally omitted (product decision: hidden for now).
+// A gift card reduces what the purchase cost (batchCost subtracts it), so it
+// is listed as a negative credit line.
 const PURCHASE_LINES = [
   { field: 'sales_tax',             category: 'PURCHASE_TAX',     label: 'Sales tax',        key: 'tax' },
   { field: 'shipping_cost_inbound', category: 'INBOUND_SHIPPING', label: 'Inbound shipping', key: 'shipping' },
   { field: 'fees',                  category: 'PURCHASE_FEE',     label: 'Purchase fee',     key: 'fees' },
+  { field: 'gift_card_amount',      category: 'GIFT_CARD_CREDIT', label: 'Gift card',        key: 'gift_card', credit: true },
 ];
 const SALE_LINES = [
   { field: 'sale_shipping',  category: 'SHIPPING_LABEL',    label: 'Shipping label', key: 'shipping' },
@@ -33,8 +35,9 @@ function derivedExpenseLines(inventories = []) {
       ? { id: inv.payment_method.id, name: inv.payment_method.name, type: inv.payment_method.type }
       : null;
     for (const line of PURCHASE_LINES) {
-      const amount = money(inv[line.field]);
-      if (amount <= 0) continue;
+      const value = money(inv[line.field]);
+      if (value <= 0) continue;
+      const amount = line.credit ? -value : value;
       lines.push({
         id: `purchase:${inv.id}:${line.key}`,
         source: 'purchase',

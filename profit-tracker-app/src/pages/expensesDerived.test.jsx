@@ -132,6 +132,20 @@ describe('Expenses tab: costs from transactions', () => {
     expect(within(dialog).getAllByRole('combobox')[0].value).toBe('SHIPPING');
   });
 
+  it('shows a gift card as a negative credit that lowers the from-transactions and total figures', async () => {
+    const giftCard = { id: 'purchase:inv-1:gift_card', source: 'purchase', readonly: true, inventory_id: 'inv-1', sale_id: null, name: 'Nike Dunk Low · Gift card', category: 'GIFT_CARD_CREDIT', amount: -25, date: earlierThisYear, payment_method: null };
+    mockApi({ derived: jsonResponse([...DERIVED, giftCard]) });
+    renderPage();
+    const row = (await screen.findByText('Nike Dunk Low · Gift card')).closest('tr');
+    expect(within(row).getByText('−$25.00')).toBeInTheDocument();
+    expect(within(row).getByText('Gift Card Credit')).toBeInTheDocument();
+    expect(within(row).getByText('From purchase')).toBeInTheDocument();
+    expect(within(total('derived')).getByText('−$9.10')).toBeInTheDocument();
+    expect(within(total('all')).getByText('$6.00')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'derived' } });
+    expect(screen.getByText('$90.90', { selector: 'tfoot td' })).toBeInTheDocument();
+  });
+
   it('still shows manual expenses and warns when the transaction costs fail to load', async () => {
     mockApi({ derived: jsonResponse({ error: 'boom' }, false) });
     renderPage();
