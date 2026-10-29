@@ -48,7 +48,10 @@ router.get('/derived', isAuthenticated, async (req, res, next) => {
   try {
     const inventories = await prisma.inventory.findMany({
       where: { user_id: req.user.id },
-      include: { sales: true, payment_method: { select: { id: true, name: true, type: true } } },
+      include: {
+        sales: { include: { sale_shipping_payment_method: { select: { id: true, name: true, type: true } } } },
+        payment_method: { select: { id: true, name: true, type: true } },
+      },
     });
     res.json(derivedExpenseLines(inventories));
   } catch (err) {

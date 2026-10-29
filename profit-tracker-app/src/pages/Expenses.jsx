@@ -710,7 +710,9 @@ const Expenses = () => {
                       <td className="px-4 py-3.5 text-xs text-gray-400 whitespace-nowrap">
                         {exp.payment_method
                           ? <span className="inline-flex items-center gap-1"><CreditCard className="w-3 h-3 text-gray-500" />{exp.payment_method.name}</span>
-                          : <span className="text-gray-700">—</span>}
+                          : exp.paid_from_payout
+                            ? <span className="text-gray-500 italic" title="Taken out of the sale's payout, so no card was charged">From payout</span>
+                            : <span className="text-gray-700">—</span>}
                       </td>
                       <td className="px-4 py-3.5 text-gray-500 text-xs max-w-[200px] truncate">
                         {exp.notes || <span className="text-gray-700">—</span>}

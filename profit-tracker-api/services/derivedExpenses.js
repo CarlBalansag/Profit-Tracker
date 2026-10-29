@@ -19,8 +19,10 @@ const PURCHASE_LINES = [
   { field: 'fees',                  category: 'PURCHASE_FEE',     label: 'Purchase fee',     key: 'fees' },
   { field: 'gift_card_amount',      category: 'GIFT_CARD_CREDIT', label: 'Gift card',        key: 'gift_card', credit: true },
 ];
+// A label may have been bought on a card (cardField); a platform fee is always
+// taken out of the payout, so it never has one.
 const SALE_LINES = [
-  { field: 'sale_shipping',  category: 'SHIPPING_LABEL',    label: 'Shipping label', key: 'shipping' },
+  { field: 'sale_shipping',  category: 'SHIPPING_LABEL',    label: 'Shipping label', key: 'shipping', cardField: 'sale_shipping_payment_method' },
   { field: 'commission_fee', category: 'SALE_PLATFORM_FEE', label: 'Platform fee',   key: 'commission' },
 ];
 
@@ -61,6 +63,7 @@ function derivedExpenseLines(inventories = []) {
       for (const line of SALE_LINES) {
         const amount = money(sale[line.field]);
         if (amount <= 0) continue;
+        const card = line.cardField ? sale[line.cardField] : null;
         lines.push({
           id: `sale:${sale.id}:${line.key}`,
           source: 'sale',
@@ -73,8 +76,10 @@ function derivedExpenseLines(inventories = []) {
           category: line.category,
           amount,
           date: sale.sale_date,
-          payment_method_id: null,
-          payment_method: null,
+          payment_method_id: card ? card.id : null,
+          payment_method: card ? { id: card.id, name: card.name, type: card.type } : null,
+          // No card means the marketplace took it out of the sale's payout.
+          paid_from_payout: !card,
         });
       }
     }

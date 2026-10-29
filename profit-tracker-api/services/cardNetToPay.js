@@ -165,6 +165,44 @@ async function computeCardDashboard(prisma, userId, monthParam) {
     }
   }
 
+  // Shipping labels bought on a credit card (Sales.sale_shipping_payment_method_id)
+  // are card spend in the month of the sale, and earn the card's default rate --
+  // there is no store to match a category rate against. Only realized sales
+  // count, the same rule as every sale-side total.
+  const labelSales = await prisma.sales.findMany({
+    where: {
+      inventory: { user_id: userId },
+      sale_date: { gte: monthStart, lt: monthEnd },
+      sale_shipping_payment_method: { type: 'Credit' },
+    },
+    include: { inventory: true, sale_shipping_payment_method: true },
+  });
+  for (const sale of labelSales) {
+    if (!isRealizedSale(sale)) continue;
+    const card = cardMap[sale.sale_shipping_payment_method_id];
+    const labelCost = new Decimal(sale.sale_shipping_decimal ?? sale.sale_shipping ?? 0);
+    if (!card || !labelCost.greaterThan(0)) continue;
+    const rate = Math.max(0, Number(sale.sale_shipping_payment_method.default_cashback_rate) || 0);
+    const labelCashback = labelCost.times(rate).div(100);
+    card.totalSpend = card.totalSpend.plus(labelCost);
+    card.cashbackEarned = card.cashbackEarned.plus(labelCashback);
+    card.txnCount += 1;
+    card.items.push({
+      id: sale.inventory_id,
+      saleId: sale.id,
+      kind: 'shipping_label',
+      product: `${sale.inventory.product_name} · Shipping label`,
+      cost: money(labelCost),
+      cashback: money(labelCashback),
+      status: 'Shipping label',
+      revenue: null,
+      netPnl: null,
+      lossAmount: 0,
+      lossToRedeem: 0,
+      cashbackRate: rate,
+    });
+  }
+
   const cardsDecimal = Object.values(cardMap).map(card => {
     const cashbackToRedeem = Decimal.min(card.cashbackEarned, card.totalLosses);
     const cashbackToKeep = card.cashbackEarned.minus(cashbackToRedeem);

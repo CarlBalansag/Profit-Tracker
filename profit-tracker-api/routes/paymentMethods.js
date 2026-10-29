@@ -5,7 +5,7 @@ const { validateBody } = require('../middleware/validate');
 const { paymentMethod } = require('../validation/schemas');
 const { publishCalendarFeed } = require('../services/calendarFeed');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
-const { Decimal, batchCost } = require('../services/decimalFinance');
+const { Decimal, batchCost, isRealizedSale } = require('../services/decimalFinance');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -26,7 +26,7 @@ const parseRates = (method) => withExactFields({
 // this page has no month selector (Card Tracker is where monthly detail lives).
 router.get('/', isAuthenticated, async (req, res, next) => {
   try {
-    const [methods, inventories] = await Promise.all([
+    const [methods, inventories, labelSales] = await Promise.all([
       prisma.paymentMethod.findMany({ where: { user_id: req.user.id } }),
       prisma.inventory.findMany({
         where: { user_id: req.user.id, payment_method_id: { not: null } },
@@ -35,11 +35,21 @@ router.get('/', isAuthenticated, async (req, res, next) => {
           sales_tax: true, shipping_cost_inbound: true, fees: true, gift_card_amount: true,
         },
       }),
+      // Shipping labels bought on a card count as that card's spend too,
+      // matching the Credit Card page (services/cardNetToPay.js).
+      prisma.sales.findMany({
+        where: { inventory: { user_id: req.user.id }, sale_shipping_payment_method_id: { not: null } },
+        select: { sale_shipping_payment_method_id: true, sale_shipping: true, status: true, workflow_status: true },
+      }),
     ]);
     const spendByCard = {};
     for (const inv of inventories) {
       const prior = spendByCard[inv.payment_method_id] || new Decimal(0);
       spendByCard[inv.payment_method_id] = prior.plus(batchCost(inv));
+    }
+    for (const sale of labelSales.filter(sale => sale.sale_shipping_payment_method_id && isRealizedSale(sale))) {
+      const prior = spendByCard[sale.sale_shipping_payment_method_id] || new Decimal(0);
+      spendByCard[sale.sale_shipping_payment_method_id] = prior.plus(sale.sale_shipping || 0);
     }
     const withSpend = methods.map(method => ({
       ...method,
