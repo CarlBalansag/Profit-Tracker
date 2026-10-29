@@ -5,6 +5,7 @@ const { validateBody } = require('../middleware/validate');
 const { createExpense, updateExpense } = require('../validation/schemas');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 const { requireOwned } = require('../services/ownership');
+const { derivedExpenseLines } = require('../services/derivedExpenses');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -35,6 +36,21 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       include: { payment_method: { select: { id: true, name: true, type: true } } },
     });
     res.json(expenses.map(exactExpense));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET read-only lines computed from purchases and sales (tax, shipping, fees,
+// commission). Kept separate from GET / so Schedule C and MCP keep seeing only
+// manual expenses -- see services/derivedExpenses.js.
+router.get('/derived', isAuthenticated, async (req, res, next) => {
+  try {
+    const inventories = await prisma.inventory.findMany({
+      where: { user_id: req.user.id },
+      include: { sales: true, payment_method: { select: { id: true, name: true, type: true } } },
+    });
+    res.json(derivedExpenseLines(inventories));
   } catch (err) {
     next(err);
   }

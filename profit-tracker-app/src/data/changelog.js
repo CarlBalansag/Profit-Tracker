@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.94',
+    date: '2026-10-28',
+    notes: 'The Expenses tab now lists the tax, shipping, and fees from your purchases and sales automatically, so you no longer need to enter shipping labels or platform fees twice.',
+  },
+  {
     version: '0.93',
     date: '2026-10-25',
     notes: 'Completed full brand unification to Profit Tracker across tutorials, calendars, documentation, and system services.',

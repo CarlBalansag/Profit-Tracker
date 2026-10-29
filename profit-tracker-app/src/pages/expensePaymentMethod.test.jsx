@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import Expenses from './Expenses';
 
 const mocks = vi.hoisted(() => ({ apiFetch: vi.fn() }));
@@ -29,7 +30,7 @@ describe('Expense form: card (payment method) selection', () => {
   });
 
   it('lists every payment method as a Card option, defaulting to no card', async () => {
-    render(<Expenses />);
+    render(<MemoryRouter><Expenses /></MemoryRouter>);
     fireEvent.click(await screen.findByRole('button', { name: 'Add Expense' }));
     expect(await screen.findByRole('heading', { name: 'Add Expense' })).toBeInTheDocument();
 
@@ -40,11 +41,11 @@ describe('Expense form: card (payment method) selection', () => {
   });
 
   it('submits the selected card as payment_method_id when adding a one-off expense', async () => {
-    render(<Expenses />);
+    render(<MemoryRouter><Expenses /></MemoryRouter>);
     fireEvent.click(await screen.findByRole('button', { name: 'Add Expense' }));
     await screen.findByRole('heading', { name: 'Add Expense' });
 
-    fireEvent.change(screen.getByPlaceholderText('e.g. Shipping Label Purchase'), { target: { value: 'Label printer paper' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Bubble mailers'), { target: { value: 'Label printer paper' } });
     fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '12.50' } });
     fireEvent.change(screen.getByLabelText(/Card/), { target: { value: 'card-2' } });
 
@@ -58,11 +59,11 @@ describe('Expense form: card (payment method) selection', () => {
   });
 
   it('omits a card as null when none is selected', async () => {
-    render(<Expenses />);
+    render(<MemoryRouter><Expenses /></MemoryRouter>);
     fireEvent.click(await screen.findByRole('button', { name: 'Add Expense' }));
     await screen.findByRole('heading', { name: 'Add Expense' });
 
-    fireEvent.change(screen.getByPlaceholderText('e.g. Shipping Label Purchase'), { target: { value: 'Cash tip' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Bubble mailers'), { target: { value: 'Cash tip' } });
     fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '5' } });
 
     mocks.apiFetch.mockImplementationOnce(() => Promise.resolve(jsonResponse({ id: 'new-exp' })));
@@ -81,7 +82,7 @@ describe('Expense form: card (payment method) selection', () => {
       if (path === '/api/recurring-expenses') return Promise.resolve(jsonResponse([]));
       return Promise.resolve(jsonResponse({}));
     });
-    render(<Expenses />);
+    render(<MemoryRouter><Expenses /></MemoryRouter>);
     fireEvent.click(await screen.findByTitle('Edit'));
     await screen.findByRole('heading', { name: 'Edit Expense' });
 
