@@ -414,6 +414,8 @@ const AddTransaction = () => {
 
 
   return (
+    // The app shell never scrolls; each page owns its scroll container.
+    <div className="h-full overflow-auto">
     <div className="container max-w-7xl mx-auto px-4 py-6 lg:px-8 lg:py-10">
 
       {/* Header */}
@@ -1299,6 +1301,7 @@ const AddTransaction = () => {
           </div>
         </div>
       </form>
+    </div>
     </div>
   );
 };

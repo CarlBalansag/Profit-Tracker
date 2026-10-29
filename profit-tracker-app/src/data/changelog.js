@@ -3,9 +3,14 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
-    version: '0.94',
+    version: '0.95',
     date: '2026-10-28',
     notes: 'The Expenses tab now lists the tax, shipping, and fees from your purchases and sales automatically, including gift cards as credits, so you no longer need to enter shipping labels or platform fees twice.',
+  },
+  {
+    version: '0.94',
+    date: '2026-10-28',
+    notes: 'Fixed the Add Transaction page so you can scroll down to the sold section and the Add Transaction button.',
   },
   {
     version: '0.93',
