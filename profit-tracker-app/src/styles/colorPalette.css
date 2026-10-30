@@ -48,9 +48,8 @@
 }
 
 /* ---------------------------------------------------------------------------
- * Dark mode (planned, not active yet).
+ * Dark mode tokens
  * ------------------------------------------------------------------------- */
-/*
 :root[data-theme="dark"] {
   --color-background: #0b0b0b;
   --color-surface: #121212;
@@ -60,6 +59,7 @@
   --color-text-primary: #EDEDED;
   --color-text-secondary: #A0A0A0;
   --color-text-label: #8E8E99;
+  --color-text-muted: #9CA3AF;
 
   --color-accent: #A78BFA;
   --color-accent-bg: rgba(167, 139, 250, 0.12);
@@ -69,5 +69,11 @@
   --color-success-text: #34D399;
   --color-danger-bg: rgba(210, 59, 59, 0.16);
   --color-danger-text: #F87171;
+  --color-warning-bg: rgba(245, 158, 11, 0.16);
+  --color-warning-text: #FBBF24;
+  --color-info-bg: rgba(14, 165, 233, 0.16);
+  --color-info-text: #38BDF8;
+  --color-neutral-bg: rgba(255, 255, 255, 0.06);
+  --color-neutral-text: #9CA3AF;
+  --color-modal-backdrop: rgba(0, 0, 0, 0.7);
 }
-*/

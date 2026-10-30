@@ -1,0 +1,141 @@
+/* ==========================================================================
+   VIEW TRANSITION WAVY REVEAL ANIMATION
+   The rippling shape itself is generated in ThemeSwitch.jsx (buildRippleKeyframes).
+   ========================================================================== */
+:root {
+  /* SPEED / DURATION CONTROL:
+     Adjust `--theme-reveal-duration` below to make the screen ripple faster
+     or slower! (e.g. 1.0s, 1.25s, 1.5s) */
+  --theme-reveal-duration: 2s;
+}
+
+/* Old snapshot remains static underneath */
+::view-transition-old(root) {
+  animation: none;
+  z-index: 1;
+}
+
+/* Incoming snapshot is revealed by the wavy clip-path animation started from JS */
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+  z-index: 99998;
+}
+
+/* While the theme swaps, page colors change instantly so the wave reveals the
+   final colors (otherwise each element's own color fade blinks inside the wave).
+   The switch itself keeps its transitions so the knob still slides. */
+html.theme-switching *:not(.sticky-theme-switch-wrapper, .sticky-theme-switch-wrapper *),
+html.theme-switching *:not(.sticky-theme-switch-wrapper, .sticky-theme-switch-wrapper *)::before,
+html.theme-switching *:not(.sticky-theme-switch-wrapper, .sticky-theme-switch-wrapper *)::after {
+  transition: none !important;
+}
+
+/* Lifted cards (theme-lift-N) get their own layers: no default crossfade,
+   the card's fade and lift are both started from JS */
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* Ensure the toggle switch button stays floating on top during the ripple */
+.sticky-theme-switch-wrapper {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.18));
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  view-transition-name: theme-toggle-btn;
+}
+
+::view-transition-group(theme-toggle-btn) {
+  z-index: 999999;
+}
+
+::view-transition-old(theme-toggle-btn),
+::view-transition-new(theme-toggle-btn) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+.sticky-theme-switch-wrapper:hover {
+  transform: translateY(-2px);
+}
+
+/* Cross-browser wavy ripple fallback (for Firefox or browsers without View Transitions) */
+.theme-ripple-fallback {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 99990;
+  clip-path: circle(0px);
+  will-change: clip-path;
+}
+
+/* ==========================================================================
+   SWITCH: simple black and white pill.
+   Light mode = white track, black knob on the left.
+   Dark mode  = black track, white knob on the right.
+   ========================================================================== */
+.theme-switch {
+  --switch-width: 46px; /* <--- EDIT THIS TO CHANGE SIZE */
+  --switch-height: calc(var(--switch-width) / 1.84);
+  --knob-size: calc(var(--switch-height) - 6px);
+
+  display: inline-block;
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.theme-switch:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.theme-switch__track {
+  position: relative;
+  display: block;
+  width: var(--switch-width);
+  height: var(--switch-height);
+  border-radius: 999px;
+  background-color: #FFFFFF;
+  border: 1.5px solid #111111;
+  box-sizing: border-box;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.theme-switch__knob {
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: var(--knob-size);
+  height: var(--knob-size);
+  border-radius: 50%;
+  background-color: #111111;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease, color 0.3s ease;
+}
+
+.theme-switch[aria-checked="true"] .theme-switch__track {
+  background-color: #111111;
+  border-color: #FFFFFF;
+}
+
+.theme-switch[aria-checked="true"] .theme-switch__knob {
+  left: calc(100% - var(--knob-size) - 2px);
+  background-color: #FFFFFF;
+  color: #111111;
+}

@@ -28,6 +28,7 @@ import { AuthProvider } from './context/AuthContext';
 import { TutorialProvider } from './context/TutorialContext';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import { SCHEDULE_C_ENABLED } from './config/features';
+import ThemeSwitch from './components/UI/ThemeSwitch';
 
 
 function App() {
@@ -51,6 +52,7 @@ function App() {
         }}
       />
       <Router>
+        <ThemeSwitch />
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="*" element={
