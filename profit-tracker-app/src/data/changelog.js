@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.98',
+    date: '2026-10-30',
+    notes: 'Added a day/night switch in the bottom-right corner that changes the theme with a rippling wave and gently lifts cards as it passes.',
+  },
+  {
     version: '0.97',
     date: '2026-10-29',
     notes: 'The Schedule C tax worksheet is back in the sidebar. It now adds the shipping labels and platform fees from your sales automatically and warns you about expenses that look like duplicates. Turn it on in Settings.',
