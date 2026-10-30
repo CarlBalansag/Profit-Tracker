@@ -7,6 +7,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0f0f1a" />
     <title>Profit Tracker</title>
+    <script>
+      // Apply the theme before React loads so the page never flashes.
+      // Same rule as ThemeSwitch.jsx: a manual override wins, otherwise follow the OS.
+      (function () {
+        var theme = null;
+        try {
+          localStorage.removeItem('theme');
+          var override = localStorage.getItem('theme-override');
+          if (override === 'dark' || override === 'light') theme = override;
+        } catch (e) {}
+        if (!theme) {
+          var dark = false;
+          try {
+            dark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          } catch (e) {}
+          theme = dark ? 'dark' : 'light';
+        }
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

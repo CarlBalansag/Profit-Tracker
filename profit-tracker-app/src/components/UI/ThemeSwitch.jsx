@@ -82,13 +82,53 @@ function getRevealDuration() {
   return parseFloat(value) * 1000 || 1250;
 }
 
+// The theme follows the OS setting unless the user picked one with the switch.
+// The same rule runs in an inline script in index.html so the page never flashes.
+const OVERRIDE_KEY = 'theme-override';
+const DARK_QUERY = '(prefers-color-scheme: dark)';
+
+function getDarkQuery() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return null;
+  return window.matchMedia(DARK_QUERY);
+}
+
+function systemPrefersDark() {
+  return Boolean(getDarkQuery()?.matches);
+}
+
+function readOverride() {
+  try {
+    const value = localStorage.getItem(OVERRIDE_KEY);
+    return value === 'dark' || value === 'light' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeOverride(value) {
+  try {
+    if (value) localStorage.setItem(OVERRIDE_KEY, value);
+    else localStorage.removeItem(OVERRIDE_KEY);
+  } catch {
+    // Storage can be unavailable (private mode, blocked site data).
+  }
+}
+
+function getInitialIsDark() {
+  if (typeof window === 'undefined') return false;
+  // The old `theme` key stored a permanent choice; drop it so everyone starts on auto.
+  try {
+    localStorage.removeItem('theme');
+  } catch {
+    // ignore
+  }
+  const override = readOverride();
+  if (override) return override === 'dark';
+  return systemPrefersDark();
+}
+
 export default function ThemeSwitch() {
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    const saved = localStorage.getItem('theme');
-    if (saved) return saved === 'dark';
-    return document.documentElement.dataset.theme === 'dark';
-  });
+  const [isDark, setIsDark] = useState(getInitialIsDark);
 
   const [ripple, setRipple] = useState(null);
   const rippleTimeoutRef = useRef(null);
@@ -98,6 +138,23 @@ export default function ThemeSwitch() {
   useEffect(() => {
     const current = isDark ? 'dark' : 'light';
     document.documentElement.dataset.theme = current;
+  }, []);
+
+  // Follow live OS theme changes: they clear any manual override.
+  useEffect(() => {
+    const query = getDarkQuery();
+    if (!query) return undefined;
+    const handleChange = (event) => {
+      writeOverride(null);
+      setIsDark(event.matches);
+      document.documentElement.dataset.theme = event.matches ? 'dark' : 'light';
+    };
+    if (query.addEventListener) {
+      query.addEventListener('change', handleChange);
+      return () => query.removeEventListener('change', handleChange);
+    }
+    query.addListener?.(handleChange);
+    return () => query.removeListener?.(handleChange);
   }, []);
 
   const handleToggle = (e) => {
@@ -122,7 +179,8 @@ export default function ThemeSwitch() {
     const applyThemeChange = (next) => {
       setIsDark(next);
       document.documentElement.dataset.theme = next ? 'dark' : 'light';
-      localStorage.setItem('theme', next ? 'dark' : 'light');
+      // Picking the OS theme puts the user back on auto; anything else is an override.
+      writeOverride(next === systemPrefersDark() ? null : next ? 'dark' : 'light');
     };
 
     // 1. Native View Transitions API (Chrome 111+, Edge, Safari 18+)
