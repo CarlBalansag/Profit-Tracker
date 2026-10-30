@@ -49,6 +49,7 @@ const AddTransaction = () => {
     sale_price: '',
     payout_date: '',
     sale_shipping: '',
+    sale_shipping_payment_method_id: '',
     commission_fee: '',
     taxable: true,
     sale_tax_collected: '',
@@ -1013,8 +1014,8 @@ const AddTransaction = () => {
                   </Field>
                 </div>
 
-                {/* Sale Shipping, Sale Fees — row 2 */}
-                <div className="grid grid-cols-2 gap-4">
+                {/* Sale Shipping, label card, Sale Fees — row 2 */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <Field label="Sale Shipping">
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
@@ -1025,6 +1026,18 @@ const AddTransaction = () => {
                         placeholder="0.00"
                       />
                     </div>
+                  </Field>
+                  <Field label="Label Paid With">
+                    <select
+                      name="sale_shipping_payment_method_id" aria-label="Label Paid With"
+                      value={formData.sale_shipping_payment_method_id} onChange={handleChange}
+                      className={`${inputCls('green')} appearance-none`}
+                    >
+                      <option value="">From payout</option>
+                      {paymentMethods.map(pm => (
+                        <option key={pm.id} value={pm.id}>{pm.name}</option>
+                      ))}
+                    </select>
                   </Field>
                   <Field label="Sale Fees">
                     <div className="relative">

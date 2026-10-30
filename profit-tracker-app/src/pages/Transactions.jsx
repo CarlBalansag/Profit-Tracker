@@ -540,6 +540,21 @@ const Transactions = () => {
     rows.filter(r => r.platformId).map(r => [r.platformId, { id: r.platformId, name: r.platform }])
   ).values()];
 
+  // ─── Open a specific transaction (Expenses tab "Open purchase/sale" links) ───
+  // A fully sold purchase has no purchase row, so fall back to any row of the
+  // same batch -- the detail modal edits the purchase from either.
+  const openTarget = location.state?.openTransaction;
+  useEffect(() => {
+    if (!openTarget || isLoading) return;
+    const row = openTarget.saleId
+      ? rows.find(r => r.saleId === openTarget.saleId)
+      : rows.find(r => r.rawId === openTarget.inventoryId && !r.isSale) || rows.find(r => r.rawId === openTarget.inventoryId);
+    if (row) setExpandedRow(row);
+    else toast.error('That transaction no longer exists.');
+    navigate(location.pathname, { replace: true, state: null });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openTarget, isLoading]);
+
   // ─── Render ─────────────────────────────────────────────────────────────────
   if (isLoading) return <PageLoader variant="table" />;
 

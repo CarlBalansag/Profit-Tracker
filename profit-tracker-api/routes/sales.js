@@ -65,6 +65,7 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
       unit_price,
       commission_fee,
       sale_shipping,
+      sale_shipping_payment_method_id,
       sale_date,
       payout_date,
       status,
@@ -85,6 +86,7 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
     const saleQty = parseInt(quantity, 10) || 1;
     const platform = await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
     await requireOwned('buyer', buyer_id, req.user.id, 'Buyer');
+    await requireOwned('paymentMethod', sale_shipping_payment_method_id, req.user.id, 'Shipping label card');
     // The platform's preset is copied onto the sale now, so changing that
     // platform's default workflow later never rewrites this sale.
     const workflow_type = statusTransitions.resolveSaleWorkflow(platform && platform.workflow_preset);
@@ -130,6 +132,7 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
           unit_price: parseFloat(unit_price),
           commission_fee: parseFloat(commission_fee) || 0,
           sale_shipping: parseFloat(sale_shipping) || 0,
+          sale_shipping_payment_method_id: sale_shipping_payment_method_id || null,
           sale_date: parseLocalDate(sale_date) || new Date(),
           payout_date: payout_date ? parseLocalDate(payout_date) : null,
           status: resolvedStatus,
@@ -155,7 +158,7 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
   try {
     const {
       unit_price, quantity, status, commission_fee, platform_id,
-      sale_shipping, taxable, sale_tax_collected, customer_tax_exempt, exemption_type,
+      sale_shipping, sale_shipping_payment_method_id, taxable, sale_tax_collected, customer_tax_exempt, exemption_type,
       sale_date, payout_date, tracking_number,
     } = req.body;
     const existing = await prisma.sales.findUnique({
@@ -167,6 +170,7 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
     }
     const newQty = quantity !== undefined ? (parseInt(quantity) || existing.quantity) : existing.quantity;
     await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
+    await requireOwned('paymentMethod', sale_shipping_payment_method_id, req.user.id, 'Shipping label card');
     const qtyDiff = existing.quantity - newQty;
 
     // Adding a tracking number for the FIRST time *is* the add_outbound_tracking
@@ -232,6 +236,7 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
         ...workflowData,
         commission_fee: commission_fee !== undefined ? parseFloat(commission_fee) : existing.commission_fee,
         sale_shipping: sale_shipping !== undefined ? parseFloat(sale_shipping) : existing.sale_shipping,
+        sale_shipping_payment_method_id: sale_shipping_payment_method_id !== undefined ? (sale_shipping_payment_method_id || null) : existing.sale_shipping_payment_method_id,
         platform_id: platform_id !== undefined ? (platform_id || null) : existing.platform_id,
         sale_date: sale_date !== undefined ? (parseLocalDate(sale_date) || existing.sale_date) : existing.sale_date,
         payout_date: payout_date !== undefined ? (payout_date ? parseLocalDate(payout_date) : null) : existing.payout_date,

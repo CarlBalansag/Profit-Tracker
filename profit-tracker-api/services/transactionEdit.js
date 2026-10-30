@@ -34,6 +34,7 @@ async function editTransaction(prisma, inventoryId, userId, payload) {
     const ownedPlatform = await requireOwned('platform', sale.platform_id, userId, 'Sale platform');
     if (sale === payload.newSale) newSalePlatform = ownedPlatform;
     await requireOwned('buyer', sale.buyer_id, userId, 'Buyer');
+    await requireOwned('paymentMethod', sale.sale_shipping_payment_method_id, userId, 'Shipping label card');
   }
   return prisma.$transaction(async tx => {
     // Claim the inventory row before touching anything else, using the same

@@ -2,21 +2,46 @@ import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch, usePaymentMethods } from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
-  Receipt, Download, Plus, DollarSign, TrendingUp,
-  Search, X, Trash2, Pencil, RefreshCw, Pause, Play, CreditCard,
+  Receipt, Download, Plus, DollarSign,
+  Search, X, Trash2, Pencil, RefreshCw, Pause, Play, CreditCard, Lock, ExternalLink, Info,
 } from 'lucide-react';
 
+// Categories a user can pick for a manual expense. Costs that belong to one
+// purchase or sale (tax, inbound shipping, labels, platform fees) are entered
+// on that transaction and listed here automatically -- see DERIVED_CATEGORIES.
 const CATEGORIES = [
-  { value: 'CREDIT_CARD_FEE', label: 'Credit Card Fee',  color: 'text-blue-400' },
-  { value: 'MEMBERSHIP',      label: 'Membership',        color: 'text-amber-400' },
-  { value: 'PLATFORM_FEE',    label: 'Platform Fee',      color: 'text-purple-400' },
-  { value: 'SHIPPING',        label: 'Shipping',          color: 'text-green-400' },
-  { value: 'SOFTWARE',        label: 'Software / Tools',  color: 'text-cyan-400' },
-  { value: 'OTHER',           label: 'Other',             color: 'text-gray-400' },
+  { value: 'CREDIT_CARD_FEE',   label: 'Credit Card Fee',   color: 'text-blue-400' },
+  { value: 'MEMBERSHIP',        label: 'Membership',        color: 'text-amber-400' },
+  { value: 'SHIPPING_SUPPLIES', label: 'Shipping Supplies', color: 'text-green-400' },
+  { value: 'SOFTWARE',          label: 'Software / Tools',  color: 'text-cyan-400' },
+  { value: 'OTHER',             label: 'Other',             color: 'text-gray-400' },
 ];
-const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map(c => [c.value, c]));
+// Retired manual categories: still shown on existing rows, no longer offered for new ones.
+const LEGACY_CATEGORIES = [
+  { value: 'PLATFORM_FEE', label: 'Platform Fee (old)', color: 'text-purple-400' },
+  { value: 'SHIPPING',     label: 'Shipping (old)',     color: 'text-green-400' },
+];
+// Read-only lines computed by GET /api/expenses/derived.
+const DERIVED_CATEGORIES = [
+  { value: 'PURCHASE_TAX',      label: 'Purchase Tax',     color: 'text-orange-400' },
+  { value: 'INBOUND_SHIPPING',  label: 'Inbound Shipping', color: 'text-teal-400' },
+  { value: 'PURCHASE_FEE',      label: 'Purchase Fee',     color: 'text-pink-400' },
+  { value: 'SHIPPING_LABEL',    label: 'Shipping Label',   color: 'text-lime-400' },
+  { value: 'SALE_PLATFORM_FEE', label: 'Platform Fee',     color: 'text-purple-400' },
+  { value: 'GIFT_CARD_CREDIT',  label: 'Gift Card Credit', color: 'text-emerald-400' },
+];
+const CATEGORY_MAP = Object.fromEntries([...CATEGORIES, ...LEGACY_CATEGORIES, ...DERIVED_CATEGORIES].map(c => [c.value, c]));
+
+const SOURCE_LABELS = { manual: 'Manual', purchase: 'From purchase', sale: 'From sale' };
+const sumAmounts = rows => rows.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+// Gift card lines are negative credits; show them as "−$50.00", never "$-50.00".
+const formatMoney = value => {
+  const rounded = Math.round((Number(value) || 0) * 100) / 100;
+  return `${rounded < 0 ? '−' : ''}$${Math.abs(rounded).toFixed(2)}`;
+};
 
 const FREQUENCIES = [
   { value: 'weekly',   label: 'Weekly' },
@@ -156,10 +181,14 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
             <label className="block text-xs font-medium text-gray-400 mb-1.5">Expense Name *</label>
             <input
               ref={nameRef} type="text"
-              placeholder={form.recurring ? 'e.g. eBay Store Monthly Fee' : 'e.g. Shipping Label Purchase'}
+              placeholder={form.recurring ? 'e.g. eBay Store Monthly Fee' : 'e.g. Bubble mailers'}
               value={form.name} onChange={e => set('name', e.target.value)}
               className={`w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-gray-600 bg-white/[0.04] border border-white/10 focus:outline-none focus:border-${accent}-500/50`}
             />
+            <p className="flex items-start gap-1.5 mt-1.5 text-[11px] text-gray-500">
+              <Info className="w-3 h-3 mt-0.5 shrink-0" />
+              Tax, shipping, a shipping label, or a platform fee for one purchase or sale? Enter it on that transaction instead. It shows up here automatically.
+            </p>
           </div>
 
           {/* Amount + Date (one-off) or Amount + Frequency (recurring) */}
@@ -218,6 +247,7 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
                 className={`w-full px-3 py-2.5 rounded-lg text-sm text-white bg-white/[0.04] border border-white/10 focus:outline-none focus:border-${accent}-500/50 appearance-none`}>
                 <option value="" className="bg-[#16181d]">Uncategorized</option>
                 {CATEGORIES.map(c => <option key={c.value} value={c.value} className="bg-[#16181d]">{c.label}</option>)}
+                {LEGACY_CATEGORIES.filter(c => c.value === form.category).map(c => <option key={c.value} value={c.value} className="bg-[#16181d]">{c.label}</option>)}
               </select>
             </div>
             <div>
@@ -286,7 +316,10 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 const Expenses = () => {
+  const navigate = useNavigate();
   const [expenses, setExpenses]       = useState([]);
+  const [derived, setDerived]         = useState([]);
+  const [derivedFailed, setDerivedFailed] = useState(false);
   const [recurring, setRecurring]     = useState([]);
   const [loading, setLoading]         = useState(true);
   const { data: paymentMethods = [] } = usePaymentMethods();
@@ -302,16 +335,21 @@ const Expenses = () => {
 
   const [search, setSearch]     = useState('');
   const [catFilter, setCatFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
   const [sortBy, setSortBy]     = useState('DATE_DESC');
 
   const fetchAll = async () => {
     try {
-      const [expRes, recRes] = await Promise.all([
+      const [expRes, recRes, derRes] = await Promise.all([
         apiFetch(`/api/expenses`,           { credentials: 'include' }),
         apiFetch(`/api/recurring-expenses`, { credentials: 'include' }),
+        apiFetch(`/api/expenses/derived`,   { credentials: 'include' }).catch(() => null),
       ]);
       if (expRes.ok) setExpenses(await expRes.json());
       if (recRes.ok) setRecurring(await recRes.json());
+      const derivedLines = derRes?.ok ? await derRes.json() : null;
+      setDerived(Array.isArray(derivedLines) ? derivedLines : []);
+      setDerivedFailed(!Array.isArray(derivedLines));
     } catch { /* leave as-is */ }
     finally { setLoading(false); }
   };
@@ -385,13 +423,27 @@ const Expenses = () => {
   const thisMonth = now.getMonth();
   const thisYear  = now.getFullYear();
 
-  const monthlyCost = expenses
-    .filter(e => { const d = new Date(e.date); return d.getMonth() === thisMonth && d.getFullYear() === thisYear; })
-    .reduce((s, e) => s + e.amount, 0);
+  // Manual rows are editable here; derived rows are read-only views of costs
+  // stored on purchases/sales (already rounded to the cent by the API).
+  const manualRows = expenses.map(e => ({ ...e, source: 'manual' }));
+  const allRows = [...manualRows, ...derived];
+  const isThisMonth = e => { const d = new Date(e.date); return d.getMonth() === thisMonth && d.getFullYear() === thisYear; };
+  const isThisYear  = e => new Date(e.date).getFullYear() === thisYear;
+  const totals = {
+    all:     { ytd: sumAmounts(allRows.filter(isThisYear)),    month: sumAmounts(allRows.filter(isThisMonth)) },
+    manual:  { ytd: sumAmounts(manualRows.filter(isThisYear)), month: sumAmounts(manualRows.filter(isThisMonth)) },
+    derived: { ytd: sumAmounts(derived.filter(isThisYear)),    month: sumAmounts(derived.filter(isThisMonth)) },
+  };
+  const usedCategories = new Set(allRows.map(e => e.category));
+  const filterCategories = [
+    ...CATEGORIES,
+    ...LEGACY_CATEGORIES.filter(c => usedCategories.has(c.value)),
+    ...DERIVED_CATEGORIES.filter(c => usedCategories.has(c.value)),
+  ];
 
-  const ytdCost = expenses
-    .filter(e => new Date(e.date).getFullYear() === thisYear)
-    .reduce((s, e) => s + e.amount, 0);
+  const openTransaction = (line) => navigate('/transactions', {
+    state: { openTransaction: { inventoryId: line.inventory_id, saleId: line.sale_id || null } },
+  });
 
   const recurringMonthly = recurring.filter(r => r.active).reduce((s, r) => {
     if (r.frequency === 'monthly')  return s + r.amount;
@@ -401,8 +453,10 @@ const Expenses = () => {
   }, 0);
 
   // ── Filter + sort ─────────────────────────────────────────────────────────
-  const filtered = expenses
+  const filtered = allRows
     .filter(e => {
+      if (sourceFilter === 'manual' && e.source !== 'manual') return false;
+      if (sourceFilter === 'derived' && e.source === 'manual') return false;
       if (catFilter && e.category !== catFilter) return false;
       if (search) {
         const q = search.toLowerCase();
@@ -421,8 +475,8 @@ const Expenses = () => {
 
   const exportCSV = () => {
     const rows = [
-      ['Date', 'Name', 'Category', 'Amount', 'Notes'],
-      ...filtered.map(e => [new Date(e.date).toLocaleDateString(), e.name, CATEGORY_MAP[e.category]?.label || 'Uncategorized', e.amount.toFixed(2), e.notes || '']),
+      ['Date', 'Name', 'Category', 'Source', 'Amount', 'Notes'],
+      ...filtered.map(e => [new Date(e.date).toLocaleDateString(), e.name, CATEGORY_MAP[e.category]?.label || 'Uncategorized', SOURCE_LABELS[e.source], Number(e.amount).toFixed(2), e.notes || '']),
     ];
     const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const a = document.createElement('a');
@@ -438,7 +492,7 @@ const Expenses = () => {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white">Expenses</h1>
-          <p className="text-sm text-gray-500 mt-1">Track fees, memberships, and business costs</p>
+          <p className="text-sm text-gray-500 mt-1">Every business cost in one place, including tax, shipping, and fees from your purchases and sales</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={exportCSV}
@@ -454,35 +508,33 @@ const Expenses = () => {
 
       {/* Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="rounded-xl p-4 bg-white/[0.02] border border-white/10">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500 uppercase tracking-wider">This Month</span>
-            <DollarSign className="w-4 h-4 text-purple-400" />
+        {[
+          { key: 'all',     label: 'Total · Year to Date',    icon: <DollarSign className="w-4 h-4 text-purple-400" /> },
+          { key: 'manual',  label: 'Manual Expenses · YTD',   icon: <Pencil className="w-4 h-4 text-blue-400" /> },
+          { key: 'derived', label: 'From Transactions · YTD', icon: <Lock className="w-4 h-4 text-amber-400" /> },
+        ].map(card => (
+          <div key={card.key} data-testid={`expense-total-${card.key}`} className="rounded-xl p-4 bg-white/[0.02] border border-white/10">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-gray-500 uppercase tracking-wider">{card.label}</span>
+              {card.icon}
+            </div>
+            <p className="text-xl font-bold text-white">{formatMoney(totals[card.key].ytd)}</p>
+            <p className="text-[11px] text-gray-500 mt-1">This month: {formatMoney(totals[card.key].month)}</p>
           </div>
-          <p className="text-xl font-bold text-white">${monthlyCost.toFixed(2)}</p>
-        </div>
-        <div className="rounded-xl p-4 bg-white/[0.02] border border-white/10">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500 uppercase tracking-wider">Year to Date</span>
-            <TrendingUp className="w-4 h-4 text-blue-400" />
-          </div>
-          <p className="text-xl font-bold text-white">${ytdCost.toFixed(2)}</p>
-        </div>
+        ))}
         <div className="rounded-xl p-4 bg-white/[0.02] border border-white/10">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-gray-500 uppercase tracking-wider">Recurring / Mo</span>
             <RefreshCw className="w-4 h-4 text-emerald-400" />
           </div>
           <p className="text-xl font-bold text-white">${recurringMonthly.toFixed(2)}</p>
-        </div>
-        <div className="rounded-xl p-4 bg-white/[0.02] border border-white/10">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500 uppercase tracking-wider">Total Entries</span>
-            <Receipt className="w-4 h-4 text-green-400" />
-          </div>
-          <p className="text-xl font-bold text-white">{expenses.length}</p>
+          <p className="text-[11px] text-gray-500 mt-1">{recurring.filter(r => r.active).length} active</p>
         </div>
       </div>
+      <p className="-mt-3 text-[11px] text-gray-500">
+        Costs from transactions are already counted in your Dashboard profit, so don&apos;t add them again as manual expenses.
+        {derivedFailed && <span className="text-amber-400"> Costs from transactions couldn&apos;t be loaded and are missing from these totals. Refresh to try again.</span>}
+      </p>
 
       {/* ── Recurring Section ────────────────────────────────────────────────── */}
       {recurring.length > 0 && (
@@ -555,10 +607,16 @@ const Expenses = () => {
             <input type="text" placeholder="Search expenses..." value={search} onChange={e => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2 rounded-lg text-sm text-white placeholder-gray-600 bg-white/[0.02] border border-white/10 focus:outline-none focus:border-purple-500/50" />
           </div>
-          <select value={catFilter} onChange={e => setCatFilter(e.target.value)}
+          <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} aria-label="Source"
+            className="px-3 py-2 rounded-lg text-sm text-white bg-white/[0.02] border border-white/10 appearance-none focus:outline-none focus:border-purple-500/50 cursor-pointer">
+            <option value="" className="bg-gray-900">All Sources</option>
+            <option value="manual" className="bg-gray-900">Manual</option>
+            <option value="derived" className="bg-gray-900">From Transactions</option>
+          </select>
+          <select value={catFilter} onChange={e => setCatFilter(e.target.value)} aria-label="Category"
             className="px-3 py-2 rounded-lg text-sm text-white bg-white/[0.02] border border-white/10 appearance-none focus:outline-none focus:border-purple-500/50 cursor-pointer">
             <option value="" className="bg-gray-900">All Categories</option>
-            {CATEGORIES.map(c => <option key={c.value} value={c.value} className="bg-gray-900">{c.label}</option>)}
+            {filterCategories.map(c => <option key={c.value} value={c.value} className="bg-gray-900">{c.label}</option>)}
           </select>
           <select value={sortBy} onChange={e => setSortBy(e.target.value)}
             className="px-3 py-2 rounded-lg text-sm text-white bg-white/[0.02] border border-white/10 appearance-none focus:outline-none focus:border-purple-500/50 cursor-pointer">
@@ -576,7 +634,7 @@ const Expenses = () => {
             className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${catFilter === '' ? 'border-white/20 text-white bg-white/10' : 'border-white/10 text-gray-400 hover:bg-white/5'}`}>
             All
           </button>
-          {CATEGORIES.map(c => (
+          {filterCategories.map(c => (
             <button key={c.value} onClick={() => setCatFilter(catFilter === c.value ? '' : c.value)}
               className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${catFilter === c.value ? 'border-white/20 bg-white/10' : 'border-white/10 hover:bg-white/5'} ${c.color}`}>
               {c.label}
@@ -592,11 +650,11 @@ const Expenses = () => {
         ) : filtered.length === 0 ? (
           <div className="rounded-xl p-12 text-center bg-white/[0.02] border border-white/10">
             <Receipt className="w-12 h-12 text-gray-700 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-white mb-2">{expenses.length === 0 ? 'No expenses yet' : 'No results found'}</h3>
+            <h3 className="text-lg font-semibold text-white mb-2">{allRows.length === 0 ? 'No expenses yet' : 'No results found'}</h3>
             <p className="text-sm text-gray-500 mb-4">
-              {expenses.length === 0 ? 'Start tracking your business expenses and fees.' : 'Try adjusting your search or filters.'}
+              {allRows.length === 0 ? 'Start tracking your business expenses and fees.' : 'Try adjusting your search or filters.'}
             </p>
-            {expenses.length === 0 && (
+            {allRows.length === 0 && (
               <button onClick={openAdd}
                 className="px-4 py-2 rounded-lg text-sm font-medium text-purple-400 hover:bg-purple-500/10 transition-colors border border-purple-500/30">
                 Add your first expense
@@ -621,14 +679,24 @@ const Expenses = () => {
                 {filtered.map((exp, i) => {
                   const cat        = CATEGORY_MAP[exp.category];
                   const isGenerated = !!exp.recurring_expense_id;
+                  const isDerived   = exp.source !== 'manual';
                   return (
-                    <tr key={exp.id} className={`border-b border-white/[0.04] hover:bg-white/[0.025] transition-colors ${i % 2 !== 0 ? 'bg-white/[0.01]' : ''}`}>
+                    <tr key={exp.id} data-source={exp.source} className={`border-b border-white/[0.04] hover:bg-white/[0.025] transition-colors ${i % 2 !== 0 ? 'bg-white/[0.01]' : ''}`}>
                       <td className="px-4 py-3.5 text-gray-400 whitespace-nowrap">
                         {exp.date ? new Date(exp.date).toLocaleDateString() : '—'}
                       </td>
                       <td className="px-4 py-3.5 font-medium text-white">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           {exp.name}
+                          {isDerived ? (
+                            <span className="flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0" title="Edit this cost on its transaction">
+                              <Lock className="w-2.5 h-2.5" /> {SOURCE_LABELS[exp.source]}
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">
+                              Manual
+                            </span>
+                          )}
                           {isGenerated && (
                             <span className="flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shrink-0">
                               <RefreshCw className="w-2.5 h-2.5" /> recurring
@@ -642,13 +710,23 @@ const Expenses = () => {
                       <td className="px-4 py-3.5 text-xs text-gray-400 whitespace-nowrap">
                         {exp.payment_method
                           ? <span className="inline-flex items-center gap-1"><CreditCard className="w-3 h-3 text-gray-500" />{exp.payment_method.name}</span>
-                          : <span className="text-gray-700">—</span>}
+                          : exp.paid_from_payout
+                            ? <span className="text-gray-500 italic" title="Taken out of the sale's payout, so no card was charged">From payout</span>
+                            : <span className="text-gray-700">—</span>}
                       </td>
                       <td className="px-4 py-3.5 text-gray-500 text-xs max-w-[200px] truncate">
                         {exp.notes || <span className="text-gray-700">—</span>}
                       </td>
-                      <td className="px-4 py-3.5 text-right font-semibold text-red-400">${exp.amount.toFixed(2)}</td>
+                      <td className={`px-4 py-3.5 text-right font-semibold whitespace-nowrap ${Number(exp.amount) < 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatMoney(exp.amount)}</td>
                       <td className="px-4 py-3.5">
+                        {isDerived ? (
+                          <div className="flex items-center justify-center">
+                            <button onClick={() => openTransaction(exp)}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-purple-400 hover:bg-purple-500/10 transition-colors whitespace-nowrap">
+                              {exp.source === 'sale' ? 'Open sale' : 'Open purchase'} <ExternalLink className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
                         <div className="flex items-center justify-center gap-2">
                           {!isGenerated && (
                             <button onClick={() => openEditExp(exp)} title="Edit"
@@ -661,6 +739,7 @@ const Expenses = () => {
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -669,7 +748,7 @@ const Expenses = () => {
               <tfoot>
                 <tr className="border-t border-white/[0.08] bg-white/[0.015]">
                   <td colSpan={5} className="px-4 py-3 text-xs text-gray-500">{filtered.length} expense{filtered.length !== 1 ? 's' : ''}</td>
-                  <td className="px-4 py-3 text-right text-sm font-bold text-red-400">${filtered.reduce((s, e) => s + e.amount, 0).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-right text-sm font-bold text-red-400">{formatMoney(sumAmounts(filtered))}</td>
                   <td />
                 </tr>
               </tfoot>

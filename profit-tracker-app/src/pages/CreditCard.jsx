@@ -485,7 +485,7 @@ function CreditCard() {
                   </thead>
                   <tbody>
                     {activeItems.map((item, i) => (
-                      <ItemRow key={`${item.id}-${item.saleId ?? i}`} item={item} />
+                      <ItemRow key={`${item.kind ?? 'item'}-${item.id}-${item.saleId ?? i}`} item={item} />
                     ))}
                   </tbody>
                   <tfoot>

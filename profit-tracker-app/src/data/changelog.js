@@ -3,6 +3,21 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '0.97',
+    date: '2026-10-29',
+    notes: 'The Schedule C tax worksheet is back in the sidebar. It now adds the shipping labels and platform fees from your sales automatically and warns you about expenses that look like duplicates. Turn it on in Settings.',
+  },
+  {
+    version: '0.96',
+    date: '2026-10-28',
+    notes: 'You can now pick which card paid for a shipping label when recording a sale, and those labels count toward that card\'s spend and cashback on the Credit Card page.',
+  },
+  {
+    version: '0.95',
+    date: '2026-10-28',
+    notes: 'The Expenses tab now lists the tax, shipping, and fees from your purchases and sales automatically, including gift cards as credits, so you no longer need to enter shipping labels or platform fees twice.',
+  },
+  {
     version: '0.94',
     date: '2026-10-28',
     notes: 'Fixed the Add Transaction page so you can scroll down to the sold section and the Add Transaction button.',

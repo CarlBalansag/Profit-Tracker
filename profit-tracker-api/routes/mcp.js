@@ -530,7 +530,7 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('add_expense', {
-    description: 'Log a reselling business expense (shipping labels, tools, subscriptions, etc.). The account must already exist.',
+    description: 'Log a general business expense (shipping supplies, tools, subscriptions, etc.). Do NOT use this for a cost that belongs to one purchase or sale -- purchase tax/shipping/fees and a sale\'s shipping label or platform fee are entered on that purchase or sale (update_purchase / update_sale) and already appear on the Expenses tab automatically. The account must already exist.',
     inputSchema: {
       description: z.string().min(1),
       amount: z.number().nonnegative(),

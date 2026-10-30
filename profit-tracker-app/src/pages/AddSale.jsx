@@ -6,12 +6,13 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useNavigate } from 'react-router-dom';
-import { useInventory, usePlatforms, useInvalidate, apiFetch, useProductNote, useProductNoteMutations } from '../hooks/useApi';
+import { useInventory, usePlatforms, usePaymentMethods, useInvalidate, apiFetch, useProductNote, useProductNoteMutations } from '../hooks/useApi';
 
 const AddSale = () => {
   const navigate = useNavigate();
   const { data: rawInventory = [], isLoading: inventoryLoading } = useInventory();
   const { data: platforms = [], isLoading: platformsLoading } = usePlatforms();
+  const { data: paymentMethods = [] } = usePaymentMethods();
   const invalidate = useInvalidate();
   const isLoading = inventoryLoading || platformsLoading;
   // Only items with stock available
@@ -27,6 +28,7 @@ const AddSale = () => {
     unit_price: '',
     commission_fee: '',
     sale_shipping: '',
+    sale_shipping_payment_method_id: '',
     sale_date: new Date().toISOString().split('T')[0],
     payout_date: '',
     taxable: true,
@@ -334,6 +336,14 @@ const AddSale = () => {
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                         <input name="sale_shipping" type="number" step="0.01" value={formData.sale_shipping} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-green-500/50" placeholder="0.00" />
                       </div>
+                    </div>
+                    <div>
+                      <label htmlFor="sale-label-card" className="block text-xs font-medium text-gray-400 mb-1.5">Label Paid With</label>
+                      <select id="sale-label-card" name="sale_shipping_payment_method_id" value={formData.sale_shipping_payment_method_id} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-green-500/50">
+                        <option value="">From payout</option>
+                        {paymentMethods.map(pm => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
+                      </select>
+                      <p className="text-[10px] text-gray-500 mt-1">No card if the platform took it out of your payout.</p>
                     </div>
                   </div>
 

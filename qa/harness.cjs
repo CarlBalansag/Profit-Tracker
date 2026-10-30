@@ -22,6 +22,7 @@ function relations(model,row,key) {
   if(model==='inventory'&&key==='sales') return ['sales',db.sales.filter(x=>x.inventory_id===row.id)];
   if(model==='sales'&&key==='inventory') return ['inventory',db.inventory.find(x=>x.id===row.inventory_id)||null];
   if((model==='sales'||model==='account')&&key==='platform') return ['platform',db.platform.find(x=>x.id===row.platform_id)||null];
+  if(model==='sales'&&key==='sale_shipping_payment_method') return ['paymentMethod',row.sale_shipping_payment_method_id?(db.paymentMethod.find(x=>x.id===row.sale_shipping_payment_method_id)||null):null];
   if(key==='buyer') return ['buyer',row.buyer_id?(db.buyer.find(x=>x.id===row.buyer_id)||null):null];
   if(model==='apiKey'&&key==='user') return ['user',db.user.find(x=>x.id===row.user_id)||null];
   if(model==='platform'&&key==='accounts') return ['account',db.account.filter(x=>x.platform_id===row.id)];

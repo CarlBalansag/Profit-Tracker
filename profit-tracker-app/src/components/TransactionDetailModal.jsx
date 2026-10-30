@@ -154,6 +154,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
               quantity:        s.quantity ?? 1,
               commission_fee:  s.commission_fee ?? 0,
               sale_shipping:   s.sale_shipping ?? 0,
+              sale_shipping_payment_method_id: s.sale_shipping_payment_method_id ?? '',
               platform_id:     s.platform_id ?? '',
               buyer_id:        s.buyer_id ?? '',
               status:          s.status ?? 'SOLD',
@@ -263,6 +264,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             quantity:           Number(s.quantity),
             commission_fee:     Number(s.commission_fee),
             sale_shipping:      Number(s.sale_shipping),
+            sale_shipping_payment_method_id: s.sale_shipping_payment_method_id || null,
             platform_id:        s.platform_id || null,
             buyer_id:           s.buyer_id || null,
             // A handful of sale rows predate the sale-status validation
@@ -547,14 +549,23 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                               </Field>
                             </div>
 
-                            {/* Row 2b: Buyer -- who actually paid, separate from the platform above */}
-                            <div className="grid grid-cols-1 gap-3">
+                            {/* Row 2b: Buyer -- who actually paid, separate from the platform above --
+                                and the card the shipping label was bought with, if any */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               <Field label="Buyer (who paid)">
                                 <Sel
                                   value={sale.buyer_id}
                                   onChange={v => setSale(i, 'buyer_id', v)}
                                   options={buyers}
                                   placeholder="Select buyer…"
+                                />
+                              </Field>
+                              <Field label="Label paid with">
+                                <Sel
+                                  value={sale.sale_shipping_payment_method_id}
+                                  onChange={v => setSale(i, 'sale_shipping_payment_method_id', v)}
+                                  options={paymentMethods}
+                                  placeholder="From payout"
                                 />
                               </Field>
                             </div>

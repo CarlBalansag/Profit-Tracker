@@ -228,6 +228,10 @@ model Sales {
   commission_fee_decimal Decimal? @db.Decimal(19, 2)
   sale_shipping       Float     @default(0)
   sale_shipping_decimal Decimal? @db.Decimal(19, 2)
+  // Card the shipping label was bought with (Pirate Ship, Shippo, ...). NULL
+  // means the label was taken out of the marketplace payout, so no card spend.
+  sale_shipping_payment_method_id String?
+  sale_shipping_payment_method    PaymentMethod? @relation("SaleShippingCard", fields: [sale_shipping_payment_method_id], references: [id], onDelete: SetNull)
   sale_date           DateTime
   // User-entered "expected payout" reminder. Not a payment confirmation --
   // that is paid_at/paid_amount/paid_reference below.
@@ -277,6 +281,7 @@ model Sales {
   notes               String?
 
   @@index([inventory_id])
+  @@index([sale_shipping_payment_method_id])
   @@index([platform_id])
   @@index([sale_date])
   @@index([buyer_id])
@@ -357,6 +362,7 @@ model PaymentMethod {
   inventories           Inventory[]
   expenses              Expense[]
   recurring_expenses    RecurringExpense[]
+  sale_shipping_sales   Sales[]     @relation("SaleShippingCard")
 }
 
 model Expense {

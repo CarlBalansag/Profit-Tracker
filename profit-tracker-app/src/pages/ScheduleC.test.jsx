@@ -19,10 +19,10 @@ describe('Schedule C workflow', () => {
     apiFetch.mockResolvedValue(response({ enabled: false })); mount(<ScheduleC />);
     await screen.findByText('Enable Schedule C preparation in Settings to use this worksheet.');
     expect(apiFetch).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText('Reviewed expense total')).toBeNull();
+    expect(screen.queryByText('Worksheet total')).toBeNull();
   });
   it('shows reviewed totals, future-year caution, empty filters and exports all records with evidence and formula protection', async () => {
-    mount(<ScheduleC />); await screen.findByText('Reviewed expense total');
+    mount(<ScheduleC />); await screen.findByText('Worksheet total');
     fireEvent.change(screen.getByLabelText('Tax year'), { target: { value: '2030' } });
     await screen.findByText(/Planning worksheet for 2030/);
     fireEvent.change(screen.getByLabelText('Show records'), { target: { value: 'pending' } });
@@ -69,7 +69,62 @@ describe('Schedule C workflow', () => {
   });
   it('rejects malformed years and offers loading failure retry without showing stale totals', async () => {
     apiFetch.mockResolvedValueOnce(response({ error: 'Load failed' }, false)); mount(<ScheduleC />);
-    await screen.findByRole('alert'); fireEvent.click(screen.getByRole('button', { name: 'Retry loading' })); await screen.findByText('Reviewed expense total');
-    fireEvent.change(screen.getByLabelText('Tax year'), { target: { value: '10000' } }); expect(screen.getByRole('alert').textContent).toContain('four-digit'); expect(screen.queryByText('Reviewed expense total')).toBeNull();
+    await screen.findByRole('alert'); fireEvent.click(screen.getByRole('button', { name: 'Retry loading' })); await screen.findByText('Worksheet total');
+    fireEvent.change(screen.getByLabelText('Tax year'), { target: { value: '10000' } }); expect(screen.getByRole('alert').textContent).toContain('four-digit'); expect(screen.queryByText('Worksheet total')).toBeNull();
+  });
+});
+
+describe('Schedule C: sale costs included automatically', () => {
+  const saleRow = { id: 'sale:s1:shipping', source: 'sale', name: 'Cup · Shipping label', inventory_id: 'inv-1', sale_id: 's1', amount: '10.04', eligible: '10.04', status: 'automatic', issues: [], documentation_missing: false, receipt_url: null, possible_duplicate_of: null,
+    tax_details: { ...reviewed, tax_category: 'POSTAGE', payee: 'Shipping label (Wells Fargo Debit)', purpose: 'Shipping label for the sale of Cup', paid_date: '2026-09-27', payment_reference: 'Sale record s1' } };
+  const dupRow = { ...structuredClone(row), id: 'expense-2', source: 'manual', name: 'Pirate Ship label', amount: '10.04', eligible: '10.04', tax_details: { ...reviewed, tax_category: 'POSTAGE' }, possible_duplicate_of: 'Cup · Shipping label' };
+  const saleReport = () => ({ ...report(2026), total: '120.08', automatic: { total: '10.04', count: 1 }, inventory_costs_excluded: { total: '53.20', count: 6 }, possible_duplicates: 1,
+    groups: [{ id: 'SUPPLIES', label: 'Supplies / shipping supplies', line2025: '22', total: '100.00', count: 1 }, { id: 'POSTAGE', label: 'Postage / shipping labels', line2025: '27b', detail: 'Postage and shipping', total: '20.08', count: 2 }],
+    rows: [structuredClone(saleRow), structuredClone(dupRow), { ...structuredClone(row), source: 'manual', possible_duplicate_of: null }] });
+  beforeEach(() => { apiFetch.mockImplementation(async path => response(path.includes('/preferences/') ? { enabled: true } : saleReport())); });
+
+  it('shows sale costs as automatic rows with an Open sale link and no review button', async () => {
+    mount(<ScheduleC />);
+    await screen.findByText('Cup · Shipping label');
+    expect(screen.getByText(/Includes \$10.04 from 1 sale cost/)).toBeTruthy();
+    const article = screen.getByText('Cup · Shipping label').closest('article');
+    expect(article.textContent).toContain('Automatic · from your sale · Shipping label (Wells Fargo Debit) · 2026-09-27');
+    expect(article.querySelector('a').getAttribute('href')).toBe('/transactions');
+    expect(article.querySelector('button')).toBeNull();
+  });
+
+  it('explains that purchase costs are left out on purpose', async () => {
+    mount(<ScheduleC />);
+    expect(await screen.findByText(/\$53.20 this year, net of gift cards/)).toBeTruthy();
+  });
+
+  it('warns about a manual expense that duplicates a sale cost, and filters to it', async () => {
+    mount(<ScheduleC />);
+    const banner = await screen.findByRole('button', { name: /1 manual expense looks like/ });
+    expect(screen.getByText(/Possible duplicate of “Cup · Shipping label”/)).toBeTruthy();
+    fireEvent.click(banner);
+    await waitFor(() => expect(screen.queryByText('Packing tape')).toBeNull());
+    expect(screen.getByText('Pirate Ship label')).toBeTruthy();
+    expect(screen.queryByText('Cup · Shipping label')).toBeNull();
+  });
+
+  it('filters to only the automatic sale rows', async () => {
+    mount(<ScheduleC />);
+    await screen.findByText('Cup · Shipping label');
+    fireEvent.change(screen.getByLabelText('Show records'), { target: { value: 'automatic' } });
+    expect(screen.queryByText('Pirate Ship label')).toBeNull();
+    expect(screen.getByText('Cup · Shipping label')).toBeTruthy();
+  });
+
+  it('exports the source and duplicate flag in the supporting CSV', async () => {
+    mount(<ScheduleC />);
+    await screen.findByText('Cup · Shipping label');
+    fireEvent.click(screen.getByRole('button', { name: 'Export supporting CSV' }));
+    const csv = downloadFile.mock.calls[0][1];
+    const header = csv.split(/\r?\n/)[0];
+    expect(header).toContain('source');
+    expect(header).toContain('possible_duplicate_of');
+    expect(csv).toContain('sale:s1:shipping');
+    expect(csv).toContain('Cup · Shipping label');
   });
 });

@@ -74,12 +74,13 @@ router.get('/', isAuthenticated, async (req, res, next) => {
         sales: {
           select: {
             id: true, platform_id: true, quantity: true, unit_price: true, commission_fee: true,
-            sale_shipping: true, sale_date: true, payout_date: true, status: true,
+            sale_shipping: true, sale_shipping_payment_method_id: true, sale_date: true, payout_date: true, status: true,
             workflow_type: true, workflow_status: true, workflow_status_changed_at: true,
             taxable: true, sale_tax_collected: true, customer_tax_exempt: true, exemption_type: true,
             unit_price_decimal: true, commission_fee_decimal: true, sale_shipping_decimal: true, sale_tax_collected_decimal: true,
             platform: { select: { id: true, name: true, type: true, tax_exempt_place: true } },
             buyer: { select: { id: true, name: true } },
+            sale_shipping_payment_method: { select: { id: true, name: true, type: true } },
           }
         },
       },
@@ -120,6 +121,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
       buyer_id,
       commission_fee,
       sale_shipping,
+      sale_shipping_payment_method_id,
       sale_date,
       qty_sold,
       status,
@@ -167,6 +169,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
     const salePlatform = await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
     const saleWorkflow = statusTransitions.resolveSaleWorkflow(salePlatform && salePlatform.workflow_preset);
     await requireOwned('buyer', buyer_id, req.user.id, 'Buyer');
+    await requireOwned('paymentMethod', sale_shipping_payment_method_id, req.user.id, 'Shipping label card');
 
     const inventory = await prisma.$transaction(async (tx) => {
       const created = await tx.inventory.create({
@@ -206,6 +209,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
                 unit_price: parseFloat(sale_price),
                 commission_fee: parseFloat(commission_fee) || 0,
                 sale_shipping: parseFloat(sale_shipping) || 0,
+                sale_shipping_payment_method_id: sale_shipping_payment_method_id || null,
                 sale_date: parseLocalDate(sale_date || purchase_date) || new Date(),
                 payout_date: payout_date ? parseLocalDate(payout_date) : null,
                 status: 'SOLD',
