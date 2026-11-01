@@ -36,21 +36,42 @@ function isCardLike(el, viewportArea) {
   return style.backgroundColor !== 'rgba(0, 0, 0, 0)' || style.boxShadow !== 'none';
 }
 
+const CLIPPING_OVERFLOW = new Set(['auto', 'scroll', 'hidden', 'clip']);
+
 // Collects the outermost visible cards on screen (a card's inner cards are skipped).
+// A lifted card is drawn above the page, outside any scroll container, so a card
+// that a scroller (e.g. the Dashboard KPI row) clips even partly is left in the
+// page snapshot instead -- lifting it would show its hidden part during the wave.
 function findVisibleCards(root, exclude) {
   const viewportArea = window.innerWidth * window.innerHeight;
   const cards = [];
-  const visit = (el) => {
+  const visit = (el, clip) => {
     if (cards.length >= LIFT_MAX_CARDS || el === exclude) return;
     const rect = el.getBoundingClientRect();
     const onScreen = rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth;
     if (onScreen && isCardLike(el, viewportArea)) {
-      cards.push(el);
+      const insideClip = !clip || (
+        rect.left >= clip.left - 1 && rect.right <= clip.right + 1 &&
+        rect.top >= clip.top - 1 && rect.bottom <= clip.bottom + 1
+      );
+      if (insideClip) cards.push(el);
       return;
     }
-    for (const child of el.children) visit(child);
+    let childClip = clip;
+    if (el.children.length) {
+      const style = getComputedStyle(el);
+      if (CLIPPING_OVERFLOW.has(style.overflowX) || CLIPPING_OVERFLOW.has(style.overflowY)) {
+        childClip = clip
+          ? {
+              left: Math.max(clip.left, rect.left), right: Math.min(clip.right, rect.right),
+              top: Math.max(clip.top, rect.top), bottom: Math.min(clip.bottom, rect.bottom),
+            }
+          : { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+      }
+    }
+    for (const child of el.children) visit(child, childClip);
   };
-  visit(root);
+  visit(root, null);
   return cards;
 }
 
