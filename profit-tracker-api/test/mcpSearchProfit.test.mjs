@@ -83,7 +83,7 @@ describe('search', () => {
       // amount = saleEconomics revenue = 2*150 - 15 commission - 12 shipping = 273
       { id: ids.sale, type: 'sale', name: 'QA Multi-unit Sneaker', date: '2026-09-03', amount: 273, status: 'SOLD' },
       // amount = batchCost = 100*5 + 40 tax + 20 ship + 10 fees - 50 gift card = 520
-      { id: ids.inventory, type: 'purchase', name: 'QA Multi-unit Sneaker', date: '2026-09-01', amount: 520, status: 'PURCHASED' },
+      { id: ids.inventory, type: 'purchase', name: 'QA Multi-unit Sneaker', date: '2026-09-01', amount: 520, status: 'PURCHASED', availability: 'Available' },
     ]);
   });
 
@@ -182,11 +182,15 @@ describe('get_item_profit', () => {
     expect(isError).toBe(false);
     expect(data).toEqual({
       scope: 'purchase', product: 'QA Multi-unit Sneaker',
-      units_bought: 5, units_sold: 2, units_on_hand: 3,
-      total_cost: 520, cost_of_units_sold: 208,
-      fees: 25, // 10 purchase fees + 15 commission
-      shipping: 32, // 20 inbound + 12 sale shipping
-      revenue: 273, net_profit: 69.16, roi_pct: 33.25,
+      units_bought: 5, units_sold: 2, units_on_hand: 3, availability: 'Available',
+      total_cost: 520,
+      revenue: 300, // 2 x 150 gross
+      fees: 15, shipping: 12, // sale commission and sale shipping
+      cost_of_units_sold: 208, // 520 * 2/5
+      purchase_fees_and_shipping: 12, // (10 fees + 20 inbound) * 2/5, inside cost_of_units_sold
+      profit_before_cashback: 65, // 300 - 15 - 12 - 208
+      cashback: 4.16, // 2% of 520 * 2/5
+      net_profit: 69.16, roi_pct: 33.25,
       sales_count: 1, excluded_sales: 0,
     });
   });
@@ -195,11 +199,10 @@ describe('get_item_profit', () => {
     const { data } = await callTool('get_item_profit', { sale_id: ids.sale });
     expect(data).toEqual({
       scope: 'sale', product: 'QA Multi-unit Sneaker',
-      units_bought: 2, units_sold: 2, units_on_hand: null,
+      units_bought: 2, units_sold: 2, units_on_hand: null, availability: null,
       total_cost: 208, cost_of_units_sold: 208, // 520 * 2/5
-      fees: 19, // 10 * 2/5 = 4 allocated purchase fees + 15 commission
-      shipping: 20, // 20 * 2/5 = 8 allocated inbound + 12 sale shipping
-      revenue: 273, net_profit: 69.16, roi_pct: 33.25,
+      revenue: 300, fees: 15, shipping: 12, purchase_fees_and_shipping: 12,
+      profit_before_cashback: 65, cashback: 4.16, net_profit: 69.16, roi_pct: 33.25,
       sales_count: 1, excluded_sales: 0,
     });
   });
@@ -232,11 +235,15 @@ describe('get_item_profit', () => {
       units_bought: 7, // 5 + 2
       units_sold: 3, // 2 + 1 (voided excluded)
       units_on_hand: 4, // 3 + 1
+      availability: 'Available',
       total_cost: 620, // 520 + 100
+      revenue: 380, // 300 + 80
+      fees: 23, // 15 + 8
+      shipping: 14, // 12 + 2
       cost_of_units_sold: 258, // 208 + 50
-      fees: 33, // 10 + 15 + 0 + 8
-      shipping: 34, // 20 + 12 + 0 + 2
-      revenue: 343, // 273 + 70
+      purchase_fees_and_shipping: 12, // 12 + 0
+      profit_before_cashback: 85, // 380 - 23 - 14 - 258
+      cashback: 4.16, // 4.16 + 0
       net_profit: 89.16, // 69.16 + 20
       roi_pct: 34.56, // 89.16 / 258 * 100 = 34.5581...
       sales_count: 2, excluded_sales: 1,
@@ -248,11 +255,11 @@ describe('get_item_profit', () => {
     const purchase = await callTool('get_item_profit', { purchase_id: ids.inventory });
     expect(purchase.data).toMatchObject({
       units_sold: 0, cost_of_units_sold: 0, revenue: 0, net_profit: 0, roi_pct: null,
-      fees: 10, shipping: 20, sales_count: 0, excluded_sales: 1, total_cost: 520,
+      fees: 0, shipping: 0, cashback: 0, purchase_fees_and_shipping: 0, sales_count: 0, excluded_sales: 1, total_cost: 520,
     });
     const sale = await callTool('get_item_profit', { sale_id: ids.sale });
     expect(sale.data).toMatchObject({
-      units_sold: 0, revenue: 0, net_profit: 0, fees: 0, shipping: 0, roi_pct: null, sales_count: 0, excluded_sales: 1,
+      units_sold: 0, revenue: 0, net_profit: 0, fees: 0, shipping: 0, cashback: 0, roi_pct: null, sales_count: 0, excluded_sales: 1,
     });
   });
 

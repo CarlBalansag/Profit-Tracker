@@ -104,7 +104,7 @@ describe('MCP read tools never leak across users', () => {
 
   it("list_inventory with user A's token never returns user B's item", async () => {
     const res = await callTool(tokenA, 'list_inventory', {});
-    expect(res.data.some((i) => i.id === USER_B_INVENTORY)).toBe(false);
+    expect(res.data.items.some((i) => i.id === USER_B_INVENTORY)).toBe(false);
   });
 
   it("list_expenses with user A's token never returns user B's expense", async () => {

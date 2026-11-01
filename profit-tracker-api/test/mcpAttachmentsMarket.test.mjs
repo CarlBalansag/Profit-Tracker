@@ -207,10 +207,10 @@ describe('set_market_value', () => {
   });
 
   it('shows market_value on list_inventory rows (null when unset)', async () => {
-    let rows = (await callTool('list_inventory')).data;
+    let rows = (await callTool('list_inventory')).data.items;
     expect(rows[0].market_value).toBeNull();
     await callTool('set_market_value', { purchase_id: ids.inventory, market_value: 120.25 });
-    rows = (await callTool('list_inventory')).data;
+    rows = (await callTool('list_inventory')).data.items;
     expect(rows[0].market_value).toBe(120.25);
   });
 });
