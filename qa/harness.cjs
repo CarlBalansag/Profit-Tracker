@@ -13,7 +13,7 @@ function reset() {
     paymentMethod:[{id:ids.card,user_id:ids.user,name:'QA Credit Card',type:'Credit',default_cashback_rate:2,category_rates:'[]',statement_close_day:15,due_day:10,credit_limit:5000,min_payment_pct:2}],
     inventory:[{id:ids.inventory,user_id:ids.user,product_name:'QA Multi-unit Sneaker',vendor_id:ids.vendor,payment_method_id:ids.card,unit_purchase_cost:100,qty_purchased:5,qty_on_hand:3,sales_tax:40,shipping_cost_inbound:20,fees:10,gift_card_amount:50,cashback_earned:10.4,status:'PURCHASED',category:'Shoes',purchase_date:new Date('2026-09-01T12:00:00Z'),created_at:new Date(),tracking_number:'9400111899223856928499',receipt_url:null,tax_exempt:false}],
     sales:[{id:ids.sale,inventory_id:ids.inventory,platform_id:ids.platform,buyer_id:null,quantity:2,unit_price:150,commission_fee:15,sale_shipping:12,sale_tax_collected:8,taxable:true,customer_tax_exempt:false,status:'SOLD',sale_date:new Date('2026-09-03T12:00:00Z'),payout_date:null,paid_at:null,paid_amount:null,paid_reference:null,payout_account:null,payout_short_amount:null}],
-    expense:[{id:randomUUID(),user_id:ids.user,name:'QA Storage',amount:25,tax_version:0,date:new Date('2026-09-01T12:00:00Z'),category:'Storage'}],recurringExpense:[],account:[],goal:[],calendarEvent:[],productNote:[],authAttemptBucket:[],buyer:[],invoice:[],apiKey:[],mcpWriteLog:[],changeLog:[]};
+    expense:[{id:randomUUID(),user_id:ids.user,name:'QA Storage',amount:25,tax_version:0,date:new Date('2026-09-01T12:00:00Z'),category:'Storage'}],recurringExpense:[],account:[],goal:[],calendarEvent:[],productNote:[],authAttemptBucket:[],buyer:[],invoice:[],apiKey:[],mcpWriteLog:[],changeLog:[],transactionNote:[]};
 }
 reset();
 function relations(model,row,key) {
@@ -33,7 +33,7 @@ function matches(model,row,where={}) {
     if(k==='OR')return v.some(w=>matches(model,row,w));
     if(k==='AND')return v.every(w=>matches(model,row,w));
     const rel=relations(model,row,k); if(rel)return rel[1]&&matches(rel[0],rel[1],v);
-    if(v&&typeof v==='object'&&!(v instanceof Date))return Object.entries(v).every(([op,x])=>op==='gte'?row[k]>=x:op==='lte'?row[k]<=x:op==='lt'?row[k]<x:op==='gt'?row[k]>x:op==='equals'?(v.mode==='insensitive'?String(row[k]).toLowerCase()===String(x).toLowerCase():row[k]===x):op==='in'?x.includes(row[k]):true);
+    if(v&&typeof v==='object'&&!(v instanceof Date))return Object.entries(v).every(([op,x])=>op==='gte'?row[k]>=x:op==='lte'?row[k]<=x:op==='lt'?row[k]<x:op==='gt'?row[k]>x:op==='equals'?(v.mode==='insensitive'?String(row[k]).toLowerCase()===String(x).toLowerCase():row[k]===x):op==='in'?x.includes(row[k]):op==='contains'?(row[k]!=null&&(v.mode==='insensitive'?String(row[k]).toLowerCase().includes(String(x).toLowerCase()):String(row[k]).includes(x))):true);
     return row[k]===v;
   });
 }
@@ -55,7 +55,11 @@ for(const model of Object.keys(db)) {
     if(faults[model+'.'+op])throw new Error('Injected '+model+'.'+op+' failure');
     const rows=db[model].filter(x=>matches(model,x,args.where));
     if(op==='findMany'){
-      if(args.orderBy){
+      if(Array.isArray(args.orderBy)){
+        // Multi-key orderBy ([{a:'desc'},{b:'asc'}]): first key wins, later keys break ties.
+        const keys=args.orderBy.map(o=>Object.entries(o)[0]);
+        rows.sort((a,b)=>{for(const[key,dir]of keys){const c=a[key]<b[key]?-1:a[key]>b[key]?1:0;if(c)return dir==='desc'?-c:c;}return 0;});
+      }else if(args.orderBy){
         const [[key,dir]]=Object.entries(args.orderBy);
         rows.sort((a,b)=>a[key]<b[key]?-1:a[key]>b[key]?1:0);
         if(dir==='desc')rows.reverse();
@@ -66,7 +70,7 @@ for(const model of Object.keys(db)) {
     if(op==='findUnique'||op==='findFirst')return project(model,rows[0],args);
     if(op==='create'||op==='createMany'||(op==='upsert'&&!rows.length)) {
       const data=op==='upsert'?args.create:args.data;
-      const created=(Array.isArray(data)?data:[data]).map(x=>({id:randomUUID(),...(model==='inventory'?{status:'PURCHASED',created_at:new Date()}:{}),...(model==='authAttemptBucket'?{count:1}:{}),...(model==='expense'?{tax_version:0}:{}),...x}));
+      const created=(Array.isArray(data)?data:[data]).map(x=>({id:randomUUID(),...(model==='inventory'?{status:'PURCHASED',created_at:new Date()}:{}),...(model==='authAttemptBucket'?{count:1}:{}),...(model==='expense'?{tax_version:0}:{}),...(model==='transactionNote'?{author:'carl',pinned:false,created_at:new Date(),updated_at:new Date(),deleted_at:null}:{}),...x}));
       db[model].push(...created);return op==='createMany'?{count:created.length}:project(model,created[0],args);
     }
     if(op==='update'||op==='updateMany'||op==='upsert'){
@@ -75,6 +79,7 @@ for(const model of Object.keys(db)) {
         else if(v&&typeof v==='object'&&'decrement' in v)row[k]-=v.decrement;
         else row[k]=v;
       }
+      if(model==='transactionNote')for(const row of (op==='updateMany'?rows:rows.slice(0,1)))row.updated_at=new Date(); // @updatedAt
       return op==='updateMany'?{count:rows.length}:project(model,rows[0],args);
     }
     db[model]=db[model].filter(x=>!rows.includes(x));
@@ -104,7 +109,7 @@ function app() {
   app.get('/auth/me',(req,res)=>res.json(db.user[0]));
   app.use('/api/schedule-c', requireApi('./routes/scheduleC'));
   app.use('/mcp', requireApi('./routes/mcp.js'));
-  for(const [url,file]of Object.entries({'inventory':'inventory','sales':'sales','platforms':'platforms','payment-methods':'paymentMethods','accounts':'accounts','analytics':'analytics','creditcard':'creditcard','expenses':'expenses','recurring-expenses':'recurringExpenses','receipts':'receipts','goals':'goals','calendar-events':'calendarEvents','product-notes':'productNotes','preferences':'preferences','buyers':'buyers','api-keys':'apiKeys'}))app.use('/api/'+url,requireApi('./routes/'+file+'.js'));
+  for(const [url,file]of Object.entries({'inventory':'inventory','sales':'sales','platforms':'platforms','payment-methods':'paymentMethods','accounts':'accounts','analytics':'analytics','creditcard':'creditcard','expenses':'expenses','recurring-expenses':'recurringExpenses','receipts':'receipts','goals':'goals','calendar-events':'calendarEvents','product-notes':'productNotes','transaction-notes':'transactionNotes','preferences':'preferences','buyers':'buyers','api-keys':'apiKeys'}))app.use('/api/'+url,requireApi('./routes/'+file+'.js'));
   app.use((err,req,res,next)=>res.status(err.status||500).json({error:err.message}));
   return app;
 }

@@ -17,6 +17,8 @@ const { markSalesPaid } = require('../services/markSalesPaid');
 const statusTransitions = require('../services/statusTransitions');
 const { detectCarrier } = require('../services/tracking');
 const { computeCardDashboard, nextDueDate } = require('../services/cardNetToPay');
+const { recordChanges } = require('../services/changeLog');
+const transactionNotes = require('../services/transactionNotes');
 
 const toDateOnly = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 const toNum = (d) => (d === null || d === undefined ? 0 : (typeof d.toNumber === 'function' ? d.toNumber() : Number(d)));
@@ -128,25 +130,6 @@ async function findPlatformByName(userId, name, client = prisma) {
   const all = await client.platform.findMany({ where: { user_id: userId }, select: { name: true, type: true } });
   const names = all.map((p) => `${p.name} (${p.type})`).join(', ') || '(none set up yet)';
   throw Object.assign(new Error(`No platform named "${trimmed}". Existing: ${names}`), { toolError: true });
-}
-
-// Records one ChangeLog row per changed field. `client` is the transaction
-// client the caller is already inside, so this commits/rolls back with it.
-async function recordChanges(client, userId, tableName, recordId, changes) {
-  if (!changes.length) return;
-  const now = new Date();
-  await client.changeLog.createMany({
-    data: changes.map(({ field, oldValue, newValue }) => ({
-      user_id: userId,
-      table_name: tableName,
-      record_id: recordId,
-      field,
-      old_value: oldValue === null || oldValue === undefined ? null : String(oldValue),
-      new_value: newValue === null || newValue === undefined ? null : String(newValue),
-      source: 'mcp',
-      created_at: now,
-    })),
-  });
 }
 
 // Shared response shape for update_shipment, for both kinds.
@@ -577,7 +560,7 @@ function buildServer(userId, apiKeyId) {
       platform: z.string().min(1).optional().describe('Existing marketplace/cashout name -- the sale\'s buyer. Must already exist (see list_sales for names in use).'),
       tracking_number: z.string().optional().describe('Outbound tracking number. Empty string clears it.'),
       carrier: z.string().optional().describe('Empty string clears it. Auto-detected from the tracking number when not set.'),
-      notes: z.string().max(2000).optional(),
+      notes: z.string().max(2000).optional().describe('Legacy single note field. Prefer add_note, which keeps a dated history of notes.'),
     }).strict(),
   }, async ({ sale_id, price, fees, shipping, qty, sale_date, platform, tracking_number, carrier, notes }) => {
     try {
@@ -665,7 +648,7 @@ function buildServer(userId, apiKeyId) {
       tracking_number: z.string().optional().describe('Empty string clears it.'),
       carrier: z.string().optional().describe('Empty string clears it. Auto-detected from the tracking number when not set.'),
       tax_exempt: z.boolean().optional(),
-      notes: z.string().max(2000).optional(),
+      notes: z.string().max(2000).optional().describe('Legacy single note field. Prefer add_note, which keeps a dated history of notes.'),
     }).strict(),
   }, async ({ purchase_id, qty, unit_cost, purchase_date, store, order_number, tracking_number, carrier, tax_exempt, notes }) => {
     try {
@@ -764,7 +747,7 @@ function buildServer(userId, apiKeyId) {
       platform: z.string().min(1).describe('Existing marketplace/cashout name -- the sale\'s buyer.'),
       tracking_number: z.string().optional().describe('Outbound tracking number, if already known.'),
       carrier: z.string().optional().describe('Auto-detected from the tracking number when not set.'),
-      notes: z.string().max(2000).optional(),
+      notes: z.string().max(2000).optional().describe('Legacy single note field. Prefer add_note, which keeps a dated history of notes.'),
     }).strict(),
   }, async ({ inventory_id, qty, sale_price, fees, sale_date, platform, tracking_number, carrier, notes }) => {
     try {
@@ -922,8 +905,150 @@ function buildServer(userId, apiKeyId) {
     })));
   });
 
+  // ------------------------------------------------------------------ notes
+
+  // Compact row shared by the note tools. `product` is the linked purchase's
+  // product name (a sale's comes via its purchase).
+  const noteRow = (note, product, withDeleted = false) => ({
+    id: note.id,
+    entity_type: note.entity_type,
+    entity_id: note.entity_id,
+    product: product ?? null,
+    ...transactionNotes.serializeNote(note),
+    ...(withDeleted ? { deleted_at: note.deleted_at ? new Date(note.deleted_at).toISOString() : null } : {}),
+  });
+  const noteProduct = async (note) => (await transactionNotes.findOwnedEntity(prisma, userId, note.entity_type, note.entity_id))?.product_name ?? null;
+
+  server.registerTool('add_note', {
+    description: 'Add a dated note to one sale or purchase.',
+    inputSchema: z.object({
+      entity_type: z.enum(['sale', 'purchase']),
+      entity_id: z.string().uuid().describe('The sale id or purchase id.'),
+      body: z.string().min(1).max(2000),
+      pinned: z.boolean().optional().describe('Pinned notes list first. Defaults to false.'),
+    }).strict(),
+  }, async ({ entity_type, entity_id, body, pinned }) => {
+    try {
+      const { note, product } = await prisma.$transaction((tx) => transactionNotes.createNote(
+        tx, userId, { entity_type, entity_id, body, pinned, author: 'bot' }, 'mcp',
+      ));
+      await logWrite(userId, apiKeyId, 'add_note', { entity_type, entity_id, body, pinned });
+      return jsonResult(noteRow(note, product));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to add note');
+    }
+  });
+
+  server.registerTool('list_notes', {
+    description: 'List notes on sales and purchases, pinned first then newest, with optional filters.',
+    inputSchema: z.object({
+      entity_type: z.enum(['sale', 'purchase']).optional().describe('Use together with entity_id.'),
+      entity_id: z.string().uuid().optional().describe('Use together with entity_type.'),
+      product: z.string().min(1).optional().describe('Case-insensitive partial match on the product name.'),
+      start_date: strictDate.optional().describe('YYYY-MM-DD, inclusive, on when the note was written.'),
+      end_date: strictDate.optional().describe('YYYY-MM-DD, inclusive, on when the note was written.'),
+      text: z.string().min(1).optional().describe('Case-insensitive search in the note text.'),
+      limit: z.number().int().min(1).max(100).optional().describe('Default 20.'),
+      include_deleted: z.boolean().optional().describe('Default false.'),
+    }).strict(),
+  }, async ({ entity_type, entity_id, product, start_date, end_date, text, limit, include_deleted }) => {
+    try {
+      if ((entity_type === undefined) !== (entity_id === undefined)) {
+        throw Object.assign(new Error('entity_type and entity_id must be given together'), { toolError: true });
+      }
+      const where = { user_id: userId };
+      if (!include_deleted) where.deleted_at = null;
+
+      // Which product's shared ProductNote to return, if any.
+      let productNoteName;
+      if (entity_type) {
+        const entity = await transactionNotes.requireOwnedEntity(prisma, userId, entity_type, entity_id);
+        where.entity_type = entity_type;
+        where.entity_id = entity_id;
+        productNoteName = transactionNotes.normalizeProductName(entity.product_name);
+      }
+      if (product !== undefined) {
+        const term = product.trim();
+        if (!term) throw Object.assign(new Error('product cannot be blank'), { toolError: true });
+        const invs = await prisma.inventory.findMany({
+          where: { user_id: userId, product_name: { contains: term, mode: 'insensitive' } },
+          select: { id: true, product_name: true },
+        });
+        const invIds = invs.map((i) => i.id);
+        const sales = invIds.length
+          ? await prisma.sales.findMany({ where: { inventory_id: { in: invIds } }, select: { id: true } })
+          : [];
+        where.AND = [{ OR: [
+          { entity_type: 'purchase', entity_id: { in: invIds } },
+          { entity_type: 'sale', entity_id: { in: sales.map((s) => s.id) } },
+        ] }];
+        if (productNoteName === undefined) {
+          // Exact product name first; otherwise, if the partial match landed
+          // on exactly one product, that product's shared note.
+          productNoteName = transactionNotes.normalizeProductName(term);
+          const exact = await prisma.productNote.findFirst({ where: { user_id: userId, product_name: productNoteName } });
+          const distinct = [...new Set(invs.map((i) => transactionNotes.normalizeProductName(i.product_name)))];
+          if (!exact && distinct.length === 1) productNoteName = distinct[0];
+        }
+      }
+      if (start_date || end_date) {
+        where.created_at = {};
+        if (start_date) where.created_at.gte = new Date(`${start_date}T00:00:00.000Z`);
+        if (end_date) where.created_at.lte = new Date(`${end_date}T23:59:59.999Z`);
+      }
+      if (text !== undefined) where.body = { contains: text, mode: 'insensitive' };
+
+      const notes = await prisma.transactionNote.findMany({ where, orderBy: transactionNotes.ORDER, take: limit ?? 20 });
+      const names = await transactionNotes.productNamesFor(prisma, userId, notes);
+      const result = {};
+      if (productNoteName !== undefined) {
+        const record = await prisma.productNote.findFirst({ where: { user_id: userId, product_name: productNoteName } });
+        result.product_note = record?.note ?? null;
+      }
+      result.notes = notes.map((n) => noteRow(n, names.get(`${n.entity_type}:${n.entity_id}`), include_deleted === true));
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err.message || 'Failed to list notes');
+    }
+  });
+
+  server.registerTool('update_note', {
+    description: 'Edit a note\'s text or pinned flag.',
+    inputSchema: z.object({
+      note_id: z.string().uuid(),
+      body: z.string().min(1).max(2000).optional(),
+      pinned: z.boolean().optional(),
+    }).strict(),
+  }, async ({ note_id, body, pinned }) => {
+    try {
+      if (body === undefined && pinned === undefined) {
+        throw Object.assign(new Error('Provide body and/or pinned'), { toolError: true });
+      }
+      const note = await prisma.$transaction((tx) => transactionNotes.updateNote(tx, userId, note_id, { body, pinned }, 'mcp'));
+      await logWrite(userId, apiKeyId, 'update_note', { note_id, body, pinned });
+      return jsonResult(noteRow(note, await noteProduct(note)));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to update note');
+    }
+  });
+
+  server.registerTool('delete_note', {
+    description: 'Soft-delete a note; list_notes with include_deleted still shows it.',
+    inputSchema: z.object({
+      note_id: z.string().uuid(),
+    }).strict(),
+  }, async ({ note_id }) => {
+    try {
+      const note = await prisma.$transaction((tx) => transactionNotes.deleteNote(tx, userId, note_id, 'mcp'));
+      await logWrite(userId, apiKeyId, 'delete_note', { note_id });
+      return jsonResult(noteRow(note, await noteProduct(note), true));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to delete note');
+    }
+  });
+
   server.registerTool('list_changes', {
-    description: 'List recent field-level changes made by update_sale/update_purchase/update_shipment, most recent first, so an edit can be reviewed (and manually reversed using old_value).',
+    description: 'List recent field-level changes made by update_sale/update_purchase/update_shipment, plus note activity (note_added/note_body/note_pinned/note_deleted), most recent first, so an edit can be reviewed (and manually reversed using old_value).',
     inputSchema: z.object({
       limit: z.number().int().min(1).max(500).optional().describe('Omit to return every matching change.'),
       record_id: z.string().uuid().optional().describe('Limit to the change history of one sale or purchase.'),

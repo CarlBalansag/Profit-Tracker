@@ -38,6 +38,7 @@ model User {
   api_keys               ApiKey[]
   mcp_write_logs         McpWriteLog[]
   change_logs            ChangeLog[]
+  transaction_notes      TransactionNote[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -93,6 +94,28 @@ model ChangeLog {
 
   @@index([user_id, created_at])
   @@index([user_id, record_id])
+}
+
+// Per-transaction notes: many per sale or purchase. Polymorphic parent
+// (entity_type 'sale' -> Sales.id, 'purchase' -> Inventory.id), so there is
+// no FK to the parent; ownership is checked in code. Soft-deleted via
+// deleted_at. Separate from ProductNote (one shared note per product name)
+// and from the legacy single Inventory.notes / Sales.notes columns.
+model TransactionNote {
+  id          String    @id @default(uuid())
+  user_id     String
+  user        User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  entity_type String    // 'sale' | 'purchase'
+  entity_id   String
+  body        String
+  author      String    @default("carl") // 'carl' | 'bot'
+  pinned      Boolean   @default(false)
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+  deleted_at  DateTime?
+
+  @@index([user_id, entity_type, entity_id])
+  @@index([user_id, created_at])
 }
 
 model FirebaseIdentity {
