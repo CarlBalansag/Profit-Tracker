@@ -1,10 +1,11 @@
 import { batchCost, effectiveCashbackRate, saleEconomics, realizedSummary, isRealizedSale } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useRef } from 'react';
-import { X, DollarSign, Package, CreditCard, Tag, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, DollarSign, Package, CreditCard, Tag, ChevronDown, ChevronUp, StickyNote } from 'lucide-react';
 import { useInvalidate, apiFetch} from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { toast } from 'sonner';
+import TransactionNotesPanel from './TransactionNotesPanel';
 
 const STATUSES = ['Pre Order', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
 const SALE_STATUSES = ['SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
@@ -108,6 +109,13 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
   const modalRef = useModalKeyboard(true, dismiss);
   // track which sale card is expanded (index)
   const [expandedSale, setExpandedSale] = useState(0);
+  // sale ids whose Notes panel is open
+  const [openSaleNotes, setOpenSaleNotes] = useState(() => new Set());
+  const toggleSaleNotes = (id) => setOpenSaleNotes(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const invalidate = useInvalidate();
 
   const marketplaces = platforms.filter(p => p.type === 'Marketplace');
@@ -131,6 +139,8 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             : batchCost(d) * storedCashbackRate / 100;
           setForm({
             product_name:            d.product_name ?? '',
+            // Saved name, for note lookups (not live-edited; not sent on save)
+            _savedProductName:       d.product_name ?? '',
             status:                  d.status ?? 'PURCHASED',
             vendor_id:               d.vendor_id ?? '',
             purchase_date:           d.purchase_date ? d.purchase_date.split('T')[0] : '',
@@ -647,6 +657,33 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                             </div>
                           </div>
                         )}
+
+                        {/* Per-sale notes toggle */}
+                        <div className="border-t border-white/[0.06]">
+                          <button
+                            type="button"
+                            onClick={() => toggleSaleNotes(sale.id)}
+                            aria-expanded={openSaleNotes.has(sale.id)}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-left text-xs text-[var(--dp-text-secondary)] hover:bg-white/[0.03] transition-colors"
+                          >
+                            <StickyNote className="w-3.5 h-3.5 shrink-0" />
+                            <span className="font-medium">Notes</span>
+                            {openSaleNotes.has(sale.id)
+                              ? <ChevronUp className="w-3.5 h-3.5 ml-auto text-gray-500" />
+                              : <ChevronDown className="w-3.5 h-3.5 ml-auto text-gray-500" />
+                            }
+                          </button>
+                          {openSaleNotes.has(sale.id) && (
+                            <div className="px-4 pb-4">
+                              <TransactionNotesPanel
+                                entityType="sale"
+                                entityId={sale.id}
+                                productName={form._savedProductName}
+                                showProductNote={false}
+                              />
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -739,6 +776,13 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                 })()}
               </div>
             </div>
+
+            {/* ── Notes (purchase + shared product note) ── */}
+            <TransactionNotesPanel
+              entityType="purchase"
+              entityId={row.rawId}
+              productName={form._savedProductName}
+            />
 
           </div>
         )}

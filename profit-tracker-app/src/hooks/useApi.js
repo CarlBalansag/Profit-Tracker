@@ -175,6 +175,50 @@ export const useProductNoteMutations = (productName) => {
   return { upsert, remove };
 };
 
+// ─── Transaction Notes ────────────────────────────────────────────────────────
+// Per-sale / per-purchase notes. entityType is 'sale' or 'purchase'.
+const noteJson = (r) => {
+  if (!r.ok) return r.json().catch(() => ({})).then(e => { throw new Error(e.error || 'Failed'); });
+  return r.json();
+};
+
+export const useTransactionNotes = (entityType, entityId) =>
+  useQuery({
+    queryKey: ['transaction-notes', entityType, entityId],
+    queryFn: () => fetcher(`/api/transaction-notes?entity_type=${encodeURIComponent(entityType)}&entity_id=${encodeURIComponent(entityId)}`),
+    enabled: !!entityType && !!entityId,
+  });
+
+export const useTransactionNoteMutations = (entityType, entityId) => {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['transaction-notes', entityType, entityId] });
+
+  const add = useMutation({
+    mutationFn: ({ body, pinned }) => apiFetch('/api/transaction-notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entity_type: entityType, entity_id: entityId, body, ...(pinned !== undefined && { pinned }) }),
+    }).then(noteJson),
+    onSuccess: invalidate,
+  });
+
+  const update = useMutation({
+    mutationFn: ({ id, ...data }) => apiFetch(`/api/transaction-notes/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then(noteJson),
+    onSuccess: invalidate,
+  });
+
+  const remove = useMutation({
+    mutationFn: (id) => apiFetch(`/api/transaction-notes/${id}`, { method: 'DELETE' }).then(noteJson),
+    onSuccess: invalidate,
+  });
+
+  return { add, update, remove };
+};
+
 // ─── Calendar Events ──────────────────────────────────────────────────────────
 export const useCalendarEvents = (month) =>
   useQuery({

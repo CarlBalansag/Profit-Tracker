@@ -21,6 +21,7 @@ vi.mock('../hooks/useApi', () => ({
   useInvalidate: () => ({ all: vi.fn() }),
 }));
 vi.mock('../components/ProductNoteButton', () => ({ default: () => null }));
+vi.mock('../components/TransactionNotesPanel', () => ({ default: () => null }));
 
 const purchase = {
   id: 'purchase', product_name: 'Fixture item', qty_purchased: 2, qty_on_hand: 1, unit_purchase_cost: 100,

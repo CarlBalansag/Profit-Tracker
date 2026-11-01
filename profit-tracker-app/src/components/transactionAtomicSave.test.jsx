@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('../hooks/useApi', () => ({ apiFetch: mocks.fetch, useInvalidate: () => mocks.invalidate }));
 vi.mock('sonner', () => ({ toast: { error: mocks.error } }));
+vi.mock('./TransactionNotesPanel', () => ({ default: () => null }));
 
 const purchase = {
   id: '33333333-3333-4333-8333-333333333333', product_name: 'Saved purchase', qty_purchased: 5, qty_on_hand: 3,

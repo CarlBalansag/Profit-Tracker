@@ -20,6 +20,7 @@ vi.mock('../hooks/useApi', () => ({
   useInvalidate: () => ({ all: vi.fn() }),
 }));
 vi.mock('../components/ProductNoteButton', () => ({ default: () => null }));
+vi.mock('../components/TransactionNotesPanel', () => ({ default: () => null }));
 
 const purchase = {
   id: 'purchase', product_name: 'Fixture item', vendor_id: 'vendor', payment_method_id: 'card',
