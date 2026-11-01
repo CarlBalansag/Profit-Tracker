@@ -1393,8 +1393,215 @@ function buildServer(userId, apiKeyId) {
     }
   });
 
+  // ---------------------------------------------------- search and profit
+
+  // A purchase is out of the product-level profit picture once cancelled by
+  // either path (same test get_cashflow_summary uses for live stock).
+  const isCancelledInventory = (inv) => Boolean(inv.cancelled_at)
+    || inv.receiving_status === 'CANCELLED'
+    || String(inv.status || '').toUpperCase() === 'CANCELLED';
+  // Counts toward profit: realized by status and not voided.
+  const countsAsRealized = (sale) => isRealizedSale(sale) && !sale.voided_at;
+  const money2 = (d) => toNum(d.toDecimalPlaces(2));
+
+  server.registerTool('search', {
+    description: 'Search purchases, sales and notes by text, newest first.',
+    inputSchema: z.object({
+      query: z.string().min(1).max(200).describe('Case-insensitive substring: product, order number, tracking, store, platform, buyer, or note text.'),
+      types: z.array(z.enum(['purchase', 'sale', 'note'])).min(1).optional().describe('Default all three.'),
+      limit: z.number().int().min(1).max(50).optional().describe('Default 10.'),
+    }).strict(),
+  }, async ({ query, types, limit }) => {
+    try {
+      const term = query.trim().toLowerCase();
+      if (!term) throw toolError('query cannot be blank');
+      const want = new Set(types && types.length ? types : ['purchase', 'sale', 'note']);
+      const hit = (...values) => values.some((v) => v !== null && v !== undefined && String(v).toLowerCase().includes(term));
+      const rows = [];
+
+      if (want.has('purchase')) {
+        const inventories = await prisma.inventory.findMany({ where: { user_id: userId }, include: { vendor: true } });
+        for (const inv of inventories) {
+          if (!hit(inv.product_name, inv.order_number, inv.tracking_number, inv.vendor?.name)) continue;
+          rows.push({
+            sortKey: new Date(inv.purchase_date).getTime(),
+            row: {
+              id: inv.id,
+              type: 'purchase',
+              name: inv.product_name,
+              date: toDateOnly(inv.purchase_date),
+              amount: money2(batchCost(inv)),
+              status: inv.cancelled_at ? 'CANCELLED' : (inv.receiving_status || inv.status || null),
+            },
+          });
+        }
+      }
+      if (want.has('sale')) {
+        const sales = await prisma.sales.findMany({
+          where: { inventory: { user_id: userId } },
+          include: { inventory: true, platform: true, buyer: true },
+        });
+        for (const s of sales) {
+          if (!hit(s.inventory?.product_name, s.tracking_number, s.platform?.name, s.buyer?.name, s.inventory?.order_number)) continue;
+          rows.push({
+            sortKey: new Date(s.sale_date).getTime(),
+            row: {
+              id: s.id,
+              type: 'sale',
+              name: s.inventory?.product_name ?? null,
+              date: toDateOnly(s.sale_date),
+              amount: money2(saleEconomics(s.inventory, s).revenue),
+              status: s.workflow_status || s.status || null,
+            },
+          });
+        }
+      }
+      if (want.has('note')) {
+        const notes = await prisma.transactionNote.findMany({ where: { user_id: userId, deleted_at: null } });
+        for (const n of notes) {
+          if (!hit(n.body)) continue;
+          rows.push({
+            sortKey: new Date(n.created_at).getTime(),
+            row: {
+              id: n.id,
+              type: 'note',
+              name: String(n.body).slice(0, 80),
+              date: toDateOnly(n.created_at),
+              amount: null,
+              status: n.entity_type,
+              parent_id: n.entity_id,
+            },
+          });
+        }
+      }
+
+      rows.sort((a, b) => (b.sortKey || 0) - (a.sortKey || 0));
+      const max = limit ?? 10;
+      return jsonResult({ results: rows.slice(0, max).map((r) => r.row), truncated: rows.length > max });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to search');
+    }
+  });
+
+  server.registerTool('get_item_profit', {
+    description: 'Profit for one purchase, one sale, or every purchase of a product; fees = purchase fees + sale commission, shipping = inbound + sale shipping.',
+    inputSchema: z.object({
+      purchase_id: z.string().uuid().optional(),
+      sale_id: z.string().uuid().optional(),
+      product: z.string().min(1).max(200).optional().describe('Exact product name, case-insensitive.'),
+    }).strict(),
+  }, async ({ purchase_id, sale_id, product }) => {
+    try {
+      const given = [purchase_id, sale_id, product].filter((v) => v !== undefined).length;
+      if (given !== 1) throw toolError('Give exactly one of purchase_id, sale_id, or product');
+
+      const zero = () => decimal(0);
+      const totals = {
+        units_bought: 0, units_sold: 0, units_on_hand: 0,
+        total_cost: zero(), cost_of_units_sold: zero(), fees: zero(), shipping: zero(),
+        revenue: zero(), net_profit: zero(), sales_count: 0, excluded_sales: 0,
+      };
+      // Realized sales only; revenue/cost/net_profit come straight from
+      // saleEconomics (net_profit = revenue - allocated cost + allocated
+      // cashback, the same profit the analytics routes report).
+      const addSale = (inv, sale) => {
+        if (!countsAsRealized(sale)) { totals.excluded_sales += 1; return; }
+        const econ = saleEconomics(inv, sale);
+        totals.units_sold += Number(sale.quantity) || 0;
+        totals.cost_of_units_sold = totals.cost_of_units_sold.plus(econ.cost);
+        totals.revenue = totals.revenue.plus(econ.revenue);
+        totals.net_profit = totals.net_profit.plus(econ.netProfit);
+        totals.fees = totals.fees.plus(decimal(sale.commission_fee || 0));
+        totals.shipping = totals.shipping.plus(decimal(sale.sale_shipping || 0));
+        totals.sales_count += 1;
+      };
+      const addPurchase = (inv) => {
+        totals.units_bought += Number(inv.qty_purchased) || 0;
+        totals.units_on_hand += Number(inv.qty_on_hand) || 0;
+        totals.total_cost = totals.total_cost.plus(batchCost(inv));
+        totals.fees = totals.fees.plus(decimal(inv.fees || 0));
+        totals.shipping = totals.shipping.plus(decimal(inv.shipping_cost_inbound || 0));
+        for (const sale of inv.sales || []) addSale(inv, sale);
+      };
+
+      let scope;
+      let productName;
+      if (purchase_id) {
+        scope = 'purchase';
+        const inv = await prisma.inventory.findFirst({
+          where: { id: purchase_id, user_id: userId },
+          include: { vendor: true, payment_method: true, sales: true },
+        });
+        if (!inv) throw toolError('Purchase not found or access denied');
+        productName = inv.product_name;
+        addPurchase(inv);
+      } else if (sale_id) {
+        scope = 'sale';
+        const sale = await prisma.sales.findUnique({
+          where: { id: sale_id },
+          include: { inventory: { include: { vendor: true, payment_method: true } } },
+        });
+        if (!sale || !sale.inventory || sale.inventory.user_id !== userId) throw toolError('Sale not found or access denied');
+        const inv = sale.inventory;
+        productName = inv.product_name;
+        // One sale: its cost is the allocated cost of its own units, and the
+        // purchase-side fees/shipping are allocated by the same unit share.
+        const qty = Number(sale.quantity) || 0;
+        const purchased = Number(inv.qty_purchased) || 0;
+        const share = (value) => (purchased > 0 ? decimal(value || 0).times(qty).div(purchased) : zero());
+        totals.units_bought = qty;
+        totals.units_on_hand = null;
+        totals.total_cost = allocatedCost(inv, qty);
+        if (countsAsRealized(sale)) {
+          totals.fees = share(inv.fees);
+          totals.shipping = share(inv.shipping_cost_inbound);
+        }
+        addSale(inv, sale);
+      } else {
+        scope = 'product';
+        const wanted = product.trim().toLowerCase();
+        if (!wanted) throw toolError('product cannot be blank');
+        const inventories = (await prisma.inventory.findMany({
+          where: { user_id: userId },
+          include: { vendor: true, payment_method: true, sales: true },
+        })).filter((inv) => !isCancelledInventory(inv));
+        const matched = inventories.filter((inv) => String(inv.product_name || '').trim().toLowerCase() === wanted);
+        if (!matched.length) {
+          const names = [...new Set(inventories.map((inv) => String(inv.product_name || '').trim()).filter(Boolean))];
+          const words = wanted.split(/\s+/).filter((w) => w.length > 1);
+          const suggestions = names.filter((name) => {
+            const lower = name.toLowerCase();
+            return lower.includes(wanted) || wanted.includes(lower) || words.some((w) => lower.includes(w));
+          }).slice(0, 5);
+          throw toolError(`No purchases of "${product.trim()}".${suggestions.length ? ` Did you mean: ${suggestions.join(', ')}` : ''}`);
+        }
+        productName = matched[0].product_name;
+        for (const inv of matched) addPurchase(inv);
+      }
+
+      return jsonResult({
+        scope,
+        product: productName,
+        units_bought: totals.units_bought,
+        units_sold: totals.units_sold,
+        units_on_hand: totals.units_on_hand,
+        total_cost: money2(totals.total_cost),
+        cost_of_units_sold: money2(totals.cost_of_units_sold),
+        fees: money2(totals.fees),
+        shipping: money2(totals.shipping),
+        revenue: money2(totals.revenue),
+        net_profit: money2(totals.net_profit),
+        roi_pct: totals.cost_of_units_sold.isZero() ? null : money2(totals.net_profit.div(totals.cost_of_units_sold).times(100)),
+        sales_count: totals.sales_count,
+        excluded_sales: totals.excluded_sales,
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to compute profit');
+    }
+  });
+
   server.registerTool('list_changes', {
-    description: 'List recent field-level changes made by update_sale/update_purchase/update_shipment, voids (void_sale/void_purchase), new platforms/cards, plus note activity (note_added/note_body/note_pinned/note_deleted), most recent first, so an edit can be reviewed (and manually reversed using old_value).',
+    description: 'List recent field-level changes (edits, voids, new platforms/cards, notes, attachments, market value), newest first, for review or manual reversal via old_value.',
     inputSchema: z.object({
       limit: z.number().int().min(1).max(500).optional().describe('Omit to return every matching change.'),
       record_id: z.string().uuid().optional().describe('Limit to the change history of one sale or purchase.'),
