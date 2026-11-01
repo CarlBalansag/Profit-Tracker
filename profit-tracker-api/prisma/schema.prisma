@@ -204,6 +204,8 @@ model Inventory {
   is_listed             Boolean        @default(false)
   received_at           DateTime?
   cancelled_at          DateTime?
+  // Why the purchase was voided (MCP void_purchase). NULL unless voided.
+  void_reason           String?
   correction_note       String?
   sales_tax             Float          @default(0)
   sales_tax_decimal     Decimal?       @db.Decimal(19, 2)
@@ -284,6 +286,8 @@ model Sales {
   payout_short_amount Decimal?  @db.Decimal(19, 2)
   cancelled_at        DateTime?
   voided_at           DateTime?
+  // Why the sale was voided (MCP void_sale). NULL unless voided.
+  void_reason         String?
   return_requested_at DateTime?
   returned_at         DateTime?
   disputed_at         DateTime?

@@ -905,6 +905,192 @@ function buildServer(userId, apiKeyId) {
     })));
   });
 
+  // ------------------------------------------- platforms and payment methods
+
+  const toolError = (message) => Object.assign(new Error(message), { toolError: true });
+
+  server.registerTool('add_platform', {
+    description: 'Create a marketplace, cashout, or vendor platform.',
+    inputSchema: z.object({
+      name: z.string().trim().min(1).max(100),
+      type: z.enum(['Marketplace', 'Cashout', 'Vendor']),
+      fee_pct: z.number().min(0).max(100).optional().describe('Platform fee percent, e.g. 12.9. Defaults to 0.'),
+    }).strict(),
+  }, async ({ name, type, fee_pct }) => {
+    try {
+      const created = await prisma.$transaction(async (tx) => {
+        // add_sale/findPlatformByName look platforms up by name across every
+        // type, so a name may exist only once per user, whatever its type.
+        const existing = await tx.platform.findFirst({
+          where: { user_id: userId, name: { equals: name, mode: 'insensitive' } },
+        });
+        if (existing) throw toolError(`A platform named "${existing.name}" (${existing.type}) already exists`);
+        // Same defaults as POST /api/platforms. fee_pct_decimal is filled by
+        // the database trigger; workflow_preset is left unset there too.
+        const platform = await tx.platform.create({
+          data: { user_id: userId, name, type, fee_pct: fee_pct ?? 0 },
+        });
+        await recordChanges(tx, userId, 'Platform', platform.id, [
+          { field: 'created', oldValue: null, newValue: `${platform.name} (${platform.type})` },
+        ]);
+        return platform;
+      });
+      await logWrite(userId, apiKeyId, 'add_platform', { name, type, fee_pct });
+      return jsonResult({ id: created.id, name: created.name, type: created.type, fee_pct: toNum(created.fee_pct) });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to add platform');
+    }
+  });
+
+  server.registerTool('add_payment_method', {
+    description: 'Create a credit or debit card/account for logging purchases and expenses.',
+    inputSchema: z.object({
+      name: z.string().trim().min(1).max(100),
+      type: z.enum(['Credit', 'Debit']),
+      last4: z.string().regex(/^\d{4}$/, 'last4 must be exactly 4 digits').optional(),
+      cashback_rate: z.number().min(0).max(100).optional().describe('Default cashback percent, e.g. 2 for 2%. Defaults to 0.'),
+    }).strict(),
+  }, async ({ name, type, last4, cashback_rate }) => {
+    try {
+      const created = await prisma.$transaction(async (tx) => {
+        const existing = await tx.paymentMethod.findFirst({
+          where: { user_id: userId, name: { equals: name, mode: 'insensitive' } },
+        });
+        if (existing) throw toolError(`A payment method named "${existing.name}" (${existing.type}) already exists`);
+        // Same defaults as POST /api/payment-methods; default_cashback_rate is
+        // the percent itself, and its _decimal twin is filled by the trigger.
+        const method = await tx.paymentMethod.create({
+          data: { user_id: userId, name, type, default_cashback_rate: cashback_rate ?? 0, last4: last4 || null },
+        });
+        await recordChanges(tx, userId, 'PaymentMethod', method.id, [
+          { field: 'created', oldValue: null, newValue: `${method.name} (${method.type})` },
+        ]);
+        return method;
+      });
+      await logWrite(userId, apiKeyId, 'add_payment_method', { name, type, last4, cashback_rate });
+      return jsonResult({
+        id: created.id,
+        name: created.name,
+        type: created.type,
+        last4: created.last4 || null,
+        cashback_rate: toNum(created.default_cashback_rate),
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to add payment method');
+    }
+  });
+
+  // ------------------------------------------------------------------ voids
+
+  // Both void tools go through statusTransitions.applyTransition, the same
+  // function the website's status-action routes use, so status, legacy status,
+  // timestamps and the inventory restore behave identically. Nothing is ever
+  // deleted.
+  const confirmFlag = z.literal(true).describe('Must be true to confirm the void.');
+
+  server.registerTool('void_sale', {
+    description: 'Void a mistaken sale: marks it cancelled and puts its quantity back in stock.',
+    inputSchema: z.object({
+      sale_id: z.string().uuid(),
+      reason: z.string().trim().min(1).max(500),
+      confirm: confirmFlag,
+    }).strict(),
+  }, async ({ sale_id, reason, confirm }) => {
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const existing = await tx.sales.findUnique({ where: { id: sale_id }, include: { inventory: true } });
+        if (!existing || existing.inventory.user_id !== userId) throw toolError('Sale not found or access denied');
+        if (existing.voided_at) {
+          throw toolError(`Sale was already voided on ${new Date(existing.voided_at).toISOString()}`);
+        }
+        if (!statusTransitions.isActionAllowed(existing, 'sale', 'void_sale')) {
+          throw toolError(`This sale cannot be voided from its current status (${existing.workflow_status || existing.status || 'none'})`);
+        }
+
+        const transition = await statusTransitions.applyTransition(tx, 'sale', existing, 'void_sale', { user_id: userId });
+        const updated = await tx.sales.update({ where: { id: sale_id }, data: { void_reason: reason } });
+        await recordChanges(tx, userId, 'Sales', sale_id, [
+          { field: 'voided', oldValue: null, newValue: new Date(updated.voided_at).toISOString() },
+          { field: 'void_reason', oldValue: existing.void_reason ?? null, newValue: reason },
+          { field: 'workflow_status', oldValue: transition.from, newValue: transition.to },
+        ]);
+        return { updated, restored: transition.restored };
+      });
+      await logWrite(userId, apiKeyId, 'void_sale', { sale_id, reason, confirm });
+      return jsonResult({
+        id: result.updated.id,
+        status: result.updated.workflow_status,
+        voided_at: new Date(result.updated.voided_at).toISOString(),
+        void_reason: result.updated.void_reason,
+        qty_restored: result.restored,
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to void sale');
+    }
+  });
+
+  const isClosedSale = (sale) => Boolean(sale.voided_at)
+    || sale.workflow_status === 'CANCELLED'
+    || String(sale.status || '').toUpperCase() === 'CANCELLED';
+
+  server.registerTool('void_purchase', {
+    description: 'Void a mistaken purchase by cancelling it; its sales must be voided first.',
+    inputSchema: z.object({
+      purchase_id: z.string().uuid(),
+      reason: z.string().trim().min(1).max(500),
+      confirm: confirmFlag,
+    }).strict(),
+  }, async ({ purchase_id, reason, confirm }) => {
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        const existing = await tx.inventory.findUnique({ where: { id: purchase_id } });
+        if (!existing || existing.user_id !== userId) throw toolError('Purchase not found or access denied');
+        if (existing.cancelled_at) {
+          throw toolError(`Purchase was already cancelled on ${new Date(existing.cancelled_at).toISOString()}`);
+        }
+        if (!statusTransitions.isActionAllowed(existing, 'inventory', 'cancel')) {
+          throw toolError(`This purchase cannot be voided from its current receiving status (${existing.receiving_status || 'none'}); only purchases not yet received can be cancelled`);
+        }
+
+        // The cancel transition is guarded only on receiving_status, which it
+        // does not change, so claim the row on cancelled_at first: a second
+        // concurrent void blocks here and then matches nothing. Taking the row
+        // lock before reading the sales also means a concurrent add_sale has
+        // either committed (and is seen below) or waits for this to finish.
+        const claim = await tx.inventory.updateMany({
+          where: { id: purchase_id, user_id: userId, cancelled_at: null },
+          data: { void_reason: reason },
+        });
+        if (claim.count !== 1) throw toolError('Purchase was already cancelled');
+
+        const sales = await tx.sales.findMany({
+          where: { inventory_id: purchase_id },
+          select: { id: true, status: true, workflow_status: true, voided_at: true },
+        });
+        const live = sales.filter((s) => !isClosedSale(s));
+        if (live.length) {
+          throw toolError(`Purchase still has ${live.length} sale(s) that are not voided or cancelled; void them first: ${live.map((s) => s.id).join(', ')}`);
+        }
+
+        const transition = await statusTransitions.applyTransition(tx, 'inventory', existing, 'cancel', { user_id: userId });
+        await recordChanges(tx, userId, 'Inventory', purchase_id, [
+          { field: 'voided', oldValue: null, newValue: new Date(transition.record.cancelled_at).toISOString() },
+          { field: 'void_reason', oldValue: existing.void_reason ?? null, newValue: reason },
+        ]);
+        return transition.record;
+      });
+      await logWrite(userId, apiKeyId, 'void_purchase', { purchase_id, reason, confirm });
+      return jsonResult({
+        id: updated.id,
+        item: updated.product_name,
+        cancelled_at: new Date(updated.cancelled_at).toISOString(),
+        void_reason: updated.void_reason,
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to void purchase');
+    }
+  });
+
   // ------------------------------------------------------------------ notes
 
   // Compact row shared by the note tools. `product` is the linked purchase's
@@ -1048,7 +1234,7 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('list_changes', {
-    description: 'List recent field-level changes made by update_sale/update_purchase/update_shipment, plus note activity (note_added/note_body/note_pinned/note_deleted), most recent first, so an edit can be reviewed (and manually reversed using old_value).',
+    description: 'List recent field-level changes made by update_sale/update_purchase/update_shipment, voids (void_sale/void_purchase), new platforms/cards, plus note activity (note_added/note_body/note_pinned/note_deleted), most recent first, so an edit can be reviewed (and manually reversed using old_value).',
     inputSchema: z.object({
       limit: z.number().int().min(1).max(500).optional().describe('Omit to return every matching change.'),
       record_id: z.string().uuid().optional().describe('Limit to the change history of one sale or purchase.'),

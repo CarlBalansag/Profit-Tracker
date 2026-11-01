@@ -34,6 +34,9 @@ function matches(model,row,where={}) {
     if(k==='AND')return v.every(w=>matches(model,row,w));
     const rel=relations(model,row,k); if(rel)return rel[1]&&matches(rel[0],rel[1],v);
     if(v&&typeof v==='object'&&!(v instanceof Date))return Object.entries(v).every(([op,x])=>op==='gte'?row[k]>=x:op==='lte'?row[k]<=x:op==='lt'?row[k]<x:op==='gt'?row[k]>x:op==='equals'?(v.mode==='insensitive'?String(row[k]).toLowerCase()===String(x).toLowerCase():row[k]===x):op==='in'?x.includes(row[k]):op==='contains'?(row[k]!=null&&(v.mode==='insensitive'?String(row[k]).toLowerCase().includes(String(x).toLowerCase()):String(row[k]).includes(x))):true);
+    // A real column is NULL, never undefined: a `field: null` filter matches a
+    // fixture row that simply omits the field.
+    if(v===null)return row[k]==null;
     return row[k]===v;
   });
 }
