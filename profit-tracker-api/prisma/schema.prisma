@@ -38,6 +38,8 @@ model User {
   api_keys               ApiKey[]
   mcp_write_logs         McpWriteLog[]
   change_logs            ChangeLog[]
+  transaction_notes      TransactionNote[]
+  attachments            Attachment[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -93,6 +95,45 @@ model ChangeLog {
 
   @@index([user_id, created_at])
   @@index([user_id, record_id])
+}
+
+// Per-transaction notes: many per sale or purchase. Polymorphic parent
+// (entity_type 'sale' -> Sales.id, 'purchase' -> Inventory.id), so there is
+// no FK to the parent; ownership is checked in code. Soft-deleted via
+// deleted_at. Separate from ProductNote (one shared note per product name)
+// and from the legacy single Inventory.notes / Sales.notes columns.
+model TransactionNote {
+  id          String    @id @default(uuid())
+  user_id     String
+  user        User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  entity_type String    // 'sale' | 'purchase'
+  entity_id   String
+  body        String
+  author      String    @default("carl") // 'carl' | 'bot'
+  pinned      Boolean   @default(false)
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+  deleted_at  DateTime?
+
+  @@index([user_id, entity_type, entity_id])
+  @@index([user_id, created_at])
+}
+
+// A link (Gmail thread, receipt, shipping label, ...) attached to one sale
+// ('sale' -> Sales.id) or one purchase ('purchase' -> Inventory.id). Like
+// TransactionNote there is no FK to the parent; ownership is checked in code.
+model Attachment {
+  id          String   @id @default(uuid())
+  user_id     String
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  entity_type String   // 'sale' | 'purchase'
+  entity_id   String
+  url         String
+  label       String?
+  kind        String?  // 'gmail' | 'receipt' | 'label' | 'other'
+  created_at  DateTime @default(now())
+
+  @@index([user_id, entity_type, entity_id])
 }
 
 model FirebaseIdentity {
@@ -181,6 +222,8 @@ model Inventory {
   is_listed             Boolean        @default(false)
   received_at           DateTime?
   cancelled_at          DateTime?
+  // Why the purchase was voided (MCP void_purchase). NULL unless voided.
+  void_reason           String?
   correction_note       String?
   sales_tax             Float          @default(0)
   sales_tax_decimal     Decimal?       @db.Decimal(19, 2)
@@ -205,6 +248,11 @@ model Inventory {
   receipt_url           String?
   tax_exempt            Boolean        @default(false)
   notes                 String?
+  // Current per-unit market value (MCP set_market_value), the source it came
+  // from, and when it was checked. NULL = not priced.
+  market_value          Decimal?       @db.Decimal(19, 2)
+  market_source         String?
+  market_checked_at     DateTime?
   created_at            DateTime       @default(now())
   sales                 Sales[]
 
@@ -261,6 +309,8 @@ model Sales {
   payout_short_amount Decimal?  @db.Decimal(19, 2)
   cancelled_at        DateTime?
   voided_at           DateTime?
+  // Why the sale was voided (MCP void_sale). NULL unless voided.
+  void_reason         String?
   return_requested_at DateTime?
   returned_at         DateTime?
   disputed_at         DateTime?

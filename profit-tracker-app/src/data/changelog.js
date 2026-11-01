@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '1.00',
+    date: '2026-10-31',
+    notes: 'Each sale and purchase now has its own notes (with pinning), shown alongside the shared product note in the transaction details.',
+  },
+  {
     version: '0.99',
     date: '2026-10-30',
     notes: 'Light and dark mode now follow your device\'s setting automatically; the day/night switch still lets you pick one yourself.',

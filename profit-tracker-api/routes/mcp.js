@@ -17,6 +17,8 @@ const { markSalesPaid } = require('../services/markSalesPaid');
 const statusTransitions = require('../services/statusTransitions');
 const { detectCarrier } = require('../services/tracking');
 const { computeCardDashboard, nextDueDate } = require('../services/cardNetToPay');
+const { recordChanges } = require('../services/changeLog');
+const transactionNotes = require('../services/transactionNotes');
 
 const toDateOnly = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 const toNum = (d) => (d === null || d === undefined ? 0 : (typeof d.toNumber === 'function' ? d.toNumber() : Number(d)));
@@ -128,25 +130,6 @@ async function findPlatformByName(userId, name, client = prisma) {
   const all = await client.platform.findMany({ where: { user_id: userId }, select: { name: true, type: true } });
   const names = all.map((p) => `${p.name} (${p.type})`).join(', ') || '(none set up yet)';
   throw Object.assign(new Error(`No platform named "${trimmed}". Existing: ${names}`), { toolError: true });
-}
-
-// Records one ChangeLog row per changed field. `client` is the transaction
-// client the caller is already inside, so this commits/rolls back with it.
-async function recordChanges(client, userId, tableName, recordId, changes) {
-  if (!changes.length) return;
-  const now = new Date();
-  await client.changeLog.createMany({
-    data: changes.map(({ field, oldValue, newValue }) => ({
-      user_id: userId,
-      table_name: tableName,
-      record_id: recordId,
-      field,
-      old_value: oldValue === null || oldValue === undefined ? null : String(oldValue),
-      new_value: newValue === null || newValue === undefined ? null : String(newValue),
-      source: 'mcp',
-      created_at: now,
-    })),
-  });
 }
 
 // Shared response shape for update_shipment, for both kinds.
@@ -349,6 +332,7 @@ function buildServer(userId, apiKeyId) {
       carrier: resolveCarrier(inv.carrier, inv.tracking_number, inv.tracking_info),
       tax_exempt: inv.tax_exempt,
       notes: inv.notes || null,
+      market_value: inv.market_value === null || inv.market_value === undefined ? null : toNum(decimal(inv.market_value)),
     })));
   });
 
@@ -379,7 +363,7 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('get_cashflow_summary', {
-    description: 'Overall cash-flow snapshot: owed to you (sold but unpaid/short-paid), spend, and on-hand inventory value, broken down by buyer (the sale\'s marketplace/cashout).',
+    description: 'Overall cash-flow snapshot: owed to you (sold but unpaid/short-paid), spend, and on-hand inventory value, broken down by buyer (the sale\'s marketplace/cashout), plus market value and unrealized profit of priced stock.',
     inputSchema: {},
   }, async () => {
     const [inventories, sales] = await Promise.all([
@@ -388,6 +372,16 @@ function buildServer(userId, apiKeyId) {
     ]);
     const spent = inventories.reduce((sum, inv) => sum.plus(batchCost(inv)), decimal(0));
     const onHand = inventories.reduce((sum, inv) => sum.plus(allocatedCost(inv, inv.qty_on_hand)), decimal(0));
+
+    // Market-value view over live (not cancelled) stock. Unpriced rows are
+    // counted, not valued, so unrealized_profit only compares like with like.
+    const isCancelledPurchase = (inv) => Boolean(inv.cancelled_at)
+      || inv.receiving_status === 'CANCELLED'
+      || String(inv.status || '').toUpperCase() === 'CANCELLED';
+    const liveStock = inventories.filter((inv) => !isCancelledPurchase(inv) && inv.qty_on_hand > 0);
+    const pricedStock = liveStock.filter((inv) => inv.market_value !== null && inv.market_value !== undefined);
+    const marketValueOnHand = pricedStock.reduce((sum, inv) => sum.plus(decimal(inv.market_value).times(inv.qty_on_hand)), decimal(0));
+    const pricedCostBasis = pricedStock.reduce((sum, inv) => sum.plus(allocatedCost(inv, inv.qty_on_hand)), decimal(0));
 
     const byBuyer = new Map();
     let owed = decimal(0);
@@ -415,6 +409,10 @@ function buildServer(userId, apiKeyId) {
         revenue: toNum(b.revenue.toDecimalPlaces(2)),
         owed: toNum(b.owed.toDecimalPlaces(2)),
       })),
+      market_value_on_hand: toNum(marketValueOnHand.toDecimalPlaces(2)),
+      priced_cost_basis: toNum(pricedCostBasis.toDecimalPlaces(2)),
+      unrealized_profit: toNum(marketValueOnHand.minus(pricedCostBasis).toDecimalPlaces(2)),
+      unpriced_items: liveStock.length - pricedStock.length,
     });
   });
 
@@ -577,7 +575,7 @@ function buildServer(userId, apiKeyId) {
       platform: z.string().min(1).optional().describe('Existing marketplace/cashout name -- the sale\'s buyer. Must already exist (see list_sales for names in use).'),
       tracking_number: z.string().optional().describe('Outbound tracking number. Empty string clears it.'),
       carrier: z.string().optional().describe('Empty string clears it. Auto-detected from the tracking number when not set.'),
-      notes: z.string().max(2000).optional(),
+      notes: z.string().max(2000).optional().describe('Legacy single note field. Prefer add_note, which keeps a dated history of notes.'),
     }).strict(),
   }, async ({ sale_id, price, fees, shipping, qty, sale_date, platform, tracking_number, carrier, notes }) => {
     try {
@@ -665,7 +663,7 @@ function buildServer(userId, apiKeyId) {
       tracking_number: z.string().optional().describe('Empty string clears it.'),
       carrier: z.string().optional().describe('Empty string clears it. Auto-detected from the tracking number when not set.'),
       tax_exempt: z.boolean().optional(),
-      notes: z.string().max(2000).optional(),
+      notes: z.string().max(2000).optional().describe('Legacy single note field. Prefer add_note, which keeps a dated history of notes.'),
     }).strict(),
   }, async ({ purchase_id, qty, unit_cost, purchase_date, store, order_number, tracking_number, carrier, tax_exempt, notes }) => {
     try {
@@ -764,7 +762,7 @@ function buildServer(userId, apiKeyId) {
       platform: z.string().min(1).describe('Existing marketplace/cashout name -- the sale\'s buyer.'),
       tracking_number: z.string().optional().describe('Outbound tracking number, if already known.'),
       carrier: z.string().optional().describe('Auto-detected from the tracking number when not set.'),
-      notes: z.string().max(2000).optional(),
+      notes: z.string().max(2000).optional().describe('Legacy single note field. Prefer add_note, which keeps a dated history of notes.'),
     }).strict(),
   }, async ({ inventory_id, qty, sale_price, fees, sale_date, platform, tracking_number, carrier, notes }) => {
     try {
@@ -922,8 +920,688 @@ function buildServer(userId, apiKeyId) {
     })));
   });
 
+  // ------------------------------------------- platforms and payment methods
+
+  const toolError = (message) => Object.assign(new Error(message), { toolError: true });
+
+  server.registerTool('add_platform', {
+    description: 'Create a marketplace, cashout, or vendor platform.',
+    inputSchema: z.object({
+      name: z.string().trim().min(1).max(100),
+      type: z.enum(['Marketplace', 'Cashout', 'Vendor']),
+      fee_pct: z.number().min(0).max(100).optional().describe('Platform fee percent, e.g. 12.9. Defaults to 0.'),
+    }).strict(),
+  }, async ({ name, type, fee_pct }) => {
+    try {
+      const created = await prisma.$transaction(async (tx) => {
+        // add_sale/findPlatformByName look platforms up by name across every
+        // type, so a name may exist only once per user, whatever its type.
+        const existing = await tx.platform.findFirst({
+          where: { user_id: userId, name: { equals: name, mode: 'insensitive' } },
+        });
+        if (existing) throw toolError(`A platform named "${existing.name}" (${existing.type}) already exists`);
+        // Same defaults as POST /api/platforms. fee_pct_decimal is filled by
+        // the database trigger; workflow_preset is left unset there too.
+        const platform = await tx.platform.create({
+          data: { user_id: userId, name, type, fee_pct: fee_pct ?? 0 },
+        });
+        await recordChanges(tx, userId, 'Platform', platform.id, [
+          { field: 'created', oldValue: null, newValue: `${platform.name} (${platform.type})` },
+        ]);
+        return platform;
+      });
+      await logWrite(userId, apiKeyId, 'add_platform', { name, type, fee_pct });
+      return jsonResult({ id: created.id, name: created.name, type: created.type, fee_pct: toNum(created.fee_pct) });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to add platform');
+    }
+  });
+
+  server.registerTool('add_payment_method', {
+    description: 'Create a credit or debit card/account for logging purchases and expenses.',
+    inputSchema: z.object({
+      name: z.string().trim().min(1).max(100),
+      type: z.enum(['Credit', 'Debit']),
+      last4: z.string().regex(/^\d{4}$/, 'last4 must be exactly 4 digits').optional(),
+      cashback_rate: z.number().min(0).max(100).optional().describe('Default cashback percent, e.g. 2 for 2%. Defaults to 0.'),
+    }).strict(),
+  }, async ({ name, type, last4, cashback_rate }) => {
+    try {
+      const created = await prisma.$transaction(async (tx) => {
+        const existing = await tx.paymentMethod.findFirst({
+          where: { user_id: userId, name: { equals: name, mode: 'insensitive' } },
+        });
+        if (existing) throw toolError(`A payment method named "${existing.name}" (${existing.type}) already exists`);
+        // Same defaults as POST /api/payment-methods; default_cashback_rate is
+        // the percent itself, and its _decimal twin is filled by the trigger.
+        const method = await tx.paymentMethod.create({
+          data: { user_id: userId, name, type, default_cashback_rate: cashback_rate ?? 0, last4: last4 || null },
+        });
+        await recordChanges(tx, userId, 'PaymentMethod', method.id, [
+          { field: 'created', oldValue: null, newValue: `${method.name} (${method.type})` },
+        ]);
+        return method;
+      });
+      await logWrite(userId, apiKeyId, 'add_payment_method', { name, type, last4, cashback_rate });
+      return jsonResult({
+        id: created.id,
+        name: created.name,
+        type: created.type,
+        last4: created.last4 || null,
+        cashback_rate: toNum(created.default_cashback_rate),
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to add payment method');
+    }
+  });
+
+  // ------------------------------------------------------------------ voids
+
+  // Both void tools go through statusTransitions.applyTransition, the same
+  // function the website's status-action routes use, so status, legacy status,
+  // timestamps and the inventory restore behave identically. Nothing is ever
+  // deleted.
+  const confirmFlag = z.literal(true).describe('Must be true to confirm the void.');
+
+  server.registerTool('void_sale', {
+    description: 'Void a mistaken sale: marks it cancelled and puts its quantity back in stock.',
+    inputSchema: z.object({
+      sale_id: z.string().uuid(),
+      reason: z.string().trim().min(1).max(500),
+      confirm: confirmFlag,
+    }).strict(),
+  }, async ({ sale_id, reason, confirm }) => {
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const existing = await tx.sales.findUnique({ where: { id: sale_id }, include: { inventory: true } });
+        if (!existing || existing.inventory.user_id !== userId) throw toolError('Sale not found or access denied');
+        if (existing.voided_at) {
+          throw toolError(`Sale was already voided on ${new Date(existing.voided_at).toISOString()}`);
+        }
+        if (!statusTransitions.isActionAllowed(existing, 'sale', 'void_sale')) {
+          throw toolError(`This sale cannot be voided from its current status (${existing.workflow_status || existing.status || 'none'})`);
+        }
+
+        const transition = await statusTransitions.applyTransition(tx, 'sale', existing, 'void_sale', { user_id: userId });
+        const updated = await tx.sales.update({ where: { id: sale_id }, data: { void_reason: reason } });
+        await recordChanges(tx, userId, 'Sales', sale_id, [
+          { field: 'voided', oldValue: null, newValue: new Date(updated.voided_at).toISOString() },
+          { field: 'void_reason', oldValue: existing.void_reason ?? null, newValue: reason },
+          { field: 'workflow_status', oldValue: transition.from, newValue: transition.to },
+        ]);
+        return { updated, restored: transition.restored };
+      });
+      await logWrite(userId, apiKeyId, 'void_sale', { sale_id, reason, confirm });
+      return jsonResult({
+        id: result.updated.id,
+        status: result.updated.workflow_status,
+        voided_at: new Date(result.updated.voided_at).toISOString(),
+        void_reason: result.updated.void_reason,
+        qty_restored: result.restored,
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to void sale');
+    }
+  });
+
+  const isClosedSale = (sale) => Boolean(sale.voided_at)
+    || sale.workflow_status === 'CANCELLED'
+    || String(sale.status || '').toUpperCase() === 'CANCELLED';
+
+  server.registerTool('void_purchase', {
+    description: 'Void a mistaken purchase by cancelling it; its sales must be voided first.',
+    inputSchema: z.object({
+      purchase_id: z.string().uuid(),
+      reason: z.string().trim().min(1).max(500),
+      confirm: confirmFlag,
+    }).strict(),
+  }, async ({ purchase_id, reason, confirm }) => {
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        const existing = await tx.inventory.findUnique({ where: { id: purchase_id } });
+        if (!existing || existing.user_id !== userId) throw toolError('Purchase not found or access denied');
+        if (existing.cancelled_at) {
+          throw toolError(`Purchase was already cancelled on ${new Date(existing.cancelled_at).toISOString()}`);
+        }
+        if (!statusTransitions.isActionAllowed(existing, 'inventory', 'cancel')) {
+          throw toolError(`This purchase cannot be voided from its current receiving status (${existing.receiving_status || 'none'}); only purchases not yet received can be cancelled`);
+        }
+
+        // The cancel transition is guarded only on receiving_status, which it
+        // does not change, so claim the row on cancelled_at first: a second
+        // concurrent void blocks here and then matches nothing. Taking the row
+        // lock before reading the sales also means a concurrent add_sale has
+        // either committed (and is seen below) or waits for this to finish.
+        const claim = await tx.inventory.updateMany({
+          where: { id: purchase_id, user_id: userId, cancelled_at: null },
+          data: { void_reason: reason },
+        });
+        if (claim.count !== 1) throw toolError('Purchase was already cancelled');
+
+        const sales = await tx.sales.findMany({
+          where: { inventory_id: purchase_id },
+          select: { id: true, status: true, workflow_status: true, voided_at: true },
+        });
+        const live = sales.filter((s) => !isClosedSale(s));
+        if (live.length) {
+          throw toolError(`Purchase still has ${live.length} sale(s) that are not voided or cancelled; void them first: ${live.map((s) => s.id).join(', ')}`);
+        }
+
+        const transition = await statusTransitions.applyTransition(tx, 'inventory', existing, 'cancel', { user_id: userId });
+        await recordChanges(tx, userId, 'Inventory', purchase_id, [
+          { field: 'voided', oldValue: null, newValue: new Date(transition.record.cancelled_at).toISOString() },
+          { field: 'void_reason', oldValue: existing.void_reason ?? null, newValue: reason },
+        ]);
+        return transition.record;
+      });
+      await logWrite(userId, apiKeyId, 'void_purchase', { purchase_id, reason, confirm });
+      return jsonResult({
+        id: updated.id,
+        item: updated.product_name,
+        cancelled_at: new Date(updated.cancelled_at).toISOString(),
+        void_reason: updated.void_reason,
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to void purchase');
+    }
+  });
+
+  // ------------------------------------------------------------------ notes
+
+  // Compact row shared by the note tools. `product` is the linked purchase's
+  // product name (a sale's comes via its purchase).
+  const noteRow = (note, product, withDeleted = false) => ({
+    id: note.id,
+    entity_type: note.entity_type,
+    entity_id: note.entity_id,
+    product: product ?? null,
+    ...transactionNotes.serializeNote(note),
+    ...(withDeleted ? { deleted_at: note.deleted_at ? new Date(note.deleted_at).toISOString() : null } : {}),
+  });
+  const noteProduct = async (note) => (await transactionNotes.findOwnedEntity(prisma, userId, note.entity_type, note.entity_id))?.product_name ?? null;
+
+  server.registerTool('add_note', {
+    description: 'Add a dated note to one sale or purchase.',
+    inputSchema: z.object({
+      entity_type: z.enum(['sale', 'purchase']),
+      entity_id: z.string().uuid().describe('The sale id or purchase id.'),
+      body: z.string().min(1).max(2000),
+      pinned: z.boolean().optional().describe('Pinned notes list first. Defaults to false.'),
+    }).strict(),
+  }, async ({ entity_type, entity_id, body, pinned }) => {
+    try {
+      const { note, product } = await prisma.$transaction((tx) => transactionNotes.createNote(
+        tx, userId, { entity_type, entity_id, body, pinned, author: 'bot' }, 'mcp',
+      ));
+      await logWrite(userId, apiKeyId, 'add_note', { entity_type, entity_id, body, pinned });
+      return jsonResult(noteRow(note, product));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to add note');
+    }
+  });
+
+  server.registerTool('list_notes', {
+    description: 'List notes on sales and purchases, pinned first then newest, with optional filters.',
+    inputSchema: z.object({
+      entity_type: z.enum(['sale', 'purchase']).optional().describe('Use together with entity_id.'),
+      entity_id: z.string().uuid().optional().describe('Use together with entity_type.'),
+      product: z.string().min(1).optional().describe('Case-insensitive partial match on the product name.'),
+      start_date: strictDate.optional().describe('YYYY-MM-DD, inclusive, on when the note was written.'),
+      end_date: strictDate.optional().describe('YYYY-MM-DD, inclusive, on when the note was written.'),
+      text: z.string().min(1).optional().describe('Case-insensitive search in the note text.'),
+      limit: z.number().int().min(1).max(100).optional().describe('Default 20.'),
+      include_deleted: z.boolean().optional().describe('Default false.'),
+    }).strict(),
+  }, async ({ entity_type, entity_id, product, start_date, end_date, text, limit, include_deleted }) => {
+    try {
+      if ((entity_type === undefined) !== (entity_id === undefined)) {
+        throw Object.assign(new Error('entity_type and entity_id must be given together'), { toolError: true });
+      }
+      const where = { user_id: userId };
+      if (!include_deleted) where.deleted_at = null;
+
+      // Which product's shared ProductNote to return, if any.
+      let productNoteName;
+      if (entity_type) {
+        const entity = await transactionNotes.requireOwnedEntity(prisma, userId, entity_type, entity_id);
+        where.entity_type = entity_type;
+        where.entity_id = entity_id;
+        productNoteName = transactionNotes.normalizeProductName(entity.product_name);
+      }
+      if (product !== undefined) {
+        const term = product.trim();
+        if (!term) throw Object.assign(new Error('product cannot be blank'), { toolError: true });
+        const invs = await prisma.inventory.findMany({
+          where: { user_id: userId, product_name: { contains: term, mode: 'insensitive' } },
+          select: { id: true, product_name: true },
+        });
+        const invIds = invs.map((i) => i.id);
+        const sales = invIds.length
+          ? await prisma.sales.findMany({ where: { inventory_id: { in: invIds } }, select: { id: true } })
+          : [];
+        where.AND = [{ OR: [
+          { entity_type: 'purchase', entity_id: { in: invIds } },
+          { entity_type: 'sale', entity_id: { in: sales.map((s) => s.id) } },
+        ] }];
+        if (productNoteName === undefined) {
+          // Exact product name first; otherwise, if the partial match landed
+          // on exactly one product, that product's shared note.
+          productNoteName = transactionNotes.normalizeProductName(term);
+          const exact = await prisma.productNote.findFirst({ where: { user_id: userId, product_name: productNoteName } });
+          const distinct = [...new Set(invs.map((i) => transactionNotes.normalizeProductName(i.product_name)))];
+          if (!exact && distinct.length === 1) productNoteName = distinct[0];
+        }
+      }
+      if (start_date || end_date) {
+        where.created_at = {};
+        if (start_date) where.created_at.gte = new Date(`${start_date}T00:00:00.000Z`);
+        if (end_date) where.created_at.lte = new Date(`${end_date}T23:59:59.999Z`);
+      }
+      if (text !== undefined) where.body = { contains: text, mode: 'insensitive' };
+
+      const notes = await prisma.transactionNote.findMany({ where, orderBy: transactionNotes.ORDER, take: limit ?? 20 });
+      const names = await transactionNotes.productNamesFor(prisma, userId, notes);
+      const result = {};
+      if (productNoteName !== undefined) {
+        const record = await prisma.productNote.findFirst({ where: { user_id: userId, product_name: productNoteName } });
+        result.product_note = record?.note ?? null;
+      }
+      result.notes = notes.map((n) => noteRow(n, names.get(`${n.entity_type}:${n.entity_id}`), include_deleted === true));
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err.message || 'Failed to list notes');
+    }
+  });
+
+  server.registerTool('update_note', {
+    description: 'Edit a note\'s text or pinned flag.',
+    inputSchema: z.object({
+      note_id: z.string().uuid(),
+      body: z.string().min(1).max(2000).optional(),
+      pinned: z.boolean().optional(),
+    }).strict(),
+  }, async ({ note_id, body, pinned }) => {
+    try {
+      if (body === undefined && pinned === undefined) {
+        throw Object.assign(new Error('Provide body and/or pinned'), { toolError: true });
+      }
+      const note = await prisma.$transaction((tx) => transactionNotes.updateNote(tx, userId, note_id, { body, pinned }, 'mcp'));
+      await logWrite(userId, apiKeyId, 'update_note', { note_id, body, pinned });
+      return jsonResult(noteRow(note, await noteProduct(note)));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to update note');
+    }
+  });
+
+  server.registerTool('delete_note', {
+    description: 'Soft-delete a note; list_notes with include_deleted still shows it.',
+    inputSchema: z.object({
+      note_id: z.string().uuid(),
+    }).strict(),
+  }, async ({ note_id }) => {
+    try {
+      const note = await prisma.$transaction((tx) => transactionNotes.deleteNote(tx, userId, note_id, 'mcp'));
+      await logWrite(userId, apiKeyId, 'delete_note', { note_id });
+      return jsonResult(noteRow(note, await noteProduct(note), true));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to delete note');
+    }
+  });
+
+  // ------------------------------------------------------------ attachments
+
+  const attachmentRow = (a) => ({
+    id: a.id,
+    entity_type: a.entity_type,
+    entity_id: a.entity_id,
+    url: a.url,
+    label: a.label ?? null,
+    kind: a.kind ?? null,
+    created_at: new Date(a.created_at).toISOString(),
+  });
+  // Best-effort guess when the caller leaves kind out.
+  const inferAttachmentKind = (url, label) => {
+    const parsed = new URL(url);
+    if (parsed.hostname.toLowerCase() === 'mail.google.com') return 'gmail';
+    const mentionsLabel = /label/i.test(url) || /label/i.test(label || '');
+    if (parsed.pathname.toLowerCase().endsWith('.pdf') && mentionsLabel) return 'label';
+    return 'other';
+  };
+
+  server.registerTool('add_attachment', {
+    description: 'Attach a link (Gmail thread, receipt, shipping label) to one sale or purchase.',
+    inputSchema: z.object({
+      entity_type: z.enum(['sale', 'purchase']),
+      entity_id: z.string().uuid().describe('The sale id or purchase id.'),
+      url: z.string().max(2000).url().refine((value) => {
+        try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
+      }, 'url must start with http:// or https://'),
+      label: z.string().max(200).optional(),
+      kind: z.enum(['gmail', 'receipt', 'label', 'other']).optional().describe('Inferred from the url when omitted.'),
+    }).strict(),
+  }, async ({ entity_type, entity_id, url, label, kind }) => {
+    try {
+      const resolvedKind = kind ?? inferAttachmentKind(url, label);
+      const created = await prisma.$transaction(async (tx) => {
+        const entity = await transactionNotes.findOwnedEntity(tx, userId, entity_type, entity_id);
+        if (!entity) throw toolError(`${entity_type === 'sale' ? 'Sale' : 'Purchase'} not found or access denied`);
+        const duplicate = await tx.attachment.findFirst({ where: { user_id: userId, entity_type, entity_id, url } });
+        if (duplicate) throw toolError('That url is already attached to this record');
+        const attachment = await tx.attachment.create({
+          data: { user_id: userId, entity_type, entity_id, url, label: label ?? null, kind: resolvedKind },
+        });
+        await recordChanges(tx, userId, transactionNotes.TABLE_FOR[entity_type], entity_id, [
+          { field: 'attachment_added', oldValue: null, newValue: url },
+        ]);
+        return attachment;
+      });
+      await logWrite(userId, apiKeyId, 'add_attachment', { entity_type, entity_id, url, label, kind });
+      return jsonResult(attachmentRow(created));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to add attachment');
+    }
+  });
+
+  server.registerTool('list_attachments', {
+    description: 'List attached links, newest first, optionally for one sale or purchase.',
+    inputSchema: z.object({
+      entity_type: z.enum(['sale', 'purchase']).optional().describe('Use together with entity_id.'),
+      entity_id: z.string().uuid().optional().describe('Use together with entity_type.'),
+      limit: z.number().int().min(1).max(100).optional().describe('Default 20.'),
+    }).strict(),
+  }, async ({ entity_type, entity_id, limit }) => {
+    try {
+      if ((entity_type === undefined) !== (entity_id === undefined)) {
+        throw toolError('entity_type and entity_id must be given together');
+      }
+      const where = { user_id: userId };
+      if (entity_type) {
+        await transactionNotes.requireOwnedEntity(prisma, userId, entity_type, entity_id);
+        where.entity_type = entity_type;
+        where.entity_id = entity_id;
+      }
+      const rows = await prisma.attachment.findMany({ where, orderBy: { created_at: 'desc' }, take: limit ?? 20 });
+      return jsonResult(rows.map(attachmentRow));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to list attachments');
+    }
+  });
+
+  // ----------------------------------------------------------- market value
+
+  server.registerTool('set_market_value', {
+    description: 'Set or clear (null) a purchase\'s current per-unit market value.',
+    inputSchema: z.object({
+      purchase_id: z.string().uuid(),
+      market_value: z.number().min(0).max(999999999999.99).nullable().describe('Per unit. null clears it.'),
+      market_source: z.string().max(100).optional().describe('e.g. "eBay sold comps".'),
+      checked_at: strictDate.optional().describe('YYYY-MM-DD. Defaults to today.'),
+    }).strict(),
+  }, async ({ purchase_id, market_value, market_source, checked_at }) => {
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        const existing = await tx.inventory.findUnique({ where: { id: purchase_id } });
+        if (!existing || existing.user_id !== userId) throw toolError('Purchase not found or access denied');
+
+        // Clearing (null) clears all three fields; setting keeps the previous
+        // source unless a new one is given.
+        const clearing = market_value === null;
+        const newValueStr = clearing ? null : decimal(market_value).toDecimalPlaces(2).toFixed(2);
+        const newSource = clearing ? null : (market_source ?? existing.market_source ?? null);
+        const newCheckedStr = clearing ? null : (checked_at ?? new Date().toISOString().slice(0, 10));
+
+        const hasOld = existing.market_value !== null && existing.market_value !== undefined;
+        const oldValueStr = hasOld ? decimal(existing.market_value).toFixed(2) : null;
+        const oldCheckedStr = existing.market_checked_at ? toDateOnly(existing.market_checked_at) : null;
+
+        const data = {};
+        const changes = [];
+        if (oldValueStr !== newValueStr) {
+          data.market_value = newValueStr;
+          changes.push({ field: 'market_value', oldValue: oldValueStr, newValue: newValueStr });
+        }
+        if ((existing.market_source ?? null) !== newSource) {
+          data.market_source = newSource;
+          changes.push({ field: 'market_source', oldValue: existing.market_source ?? null, newValue: newSource });
+        }
+        if (oldCheckedStr !== newCheckedStr) {
+          data.market_checked_at = newCheckedStr === null ? null : localNoon(newCheckedStr);
+          changes.push({ field: 'market_checked_at', oldValue: oldCheckedStr, newValue: newCheckedStr });
+        }
+        if (!changes.length) return existing;
+        const row = await tx.inventory.update({ where: { id: purchase_id }, data });
+        await recordChanges(tx, userId, 'Inventory', purchase_id, changes);
+        return row;
+      });
+      await logWrite(userId, apiKeyId, 'set_market_value', { purchase_id, market_value, market_source, checked_at });
+
+      const qty = updated.qty_on_hand;
+      const priced = updated.market_value !== null && updated.market_value !== undefined;
+      const unrealized = priced ? decimal(updated.market_value).times(qty).minus(allocatedCost(updated, qty)) : null;
+      return jsonResult({
+        id: updated.id,
+        item: updated.product_name,
+        qty_on_hand: qty,
+        market_value: priced ? toNum(decimal(updated.market_value)) : null,
+        market_source: updated.market_source ?? null,
+        market_checked_at: updated.market_checked_at ? toDateOnly(updated.market_checked_at) : null,
+        unit_cost_basis: toNum(allocatedCost(updated, 1).toDecimalPlaces(2)),
+        unrealized_profit: unrealized === null ? null : toNum(unrealized.toDecimalPlaces(2)),
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to set market value');
+    }
+  });
+
+  // ---------------------------------------------------- search and profit
+
+  // A purchase is out of the product-level profit picture once cancelled by
+  // either path (same test get_cashflow_summary uses for live stock).
+  const isCancelledInventory = (inv) => Boolean(inv.cancelled_at)
+    || inv.receiving_status === 'CANCELLED'
+    || String(inv.status || '').toUpperCase() === 'CANCELLED';
+  // Counts toward profit: realized by status and not voided.
+  const countsAsRealized = (sale) => isRealizedSale(sale) && !sale.voided_at;
+  const money2 = (d) => toNum(d.toDecimalPlaces(2));
+
+  server.registerTool('search', {
+    description: 'Search purchases, sales and notes by text, newest first.',
+    inputSchema: z.object({
+      query: z.string().min(1).max(200).describe('Case-insensitive substring: product, order number, tracking, store, platform, buyer, or note text.'),
+      types: z.array(z.enum(['purchase', 'sale', 'note'])).min(1).optional().describe('Default all three.'),
+      limit: z.number().int().min(1).max(50).optional().describe('Default 10.'),
+    }).strict(),
+  }, async ({ query, types, limit }) => {
+    try {
+      const term = query.trim().toLowerCase();
+      if (!term) throw toolError('query cannot be blank');
+      const want = new Set(types && types.length ? types : ['purchase', 'sale', 'note']);
+      const hit = (...values) => values.some((v) => v !== null && v !== undefined && String(v).toLowerCase().includes(term));
+      const rows = [];
+
+      if (want.has('purchase')) {
+        const inventories = await prisma.inventory.findMany({ where: { user_id: userId }, include: { vendor: true } });
+        for (const inv of inventories) {
+          if (!hit(inv.product_name, inv.order_number, inv.tracking_number, inv.vendor?.name)) continue;
+          rows.push({
+            sortKey: new Date(inv.purchase_date).getTime(),
+            row: {
+              id: inv.id,
+              type: 'purchase',
+              name: inv.product_name,
+              date: toDateOnly(inv.purchase_date),
+              amount: money2(batchCost(inv)),
+              status: inv.cancelled_at ? 'CANCELLED' : (inv.receiving_status || inv.status || null),
+            },
+          });
+        }
+      }
+      if (want.has('sale')) {
+        const sales = await prisma.sales.findMany({
+          where: { inventory: { user_id: userId } },
+          include: { inventory: true, platform: true, buyer: true },
+        });
+        for (const s of sales) {
+          if (!hit(s.inventory?.product_name, s.tracking_number, s.platform?.name, s.buyer?.name, s.inventory?.order_number)) continue;
+          rows.push({
+            sortKey: new Date(s.sale_date).getTime(),
+            row: {
+              id: s.id,
+              type: 'sale',
+              name: s.inventory?.product_name ?? null,
+              date: toDateOnly(s.sale_date),
+              amount: money2(saleEconomics(s.inventory, s).revenue),
+              status: s.workflow_status || s.status || null,
+            },
+          });
+        }
+      }
+      if (want.has('note')) {
+        const notes = await prisma.transactionNote.findMany({ where: { user_id: userId, deleted_at: null } });
+        for (const n of notes) {
+          if (!hit(n.body)) continue;
+          rows.push({
+            sortKey: new Date(n.created_at).getTime(),
+            row: {
+              id: n.id,
+              type: 'note',
+              name: String(n.body).slice(0, 80),
+              date: toDateOnly(n.created_at),
+              amount: null,
+              status: n.entity_type,
+              parent_id: n.entity_id,
+            },
+          });
+        }
+      }
+
+      rows.sort((a, b) => (b.sortKey || 0) - (a.sortKey || 0));
+      const max = limit ?? 10;
+      return jsonResult({ results: rows.slice(0, max).map((r) => r.row), truncated: rows.length > max });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to search');
+    }
+  });
+
+  server.registerTool('get_item_profit', {
+    description: 'Profit for one purchase, one sale, or every purchase of a product; fees = purchase fees + sale commission, shipping = inbound + sale shipping.',
+    inputSchema: z.object({
+      purchase_id: z.string().uuid().optional(),
+      sale_id: z.string().uuid().optional(),
+      product: z.string().min(1).max(200).optional().describe('Exact product name, case-insensitive.'),
+    }).strict(),
+  }, async ({ purchase_id, sale_id, product }) => {
+    try {
+      const given = [purchase_id, sale_id, product].filter((v) => v !== undefined).length;
+      if (given !== 1) throw toolError('Give exactly one of purchase_id, sale_id, or product');
+
+      const zero = () => decimal(0);
+      const totals = {
+        units_bought: 0, units_sold: 0, units_on_hand: 0,
+        total_cost: zero(), cost_of_units_sold: zero(), fees: zero(), shipping: zero(),
+        revenue: zero(), net_profit: zero(), sales_count: 0, excluded_sales: 0,
+      };
+      // Realized sales only; revenue/cost/net_profit come straight from
+      // saleEconomics (net_profit = revenue - allocated cost + allocated
+      // cashback, the same profit the analytics routes report).
+      const addSale = (inv, sale) => {
+        if (!countsAsRealized(sale)) { totals.excluded_sales += 1; return; }
+        const econ = saleEconomics(inv, sale);
+        totals.units_sold += Number(sale.quantity) || 0;
+        totals.cost_of_units_sold = totals.cost_of_units_sold.plus(econ.cost);
+        totals.revenue = totals.revenue.plus(econ.revenue);
+        totals.net_profit = totals.net_profit.plus(econ.netProfit);
+        totals.fees = totals.fees.plus(decimal(sale.commission_fee || 0));
+        totals.shipping = totals.shipping.plus(decimal(sale.sale_shipping || 0));
+        totals.sales_count += 1;
+      };
+      const addPurchase = (inv) => {
+        totals.units_bought += Number(inv.qty_purchased) || 0;
+        totals.units_on_hand += Number(inv.qty_on_hand) || 0;
+        totals.total_cost = totals.total_cost.plus(batchCost(inv));
+        totals.fees = totals.fees.plus(decimal(inv.fees || 0));
+        totals.shipping = totals.shipping.plus(decimal(inv.shipping_cost_inbound || 0));
+        for (const sale of inv.sales || []) addSale(inv, sale);
+      };
+
+      let scope;
+      let productName;
+      if (purchase_id) {
+        scope = 'purchase';
+        const inv = await prisma.inventory.findFirst({
+          where: { id: purchase_id, user_id: userId },
+          include: { vendor: true, payment_method: true, sales: true },
+        });
+        if (!inv) throw toolError('Purchase not found or access denied');
+        productName = inv.product_name;
+        addPurchase(inv);
+      } else if (sale_id) {
+        scope = 'sale';
+        const sale = await prisma.sales.findUnique({
+          where: { id: sale_id },
+          include: { inventory: { include: { vendor: true, payment_method: true } } },
+        });
+        if (!sale || !sale.inventory || sale.inventory.user_id !== userId) throw toolError('Sale not found or access denied');
+        const inv = sale.inventory;
+        productName = inv.product_name;
+        // One sale: its cost is the allocated cost of its own units, and the
+        // purchase-side fees/shipping are allocated by the same unit share.
+        const qty = Number(sale.quantity) || 0;
+        const purchased = Number(inv.qty_purchased) || 0;
+        const share = (value) => (purchased > 0 ? decimal(value || 0).times(qty).div(purchased) : zero());
+        totals.units_bought = qty;
+        totals.units_on_hand = null;
+        totals.total_cost = allocatedCost(inv, qty);
+        if (countsAsRealized(sale)) {
+          totals.fees = share(inv.fees);
+          totals.shipping = share(inv.shipping_cost_inbound);
+        }
+        addSale(inv, sale);
+      } else {
+        scope = 'product';
+        const wanted = product.trim().toLowerCase();
+        if (!wanted) throw toolError('product cannot be blank');
+        const inventories = (await prisma.inventory.findMany({
+          where: { user_id: userId },
+          include: { vendor: true, payment_method: true, sales: true },
+        })).filter((inv) => !isCancelledInventory(inv));
+        const matched = inventories.filter((inv) => String(inv.product_name || '').trim().toLowerCase() === wanted);
+        if (!matched.length) {
+          const names = [...new Set(inventories.map((inv) => String(inv.product_name || '').trim()).filter(Boolean))];
+          const words = wanted.split(/\s+/).filter((w) => w.length > 1);
+          const suggestions = names.filter((name) => {
+            const lower = name.toLowerCase();
+            return lower.includes(wanted) || wanted.includes(lower) || words.some((w) => lower.includes(w));
+          }).slice(0, 5);
+          throw toolError(`No purchases of "${product.trim()}".${suggestions.length ? ` Did you mean: ${suggestions.join(', ')}` : ''}`);
+        }
+        productName = matched[0].product_name;
+        for (const inv of matched) addPurchase(inv);
+      }
+
+      return jsonResult({
+        scope,
+        product: productName,
+        units_bought: totals.units_bought,
+        units_sold: totals.units_sold,
+        units_on_hand: totals.units_on_hand,
+        total_cost: money2(totals.total_cost),
+        cost_of_units_sold: money2(totals.cost_of_units_sold),
+        fees: money2(totals.fees),
+        shipping: money2(totals.shipping),
+        revenue: money2(totals.revenue),
+        net_profit: money2(totals.net_profit),
+        roi_pct: totals.cost_of_units_sold.isZero() ? null : money2(totals.net_profit.div(totals.cost_of_units_sold).times(100)),
+        sales_count: totals.sales_count,
+        excluded_sales: totals.excluded_sales,
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to compute profit');
+    }
+  });
+
   server.registerTool('list_changes', {
-    description: 'List recent field-level changes made by update_sale/update_purchase/update_shipment, most recent first, so an edit can be reviewed (and manually reversed using old_value).',
+    description: 'List recent field-level changes (edits, voids, new platforms/cards, notes, attachments, market value), newest first, for review or manual reversal via old_value.',
     inputSchema: z.object({
       limit: z.number().int().min(1).max(500).optional().describe('Omit to return every matching change.'),
       record_id: z.string().uuid().optional().describe('Limit to the change history of one sale or purchase.'),
