@@ -304,19 +304,26 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('list_inventory', {
-    description: 'List inventory purchases, optionally filtered by status.',
-    inputSchema: { status: z.string().optional() },
-  }, async ({ status }) => {
+    description: 'List inventory purchases, newest first, paged. status = receiving status (did it arrive); availability = Available/Sold Out from qty_on_hand.',
+    inputSchema: {
+      status: z.string().optional(),
+      availability: z.enum(['Available', 'Sold Out']).optional(),
+      limit: z.number().int().min(1).max(100).optional().describe('Default 20.'),
+      offset: z.number().int().min(0).optional().describe('Default 0.'),
+    },
+  }, async ({ status, availability, limit, offset }) => {
     const inventories = await prisma.inventory.findMany({
       where: { user_id: userId },
       include: { vendor: true },
       orderBy: { purchase_date: 'desc' },
     });
     const now = Date.now();
-    const filtered = status
-      ? inventories.filter((inv) => String(inv.receiving_status || inv.status || '').toUpperCase() === status.toUpperCase())
-      : inventories;
-    return jsonResult(filtered.map((inv) => ({
+    const filtered = inventories
+      .filter((inv) => !status || String(inv.receiving_status || inv.status || '').toUpperCase() === status.toUpperCase())
+      .filter((inv) => !availability || statusTransitions.availabilityLabel(inv) === availability);
+    const start = offset ?? 0;
+    const page = filtered.slice(start, start + (limit ?? 20));
+    const items = page.map((inv) => ({
       id: inv.id,
       item: inv.product_name,
       qty: inv.qty_purchased,
@@ -326,6 +333,7 @@ function buildServer(userId, apiKeyId) {
       purchase_date: toDateOnly(inv.purchase_date),
       store: inv.vendor?.name || null,
       status: inv.receiving_status || inv.status,
+      availability: statusTransitions.availabilityLabel(inv),
       days_held: Math.max(0, Math.floor((now - new Date(inv.purchase_date).getTime()) / 86400000)),
       order_number: inv.order_number || null,
       tracking_number: inv.tracking_number || null,
@@ -333,7 +341,8 @@ function buildServer(userId, apiKeyId) {
       tax_exempt: inv.tax_exempt,
       notes: inv.notes || null,
       market_value: inv.market_value === null || inv.market_value === undefined ? null : toNum(decimal(inv.market_value)),
-    })));
+    }));
+    return jsonResult({ items, total: filtered.length, truncated: start + page.length < filtered.length });
   });
 
   server.registerTool('list_expenses', {
@@ -1432,6 +1441,7 @@ function buildServer(userId, apiKeyId) {
               date: toDateOnly(inv.purchase_date),
               amount: money2(batchCost(inv)),
               status: inv.cancelled_at ? 'CANCELLED' : (inv.receiving_status || inv.status || null),
+              availability: inv.cancelled_at ? null : statusTransitions.availabilityLabel(inv),
             },
           });
         }
@@ -1484,7 +1494,7 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('get_item_profit', {
-    description: 'Profit for one purchase, one sale, or every purchase of a product; fees = purchase fees + sale commission, shipping = inbound + sale shipping.',
+    description: 'Profit for one purchase, one sale, or every purchase of a product. net_profit = revenue - fees - shipping - cost_of_units_sold + cashback, over realized sales only. revenue is the gross sale price; fees/shipping are sale-side; cost_of_units_sold already includes tax, purchase fees and inbound shipping (shown in purchase_fees_and_shipping); cashback is card cashback on the units sold.',
     inputSchema: z.object({
       purchase_id: z.string().uuid().optional(),
       sale_id: z.string().uuid().optional(),
@@ -1498,29 +1508,35 @@ function buildServer(userId, apiKeyId) {
       const zero = () => decimal(0);
       const totals = {
         units_bought: 0, units_sold: 0, units_on_hand: 0,
-        total_cost: zero(), cost_of_units_sold: zero(), fees: zero(), shipping: zero(),
-        revenue: zero(), net_profit: zero(), sales_count: 0, excluded_sales: 0,
+        total_cost: zero(), cost_of_units_sold: zero(), purchase_fees_and_shipping: zero(),
+        revenue: zero(), fees: zero(), shipping: zero(), cashback: zero(),
+        sales_count: 0, excluded_sales: 0,
       };
-      // Realized sales only; revenue/cost/net_profit come straight from
-      // saleEconomics (net_profit = revenue - allocated cost + allocated
-      // cashback, the same profit the analytics routes report).
+      // Realized sales only, priced with saleEconomics so net_profit is the
+      // same profit the analytics routes report. Each component is reported
+      // on its own so the formula in the description adds up.
       const addSale = (inv, sale) => {
         if (!countsAsRealized(sale)) { totals.excluded_sales += 1; return; }
         const econ = saleEconomics(inv, sale);
-        totals.units_sold += Number(sale.quantity) || 0;
+        const qty = Number(sale.quantity) || 0;
+        const purchased = Number(inv.qty_purchased) || 0;
+        totals.units_sold += qty;
         totals.cost_of_units_sold = totals.cost_of_units_sold.plus(econ.cost);
-        totals.revenue = totals.revenue.plus(econ.revenue);
-        totals.net_profit = totals.net_profit.plus(econ.netProfit);
+        if (purchased > 0) {
+          totals.purchase_fees_and_shipping = totals.purchase_fees_and_shipping.plus(
+            decimal(inv.fees || 0).plus(decimal(inv.shipping_cost_inbound || 0)).times(qty).div(purchased),
+          );
+        }
+        totals.revenue = totals.revenue.plus(decimal(sale.unit_price || 0).times(qty));
         totals.fees = totals.fees.plus(decimal(sale.commission_fee || 0));
         totals.shipping = totals.shipping.plus(decimal(sale.sale_shipping || 0));
+        totals.cashback = totals.cashback.plus(econ.cashback);
         totals.sales_count += 1;
       };
       const addPurchase = (inv) => {
         totals.units_bought += Number(inv.qty_purchased) || 0;
         totals.units_on_hand += Number(inv.qty_on_hand) || 0;
         totals.total_cost = totals.total_cost.plus(batchCost(inv));
-        totals.fees = totals.fees.plus(decimal(inv.fees || 0));
-        totals.shipping = totals.shipping.plus(decimal(inv.shipping_cost_inbound || 0));
         for (const sale of inv.sales || []) addSale(inv, sale);
       };
 
@@ -1544,18 +1560,11 @@ function buildServer(userId, apiKeyId) {
         if (!sale || !sale.inventory || sale.inventory.user_id !== userId) throw toolError('Sale not found or access denied');
         const inv = sale.inventory;
         productName = inv.product_name;
-        // One sale: its cost is the allocated cost of its own units, and the
-        // purchase-side fees/shipping are allocated by the same unit share.
+        // One sale: its cost is the allocated cost of its own units.
         const qty = Number(sale.quantity) || 0;
-        const purchased = Number(inv.qty_purchased) || 0;
-        const share = (value) => (purchased > 0 ? decimal(value || 0).times(qty).div(purchased) : zero());
         totals.units_bought = qty;
         totals.units_on_hand = null;
         totals.total_cost = allocatedCost(inv, qty);
-        if (countsAsRealized(sale)) {
-          totals.fees = share(inv.fees);
-          totals.shipping = share(inv.shipping_cost_inbound);
-        }
         addSale(inv, sale);
       } else {
         scope = 'product';
@@ -1579,19 +1588,28 @@ function buildServer(userId, apiKeyId) {
         for (const inv of matched) addPurchase(inv);
       }
 
+      // Built from the rounded components so the published formula holds to
+      // the cent (at most a cent off the unrounded analytics figure).
+      const r = (d) => decimal(money2(d));
+      const profitBeforeCashback = r(totals.revenue).minus(r(totals.fees)).minus(r(totals.shipping)).minus(r(totals.cost_of_units_sold));
+      const netProfit = profitBeforeCashback.plus(r(totals.cashback));
       return jsonResult({
         scope,
         product: productName,
         units_bought: totals.units_bought,
         units_sold: totals.units_sold,
         units_on_hand: totals.units_on_hand,
+        availability: totals.units_on_hand === null ? null : statusTransitions.availabilityLabel({ qty_on_hand: totals.units_on_hand }),
         total_cost: money2(totals.total_cost),
-        cost_of_units_sold: money2(totals.cost_of_units_sold),
+        revenue: money2(totals.revenue),
         fees: money2(totals.fees),
         shipping: money2(totals.shipping),
-        revenue: money2(totals.revenue),
-        net_profit: money2(totals.net_profit),
-        roi_pct: totals.cost_of_units_sold.isZero() ? null : money2(totals.net_profit.div(totals.cost_of_units_sold).times(100)),
+        cost_of_units_sold: money2(totals.cost_of_units_sold),
+        purchase_fees_and_shipping: money2(totals.purchase_fees_and_shipping),
+        profit_before_cashback: money2(profitBeforeCashback),
+        cashback: money2(totals.cashback),
+        net_profit: money2(netProfit),
+        roi_pct: totals.cost_of_units_sold.isZero() ? null : money2(netProfit.div(totals.cost_of_units_sold).times(100)),
         sales_count: totals.sales_count,
         excluded_sales: totals.excluded_sales,
       });

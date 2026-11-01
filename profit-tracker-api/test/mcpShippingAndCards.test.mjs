@@ -104,7 +104,7 @@ describe('tracking fields on add_sale and update_sale', () => {
 describe('list_inventory / list_sales return the new fields', () => {
   it('list_inventory includes order_number, tracking_number, carrier, tax_exempt', async () => {
     const { data } = await callTool('list_inventory', {});
-    const row = data.find((r) => r.id === harness.ids.inventory);
+    const row = data.items.find((r) => r.id === harness.ids.inventory);
     expect(row.tracking_number).toBe('9400111899223856928499');
     expect(row.carrier).toBe('USPS'); // auto-detected, no stored carrier on the fixture row
     expect(row.tax_exempt).toBe(false);

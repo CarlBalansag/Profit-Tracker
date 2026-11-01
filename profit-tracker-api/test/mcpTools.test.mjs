@@ -80,10 +80,12 @@ describe('MCP read tools', () => {
   });
 
   it('list_inventory reports total cost and days held', async () => {
-    const { data } = await callTool('list_inventory', {});
-    expect(data).toHaveLength(1);
-    expect(data[0].store).toBe('QA Store');
-    expect(data[0].total_cost).toBeCloseTo(100 * 5 + 40 + 20 + 10 - 50, 2);
+    const { data: { items, total, truncated } } = await callTool('list_inventory', {});
+    expect(items).toHaveLength(1);
+    expect(total).toBe(1);
+    expect(truncated).toBe(false);
+    expect(items[0].store).toBe('QA Store');
+    expect(items[0].total_cost).toBeCloseTo(100 * 5 + 40 + 20 + 10 - 50, 2);
   });
 
   it('list_expenses respects the category filter', async () => {

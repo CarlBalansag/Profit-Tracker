@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '1.01',
+    date: '2026-10-31',
+    notes: 'Your AI assistant now shows a full profit breakdown including card cashback, tells sold-out items apart, and lists inventory a page at a time.',
+  },
+  {
     version: '1.00',
     date: '2026-10-31',
     notes: 'Each sale and purchase now has its own notes (with pinning), shown alongside the shared product note in the transaction details.',
