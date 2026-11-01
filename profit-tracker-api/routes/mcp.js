@@ -332,6 +332,7 @@ function buildServer(userId, apiKeyId) {
       carrier: resolveCarrier(inv.carrier, inv.tracking_number, inv.tracking_info),
       tax_exempt: inv.tax_exempt,
       notes: inv.notes || null,
+      market_value: inv.market_value === null || inv.market_value === undefined ? null : toNum(decimal(inv.market_value)),
     })));
   });
 
@@ -362,7 +363,7 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('get_cashflow_summary', {
-    description: 'Overall cash-flow snapshot: owed to you (sold but unpaid/short-paid), spend, and on-hand inventory value, broken down by buyer (the sale\'s marketplace/cashout).',
+    description: 'Overall cash-flow snapshot: owed to you (sold but unpaid/short-paid), spend, and on-hand inventory value, broken down by buyer (the sale\'s marketplace/cashout), plus market value and unrealized profit of priced stock.',
     inputSchema: {},
   }, async () => {
     const [inventories, sales] = await Promise.all([
@@ -371,6 +372,16 @@ function buildServer(userId, apiKeyId) {
     ]);
     const spent = inventories.reduce((sum, inv) => sum.plus(batchCost(inv)), decimal(0));
     const onHand = inventories.reduce((sum, inv) => sum.plus(allocatedCost(inv, inv.qty_on_hand)), decimal(0));
+
+    // Market-value view over live (not cancelled) stock. Unpriced rows are
+    // counted, not valued, so unrealized_profit only compares like with like.
+    const isCancelledPurchase = (inv) => Boolean(inv.cancelled_at)
+      || inv.receiving_status === 'CANCELLED'
+      || String(inv.status || '').toUpperCase() === 'CANCELLED';
+    const liveStock = inventories.filter((inv) => !isCancelledPurchase(inv) && inv.qty_on_hand > 0);
+    const pricedStock = liveStock.filter((inv) => inv.market_value !== null && inv.market_value !== undefined);
+    const marketValueOnHand = pricedStock.reduce((sum, inv) => sum.plus(decimal(inv.market_value).times(inv.qty_on_hand)), decimal(0));
+    const pricedCostBasis = pricedStock.reduce((sum, inv) => sum.plus(allocatedCost(inv, inv.qty_on_hand)), decimal(0));
 
     const byBuyer = new Map();
     let owed = decimal(0);
@@ -398,6 +409,10 @@ function buildServer(userId, apiKeyId) {
         revenue: toNum(b.revenue.toDecimalPlaces(2)),
         owed: toNum(b.owed.toDecimalPlaces(2)),
       })),
+      market_value_on_hand: toNum(marketValueOnHand.toDecimalPlaces(2)),
+      priced_cost_basis: toNum(pricedCostBasis.toDecimalPlaces(2)),
+      unrealized_profit: toNum(marketValueOnHand.minus(pricedCostBasis).toDecimalPlaces(2)),
+      unpriced_items: liveStock.length - pricedStock.length,
     });
   });
 
@@ -1230,6 +1245,151 @@ function buildServer(userId, apiKeyId) {
       return jsonResult(noteRow(note, await noteProduct(note), true));
     } catch (err) {
       return errorResult(err.message || 'Failed to delete note');
+    }
+  });
+
+  // ------------------------------------------------------------ attachments
+
+  const attachmentRow = (a) => ({
+    id: a.id,
+    entity_type: a.entity_type,
+    entity_id: a.entity_id,
+    url: a.url,
+    label: a.label ?? null,
+    kind: a.kind ?? null,
+    created_at: new Date(a.created_at).toISOString(),
+  });
+  // Best-effort guess when the caller leaves kind out.
+  const inferAttachmentKind = (url, label) => {
+    const parsed = new URL(url);
+    if (parsed.hostname.toLowerCase() === 'mail.google.com') return 'gmail';
+    const mentionsLabel = /label/i.test(url) || /label/i.test(label || '');
+    if (parsed.pathname.toLowerCase().endsWith('.pdf') && mentionsLabel) return 'label';
+    return 'other';
+  };
+
+  server.registerTool('add_attachment', {
+    description: 'Attach a link (Gmail thread, receipt, shipping label) to one sale or purchase.',
+    inputSchema: z.object({
+      entity_type: z.enum(['sale', 'purchase']),
+      entity_id: z.string().uuid().describe('The sale id or purchase id.'),
+      url: z.string().max(2000).url().refine((value) => {
+        try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
+      }, 'url must start with http:// or https://'),
+      label: z.string().max(200).optional(),
+      kind: z.enum(['gmail', 'receipt', 'label', 'other']).optional().describe('Inferred from the url when omitted.'),
+    }).strict(),
+  }, async ({ entity_type, entity_id, url, label, kind }) => {
+    try {
+      const resolvedKind = kind ?? inferAttachmentKind(url, label);
+      const created = await prisma.$transaction(async (tx) => {
+        const entity = await transactionNotes.findOwnedEntity(tx, userId, entity_type, entity_id);
+        if (!entity) throw toolError(`${entity_type === 'sale' ? 'Sale' : 'Purchase'} not found or access denied`);
+        const duplicate = await tx.attachment.findFirst({ where: { user_id: userId, entity_type, entity_id, url } });
+        if (duplicate) throw toolError('That url is already attached to this record');
+        const attachment = await tx.attachment.create({
+          data: { user_id: userId, entity_type, entity_id, url, label: label ?? null, kind: resolvedKind },
+        });
+        await recordChanges(tx, userId, transactionNotes.TABLE_FOR[entity_type], entity_id, [
+          { field: 'attachment_added', oldValue: null, newValue: url },
+        ]);
+        return attachment;
+      });
+      await logWrite(userId, apiKeyId, 'add_attachment', { entity_type, entity_id, url, label, kind });
+      return jsonResult(attachmentRow(created));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to add attachment');
+    }
+  });
+
+  server.registerTool('list_attachments', {
+    description: 'List attached links, newest first, optionally for one sale or purchase.',
+    inputSchema: z.object({
+      entity_type: z.enum(['sale', 'purchase']).optional().describe('Use together with entity_id.'),
+      entity_id: z.string().uuid().optional().describe('Use together with entity_type.'),
+      limit: z.number().int().min(1).max(100).optional().describe('Default 20.'),
+    }).strict(),
+  }, async ({ entity_type, entity_id, limit }) => {
+    try {
+      if ((entity_type === undefined) !== (entity_id === undefined)) {
+        throw toolError('entity_type and entity_id must be given together');
+      }
+      const where = { user_id: userId };
+      if (entity_type) {
+        await transactionNotes.requireOwnedEntity(prisma, userId, entity_type, entity_id);
+        where.entity_type = entity_type;
+        where.entity_id = entity_id;
+      }
+      const rows = await prisma.attachment.findMany({ where, orderBy: { created_at: 'desc' }, take: limit ?? 20 });
+      return jsonResult(rows.map(attachmentRow));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to list attachments');
+    }
+  });
+
+  // ----------------------------------------------------------- market value
+
+  server.registerTool('set_market_value', {
+    description: 'Set or clear (null) a purchase\'s current per-unit market value.',
+    inputSchema: z.object({
+      purchase_id: z.string().uuid(),
+      market_value: z.number().min(0).max(999999999999.99).nullable().describe('Per unit. null clears it.'),
+      market_source: z.string().max(100).optional().describe('e.g. "eBay sold comps".'),
+      checked_at: strictDate.optional().describe('YYYY-MM-DD. Defaults to today.'),
+    }).strict(),
+  }, async ({ purchase_id, market_value, market_source, checked_at }) => {
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        const existing = await tx.inventory.findUnique({ where: { id: purchase_id } });
+        if (!existing || existing.user_id !== userId) throw toolError('Purchase not found or access denied');
+
+        // Clearing (null) clears all three fields; setting keeps the previous
+        // source unless a new one is given.
+        const clearing = market_value === null;
+        const newValueStr = clearing ? null : decimal(market_value).toDecimalPlaces(2).toFixed(2);
+        const newSource = clearing ? null : (market_source ?? existing.market_source ?? null);
+        const newCheckedStr = clearing ? null : (checked_at ?? new Date().toISOString().slice(0, 10));
+
+        const hasOld = existing.market_value !== null && existing.market_value !== undefined;
+        const oldValueStr = hasOld ? decimal(existing.market_value).toFixed(2) : null;
+        const oldCheckedStr = existing.market_checked_at ? toDateOnly(existing.market_checked_at) : null;
+
+        const data = {};
+        const changes = [];
+        if (oldValueStr !== newValueStr) {
+          data.market_value = newValueStr;
+          changes.push({ field: 'market_value', oldValue: oldValueStr, newValue: newValueStr });
+        }
+        if ((existing.market_source ?? null) !== newSource) {
+          data.market_source = newSource;
+          changes.push({ field: 'market_source', oldValue: existing.market_source ?? null, newValue: newSource });
+        }
+        if (oldCheckedStr !== newCheckedStr) {
+          data.market_checked_at = newCheckedStr === null ? null : localNoon(newCheckedStr);
+          changes.push({ field: 'market_checked_at', oldValue: oldCheckedStr, newValue: newCheckedStr });
+        }
+        if (!changes.length) return existing;
+        const row = await tx.inventory.update({ where: { id: purchase_id }, data });
+        await recordChanges(tx, userId, 'Inventory', purchase_id, changes);
+        return row;
+      });
+      await logWrite(userId, apiKeyId, 'set_market_value', { purchase_id, market_value, market_source, checked_at });
+
+      const qty = updated.qty_on_hand;
+      const priced = updated.market_value !== null && updated.market_value !== undefined;
+      const unrealized = priced ? decimal(updated.market_value).times(qty).minus(allocatedCost(updated, qty)) : null;
+      return jsonResult({
+        id: updated.id,
+        item: updated.product_name,
+        qty_on_hand: qty,
+        market_value: priced ? toNum(decimal(updated.market_value)) : null,
+        market_source: updated.market_source ?? null,
+        market_checked_at: updated.market_checked_at ? toDateOnly(updated.market_checked_at) : null,
+        unit_cost_basis: toNum(allocatedCost(updated, 1).toDecimalPlaces(2)),
+        unrealized_profit: unrealized === null ? null : toNum(unrealized.toDecimalPlaces(2)),
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to set market value');
     }
   });
 

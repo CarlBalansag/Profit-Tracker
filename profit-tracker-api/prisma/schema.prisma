@@ -39,6 +39,7 @@ model User {
   mcp_write_logs         McpWriteLog[]
   change_logs            ChangeLog[]
   transaction_notes      TransactionNote[]
+  attachments            Attachment[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -116,6 +117,23 @@ model TransactionNote {
 
   @@index([user_id, entity_type, entity_id])
   @@index([user_id, created_at])
+}
+
+// A link (Gmail thread, receipt, shipping label, ...) attached to one sale
+// ('sale' -> Sales.id) or one purchase ('purchase' -> Inventory.id). Like
+// TransactionNote there is no FK to the parent; ownership is checked in code.
+model Attachment {
+  id          String   @id @default(uuid())
+  user_id     String
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  entity_type String   // 'sale' | 'purchase'
+  entity_id   String
+  url         String
+  label       String?
+  kind        String?  // 'gmail' | 'receipt' | 'label' | 'other'
+  created_at  DateTime @default(now())
+
+  @@index([user_id, entity_type, entity_id])
 }
 
 model FirebaseIdentity {
@@ -230,6 +248,11 @@ model Inventory {
   receipt_url           String?
   tax_exempt            Boolean        @default(false)
   notes                 String?
+  // Current per-unit market value (MCP set_market_value), the source it came
+  // from, and when it was checked. NULL = not priced.
+  market_value          Decimal?       @db.Decimal(19, 2)
+  market_source         String?
+  market_checked_at     DateTime?
   created_at            DateTime       @default(now())
   sales                 Sales[]
 
