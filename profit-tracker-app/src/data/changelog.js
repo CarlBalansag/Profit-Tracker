@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '1.02',
+    date: '2026-11-01',
+    notes: 'Switching between light and dark mode no longer briefly shows the dashboard stat cards that are scrolled out of view.',
+  },
+  {
     version: '1.01',
     date: '2026-10-31',
     notes: 'Your AI assistant now shows a full profit breakdown including card cashback, tells sold-out items apart, and lists inventory a page at a time.',

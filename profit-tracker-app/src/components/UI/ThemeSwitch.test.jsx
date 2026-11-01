@@ -87,6 +87,47 @@ describe('ThemeSwitch', () => {
     expect(toggle).toHaveAttribute('aria-checked', 'false');
   });
 
+  it('does not lift cards that a scroll container clips, so hidden KPI cards stay hidden', () => {
+    const box = (left, top, width, height) => ({
+      left, top, width, height, right: left + width, bottom: top + height, x: left, y: top,
+    });
+    const card = (name, rect) => {
+      const el = document.createElement('div');
+      el.dataset.name = name;
+      Object.assign(el.style, { borderTopLeftRadius: '12px', backgroundColor: 'rgb(20, 20, 20)' });
+      el.getBoundingClientRect = () => rect;
+      return el;
+    };
+    // A 600px-wide KPI row scrolled to the start: two cards fit, one is cut
+    // off at the right edge, one is fully past it.
+    const row = document.createElement('div');
+    Object.assign(row.style, { overflowX: 'auto', borderTopLeftRadius: '0px' });
+    row.getBoundingClientRect = () => box(0, 0, 600, 200);
+    row.append(
+      card('kpi-1', box(0, 0, 250, 200)),
+      card('kpi-2', box(260, 0, 250, 200)),
+      card('kpi-cut', box(520, 0, 250, 200)),
+      card('kpi-hidden', box(780, 0, 250, 200)),
+    );
+    const standalone = card('standalone', box(0, 300, 400, 200));
+    document.body.append(row, standalone);
+
+    let named = [];
+    document.startViewTransition = vi.fn((update) => {
+      named = [...document.querySelectorAll('[data-name]')]
+        .filter((el) => el.style.viewTransitionName)
+        .map((el) => el.dataset.name);
+      update();
+      return { ready: Promise.resolve(), finished: Promise.resolve() };
+    });
+    render(<ThemeSwitch />);
+    fireEvent.click(screen.getByRole('switch'), { clientX: 10, clientY: 10 });
+
+    expect(named).toEqual(['kpi-1', 'kpi-2', 'standalone']);
+    row.remove();
+    standalone.remove();
+  });
+
   describe('following the OS theme', () => {
     it('starts dark when the OS is dark and there is no override', () => {
       mockSystemTheme(true);
