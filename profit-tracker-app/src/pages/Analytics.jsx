@@ -132,6 +132,8 @@ function Analytics() {
   const topStore = topCards[0];
 
   return (
+    // The app shell never scrolls; each page owns its scroll container.
+    <div className="h-full overflow-auto">
     <div className="max-w-7xl mx-auto space-y-6 pb-10 px-4 py-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -634,6 +636,7 @@ function Analytics() {
           </table>
         </div>
       )}
+    </div>
     </div>
   );
 }

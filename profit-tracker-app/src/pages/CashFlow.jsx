@@ -71,6 +71,8 @@ function CashFlow() {
   if (loading) return <PageLoader variant="generic" />;
 
   return (
+    // The app shell never scrolls; each page owns its scroll container.
+    <div className="h-full overflow-auto">
     <div className="max-w-6xl mx-auto space-y-8 pb-10 px-4 py-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -279,6 +281,7 @@ function CashFlow() {
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 }

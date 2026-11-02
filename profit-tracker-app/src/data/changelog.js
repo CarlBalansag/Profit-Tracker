@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '1.03',
+    date: '2026-11-02',
+    notes: 'Analytics, Cash Flow, Settings, Tax Exempt and Schedule C now scroll, so nothing at the bottom of those pages is cut off.',
+  },
+  {
     version: '1.02',
     date: '2026-11-01',
     notes: 'Switching between light and dark mode no longer briefly shows the dashboard stat cards that are scrolled out of view.',
