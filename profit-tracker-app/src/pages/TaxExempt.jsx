@@ -151,6 +151,8 @@ const TaxExempt = () => {
   if (isLoading) return <PageLoader variant="taxexempt" />;
 
   return (
+    // The app shell never scrolls; each page owns its scroll container.
+    <div className="h-full overflow-auto">
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
@@ -408,6 +410,7 @@ const TaxExempt = () => {
           )
         )}
       </div>
+    </div>
     </div>
   );
 };

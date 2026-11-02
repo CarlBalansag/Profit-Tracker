@@ -59,6 +59,8 @@ function Settings() {
   }
 
   return (
+    // The app shell never scrolls; each page owns its scroll container.
+    <div className="h-full overflow-auto">
     <div className="max-w-5xl mx-auto space-y-6 pb-10">
       {/* Header */}
       <div>
@@ -176,6 +178,7 @@ function Settings() {
           )}
         </div>
       </div>
+    </div>
     </div>
   );
 }
