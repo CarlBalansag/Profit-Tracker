@@ -169,8 +169,10 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
       return res.status(404).json({ error: 'Sale not found or access denied' });
     }
     const newQty = quantity !== undefined ? (parseInt(quantity) || existing.quantity) : existing.quantity;
-    if (newQty < (existing.refunded_qty || 0)) {
-      return res.status(400).json({ error: 'Quantity cannot be lower than the units already returned by the buyer' });
+    // Units the buyer sent back, or a cancel/void/return action restored, are
+    // already in stock; the quantity can't drop below them.
+    if (statusTransitions.unitsHeld({ ...existing, quantity: newQty }) < 0) {
+      return res.status(400).json({ error: 'Quantity cannot be lower than the units already returned to stock' });
     }
     await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
     await requireOwned('paymentMethod', sale_shipping_payment_method_id, req.user.id, 'Shipping label card');
@@ -231,7 +233,11 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
       // concurrent edit must not have this write silently re-apply that delta
       // or clobber fields this request never touched.
       const claim = await tx.sales.updateMany({
-        where: { id: req.params.id, quantity: existing.quantity, inventory: { user_id: req.user.id } },
+        where: {
+          id: req.params.id, quantity: existing.quantity, inventory: { user_id: req.user.id },
+          ...(existing.refunded_qty !== undefined ? { refunded_qty: existing.refunded_qty } : {}),
+          ...(existing.restored_qty !== undefined ? { restored_qty: existing.restored_qty } : {}),
+        },
         data: {
         unit_price: unit_price !== undefined ? parseFloat(unit_price) : existing.unit_price,
         quantity: newQty,

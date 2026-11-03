@@ -598,8 +598,11 @@ function buildServer(userId, apiKeyId) {
         if (platform !== undefined) platformId = (await findPlatformByName(userId, platform, tx)).id;
 
         const newQty = qty !== undefined ? qty : existing.quantity;
-        if (newQty < (existing.refunded_qty || 0)) {
-          throw Object.assign(new Error(`Cannot set qty below ${existing.refunded_qty}, the units the buyer already returned`), { toolError: true });
+        // Units the buyer sent back, or a cancel/void/return action restored,
+        // are already in stock; the qty can't drop below them.
+        const backInStock = (existing.refunded_qty || 0) + (existing.restored_qty || 0);
+        if (newQty < backInStock) {
+          throw Object.assign(new Error(`Cannot set qty below ${backInStock}, the units already returned to stock`), { toolError: true });
         }
         const qtyDiff = existing.quantity - newQty;
         if (qtyDiff < 0) {
@@ -638,7 +641,14 @@ function buildServer(userId, apiKeyId) {
 
         if (Object.keys(data).length === 0) return existing;
 
-        const claim = await tx.sales.updateMany({ where: { id: sale_id, quantity: existing.quantity }, data });
+        const claim = await tx.sales.updateMany({
+          where: {
+            id: sale_id, quantity: existing.quantity,
+            ...(existing.refunded_qty !== undefined ? { refunded_qty: existing.refunded_qty } : {}),
+            ...(existing.restored_qty !== undefined ? { restored_qty: existing.restored_qty } : {}),
+          },
+          data,
+        });
         if (claim.count !== 1) throw Object.assign(new Error('Sale changed while saving. Reload and retry.'), { status: 409 });
 
         await recordChanges(tx, userId, 'Sales', sale_id, changes);

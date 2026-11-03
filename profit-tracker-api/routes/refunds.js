@@ -11,6 +11,7 @@ const { validateBody } = require('../middleware/validate');
 const { createRefund } = require('../validation/schemas');
 const { decimal, grossBatchCost, isRealizedSale } = require('../services/decimalFinance');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
+const { unitsHeld } = require('../services/statusTransitions');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -88,7 +89,8 @@ async function refundSale(userId, saleId, amount, quantity, refundData) {
   if (!raw || raw.inventory?.user_id !== userId) throw requestError(404, 'Sale not found or access denied');
   if (!isRealizedSale(raw)) throw requestError(409, EXCLUDED_SALE_MESSAGE);
   const sale = withExactFields(raw, MAPPINGS.sales);
-  const returnable = sale.quantity - (sale.refunded_qty || 0);
+  // Units a cancel/void/return action already restored can't come back again.
+  const returnable = Math.max(unitsHeld(sale), 0);
   if (quantity > returnable) {
     throw requestError(400, `Only ${returnable} unit${returnable === 1 ? '' : 's'} of this sale can still be returned`);
   }
@@ -105,7 +107,11 @@ async function refundSale(userId, saleId, amount, quantity, refundData) {
     });
     if (stock.count !== 1) throw requestError(404, 'Purchase not found or access denied');
     const claim = await tx.sales.updateMany({
-      where: { id: saleId, quantity: sale.quantity, refunded_qty: sale.refunded_qty || 0, refunded_amount: raw.refunded_amount ?? 0, inventory: { user_id: userId } },
+      where: {
+        id: saleId, quantity: sale.quantity, refunded_qty: sale.refunded_qty || 0, refunded_amount: raw.refunded_amount ?? 0,
+        ...(raw.restored_qty !== undefined ? { restored_qty: raw.restored_qty } : {}),
+        inventory: { user_id: userId },
+      },
       data: { refunded_qty: { increment: quantity }, refunded_amount: { increment: amount.toFixed(2) } },
     });
     if (claim.count !== 1) throw requestError(409, 'Sale changed while saving. Reload and retry.');
