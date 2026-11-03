@@ -398,9 +398,11 @@ const SALE_TRANSITIONS = {
     data: { workflow_status: 'RETURN_IN_PROGRESS', return_requested_at: now },
   }),
   mark_returned: (record, payload, now) => {
-    const quantity = payload.quantity === undefined ? record.quantity : Number(payload.quantity);
-    if (!Number.isInteger(quantity) || quantity < 0 || quantity > record.quantity) {
-      throw transitionError(400, 'Returned quantity must be between 0 and the sale quantity');
+    // Units already returned through a refund are back in stock already.
+    const returnable = record.quantity - (record.refunded_qty || 0);
+    const quantity = payload.quantity === undefined ? returnable : Number(payload.quantity);
+    if (!Number.isInteger(quantity) || quantity < 0 || quantity > returnable) {
+      throw transitionError(400, 'Returned quantity must be between 0 and the units not already returned');
     }
     return { data: { workflow_status: 'RETURNED', returned_at: now }, restores: quantity };
   },
@@ -408,14 +410,14 @@ const SALE_TRANSITIONS = {
   report_dispute: (record, payload, now) => ({ data: { workflow_status: 'DISPUTED', disputed_at: now } }),
   cancel_sale: (record, payload, now) => ({
     data: { workflow_status: 'CANCELLED', cancelled_at: now },
-    restores: record.quantity,
+    restores: record.quantity - (record.refunded_qty || 0),
   }),
   // The sale should never have existed. voided_at is what distinguishes it from
   // a real cancellation; both are excluded from financials via CANCELLED until
   // a later checkpoint introduces a dedicated VOID status.
   void_sale: (record, payload, now) => ({
     data: { workflow_status: 'CANCELLED', voided_at: now },
-    restores: record.quantity,
+    restores: record.quantity - (record.refunded_qty || 0),
   }),
   // `workflow_type` in the payload is optional and only ever sent by the "set a
   // status on a sale that has none" form. A sale the backfill could not resolve
@@ -592,6 +594,7 @@ async function applyTransition(tx, kind, record, action, payload = {}) {
     where: {
       id: record.id,
       quantity: record.quantity,
+      ...(record.refunded_qty !== undefined ? { refunded_qty: record.refunded_qty } : {}),
       workflow_status: record.workflow_status ?? null,
       inventory: { user_id },
     },

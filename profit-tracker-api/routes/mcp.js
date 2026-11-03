@@ -11,7 +11,7 @@ const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const prisma = require('../prisma');
 const { decimal } = require('../services/money');
-const { saleEconomics, allocatedCost, batchCost, isRealizedSale } = require('../services/decimalFinance');
+const { saleEconomics, allocatedCost, batchCost, isRealizedSale, keptQuantity, keptSaleQuantity } = require('../services/decimalFinance');
 const { payoutStatus } = require('../services/payoutStatus');
 const { markSalesPaid } = require('../services/markSalesPaid');
 const statusTransitions = require('../services/statusTransitions');
@@ -598,6 +598,9 @@ function buildServer(userId, apiKeyId) {
         if (platform !== undefined) platformId = (await findPlatformByName(userId, platform, tx)).id;
 
         const newQty = qty !== undefined ? qty : existing.quantity;
+        if (newQty < (existing.refunded_qty || 0)) {
+          throw Object.assign(new Error(`Cannot set qty below ${existing.refunded_qty}, the units the buyer already returned`), { toolError: true });
+        }
         const qtyDiff = existing.quantity - newQty;
         if (qtyDiff < 0) {
           const claim = await tx.inventory.updateMany({
@@ -1494,7 +1497,7 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('get_item_profit', {
-    description: 'Profit for one purchase, one sale, or every purchase of a product. net_profit = revenue - fees - shipping - cost_of_units_sold + cashback, over realized sales only. revenue is the gross sale price; fees/shipping are sale-side; cost_of_units_sold already includes tax, purchase fees and inbound shipping (shown in purchase_fees_and_shipping); cashback is card cashback on the units sold.',
+    description: 'Profit for one purchase, one sale, or every purchase of a product. net_profit = revenue - fees - shipping - refunds_to_buyers - cost_of_units_sold + cashback, over realized sales only. revenue is the gross sale price; refunds_to_buyers is money refunded on those sales; units a buyer returned are back in stock and not counted as sold; fees/shipping are sale-side; cost_of_units_sold already includes tax, purchase fees and inbound shipping (shown in purchase_fees_and_shipping); cashback is card cashback on the units sold.',
     inputSchema: z.object({
       purchase_id: z.string().uuid().optional(),
       sale_id: z.string().uuid().optional(),
@@ -1509,7 +1512,7 @@ function buildServer(userId, apiKeyId) {
       const totals = {
         units_bought: 0, units_sold: 0, units_on_hand: 0,
         total_cost: zero(), cost_of_units_sold: zero(), purchase_fees_and_shipping: zero(),
-        revenue: zero(), fees: zero(), shipping: zero(), cashback: zero(),
+        revenue: zero(), fees: zero(), shipping: zero(), refunds: zero(), cashback: zero(),
         sales_count: 0, excluded_sales: 0,
       };
       // Realized sales only, priced with saleEconomics so net_profit is the
@@ -1519,22 +1522,25 @@ function buildServer(userId, apiKeyId) {
         if (!countsAsRealized(sale)) { totals.excluded_sales += 1; return; }
         const econ = saleEconomics(inv, sale);
         const qty = Number(sale.quantity) || 0;
-        const purchased = Number(inv.qty_purchased) || 0;
-        totals.units_sold += qty;
+        // Units the buyer kept, out of the units the batch kept after store returns.
+        const kept = keptSaleQuantity(sale);
+        const purchased = keptQuantity(inv);
+        totals.units_sold += kept;
         totals.cost_of_units_sold = totals.cost_of_units_sold.plus(econ.cost);
         if (purchased > 0) {
           totals.purchase_fees_and_shipping = totals.purchase_fees_and_shipping.plus(
-            decimal(inv.fees || 0).plus(decimal(inv.shipping_cost_inbound || 0)).times(qty).div(purchased),
+            decimal(inv.fees || 0).plus(decimal(inv.shipping_cost_inbound || 0)).times(kept).div(purchased),
           );
         }
         totals.revenue = totals.revenue.plus(decimal(sale.unit_price || 0).times(qty));
         totals.fees = totals.fees.plus(decimal(sale.commission_fee || 0));
         totals.shipping = totals.shipping.plus(decimal(sale.sale_shipping || 0));
+        totals.refunds = totals.refunds.plus(decimal(sale.refunded_amount || 0));
         totals.cashback = totals.cashback.plus(econ.cashback);
         totals.sales_count += 1;
       };
       const addPurchase = (inv) => {
-        totals.units_bought += Number(inv.qty_purchased) || 0;
+        totals.units_bought += keptQuantity(inv);
         totals.units_on_hand += Number(inv.qty_on_hand) || 0;
         totals.total_cost = totals.total_cost.plus(batchCost(inv));
         for (const sale of inv.sales || []) addSale(inv, sale);
@@ -1561,7 +1567,7 @@ function buildServer(userId, apiKeyId) {
         const inv = sale.inventory;
         productName = inv.product_name;
         // One sale: its cost is the allocated cost of its own units.
-        const qty = Number(sale.quantity) || 0;
+        const qty = keptSaleQuantity(sale);
         totals.units_bought = qty;
         totals.units_on_hand = null;
         totals.total_cost = allocatedCost(inv, qty);
@@ -1591,7 +1597,7 @@ function buildServer(userId, apiKeyId) {
       // Built from the rounded components so the published formula holds to
       // the cent (at most a cent off the unrounded analytics figure).
       const r = (d) => decimal(money2(d));
-      const profitBeforeCashback = r(totals.revenue).minus(r(totals.fees)).minus(r(totals.shipping)).minus(r(totals.cost_of_units_sold));
+      const profitBeforeCashback = r(totals.revenue).minus(r(totals.fees)).minus(r(totals.shipping)).minus(r(totals.refunds)).minus(r(totals.cost_of_units_sold));
       const netProfit = profitBeforeCashback.plus(r(totals.cashback));
       return jsonResult({
         scope,
@@ -1604,6 +1610,7 @@ function buildServer(userId, apiKeyId) {
         revenue: money2(totals.revenue),
         fees: money2(totals.fees),
         shipping: money2(totals.shipping),
+        refunds_to_buyers: money2(totals.refunds),
         cost_of_units_sold: money2(totals.cost_of_units_sold),
         purchase_fees_and_shipping: money2(totals.purchase_fees_and_shipping),
         profit_before_cashback: money2(profitBeforeCashback),

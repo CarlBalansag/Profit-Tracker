@@ -50,9 +50,17 @@ async function editTransaction(prisma, inventoryId, userId, payload) {
     const byId = new Map(sales.map(sale => [sale.id, sale]));
     for (const sale of payload.sales) if (!byId.has(sale.id)) throw fail(404, 'Sale not found in this transaction');
     const changes = new Map(payload.sales.map(sale => [sale.id, sale]));
-    const sold = sales.reduce((sum, sale) => sum + (changes.get(sale.id)?.quantity ?? sale.quantity), 0) + (payload.newSale?.quantity ?? 0);
+    // A sale can't drop below the units its buyer already sent back.
+    for (const sale of sales) {
+      const quantity = changes.get(sale.id)?.quantity ?? sale.quantity;
+      if (quantity < (sale.refunded_qty || 0)) throw fail(400, 'A sale quantity cannot be lower than the units already returned by the buyer');
+    }
+    // Units out of stock: kept by buyers (sold minus returned to you) plus
+    // units sent back to the store.
+    const sold = sales.reduce((sum, sale) => sum + (changes.get(sale.id)?.quantity ?? sale.quantity) - (sale.refunded_qty || 0), 0)
+      + (payload.newSale?.quantity ?? 0) + (existing.refunded_qty || 0);
     const purchased = payload.inventory.qty_purchased ?? existing.qty_purchased;
-    if (sold > purchased) throw fail(400, 'Quantity purchased cannot be lower than units sold');
+    if (sold > purchased) throw fail(400, 'Quantity purchased cannot be lower than units sold or returned to the store');
     if (payload.inventory.qty_on_hand !== undefined && payload.inventory.qty_on_hand !== purchased - sold) {
       throw fail(400, 'On-hand quantity must equal purchased quantity minus sold quantity');
     }

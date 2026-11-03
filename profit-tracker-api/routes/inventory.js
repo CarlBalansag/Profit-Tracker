@@ -62,6 +62,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
         receiving_status: true, receiving_status_changed_at: true, is_listed: true,
         vendor_id: true, payment_method_id: true,
         purchase_date: true, received_date: true, return_by_date: true,
+        refunded_amount: true, refunded_qty: true,
         unit_purchase_cost: true, qty_purchased: true, qty_on_hand: true,
         sales_tax: true, shipping_cost_inbound: true, fees: true,
         cashback_earned: true, cashback_rate: true, gift_card_amount: true,
@@ -75,6 +76,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
           select: {
             id: true, platform_id: true, quantity: true, unit_price: true, commission_fee: true,
             sale_shipping: true, sale_shipping_payment_method_id: true, sale_date: true, payout_date: true, status: true,
+            refunded_amount: true, refunded_qty: true,
             workflow_type: true, workflow_status: true, workflow_status_changed_at: true,
             taxable: true, sale_tax_collected: true, customer_tax_exempt: true, exemption_type: true,
             unit_price_decimal: true, commission_fee_decimal: true, sale_shipping_decimal: true, sale_tax_collected_decimal: true,
@@ -321,7 +323,7 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
   try {
     const existing = await prisma.inventory.findUnique({
       where: { id: req.params.id },
-      include: { sales: { select: { quantity: true } } },
+      include: { sales: { select: { quantity: true, refunded_qty: true } } },
     });
     if (!existing || existing.user_id !== req.user.id) return res.status(404).json({ error: 'Not found' });
 
@@ -350,11 +352,14 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
     const data = {};
     await requireOwned('platform', vendor_id, req.user.id, 'Vendor');
     await requireOwned('paymentMethod', payment_method_id, req.user.id, 'Payment method');
-    const soldQty = existing.sales.reduce((sum, sale) => sum + sale.quantity, 0);
+    // Units no longer in stock: kept by buyers (sold minus returned by them)
+    // plus units sent back to the store. On hand = purchased - this.
+    const soldQty = existing.sales.reduce((sum, sale) => sum + sale.quantity - (sale.refunded_qty || 0), 0)
+      + (existing.refunded_qty || 0);
     if (qty_purchased !== undefined) {
       const requestedQty = parseInt(qty_purchased, 10);
       if (requestedQty < soldQty) {
-        return res.status(400).json({ error: 'Quantity purchased cannot be lower than units already sold' });
+        return res.status(400).json({ error: 'Quantity purchased cannot be lower than units already sold or returned to the store' });
       }
       data.qty_purchased = requestedQty;
       data.qty_on_hand = requestedQty - soldQty;

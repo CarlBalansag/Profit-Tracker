@@ -453,7 +453,19 @@ const updateGoal = z.object({
   active: goalActive.optional(),
 });
 
+// A refund on a purchase (inventory_id) or on a sale (sale_id) -- exactly one,
+// enforced in routes/refunds.js. quantity = units physically returned.
+const createRefund = z.object({
+  inventory_id: id,
+  sale_id: id,
+  amount: decimalAmount({ defaultValue: 0 }),
+  quantity: optionalNonNegativeInt,
+  date: optionalDateString,
+  note: optionalString,
+}).passthrough();
+
 module.exports = {
+  createRefund,
   createInventory,
   updateInventory,
   createSale,

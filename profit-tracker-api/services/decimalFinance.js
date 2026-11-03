@@ -26,7 +26,10 @@ const number = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
 // which have workflow_status = NULL) is classified exactly as before.
 const isRealizedSale = sale => !isExcludedFromFinancials(sale.workflow_status) && !isExcludedFromFinancials(sale.status);
 
-function batchCost(inventory = {}) {
+// Same refund rules as shared/finance.mjs: grossBatchCost is the receipt /
+// original card charge; batchCost subtracts store refunds (refunded_amount);
+// the remaining cost is spread over the units kept (qty_purchased - refunded_qty).
+function grossBatchCost(inventory = {}) {
   return decimal(inventory.unit_purchase_cost || 0)
     .times(number(inventory.qty_purchased))
     .plus(decimal(inventory.sales_tax || 0))
@@ -35,9 +38,16 @@ function batchCost(inventory = {}) {
     .minus(decimal(inventory.gift_card_amount || 0));
 }
 
+function batchCost(inventory = {}) {
+  return grossBatchCost(inventory).minus(decimal(inventory.refunded_amount || 0));
+}
+
+const keptQuantity = (inventory = {}) => number(inventory.qty_purchased) - number(inventory.refunded_qty);
+const keptSaleQuantity = (sale = {}) => number(sale.quantity) - number(sale.refunded_qty);
+
 function allocatedCost(inventory = {}, quantity = 0) {
-  const purchased = number(inventory.qty_purchased);
-  return purchased > 0 ? batchCost(inventory).times(number(quantity)).div(purchased) : new Decimal(0);
+  const kept = keptQuantity(inventory);
+  return kept > 0 ? batchCost(inventory).times(number(quantity)).div(kept) : new Decimal(0);
 }
 
 // Rate lookup is unchanged from shared/finance.mjs -- a single percentage
@@ -66,26 +76,31 @@ function effectiveCashbackRate(inventory = {}, today = new Date()) {
 
 function inventoryCashback(inventory = {}, rate = effectiveCashbackRate(inventory)) {
   if (inventory.cashback_rate !== null && inventory.cashback_rate !== undefined) {
-    return Decimal.max(0, decimal(inventory.cashback_earned || 0));
+    // A snapshot is the cashback on the full charge; a refund claws back its share.
+    const gross = grossBatchCost(inventory);
+    const earned = Decimal.max(0, decimal(inventory.cashback_earned || 0));
+    return gross.greaterThan(0) ? earned.times(Decimal.max(0, batchCost(inventory))).div(gross) : earned;
   }
   return batchCost(inventory).times(number(rate)).div(100);
 }
 
 function allocatedCashback(inventory = {}, quantity = 0, rate = effectiveCashbackRate(inventory)) {
-  const purchased = number(inventory.qty_purchased);
-  return purchased > 0
-    ? inventoryCashback(inventory, rate).times(number(quantity)).div(purchased)
+  const kept = keptQuantity(inventory);
+  return kept > 0
+    ? inventoryCashback(inventory, rate).times(number(quantity)).div(kept)
     : new Decimal(0);
 }
 
 function saleEconomics(inventory = {}, sale = {}, rate = effectiveCashbackRate(inventory)) {
-  const cost = allocatedCost(inventory, sale.quantity);
+  const kept = keptSaleQuantity(sale);
+  const cost = allocatedCost(inventory, kept);
   const revenue = decimal(sale.unit_price || 0).times(number(sale.quantity))
     .minus(decimal(sale.commission_fee || 0))
-    .minus(decimal(sale.sale_shipping || 0));
-  const cashback = allocatedCashback(inventory, sale.quantity, rate);
+    .minus(decimal(sale.sale_shipping || 0))
+    .minus(decimal(sale.refunded_amount || 0));
+  const cashback = allocatedCashback(inventory, kept, rate);
   const grossProfit = revenue.minus(cost);
   return { cost, revenue, cashback, grossProfit, netProfit: grossProfit.plus(cashback) };
 }
 
-module.exports = { Decimal, decimal, isRealizedSale, batchCost, allocatedCost, effectiveCashbackRate, inventoryCashback, allocatedCashback, saleEconomics };
+module.exports = { Decimal, decimal, isRealizedSale, grossBatchCost, batchCost, keptQuantity, keptSaleQuantity, allocatedCost, effectiveCashbackRate, inventoryCashback, allocatedCashback, saleEconomics };

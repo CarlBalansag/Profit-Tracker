@@ -3,7 +3,7 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { validateQuery } = require('../middleware/validate');
 const { analyticsDashboardQuery } = require('../validation/schemas');
-const { Decimal, decimal, isRealizedSale, batchCost, allocatedCost, effectiveCashbackRate, inventoryCashback, saleEconomics } = require('../services/decimalFinance');
+const { Decimal, decimal, isRealizedSale, batchCost, allocatedCost, effectiveCashbackRate, inventoryCashback, saleEconomics, keptQuantity, keptSaleQuantity } = require('../services/decimalFinance');
 const { pipelineBucketOf } = require('../services/statusTransitions');
 const { payoutStatus } = require('../services/payoutStatus');
 
@@ -82,8 +82,9 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     const realizedSales = sales.filter(isRealizedSale);
     const saleAlloc = realizedSales.map(sale => {
       const inv = sale.inventory;
-      const purchased = Number(inv.qty_purchased) || 0;
-      const share = purchased > 0 ? new Decimal(sale.quantity).div(purchased) : zero();
+      // Units the buyer kept, over the units the batch kept after store returns.
+      const purchased = keptQuantity(inv);
+      const share = purchased > 0 ? new Decimal(keptSaleQuantity(sale)).div(purchased) : zero();
       const allocatedTax      = new Decimal(inv.sales_tax || 0).times(share);
       const allocatedShipping = new Decimal(inv.shipping_cost_inbound || 0).times(share);
       const allocatedFees     = new Decimal(inv.fees || 0).times(share);
@@ -156,7 +157,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     });
 
     let unitsSold = 0;
-    saleAlloc.forEach(({ sale }) => { unitsSold += sale.quantity; });
+    saleAlloc.forEach(({ sale }) => { unitsSold += keptSaleQuantity(sale); });
 
     // Sales velocity: sales count ÷ days in filter window
     const windowDays = dateParam === '7 Days' ? 7
@@ -221,7 +222,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       p.cost = p.cost.plus(saleCost);
       p.commission = p.commission.plus(sale.commission_fee || 0);
       p.cashback = p.cashback.plus(saleCashback);
-      p.unitsSold += sale.quantity;
+      p.unitsSold += keptSaleQuantity(sale);
       p.salesCount += 1;
       if (sale.paid_at) {
         const days = (new Date(sale.paid_at) - new Date(sale.sale_date)) / (24 * 60 * 60 * 1000);
@@ -282,14 +283,14 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       inventories.forEach(inv => {
         const v = ensureVendor(inv);
         v.spend = v.spend.plus(batchCost(inv));
-        v.units += Number(inv.qty_purchased) || 0;
+        v.units += keptQuantity(inv);
         v.purchases += 1;
       });
     } else {
       saleAlloc.forEach(({ inv, saleCost, sale }) => {
         const v = ensureVendor(inv);
         v.spend = v.spend.plus(saleCost);
-        v.units += sale.quantity;
+        v.units += keptSaleQuantity(sale);
         v.purchases += 1;
       });
     }
@@ -317,7 +318,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       c.revenue = c.revenue.plus(saleRevenue);
       c.cost = c.cost.plus(saleCost);
       c.profit = c.profit.plus(grossProfit).plus(saleCashback);
-      c.unitsSold += sale.quantity;
+      c.unitsSold += keptSaleQuantity(sale);
     });
     const categoryBreakdown = Array.from(categoryMap.values())
       .map(c => ({
@@ -387,7 +388,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     sales.forEach(sale => {
       const bucket = pipelineBucketOf(sale, 'sale');
       if (bucket) {
-        pipelineCounts[bucket] += sale.quantity;
+        pipelineCounts[bucket] += keptSaleQuantity(sale);
         return;
       }
       let st = (sale.status || '').toUpperCase();
@@ -395,7 +396,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       if (st === 'ON HAND') st = 'On Hand';
 
       if (pipelineCounts.hasOwnProperty(st)) {
-        pipelineCounts[st] += sale.quantity;
+        pipelineCounts[st] += keptSaleQuantity(sale);
       }
     });
 
@@ -451,7 +452,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       pt.soldCost = pt.soldCost.plus(saleCost);
       pt.grossProfit = pt.grossProfit.plus(grossProfit);
       pt.netProfit = pt.netProfit.plus(grossProfit.plus(saleCashback));
-      pt.unitsSold += sale.quantity;
+      pt.unitsSold += keptSaleQuantity(sale);
     });
 
     const trend = Array.from(trendByBucket.values())

@@ -2,7 +2,12 @@
 // Credit Card page) and routes/mcp.js's get_card_net_to_pay tool. Factored out
 // so the two can never drift onto different numbers for the same month --
 // moved here verbatim from routes/creditcard.js, no behavior change.
-const { Decimal, isRealizedSale, batchCost, effectiveCashbackRate, inventoryCashback, allocatedCashback, saleEconomics } = require('./decimalFinance');
+const { Decimal, isRealizedSale, batchCost, grossBatchCost, effectiveCashbackRate, inventoryCashback, allocatedCashback, saleEconomics, keptSaleQuantity } = require('./decimalFinance');
+
+// The card was charged the full amount in the purchase month; a refund is a
+// separate credit in the month it arrived (see the refund loop below), just as
+// on a statement. So purchase-month numbers use the purchase before refunds.
+const asCharged = (inv) => ({ ...inv, refunded_amount: 0, refunded_qty: 0 });
 
 const zero = () => new Decimal(0);
 const money = (d) => d.toDecimalPlaces(2).toNumber();
@@ -79,7 +84,8 @@ async function computeCardDashboard(prisma, userId, monthParam) {
     };
   }
 
-  for (const inv of inventories) {
+  for (const chargedInv of inventories) {
+    const inv = asCharged(chargedInv);
     const pm = inv.payment_method;
     if (!pm) continue;
     if (!cardMap[pm.id]) continue;
@@ -122,7 +128,8 @@ async function computeCardDashboard(prisma, userId, monthParam) {
         });
       }
 
-      const soldQty = inv.sales.reduce((s, sa) => s + sa.quantity, 0);
+      // Units a buyer sent back are unsold stock again.
+      const soldQty = inv.sales.reduce((s, sa) => s + keptSaleQuantity(sa), 0);
       const unsoldQty = qty - soldQty;
       if (unsoldQty > 0) {
         const unsoldShare = new Decimal(unsoldQty).div(qty);
@@ -132,7 +139,9 @@ async function computeCardDashboard(prisma, userId, monthParam) {
           .plus(new Decimal(inv.fees || 0).times(unsoldShare))
           .minus(new Decimal(inv.gift_card_amount || 0).times(unsoldShare));
         const unsoldCashback = allocatedCashback(inv, unsoldQty, rate);
-        card.pendingCount += unsoldQty;
+        // Units sent back to the store aren't waiting to sell; their cost is
+        // offset by the refund credit row.
+        card.pendingCount += Math.max(0, unsoldQty - (chargedInv.refunded_qty || 0));
         card.items.push({
           id: inv.id,
           saleId: null,
@@ -195,6 +204,45 @@ async function computeCardDashboard(prisma, userId, monthParam) {
       cost: money(labelCost),
       cashback: money(labelCashback),
       status: 'Shipping label',
+      revenue: null,
+      netPnl: null,
+      lossAmount: 0,
+      lossToRedeem: 0,
+      cashbackRate: rate,
+    });
+  }
+
+  // Store refunds on a credit card: a credit in the month the refund arrived,
+  // taking back the matching share of the cashback that charge earned.
+  const refunds = await prisma.refund.findMany({
+    where: {
+      user_id: userId,
+      date: { gte: monthStart, lt: monthEnd },
+      inventory: { payment_method: { type: 'Credit' } },
+    },
+    include: { inventory: { include: { payment_method: true, vendor: true } } },
+  });
+  for (const refund of refunds) {
+    const inv = refund.inventory;
+    const card = inv && cardMap[inv.payment_method_id];
+    const amount = new Decimal(refund.amount || 0);
+    if (!card || !amount.greaterThan(0)) continue;
+    const charged = asCharged(inv);
+    const rate = effectiveCashbackRate(charged);
+    const gross = grossBatchCost(charged);
+    const cashbackBack = gross.greaterThan(0) ? inventoryCashback(charged, rate).times(amount).div(gross) : new Decimal(0);
+    card.totalSpend = card.totalSpend.minus(amount);
+    card.cashbackEarned = card.cashbackEarned.minus(cashbackBack);
+    card.txnCount += 1;
+    card.items.push({
+      id: inv.id,
+      saleId: null,
+      kind: 'refund',
+      refundId: refund.id,
+      product: `${inv.product_name} · Refund`,
+      cost: money(amount.negated()),
+      cashback: money(cashbackBack.negated()),
+      status: 'Refund',
       revenue: null,
       netPnl: null,
       lossAmount: 0,

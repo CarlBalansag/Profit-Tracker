@@ -186,6 +186,7 @@ describe('get_item_profit', () => {
       total_cost: 520,
       revenue: 300, // 2 x 150 gross
       fees: 15, shipping: 12, // sale commission and sale shipping
+      refunds_to_buyers: 0,
       cost_of_units_sold: 208, // 520 * 2/5
       purchase_fees_and_shipping: 12, // (10 fees + 20 inbound) * 2/5, inside cost_of_units_sold
       profit_before_cashback: 65, // 300 - 15 - 12 - 208
@@ -201,7 +202,7 @@ describe('get_item_profit', () => {
       scope: 'sale', product: 'QA Multi-unit Sneaker',
       units_bought: 2, units_sold: 2, units_on_hand: null, availability: null,
       total_cost: 208, cost_of_units_sold: 208, // 520 * 2/5
-      revenue: 300, fees: 15, shipping: 12, purchase_fees_and_shipping: 12,
+      revenue: 300, fees: 15, shipping: 12, refunds_to_buyers: 0, purchase_fees_and_shipping: 12,
       profit_before_cashback: 65, cashback: 4.16, net_profit: 69.16, roi_pct: 33.25,
       sales_count: 1, excluded_sales: 0,
     });
@@ -240,6 +241,7 @@ describe('get_item_profit', () => {
       revenue: 380, // 300 + 80
       fees: 23, // 15 + 8
       shipping: 14, // 12 + 2
+      refunds_to_buyers: 0,
       cost_of_units_sold: 258, // 208 + 50
       purchase_fees_and_shipping: 12, // 12 + 0
       profit_before_cashback: 85, // 380 - 23 - 14 - 258

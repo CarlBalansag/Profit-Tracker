@@ -33,6 +33,9 @@ router.get('/', isAuthenticated, async (req, res, next) => {
         select: {
           payment_method_id: true, unit_purchase_cost: true, qty_purchased: true,
           sales_tax: true, shipping_cost_inbound: true, fees: true, gift_card_amount: true,
+          // batchCost() subtracts store refunds, so lifetime spend is net of them
+          // (the Credit Card page shows each refund as a credit in its month).
+          refunded_amount: true,
         },
       }),
       // Shipping labels bought on a card count as that card's spend too,

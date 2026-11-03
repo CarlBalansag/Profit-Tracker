@@ -22,6 +22,7 @@ model User {
   inventories            Inventory[]
   payment_methods        PaymentMethod[]
   expenses               Expense[]
+  refunds                Refund[]
   recurring_expenses     RecurringExpense[]
   accounts               Account[]
   platforms              Platform[]
@@ -210,6 +211,11 @@ model Inventory {
   // Optional last day the store accepts a return (its return policy). NULL
   // means no window was recorded; it is informational only, never a total.
   return_by_date        DateTime?
+  // Running totals of this purchase's Refund rows (money back from the store,
+  // units sent back), kept in step with them in the same transaction so every
+  // cost formula can read them without loading the refund history.
+  refunded_amount       Decimal        @default(0) @db.Decimal(19, 2)
+  refunded_qty          Int            @default(0)
   unit_purchase_cost    Float
   unit_purchase_cost_decimal Decimal?  @db.Decimal(19, 2)
   qty_purchased         Int
@@ -258,6 +264,7 @@ model Inventory {
   market_checked_at     DateTime?
   created_at            DateTime       @default(now())
   sales                 Sales[]
+  refunds               Refund[]
 
   @@index([user_id])
   @@index([user_id, purchase_date])
@@ -283,6 +290,11 @@ model Sales {
   // means the label was taken out of the marketplace payout, so no card spend.
   sale_shipping_payment_method_id String?
   sale_shipping_payment_method    PaymentMethod? @relation("SaleShippingCard", fields: [sale_shipping_payment_method_id], references: [id], onDelete: SetNull)
+  // Running totals of this sale's Refund rows (money back to the buyer, units
+  // the buyer sent back), kept in step with them in the same transaction.
+  refunded_amount     Decimal   @default(0) @db.Decimal(19, 2)
+  refunded_qty        Int       @default(0)
+  refunds             Refund[]
   sale_date           DateTime
   // User-entered "expected payout" reminder. Not a payment confirmation --
   // that is paid_at/paid_amount/paid_reference below.
@@ -416,6 +428,29 @@ model PaymentMethod {
   expenses              Expense[]
   recurring_expenses    RecurringExpense[]
   sale_shipping_sales   Sales[]     @relation("SaleShippingCard")
+}
+
+// Money back on a purchase (inventory_id set) or to a buyer on a sale (sale_id
+// set) -- exactly one of the two. quantity is units physically returned (0 for
+// a price adjustment or a partial refund where the item stays put). The
+// owning row's refunded_amount/refunded_qty are the running totals.
+model Refund {
+  id           String     @id @default(uuid())
+  user_id      String
+  user         User       @relation(fields: [user_id], references: [id])
+  inventory_id String?
+  inventory    Inventory? @relation(fields: [inventory_id], references: [id], onDelete: Cascade)
+  sale_id      String?
+  sale         Sales?     @relation(fields: [sale_id], references: [id], onDelete: Cascade)
+  amount       Decimal    @db.Decimal(19, 2)
+  quantity     Int        @default(0)
+  date         DateTime
+  note         String?
+  created_at   DateTime   @default(now())
+
+  @@index([user_id, date])
+  @@index([inventory_id])
+  @@index([sale_id])
 }
 
 model Expense {

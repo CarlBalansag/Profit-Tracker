@@ -11,15 +11,18 @@ function reset() {
   db={user:[{id:ids.user,username:'QA Fixture',tutorial_seen:true,calendar_token:'qa-only-token',accounting_preferences:null}],
     platform:[{id:ids.vendor,user_id:ids.user,name:'QA Store',type:'Vendor',fee_pct:0},{id:ids.platform,user_id:ids.user,name:'QA Marketplace',type:'Marketplace',fee_pct:12,address:'QA address',notes:'Preserve notes',tax_exempt_place:false},{id:ids.foreign,user_id:ids.other,name:'Other user private platform',type:'Marketplace',notes:'PRIVATE'}],
     paymentMethod:[{id:ids.card,user_id:ids.user,name:'QA Credit Card',type:'Credit',default_cashback_rate:2,category_rates:'[]',statement_close_day:15,due_day:10,credit_limit:5000,min_payment_pct:2}],
-    inventory:[{id:ids.inventory,user_id:ids.user,product_name:'QA Multi-unit Sneaker',vendor_id:ids.vendor,payment_method_id:ids.card,unit_purchase_cost:100,qty_purchased:5,qty_on_hand:3,sales_tax:40,shipping_cost_inbound:20,fees:10,gift_card_amount:50,cashback_earned:10.4,status:'PURCHASED',category:'Shoes',purchase_date:new Date('2026-09-01T12:00:00Z'),created_at:new Date(),tracking_number:'9400111899223856928499',receipt_url:null,tax_exempt:false}],
-    sales:[{id:ids.sale,inventory_id:ids.inventory,platform_id:ids.platform,buyer_id:null,quantity:2,unit_price:150,commission_fee:15,sale_shipping:12,sale_tax_collected:8,taxable:true,customer_tax_exempt:false,status:'SOLD',sale_date:new Date('2026-09-03T12:00:00Z'),payout_date:null,paid_at:null,paid_amount:null,paid_reference:null,payout_account:null,payout_short_amount:null}],
-    expense:[{id:randomUUID(),user_id:ids.user,name:'QA Storage',amount:25,tax_version:0,date:new Date('2026-09-01T12:00:00Z'),category:'Storage'}],recurringExpense:[],account:[],goal:[],calendarEvent:[],productNote:[],authAttemptBucket:[],buyer:[],invoice:[],apiKey:[],mcpWriteLog:[],changeLog:[],transactionNote:[],attachment:[]};
+    inventory:[{id:ids.inventory,user_id:ids.user,product_name:'QA Multi-unit Sneaker',vendor_id:ids.vendor,payment_method_id:ids.card,unit_purchase_cost:100,qty_purchased:5,qty_on_hand:3,sales_tax:40,shipping_cost_inbound:20,fees:10,gift_card_amount:50,cashback_earned:10.4,status:'PURCHASED',category:'Shoes',purchase_date:new Date('2026-09-01T12:00:00Z'),created_at:new Date(),tracking_number:'9400111899223856928499',receipt_url:null,tax_exempt:false,refunded_amount:0,refunded_qty:0}],
+    sales:[{id:ids.sale,inventory_id:ids.inventory,platform_id:ids.platform,buyer_id:null,quantity:2,unit_price:150,commission_fee:15,sale_shipping:12,sale_tax_collected:8,taxable:true,customer_tax_exempt:false,status:'SOLD',sale_date:new Date('2026-09-03T12:00:00Z'),payout_date:null,paid_at:null,paid_amount:null,paid_reference:null,payout_account:null,payout_short_amount:null,refunded_amount:0,refunded_qty:0}],
+    expense:[{id:randomUUID(),user_id:ids.user,name:'QA Storage',amount:25,tax_version:0,date:new Date('2026-09-01T12:00:00Z'),category:'Storage'}],recurringExpense:[],refund:[],account:[],goal:[],calendarEvent:[],productNote:[],authAttemptBucket:[],buyer:[],invoice:[],apiKey:[],mcpWriteLog:[],changeLog:[],transactionNote:[],attachment:[]};
 }
 reset();
 function relations(model,row,key) {
   if(model==='inventory'&&key==='vendor') return ['platform',db.platform.find(x=>x.id===row.vendor_id)||null];
   if((model==='inventory'||model==='expense'||model==='recurringExpense')&&key==='payment_method') return ['paymentMethod',db.paymentMethod.find(x=>x.id===row.payment_method_id)||null];
   if(model==='inventory'&&key==='sales') return ['sales',db.sales.filter(x=>x.inventory_id===row.id)];
+  if((model==='inventory'||model==='sales')&&key==='refunds') return ['refund',db.refund.filter(x=>model==='inventory'?x.inventory_id===row.id:x.sale_id===row.id)];
+  if(model==='refund'&&key==='sale') return ['sales',row.sale_id?(db.sales.find(x=>x.id===row.sale_id)||null):null];
+  if(model==='refund'&&key==='inventory') return ['inventory',row.inventory_id?(db.inventory.find(x=>x.id===row.inventory_id)||null):null];
   if(model==='sales'&&key==='inventory') return ['inventory',db.inventory.find(x=>x.id===row.inventory_id)||null];
   if((model==='sales'||model==='account')&&key==='platform') return ['platform',db.platform.find(x=>x.id===row.platform_id)||null];
   if(model==='sales'&&key==='sale_shipping_payment_method') return ['paymentMethod',row.sale_shipping_payment_method_id?(db.paymentMethod.find(x=>x.id===row.sale_shipping_payment_method_id)||null):null];
@@ -73,13 +76,14 @@ for(const model of Object.keys(db)) {
     if(op==='findUnique'||op==='findFirst')return project(model,rows[0],args);
     if(op==='create'||op==='createMany'||(op==='upsert'&&!rows.length)) {
       const data=op==='upsert'?args.create:args.data;
-      const created=(Array.isArray(data)?data:[data]).map(x=>({id:randomUUID(),...(model==='inventory'?{status:'PURCHASED',created_at:new Date()}:{}),...(model==='authAttemptBucket'?{count:1}:{}),...(model==='expense'?{tax_version:0}:{}),...(model==='attachment'?{label:null,kind:null,created_at:new Date()}:{}),...(model==='transactionNote'?{author:'carl',pinned:false,created_at:new Date(),updated_at:new Date(),deleted_at:null}:{}),...x}));
+      const created=(Array.isArray(data)?data:[data]).map(x=>({id:randomUUID(),...(model==='inventory'?{status:'PURCHASED',created_at:new Date(),refunded_amount:0,refunded_qty:0}:{}),...(model==='sales'?{refunded_amount:0,refunded_qty:0}:{}),...(model==='refund'?{quantity:0,created_at:new Date()}:{}),...(model==='authAttemptBucket'?{count:1}:{}),...(model==='expense'?{tax_version:0}:{}),...(model==='attachment'?{label:null,kind:null,created_at:new Date()}:{}),...(model==='transactionNote'?{author:'carl',pinned:false,created_at:new Date(),updated_at:new Date(),deleted_at:null}:{}),...x}));
       db[model].push(...created);return op==='createMany'?{count:created.length}:project(model,created[0],args);
     }
     if(op==='update'||op==='updateMany'||op==='upsert'){
       for(const row of (op==='updateMany'?rows:rows.slice(0,1)))for(const[k,v]of Object.entries(op==='upsert'?args.update:args.data))if(v!==undefined){
-        if(v&&typeof v==='object'&&'increment' in v)row[k]+=v.increment;
-        else if(v&&typeof v==='object'&&'decrement' in v)row[k]-=v.decrement;
+        // Numeric even for Decimal columns (passed as strings), like Postgres.
+        if(v&&typeof v==='object'&&'increment' in v)row[k]=Math.round((Number(row[k]||0)+Number(v.increment))*100)/100;
+        else if(v&&typeof v==='object'&&'decrement' in v)row[k]=Math.round((Number(row[k]||0)-Number(v.decrement))*100)/100;
         else row[k]=v;
       }
       if(model==='transactionNote')for(const row of (op==='updateMany'?rows:rows.slice(0,1)))row.updated_at=new Date(); // @updatedAt
@@ -87,6 +91,8 @@ for(const model of Object.keys(db)) {
     }
     db[model]=db[model].filter(x=>!rows.includes(x));
     if(model==='inventory')db.sales=db.sales.filter(x=>!rows.some(r=>r.id===x.inventory_id));
+    // ON DELETE CASCADE for refunds of a deleted purchase or sale.
+    if(model==='inventory'||model==='sales')db.refund=db.refund.filter(x=>x.inventory_id?db.inventory.some(i=>i.id===x.inventory_id):db.sales.some(sale=>sale.id===x.sale_id));
     return op==='deleteMany'?{count:rows.length}:rows[0];
   };
 }
@@ -112,7 +118,7 @@ function app() {
   app.get('/auth/me',(req,res)=>res.json(db.user[0]));
   app.use('/api/schedule-c', requireApi('./routes/scheduleC'));
   app.use('/mcp', requireApi('./routes/mcp.js'));
-  for(const [url,file]of Object.entries({'inventory':'inventory','sales':'sales','platforms':'platforms','payment-methods':'paymentMethods','accounts':'accounts','analytics':'analytics','creditcard':'creditcard','expenses':'expenses','recurring-expenses':'recurringExpenses','receipts':'receipts','goals':'goals','calendar-events':'calendarEvents','product-notes':'productNotes','transaction-notes':'transactionNotes','preferences':'preferences','buyers':'buyers','api-keys':'apiKeys'}))app.use('/api/'+url,requireApi('./routes/'+file+'.js'));
+  for(const [url,file]of Object.entries({'inventory':'inventory','sales':'sales','platforms':'platforms','payment-methods':'paymentMethods','accounts':'accounts','analytics':'analytics','creditcard':'creditcard','expenses':'expenses','recurring-expenses':'recurringExpenses','receipts':'receipts','goals':'goals','calendar-events':'calendarEvents','product-notes':'productNotes','transaction-notes':'transactionNotes','refunds':'refunds','preferences':'preferences','buyers':'buyers','api-keys':'apiKeys'}))app.use('/api/'+url,requireApi('./routes/'+file+'.js'));
   app.use((err,req,res,next)=>res.status(err.status||500).json({error:err.message}));
   return app;
 }

@@ -5,7 +5,7 @@ const { randomUUID } = require('node:crypto');
 const cloudinary = require('cloudinary').v2;
 const { validateBody } = require('../middleware/validate');
 const { attachReceipt, detachReceipt } = require('../validation/schemas');
-const { batchCost } = require('../services/decimalFinance');
+const { grossBatchCost } = require('../services/decimalFinance');
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -57,7 +57,8 @@ router.get('/', isAuthenticated, async (req, res, next) => {
         itemType: 'inventory',
         name: inv.product_name,
         date: inv.purchase_date,
-        amount: batchCost(inv).toDecimalPlaces(2).toNumber(),
+        // The receipt shows what was charged, before any later refund.
+        amount: grossBatchCost(inv).toDecimalPlaces(2).toNumber(),
         receipt_url: inv.receipt_url || null,
       })),
       ...expenses.map(exp => ({

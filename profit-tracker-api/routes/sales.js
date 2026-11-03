@@ -169,6 +169,9 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
       return res.status(404).json({ error: 'Sale not found or access denied' });
     }
     const newQty = quantity !== undefined ? (parseInt(quantity) || existing.quantity) : existing.quantity;
+    if (newQty < (existing.refunded_qty || 0)) {
+      return res.status(400).json({ error: 'Quantity cannot be lower than the units already returned by the buyer' });
+    }
     await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
     await requireOwned('paymentMethod', sale_shipping_payment_method_id, req.user.id, 'Shipping label card');
     const qtyDiff = existing.quantity - newQty;
@@ -272,12 +275,14 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
       });
       if (inventory.count !== 1) throw requestError(404, 'Inventory not found or access denied');
       const removed = await tx.sales.deleteMany({
-        where: { id: existing.id, inventory_id: existing.inventory_id, quantity: existing.quantity },
+        where: { id: existing.id, inventory_id: existing.inventory_id, quantity: existing.quantity, ...(existing.refunded_qty !== undefined ? { refunded_qty: existing.refunded_qty } : {}) },
       });
       if (removed.count !== 1) throw requestError(409, 'Sale changed while deleting. Reload and retry.');
+      // Units the buyer already sent back are in stock already; only the
+      // units they kept come back now. The sale's refunds are deleted with it.
       await tx.inventory.update({
         where: { id: existing.inventory_id },
-        data: { qty_on_hand: { increment: existing.quantity } },
+        data: { qty_on_hand: { increment: existing.quantity - (existing.refunded_qty || 0) } },
       });
     });
     await publishCalendarFeed(req.user.id);

@@ -82,7 +82,7 @@ describe('get_item_profit components', () => {
     });
     const tools = (await response.json()).result.tools;
     const tool = tools.find((t) => t.name === 'get_item_profit');
-    expect(tool.description).toContain('net_profit = revenue - fees - shipping - cost_of_units_sold + cashback');
+    expect(tool.description).toContain('net_profit = revenue - fees - shipping - refunds_to_buyers - cost_of_units_sold + cashback');
   });
 });
 
