@@ -174,6 +174,9 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
     if (statusTransitions.unitsHeld({ ...existing, quantity: newQty }) < 0) {
       return res.status(400).json({ error: 'Quantity cannot be lower than the units already returned to stock' });
     }
+    if (statusTransitions.reopensRestoredSale(existing, { status })) {
+      return res.status(409).json({ error: statusTransitions.REOPEN_REFUSED_MESSAGE });
+    }
     await requireOwned('platform', platform_id, req.user.id, 'Sale platform');
     await requireOwned('paymentMethod', sale_shipping_payment_method_id, req.user.id, 'Shipping label card');
     const qtyDiff = existing.quantity - newQty;

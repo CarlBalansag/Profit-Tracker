@@ -76,7 +76,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
           select: {
             id: true, platform_id: true, quantity: true, unit_price: true, commission_fee: true,
             sale_shipping: true, sale_shipping_payment_method_id: true, sale_date: true, payout_date: true, status: true,
-            refunded_amount: true, refunded_qty: true,
+            refunded_amount: true, refunded_qty: true, restored_qty: true,
             workflow_type: true, workflow_status: true, workflow_status_changed_at: true,
             taxable: true, sale_tax_collected: true, customer_tax_exempt: true, exemption_type: true,
             unit_price_decimal: true, commission_fee_decimal: true, sale_shipping_decimal: true, sale_tax_collected_decimal: true,

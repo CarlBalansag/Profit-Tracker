@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '1.08',
+    date: '2026-11-03',
+    notes: 'A cancelled, voided or returned sale whose units went back into stock can no longer be moved back to an active status. Record a new sale instead.',
+  },
+  {
     version: '1.07',
     date: '2026-11-03',
     notes: 'Lowering the quantity of a cancelled or returned sale, or refunding it, can no longer add units back to your stock that were already put back.',

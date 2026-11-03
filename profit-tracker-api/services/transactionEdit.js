@@ -48,7 +48,12 @@ async function editTransaction(prisma, inventoryId, userId, payload) {
 
     const sales = await tx.sales.findMany({ where: { inventory_id: inventoryId } });
     const byId = new Map(sales.map(sale => [sale.id, sale]));
-    for (const sale of payload.sales) if (!byId.has(sale.id)) throw fail(404, 'Sale not found in this transaction');
+    for (const sale of payload.sales) {
+      if (!byId.has(sale.id)) throw fail(404, 'Sale not found in this transaction');
+      if (statusTransitions.reopensRestoredSale(byId.get(sale.id), { status: sale.status })) {
+        throw fail(409, statusTransitions.REOPEN_REFUSED_MESSAGE);
+      }
+    }
     const changes = new Map(payload.sales.map(sale => [sale.id, sale]));
     // A sale can't drop below the units already back in stock from it (sent
     // back by the buyer, or restored by a cancel/void/return action).

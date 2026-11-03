@@ -222,6 +222,9 @@ async function updateSaleShipment(tx, userId, existing, { tracking_number, carri
     if (!valid.includes(normalized)) {
       throw Object.assign(new Error(`Invalid status for this sale's workflow. Must be one of: ${valid.join(', ')}`), { toolError: true });
     }
+    if (statusTransitions.reopensRestoredSale(existing, { workflow_status: normalized })) {
+      throw Object.assign(new Error(statusTransitions.REOPEN_REFUSED_MESSAGE), { toolError: true });
+    }
     if (normalized !== existing.workflow_status) {
       data.workflow_status = normalized;
       data.workflow_status_changed_at = new Date();

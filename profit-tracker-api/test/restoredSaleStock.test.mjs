@@ -84,9 +84,11 @@ describe('deleting a sale whose units a status action already restored', () => {
     expect(onHand()).toBe(5);
   });
 
-  it('cancelling again after a status correction restores nothing more', async () => {
+  it('cancelling again a sale reopened before reopening was refused restores nothing more', async () => {
     expect((await act('cancel_sale')).status).toBe(200);
-    expect((await act('correct_status', { workflow_status: 'PAID' })).status).toBe(200);
+    // correct_status now refuses this (restoredSaleReopen.test.mjs); a row
+    // reopened earlier can still be in this state.
+    Object.assign(harness.db.sales[0], { workflow_status: 'PAID', status: 'SOLD' });
     expect((await act('cancel_sale')).status).toBe(200);
     expect(onHand()).toBe(5);
     expect(harness.db.sales[0].restored_qty).toBe(2);

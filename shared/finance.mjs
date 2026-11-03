@@ -7,7 +7,7 @@ const number = value => Number.isFinite(Number(value)) ? Number(value) : 0;
 // it for live previews) and so cannot require a CommonJS backend service. The
 // two are pinned together by profit-tracker-api/test/statusFinancialExclusion.test.mjs.
 const EXCLUDED_FROM_FINANCIALS = ['CANCELLED', 'RETURNED', 'DISPUTED'];
-const isExcludedFromFinancials = status => EXCLUDED_FROM_FINANCIALS.includes(String(status || '').toUpperCase());
+export const isExcludedFromFinancials = status => EXCLUDED_FROM_FINANCIALS.includes(String(status || '').toUpperCase());
 // Both status columns are checked, matching services/decimalFinance.js exactly:
 // the new status-workflow actions write workflow_status, the legacy status
 // dropdown still writes `status`, and a sale excluded by either must not count.

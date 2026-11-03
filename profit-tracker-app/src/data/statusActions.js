@@ -12,6 +12,15 @@ import {
   correctableSaleStatuses,
   workflowLabel,
 } from './statusWorkflow';
+import { isExcludedFromFinancials } from '../../../shared/finance.mjs';
+
+// Mirrors statusTransitions.reopensRestoredSale: once a cancel/void/return put
+// a sale's units back in stock (restored_qty), the server refuses any status
+// that counts as a sale, so only Cancelled/Returned/Disputed are offered.
+const saleStatusOptions = (record = {}) => {
+  const statuses = correctableSaleStatuses(record.workflow_type);
+  return Number(record.restored_qty) > 0 ? statuses.filter(isExcludedFromFinancials) : statuses;
+};
 
 // ─── Form fields ─────────────────────────────────────────────────────────────
 // Derived from what the server actually accepts: validation/schemas.js
@@ -85,7 +94,7 @@ export function fieldsForAction(action, kind, record = {}, descriptor = {}) {
           label: 'Workflow step',
           type: 'select',
           required: true,
-          options: correctableSaleStatuses(record.workflow_type),
+          options: saleStatusOptions(record),
         },
       ];
 
@@ -147,7 +156,7 @@ export const QUICK_STATUS_FIELD = { inventory: 'receiving_status', sale: 'workfl
 //                sale something is belongs to the dedicated Set Sale Status form.
 export const quickStatusOptions = (kind, record = {}) => {
   if (kind === 'inventory') return INVENTORY_RECEIVING_STATUSES;
-  if (kind === 'sale') return correctableSaleStatuses(record.workflow_type);
+  if (kind === 'sale') return saleStatusOptions(record);
   return [];
 };
 

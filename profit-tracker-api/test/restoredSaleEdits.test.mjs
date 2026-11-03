@@ -38,11 +38,11 @@ const send = async (method, path, body) => {
 const act = (action, body) => send('POST', `/api/sales/${harness.ids.sale}/actions/${action}`, body);
 const editSale = (body) => send('PUT', `/api/sales/${harness.ids.sale}`, body);
 const refund = (quantity) => send('POST', '/api/refunds', { sale_id: harness.ids.sale, amount: '10.00', quantity, date: '2026-09-05' });
-// correct_status alone leaves the legacy status excluded (refunds refuse it
-// with 409); also setting the legacy status back makes the sale realized again.
+// Every status write now refuses reopening a restored sale
+// (restoredSaleReopen.test.mjs); a row reopened before that rule can still be
+// realized again, so set that state directly.
 const reopen = async () => {
-  expect((await act('correct_status', { workflow_status: 'PAID' })).status).toBe(200);
-  expect((await editSale({ status: 'SOLD' })).status).toBe(200);
+  Object.assign(harness.db.sales[0], { workflow_status: 'PAID', status: 'SOLD' });
 };
 const onHand = () => harness.db.inventory[0].qty_on_hand;
 

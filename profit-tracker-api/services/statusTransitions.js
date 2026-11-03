@@ -291,6 +291,20 @@ const unitsHeld = (sale) => sale.quantity - (sale.refunded_qty || 0) - (sale.res
 // restored_qty this was computed from.
 const restoredPatch = (record, restores) => (restores ? { restored_qty: (record.restored_qty || 0) + restores } : {});
 
+// A sale whose units a cancel/void/mark_returned action put back in stock
+// can't be reopened: moving it back to a status that counts as a sale would
+// book revenue for units that are on hand again. `next` holds the
+// workflow_status and/or legacy status about to be written; only a value that
+// changes and leaves the excluded set is refused, so moving between
+// Cancelled/Returned/Disputed, or re-sending the current value, still works.
+const REOPEN_REFUSED_MESSAGE = "This sale's units are already back in stock, so it can't be reopened. Record a new sale instead.";
+function reopensRestoredSale(sale, next = {}) {
+  if (!((sale.restored_qty || 0) > 0)) return false;
+  const reopens = (value, current) =>
+    value !== undefined && value !== null && value !== '' && value !== current && !isExcludedFromFinancials(value);
+  return reopens(next.workflow_status, sale.workflow_status) || reopens(next.status, sale.status);
+}
+
 const SYSTEM_ACTION_FROM = {
   inventory: { mark_delivered: ['PRE_ORDER', 'PURCHASED', 'INBOUND'] },
   sale: { mark_delivered: ['OUTBOUND'] },
@@ -448,6 +462,9 @@ const SALE_TRANSITIONS = {
     const valid = [...SALE_STATUSES_BY_WORKFLOW[workflow], ...SALE_EXCEPTION_STATUSES];
     if (!valid.includes(payload.workflow_status)) {
       throw transitionError(400, 'A valid workflow status is required');
+    }
+    if (reopensRestoredSale(record, { workflow_status: payload.workflow_status })) {
+      throw transitionError(409, REOPEN_REFUSED_MESSAGE);
     }
     return {
       data: {
@@ -834,6 +851,8 @@ module.exports = {
   actionPayload,
   applyTransition,
   unitsHeld,
+  reopensRestoredSale,
+  REOPEN_REFUSED_MESSAGE,
   // Legacy-column bridge (checkpoint 2, removed with the legacy column)
   LEGACY_TO_RECEIVING_STATUS,
   LEGACY_TO_WORKFLOW_STATUS,
