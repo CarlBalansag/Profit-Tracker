@@ -6,6 +6,7 @@ import {
   Paperclip, X, Hash, MapPin, ChevronDown, CheckCircle2, StickyNote, AlertTriangle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { addDays } from '../utils/returnWindow';
 import { usePaymentMethods, usePlatforms, useBuyers, useInvalidate, apiFetch, useProductNote, useProductNoteMutations, useProductNames, useRecentTransaction } from '../hooks/useApi';
 import { MAX_RECEIPT_BYTES, RECEIPT_ACCEPT, saveInventoryWithReceipt, validateReceiptFile } from '../hooks/receiptUpload';
 
@@ -37,6 +38,7 @@ const AddTransaction = () => {
     unit_purchase_cost: '',
     qty_purchased: 1,
     purchase_date: new Date().toISOString().split('T')[0],
+    return_window_days: '',
     sales_tax: '',
     shipping_cost_inbound: '',
     fees: '',
@@ -247,6 +249,7 @@ const AddTransaction = () => {
           apiFetch,
           formData: {
             ...formData,
+            return_by_date: addDays(formData.purchase_date, formData.return_window_days),
             cashback_rate: Number(cashbackRate.toFixed(6)),
             cashback_earned: Number(cashbackAmount.toFixed(2)),
           },
@@ -640,6 +643,21 @@ const AddTransaction = () => {
                 <Field label="Tax">{dollarInput('sales_tax', '0.00', 'blue')}</Field>
                 <Field label="Shipping Cost">{dollarInput('shipping_cost_inbound', '0.00', 'blue')}</Field>
                 <Field label="Fees">{dollarInput('fees', '0.00', 'blue')}</Field>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                <Field label="Return window (days, optional)">
+                  <input
+                    type="number" min="0" step="1" name="return_window_days" aria-label="Return window (days)"
+                    value={formData.return_window_days} onChange={handleChange}
+                    className={inputCls('blue')} placeholder="e.g. 30"
+                  />
+                </Field>
+                <p className="sm:col-span-2 text-xs text-gray-500 pb-2">
+                  {addDays(formData.purchase_date, formData.return_window_days)
+                    ? <>Return to the store by <span className="text-gray-300">{addDays(formData.purchase_date, formData.return_window_days)}</span>. Record Sale and Inventory will count down the days left.</>
+                    : <>The store&apos;s return policy. Leave blank if you won&apos;t return it.</>}
+                </p>
               </div>
 
               <label className="flex items-center gap-2.5 cursor-pointer select-none w-fit">

@@ -207,6 +207,9 @@ model Inventory {
   payment_method        PaymentMethod? @relation(fields: [payment_method_id], references: [id])
   purchase_date         DateTime
   received_date         DateTime?
+  // Optional last day the store accepts a return (its return policy). NULL
+  // means no window was recorded; it is informational only, never a total.
+  return_by_date        DateTime?
   unit_purchase_cost    Float
   unit_purchase_cost_decimal Decimal?  @db.Decimal(19, 2)
   qty_purchased         Int

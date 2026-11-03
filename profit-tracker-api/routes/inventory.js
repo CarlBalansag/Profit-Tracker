@@ -61,7 +61,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
         // Status-workflow columns, needed to compute allowed_actions below.
         receiving_status: true, receiving_status_changed_at: true, is_listed: true,
         vendor_id: true, payment_method_id: true,
-        purchase_date: true, received_date: true,
+        purchase_date: true, received_date: true, return_by_date: true,
         unit_purchase_cost: true, qty_purchased: true, qty_on_hand: true,
         sales_tax: true, shipping_cost_inbound: true, fees: true,
         cashback_earned: true, cashback_rate: true, gift_card_amount: true,
@@ -100,6 +100,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
       vendor_id,
       payment_method_id,
       purchase_date,
+      return_by_date,
       unit_purchase_cost,
       qty_purchased,
       sales_tax,
@@ -179,6 +180,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
         vendor_id: vendor_id || null,
         payment_method_id: payment_method_id || null,
         purchase_date: parseLocalDate(purchase_date) || new Date(),
+        return_by_date: return_by_date ? parseLocalDate(return_by_date) : null,
         unit_purchase_cost: parseFloat(unit_purchase_cost) || 0,
         qty_purchased: qty,
         qty_on_hand: qty, // Initialize to purchased qty
@@ -341,6 +343,7 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
       vendor_id,
       payment_method_id,
       purchase_date,
+      return_by_date,
       tax_exempt,
     } = req.body;
 
@@ -403,6 +406,7 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
     if (vendor_id !== undefined)             data.vendor_id = vendor_id || null;
     if (payment_method_id !== undefined)     data.payment_method_id = payment_method_id || null;
     if (purchase_date !== undefined)         data.purchase_date = parseLocalDate(purchase_date);
+    if (return_by_date !== undefined)        data.return_by_date = return_by_date ? parseLocalDate(return_by_date) : null;
     if (tax_exempt !== undefined)            data.tax_exempt = tax_exempt === true || tax_exempt === 'true';
 
     // Quantity fields double as the basis for every sale's stock math, so a

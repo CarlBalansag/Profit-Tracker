@@ -5,6 +5,7 @@ import { useInvalidate, apiFetch} from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { toast } from 'sonner';
+import ReturnWindowBadge from './ReturnWindowBadge';
 import TransactionNotesPanel from './TransactionNotesPanel';
 
 const STATUSES = ['Pre Order', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
@@ -144,6 +145,8 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             status:                  d.status ?? 'PURCHASED',
             vendor_id:               d.vendor_id ?? '',
             purchase_date:           d.purchase_date ? d.purchase_date.split('T')[0] : '',
+            return_by_date:          d.return_by_date ? d.return_by_date.split('T')[0] : '',
+            qty_on_hand:             d.qty_on_hand,
             category:                d.category ?? '',
             unit_purchase_cost:      d.unit_purchase_cost ?? 0,
             qty_purchased:           d.qty_purchased ?? 1,
@@ -255,6 +258,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             product_name:          form.product_name,
             status:                form.status,
             purchase_date:         form.purchase_date,
+            return_by_date:        form.return_by_date || null,
             unit_purchase_cost:    Number(form.unit_purchase_cost),
             qty_purchased:         Number(form.qty_purchased),
             sales_tax:             Number(form.sales_tax),
@@ -362,13 +366,17 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
               </Field>
             </div>
 
-            {/* Vendor / Date / Category */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Vendor / Date / Return by / Category */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <Field label="Store / Vendor">
                 <Sel value={form.vendor_id} onChange={v => applyCashbackDefault(form.payment_method_id, v)} options={vendors} placeholder="Select vendor…" />
               </Field>
               <Field label="Purchase Date">
                 <Input type="date" value={form.purchase_date} onChange={v => set('purchase_date', v)} />
+              </Field>
+              <Field label="Return by (optional)">
+                <Input type="date" ariaLabel="Return by" value={form.return_by_date} onChange={v => set('return_by_date', v)} />
+                <ReturnWindowBadge item={form} className="mt-1.5" />
               </Field>
               <Field label="Category">
                 <Input value={form.category} onChange={v => set('category', v)} placeholder="e.g. Electronics" />

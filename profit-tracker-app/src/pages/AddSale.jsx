@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useNavigate } from 'react-router-dom';
+import ReturnWindowBadge from '../components/ReturnWindowBadge';
 import { useInventory, usePlatforms, usePaymentMethods, useInvalidate, apiFetch, useProductNote, useProductNoteMutations } from '../hooks/useApi';
 
 const AddSale = () => {
@@ -201,6 +202,7 @@ const AddSale = () => {
                       <div className="text-gray-400 font-medium">Stock: <span className="text-gray-200">{item.qty_on_hand}</span></div>
                       <div className="text-gray-400 font-medium">Cost: <span className="text-blue-400">${item.unit_purchase_cost.toFixed(2)}</span></div>
                     </div>
+                    <ReturnWindowBadge item={item} className="mt-2" />
                     <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/5">
                       <Store className="w-3.5 h-3.5 text-gray-500" />
                       <span className="text-xs text-gray-500">{item.vendor?.name || 'Unknown'} • {new Date(item.purchase_date).toLocaleDateString()}</span>
@@ -229,6 +231,7 @@ const AddSale = () => {
                 <div>
                   <h2 className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Currently Selling</h2>
                   <p className="text-lg font-bold text-white mt-0.5">{selectedItem.product_name}</p>
+                  <ReturnWindowBadge item={selectedItem} className="mt-1" />
                 </div>
               </div>
 

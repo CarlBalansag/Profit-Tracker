@@ -4,6 +4,18 @@ import { useInventory } from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
 import { Columns3, Plus, Search, Package, AlertTriangle, TrendingUp, DollarSign, Clock, MoreVertical, ListChecks, ChevronRight, ChevronDown, ExternalLink } from 'lucide-react';
 import ProductNoteButton from '../components/ProductNoteButton';
+import ReturnWindowBadge from '../components/ReturnWindowBadge';
+import { returnWindowStatus } from '../utils/returnWindow';
+
+// The batch whose return window runs out first, so a collapsed group still
+// warns about it. Closed windows only count when no batch is still open.
+const soonestReturnWindow = (entries) => entries
+  .filter(entry => returnWindowStatus(entry))
+  .sort((a, b) => {
+    const sa = returnWindowStatus(a), sb = returnWindowStatus(b);
+    if ((sa.daysLeft < 0) !== (sb.daysLeft < 0)) return sa.daysLeft < 0 ? 1 : -1;
+    return sa.daysLeft - sb.daysLeft;
+  })[0] || null;
 
 const STATUS_COLORS = {
   'Pre Order':    'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
@@ -202,6 +214,7 @@ const Inventory = () => {
                         <div>
                           <p className="text-sm font-semibold text-gray-200">{item.product_name}</p>
                           <span className="text-[10px] text-gray-400">{item.category || 'Uncategorized'}</span>
+                          <div><ReturnWindowBadge item={item} className="mt-1" /></div>
                         </div>
                         <ProductNoteButton productName={item.product_name} />
                       </div>
@@ -262,6 +275,7 @@ const Inventory = () => {
                         <div>
                           <p className="text-sm font-semibold text-gray-200">{group.product_name}</p>
                           <span className="text-[10px] text-gray-500">{group.entries.length} purchase entries</span>
+                          {soonestReturnWindow(group.entries) && <div><ReturnWindowBadge item={soonestReturnWindow(group.entries)} className="mt-1" /></div>}
                         </div>
                         <div onClick={e => e.stopPropagation()}>
                           <ProductNoteButton productName={group.product_name} />
@@ -310,6 +324,7 @@ const Inventory = () => {
                           <div>
                             <p className="text-sm text-gray-400">{item.product_name}</p>
                             <span className="text-[10px] text-gray-600">{item.category || 'Uncategorized'} · #{item.order_number || item.id.slice(0, 8)}</span>
+                            <div><ReturnWindowBadge item={item} className="mt-1" /></div>
                           </div>
                         </td>
                         <td className="px-4 py-3.5 text-center">

@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '1.04',
+    date: '2026-11-02',
+    notes: 'You can now add a store return window when adding a purchase, and Record Sale, Inventory and the transaction editor show how many days you have left to return it.',
+  },
+  {
     version: '1.03',
     date: '2026-11-02',
     notes: 'Analytics, Cash Flow, Settings, Tax Exempt and Schedule C now scroll, so nothing at the bottom of those pages is cut off.',
