@@ -323,7 +323,7 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
   try {
     const existing = await prisma.inventory.findUnique({
       where: { id: req.params.id },
-      include: { sales: { select: { quantity: true, refunded_qty: true } } },
+      include: { sales: { select: { quantity: true, refunded_qty: true, restored_qty: true } } },
     });
     if (!existing || existing.user_id !== req.user.id) return res.status(404).json({ error: 'Not found' });
 
@@ -352,9 +352,10 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
     const data = {};
     await requireOwned('platform', vendor_id, req.user.id, 'Vendor');
     await requireOwned('paymentMethod', payment_method_id, req.user.id, 'Payment method');
-    // Units no longer in stock: kept by buyers (sold minus returned by them)
+    // Units no longer in stock: still held by sales (sold minus units back in
+    // stock from them -- refunded, or restored by a cancel/void/return action)
     // plus units sent back to the store. On hand = purchased - this.
-    const soldQty = existing.sales.reduce((sum, sale) => sum + sale.quantity - (sale.refunded_qty || 0), 0)
+    const soldQty = existing.sales.reduce((sum, sale) => sum + statusTransitions.unitsHeld(sale), 0)
       + (existing.refunded_qty || 0);
     if (qty_purchased !== undefined) {
       const requestedQty = parseInt(qty_purchased, 10);

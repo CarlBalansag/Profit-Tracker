@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '1.05',
+    date: '2026-11-02',
+    notes: 'Deleting a cancelled, voided or returned sale, or editing its purchase afterwards, no longer counts those units twice in your stock.',
+  },
+  {
     version: '1.04',
     date: '2026-11-02',
     notes: 'You can now add a store return window when adding a purchase, and Record Sale, Inventory and the transaction editor show how many days you have left to return it.',

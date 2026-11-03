@@ -295,6 +295,10 @@ model Sales {
   refunded_amount     Decimal   @default(0) @db.Decimal(19, 2)
   refunded_qty        Int       @default(0)
   refunds             Refund[]
+  // Units a cancel_sale/void_sale/mark_returned action put back in stock
+  // (mark_returned can restore only part of the sale). A sale still holds
+  // quantity - refunded_qty - restored_qty units out of stock.
+  restored_qty        Int       @default(0)
   sale_date           DateTime
   // User-entered "expected payout" reminder. Not a payment confirmation --
   // that is paid_at/paid_amount/paid_reference below.

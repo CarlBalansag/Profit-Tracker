@@ -275,15 +275,23 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
       });
       if (inventory.count !== 1) throw requestError(404, 'Inventory not found or access denied');
       const removed = await tx.sales.deleteMany({
-        where: { id: existing.id, inventory_id: existing.inventory_id, quantity: existing.quantity, ...(existing.refunded_qty !== undefined ? { refunded_qty: existing.refunded_qty } : {}) },
+        where: {
+          id: existing.id, inventory_id: existing.inventory_id, quantity: existing.quantity,
+          ...(existing.refunded_qty !== undefined ? { refunded_qty: existing.refunded_qty } : {}),
+          ...(existing.restored_qty !== undefined ? { restored_qty: existing.restored_qty } : {}),
+        },
       });
       if (removed.count !== 1) throw requestError(409, 'Sale changed while deleting. Reload and retry.');
-      // Units the buyer already sent back are in stock already; only the
-      // units they kept come back now. The sale's refunds are deleted with it.
-      await tx.inventory.update({
-        where: { id: existing.inventory_id },
-        data: { qty_on_hand: { increment: existing.quantity - (existing.refunded_qty || 0) } },
-      });
+      // Units the buyer already sent back, and units a cancel/void/return
+      // action already restored, are in stock already; only the units the sale
+      // still holds come back now. The sale's refunds are deleted with it.
+      const held = statusTransitions.unitsHeld(existing);
+      if (held > 0) {
+        await tx.inventory.update({
+          where: { id: existing.inventory_id },
+          data: { qty_on_hand: { increment: held } },
+        });
+      }
     });
     await publishCalendarFeed(req.user.id);
     res.json({ success: true });

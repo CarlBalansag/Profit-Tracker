@@ -225,7 +225,7 @@ const seedSale = (overrides = {}) => {
   Object.assign(harness.db.sales[0], {
     quantity: 2, workflow_type: 'STANDARD_MARKETPLACE', workflow_status: 'WAITING_FOR_PAYMENT',
     workflow_status_changed_at: null,
-    paid_at: null, cancelled_at: null, voided_at: null, delivered_at: null, returned_at: null,
+    paid_at: null, cancelled_at: null, voided_at: null, delivered_at: null, returned_at: null, restored_qty: 0,
     return_requested_at: null, disputed_at: null, ...overrides,
   });
   return { ...harness.db.sales[0], user_id: harness.ids.user };

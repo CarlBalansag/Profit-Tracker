@@ -282,6 +282,15 @@ const saleWorkflowOf = (record = {}) =>
 // gated on an explicit set of source statuses instead of allowedActions. Listing
 // them here is what keeps a repeated or late carrier check from moving a record
 // backward: once the status has left the set, the action is rejected.
+// Units a sale still keeps out of stock: its quantity, minus units the buyer
+// sent back through a refund, minus units a cancel/void/mark_returned action
+// already put back (restored_qty). Every stock recount and the sale DELETE use
+// this, so units a status action restored are never restored or counted twice.
+const unitsHeld = (sale) => sale.quantity - (sale.refunded_qty || 0) - (sale.restored_qty || 0);
+// Absolute, not an increment: applyTransition guards the write on the
+// restored_qty this was computed from.
+const restoredPatch = (record, restores) => (restores ? { restored_qty: (record.restored_qty || 0) + restores } : {});
+
 const SYSTEM_ACTION_FROM = {
   inventory: { mark_delivered: ['PRE_ORDER', 'PURCHASED', 'INBOUND'] },
   sale: { mark_delivered: ['OUTBOUND'] },
@@ -398,26 +407,27 @@ const SALE_TRANSITIONS = {
     data: { workflow_status: 'RETURN_IN_PROGRESS', return_requested_at: now },
   }),
   mark_returned: (record, payload, now) => {
-    // Units already returned through a refund are back in stock already.
-    const returnable = record.quantity - (record.refunded_qty || 0);
+    // Units already returned through a refund or an earlier action are back in
+    // stock already.
+    const returnable = unitsHeld(record);
     const quantity = payload.quantity === undefined ? returnable : Number(payload.quantity);
     if (!Number.isInteger(quantity) || quantity < 0 || quantity > returnable) {
       throw transitionError(400, 'Returned quantity must be between 0 and the units not already returned');
     }
-    return { data: { workflow_status: 'RETURNED', returned_at: now }, restores: quantity };
+    return { data: { workflow_status: 'RETURNED', returned_at: now, ...restoredPatch(record, quantity) }, restores: quantity };
   },
   // A dispute preserves the current inventory position until it is resolved.
   report_dispute: (record, payload, now) => ({ data: { workflow_status: 'DISPUTED', disputed_at: now } }),
   cancel_sale: (record, payload, now) => ({
-    data: { workflow_status: 'CANCELLED', cancelled_at: now },
-    restores: record.quantity - (record.refunded_qty || 0),
+    data: { workflow_status: 'CANCELLED', cancelled_at: now, ...restoredPatch(record, unitsHeld(record)) },
+    restores: unitsHeld(record),
   }),
   // The sale should never have existed. voided_at is what distinguishes it from
   // a real cancellation; both are excluded from financials via CANCELLED until
   // a later checkpoint introduces a dedicated VOID status.
   void_sale: (record, payload, now) => ({
-    data: { workflow_status: 'CANCELLED', voided_at: now },
-    restores: record.quantity - (record.refunded_qty || 0),
+    data: { workflow_status: 'CANCELLED', voided_at: now, ...restoredPatch(record, unitsHeld(record)) },
+    restores: unitsHeld(record),
   }),
   // `workflow_type` in the payload is optional and only ever sent by the "set a
   // status on a sale that has none" form. A sale the backfill could not resolve
@@ -595,6 +605,7 @@ async function applyTransition(tx, kind, record, action, payload = {}) {
       id: record.id,
       quantity: record.quantity,
       ...(record.refunded_qty !== undefined ? { refunded_qty: record.refunded_qty } : {}),
+      ...(record.restored_qty !== undefined ? { restored_qty: record.restored_qty } : {}),
       workflow_status: record.workflow_status ?? null,
       inventory: { user_id },
     },
@@ -822,6 +833,7 @@ module.exports = {
   isActionAllowed,
   actionPayload,
   applyTransition,
+  unitsHeld,
   // Legacy-column bridge (checkpoint 2, removed with the legacy column)
   LEGACY_TO_RECEIVING_STATUS,
   LEGACY_TO_WORKFLOW_STATUS,
