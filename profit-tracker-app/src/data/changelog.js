@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '1.06',
+    date: '2026-11-03',
+    notes: 'You can now record refunds instead of deleting a transaction: money back from a store on a purchase, or money you refunded a buyer on a sale, with any units returned. Your costs, profit, stock and card totals all update.',
+  },
+  {
     version: '1.05',
     date: '2026-11-02',
     notes: 'Deleting a cancelled, voided or returned sale, or editing its purchase afterwards, no longer counts those units twice in your stock.',

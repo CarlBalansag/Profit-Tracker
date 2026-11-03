@@ -16,6 +16,13 @@ function fmt(n) {
   return (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Signed dollars for rows that can be credits (store refunds): "−$104.00".
+function money(n, { plus = false } = {}) {
+  const value = n ?? 0;
+  if (value < 0) return `−$${fmt(Math.abs(value))}`;
+  return `${plus ? '+' : ''}$${fmt(value)}`;
+}
+
 function toMonthKey(date) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
 }
@@ -49,11 +56,13 @@ function dueDateLabel(dueDay) {
 
 const STATUS_SOLD = ['SOLD', 'PAID', 'COMPLETED', 'SHIPPED_OUT', 'AUTHENTICATION', 'PENDING_PAYMENT', 'IN_TRANSIT_OUT'];
 const STATUS_RETURN = ['RETURNED', 'DISPUTED', 'CANCELLED'];
+const STATUS_CREDIT = ['REFUND'];
 
 function statusStyle(status) {
   const s = (status || '').toUpperCase();
   if (STATUS_SOLD.includes(s)) return { color: 'var(--green)', bg: 'var(--green-bg)', border: 'var(--green-soft)' };
   if (STATUS_RETURN.includes(s)) return { color: 'var(--red)', bg: 'var(--red-bg)', border: 'var(--red)' };
+  if (STATUS_CREDIT.includes(s)) return { color: 'var(--green)', bg: 'var(--green-bg)', border: 'var(--green-soft)' };
   return { color: 'var(--yellow)', bg: 'var(--accent-bg)', border: 'var(--accent-soft)' };
 }
 
@@ -95,7 +104,7 @@ function ItemRow({ item }) {
           </div>
         </td>
         <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, color: 'var(--text-secondary)' }}>
-          ${fmt(item.cost)}
+          <span style={item.cost < 0 ? { color: 'var(--green)' } : undefined}>{money(item.cost)}</span>
         </td>
         <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, color: 'var(--text-secondary)' }}>
           {isPending ? <span style={{ color: 'var(--text-muted)' }}>—</span> : `$${fmt(item.revenue)}`}
@@ -109,7 +118,7 @@ function ItemRow({ item }) {
           }
         </td>
         <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, color: 'var(--green)' }}>
-          +${fmt(item.cashback)}
+          <span style={item.cashback < 0 ? { color: 'var(--red)' } : undefined}>{money(item.cashback, { plus: true })}</span>
         </td>
         <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
           {item.lossToRedeem > 0
@@ -141,11 +150,11 @@ function ItemRow({ item }) {
               gap: '12px 24px',
             }}>
               {[
-                { label: 'Cost Basis', value: `$${fmt(item.cost)}`, color: 'var(--text-primary)' },
+                { label: item.kind === 'refund' ? 'Refund credit' : 'Cost Basis', value: money(item.cost), color: item.cost < 0 ? 'var(--green)' : 'var(--text-primary)' },
                 { label: 'Sale Revenue', value: isPending ? '—' : `$${fmt(item.revenue)}`, color: 'var(--text-primary)' },
                 { label: 'Net P&L', value: isPending ? '—' : isLoss ? `-$${fmt(Math.abs(item.netPnl))}` : `+$${fmt(item.netPnl)}`, color: isPending ? 'var(--text-muted)' : isLoss ? 'var(--red)' : 'var(--green)' },
                 { label: 'Cashback Rate', value: `${item.cashbackRate ?? 0}%`, color: 'var(--text-secondary)' },
-                { label: 'Cashback Earned', value: `+$${fmt(item.cashback)}`, color: 'var(--green)' },
+                { label: item.kind === 'refund' ? 'Cashback taken back' : 'Cashback Earned', value: money(item.cashback, { plus: true }), color: item.cashback < 0 ? 'var(--red)' : 'var(--green)' },
                 { label: 'Cashback Redeemed', value: item.lossToRedeem > 0 ? `$${fmt(item.lossToRedeem)}` : '—', color: item.lossToRedeem > 0 ? 'var(--red)' : 'var(--text-muted)' },
               ].map(({ label, value, color }) => (
                 <div key={label}>
@@ -202,7 +211,8 @@ function CreditCard() {
 
   const creditLimit = activeCard?.credit_limit ?? 0;
   const totalSpend = activeCard?.totalSpend ?? 0;
-  const utilPct = creditLimit > 0 ? Math.min((totalSpend / creditLimit) * 100, 100) : 0;
+  // A refund-only month can net to a credit; utilization never goes below 0%.
+  const utilPct = creditLimit > 0 ? Math.max(0, Math.min((totalSpend / creditLimit) * 100, 100)) : 0;
   const utilColor = utilPct < 40 ? 'var(--accent)' : utilPct < 70 ? 'var(--yellow)' : 'var(--red)';
   const utilTextColor = utilPct < 40 ? 'var(--accent)' : utilPct < 70 ? 'var(--yellow)' : 'var(--red)';
 
@@ -212,7 +222,7 @@ function CreditCard() {
   const uncoveredLoss = activeCard?.uncoveredLoss ?? 0;
   const amountToPay = activeCard?.amountToPay ?? 0;
   const cashbackEarned = activeCard?.cashbackEarned ?? 0;
-  const minPayment = activeCard?.min_payment_pct > 0 ? totalSpend * activeCard.min_payment_pct / 100 : null;
+  const minPayment = activeCard?.min_payment_pct > 0 ? Math.max(0, totalSpend * activeCard.min_payment_pct / 100) : null;
 
   // Topbar badge: pick the most urgent due date across all cards
   const urgentCard = cards.reduce((worst, c) => {
@@ -309,7 +319,7 @@ function CreditCard() {
                   Net to Pay · {activeCard?.name ?? 'All Cards'}
                 </div>
                 <div style={{ fontFamily: 'monospace', fontSize: 42, fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--text-primary)', lineHeight: 1 }}>
-                  ${fmt(amountToPay)}
+                  {money(amountToPay)}
                 </div>
                 <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
                   {cashbackToRedeem > 0 && (
@@ -324,14 +334,14 @@ function CreditCard() {
                 <div style={{ flex: 1, padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-default)' }}>
                   <div>
                     <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Total Spend</div>
-                    <div style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 700, color: 'var(--accent)' }}>${fmt(totalSpend)}</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 700, color: 'var(--accent)' }}>{money(totalSpend)}</div>
                   </div>
                   <CreditCardIcon size={18} style={{ color: 'var(--accent)', opacity: 0.5 }} />
                 </div>
                 <div style={{ flex: 1, padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Cashback Earned</div>
-                    <div style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 700, color: 'var(--green)' }}>${fmt(cashbackEarned)}</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 700, color: 'var(--green)' }}>{money(cashbackEarned)}</div>
                   </div>
                   <Sparkles size={18} style={{ color: 'var(--green)', opacity: 0.5 }} />
                 </div>
@@ -377,7 +387,7 @@ function CreditCard() {
                         {cardDays !== null ? ` · Due ${cardDueLabel}` : ''}
                       </span>
                       <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: isActive ? 'var(--text-primary)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                        ${fmt(card.amountToPay)}
+                        {money(card.amountToPay)}
                       </span>
                     </div>
                   </button>
@@ -404,7 +414,7 @@ function CreditCard() {
                       {utilPct.toFixed(0)}%
                     </span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                      <span style={{ fontFamily: 'monospace' }}>${fmt(totalSpend)}</span>
+                      <span style={{ fontFamily: 'monospace' }}>{money(totalSpend)}</span>
                       <span style={{ color: 'var(--text-muted)', margin: '0 3px' }}>/</span>
                       <span style={{ fontFamily: 'monospace' }}>${fmt(creditLimit)}</span>
                     </span>
@@ -491,12 +501,12 @@ function CreditCard() {
                   <tfoot>
                     <tr style={{ borderTop: '1px solid var(--border-hover)', background: 'var(--bg-elevated)' }}>
                       <td style={{ padding: '10px 16px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>Card Total</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>${fmt(totalSpend)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{money(totalSpend)}</td>
                       <td style={{ padding: '10px 12px' }} />
                       <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: activeCard?.totalLosses > 0 ? 'var(--red)' : 'var(--text-muted)' }}>
                         {activeCard?.totalLosses > 0 ? `-$${fmt(activeCard.totalLosses)}` : '—'}
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: 'var(--green)' }}>${fmt(cashbackEarned)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: 'var(--green)' }}>{money(cashbackEarned)}</td>
                       <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: cashbackToRedeem > 0 ? 'var(--red)' : 'var(--text-muted)' }}>
                         {cashbackToRedeem > 0 ? `$${fmt(cashbackToRedeem)}` : '—'}
                       </td>
@@ -519,7 +529,7 @@ function CreditCard() {
         }}>
           {/* Left: summary pills */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflowX: 'auto' }}>
-            {cashbackEarned > 0 && pill(`Earned $${fmt(cashbackEarned)}`, 'var(--green)', 'var(--green-bg)', 'var(--green-soft)')}
+            {cashbackEarned > 0 && pill(`Earned ${money(cashbackEarned)}`, 'var(--green)', 'var(--green-bg)', 'var(--green-soft)')}
             {cashbackToRedeem > 0 && pill(`Redeem $${fmt(cashbackToRedeem)}`, 'var(--red)', 'var(--red-bg)', 'var(--red)')}
             {cashbackToKeep > 0 && pill(`This Card · Keep $${fmt(cashbackToKeep)}`, 'var(--accent)', 'var(--accent-bg)', 'var(--accent-soft)', `Cashback to keep for ${activeCard?.name || 'this card'} only this month, not the combined total shown at the top.`)}
             {uncoveredLoss > 0 && pill(`Uncovered $${fmt(uncoveredLoss)}`, 'var(--red)', 'var(--red-bg)', 'var(--red)')}
@@ -533,7 +543,7 @@ function CreditCard() {
             flexShrink: 0,
           }}>
             <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Pay</span>
-            <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>${fmt(amountToPay)}</span>
+            <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>{money(amountToPay)}</span>
           </div>
         </div>
       )}

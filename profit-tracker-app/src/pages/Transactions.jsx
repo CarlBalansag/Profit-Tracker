@@ -1,4 +1,4 @@
-import { allocatedCost, allocatedCashback, effectiveCashbackRate, saleEconomics, isRealizedSale } from '../../../shared/finance.mjs';
+import { allocatedCost, allocatedCashback, effectiveCashbackRate, saleEconomics, isRealizedSale, keptQuantity, keptSaleQuantity } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { useInventory, usePlatforms, usePaymentMethods, useBuyers, useInvalidate, apiFetch} from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
@@ -103,6 +103,20 @@ const ALL_COLUMNS = [
 const DEFAULT_COLS = Object.fromEntries(ALL_COLUMNS.map(c => [c.key, true]));
 
 // ─── Main Component ───────────────────────────────────────────────────────────
+// Money back on this purchase (from the store) or sale (to the buyer).
+// The row's cost/profit already reflect it; the badge says why they changed.
+function RefundedBadge({ row }) {
+  const units = row.refundedUnits > 0 ? ` · ${row.refundedUnits} ${row.isSale ? 'returned' : 'sent back'}` : '';
+  return (
+    <span
+      title={row.isSale ? 'Refunded to the buyer' : 'Refunded by the store'}
+      className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border bg-amber-500/10 text-amber-400 border-amber-500/25 whitespace-nowrap"
+    >
+      REFUNDED ${row.refundedAmount.toFixed(2)}{units}
+    </span>
+  );
+}
+
 const Transactions = () => {
   const { user } = useAuth();
   const location = useLocation();
@@ -388,14 +402,17 @@ const Transactions = () => {
   const getEffectiveCashbackRate = effectiveCashbackRate;
 
   transactions.forEach(inv => {
-    const unitTax = inv.qty_purchased > 0 ? inv.sales_tax / inv.qty_purchased : 0;
-    const unitInboundShipping = inv.qty_purchased > 0 ? inv.shipping_cost_inbound / inv.qty_purchased : 0;
+    // Per kept unit: units sent back to the store no longer carry any cost.
+    const keptUnits = keptQuantity(inv);
+    const unitTax = keptUnits > 0 ? inv.sales_tax / keptUnits : 0;
+    const unitInboundShipping = keptUnits > 0 ? inv.shipping_cost_inbound / keptUnits : 0;
 
     // Always show a purchase row if there is unsold stock on hand, OR if the
     // item has no sales at all (qty_on_hand may be 0 due to a data issue — we
     // never want to silently hide a transaction the user recorded).
     if (inv.qty_on_hand > 0 || !inv.sales?.length) {
-      const displayQty = inv.qty_on_hand > 0 ? inv.qty_on_hand : inv.qty_purchased;
+      // A purchase fully sent back to the store shows 0 units (and $0 cost).
+      const displayQty = inv.qty_on_hand > 0 ? inv.qty_on_hand : keptUnits;
       const unsoldCost = allocatedCost(inv, displayQty);
       const effectiveRate = getEffectiveCashbackRate(inv);
       rows.push({
@@ -426,14 +443,16 @@ const Transactions = () => {
         shipping: unitInboundShipping * displayQty,
         category: inv.category || null,
         tracking_number: inv.tracking_number || null,
+        refundedAmount: Number(inv.refunded_amount) || 0,
+        refundedUnits: Number(inv.refunded_qty) || 0,
       });
     }
 
     if (inv.sales?.length > 0) {
       inv.sales.forEach(sale => {
         // Proportionally allocate tax, shipping, and fees based on qty sold vs qty purchased
-        const allocatedTax = unitTax * sale.quantity;
-        const allocatedShipping = unitInboundShipping * sale.quantity;
+        const allocatedTax = unitTax * keptSaleQuantity(sale);
+        const allocatedShipping = unitInboundShipping * keptSaleQuantity(sale);
         const economics = saleEconomics(inv, sale);
         const totalUnitCost = economics.cost;
         const profit = isRealizedSale(sale) ? economics.netProfit : 0;
@@ -466,6 +485,8 @@ const Transactions = () => {
           category: inv.category || null,
           tracking_number: inv.tracking_number || null,
           rawCommission: sale.commission_fee,
+          refundedAmount: Number(sale.refunded_amount) || 0,
+          refundedUnits: Number(sale.refunded_qty) || 0,
           rawSaleDate: sale.sale_date,
           rawPayoutDate: sale.payout_date,
         });
@@ -883,6 +904,7 @@ const Transactions = () => {
                   : <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border bg-blue-500/10 text-blue-400 border-blue-500/20">BUY</span>
                 }
                 <p className="text-sm font-semibold text-gray-100 truncate">{row.product}</p>
+                {row.refundedAmount > 0 || row.refundedUnits > 0 ? <RefundedBadge row={row} /> : null}
                 <ProductNoteButton productName={row.product} />
               </div>
               <button
@@ -1072,6 +1094,7 @@ const Transactions = () => {
                           ) : (
                             <div className="flex items-center gap-1">
                               <p className="text-sm font-semibold text-gray-100 leading-tight">{row.product}</p>
+                              {row.refundedAmount > 0 || row.refundedUnits > 0 ? <RefundedBadge row={row} /> : null}
                               <ProductNoteButton productName={row.product} />
                             </div>
                           )}

@@ -46,6 +46,8 @@ describe('refunds: every screen agrees', () => {
     expect(sept).toMatchObject({ totalSpend: 520, cashbackEarned: 10.4, pendingCount: 2 });
     const oct = await card('2026-10');
     expect(oct).toMatchObject({ totalSpend: -104, cashbackEarned: -2.08, txnCount: 1 });
+    // A refund-only month: nothing to redeem, no loss, the credit is the amount to pay.
+    expect(oct).toMatchObject({ cashbackToRedeem: 0, uncoveredLoss: 0, amountToPay: -104, cashbackToKeep: -2.08 });
     expect(oct.items).toEqual([expect.objectContaining({ kind: 'refund', product: 'QA Multi-unit Sneaker · Refund', cost: -104, cashback: -2.08 })]);
     // Lifetime spend on the card nets the refund out, matching the two months together.
     const methods = await get('payment-methods');

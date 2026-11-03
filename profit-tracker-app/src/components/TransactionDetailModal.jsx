@@ -1,12 +1,13 @@
-import { batchCost, effectiveCashbackRate, saleEconomics, realizedSummary, isRealizedSale } from '../../../shared/finance.mjs';
+import { batchCost, grossBatchCost, effectiveCashbackRate, inventoryCashback, saleEconomics, realizedSummary, isRealizedSale } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useRef } from 'react';
-import { X, DollarSign, Package, CreditCard, Tag, ChevronDown, ChevronUp, StickyNote } from 'lucide-react';
+import { X, DollarSign, Package, CreditCard, Tag, ChevronDown, ChevronUp, StickyNote, Undo2 } from 'lucide-react';
 import { useInvalidate, apiFetch} from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { toast } from 'sonner';
 import ReturnWindowBadge from './ReturnWindowBadge';
 import TransactionNotesPanel from './TransactionNotesPanel';
+import RefundsPanel from './RefundsPanel';
 
 const STATUSES = ['Pre Order', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
 const SALE_STATUSES = ['SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
@@ -117,7 +118,36 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
+  const [openSaleRefunds, setOpenSaleRefunds] = useState(() => new Set());
+  const toggleSaleRefunds = (id) => setOpenSaleRefunds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const invalidate = useInvalidate();
+
+  // A refund saves immediately, separately from Update. Pull just the totals
+  // and stock it changed, so any unsaved edits in this window are kept.
+  const refreshRefundTotals = async () => {
+    try {
+      const res = await apiFetch(`/api/inventory/${row.rawId}`, { credentials: 'include' });
+      if (!res.ok) return;
+      const d = await res.json();
+      const salesById = new Map((d.sales || []).map(s => [s.id, s]));
+      setForm(prev => prev && ({
+        ...prev,
+        qty_on_hand: d.qty_on_hand,
+        refunded_amount: Number(d.refunded_amount) || 0,
+        refunded_qty: Number(d.refunded_qty) || 0,
+        _sales: prev._sales.map(s => {
+          const fresh = salesById.get(s.id);
+          return fresh ? { ...s, refunded_amount: Number(fresh.refunded_amount) || 0, refunded_qty: Number(fresh.refunded_qty) || 0 } : s;
+        }),
+      }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const marketplaces = platforms.filter(p => p.type === 'Marketplace');
   const cashoutPlatforms = platforms.filter(p => p.type === 'Cashout');
@@ -137,7 +167,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
           const storedCashbackRate = d.cashback_rate ?? defaultCashbackRate;
           const storedCashbackAmount = d.cashback_rate !== null && d.cashback_rate !== undefined
             ? d.cashback_earned ?? 0
-            : batchCost(d) * storedCashbackRate / 100;
+            : grossBatchCost(d) * storedCashbackRate / 100;
           setForm({
             product_name:            d.product_name ?? '',
             // Saved name, for note lookups (not live-edited; not sent on save)
@@ -160,6 +190,9 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             include_tax_in_cashback:    true,
             include_shipping_in_cashback: true,
             tax_exempt:              d.tax_exempt ?? false,
+            // Refund running totals (read-only here; changed through RefundsPanel).
+            refunded_amount:         Number(d.refunded_amount) || 0,
+            refunded_qty:            Number(d.refunded_qty) || 0,
             // editable sales array
             _sales: (d.sales || []).map(s => ({
               id:              s.id,
@@ -180,6 +213,10 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
               payout_date:     toDateInput(s.payout_date),
               taxable:         s.taxable ?? true,
               sale_tax_collected: s.sale_tax_collected ?? 0,
+              refunded_amount: Number(s.refunded_amount) || 0,
+              refunded_qty:    Number(s.refunded_qty) || 0,
+              // Saved quantity: how many units the server lets a refund return.
+              _savedQuantity:  s.quantity ?? 1,
               // for display
               _platformName: s.platform?.name || '',
             })),
@@ -222,19 +259,20 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
       payment_method_id: paymentMethodId,
       vendor_id: vendorId,
       cashback_rate: rate,
-      cashback_earned: batchCost(prev) * rate / 100,
+      cashback_earned: grossBatchCost(prev) * rate / 100,
     }));
   };
 
   const setCashbackRate = (value) => {
     const rate = Math.max(0, Number(value) || 0);
-    setForm(prev => ({ ...prev, cashback_rate: value, cashback_earned: batchCost(prev) * rate / 100 }));
+    setForm(prev => ({ ...prev, cashback_rate: value, cashback_earned: grossBatchCost(prev) * rate / 100 }));
   };
 
   const setCashbackAmount = (value) => {
     const amount = Math.max(0, Number(value) || 0);
     setForm(prev => {
-      const cost = batchCost(prev);
+      // The stored cashback is on the full original charge; refunds scale it down later.
+      const cost = grossBatchCost(prev);
       return {
         ...prev,
         cashback_earned: value,
@@ -414,6 +452,9 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                 </Field>
                 <Field label="Total Cost">
                   <ReadBox value={`$${totalCost.toFixed(2)}`} className="text-white font-semibold" />
+                  {form.refunded_amount > 0 && (
+                    <p className="mt-1 text-[10px] text-emerald-400">After −${Number(form.refunded_amount).toFixed(2)} refunded{form.refunded_qty > 0 ? ` · ${form.refunded_qty} sent back` : ''}</p>
+                  )}
                 </Field>
               </div>
               <label className="flex items-center gap-2.5 cursor-pointer select-none w-fit mt-3">
@@ -650,6 +691,12 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                                   <span className="text-red-400">-${saleShipping.toFixed(2)}</span>
                                 </div>
                               )}
+                              {sale.refunded_amount > 0 && (
+                                <div className="flex justify-between px-3 py-2">
+                                  <span className="text-gray-500">Refunded to buyer{sale.refunded_qty > 0 ? ` (${sale.refunded_qty} returned)` : ''}</span>
+                                  <span className="text-red-400">-${Number(sale.refunded_amount).toFixed(2)}</span>
+                                </div>
+                              )}
                               {saleCashback > 0 && (
                                 <div className="flex justify-between px-3 py-2">
                                   <span className="text-gray-500">Cashback</span>
@@ -665,6 +712,35 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                             </div>
                           </div>
                         )}
+
+                        {/* Per-sale refunds toggle */}
+                        <div className="border-t border-white/[0.06]">
+                          <button
+                            type="button"
+                            onClick={() => toggleSaleRefunds(sale.id)}
+                            aria-expanded={openSaleRefunds.has(sale.id)}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-left text-xs text-[var(--dp-text-secondary)] hover:bg-white/[0.03] transition-colors"
+                          >
+                            <Undo2 className="w-3.5 h-3.5 shrink-0" />
+                            <span className="font-medium">Refunds</span>
+                            {sale.refunded_amount > 0 && <span className="text-emerald-400">−${Number(sale.refunded_amount).toFixed(2)}{sale.refunded_qty > 0 ? ` · ${sale.refunded_qty} returned` : ''}</span>}
+                            {openSaleRefunds.has(sale.id)
+                              ? <ChevronUp className="w-3.5 h-3.5 ml-auto text-gray-500" />
+                              : <ChevronDown className="w-3.5 h-3.5 ml-auto text-gray-500" />
+                            }
+                          </button>
+                          {openSaleRefunds.has(sale.id) && (
+                            <div className="px-4 pb-4">
+                              <RefundsPanel
+                                kind="sale"
+                                id={sale.id}
+                                maxUnits={Math.max(0, Number(sale._savedQuantity) - (sale.refunded_qty || 0))}
+                                disabledReason={isRealizedSale(sale) ? '' : 'This sale is cancelled, returned or disputed, so it no longer counts toward your totals. Reopen it to record or remove a refund.'}
+                                onChanged={refreshRefundTotals}
+                              />
+                            </div>
+                          )}
+                        </div>
 
                         {/* Per-sale notes toggle */}
                         <div className="border-t border-white/[0.06]">
@@ -733,14 +809,20 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                     <span className="text-emerald-400 font-medium">-${giftCardAmt.toFixed(2)}</span>
                   </div>
                 )}
+                {form.refunded_amount > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Refunds from store</span>
+                    <span className="text-emerald-400 font-medium">-${Number(form.refunded_amount).toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm border-t border-white/[0.06] pt-2">
                   <span className="text-gray-200 font-semibold">Total Cost</span>
                   <span className="text-white font-bold">${totalCost.toFixed(2)}</span>
                 </div>
                 {cbEarned > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Cashback ({cbRate}%)</span>
-                    <span className="text-emerald-400 font-semibold">+${cbEarned.toFixed(2)}</span>
+                    <span className="text-gray-400">Cashback ({cbRate}%){form.refunded_amount > 0 ? ', after refunds' : ''}</span>
+                    <span className="text-emerald-400 font-semibold">+${inventoryCashback(form, cbRate).toFixed(2)}</span>
                   </div>
                 )}
                 {form._sales.length > 0 && (() => {
@@ -748,6 +830,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                   const totalSaleRevenue = realizedSales.reduce((sum, s) => sum + ((Number(s.unit_price) || 0) * (Number(s.quantity) || 0)), 0);
                   const totalCommissions = realizedSales.reduce((sum, s) => sum + (Number(s.commission_fee) || 0), 0);
                   const totalSaleShipping = realizedSales.reduce((sum, s) => sum + (Number(s.sale_shipping) || 0), 0);
+                  const totalBuyerRefunds = realizedSales.reduce((sum, s) => sum + (Number(s.refunded_amount) || 0), 0);
                   const summary = realizedSummary(form, realizedSales, cbRate);
                   const netProfit = summary.netProfit;
                   return (
@@ -768,6 +851,12 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                           <span className="text-red-400 font-medium">-${totalSaleShipping.toFixed(2)}</span>
                         </div>
                       )}
+                      {totalBuyerRefunds > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">Refunds to buyers</span>
+                          <span className="text-red-400 font-medium">-${totalBuyerRefunds.toFixed(2)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-200 font-semibold">Realized Profit + Cashback</span>
                         <span className={`font-bold ${netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -783,6 +872,16 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                   );
                 })()}
               </div>
+            </div>
+
+            {/* ── Refunds from the store (purchase) ── */}
+            <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-4">
+              <RefundsPanel
+                kind="purchase"
+                id={row.rawId}
+                maxUnits={Math.max(0, Number(form.qty_on_hand) || 0)}
+                onChanged={refreshRefundTotals}
+              />
             </div>
 
             {/* ── Notes (purchase + shared product note) ── */}

@@ -9,6 +9,8 @@ import TransactionDetailModal from '../components/TransactionDetailModal';
 
 const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), inventory: [], cards: [] }));
 vi.mock('../hooks/useApi', () => ({
+  useRefunds: () => ({ data: [], isLoading: false }),
+  useRefundMutations: () => ({ add: { mutateAsync: vi.fn(), isPending: false }, remove: { mutateAsync: vi.fn(), isPending: false } }),
   apiFetch: mocks.apiFetch,
   useInventory: () => ({ data: mocks.inventory }),
   usePlatforms: () => ({ data: [] }),

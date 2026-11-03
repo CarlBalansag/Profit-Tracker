@@ -7,7 +7,11 @@ const mocks = vi.hoisted(() => ({
   invalidate: { all: vi.fn() },
   error: vi.fn(),
 }));
-vi.mock('../hooks/useApi', () => ({ apiFetch: mocks.fetch, useInvalidate: () => mocks.invalidate }));
+vi.mock('../hooks/useApi', () => ({
+  apiFetch: mocks.fetch, useInvalidate: () => mocks.invalidate,
+  useRefunds: () => ({ data: [], isLoading: false }),
+  useRefundMutations: () => ({ add: { mutateAsync: vi.fn(), isPending: false }, remove: { mutateAsync: vi.fn(), isPending: false } }),
+}));
 vi.mock('sonner', () => ({ toast: { error: mocks.error } }));
 vi.mock('./TransactionNotesPanel', () => ({ default: () => null }));
 

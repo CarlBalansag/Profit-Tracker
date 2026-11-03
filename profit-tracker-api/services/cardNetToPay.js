@@ -252,9 +252,12 @@ async function computeCardDashboard(prisma, userId, monthParam) {
   }
 
   const cardsDecimal = Object.values(cardMap).map(card => {
-    const cashbackToRedeem = Decimal.min(card.cashbackEarned, card.totalLosses);
+    // A month can net to negative cashback when a store refund claws back more
+    // than was earned; only positive cashback can cover a loss.
+    const availableCashback = Decimal.max(0, card.cashbackEarned);
+    const cashbackToRedeem = Decimal.min(availableCashback, card.totalLosses);
     const cashbackToKeep = card.cashbackEarned.minus(cashbackToRedeem);
-    const uncoveredLoss = Decimal.max(0, card.totalLosses.minus(card.cashbackEarned));
+    const uncoveredLoss = Decimal.max(0, card.totalLosses.minus(availableCashback));
     const amountToPay = card.totalSpend.minus(cashbackToRedeem);
 
     return { ...card, cashbackToRedeem, cashbackToKeep, uncoveredLoss, amountToPay };

@@ -219,6 +219,39 @@ export const useTransactionNoteMutations = (entityType, entityId) => {
   return { add, update, remove };
 };
 
+// ─── Refunds ──────────────────────────────────────────────────────────────────
+// kind: 'purchase' (money back from the store) or 'sale' (money back to a buyer).
+const refundParam = (kind) => (kind === 'sale' ? 'sale_id' : 'inventory_id');
+
+export const useRefunds = (kind, id) =>
+  useQuery({
+    queryKey: ['refunds', kind, id],
+    queryFn: () => fetcher(`/api/refunds?${refundParam(kind)}=${encodeURIComponent(id)}`),
+    enabled: !!kind && !!id,
+  });
+
+export const useRefundMutations = (kind, id) => {
+  const qc = useQueryClient();
+  // A refund changes cost, revenue, stock and card totals on every screen.
+  const invalidate = () => qc.invalidateQueries();
+
+  const add = useMutation({
+    mutationFn: ({ amount, quantity, date, note }) => apiFetch('/api/refunds', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [refundParam(kind)]: id, amount, quantity, date, note }),
+    }).then(noteJson),
+    onSuccess: invalidate,
+  });
+
+  const remove = useMutation({
+    mutationFn: (refundId) => apiFetch(`/api/refunds/${refundId}`, { method: 'DELETE' }).then(noteJson),
+    onSuccess: invalidate,
+  });
+
+  return { add, remove };
+};
+
 // ─── Calendar Events ──────────────────────────────────────────────────────────
 export const useCalendarEvents = (month) =>
   useQuery({
