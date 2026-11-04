@@ -104,6 +104,8 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     let commissionFees = zero();
     let saleShipping = zero();
     let totalTax = zero();
+    let storeRefunds = zero();   // money back from stores, already out of totalCost
+    let buyerRefunds = zero();   // money back to buyers, already out of totalRevenue
     let soldTax = zero();        // tax allocated to sold items only
 
     // Purchase spend: all inventory purchases in the selected purchase-date window.
@@ -112,6 +114,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       const lineCost = batchCost(inv);
       totalCost = totalCost.plus(lineCost);
       totalTax = totalTax.plus(inv.sales_tax || 0);
+      storeRefunds = storeRefunds.plus(decimal(inv.refunded_amount || 0));
       const rate = effectiveCashbackRate(inv);
       totalCashback = totalCashback.plus(inventoryCashback(inv, rate));
     });
@@ -123,6 +126,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       soldTax = soldTax.plus(allocatedTax);
       totalRevenue = totalRevenue.plus(saleRevenue);
       commissionFees = commissionFees.plus(sale.commission_fee || 0);
+      buyerRefunds = buyerRefunds.plus(decimal(sale.refunded_amount || 0));
       saleShipping = saleShipping.plus(sale.sale_shipping || 0);
     });
 
@@ -484,6 +488,8 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       cost: money(saleCost),
       revenue: money(saleRevenue),
       commission: money(decimal(s.commission_fee_decimal ?? s.commission_fee)),
+      refunded: money(decimal(s.refunded_amount || 0)),
+      refunded_units: s.refunded_qty || 0,
       cashback: money(saleCashback),
       profit: money(saleRevenue.minus(saleCost).plus(saleCashback)),
       // workflow_status (set by the mark_paid action) takes precedence over
@@ -508,6 +514,8 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
         profit: money(profit),
         roi: money(roi),
         commissionFees: money(commissionFees),
+        storeRefunds: money(storeRefunds),
+        buyerRefunds: money(buyerRefunds),
         saleShipping: money(saleShipping),
         totalTax: money(totalTax),
         inventoryValue: money(inventoryValue),

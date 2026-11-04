@@ -95,6 +95,7 @@ function CashFlow() {
             <h3 className="text-[10px] font-bold text-[#60a5fa] uppercase tracking-wider mb-2">Spending Out</h3>
             <div className="text-xl font-bold text-blue-400 mb-1">{loading ? '…' : `$${fmt(spendingOut)}`}</div>
             <p className="text-[10px] text-blue-400/60">{s.transactionCount ?? 0} items purchased</p>
+            {s.storeRefunds > 0 && <p className="text-[10px] text-blue-400/60">after ${fmt(s.storeRefunds)} refunded by stores</p>}
           </div>
           <div className="w-8 h-8 rounded-full border border-blue-500/30 flex items-center justify-center bg-blue-500/10">
             <DollarSign size={14} className="text-blue-400" />
@@ -106,6 +107,7 @@ function CashFlow() {
             <h3 className="text-[10px] font-bold text-[#4ade80] uppercase tracking-wider mb-2">Coming Back</h3>
             <div className="text-xl font-bold text-green-400 mb-1">{loading ? '…' : `$${fmt(comingBack)}`}</div>
             <p className="text-[10px] text-green-400/60">net after buyer fees{includeCashback ? ' + cashback' : ''}</p>
+            {s.buyerRefunds > 0 && <p className="text-[10px] text-green-400/60">after ${fmt(s.buyerRefunds)} refunded to buyers</p>}
           </div>
           <div className="w-8 h-8 rounded-full border border-green-500/30 flex items-center justify-center bg-green-500/10">
             <ArrowRight size={14} className="text-green-400" />
@@ -250,7 +252,14 @@ function CashFlow() {
                       <tbody className="divide-y divide-white/5">
                         {buyer.sales.map(t => (
                           <tr key={t.id}>
-                            <td className="py-2 text-gray-300 max-w-[160px] truncate pr-4">{t.product}</td>
+                            <td className="py-2 text-gray-300 max-w-[160px] truncate pr-4">
+                              {t.product}
+                              {t.refunded > 0 && (
+                                <span className="block text-[10px] text-amber-400">
+                                  Refunded ${fmt(t.refunded)}{t.refunded_units > 0 ? ` · ${t.refunded_units} returned` : ''}
+                                </span>
+                              )}
+                            </td>
                             <td className="py-2 text-gray-500">{new Date(t.date).toLocaleDateString()}</td>
                             <td className="py-2 text-right text-blue-400">${fmt(t.cost)}</td>
                             <td className="py-2 text-right text-green-400">${fmt(t.revenue)}</td>
