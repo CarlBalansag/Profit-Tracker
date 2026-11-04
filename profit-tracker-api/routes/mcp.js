@@ -576,12 +576,13 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('update_sale', {
-    description: 'Edit an existing sale\'s price, fees, shipping, quantity, sale date, platform (buyer), outbound tracking/carrier, or notes. Never touches payout fields (paid_at, paid_amount, payout_account, payout_reference, payout_short_amount) -- use mark_sale_paid for those. Every changed field is recorded and reviewable via list_changes.',
+    description: 'Edit an existing sale\'s price, fees, shipping, the card its shipping label was paid with, quantity, sale date, platform (buyer), outbound tracking/carrier, or notes. Never touches payout fields (paid_at, paid_amount, payout_account, payout_reference, payout_short_amount) -- use mark_sale_paid for those. Every changed field is recorded and reviewable via list_changes.',
     inputSchema: z.object({
       sale_id: z.string().uuid(),
       price: z.number().nonnegative().optional().describe('Per-unit sale price.'),
       fees: z.number().nonnegative().optional().describe('Marketplace/cashout commission.'),
       shipping: z.number().nonnegative().optional().describe('Outbound shipping cost.'),
+      label_paid_with: z.string().optional().describe('Name of the existing card or account the shipping label was bought with (Pirate Ship, Shippo, ...). Empty string means it came out of the payout, with no card.'),
       qty: z.number().int().min(1).optional(),
       sale_date: strictDate.optional(),
       platform: z.string().min(1).optional().describe('Existing marketplace/cashout name -- the sale\'s buyer. Must already exist (see list_sales for names in use).'),
@@ -589,7 +590,7 @@ function buildServer(userId, apiKeyId) {
       carrier: z.string().optional().describe('Empty string clears it. Auto-detected from the tracking number when not set.'),
       notes: z.string().max(2000).optional().describe('Legacy single note field. Prefer add_note, which keeps a dated history of notes.'),
     }).strict(),
-  }, async ({ sale_id, price, fees, shipping, qty, sale_date, platform, tracking_number, carrier, notes }) => {
+  }, async ({ sale_id, price, fees, shipping, label_paid_with, qty, sale_date, platform, tracking_number, carrier, notes }) => {
     try {
       const result = await prisma.$transaction(async (tx) => {
         const existing = await tx.sales.findUnique({ where: { id: sale_id }, include: { inventory: true } });
@@ -623,6 +624,13 @@ function buildServer(userId, apiKeyId) {
         if (price !== undefined && price !== existing.unit_price) { data.unit_price = price; changes.push({ field: 'unit_price', oldValue: existing.unit_price, newValue: price }); }
         if (fees !== undefined && fees !== existing.commission_fee) { data.commission_fee = fees; changes.push({ field: 'commission_fee', oldValue: existing.commission_fee, newValue: fees }); }
         if (shipping !== undefined && shipping !== existing.sale_shipping) { data.sale_shipping = shipping; changes.push({ field: 'sale_shipping', oldValue: existing.sale_shipping, newValue: shipping }); }
+        if (label_paid_with !== undefined) {
+          const labelCardId = label_paid_with.trim() ? (await findPaymentMethod(userId, label_paid_with)).id : null;
+          if (labelCardId !== (existing.sale_shipping_payment_method_id ?? null)) {
+            data.sale_shipping_payment_method_id = labelCardId;
+            changes.push({ field: 'sale_shipping_payment_method_id', oldValue: existing.sale_shipping_payment_method_id, newValue: labelCardId });
+          }
+        }
         if (qty !== undefined && newQty !== existing.quantity) { data.quantity = newQty; changes.push({ field: 'quantity', oldValue: existing.quantity, newValue: newQty }); }
         if (sale_date !== undefined) {
           const oldDate = toDateOnly(existing.sale_date);
@@ -657,13 +665,14 @@ function buildServer(userId, apiKeyId) {
         await recordChanges(tx, userId, 'Sales', sale_id, changes);
         return tx.sales.findUnique({ where: { id: sale_id } });
       });
-      await logWrite(userId, apiKeyId, 'update_sale', { sale_id, price, fees, shipping, qty, sale_date, platform, tracking_number, carrier, notes });
+      await logWrite(userId, apiKeyId, 'update_sale', { sale_id, price, fees, shipping, label_paid_with, qty, sale_date, platform, tracking_number, carrier, notes });
       return jsonResult({
         id: result.id,
         qty: result.quantity,
         price: toNum(result.unit_price),
         fees: toNum(result.commission_fee),
         shipping: toNum(result.sale_shipping),
+        label_card_id: result.sale_shipping_payment_method_id ?? null,
         sale_date: toDateOnly(result.sale_date),
         platform_id: result.platform_id,
         tracking_number: result.tracking_number,
@@ -783,13 +792,15 @@ function buildServer(userId, apiKeyId) {
       qty: z.number().int().min(1),
       sale_price: z.number().nonnegative().describe('Per-unit sale price.'),
       fees: z.number().nonnegative().optional().describe('Marketplace/cashout commission. Defaults to 0.'),
+      shipping: z.number().nonnegative().optional().describe('Outbound shipping cost. Defaults to 0.'),
+      label_paid_with: z.string().optional().describe('Name of the existing card or account the shipping label was bought with (Pirate Ship, Shippo, ...). Leave out when it came out of the payout.'),
       sale_date: strictDate,
       platform: z.string().min(1).describe('Existing marketplace/cashout name -- the sale\'s buyer.'),
       tracking_number: z.string().optional().describe('Outbound tracking number, if already known.'),
       carrier: z.string().optional().describe('Auto-detected from the tracking number when not set.'),
       notes: z.string().max(2000).optional().describe('Legacy single note field. Prefer add_note, which keeps a dated history of notes.'),
     }).strict(),
-  }, async ({ inventory_id, qty, sale_price, fees, sale_date, platform, tracking_number, carrier, notes }) => {
+  }, async ({ inventory_id, qty, sale_price, fees, shipping, label_paid_with, sale_date, platform, tracking_number, carrier, notes }) => {
     try {
       const result = await prisma.$transaction(async (tx) => {
         const inv = await tx.inventory.findUnique({ where: { id: inventory_id } });
@@ -797,6 +808,7 @@ function buildServer(userId, apiKeyId) {
           throw Object.assign(new Error('Purchase not found or access denied'), { toolError: true });
         }
         const platformRecord = await findPlatformByName(userId, platform, tx);
+        const labelCard = label_paid_with?.trim() ? await findPaymentMethod(userId, label_paid_with) : null;
         const claim = await tx.inventory.updateMany({
           where: { id: inventory_id, qty_on_hand: { gte: qty } },
           data: { qty_on_hand: { decrement: qty } },
@@ -811,6 +823,8 @@ function buildServer(userId, apiKeyId) {
             quantity: qty,
             unit_price: sale_price,
             commission_fee: fees || 0,
+            sale_shipping: shipping || 0,
+            sale_shipping_payment_method_id: labelCard ? labelCard.id : null,
             sale_date: localNoon(sale_date),
             status: 'SOLD',
             workflow_type: workflowType,
@@ -822,13 +836,15 @@ function buildServer(userId, apiKeyId) {
           },
         });
       });
-      await logWrite(userId, apiKeyId, 'add_sale', { inventory_id, qty, sale_price, fees, sale_date, platform, tracking_number, carrier, notes });
+      await logWrite(userId, apiKeyId, 'add_sale', { inventory_id, qty, sale_price, fees, shipping, label_paid_with, sale_date, platform, tracking_number, carrier, notes });
       return jsonResult({
         id: result.id,
         inventory_id: result.inventory_id,
         qty: result.quantity,
         sale_price: toNum(result.unit_price),
         fees: toNum(result.commission_fee),
+        shipping: toNum(result.sale_shipping),
+        label_card_id: result.sale_shipping_payment_method_id ?? null,
         sale_date: toDateOnly(result.sale_date),
         platform_id: result.platform_id,
         tracking_number: result.tracking_number,
