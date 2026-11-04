@@ -19,6 +19,8 @@ import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import ProfitRevenueTrendChart from '../components/Dashboard/ProfitRevenueTrendChart';
 import MonthlyProfitSpendChart from '../components/Dashboard/MonthlyProfitSpendChart';
 import PageNav from '../components/UI/PageNav';
+import { formatMoney, formatWholeMoney } from '../utils/money';
+import { recordStatusLabel } from '../data/statusWorkflow';
 
 const GLASS_BASE_LAYOUT_ITEMS = ['statCards', 'radarGraph', 'trendChart', 'paymentMethods', 'recentSales'];
 
@@ -173,16 +175,16 @@ const Dashboard = () => {
   const glassMetricDefs = {
     items: { label: 'Items', value: String(stats.inventoryQty || stats.transactionCount || 0), icon: Layers, accent: false },
     margin: { label: 'Margin', value: `${stats.totalRevenue ? ((stats.profit / stats.totalRevenue) * 100).toFixed(0) : 0}%`, icon: TrendingUp, accent: true },
-    avgCost: { label: 'Avg Cost', value: `$${(stats.unitsSold ? stats.soldCost / stats.unitsSold : stats.transactionCount ? stats.totalCost / stats.transactionCount : 0).toFixed(0)}`, icon: Store, accent: false },
+    avgCost: { label: 'Avg Cost', value: `$${formatWholeMoney(stats.unitsSold ? stats.soldCost / stats.unitsSold : stats.transactionCount ? stats.totalCost / stats.transactionCount : 0)}`, icon: Store, accent: false },
     roi: { label: 'ROI', value: `${(stats.roi || 0).toFixed(0)}%`, icon: Zap, accent: true },
-    revenue: { label: 'Revenue', value: `$${(stats.totalRevenue || 0).toFixed(0)}`, icon: Store, accent: false },
-    cashback: { label: 'Cashback', value: `$${(stats.totalCashback || 0).toFixed(0)}`, icon: Layers, accent: true },
+    revenue: { label: 'Revenue', value: `$${formatWholeMoney(stats.totalRevenue || 0)}`, icon: Store, accent: false },
+    cashback: { label: 'Cashback', value: `$${formatWholeMoney(stats.totalCashback || 0)}`, icon: Layers, accent: true },
     sold: { label: 'Units Sold', value: String(stats.unitsSold || stats.salesCount || 0), icon: TrendingUp, accent: false, title: 'Total quantity of items sold in the selected time range (not the number of sale records).' },
-    tax: { label: 'Tax', value: `$${(stats.totalTax || 0).toFixed(0)}`, icon: Zap, accent: true },
-    inventory: { label: 'Inventory', value: `$${(stats.inventoryValue || 0).toFixed(0)}`, icon: Store, accent: false },
+    tax: { label: 'Tax', value: `$${formatWholeMoney(stats.totalTax || 0)}`, icon: Zap, accent: true },
+    inventory: { label: 'Inventory', value: `$${formatWholeMoney(stats.inventoryValue || 0)}`, icon: Store, accent: false },
     qty: { label: 'Qty', value: String(stats.inventoryQty || 0), icon: Layers, accent: true },
-    avgSale: { label: 'Avg Sale', value: `$${(stats.unitsSold ? stats.totalRevenue / stats.unitsSold : 0).toFixed(0)}`, icon: TrendingUp, accent: false },
-    netProfit: { label: 'Net Profit', value: `$${(stats.profit || 0).toFixed(0)}`, icon: Zap, accent: true },
+    avgSale: { label: 'Avg Sale', value: `$${formatWholeMoney(stats.unitsSold ? stats.totalRevenue / stats.unitsSold : 0)}`, icon: TrendingUp, accent: false },
+    netProfit: { label: 'Net Profit', value: `$${formatWholeMoney(stats.profit || 0)}`, icon: Zap, accent: true },
   };
 
   function renderDashboardSection(sectionId) {
@@ -377,7 +379,7 @@ const Dashboard = () => {
                         <p className={isGlass ? "text-xs text-white/20" : "text-[10px] text-[var(--dp-text-label)]"}>{card.txns} txns</p>
                       </div>
                     </div>
-                    <p className={isGlass ? "text-sm font-medium text-[#d8a65a]" : `text-[12px] font-semibold tabular-nums ${i === 0 ? 'text-[var(--dp-accent)]' : 'text-[var(--dp-text-secondary)]'}`}>${card.amount.toFixed(0)}</p>
+                    <p className={isGlass ? "text-sm font-medium text-[#d8a65a]" : `text-[12px] font-semibold tabular-nums ${i === 0 ? 'text-[var(--dp-accent)]' : 'text-[var(--dp-text-secondary)]'}`}>${formatWholeMoney(card.amount)}</p>
                   </div>
                 );
                 return (
@@ -452,8 +454,8 @@ const Dashboard = () => {
                         }
                         if (column.id === 'platform') return <td key={column.id} className={isGlass ? "py-3 px-4 text-gray-400" : "py-3 px-4 text-[var(--dp-text-secondary)]"}>{txn.platform}</td>;
                         if (column.id === 'buyer') return <td key={column.id} className={isGlass ? "py-3 px-4 text-gray-400 text-xs" : "py-3 px-4 text-[var(--dp-text-secondary)] text-xs"}>{txn.buyer}</td>;
-                        if (column.id === 'cost') return <td key={column.id} className={isGlass ? "py-3 px-4 text-blue-400" : "py-3 px-4 tabular-nums text-[var(--dp-text-primary)]"}>${(txn.cost ?? 0).toFixed(2)}</td>;
-                        if (column.id === 'sale') return <td key={column.id} className={isGlass ? "py-3 px-4 text-green-400" : "py-3 px-4 tabular-nums text-[var(--dp-text-primary)]"}>${(txn.revenue ?? 0).toFixed(2)}</td>;
+                        if (column.id === 'cost') return <td key={column.id} className={isGlass ? "py-3 px-4 text-blue-400" : "py-3 px-4 tabular-nums text-[var(--dp-text-primary)]"}>${formatMoney(txn.cost ?? 0)}</td>;
+                        if (column.id === 'sale') return <td key={column.id} className={isGlass ? "py-3 px-4 text-green-400" : "py-3 px-4 tabular-nums text-[var(--dp-text-primary)]"}>${formatMoney(txn.revenue ?? 0)}</td>;
                         if (column.id === 'status') {
                           const statusColorMap = {
                             PURCHASED:      'bg-blue-500/10 text-blue-400 border-blue-500/20',
@@ -479,7 +481,7 @@ const Dashboard = () => {
                           return (
                             <td key={column.id} className="py-3 px-4">
                               <span className={isGlass ? `inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase border ${cls}` : `inline-flex items-center rounded-full px-2.5 py-[3px] text-[9px] font-semibold uppercase tracking-[0.04em] ${premiumStatusClass}`}>
-                                {txn.status || 'SOLD'}
+                                {recordStatusLabel(txn.status || 'SOLD')}
                               </span>
                             </td>
                           );
@@ -496,7 +498,7 @@ const Dashboard = () => {
                       {!isGlass && (
                         <td className="py-3 px-4">
                           <span className={`inline-flex items-center rounded-full px-2.5 py-[3px] text-[11px] font-semibold tabular-nums ${getRowProfit(txn) >= 0 ? 'bg-[var(--dp-green-bg)] text-[var(--dp-green-text)]' : 'bg-[var(--dp-red-bg)] text-[var(--dp-red-text)]'}`}>
-                            {getRowProfit(txn) >= 0 ? '+' : '-'}${Math.abs(getRowProfit(txn)).toFixed(0)}
+                            {getRowProfit(txn) >= 0 ? '+' : '-'}${formatWholeMoney(Math.abs(getRowProfit(txn)))}
                           </span>
                         </td>
                       )}
@@ -624,7 +626,7 @@ const Dashboard = () => {
                     <p className="text-sm font-semibold text-[#e8e2d6]">{card.name}</p>
                     <p className="mt-1 text-[10px] text-white/22">{card.txns} txns</p>
                   </div>
-                  <p className="font-serif text-xl font-semibold text-[#d8a65a]">${card.amount.toFixed(2)}</p>
+                  <p className="font-serif text-xl font-semibold text-[#d8a65a]">${formatMoney(card.amount)}</p>
                 </div>
                 <div className="mt-4 h-1 rounded-full bg-white/[0.04]">
                   <div
@@ -698,9 +700,9 @@ const Dashboard = () => {
                   {recent.slice(0, 4).map((txn, index) => (
                     <tr key={index}>
                       <td className="py-3 pr-4 font-medium text-[#e8e2d6]">{txn.product}</td>
-                      <td className="py-3 px-4 text-white/45">${(txn.cost ?? 0).toFixed(2)}</td>
-                      <td className="py-3 px-4 text-[#d8a65a]">${(txn.revenue ?? 0).toFixed(2)}</td>
-                      <td className="py-3 pl-4 text-[10px] font-bold uppercase tracking-wider text-white/35">{txn.status || 'SOLD'}</td>
+                      <td className="py-3 px-4 text-white/45">${formatMoney(txn.cost ?? 0)}</td>
+                      <td className="py-3 px-4 text-[#d8a65a]">${formatMoney(txn.revenue ?? 0)}</td>
+                      <td className="py-3 pl-4 text-[10px] font-bold uppercase tracking-wider text-white/35">{recordStatusLabel(txn.status || 'SOLD')}</td>
                     </tr>
                   ))}
                 </tbody>

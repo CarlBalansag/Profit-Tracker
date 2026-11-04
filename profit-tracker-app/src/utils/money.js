@@ -7,3 +7,9 @@ export const formatMoney = (value) => {
     maximumFractionDigits: 2,
   });
 };
+
+// Same, rounded to whole dollars: 1234.5 -> '1,235'. For tight spots like the Dashboard.
+export const formatWholeMoney = (value) => {
+  const number = Number(value);
+  return (Number.isFinite(number) ? number : 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+};

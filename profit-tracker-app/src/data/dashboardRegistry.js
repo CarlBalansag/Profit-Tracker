@@ -1,3 +1,4 @@
+import { formatMoney } from '../utils/money';
 import {
   ShoppingCart, DollarSign, Tag, TrendingUp, Percent,
   Gauge, BarChart2, Receipt, Warehouse,
@@ -18,7 +19,7 @@ export const STAT_CARD_REGISTRY = {
     scope: 'all',
     formula: ['(Item Price × Quantity) + Purchase Tax + Shipping to You + Purchase Fees', '− Gift Cards'],
     description: 'How much you spent to buy inventory during the selected period. It includes item cost, purchase tax, shipping to you, and purchase fees, then subtracts gift cards.',
-    getValue: (s) => `$${s.totalCost.toFixed(2)}`,
+    getValue: (s) => `$${formatMoney(s.totalCost)}`,
     getSubtext: (s) => `${s.transactionCount} purchases`,
   },
   totalCashback: {
@@ -28,7 +29,7 @@ export const STAT_CARD_REGISTRY = {
     scope: 'all',
     formula: ['Purchase Amount Eligible for Cashback × Card Cashback Rate %'],
     description: 'Cashback earned from inventory purchases. The All view includes sold and unsold items; a sales-channel view includes only the cashback connected to units you sold.',
-    getValue: (s) => `$${s.totalCashback.toFixed(2)}`,
+    getValue: (s) => `$${formatMoney(s.totalCashback)}`,
     getSubtext: (s) => `${s.avgCashbackRate.toFixed(2)}% avg rate`,
   },
   totalTax: {
@@ -38,7 +39,7 @@ export const STAT_CARD_REGISTRY = {
     scope: 'all',
     formula: ['Purchase Sales Tax Added Together'],
     description: 'Purchase sales tax paid on inventory you bought during the selected period.',
-    getValue: (s) => `$${(s.totalTax ?? 0).toFixed(2)}`,
+    getValue: (s) => `$${formatMoney(s.totalTax ?? 0)}`,
     getSubtext: () => 'all purchases',
   },
   inventoryValue: {
@@ -48,7 +49,7 @@ export const STAT_CARD_REGISTRY = {
     scope: 'all',
     formula: ['Cost of Each Unsold Unit × Quantity On Hand'],
     description: 'What your current unsold inventory cost you. This is a current snapshot, so the dashboard date filter does not change it.',
-    getValue: (s) => `$${(s.inventoryValue ?? 0).toFixed(2)}`,
+    getValue: (s) => `$${formatMoney(s.inventoryValue ?? 0)}`,
     getSubtext: () => 'unsold stock at cost',
   },
 
@@ -60,7 +61,7 @@ export const STAT_CARD_REGISTRY = {
     scope: 'sold',
     formula: ['(Sale Price × Quantity) − Marketplace Commission − Shipping to Buyer'],
     description: 'Money received from sales during the selected period, after marketplace commission and shipping to the buyer are subtracted. Cancelled, returned, and disputed sales are not counted.',
-    getValue: (s) => `$${s.totalRevenue.toFixed(2)}`,
+    getValue: (s) => `$${formatMoney(s.totalRevenue)}`,
     getSubtext: (s) => `${s.unitsSold ?? 0} units sold`,
   },
   grossProfit: {
@@ -70,7 +71,7 @@ export const STAT_CARD_REGISTRY = {
     scope: 'sold',
     formula: ['Sale Revenue', '− Cost of Sold Items'],
     description: 'Sale Revenue minus what the sold items cost you. Cashback is not added yet.',
-    getValue: (s) => `$${(s.grossProfit ?? (s.totalRevenue - (s.soldCost ?? 0))).toFixed(2)}`,
+    getValue: (s) => `$${formatMoney(s.grossProfit ?? (s.totalRevenue - (s.soldCost ?? 0)))}`,
     getSubtext: () => 'sold items only',
   },
   profit: {
@@ -80,7 +81,7 @@ export const STAT_CARD_REGISTRY = {
     scope: 'sold',
     formula: ['Gross Profit', '+ Cashback on Sold Items'],
     description: 'Gross Profit plus the cashback earned on the units you sold. Regular business expenses, such as subscriptions, rent, or supplies, are not subtracted here.',
-    getValue: (s) => `$${s.profit.toFixed(2)}`,
+    getValue: (s) => `$${formatMoney(s.profit)}`,
     getSubtext: (s) => s.profit >= 0 ? 'sold items only' : 'sold items loss',
   },
   roi: {
@@ -111,7 +112,7 @@ export const STAT_CARD_REGISTRY = {
     scope: 'sold',
     formula: ['Sale Revenue ÷ Units Sold'],
     description: 'The average Sale Revenue kept for each unit sold, after commission and shipping to the buyer are subtracted.',
-    getValue: (s) => `$${s.unitsSold > 0 ? (s.totalRevenue / s.unitsSold).toFixed(2) : '0.00'}`,
+    getValue: (s) => `$${formatMoney(s.unitsSold > 0 ? s.totalRevenue / s.unitsSold : 0)}`,
     getSubtext: () => 'sold items only',
   },
   avgCostPerUnit: {
@@ -121,7 +122,7 @@ export const STAT_CARD_REGISTRY = {
     scope: 'sold',
     formula: ['Cost of Sold Items ÷ Units Sold'],
     description: 'The average amount the sold units cost you. It divides the total cost of sold inventory by the number of units sold.',
-    getValue: (s) => `$${s.unitsSold > 0 ? ((s.soldCost ?? 0) / s.unitsSold).toFixed(2) : '0.00'}`,
+    getValue: (s) => `$${formatMoney(s.unitsSold > 0 ? (s.soldCost ?? 0) / s.unitsSold : 0)}`,
     getSubtext: () => 'sold items only',
   },
 

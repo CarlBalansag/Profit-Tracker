@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatMoney } from './money';
+import { formatMoney, formatWholeMoney } from './money';
 
 describe('formatMoney', () => {
   it('adds thousands separators and two decimals', () => {
@@ -19,5 +19,19 @@ describe('formatMoney', () => {
     expect(formatMoney(undefined)).toBe('0.00');
     expect(formatMoney('abc')).toBe('0.00');
     expect(formatMoney(NaN)).toBe('0.00');
+  });
+});
+
+describe('formatWholeMoney', () => {
+  it('rounds to whole dollars with thousands separators', () => {
+    expect(formatWholeMoney(23097.2)).toBe('23,097');
+    expect(formatWholeMoney(999.5)).toBe('1,000');
+    expect(formatWholeMoney(0)).toBe('0');
+    expect(formatWholeMoney(-1234.4)).toBe('-1,234');
+  });
+
+  it('shows 0 for anything that is not a number', () => {
+    expect(formatWholeMoney(null)).toBe('0');
+    expect(formatWholeMoney('abc')).toBe('0');
   });
 });
