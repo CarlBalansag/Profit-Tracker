@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '1.10',
+    date: '2026-11-03',
+    notes: 'The AI assistant can now record the shipping cost on a sale and which card paid for the label.',
+  },
+  {
     version: '1.09',
     date: '2026-11-03',
     notes: 'Add Transaction, Record Sale and Add Expense now default to today\'s date in the evening instead of tomorrow\'s.',
