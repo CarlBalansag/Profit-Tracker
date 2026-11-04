@@ -24,7 +24,7 @@ export function ScheduleCSettings() {
   };
   return <section className="space-y-4 rounded-xl border border-white/10 bg-[#12121A] p-6">
     <h2 className="font-semibold text-white">Schedule C preparation</h2>
-    <p className="text-sm text-gray-400">Organize business expenses by tax year. This first worksheet supports cash-method paid expenses with user-confirmed tax treatment. Accrual reporting, sales, inventory, depreciation and your complete return are not included.</p>
+    <p className="text-sm text-gray-400">Organize business expenses by tax year. This worksheet supports cash-method paid expenses with user-confirmed tax treatment, and adds the shipping labels and platform fees from your sales automatically. Accrual reporting, gross receipts, cost of goods sold, depreciation and your complete return are not included.</p>
     <label className="flex items-center gap-3 text-sm text-white"><input type="checkbox" checked={enabled === true} disabled={saving || enabled === null} onChange={change} />Prepare Schedule C reports</label>
     {enabled && <Link className="inline-block text-purple-300 underline" to="/schedule-c">Open expense worksheet</Link>}
     {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
