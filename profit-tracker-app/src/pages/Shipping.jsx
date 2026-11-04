@@ -540,7 +540,7 @@ export default function Shipping() {
   return (
     <div className="space-y-5 animate-in fade-in duration-300 h-full overflow-auto px-4 py-6 sm:px-6">
       <div>
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2"><Truck className="w-5 h-5 text-indigo-400" /> Shipping</h1>
+        <h1 className="text-2xl font-bold text-white">Shipping</h1>
         <p className="text-sm text-gray-400 mt-1">Track packages coming in from vendors and going out to buyers.</p>
       </div>
 

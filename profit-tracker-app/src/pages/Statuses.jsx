@@ -779,9 +779,7 @@ export default function Statuses() {
   return (
     <div className="space-y-5 animate-in fade-in duration-300 h-full overflow-auto px-4 py-6 sm:px-6">
       <div>
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-          <ListChecks className="w-5 h-5 text-indigo-400" /> Statuses
-        </h1>
+        <h1 className="text-2xl font-bold text-white">Statuses</h1>
         <p className="text-sm text-gray-400 mt-1">
           Everything waiting on you, from purchase to payout. Act on a card and it moves to the column its new status belongs to.
         </p>

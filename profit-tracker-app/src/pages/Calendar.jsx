@@ -246,10 +246,7 @@ export default function Calendar() {
       {/* ── Page header ───────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-[var(--dp-text-primary)] flex items-center gap-2">
-            <CalendarDays size={20} className="text-[var(--dp-accent)]" />
-            Reselling Calendar
-          </h1>
+          <h1 className="text-2xl font-bold text-[var(--dp-text-primary)]">Reselling Calendar</h1>
           <p className="text-xs text-[var(--dp-text-muted)] mt-0.5">Track purchases, sales, payouts and custom events</p>
         </div>
         <button

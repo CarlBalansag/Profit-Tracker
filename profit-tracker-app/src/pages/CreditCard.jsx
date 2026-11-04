@@ -263,9 +263,9 @@ function CreditCard() {
       }}>
         {/* Left: title + month nav */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>
+          <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>
             Card Tracker
-          </span>
+          </h1>
           <span style={{ width: 1, height: 16, background: 'var(--border-hover)', flexShrink: 0 }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <button

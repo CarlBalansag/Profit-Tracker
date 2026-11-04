@@ -158,10 +158,7 @@ const TaxExempt = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <ShieldCheck className="w-6 h-6 text-blue-400" />
-            Tax Exempt
-          </h1>
+          <h1 className="text-2xl font-bold text-white">Tax Exempt</h1>
           <p className="text-gray-400 text-sm mt-1">Transactions marked as tax exempt</p>
         </div>
         <div className="flex items-center gap-2">
