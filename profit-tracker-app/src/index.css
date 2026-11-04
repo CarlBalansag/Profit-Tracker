@@ -20,6 +20,7 @@
     --dp-text-label: var(--color-text-label);
     --dp-text-muted: var(--color-text-muted);
     --dp-accent: var(--color-accent);
+    --dp-accent-solid: var(--color-accent-solid);
     --dp-accent-bg: var(--color-accent-bg);
     --dp-accent-gradient: var(--color-accent-gradient);
     --dp-green-bg: var(--color-success-bg);
@@ -424,10 +425,15 @@
   .carbon-workspace button[class*="bg-purple"],
   .carbon-workspace button[class*="bg-blue"],
   .carbon-workspace button[class*="bg-amber"] {
-    background-color: var(--dp-accent) !important;
-    border-color: var(--dp-accent) !important;
+    background-color: var(--dp-accent-solid) !important;
+    border-color: var(--dp-accent-solid) !important;
     color: #fff !important;
     box-shadow: none !important;
+  }
+
+  /* Filled accent controls: the lighter dark-mode accent is too pale behind white text. */
+  [class~="bg-[var(--dp-accent)]"] {
+    background-color: var(--dp-accent-solid) !important;
   }
 
   .carbon-workspace button[class*="bg-green"] {
