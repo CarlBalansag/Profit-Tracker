@@ -1,6 +1,6 @@
 import { formatMoney } from '../utils/money';
 import { batchCost, allocatedCost, effectiveCashbackRate, saleEconomics } from '../../../shared/finance.mjs';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useId, useRef } from 'react';
 import { toast } from 'sonner';
 import {
   Package, ShoppingCart, Truck, CreditCard, DollarSign, Plus,
@@ -12,12 +12,28 @@ import { usePaymentMethods, usePlatforms, useBuyers, useInvalidate, apiFetch, us
 import { MAX_RECEIPT_BYTES, RECEIPT_ACCEPT, saveInventoryWithReceipt, validateReceiptFile } from '../hooks/receiptUpload';
 
 // ── Stable module-level components (MUST be outside the component to avoid focus loss) ──
-const Field = ({ label, children }) => (
-  <div>
-    <label className="block text-xs font-medium text-gray-400 mb-1.5">{label}</label>
-    {children}
-  </div>
-);
+const Field = ({ label, children }) => {
+  const generatedId = useId();
+  const wrapperRef = useRef(null);
+  const labelRef = useRef(null);
+  // Fields hold anything from a plain input to a wrapped or swapped control, so
+  // the label links to whichever real control is inside after each render.
+  useEffect(() => {
+    const control = wrapperRef.current?.querySelector('input:not([type="hidden"]), select, textarea');
+    if (control) {
+      control.id ||= generatedId;
+      labelRef.current.htmlFor = control.id;
+    } else {
+      labelRef.current.removeAttribute('for');
+    }
+  });
+  return (
+    <div ref={wrapperRef}>
+      <label ref={labelRef} className="block text-xs font-medium text-gray-400 mb-1.5">{label}</label>
+      {children}
+    </div>
+  );
+};
 
 const inputCls = (accent = 'purple') =>
   `w-full bg-white/[0.02] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-${accent}-500/50 transition-colors`;
@@ -1197,10 +1213,11 @@ const AddTransaction = () => {
                 )}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                <label htmlFor="transaction-note" className="block text-xs font-medium text-gray-400 mb-1.5">
                   Note <span className="text-gray-600 normal-case font-normal">(shared across all items with this product name)</span>
                 </label>
                 <textarea
+                  id="transaction-note"
                   name="note"
                   value={formData.note}
                   onChange={(e) => {
