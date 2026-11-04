@@ -9,6 +9,7 @@ import {
   SALE_WORKFLOW_LABELS,
   STATUS_ORDER,
   displayLabel,
+  recordStatusLabel,
   availabilityLabel,
   correctableSaleStatuses,
   formatStatusChangedAt,
@@ -104,5 +105,22 @@ describe('statusWorkflow correction lists', () => {
       ...registry.SALE_STATUSES_BY_WORKFLOW.STANDARD_MARKETPLACE,
       ...registry.SALE_EXCEPTION_STATUSES,
     ]);
+  });
+});
+
+describe('recordStatusLabel', () => {
+  it('names the stored spellings of older statuses', () => {
+    expect(recordStatusLabel('SHIPPED_IN')).toBe('Shipped In');
+    expect(recordStatusLabel('SHIPPED_OUT')).toBe('Shipped Out');
+    expect(recordStatusLabel('Pre Order')).toBe('Pre-order');
+    expect(recordStatusLabel('On Hand')).toBe('On Hand');
+    expect(recordStatusLabel('sold')).toBe('Sold');
+  });
+
+  it('leaves an unknown status readable and an empty one empty', () => {
+    expect(recordStatusLabel('Waiting on Bob')).toBe('Waiting on Bob');
+    expect(recordStatusLabel('')).toBe('');
+    expect(recordStatusLabel(null)).toBe('');
+    expect(recordStatusLabel(undefined)).toBe('');
   });
 });

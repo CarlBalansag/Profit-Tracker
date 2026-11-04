@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, BookOpen, Play, LayoutDashboard, CirclePlus, DollarSign, ArrowLeftRight, Package, Receipt, FileText, ShieldCheck, ChartColumn, Wallet, CreditCard, Settings, Lightbulb, HelpCircle, TrendingUp } from 'lucide-react';
 import { useTutorial } from '../context/TutorialContext';
+import { recordStatusLabel } from '../data/statusWorkflow';
 
 // ─── Accordion item ────────────────────────────────────────────────────────
 const AccordionItem = ({ icon: Icon, title, color = 'emerald', children }) => {
@@ -134,7 +135,7 @@ const Guide = () => {
               <li><strong className="text-gray-200">Unit price & quantity</strong> — what you paid per item</li>
               <li><strong className="text-gray-200">Tax, shipping, fees</strong> — any additional costs</li>
               <li><strong className="text-gray-200">Payment method</strong> — which card you used (cashback auto-calculates)</li>
-              <li><strong className="text-gray-200">Status</strong> — PURCHASED, SHIPPED_IN, DELIVERED, etc.</li>
+              <li><strong className="text-gray-200">Status</strong> — Purchased, Shipped In, Delivered, etc.</li>
             </ul>
             <p>If the item is already sold, toggle <strong className="text-gray-200">"Has this item been sold?"</strong> to add sale details in the same form.</p>
             <Tip>The Transaction Summary panel on the right shows your cost breakdown and profit in real time as you fill in the form.</Tip>
@@ -297,7 +298,7 @@ const Guide = () => {
                 ['CANCELLED', 'Sale cancelled'],
               ].map(([status, desc]) => (
                 <div key={status} className="flex gap-2 p-2 rounded bg-white/[0.03] border border-white/[0.05]">
-                  <span className="font-mono text-emerald-400 text-[10px] font-bold flex-shrink-0">{status}</span>
+                  <span className="text-emerald-400 text-[11px] font-bold flex-shrink-0">{recordStatusLabel(status)}</span>
                   <span className="text-gray-500">{desc}</span>
                 </div>
               ))}

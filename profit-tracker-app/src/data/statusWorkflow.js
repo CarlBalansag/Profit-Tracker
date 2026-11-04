@@ -77,6 +77,35 @@ export const DISPLAY_LABELS = {
 
 export const displayLabel = (status) => DISPLAY_LABELS[status] || status || 'No status yet';
 
+// Friendly names for the older status codes still stored on purchases and
+// sales (Inventory.status / Sales.status). Display only: forms and filters keep
+// using the stored code as their value, so nothing saved changes.
+const RECORD_STATUS_LABELS = {
+  PRE_ORDER: 'Pre-order',
+  ON_HAND: 'On Hand',
+  PURCHASED: 'Purchased',
+  SHIPPED_IN: 'Shipped In',
+  DELIVERED: 'Delivered',
+  SCANNED_IN: 'Scanned In',
+  LISTED: 'Listed',
+  SOLD: 'Sold',
+  SHIPPED_OUT: 'Shipped Out',
+  AUTHENTICATION: 'Authentication',
+  PAID: 'Paid',
+  COMPLETED: 'Completed',
+  RETURNED: 'Returned',
+  DISPUTED: 'Disputed',
+  CANCELLED: 'Cancelled',
+};
+
+// Accepts the stored spellings ('Pre Order', 'SHIPPED_IN', 'sold'); an unknown
+// value comes back unchanged rather than being hidden.
+export const recordStatusLabel = (status) => {
+  if (!status) return '';
+  const key = String(status).trim().toUpperCase().replace(/[\s-]+/g, '_');
+  return RECORD_STATUS_LABELS[key] || status;
+};
+
 // "Status last updated", as a calendar date.
 //
 // receiving_status_changed_at / workflow_status_changed_at are real timestamps

@@ -14,6 +14,7 @@ import { useAuth } from '../context/AuthContext';
 import TransactionDetailModal from '../components/TransactionDetailModal';
 import ProductNoteButton from '../components/ProductNoteButton';
 import { detectCarrier } from '../utils/carrier';
+import { recordStatusLabel } from '../data/statusWorkflow';
 
 // ─── Inline editable cell input ───────────────────────────────────────────────
 function EditInput({ value, onChange, type = 'text', className = '' }) {
@@ -49,8 +50,8 @@ export const STATUS_COLORS = {
 function StatusBadge({ status }) {
   const cls = STATUS_COLORS[status?.toUpperCase()] || STATUS_COLORS.PURCHASED;
   return (
-    <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border ${cls}`}>
-      {status}
+    <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border uppercase ${cls}`}>
+      {recordStatusLabel(status)}
     </span>
   );
 }
@@ -550,7 +551,7 @@ const Transactions = () => {
   // ─── Summary stats derived from filteredRows (respond to all active filters) ────
   const totalCostSum    = filteredRows.reduce((s, r) => s + (r.cost || 0), 0);
   const totalProfitSum  = filteredRows.filter(r => r.isSale).reduce((s, r) => s + (r.profit || 0), 0);
-  const listedCount     = filteredRows.filter(r => !r.isSale).reduce((s, r) => s + r.qty, 0);
+  const unsoldCount     = filteredRows.filter(r => !r.isSale).reduce((s, r) => s + r.qty, 0);
   const soldCount       = filteredRows.filter(r => r.isSale).reduce((s, r) => s + r.qty, 0);
 
   // Unique vendor/platform options derived from actual rows
@@ -723,8 +724,8 @@ const Transactions = () => {
           <div className="text-xl font-bold text-white">{filteredRows.length}</div>
         </div>
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 pl-4 flex flex-col justify-between">
-          <div className="flex items-center gap-2 text-amber-500/80 text-xs font-medium mb-2"><Tag className="w-3.5 h-3.5" /> Active Listed</div>
-          <div className="text-xl font-bold text-amber-400">{listedCount}</div>
+          <div className="flex items-center gap-2 text-amber-500/80 text-xs font-medium mb-2"><Tag className="w-3.5 h-3.5" /> Unsold Units</div>
+          <div className="text-xl font-bold text-amber-400">{unsoldCount}</div>
         </div>
         <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-3 pl-4 flex flex-col justify-between">
           <div className="flex items-center gap-2 text-green-500/80 text-xs font-medium mb-2"><Check className="w-3.5 h-3.5" /> Sold / Done</div>
@@ -785,7 +786,7 @@ const Transactions = () => {
               className="bg-[#16181d] border border-white/5 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-white/20 appearance-none"
             >
               <option value="">All Statuses</option>
-              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              {STATUSES.map(s => <option key={s} value={s}>{recordStatusLabel(s)}</option>)}
             </select>
             <select
               value={filterVendorId}
@@ -1204,7 +1205,7 @@ const Transactions = () => {
                             <EditSelect
                               value={editData.status}
                               onChange={v => setEditData(d => ({ ...d, status: v }))}
-                              options={(row.isSale ? SALE_STATUSES : STATUSES).map(s => ({ id: s, name: s }))}
+                              options={(row.isSale ? SALE_STATUSES : STATUSES).map(s => ({ id: s, name: recordStatusLabel(s) }))}
                               placeholder=""
                             />
                           ) : <StatusBadge status={row.status} />}

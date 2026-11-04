@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import ReturnWindowBadge from './ReturnWindowBadge';
 import TransactionNotesPanel from './TransactionNotesPanel';
 import RefundsPanel from './RefundsPanel';
+import { recordStatusLabel } from '../data/statusWorkflow';
 import { RECEIPT_ACCEPT, MAX_RECEIPT_BYTES, attachInventoryReceipt, readReceiptFile, validateReceiptFile } from '../hooks/receiptUpload';
 
 const STATUSES = ['Pre Order', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
@@ -507,7 +508,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                   <Sel value={form.vendor_id} onChange={v => applyCashbackDefault(form.payment_method_id, v)} options={vendors} placeholder="Select store…" />
                 </Field>
                 <Field label="Status">
-                  <Sel value={form.status} onChange={v => set('status', v)} options={STATUSES.map(s => ({ id: s, name: s }))} />
+                  <Sel value={form.status} onChange={v => set('status', v)} options={STATUSES.map(s => ({ id: s, name: recordStatusLabel(s) }))} />
                 </Field>
                 <Field label="Order Number">
                   <div className="relative">
@@ -680,7 +681,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                                 <Sel
                                   value={sale.status}
                                   onChange={v => setSale(i, 'status', v)}
-                                  options={SALE_STATUSES.map(s => ({ id: s, name: s }))}
+                                  options={SALE_STATUSES.map(s => ({ id: s, name: recordStatusLabel(s) }))}
                                 />
                               </Field>
                             </div>

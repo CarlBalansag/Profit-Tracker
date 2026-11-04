@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useCreditCard } from '../hooks/useApi';
+import { recordStatusLabel } from '../data/statusWorkflow';
 import { PageLoader } from '../components/PageLoader';
 import {
   CreditCard as CreditCardIcon,
@@ -77,7 +78,7 @@ function StatusBadge({ status }) {
       textTransform: 'uppercase', padding: '2px 7px', borderRadius: '4px',
       whiteSpace: 'nowrap',
     }}>
-      {status || 'Pending'}
+      {recordStatusLabel(status) || 'Pending'}
     </span>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useDashboard } from '../hooks/useApi';
+import { recordStatusLabel } from '../data/statusWorkflow';
 import {
   DollarSign, ShoppingCart, TrendingUp, Percent, Gift,
   CreditCard, Store, Package, BarChart2, Download, RotateCcw,
@@ -626,8 +627,8 @@ function Analytics() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded border bg-green-500/10 text-green-400 border-green-500/20">
-                      {txn.status}
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded border uppercase bg-green-500/10 text-green-400 border-green-500/20">
+                      {recordStatusLabel(txn.status)}
                     </span>
                   </td>
                 </tr>

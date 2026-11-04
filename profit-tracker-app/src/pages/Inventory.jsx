@@ -6,6 +6,7 @@ import { Columns3, Plus, Search, Package, AlertTriangle, TrendingUp, DollarSign,
 import ProductNoteButton from '../components/ProductNoteButton';
 import ReturnWindowBadge from '../components/ReturnWindowBadge';
 import { returnWindowStatus } from '../utils/returnWindow';
+import { recordStatusLabel } from '../data/statusWorkflow';
 
 // The batch whose return window runs out first, so a collapsed group still
 // warns about it. Closed windows only count when no batch is still open.
@@ -246,7 +247,7 @@ const Inventory = () => {
                     </td>
                     <td className="px-4 py-5">
                       <span className={`px-2 py-1 rounded text-[10px] font-bold tracking-wider border uppercase ${STATUS_COLORS[item.status] || STATUS_COLORS.PURCHASED}`}>
-                        {item.status}
+                        {recordStatusLabel(item.status)}
                       </span>
                     </td>
                     <td className="px-4 py-5 text-right">
@@ -350,7 +351,7 @@ const Inventory = () => {
                         <td className="px-4 py-3.5" />
                         <td className="px-4 py-3.5">
                           <span className={`px-2 py-1 rounded text-[10px] font-bold tracking-wider border uppercase ${STATUS_COLORS[item.status] || STATUS_COLORS.PURCHASED}`}>
-                            {item.status}
+                            {recordStatusLabel(item.status)}
                           </span>
                         </td>
                         <td className="px-4 py-3.5 text-right">
