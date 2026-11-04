@@ -292,6 +292,13 @@
     color: var(--dp-text-primary) !important;
   }
 
+  /* Solid dark buttons keep white text in every theme. The word match (~=) skips
+     hover-only and translucent classes, whose background is not solid dark. */
+  .carbon-workspace [class~="bg-gray-800"][class~="text-white"],
+  .carbon-workspace [class~="bg-gray-900"][class~="text-white"] {
+    color: #fff !important;
+  }
+
   .carbon-workspace [class*="text-gray-400"],
   .carbon-workspace [class*="text-slate-400"] {
     color: var(--dp-text-secondary) !important;
