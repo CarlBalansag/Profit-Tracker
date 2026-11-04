@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.16',
+    date: '2026-11-04',
+    notes: "Transactions now opens with the key columns so Sale and Profit fit on screen, and the rest are still in the Columns menu. Inventory's listing count now matches Analytics, and the Dashboard, page titles, small text and form fields are clearer and more consistent.",
+  },
+  {
     version: '1.15',
     date: '2026-11-04',
     notes: "Add a usual return window to a vendor and it fills in on new purchases, and you can still change it each time. The transaction editor now uses days too. Totals now match across Inventory, Transactions and Analytics, status names are easier to read, and dollar amounts have commas.",
