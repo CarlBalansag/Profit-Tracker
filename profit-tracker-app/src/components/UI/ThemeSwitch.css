@@ -53,6 +53,12 @@ html.theme-switching *:not(.sticky-theme-switch-wrapper, .sticky-theme-switch-wr
   view-transition-name: theme-toggle-btn;
 }
 
+/* In the sidebar the switch sits in the layout instead of floating over the page */
+.sticky-theme-switch-wrapper.theme-switch-inline {
+  position: static;
+  filter: none;
+}
+
 ::view-transition-group(theme-toggle-btn) {
   z-index: 999999;
 }

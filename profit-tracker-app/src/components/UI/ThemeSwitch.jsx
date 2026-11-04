@@ -148,7 +148,7 @@ function getInitialIsDark() {
   return systemPrefersDark();
 }
 
-export default function ThemeSwitch() {
+export default function ThemeSwitch({ inline = false }) {
   const [isDark, setIsDark] = useState(getInitialIsDark);
 
   const [ripple, setRipple] = useState(null);
@@ -294,7 +294,7 @@ export default function ThemeSwitch() {
           aria-hidden="true"
         />
       )}
-      <div className="sticky-theme-switch-wrapper" data-testid="sticky-theme-switch">
+      <div className={`sticky-theme-switch-wrapper${inline ? ' theme-switch-inline' : ''}`} data-testid="sticky-theme-switch">
         <button
           type="button"
           role="switch"

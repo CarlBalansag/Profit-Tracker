@@ -11,6 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import { SCHEDULE_C_ENABLED } from '../../config/features';
 import { CURRENT_VERSION } from '../../data/changelog';
 import VersionHistoryModal from '../VersionHistoryModal';
+import ThemeSwitch from '../UI/ThemeSwitch';
 
 const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'neon-dark' }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -62,6 +63,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <div className="my-2 h-px w-7 bg-white/[0.07]" />
 
             <GlassNavItem icon={BookOpen} label="Guide" to="/guide" />
+            <div className="flex justify-center py-2"><ThemeSwitch inline /></div>
             <GlassNavButton icon={Settings} label="Settings" onClick={() => navigate('/settings')} />
           </div>
         </aside>
@@ -156,6 +158,10 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             {!isCollapsed && <span className="truncate">Data Setup</span>}
           </button>
           <NavItem icon={BookOpen} label="Guide" to="/guide" isCollapsed={isCollapsed} tutorialId="sidebar-guide" />
+          <div className={clsx("flex items-center py-1.5", isCollapsed ? "justify-center" : "justify-between px-3")}>
+            {!isCollapsed && <span className="text-[12px] text-[var(--dp-text-secondary)]">Theme</span>}
+            <ThemeSwitch inline />
+          </div>
         </div>
 
         <div className="p-2 border-t border-[color:var(--dp-border)] relative">

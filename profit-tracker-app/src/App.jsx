@@ -52,9 +52,8 @@ function App() {
         }}
       />
       <Router>
-        <ThemeSwitch />
         <Routes>
-          <Route path="/login" element={<Login />} />
+          <Route path="/login" element={<><ThemeSwitch /><Login /></>} />
           <Route path="*" element={
             <ProtectedRoute>
               <Shell>
