@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '1.14',
+    date: '2026-11-04',
+    notes: 'The transaction editor now matches Add Transaction: same sections, plus order number, tracking number, receipt and buyer tax-exempt details. The sold section only shows once an item has sold.',
+  },
+  {
     version: '1.13',
     date: '2026-11-04',
     notes: "The Schedule C worksheet now shows refunds to buyers as returns and allowances, separate from your expenses.",

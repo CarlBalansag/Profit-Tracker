@@ -1,6 +1,6 @@
 import { batchCost, grossBatchCost, effectiveCashbackRate, inventoryCashback, saleEconomics, realizedSummary, isRealizedSale } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useRef } from 'react';
-import { X, DollarSign, Package, CreditCard, Tag, ChevronDown, ChevronUp, StickyNote, Undo2 } from 'lucide-react';
+import { X, DollarSign, Package, CreditCard, Tag, ChevronDown, ChevronUp, StickyNote, Undo2, MapPin, Paperclip, Hash, Truck } from 'lucide-react';
 import { useInvalidate, apiFetch} from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
@@ -8,8 +8,11 @@ import { toast } from 'sonner';
 import ReturnWindowBadge from './ReturnWindowBadge';
 import TransactionNotesPanel from './TransactionNotesPanel';
 import RefundsPanel from './RefundsPanel';
+import { RECEIPT_ACCEPT, MAX_RECEIPT_BYTES, attachInventoryReceipt, readReceiptFile, validateReceiptFile } from '../hooks/receiptUpload';
 
 const STATUSES = ['Pre Order', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
+// Same list as Add Transaction.
+const CATEGORIES = ['Electronics', 'Apparel', 'Home', 'Grocery', 'Auto', 'Sports', 'Other'];
 const SALE_STATUSES = ['SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
 const EMPTY_LIST = [];
 
@@ -149,6 +152,26 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
     }
   };
 
+  // A receipt saves immediately, like on the Receipts page, so it doesn't wait
+  // on Update and can't be lost if the rest of the form fails validation.
+  const [receiptBusy, setReceiptBusy] = useState(false);
+  const attachReceipt = async (file) => {
+    if (!file) return;
+    setReceiptBusy(true);
+    try {
+      validateReceiptFile(file);
+      const fileData = await readReceiptFile(file);
+      const result = await attachInventoryReceipt(apiFetch, row.rawId, fileData, file.name);
+      setForm(prev => prev && ({ ...prev, receipt_url: result?.receiptUrl || result?.receipt_url || prev.receipt_url }));
+      toast.success('Receipt attached.');
+      invalidate.all();
+    } catch (err) {
+      toast.error(err.message || 'Could not attach the receipt.');
+    } finally {
+      setReceiptBusy(false);
+    }
+  };
+
   const marketplaces = platforms.filter(p => p.type === 'Marketplace');
   const cashoutPlatforms = platforms.filter(p => p.type === 'Cashout');
   const vendors = platforms.filter(p => p.type === 'Vendor');
@@ -178,6 +201,9 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             return_by_date:          d.return_by_date ? d.return_by_date.split('T')[0] : '',
             qty_on_hand:             d.qty_on_hand,
             category:                d.category ?? '',
+            order_number:            d.order_number ?? '',
+            tracking_number:         d.tracking_number ?? '',
+            receipt_url:             d.receipt_url ?? null,
             unit_purchase_cost:      d.unit_purchase_cost ?? 0,
             qty_purchased:           d.qty_purchased ?? 1,
             sales_tax:               d.sales_tax ?? 0,
@@ -213,6 +239,8 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
               payout_date:     toDateInput(s.payout_date),
               taxable:         s.taxable ?? true,
               sale_tax_collected: s.sale_tax_collected ?? 0,
+              customer_tax_exempt: s.customer_tax_exempt ?? false,
+              exemption_type:  s.exemption_type ?? '',
               refunded_amount: Number(s.refunded_amount) || 0,
               refunded_qty:    Number(s.refunded_qty) || 0,
               // Saved quantity: how many units the server lets a refund return.
@@ -297,6 +325,8 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             status:                form.status,
             purchase_date:         form.purchase_date,
             return_by_date:        form.return_by_date || null,
+            order_number:          form.order_number || null,
+            tracking_number:       form.tracking_number || null,
             unit_purchase_cost:    Number(form.unit_purchase_cost),
             qty_purchased:         Number(form.qty_purchased),
             sales_tax:             Number(form.sales_tax),
@@ -333,6 +363,8 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             payout_date:        s.payout_date || null,
             taxable:            s.taxable,
             sale_tax_collected: Number(s.sale_tax_collected),
+            customer_tax_exempt: s.customer_tax_exempt ?? false,
+            exemption_type:     s.exemption_type || null,
           })),
         }),
       });
@@ -394,38 +426,29 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
         ) : (
           <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-5">
 
-            {/* Product Name + Status */}
-            <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-3">
-              <Field label="Product Name *">
-                <Input value={form.product_name} onChange={v => set('product_name', v)} placeholder="Product name" />
-              </Field>
-              <Field label="Status">
-                <Sel value={form.status} onChange={v => set('status', v)} options={STATUSES.map(s => ({ id: s, name: s }))} />
-              </Field>
-            </div>
-
-            {/* Vendor / Date / Return by / Category */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              <Field label="Store / Vendor">
-                <Sel value={form.vendor_id} onChange={v => applyCashbackDefault(form.payment_method_id, v)} options={vendors} placeholder="Select vendor…" />
-              </Field>
-              <Field label="Purchase Date">
-                <Input type="date" value={form.purchase_date} onChange={v => set('purchase_date', v)} />
-              </Field>
-              <Field label="Return by (optional)">
-                <Input type="date" ariaLabel="Return by" value={form.return_by_date} onChange={v => set('return_by_date', v)} />
-                <ReturnWindowBadge item={form} className="mt-1.5" />
-              </Field>
-              <Field label="Category">
-                <Input value={form.category} onChange={v => set('category', v)} placeholder="e.g. Electronics" />
-              </Field>
+            {/* Product Information */}
+            <div>
+              <SectionHeader icon={Package}>Product Information</SectionHeader>
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_220px] gap-3">
+                <Field label="Product Name *">
+                  <Input value={form.product_name} onChange={v => set('product_name', v)} placeholder="Product name" />
+                </Field>
+                <Field label="Category">
+                  <Sel
+                    value={form.category}
+                    onChange={v => set('category', v)}
+                    options={form.category && !CATEGORIES.includes(form.category) ? [form.category, ...CATEGORIES] : CATEGORIES}
+                    placeholder="Select category…"
+                  />
+                </Field>
+              </div>
             </div>
 
             <div className="border-t border-white/[0.04]" />
 
             {/* Purchase Details */}
             <div>
-              <SectionHeader icon={Package}>Purchase Details</SectionHeader>
+              <SectionHeader icon={DollarSign}>Purchase Details</SectionHeader>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                 <Field label="Unit Price">
                   <DollarInput value={form.unit_purchase_cost} onChange={v => set('unit_purchase_cost', v)} accentClass="focus:border-blue-500/60" />
@@ -436,25 +459,31 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                 <Field label="Subtotal">
                   <ReadBox value={`$${subtotal.toFixed(2)}`} className="text-gray-400" />
                 </Field>
+                <Field label="Purchase Date">
+                  <Input type="date" value={form.purchase_date} onChange={v => set('purchase_date', v)} />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                 <Field label="Tax">
                   <DollarInput value={form.sales_tax} onChange={v => set('sales_tax', v)} accentClass="focus:border-blue-500/60" />
                 </Field>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <Field label="Inbound Shipping">
                   <DollarInput value={form.shipping_cost_inbound} onChange={v => set('shipping_cost_inbound', v)} accentClass="focus:border-blue-500/60" />
                 </Field>
                 <Field label="Fees">
                   <DollarInput value={form.fees} onChange={v => set('fees', v)} accentClass="focus:border-blue-500/60" />
                 </Field>
-                <Field label="Gift Card">
-                  <DollarInput value={form.gift_card_amount} onChange={v => set('gift_card_amount', v)} accentClass="focus:border-blue-500/60" />
-                </Field>
                 <Field label="Total Cost">
                   <ReadBox value={`$${totalCost.toFixed(2)}`} className="text-white font-semibold" />
                   {form.refunded_amount > 0 && (
                     <p className="mt-1 text-[10px] text-emerald-400">After −${Number(form.refunded_amount).toFixed(2)} refunded{form.refunded_qty > 0 ? ` · ${form.refunded_qty} sent back` : ''}</p>
                   )}
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <Field label="Return by (optional)">
+                  <Input type="date" ariaLabel="Return by" value={form.return_by_date} onChange={v => set('return_by_date', v)} />
+                  <ReturnWindowBadge item={form} className="mt-1.5" />
                 </Field>
               </div>
               <label className="flex items-center gap-2.5 cursor-pointer select-none w-fit mt-3">
@@ -466,6 +495,53 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                 />
                 <span className="text-sm text-gray-300">Tax Exempt</span>
               </label>
+            </div>
+
+            <div className="border-t border-white/[0.04]" />
+
+            {/* Purchase Location */}
+            <div>
+              <SectionHeader icon={MapPin}>Purchase Location</SectionHeader>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                <Field label="Store">
+                  <Sel value={form.vendor_id} onChange={v => applyCashbackDefault(form.payment_method_id, v)} options={vendors} placeholder="Select store…" />
+                </Field>
+                <Field label="Status">
+                  <Sel value={form.status} onChange={v => set('status', v)} options={STATUSES.map(s => ({ id: s, name: s }))} />
+                </Field>
+                <Field label="Order Number">
+                  <div className="relative">
+                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+                    <Input value={form.order_number} onChange={v => set('order_number', v)} placeholder="e.g. 112-3456789" className="pl-8" ariaLabel="Order Number" />
+                  </div>
+                </Field>
+                <Field label="Tracking Number">
+                  <div className="relative">
+                    <Truck className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+                    <Input value={form.tracking_number} onChange={v => set('tracking_number', v)} placeholder="e.g. 1Z999AA10123456784" className="pl-8" ariaLabel="Tracking Number" />
+                  </div>
+                </Field>
+              </div>
+              <Field label="Receipt">
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-[color:var(--dp-border)] text-xs text-[var(--dp-text-secondary)] transition-colors ${receiptBusy ? 'opacity-50' : 'cursor-pointer hover:bg-white/[0.03]'}`}>
+                    <Paperclip className="w-3.5 h-3.5" />
+                    {receiptBusy ? 'Uploading…' : form.receipt_url ? 'Replace receipt' : 'Attach receipt'}
+                    <input
+                      type="file"
+                      accept={RECEIPT_ACCEPT}
+                      disabled={receiptBusy}
+                      aria-label="Receipt file"
+                      className="hidden"
+                      onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; attachReceipt(file); }}
+                    />
+                  </label>
+                  {/^https:\/\//i.test(form.receipt_url || '') && (
+                    <a href={form.receipt_url} target="_blank" rel="noreferrer" className="text-xs text-[var(--dp-accent)] underline">View receipt</a>
+                  )}
+                </div>
+                <p className="text-[10px] text-gray-600 mt-1.5">JPEG, PNG, WebP, GIF, or PDF up to {MAX_RECEIPT_BYTES / (1024 * 1024)} MB. Saved right away.</p>
+              </Field>
             </div>
 
             <div className="border-t border-white/[0.04]" />
@@ -495,20 +571,21 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                   <p className="text-[10px] text-gray-600 mt-1">Payment method default; editable for this transaction</p>
                 </Field>
               </div>
-              <p className="text-xs text-gray-400 mt-3">Changing the payment method or vendor applies its default rate. You can override either field for this transaction.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                <Field label="Gift Card Used">
+                  <DollarInput value={form.gift_card_amount} onChange={v => set('gift_card_amount', v)} accentClass="focus:border-blue-500/60" />
+                </Field>
+              </div>
+              <p className="text-xs text-gray-400 mt-3">Changing the payment method or store applies its default rate. You can override either field for this transaction.</p>
             </div>
 
-            <div className="border-t border-white/[0.04]" />
-
-            {/* ── Sale Events (editable) ── */}
+            {/* ── Sale Details (editable), only once the item has sold ── */}
+            {form._sales.length > 0 && (
             <div>
               <SectionHeader icon={Tag}>
-                Sale{form._sales.length > 1 ? 's' : ''} ({form._sales.length === 0 ? 'none' : form._sales.length})
+                Sale Details{form._sales.length > 1 ? ` (${form._sales.length} sales)` : ''}
               </SectionHeader>
 
-              {form._sales.length === 0 ? (
-                <p className="text-xs text-gray-600">No sales recorded for this item yet.</p>
-              ) : (
                 <div className="space-y-3">
                   {form._sales.map((sale, i) => {
                     const unitPrice = Number(sale.unit_price) || 0;
@@ -669,6 +746,28 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                               </label>
                             </div>
 
+                            {/* Row 5: Exemption type + customer exempt */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                              <Field label="Exemption Type">
+                                <Input
+                                  value={sale.exemption_type}
+                                  onChange={v => setSale(i, 'exemption_type', v)}
+                                  placeholder="e.g. Resale, Nonprofit…"
+                                  ariaLabel="Exemption Type"
+                                  className="focus:border-green-500/60"
+                                />
+                              </Field>
+                              <label className="flex items-center gap-2.5 cursor-pointer select-none pb-2">
+                                <input
+                                  type="checkbox"
+                                  checked={sale.customer_tax_exempt ?? false}
+                                  onChange={e => setSale(i, 'customer_tax_exempt', e.target.checked)}
+                                  className="w-4 h-4 rounded border-gray-600 accent-green-500"
+                                />
+                                <span className="text-sm text-gray-300">Customer Tax Exempt</span>
+                              </label>
+                            </div>
+
                             {/* Mini profit breakdown */}
                             <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] divide-y divide-white/[0.04] text-xs mt-1">
                               <div className="flex justify-between px-3 py-2">
@@ -772,10 +871,10 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                     );
                   })}
                 </div>
-              )}
             </div>
+            )}
 
-            <div className="border-t border-white/[0.04]" />
+            {form._sales.length > 0 && <div className="border-t border-white/[0.04]" />}
 
             {/* ── Summary ── */}
             <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-4">

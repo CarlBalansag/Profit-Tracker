@@ -72,6 +72,19 @@ async function editTransaction(prisma, inventoryId, userId, payload) {
     }
 
     const inventoryData = { ...writable(payload.inventory, updateInventory), qty_purchased: purchased, qty_on_hand: purchased - sold };
+    // Same rules as PUT /api/inventory/:id: a first tracking number is only
+    // valid while the purchase is still on its way, and it moves the status
+    // along unless this save picked a different status itself.
+    const firstTracking = payload.inventory.tracking_number && !existing.tracking_number;
+    if (firstTracking && existing.receiving_status && !statusTransitions.isActionAllowed(existing, 'inventory', 'add_tracking')) {
+      throw fail(400, 'A tracking number cannot be added to a purchase that has already been received');
+    }
+    if (firstTracking && (payload.inventory.status === undefined || payload.inventory.status === existing.status)) {
+      const advanced = statusTransitions.trackingAttached('inventory', existing, payload.inventory.tracking_number);
+      if (advanced.legacy_status) inventoryData.status = advanced.legacy_status;
+      Object.assign(inventoryData, advanced.data);
+      if (advanced.data.receiving_status) inventoryData.receiving_status_changed_at = new Date();
+    }
     if (existing.status?.toUpperCase().includes('PRE') && inventoryData.status === 'On Hand') inventoryData.received_date = new Date();
     await tx.inventory.update({ where: { id: inventoryId }, data: inventoryData });
 
