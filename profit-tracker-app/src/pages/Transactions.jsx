@@ -756,12 +756,12 @@ const Transactions = () => {
         </div>
         <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 pl-4 flex flex-col justify-between">
           <div className="flex items-center gap-2 text-red-500/80 text-xs font-medium mb-2"><DollarSign className="w-3.5 h-3.5" /> Total Cost</div>
-          <div className="text-xl font-bold text-red-400">${roundCents(totalCostSum).toFixed(2)}</div>
+          <div className="text-xl font-bold text-red-400">${formatMoney(roundCents(totalCostSum))}</div>
           <div className="text-[10px] text-gray-500 mt-1">Rows shown, less refunds</div>
         </div>
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 pl-4 flex flex-col justify-between">
           <div className="flex items-center gap-2 text-emerald-500/80 text-xs font-medium mb-2"><DollarSign className="w-3.5 h-3.5" /> Total Profit</div>
-          <div className="text-xl font-bold text-emerald-400">${roundCents(totalProfitSum).toFixed(2)}</div>
+          <div className="text-xl font-bold text-emerald-400">${formatMoney(roundCents(totalProfitSum))}</div>
         </div>
       </div>
 
