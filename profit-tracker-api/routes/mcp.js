@@ -11,6 +11,7 @@ const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const prisma = require('../prisma');
 const { decimal } = require('../services/money');
+const { listRefunds, recordRefund, removeRefund } = require('../services/refunds');
 const { saleEconomics, allocatedCost, batchCost, isRealizedSale, keptQuantity, keptSaleQuantity } = require('../services/decimalFinance');
 const { payoutStatus } = require('../services/payoutStatus');
 const { markSalesPaid } = require('../services/markSalesPaid');
@@ -1160,6 +1161,67 @@ function buildServer(userId, apiKeyId) {
     ...(withDeleted ? { deleted_at: note.deleted_at ? new Date(note.deleted_at).toISOString() : null } : {}),
   });
   const noteProduct = async (note) => (await transactionNotes.findOwnedEntity(prisma, userId, note.entity_type, note.entity_id))?.product_name ?? null;
+
+  const refundJson = (refund) => ({
+    id: refund.id,
+    purchase_id: refund.inventory_id ?? null,
+    sale_id: refund.sale_id ?? null,
+    amount: toNum(decimal(refund.amount).toDecimalPlaces(2)),
+    units_returned: refund.quantity,
+    date: toDateOnly(refund.date),
+    note: refund.note ?? null,
+  });
+  const refundTarget = {
+    purchase_id: z.string().uuid().optional().describe('The purchase, for money back from the store. Give this or sale_id, not both.'),
+    sale_id: z.string().uuid().optional().describe('The sale, for money back to a buyer. Give this or purchase_id, not both.'),
+  };
+
+  server.registerTool('list_refunds', {
+    description: 'List the refunds on one purchase or one sale, newest first.',
+    inputSchema: z.object(refundTarget).strict(),
+  }, async ({ purchase_id, sale_id }) => {
+    try {
+      const refunds = await listRefunds(userId, { inventory_id: purchase_id, sale_id });
+      return jsonResult(refunds.map(refundJson));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to list refunds');
+    }
+  });
+
+  server.registerTool('add_refund', {
+    description: 'Record a refund instead of deleting a transaction. On a purchase: money back from the store, lowering its cost. On a sale: money back to the buyer, lowering its revenue while fees and the label stay as costs. units_returned is how many units physically came back (0 for a price adjustment or when the item stays put): on a purchase they leave stock, on a sale they go back into stock.',
+    inputSchema: z.object({
+      ...refundTarget,
+      amount: z.number().nonnegative().describe('Refunded amount in dollars. For a sale, what you are actually out after any fee credit.'),
+      units_returned: z.number().int().min(0).optional().describe('Defaults to 0.'),
+      date: strictDate.describe('Day the refund happened (YYYY-MM-DD). On the Credit Card page a store refund is a credit in this month.'),
+      note: z.string().max(2000).optional(),
+    }).strict(),
+  }, async ({ purchase_id, sale_id, amount, units_returned, date, note }) => {
+    try {
+      const refund = await recordRefund(userId, { inventory_id: purchase_id, sale_id, amount, quantity: units_returned, date, note });
+      await logWrite(userId, apiKeyId, 'add_refund', { purchase_id, sale_id, amount, units_returned, date, note });
+      return jsonResult(refundJson(refund));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to add refund');
+    }
+  });
+
+  server.registerTool('delete_refund', {
+    description: 'Remove a refund entered by mistake. Undoes it exactly: cost or revenue and stock go back. Refused if the returned units were sold again, or the sale has been cancelled, returned or disputed.',
+    inputSchema: z.object({
+      refund_id: z.string().uuid(),
+      confirm: z.literal(true).describe('Must be true to confirm removing the refund.'),
+    }).strict(),
+  }, async ({ refund_id, confirm }) => {
+    try {
+      const refund = await removeRefund(userId, refund_id);
+      await logWrite(userId, apiKeyId, 'delete_refund', { refund_id, confirm });
+      return jsonResult({ deleted: true, ...refundJson(refund) });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to delete refund');
+    }
+  });
 
   server.registerTool('add_note', {
     description: 'Add a dated note to one sale or purchase.',
