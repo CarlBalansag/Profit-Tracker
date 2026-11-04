@@ -10,7 +10,7 @@ import ProductNoteButton from './ProductNoteButton';
 
 const MAX_BODY = 2000;
 
-const LABEL = 'text-[10px] font-semibold uppercase tracking-wider text-[var(--dp-text-label,var(--dp-text-secondary))]';
+const LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-[var(--dp-text-label,var(--dp-text-secondary))]';
 const TEXTAREA = 'w-full bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2 text-sm text-[var(--dp-text-primary)] placeholder-[color:var(--dp-text-muted)] focus:outline-none focus:border-[var(--dp-accent)] transition-colors resize-y';
 const ICON_BTN = 'p-1 rounded-md text-[var(--dp-text-muted)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors disabled:opacity-50';
 const SMALL_BTN = 'px-2.5 py-1 rounded-md text-xs font-medium transition-colors disabled:opacity-50';
@@ -100,7 +100,7 @@ function NoteRow({ note, mutations }) {
                 >
                   Cancel
                 </button>
-                <span className="ml-auto text-[10px] text-[var(--dp-text-muted)]">{draft.length}/{MAX_BODY}</span>
+                <span className="ml-auto text-[11px] text-[var(--dp-text-muted)]">{draft.length}/{MAX_BODY}</span>
               </div>
             </div>
           ) : (
@@ -108,7 +108,7 @@ function NoteRow({ note, mutations }) {
           )}
           <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px] text-[var(--dp-text-muted)]">
             {note.author === 'bot' ? (
-              <span className="px-1.5 py-px rounded-full text-[10px] font-semibold bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]">Bot</span>
+              <span className="px-1.5 py-px rounded-full text-[11px] font-semibold bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]">Bot</span>
             ) : (
               <span>Carl</span>
             )}
@@ -231,7 +231,7 @@ export default function TransactionNotesPanel({ entityType, entityId, productNam
           <span className={LABEL}>This transaction&apos;s notes</span>
           <span
             data-testid="note-count"
-            className="px-1.5 min-w-[18px] text-center rounded-full text-[10px] font-semibold bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]"
+            className="px-1.5 min-w-[18px] text-center rounded-full text-[11px] font-semibold bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]"
           >
             {notes.length}
           </span>
@@ -265,7 +265,7 @@ export default function TransactionNotesPanel({ entityType, entityId, productNam
             className={TEXTAREA}
           />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-[var(--dp-text-muted)]">{draft.length}/{MAX_BODY} · Ctrl+Enter to add</span>
+            <span className="text-[11px] text-[var(--dp-text-muted)]">{draft.length}/{MAX_BODY} · Ctrl+Enter to add</span>
             <button
               type="button"
               onClick={addNote}

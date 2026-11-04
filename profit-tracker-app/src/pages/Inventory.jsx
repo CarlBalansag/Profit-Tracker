@@ -1,3 +1,4 @@
+import StatCard from '../components/UI/StatCard';
 import { allocatedCost, roundCents } from '../../../shared/finance.mjs';
 import React, { useState } from 'react';
 import { useInventory } from '../hooks/useApi';
@@ -96,14 +97,14 @@ const Inventory = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Inventory Management</h1>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Inventory On Hand</h1>
           <p className="text-gray-400 text-sm mt-1">Manage unsold assets, track aging stock, and calculate locked capital.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" className="btn-secondary flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-white/[0.02] text-gray-300 hover:text-white hover:bg-white/[0.06] border border-white/10">
+          <button type="button" className="page-btn page-btn-secondary">
             Export Report
           </button>
-          <button type="button" className="btn-primary flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors text-white bg-gradient-to-b from-emerald-500/80 to-teal-600/80 hover:from-emerald-500 hover:to-teal-600 border border-emerald-500/50 shadow-lg shadow-emerald-500/20">
+          <button type="button" className="page-btn page-btn-primary">
             <Plus className="w-4 h-4" /> 
             Add Inventory
           </button>
@@ -112,59 +113,10 @@ const Inventory = () => {
       
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-in slide-in-from-bottom-4 duration-500 fade-in fill-mode-both">
-        <div className="rounded-xl bg-white/[0.02] border border-white/10 p-5 relative overflow-hidden group hover:border-white/20 transition-colors">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="flex items-start justify-between relative z-10">
-            <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Inventory Total Cost</p>
-              <h3 className="text-2xl font-bold text-white">${money(totalCapital)}</h3>
-            </div>
-            <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400">
-              <DollarSign className="w-5 h-5" />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl bg-white/[0.02] border border-white/10 p-5 relative overflow-hidden group hover:border-white/20 transition-colors delay-150">
-          <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="flex items-start justify-between relative z-10">
-            <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Units On Hand</p>
-              <h3 className="text-2xl font-bold text-white">{totalUnits}</h3>
-            </div>
-            <div className="p-2 bg-purple-500/10 rounded-lg text-purple-400">
-              <Package className="w-5 h-5" />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl bg-white/[0.02] border border-white/10 p-5 relative overflow-hidden group hover:border-red-500/30 transition-colors delay-200">
-          <div className="absolute inset-0 bg-gradient-to-br from-red-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="flex items-start justify-between relative z-10">
-            <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Aging Stock (30+ Days)</p>
-              <h3 className="text-2xl font-bold text-red-400">{agingUnits} units</h3>
-              <p className="text-[11px] text-gray-500 mt-1">Needs liquidation planning</p>
-            </div>
-            <div className="p-2 bg-red-500/10 rounded-lg text-red-400">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl bg-white/[0.02] border border-white/10 p-5 relative overflow-hidden group hover:border-white/20 transition-colors delay-300">
-          <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="flex items-start justify-between relative z-10">
-            <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Active Listings</p>
-              <h3 className="text-2xl font-bold text-amber-400">{activeListings} units</h3>
-              <p className="text-[11px] text-gray-500 mt-1">Currently listed for sale</p>
-            </div>
-            <div className="p-2 bg-amber-500/10 rounded-lg text-amber-400">
-              <ListChecks className="w-5 h-5" />
-            </div>
-          </div>
-        </div>
+        <StatCard label="Inventory Total Cost" value={`$${money(totalCapital)}`} icon={DollarSign} iconColor="var(--accent)" />
+        <StatCard label="Units On Hand" value={totalUnits} icon={Package} />
+        <StatCard label="Aging Stock (30+ Days)" value={`${agingUnits} units`} sub="Needs liquidation planning" icon={AlertTriangle} tone="red" />
+        <StatCard label="Active Listings" value={`${activeListings} units`} sub="Currently listed for sale" icon={ListChecks} tone="amber" />
       </div>
       
       {/* Filters Card */}
@@ -183,9 +135,9 @@ const Inventory = () => {
 
       {/* Inventory Table */}
       <div className="card overflow-x-auto bg-[#0f1115] animate-in slide-in-from-bottom-4 duration-500 fade-in delay-500 fill-mode-both">
-        <table className="w-full text-left whitespace-nowrap">
+        <table className="phone-cards w-full text-left whitespace-nowrap">
           <thead>
-            <tr className="border-b border-white/[0.06] text-[10px] uppercase font-semibold text-gray-500 tracking-widest bg-black/20">
+            <tr className="border-b border-white/[0.06] text-[11px] uppercase font-semibold text-gray-500 tracking-widest bg-black/20">
               <th className="px-4 py-4 min-w-[250px]">Product Name</th>
               <th className="px-4 py-4 w-24 text-center">Qty</th>
               <th className="px-4 py-4 w-32">Aging</th>
@@ -219,18 +171,18 @@ const Inventory = () => {
                       <div className="flex items-center gap-1">
                         <div>
                           <p className="text-sm font-semibold text-gray-200">{item.product_name}</p>
-                          <span className="text-[10px] text-gray-400">{item.category || 'Uncategorized'}</span>
+                          <span className="text-[11px] text-gray-400">{item.category || 'Uncategorized'}</span>
                           <div><ReturnWindowBadge item={item} className="mt-1" /></div>
                         </div>
                         <ProductNoteButton productName={item.product_name} />
                       </div>
                     </td>
-                    <td className="px-4 py-5 text-center">
+                    <td data-label="Qty" className="px-4 py-5 text-center">
                       <span className="inline-flex items-center justify-center min-w-8 px-2 py-1 rounded bg-white/5 text-sm font-bold text-white border border-white/10">
                         {item.qty_on_hand}
                       </span>
                     </td>
-                    <td className="px-4 py-5">
+                    <td data-label="Aging" className="px-4 py-5">
                       <div className="flex items-center gap-1.5">
                         <Clock className={`w-3.5 h-3.5 ${isCritical ? 'text-red-400' : isAging ? 'text-amber-400' : 'text-gray-500'}`} />
                         <span className={`text-xs font-medium ${isCritical ? 'text-red-400' : isAging ? 'text-amber-400' : 'text-gray-400'}`}>
@@ -238,24 +190,24 @@ const Inventory = () => {
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-5">
+                    <td data-label="Cost" className="px-4 py-5">
                       <div className="flex flex-col">
                         <span className="text-sm font-medium text-gray-300">${money(allocatedCost(item, item.qty_on_hand))}</span>
-                        <span className="text-[10px] text-gray-500">${money(allocatedCost(item, 1))} / unit</span>
+                        <span className="text-[11px] text-gray-500">${money(allocatedCost(item, 1))} / unit</span>
                       </div>
                     </td>
-                    <td className="px-4 py-5">
+                    <td data-label="eBay Sold" className="px-4 py-5">
                       <a href={ebayUrl(item.product_name)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0a0a0f] hover:bg-white/5 border border-white/10 hover:border-blue-500/40 rounded-lg transition-colors text-gray-500 hover:text-blue-400">
                         <ExternalLink className="w-3.5 h-3.5" />
                         <span className="text-[11px] font-medium">View Sales</span>
                       </a>
                     </td>
-                    <td className="px-4 py-5">
-                      <span className={`px-2 py-1 rounded text-[10px] font-bold tracking-wider border uppercase ${STATUS_COLORS[item.status] || STATUS_COLORS.PURCHASED}`}>
+                    <td data-label="Status" className="px-4 py-5">
+                      <span className={`px-2 py-1 rounded text-[11px] font-bold tracking-wider border uppercase ${STATUS_COLORS[item.status] || STATUS_COLORS.PURCHASED}`}>
                         {recordStatusLabel(item.status)}
                       </span>
                     </td>
-                    <td className="px-4 py-5 text-right">
+                    <td data-phone-hide className="px-4 py-5 text-right">
                       <button className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100">
                         <MoreVertical className="w-4 h-4" />
                       </button>
@@ -280,7 +232,7 @@ const Inventory = () => {
                         }
                         <div>
                           <p className="text-sm font-semibold text-gray-200">{group.product_name}</p>
-                          <span className="text-[10px] text-gray-500">{group.entries.length} purchase entries</span>
+                          <span className="text-[11px] text-gray-500">{group.entries.length} purchase entries</span>
                           {soonestReturnWindow(group.entries) && <div><ReturnWindowBadge item={soonestReturnWindow(group.entries)} className="mt-1" /></div>}
                         </div>
                         <div onClick={e => e.stopPropagation()}>
@@ -288,13 +240,13 @@ const Inventory = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-5 text-center">
+                    <td data-label="Qty" className="px-4 py-5 text-center">
                       <span className="inline-flex items-center justify-center min-w-8 px-2 py-1 rounded bg-white/5 text-sm font-bold text-white border border-white/10">
                         {group.totalQty}
                       </span>
                     </td>
                     {/* Aging — the oldest batch, since that is what the Aging Stock card counts */}
-                    <td className="px-4 py-5">
+                    <td data-label="Aging" className="px-4 py-5">
                       <div className="flex items-center gap-1.5">
                         <Clock className={`w-3.5 h-3.5 ${group.oldestDays > 90 ? 'text-red-400' : group.oldestDays > 30 ? 'text-amber-400' : 'text-gray-500'}`} />
                         <span className={`text-xs font-medium ${group.oldestDays > 90 ? 'text-red-400' : group.oldestDays > 30 ? 'text-amber-400' : 'text-gray-400'}`}>
@@ -302,23 +254,29 @@ const Inventory = () => {
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-5">
+                    <td data-label="Cost" className="px-4 py-5">
                       <div className="flex flex-col">
                         <span className="text-sm font-medium text-gray-300">${money(group.totalCost)}</span>
-                        <span className="text-[10px] text-gray-500">combined total</span>
+                        <span className="text-[11px] text-gray-500">combined total</span>
                       </div>
                     </td>
-                    <td className="px-4 py-5">
+                    <td data-label="eBay Sold" className="px-4 py-5">
                       <a href={ebayUrl(group.product_name)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0a0a0f] hover:bg-white/5 border border-white/10 hover:border-blue-500/40 rounded-lg transition-colors text-gray-500 hover:text-blue-400">
                         <ExternalLink className="w-3.5 h-3.5" />
                         <span className="text-[11px] font-medium">View Sales</span>
                       </a>
                     </td>
-                    {/* Status — hidden on group row */}
-                    <td className="px-4 py-5">
-                      <span className="text-xs text-gray-600">—</span>
+                    {/* Status: one badge when every batch matches, otherwise Mixed */}
+                    <td data-label="Status" className="px-4 py-5">
+                      {new Set(group.entries.map(e => e.status)).size === 1 ? (
+                        <span className={`px-2 py-1 rounded text-[11px] font-bold tracking-wider border uppercase ${STATUS_COLORS[group.entries[0].status] || STATUS_COLORS.PURCHASED}`}>
+                          {recordStatusLabel(group.entries[0].status)}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">Mixed</span>
+                      )}
                     </td>
-                    <td className="px-4 py-5 text-right">
+                    <td data-phone-hide className="px-4 py-5 text-right">
                       <button className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100" onClick={e => e.stopPropagation()}>
                         <MoreVertical className="w-4 h-4" />
                       </button>
@@ -334,16 +292,16 @@ const Inventory = () => {
                         <td className="pl-10 pr-4 py-3.5">
                           <div>
                             <p className="text-sm text-gray-400">{item.product_name}</p>
-                            <span className="text-[10px] text-gray-600">{item.category || 'Uncategorized'} · #{item.order_number || item.id.slice(0, 8)}</span>
+                            <span className="text-[11px] text-gray-600">{item.category || 'Uncategorized'} · #{item.order_number || item.id.slice(0, 8)}</span>
                             <div><ReturnWindowBadge item={item} className="mt-1" /></div>
                           </div>
                         </td>
-                        <td className="px-4 py-3.5 text-center">
+                        <td data-label="Qty" className="px-4 py-3.5 text-center">
                           <span className="inline-flex items-center justify-center min-w-8 px-2 py-1 rounded bg-white/5 text-sm font-bold text-white/70 border border-white/10">
                             {item.qty_on_hand}
                           </span>
                         </td>
-                        <td className="px-4 py-3.5">
+                        <td data-label="Aging" className="px-4 py-3.5">
                           <div className="flex items-center gap-1.5">
                             <Clock className={`w-3.5 h-3.5 ${isCritical ? 'text-red-400' : isAging ? 'text-amber-400' : 'text-gray-600'}`} />
                             <span className={`text-xs font-medium ${isCritical ? 'text-red-400' : isAging ? 'text-amber-400' : 'text-gray-500'}`}>
@@ -351,20 +309,20 @@ const Inventory = () => {
                             </span>
                           </div>
                         </td>
-                        <td className="px-4 py-3.5">
+                        <td data-label="Cost" className="px-4 py-3.5">
                           <div className="flex flex-col">
                             <span className="text-sm font-medium text-gray-400">${money(allocatedCost(item, item.qty_on_hand))}</span>
-                            <span className="text-[10px] text-gray-600">${money(allocatedCost(item, 1))} / unit</span>
+                            <span className="text-[11px] text-gray-600">${money(allocatedCost(item, 1))} / unit</span>
                           </div>
                         </td>
                         {/* eBay column — empty on child rows */}
                         <td className="px-4 py-3.5" />
-                        <td className="px-4 py-3.5">
-                          <span className={`px-2 py-1 rounded text-[10px] font-bold tracking-wider border uppercase ${STATUS_COLORS[item.status] || STATUS_COLORS.PURCHASED}`}>
+                        <td data-label="Status" className="px-4 py-3.5">
+                          <span className={`px-2 py-1 rounded text-[11px] font-bold tracking-wider border uppercase ${STATUS_COLORS[item.status] || STATUS_COLORS.PURCHASED}`}>
                             {recordStatusLabel(item.status)}
                           </span>
                         </td>
-                        <td className="px-4 py-3.5 text-right">
+                        <td data-phone-hide className="px-4 py-3.5 text-right">
                           <button className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100">
                             <MoreVertical className="w-4 h-4" />
                           </button>

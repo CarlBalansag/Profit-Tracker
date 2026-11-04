@@ -81,10 +81,10 @@ export default function CalendarEventPopover({ date, events, onClose, onAddEvent
                       </span>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-[var(--dp-text-primary)] truncate">{ev.title}</p>
-                        <p className="text-[10px] mt-0.5" style={{ color }}>{cfg.label}</p>
+                        <p className="text-[11px] mt-0.5" style={{ color }}>{cfg.label}</p>
                       </div>
                       {isManual && (
-                        <span className="flex-shrink-0 text-[10px] text-[var(--dp-text-muted)] self-center">Edit</span>
+                        <span className="flex-shrink-0 text-[11px] text-[var(--dp-text-muted)] self-center">Edit</span>
                       )}
                     </button>
                   </li>

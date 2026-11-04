@@ -217,7 +217,7 @@ const exceptionTagOf = (record) => {
 
 const PAGE_SIZE = 5;
 
-const TAG = 'px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wide border';
+const TAG = 'px-1.5 py-0.5 rounded text-[11px] font-semibold tracking-wide border';
 
 function Tag({ children, tone = 'neutral' }) {
   const tones = {
@@ -338,11 +338,11 @@ function TrackingNumberRow({ record }) {
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1.5">
       {chip && (
-        <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border ${chip.color}`}>
+        <span className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wider border ${chip.color}`}>
           {chip.label}
         </span>
       )}
-      <span className="text-xs text-gray-400 font-mono break-all">{record.tracking_number}</span>
+      <span className="text-xs text-gray-400 tabular-nums break-all">{record.tracking_number}</span>
       <button
         type="button"
         aria-label="Edit tracking number"
@@ -389,7 +389,7 @@ function RecordCard({ record, quickStatus = false }) {
         <div className="flex items-start justify-between gap-2">
           <p className="text-sm font-medium text-gray-100 truncate">{productNameOf(record)}</p>
           {changedAt && (
-            <span data-status-changed className="text-[10px] text-gray-500 shrink-0 whitespace-nowrap">
+            <span data-status-changed className="text-[11px] text-gray-500 shrink-0 whitespace-nowrap">
               {changedAt}
             </span>
           )}
@@ -512,11 +512,11 @@ function GroupedRecordCard({ records, quickStatus = false }) {
         <div className="flex flex-wrap items-center gap-1.5">
           {exception && <Tag tone="bad">{exception}</Tag>}
           {chip && (
-            <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border ${chip.color}`}>
+            <span className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wider border ${chip.color}`}>
               {chip.label}
             </span>
           )}
-          <span className="text-xs text-gray-400 font-mono break-all">{first.tracking_number}</span>
+          <span className="text-xs text-gray-400 tabular-nums break-all">{first.tracking_number}</span>
         </div>
 
         {descriptor && (

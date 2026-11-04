@@ -23,7 +23,7 @@ const EMPTY_LIST = [];
 function Field({ label, children, className = '' }) {
   return (
     <div className={className}>
-      <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">
+      <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">
         {label}
       </label>
       {children}
@@ -96,7 +96,7 @@ function SectionHeader({ icon: Icon, children }) {
   return (
     <div className="flex items-center gap-2 mb-3 pt-1">
       {Icon && <Icon className="w-3.5 h-3.5 text-indigo-400" />}
-      <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400">
+      <p className="text-[11px] font-bold uppercase tracking-widest text-indigo-400">
         {children}
       </p>
     </div>
@@ -505,14 +505,14 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                 <Field label="Total Cost">
                   <ReadBox value={`$${formatMoney(totalCost)}`} className="text-white font-semibold" />
                   {form.refunded_amount > 0 && (
-                    <p className="mt-1 text-[10px] text-emerald-400">After −${formatMoney(Number(form.refunded_amount))} refunded{form.refunded_qty > 0 ? ` · ${form.refunded_qty} sent back` : ''}</p>
+                    <p className="mt-1 text-[11px] text-emerald-400">After −${formatMoney(Number(form.refunded_amount))} refunded{form.refunded_qty > 0 ? ` · ${form.refunded_qty} sent back` : ''}</p>
                   )}
                 </Field>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <Field label="Return window (days, optional)">
                   <Input type="number" min="0" step="1" ariaLabel="Return window (days)" placeholder="e.g. 30" value={form.return_window_days} onChange={setReturnDays} />
-                  {form.return_by_date && <p className="mt-1 text-[10px] text-gray-500">Return by {form.return_by_date}</p>}
+                  {form.return_by_date && <p className="mt-1 text-[11px] text-gray-500">Return by {form.return_by_date}</p>}
                   <ReturnWindowBadge item={form} className="mt-1.5" />
                 </Field>
               </div>
@@ -570,7 +570,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                     <a href={form.receipt_url} target="_blank" rel="noreferrer" className="text-xs text-[var(--dp-accent)] underline">View receipt</a>
                   )}
                 </div>
-                <p className="text-[10px] text-gray-600 mt-1.5">JPEG, PNG, WebP, GIF, or PDF up to {MAX_RECEIPT_BYTES / (1024 * 1024)} MB. Saved right away.</p>
+                <p className="text-[11px] text-gray-600 mt-1.5">JPEG, PNG, WebP, GIF, or PDF up to {MAX_RECEIPT_BYTES / (1024 * 1024)} MB. Saved right away.</p>
               </Field>
             </div>
 
@@ -598,7 +598,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                 </Field>
                 <Field label="Cashback $">
                   <DollarInput value={form.cashback_earned} onChange={setCashbackAmount} accentClass="focus:border-pink-500/60 text-emerald-400" ariaLabel="Cashback $" />
-                  <p className="text-[10px] text-gray-600 mt-1">Payment method default; editable for this transaction</p>
+                  <p className="text-[11px] text-gray-600 mt-1">Payment method default; editable for this transaction</p>
                 </Field>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
@@ -908,7 +908,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
 
             {/* ── Summary ── */}
             <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-4">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">Summary</p>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-3">Summary</p>
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Cost of Goods</span>
@@ -993,7 +993,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                         </span>
                       </div>
                       {cbEarned > 0 && (
-                        <p className="text-[10px] text-gray-600">
+                        <p className="text-[11px] text-gray-600">
                           Includes ${formatMoney(summary.cashback)} sold-unit cashback ({cbRate}%)
                         </p>
                       )}

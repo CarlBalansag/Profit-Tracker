@@ -101,7 +101,7 @@ function TooltipCard({ rect, placement, step, onNext, onBack, onSkip, stepIndex,
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
-          <p className="text-[10px] font-semibold text-emerald-400 uppercase tracking-widest mb-1">
+          <p className="text-[11px] font-semibold text-emerald-400 uppercase tracking-widest mb-1">
             Step {stepIndex + 1} of {totalSteps}
           </p>
           <h3 className="text-base font-bold text-white leading-tight">{step.title}</h3>

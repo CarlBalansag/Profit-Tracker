@@ -448,7 +448,7 @@ const AddTransaction = () => {
   return (
     // The app shell never scrolls; each page owns its scroll container.
     <div className="h-full overflow-auto">
-    <div className="container max-w-7xl mx-auto px-4 py-6 lg:px-6">
+    <div className="w-full max-w-7xl px-4 py-6 sm:px-6">
 
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
@@ -475,7 +475,7 @@ const AddTransaction = () => {
                       <X className="w-3 h-3" />
                     </button>
                   </div>
-                  <p className="text-[10px] text-gray-500">Same product added 1hr ago — use these details?</p>
+                  <p className="text-[11px] text-gray-500">Same product added 1hr ago — use these details?</p>
 
                   <div className="space-y-1.5 text-[11px]">
                     {recentTxn.vendor?.name && (
@@ -814,11 +814,11 @@ const AddTransaction = () => {
                     ))}
                   </div>
                 )}
-                <p className="text-[10px] text-gray-600 mt-1.5">
+                <p className="text-[11px] text-gray-600 mt-1.5">
                   JPEG, PNG, WebP, GIF, or PDF up to {MAX_RECEIPT_BYTES / (1024 * 1024)} MB. One receipt is stored per transaction.
                 </p>
                 {pendingReceiptInventoryId && (
-                  <p className="text-[10px] text-amber-400 mt-1.5">
+                  <p className="text-[11px] text-amber-400 mt-1.5">
                     Transaction saved. Select a receipt and submit again to finish the attachment.
                   </p>
                 )}
@@ -858,7 +858,7 @@ const AddTransaction = () => {
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">%</span>
                   </div>
                   {categoryRateMatch && cashbackOverrideMode === 'default' && (
-                    <p className="text-[10px] text-emerald-500/80 mt-1">
+                    <p className="text-[11px] text-emerald-500/80 mt-1">
                       {categoryRateMatch.store} rate
                       {categoryRateMatch.expires ? ` · expires ${new Date(categoryRateMatch.expires).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
                     </p>
@@ -1210,7 +1210,7 @@ const AddTransaction = () => {
                 <StickyNote className="w-4 h-4 text-gray-400" />
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Product Note</h3>
                 {noteLoading && debouncedProductName && (
-                  <span className="text-[10px] text-gray-600 ml-1">Loading...</span>
+                  <span className="text-[11px] text-gray-600 ml-1">Loading...</span>
                 )}
               </div>
               <div>
@@ -1230,7 +1230,7 @@ const AddTransaction = () => {
                   placeholder="e.g. 'Check eBay comps before listing', 'Bought during outlet drop'..."
                   className={`${inputCls('gray')} resize-none`}
                 />
-                <p className="text-[10px] text-gray-600 mt-1 text-right">{(formData.note || '').length}/2000</p>
+                <p className="text-[11px] text-gray-600 mt-1 text-right">{(formData.note || '').length}/2000</p>
               </div>
             </div>
 
@@ -1302,7 +1302,7 @@ const AddTransaction = () => {
 
                             {/* Profit / Profit+Cashback toggle — only shown when cashback exists */}
                             {cashbackAmount > 0 && (
-                              <div className="flex items-center gap-1 p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-[10px] font-semibold">
+                              <div className="flex items-center gap-1 p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-[11px] font-semibold">
                                 <button
                                   type="button"
                                   onClick={() => setShowCashbackProfit(false)}
@@ -1330,7 +1330,7 @@ const AddTransaction = () => {
                             </div>
 
                             {showCashbackProfit && cashbackAmount > 0 && (
-                              <p className="text-[10px] text-gray-600">
+                              <p className="text-[11px] text-gray-600">
                                 Includes ${formatMoney(allocatedCashback)} cashback ({cashbackRate}% on ${formatMoney(totalUnitCost)})
                               </p>
                             )}

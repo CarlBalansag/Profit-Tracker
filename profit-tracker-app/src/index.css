@@ -335,13 +335,13 @@
     box-shadow: none !important;
   }
 
-  .carbon-workspace [class*="bg-purple"],
-  .carbon-workspace [class*="bg-indigo"],
-  .carbon-workspace [class*="bg-blue"],
-  .carbon-workspace [class*="bg-cyan"],
-  .carbon-workspace [class*="bg-pink"],
-  .carbon-workspace [class*="bg-violet"],
-  .carbon-workspace [class*="bg-sky"] {
+  .carbon-workspace :is([class^="bg-purple"],[class*=" bg-purple"]),
+  .carbon-workspace :is([class^="bg-indigo"],[class*=" bg-indigo"]),
+  .carbon-workspace :is([class^="bg-blue"],[class*=" bg-blue"]),
+  .carbon-workspace :is([class^="bg-cyan"],[class*=" bg-cyan"]),
+  .carbon-workspace :is([class^="bg-pink"],[class*=" bg-pink"]),
+  .carbon-workspace :is([class^="bg-violet"],[class*=" bg-violet"]),
+  .carbon-workspace :is([class^="bg-sky"],[class*=" bg-sky"]) {
     background-color: var(--dp-accent-bg) !important;
   }
 
@@ -350,23 +350,23 @@
     background-color: var(--dp-accent-bg) !important;
   }
 
-  .carbon-workspace [class*="border-purple"],
-  .carbon-workspace [class*="border-indigo"],
-  .carbon-workspace [class*="border-blue"],
-  .carbon-workspace [class*="border-cyan"],
-  .carbon-workspace [class*="border-pink"],
-  .carbon-workspace [class*="border-violet"],
-  .carbon-workspace [class*="border-sky"] {
+  .carbon-workspace :is([class^="border-purple"],[class*=" border-purple"]),
+  .carbon-workspace :is([class^="border-indigo"],[class*=" border-indigo"]),
+  .carbon-workspace :is([class^="border-blue"],[class*=" border-blue"]),
+  .carbon-workspace :is([class^="border-cyan"],[class*=" border-cyan"]),
+  .carbon-workspace :is([class^="border-pink"],[class*=" border-pink"]),
+  .carbon-workspace :is([class^="border-violet"],[class*=" border-violet"]),
+  .carbon-workspace :is([class^="border-sky"],[class*=" border-sky"]) {
     border-color: var(--dp-accent) !important;
   }
 
-  .carbon-workspace [class*="text-purple"],
-  .carbon-workspace [class*="text-indigo"],
-  .carbon-workspace [class*="text-blue"],
-  .carbon-workspace [class*="text-cyan"],
-  .carbon-workspace [class*="text-pink"],
-  .carbon-workspace [class*="text-violet"],
-  .carbon-workspace [class*="text-sky"] {
+  .carbon-workspace :is([class^="text-purple"],[class*=" text-purple"]),
+  .carbon-workspace :is([class^="text-indigo"],[class*=" text-indigo"]),
+  .carbon-workspace :is([class^="text-blue"],[class*=" text-blue"]),
+  .carbon-workspace :is([class^="text-cyan"],[class*=" text-cyan"]),
+  .carbon-workspace :is([class^="text-pink"],[class*=" text-pink"]),
+  .carbon-workspace :is([class^="text-violet"],[class*=" text-violet"]),
+  .carbon-workspace :is([class^="text-sky"],[class*=" text-sky"]) {
     color: var(--dp-accent) !important;
   }
 
@@ -375,61 +375,61 @@
     color: var(--dp-accent) !important;
   }
 
-  .carbon-workspace [class*="bg-amber"],
-  .carbon-workspace [class*="bg-yellow"],
-  .carbon-workspace [class*="bg-orange"] {
+  .carbon-workspace :is([class^="bg-amber"],[class*=" bg-amber"]),
+  .carbon-workspace :is([class^="bg-yellow"],[class*=" bg-yellow"]),
+  .carbon-workspace :is([class^="bg-orange"],[class*=" bg-orange"]) {
     background-color: var(--dp-warning-bg) !important;
   }
 
-  .carbon-workspace [class*="border-amber"],
-  .carbon-workspace [class*="border-yellow"],
-  .carbon-workspace [class*="border-orange"] {
+  .carbon-workspace :is([class^="border-amber"],[class*=" border-amber"]),
+  .carbon-workspace :is([class^="border-yellow"],[class*=" border-yellow"]),
+  .carbon-workspace :is([class^="border-orange"],[class*=" border-orange"]) {
     border-color: color-mix(in srgb, var(--dp-warning-text) 30%, transparent) !important;
   }
 
-  .carbon-workspace [class*="text-amber"],
-  .carbon-workspace [class*="text-yellow"],
-  .carbon-workspace [class*="text-orange"] {
+  .carbon-workspace :is([class^="text-amber"],[class*=" text-amber"]),
+  .carbon-workspace :is([class^="text-yellow"],[class*=" text-yellow"]),
+  .carbon-workspace :is([class^="text-orange"],[class*=" text-orange"]) {
     color: var(--dp-warning-text) !important;
   }
 
-  .carbon-workspace [class*="bg-green"],
-  .carbon-workspace [class*="bg-emerald"],
-  .carbon-workspace [class*="bg-teal"] {
+  .carbon-workspace :is([class^="bg-green"],[class*=" bg-green"]),
+  .carbon-workspace :is([class^="bg-emerald"],[class*=" bg-emerald"]),
+  .carbon-workspace :is([class^="bg-teal"],[class*=" bg-teal"]) {
     background-color: var(--dp-green-bg) !important;
   }
 
-  .carbon-workspace [class*="border-green"],
-  .carbon-workspace [class*="border-emerald"],
-  .carbon-workspace [class*="border-teal"] {
+  .carbon-workspace :is([class^="border-green"],[class*=" border-green"]),
+  .carbon-workspace :is([class^="border-emerald"],[class*=" border-emerald"]),
+  .carbon-workspace :is([class^="border-teal"],[class*=" border-teal"]) {
     border-color: color-mix(in srgb, var(--dp-green-text) 30%, transparent) !important;
   }
 
-  .carbon-workspace [class*="text-green"],
-  .carbon-workspace [class*="text-emerald"],
-  .carbon-workspace [class*="text-teal"] {
+  .carbon-workspace :is([class^="text-green"],[class*=" text-green"]),
+  .carbon-workspace :is([class^="text-emerald"],[class*=" text-emerald"]),
+  .carbon-workspace :is([class^="text-teal"],[class*=" text-teal"]) {
     color: var(--dp-green-text) !important;
   }
 
-  .carbon-workspace [class*="bg-red"],
-  .carbon-workspace [class*="bg-rose"] {
+  .carbon-workspace :is([class^="bg-red"],[class*=" bg-red"]),
+  .carbon-workspace :is([class^="bg-rose"],[class*=" bg-rose"]) {
     background-color: var(--dp-red-bg) !important;
   }
 
-  .carbon-workspace [class*="border-red"],
-  .carbon-workspace [class*="border-rose"] {
+  .carbon-workspace :is([class^="border-red"],[class*=" border-red"]),
+  .carbon-workspace :is([class^="border-rose"],[class*=" border-rose"]) {
     border-color: color-mix(in srgb, var(--dp-red-text) 30%, transparent) !important;
   }
 
-  .carbon-workspace [class*="text-red"],
-  .carbon-workspace [class*="text-rose"] {
+  .carbon-workspace :is([class^="text-red"],[class*=" text-red"]),
+  .carbon-workspace :is([class^="text-rose"],[class*=" text-rose"]) {
     color: var(--dp-red-text) !important;
   }
 
-  .carbon-workspace button[class*="bg-indigo"],
-  .carbon-workspace button[class*="bg-purple"],
-  .carbon-workspace button[class*="bg-blue"],
-  .carbon-workspace button[class*="bg-amber"] {
+  .carbon-workspace button:is([class^="bg-indigo"],[class*=" bg-indigo"]),
+  .carbon-workspace button:is([class^="bg-purple"],[class*=" bg-purple"]),
+  .carbon-workspace button:is([class^="bg-blue"],[class*=" bg-blue"]),
+  .carbon-workspace button:is([class^="bg-amber"],[class*=" bg-amber"]) {
     background-color: var(--dp-accent-solid) !important;
     border-color: var(--dp-accent-solid) !important;
     color: #fff !important;
@@ -441,14 +441,14 @@
     background-color: var(--dp-accent-solid) !important;
   }
 
-  .carbon-workspace button[class*="bg-green"] {
+  .carbon-workspace button:is([class^="bg-green"],[class*=" bg-green"]) {
     background-color: var(--dp-green-text) !important;
     border-color: var(--dp-green-text) !important;
     color: #fff !important;
     box-shadow: none !important;
   }
 
-  .carbon-workspace button[class*="bg-red"] {
+  .carbon-workspace button:is([class^="bg-red"],[class*=" bg-red"]) {
     background-color: var(--dp-red-text) !important;
     border-color: var(--dp-red-text) !important;
     color: #fff !important;
@@ -553,75 +553,75 @@
     border-color: var(--glass-border) !important;
   }
 
-  .glass-workspace [class*="bg-blue"],
-  .glass-workspace [class*="bg-purple"],
-  .glass-workspace [class*="bg-indigo"],
-  .glass-workspace [class*="bg-cyan"],
-  .glass-workspace [class*="bg-pink"],
-  .glass-workspace [class*="bg-violet"],
-  .glass-workspace [class*="bg-sky"] {
+  .glass-workspace :is([class^="bg-blue"],[class*=" bg-blue"]),
+  .glass-workspace :is([class^="bg-purple"],[class*=" bg-purple"]),
+  .glass-workspace :is([class^="bg-indigo"],[class*=" bg-indigo"]),
+  .glass-workspace :is([class^="bg-cyan"],[class*=" bg-cyan"]),
+  .glass-workspace :is([class^="bg-pink"],[class*=" bg-pink"]),
+  .glass-workspace :is([class^="bg-violet"],[class*=" bg-violet"]),
+  .glass-workspace :is([class^="bg-sky"],[class*=" bg-sky"]) {
     background-color: var(--glass-accent-soft) !important;
   }
 
-  .glass-workspace [class*="border-blue"],
-  .glass-workspace [class*="border-purple"],
-  .glass-workspace [class*="border-indigo"],
-  .glass-workspace [class*="border-cyan"],
-  .glass-workspace [class*="border-pink"],
-  .glass-workspace [class*="border-violet"],
-  .glass-workspace [class*="border-sky"] {
+  .glass-workspace :is([class^="border-blue"],[class*=" border-blue"]),
+  .glass-workspace :is([class^="border-purple"],[class*=" border-purple"]),
+  .glass-workspace :is([class^="border-indigo"],[class*=" border-indigo"]),
+  .glass-workspace :is([class^="border-cyan"],[class*=" border-cyan"]),
+  .glass-workspace :is([class^="border-pink"],[class*=" border-pink"]),
+  .glass-workspace :is([class^="border-violet"],[class*=" border-violet"]),
+  .glass-workspace :is([class^="border-sky"],[class*=" border-sky"]) {
     border-color: var(--glass-border-hover) !important;
   }
 
-  .glass-workspace [class*="text-blue"],
-  .glass-workspace [class*="text-purple"],
-  .glass-workspace [class*="text-indigo"],
-  .glass-workspace [class*="text-cyan"],
-  .glass-workspace [class*="text-pink"],
-  .glass-workspace [class*="text-violet"],
-  .glass-workspace [class*="text-sky"],
+  .glass-workspace :is([class^="text-blue"],[class*=" text-blue"]),
+  .glass-workspace :is([class^="text-purple"],[class*=" text-purple"]),
+  .glass-workspace :is([class^="text-indigo"],[class*=" text-indigo"]),
+  .glass-workspace :is([class^="text-cyan"],[class*=" text-cyan"]),
+  .glass-workspace :is([class^="text-pink"],[class*=" text-pink"]),
+  .glass-workspace :is([class^="text-violet"],[class*=" text-violet"]),
+  .glass-workspace :is([class^="text-sky"],[class*=" text-sky"]),
   .glass-workspace [class*="text-[#60a5fa]"],
   .glass-workspace [class*="text-[#c084fc]"] {
     color: var(--glass-accent) !important;
   }
 
-  .glass-workspace [class*="bg-green"],
-  .glass-workspace [class*="bg-emerald"],
-  .glass-workspace [class*="bg-teal"] {
+  .glass-workspace :is([class^="bg-green"],[class*=" bg-green"]),
+  .glass-workspace :is([class^="bg-emerald"],[class*=" bg-emerald"]),
+  .glass-workspace :is([class^="bg-teal"],[class*=" bg-teal"]) {
     background-color: var(--glass-green-soft) !important;
   }
 
-  .glass-workspace [class*="text-green"],
-  .glass-workspace [class*="text-emerald"],
-  .glass-workspace [class*="text-teal"] {
+  .glass-workspace :is([class^="text-green"],[class*=" text-green"]),
+  .glass-workspace :is([class^="text-emerald"],[class*=" text-emerald"]),
+  .glass-workspace :is([class^="text-teal"],[class*=" text-teal"]) {
     color: var(--glass-green) !important;
   }
 
-  .glass-workspace [class*="bg-yellow"],
-  .glass-workspace [class*="bg-amber"],
-  .glass-workspace [class*="bg-orange"] {
+  .glass-workspace :is([class^="bg-yellow"],[class*=" bg-yellow"]),
+  .glass-workspace :is([class^="bg-amber"],[class*=" bg-amber"]),
+  .glass-workspace :is([class^="bg-orange"],[class*=" bg-orange"]) {
     background-color: var(--glass-yellow-soft) !important;
   }
 
-  .glass-workspace [class*="text-yellow"],
-  .glass-workspace [class*="text-amber"],
-  .glass-workspace [class*="text-orange"] {
+  .glass-workspace :is([class^="text-yellow"],[class*=" text-yellow"]),
+  .glass-workspace :is([class^="text-amber"],[class*=" text-amber"]),
+  .glass-workspace :is([class^="text-orange"],[class*=" text-orange"]) {
     color: var(--glass-yellow) !important;
   }
 
-  .glass-workspace [class*="bg-red"],
-  .glass-workspace [class*="bg-rose"] {
+  .glass-workspace :is([class^="bg-red"],[class*=" bg-red"]),
+  .glass-workspace :is([class^="bg-rose"],[class*=" bg-rose"]) {
     background-color: var(--glass-red-soft) !important;
   }
 
-  .glass-workspace [class*="text-red"],
-  .glass-workspace [class*="text-rose"] {
+  .glass-workspace :is([class^="text-red"],[class*=" text-red"]),
+  .glass-workspace :is([class^="text-rose"],[class*=" text-rose"]) {
     color: var(--glass-red) !important;
   }
 
-  .glass-workspace button[class*="bg-indigo"],
-  .glass-workspace button[class*="bg-purple"],
-  .glass-workspace button[class*="bg-blue"] {
+  .glass-workspace button:is([class^="bg-indigo"],[class*=" bg-indigo"]),
+  .glass-workspace button:is([class^="bg-purple"],[class*=" bg-purple"]),
+  .glass-workspace button:is([class^="bg-blue"],[class*=" bg-blue"]) {
     background-color: var(--glass-accent) !important;
     border-color: var(--glass-accent) !important;
     color: #111315 !important;
@@ -1057,4 +1057,61 @@ body,
 .calendar-wrapper .fc .fc-scrollgrid td,
 .calendar-wrapper .fc .fc-scrollgrid th {
   border-color: var(--dp-border);
+}
+
+/* Page-level actions. One filled main action, everything else outlined. */
+.page-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.page-btn-sm { height: 32px; padding: 0 12px; font-size: 12px; }
+.page-btn-icon { width: 32px; padding: 0; }
+.page-btn-primary { background: var(--dp-accent-solid); border-color: var(--dp-accent-solid); color: #fff; }
+.page-btn-primary:hover { filter: brightness(1.1); }
+.page-btn-secondary { background: transparent; border-color: var(--dp-border); color: var(--dp-text-primary); }
+.page-btn-secondary:hover { background: var(--dp-hover-bg); }
+.glass-workspace .page-btn-primary { background: var(--glass-accent); border-color: var(--glass-accent); color: #1c1610; }
+.glass-workspace .page-btn-secondary { border-color: rgba(255, 255, 255, 0.1); color: var(--glass-text-primary); }
+.glass-workspace .page-btn-secondary:hover { background: rgba(255, 255, 255, 0.05); }
+
+/* Tables that read as stacked cards on a phone. Each cell names itself with data-label. */
+@media (max-width: 639px) {
+  .phone-cards { display: block; width: 100% !important; min-width: 0 !important; }
+  .phone-cards thead { display: none; }
+  .phone-cards tbody,
+  .phone-cards tfoot { display: block; width: 100%; }
+  .phone-cards tr { display: block; padding: 12px 16px; border-bottom: 1px solid var(--dp-border); }
+  .phone-cards td {
+    display: block;
+    width: 100%;
+    padding: 2px 0 !important;
+    text-align: left !important;
+    white-space: normal;
+  }
+  .phone-cards td[data-label] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    text-align: right !important;
+  }
+  .phone-cards td[data-label]::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--dp-text-secondary);
+  }
+  .phone-cards td:empty,
+  .phone-cards td[data-phone-hide] { display: none; }
 }

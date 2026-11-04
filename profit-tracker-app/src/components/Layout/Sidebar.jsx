@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, CirclePlus, ArrowLeftRight, Package,
   Receipt, FileText, ChartColumn, Wallet, CreditCard as CreditCardIcon,
-  Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, DollarSign, ShieldCheck, BookOpen, Target, CalendarDays, Truck, Sparkles, ListChecks
+  Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, DollarSign, ShieldCheck, BookOpen, Target, CalendarDays, Truck, Sparkles, ListChecks, ScrollText
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useState } from 'react';
@@ -36,7 +36,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
           )}
           onClick={(e) => { if (e.target.closest('a')) setIsOpen(false); }}
         >
-          <div className="flex flex-col items-center gap-1 rounded-[24px] border border-white/[0.07] bg-[#181a1c]/[0.88] px-2 py-3 shadow-[0_12px_32px_rgba(0,0,0,0.28)] backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-0.5 rounded-[24px] border border-white/[0.07] bg-[#181a1c]/[0.88] px-2 py-3 shadow-[0_12px_32px_rgba(0,0,0,0.28)] backdrop-blur-sm">
             <button
               onClick={() => navigate('/')}
               className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#d8a65a,#c4873a)] text-sm font-bold text-[#101114] shadow-[0_6px_16px_rgba(216,166,90,0.16)]"
@@ -54,6 +54,9 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <GlassNavItem icon={ListChecks} label="Statuses" to="/statuses" />
             <GlassNavItem icon={Receipt} label="Expenses" to="/expenses" />
             {SCHEDULE_C_ENABLED && <GlassNavItem icon={FileText} label="Schedule C" to="/schedule-c" />}
+            <GlassNavItem icon={FileText} label="Receipts" to="/receipts" />
+            <GlassNavItem icon={ScrollText} label="Invoices" to="/invoices" />
+            <GlassNavItem icon={ShieldCheck} label="Tax Exempt" to="/tax-exempt" />
             <GlassNavItem icon={ChartColumn} label="Analytics" to="/analytics" />
             <GlassNavItem icon={Wallet} label="Cash Flow" to="/cashflow" />
             <GlassNavItem icon={CreditCardIcon} label="Credit Card" to="/creditcard" />
@@ -96,8 +99,8 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
 
           {!isCollapsed && (
             <div className="flex-1 min-w-0">
-              <h1 className="text-[13px] font-medium text-[var(--dp-text-primary)] tracking-[-0.3px]">Profit Tracker</h1>
-              <p className="text-[8px] text-[var(--dp-text-label)] uppercase tracking-[1.2px]">Reselling</p>
+              <p className="text-[13px] font-medium text-[var(--dp-text-primary)] tracking-[-0.3px]">Profit Tracker</p>
+              <p className="text-[11px] text-[var(--dp-text-label)] uppercase tracking-[1.2px]">Reselling</p>
             </div>
           )}
 
@@ -114,7 +117,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
           </button>
         </div>
 
-        <nav className="flex-1 py-4 px-2 space-y-4 overflow-y-auto overflow-x-hidden dp-scrollbar">
+        <nav className="flex-1 py-3 px-2 space-y-3 overflow-y-auto overflow-x-hidden dp-scrollbar">
           <SidebarSection title="Core" isCollapsed={isCollapsed} tutorialId="sidebar-section-core">
             <NavItem icon={LayoutDashboard} label="Dashboard" to="/" isCollapsed={isCollapsed} />
             <NavItem icon={CirclePlus} label="Add Transaction" to="/add-transaction" isCollapsed={isCollapsed} tutorialId="sidebar-add-transaction" />
@@ -129,6 +132,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <NavItem icon={Receipt} label="Expenses" to="/expenses" isCollapsed={isCollapsed} tutorialId="sidebar-expenses" />
             {SCHEDULE_C_ENABLED && <NavItem icon={FileText} label="Schedule C" to="/schedule-c" isCollapsed={isCollapsed} />}
             <NavItem icon={FileText} label="Receipts" to="/receipts" isCollapsed={isCollapsed} tutorialId="sidebar-receipts" />
+            <NavItem icon={ScrollText} label="Invoices" to="/invoices" isCollapsed={isCollapsed} />
             <NavItem icon={ShieldCheck} label="Tax Exempt" to="/tax-exempt" isCollapsed={isCollapsed} tutorialId="sidebar-tax-exempt" />
           </SidebarSection>
 
@@ -169,12 +173,12 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             className={clsx("flex items-center rounded-md hover:bg-[var(--dp-hover-bg)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-3 py-2 px-3 text-left")}
             onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
           >
-            <div className="w-7 h-7 rounded-full bg-[var(--dp-bg)] flex-shrink-0 text-[var(--dp-accent)] flex items-center justify-center text-[10px] font-semibold">{(user?.username || '?').slice(0, 2).toUpperCase()}</div>
+            <div className="w-7 h-7 rounded-full bg-[var(--dp-bg)] flex-shrink-0 text-[var(--dp-accent)] flex items-center justify-center text-[11px] font-semibold">{(user?.username || '?').slice(0, 2).toUpperCase()}</div>
             {!isCollapsed && (
               <>
                 <div className="flex-1 min-w-0">
                   <p className="text-[12px] font-medium text-[var(--dp-text-primary)] truncate">{user?.username || 'Account'}</p>
-                  <p className="text-[10px] text-[var(--dp-text-label)]">Online</p>
+                  <p className="text-[11px] text-[var(--dp-text-label)]">Online</p>
                 </div>
                 <ChevronDown size={14} className={clsx("text-[var(--dp-text-label)] transition-transform", isProfileMenuOpen ? "rotate-180" : "")} />
               </>
@@ -204,17 +208,17 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId }) => {
   const [isSectionOpen, setIsSectionOpen] = useState(true);
 
   return (
-    <div data-tutorial-id={tutorialId} className={clsx("space-y-1", isCollapsed ? "mt-4 first:mt-0" : "")}>
+    <div data-tutorial-id={tutorialId} className={clsx("space-y-0.5", isCollapsed ? "mt-4 first:mt-0" : "")}>
       {!isCollapsed && (
         <button
           onClick={() => setIsSectionOpen(!isSectionOpen)}
-          className="w-full flex items-center justify-between px-3 py-1 text-[9px] font-medium uppercase tracking-[1.2px] text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] transition-colors"
+          className="w-full flex items-center justify-between px-3 py-1 text-[11px] font-medium uppercase tracking-[1.2px] text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] transition-colors"
         >
           <span>{title}</span>
           {isSectionOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         </button>
       )}
-      <div className={clsx("space-y-1", !isSectionOpen && !isCollapsed ? "hidden" : "block")}>
+      <div className={clsx("space-y-0.5", !isSectionOpen && !isCollapsed ? "hidden" : "block")}>
         {children}
       </div>
     </div>
@@ -229,7 +233,7 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId }) => (
     className={({ isActive }) =>
       clsx(
         "flex items-center rounded-md border-l-2 transition-colors",
-        isCollapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5 text-[12px] font-medium",
+        isCollapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5 lg:py-1 text-[12px] font-medium",
         isActive
           ? "text-[var(--dp-accent)] bg-[var(--dp-accent-bg)] [border-left-color:var(--dp-accent)] pointer-events-none"
           : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] border-l-transparent"
@@ -247,7 +251,7 @@ const GlassNavItem = ({ icon: Icon, label, to }) => (
     title={label}
     className={({ isActive }) =>
       clsx(
-        "group relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors hover:z-10",
+        "group relative flex h-8 w-10 items-center justify-center rounded-xl transition-colors hover:z-10",
         isActive
           ? "bg-[#d8a65a]/10 text-[#d8a65a] pointer-events-none"
           : "text-white/25 hover:text-[#e8e2d6]"

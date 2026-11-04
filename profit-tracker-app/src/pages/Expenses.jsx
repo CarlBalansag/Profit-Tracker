@@ -1,3 +1,4 @@
+import StatCard from '../components/UI/StatCard';
 import { formatMoney as formatAmount } from '../utils/money';
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch, usePaymentMethods } from '../hooks/useApi';
@@ -498,11 +499,11 @@ const Expenses = () => {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={exportCSV}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors text-cyan-300 hover:bg-cyan-500/10 border border-cyan-400/35">
+            className="page-btn page-btn-secondary">
             <Download className="w-4 h-4" /> Export CSV
           </button>
           <button onClick={openAdd}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-all bg-gradient-to-br from-purple-500/80 to-purple-600/80 border border-purple-500/40 hover:from-purple-500 hover:to-purple-600">
+            className="page-btn page-btn-primary">
             <Plus className="w-4 h-4" /> Add Expense
           </button>
         </div>
@@ -511,27 +512,27 @@ const Expenses = () => {
       {/* Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { key: 'all',     label: 'Total · Year to Date',    icon: <DollarSign className="w-4 h-4 text-purple-400" /> },
-          { key: 'manual',  label: 'Manual Expenses · YTD',   icon: <Pencil className="w-4 h-4 text-blue-400" /> },
-          { key: 'derived', label: 'From Transactions · YTD', icon: <Lock className="w-4 h-4 text-amber-400" /> },
+          { key: 'all',     label: 'Total · Year to Date',    icon: DollarSign, tone: 'accent' },
+          { key: 'manual',  label: 'Manual Expenses · YTD',   icon: Pencil, tone: 'accent' },
+          { key: 'derived', label: 'From Transactions · YTD', icon: Lock, tone: 'amber' },
         ].map(card => (
-          <div key={card.key} data-testid={`expense-total-${card.key}`} className="rounded-xl p-4 bg-white/[0.02] border border-white/10">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-gray-500 uppercase tracking-wider">{card.label}</span>
-              {card.icon}
-            </div>
-            <p className="text-xl font-bold text-white">{formatMoney(totals[card.key].ytd)}</p>
-            <p className="text-[11px] text-gray-500 mt-1">This month: {formatMoney(totals[card.key].month)}</p>
-          </div>
+          <StatCard
+            key={card.key}
+            data-testid={`expense-total-${card.key}`}
+            label={card.label}
+            value={formatMoney(totals[card.key].ytd)}
+            sub={`This month: ${formatMoney(totals[card.key].month)}`}
+            icon={card.icon}
+            iconColor={card.tone === 'amber' ? 'var(--dp-warning-text)' : 'var(--accent)'}
+          />
         ))}
-        <div className="rounded-xl p-4 bg-white/[0.02] border border-white/10">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500 uppercase tracking-wider">Recurring / Mo</span>
-            <RefreshCw className="w-4 h-4 text-emerald-400" />
-          </div>
-          <p className="text-xl font-bold text-white">${formatAmount(recurringMonthly)}</p>
-          <p className="text-[11px] text-gray-500 mt-1">{recurring.filter(r => r.active).length} active</p>
-        </div>
+        <StatCard
+          label="Recurring / Mo"
+          value={`$${formatAmount(recurringMonthly)}`}
+          sub={`${recurring.filter(r => r.active).length} active`}
+          icon={RefreshCw}
+          iconColor="var(--dp-green-text)"
+        />
       </div>
       <p className="-mt-3 text-[11px] text-gray-500">
         Costs from transactions are already counted in your Dashboard profit, so don&apos;t add them again as manual expenses.
@@ -544,7 +545,7 @@ const Expenses = () => {
           <div className="flex items-center gap-2">
             <RefreshCw className="w-4 h-4 text-emerald-400" />
             <h2 className="text-sm font-semibold text-white">Recurring Expenses</h2>
-            <span className="text-[10px] text-gray-500 ml-1">{recurring.filter(r => r.active).length} active</span>
+            <span className="text-[11px] text-gray-500 ml-1">{recurring.filter(r => r.active).length} active</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {recurring.map(rec => {
@@ -556,23 +557,23 @@ const Expenses = () => {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-white truncate">{rec.name}</p>
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                           {FREQ_MAP[rec.frequency] || rec.frequency}
                         </span>
-                        {cat && <span className={`text-[10px] font-medium ${cat.color}`}>{cat.label}</span>}
+                        {cat && <span className={`text-[11px] font-medium ${cat.color}`}>{cat.label}</span>}
                         {rec.payment_method && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] text-gray-500">
+                          <span className="inline-flex items-center gap-0.5 text-[11px] text-gray-500">
                             <CreditCard className="w-2.5 h-2.5" />{rec.payment_method.name}
                           </span>
                         )}
-                        {!rec.active && <span className="text-[10px] text-gray-500 font-medium">Paused</span>}
+                        {!rec.active && <span className="text-[11px] text-gray-500 font-medium">Paused</span>}
                       </div>
                     </div>
                     <p className="text-base font-bold text-red-400 whitespace-nowrap">${formatAmount(rec.amount)}</p>
                   </div>
                   {rec.notes && <p className="text-[11px] text-gray-500 mb-3 line-clamp-1">{rec.notes}</p>}
                   <div className="flex items-center justify-between pt-2 border-t border-white/[0.05]">
-                    <p className="text-[10px] text-gray-600">
+                    <p className="text-[11px] text-gray-600">
                       Since {new Date(rec.start_date).toLocaleDateString()}
                       {rec.end_date ? ` → ${new Date(rec.end_date).toLocaleDateString()}` : ''}
                     </p>
@@ -665,16 +666,16 @@ const Expenses = () => {
           </div>
         ) : (
           <div className="rounded-xl overflow-hidden border border-white/10">
-            <table className="w-full text-sm">
+            <table className="phone-cards w-full text-sm">
               <thead>
                 <tr className="border-b border-white/[0.06] bg-white/[0.015]">
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500">Date</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500">Name</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500">Category</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500">Card</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500">Notes</th>
-                  <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase tracking-wider text-gray-500">Amount</th>
-                  <th className="px-4 py-3 text-center text-[10px] font-semibold uppercase tracking-wider text-gray-500">Actions</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">Date</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">Name</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">Category</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">Card</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">Notes</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">Amount</th>
+                  <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-wider text-gray-500">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -684,42 +685,42 @@ const Expenses = () => {
                   const isDerived   = exp.source !== 'manual';
                   return (
                     <tr key={exp.id} data-source={exp.source} className={`border-b border-white/[0.04] hover:bg-white/[0.025] transition-colors ${i % 2 !== 0 ? 'bg-white/[0.01]' : ''}`}>
-                      <td className="px-4 py-3.5 text-gray-400 whitespace-nowrap">
+                      <td data-label="Date" className="px-4 py-3.5 text-gray-400 whitespace-nowrap">
                         {exp.date ? new Date(exp.date).toLocaleDateString() : '—'}
                       </td>
                       <td className="px-4 py-3.5 font-medium text-white">
                         <div className="flex items-center gap-2 flex-wrap">
                           {exp.name}
                           {isDerived ? (
-                            <span className="flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0" title="Edit this cost on its transaction">
+                            <span className="flex items-center gap-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0" title="Edit this cost on its transaction">
                               <Lock className="w-2.5 h-2.5" /> {SOURCE_LABELS[exp.source]}
                             </span>
                           ) : (
-                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">
+                            <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">
                               Manual
                             </span>
                           )}
                           {isGenerated && (
-                            <span className="flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shrink-0">
+                            <span className="flex items-center gap-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shrink-0">
                               <RefreshCw className="w-2.5 h-2.5" /> recurring
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3.5">
+                      <td data-label="Category" className="px-4 py-3.5">
                         {cat ? <span className={`text-xs font-medium ${cat.color}`}>{cat.label}</span> : <span className="text-xs text-gray-600">—</span>}
                       </td>
-                      <td className="px-4 py-3.5 text-xs text-gray-400 whitespace-nowrap">
+                      <td data-label="Card" className="px-4 py-3.5 text-xs text-gray-400 whitespace-nowrap">
                         {exp.payment_method
                           ? <span className="inline-flex items-center gap-1"><CreditCard className="w-3 h-3 text-gray-500" />{exp.payment_method.name}</span>
                           : exp.paid_from_payout
                             ? <span className="text-gray-500 italic" title="Taken out of the sale's payout, so no card was charged">From payout</span>
                             : <span className="text-gray-700">—</span>}
                       </td>
-                      <td className="px-4 py-3.5 text-gray-500 text-xs max-w-[200px] truncate">
+                      <td data-label="Notes" className="px-4 py-3.5 text-gray-500 text-xs max-w-[200px] truncate">
                         {exp.notes || <span className="text-gray-700">—</span>}
                       </td>
-                      <td className={`px-4 py-3.5 text-right font-semibold whitespace-nowrap ${Number(exp.amount) < 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatMoney(exp.amount)}</td>
+                      <td data-label="Amount" className={`px-4 py-3.5 text-right font-semibold whitespace-nowrap ${Number(exp.amount) < 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatMoney(exp.amount)}</td>
                       <td className="px-4 py-3.5">
                         {isDerived ? (
                           <div className="flex items-center justify-center">

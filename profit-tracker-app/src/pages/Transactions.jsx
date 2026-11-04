@@ -2,6 +2,7 @@ import { allocatedCost, allocatedCashback, effectiveCashbackRate, saleEconomics,
 import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { useInventory, usePlatforms, usePaymentMethods, useBuyers, useInvalidate, apiFetch} from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
+import StatCard from '../components/UI/StatCard';
 import { toast } from 'sonner';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -51,7 +52,7 @@ export const STATUS_COLORS = {
 function StatusBadge({ status }) {
   const cls = STATUS_COLORS[status?.toUpperCase()] || STATUS_COLORS.PURCHASED;
   return (
-    <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border uppercase ${cls}`}>
+    <span className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wider border uppercase ${cls}`}>
       {recordStatusLabel(status)}
     </span>
   );
@@ -117,7 +118,7 @@ function RefundedBadge({ row }) {
   return (
     <span
       title={row.isSale ? 'Refunded to the buyer' : 'Refunded by the store'}
-      className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border bg-amber-500/10 text-amber-400 border-amber-500/25 whitespace-nowrap"
+      className="shrink-0 px-1.5 py-0.5 rounded text-[11px] font-bold tracking-wider border bg-amber-500/10 text-amber-400 border-amber-500/25 whitespace-nowrap"
     >
       REFUNDED ${formatMoney(row.refundedAmount)}{units}
     </span>
@@ -130,7 +131,7 @@ function BackInStockBadge({ units }) {
   return (
     <span
       title="These units are back in stock, so their cost now sits on the purchase row"
-      className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border bg-teal-500/10 text-teal-400 border-teal-500/25 whitespace-nowrap"
+      className="shrink-0 px-1.5 py-0.5 rounded text-[11px] font-bold tracking-wider border bg-teal-500/10 text-teal-400 border-teal-500/25 whitespace-nowrap"
     >
       {units} BACK IN STOCK
     </span>
@@ -609,12 +610,15 @@ const Transactions = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openTarget, isLoading]);
 
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const activeFilterCount = [filterStatus, filterVendorId, filterPlatformId, filterPaymentId, filterDateRange].filter(Boolean).length;
+
   // ─── Render ─────────────────────────────────────────────────────────────────
   if (isLoading) return <PageLoader variant="table" />;
 
   return (
     <>
-    <div className="container max-w-full mx-auto px-4 py-6 lg:px-6 h-full overflow-y-auto">
+    <div className="h-full overflow-y-auto px-4 py-6 sm:px-6">
       
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
@@ -688,10 +692,10 @@ const Transactions = () => {
             {colsOpen && (
               <div className="absolute top-full right-0 mt-1.5 z-50 w-52 rounded-xl bg-[#16181d] border border-white/10 shadow-2xl p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Toggle Columns</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Toggle Columns</p>
                   <button
                     onClick={() => setVisibleCols(DEFAULT_COLS)}
-                    className="text-[10px] text-indigo-400 hover:text-indigo-300 transition-colors"
+                    className="text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors"
                   >Reset</button>
                 </div>
                 <div className="space-y-0.5">
@@ -736,13 +740,13 @@ const Transactions = () => {
           </div>
           <button 
             onClick={() => toast('Coming Soon')}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 bg-white/[0.02] text-gray-300 text-xs font-medium hover:bg-white/5 transition-colors"
+            className="page-btn page-btn-secondary page-btn-sm"
           >
             <Download className="w-3.5 h-3.5" /> CSV
           </button>
           <button 
             onClick={() => toast('Coming Soon')}
-            className="flex items-center justify-center w-8 h-8 rounded-lg border border-white/10 bg-white/[0.02] text-gray-300 hover:bg-white/5 transition-colors"
+            className="page-btn page-btn-secondary page-btn-sm page-btn-icon"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
           </button>
@@ -750,29 +754,12 @@ const Transactions = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-6">
-        <div className="rounded-xl border border-white/10 bg-[#16181d] p-3 pl-4 flex flex-col justify-between">
-          <div className="flex items-center gap-2 text-gray-400 text-xs font-medium mb-2"><Package className="w-3.5 h-3.5" /> Rows Shown</div>
-          <div className="text-xl font-bold text-white">{filteredRows.length}</div>
-          <div className="text-[10px] text-gray-500 mt-1">{purchaseCount} purchase{purchaseCount !== 1 ? 's' : ''} · {saleRowCount} sale{saleRowCount !== 1 ? 's' : ''}</div>
-        </div>
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 pl-4 flex flex-col justify-between">
-          <div className="flex items-center gap-2 text-amber-500/80 text-xs font-medium mb-2"><Tag className="w-3.5 h-3.5" /> Unsold Units</div>
-          <div className="text-xl font-bold text-amber-400">{unsoldCount}</div>
-        </div>
-        <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-3 pl-4 flex flex-col justify-between">
-          <div className="flex items-center gap-2 text-green-500/80 text-xs font-medium mb-2"><Check className="w-3.5 h-3.5" /> Sold / Done</div>
-          <div className="text-xl font-bold text-green-400">{soldCount}</div>
-        </div>
-        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 pl-4 flex flex-col justify-between">
-          <div className="flex items-center gap-2 text-red-500/80 text-xs font-medium mb-2"><DollarSign className="w-3.5 h-3.5" /> Total Cost</div>
-          <div className="text-xl font-bold text-red-400">${formatMoney(roundCents(totalCostSum))}</div>
-          <div className="text-[10px] text-gray-500 mt-1">Rows shown, less refunds</div>
-        </div>
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 pl-4 flex flex-col justify-between">
-          <div className="flex items-center gap-2 text-emerald-500/80 text-xs font-medium mb-2"><DollarSign className="w-3.5 h-3.5" /> Total Profit</div>
-          <div className="text-xl font-bold text-emerald-400">${formatMoney(roundCents(totalProfitSum))}</div>
-        </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-6 [&>*:last-child]:col-span-2 sm:[&>*:last-child]:col-span-1">
+        <StatCard compact label="Rows Shown" value={filteredRows.length} sub={`${purchaseCount} purchase${purchaseCount !== 1 ? 's' : ''} · ${saleRowCount} sale${saleRowCount !== 1 ? 's' : ''}`} icon={Package} iconColor="var(--dp-text-secondary)" />
+        <StatCard compact label="Unsold Units" value={unsoldCount} icon={Tag} tone="amber" />
+        <StatCard compact label="Sold / Done" value={soldCount} icon={Check} tone="green" />
+        <StatCard compact label="Total Cost" value={`$${formatMoney(roundCents(totalCostSum))}`} sub="Rows shown, less refunds" icon={DollarSign} tone="red" />
+        <StatCard compact label="Total Profit" value={`$${formatMoney(roundCents(totalProfitSum))}`} icon={DollarSign} tone="green" />
       </div>
 
       {/* Search and Filters */}
@@ -811,9 +798,19 @@ const Transactions = () => {
                 </button>
               ))}
             </div>
+            <button
+              type="button"
+              onClick={() => setShowMobileFilters(open => !open)}
+              aria-expanded={showMobileFilters}
+              className="md:hidden flex items-center gap-1 h-9 px-2.5 rounded-lg border border-white/10 text-gray-300 text-xs font-medium shrink-0"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span className="sr-only">Filters</span>
+              {activeFilterCount > 0 && <span>{activeFilterCount}</span>}
+            </button>
           </div>
           {/* Dropdowns */}
-          <div className="flex flex-wrap gap-2 [&>select]:flex-1 [&>select]:min-w-[130px] sm:[&>select]:flex-none sm:[&>select]:min-w-0">
+          <div className={`${showMobileFilters ? 'flex' : 'hidden'} md:flex flex-wrap gap-2 [&>select]:flex-1 [&>select]:min-w-[130px] sm:[&>select]:flex-none sm:[&>select]:min-w-0`}>
             <select
               value={filterStatus}
               onChange={e => setFilterStatus(e.target.value)}
@@ -935,8 +932,8 @@ const Transactions = () => {
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 {row.isSale
-                  ? <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border bg-green-500/10 text-green-400 border-green-500/20">SALE</span>
-                  : <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border bg-blue-500/10 text-blue-400 border-blue-500/20">BUY</span>
+                  ? <span className="shrink-0 px-1.5 py-0.5 rounded text-[11px] font-bold tracking-wider border bg-green-500/10 text-green-400 border-green-500/20">SALE</span>
+                  : <span className="shrink-0 px-1.5 py-0.5 rounded text-[11px] font-bold tracking-wider border bg-blue-500/10 text-blue-400 border-blue-500/20">BUY</span>
                 }
                 <p className="text-sm font-semibold text-gray-100 truncate">{row.product}</p>
                 {row.refundedAmount > 0 || row.refundedUnits > 0 ? <RefundedBadge row={row} /> : null}
@@ -962,18 +959,18 @@ const Transactions = () => {
             {/* Bottom row: cost → sale → profit */}
             <div className="flex items-center gap-4 pt-1 border-t border-white/[0.04]">
               <div>
-                <p className="text-[10px] text-gray-600 uppercase tracking-wider mb-0.5">Cost</p>
+                <p className="text-[11px] text-gray-600 uppercase tracking-wider mb-0.5">Cost</p>
                 <p className="text-sm font-semibold text-blue-400">${formatMoney(row.cost)}</p>
               </div>
               {row.sale != null && (
                 <div>
-                  <p className="text-[10px] text-gray-600 uppercase tracking-wider mb-0.5">Sale</p>
+                  <p className="text-[11px] text-gray-600 uppercase tracking-wider mb-0.5">Sale</p>
                   <p className="text-sm font-semibold text-green-400">${formatMoney(row.sale)}</p>
                 </div>
               )}
               {Number.isFinite(row.profit) && (
                 <div className="ml-auto">
-                  <p className="text-[10px] text-gray-600 uppercase tracking-wider mb-0.5 text-right">Profit</p>
+                  <p className="text-[11px] text-gray-600 uppercase tracking-wider mb-0.5 text-right">Profit</p>
                   <p className={`text-sm font-bold ${row.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                     {row.profit >= 0 ? '+' : ''}${formatMoney(row.profit)}
                   </p>
@@ -1025,7 +1022,7 @@ const Transactions = () => {
       <div ref={tableScrollRef} onScroll={handleTableScroll} className="hidden md:block card overflow-x-auto bg-[#0f1115] table-scrollbar">
         <table className="w-full text-left whitespace-nowrap">
           <thead>
-            <tr className="border-b border-white/[0.06] text-[10px] uppercase font-semibold text-gray-500 tracking-widest">
+            <tr className="border-b border-white/[0.06] text-[11px] uppercase font-semibold text-gray-500 tracking-widest">
               <th className="px-4 py-3.5 w-10 sticky left-0 z-20 bg-[#0f1115]">
                 <input
                   type="checkbox"
@@ -1105,8 +1102,8 @@ const Transactions = () => {
                   </td>
                   <td className="px-2 py-3.5">
                     {row.isSale
-                      ? <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border bg-green-500/10 text-green-400 border-green-500/20">SALE</span>
-                      : <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border bg-blue-500/10 text-blue-400 border-blue-500/20">BUY</span>
+                      ? <span className="px-1.5 py-0.5 rounded text-[11px] font-bold tracking-wider border bg-green-500/10 text-green-400 border-green-500/20">SALE</span>
+                      : <span className="px-1.5 py-0.5 rounded text-[11px] font-bold tracking-wider border bg-blue-500/10 text-blue-400 border-blue-500/20">BUY</span>
                     }
                   </td>
 
@@ -1179,7 +1176,7 @@ const Transactions = () => {
                           {isEditing ? (
                             <div>
                               <EditInput type="number" value={editData.cost} onChange={v => setEditData(d => ({ ...d, cost: v }))} className="w-24" />
-                              <p className="text-[10px] text-gray-600 mt-0.5">per unit</p>
+                              <p className="text-[11px] text-gray-600 mt-0.5">per unit</p>
                             </div>
                           ) : (
                             <span className="text-sm font-semibold text-blue-400">${formatMoney(row.cost)}</span>
@@ -1191,7 +1188,7 @@ const Transactions = () => {
                           {isEditing && editData.isSale ? (
                             <div>
                               <EditInput type="number" value={editData.sale ?? ''} onChange={v => setEditData(d => ({ ...d, sale: v }))} className="w-24" />
-                              <p className="text-[10px] text-gray-600 mt-0.5">per unit</p>
+                              <p className="text-[11px] text-gray-600 mt-0.5">per unit</p>
                             </div>
                           ) : (
                             <span className="text-sm font-semibold text-green-400">{row.sale ? `$${formatMoney(row.sale)}` : <span className="text-gray-600 font-normal">—</span>}</span>
@@ -1268,7 +1265,7 @@ const Transactions = () => {
                       case 'category': return (
                         <td key="category" className="px-4 py-3.5">
                           {row.category
-                            ? <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-white/5 text-gray-400 border border-white/10">{row.category}</span>
+                            ? <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-white/5 text-gray-400 border border-white/10">{row.category}</span>
                             : <span className="text-gray-600">—</span>
                           }
                         </td>
@@ -1291,7 +1288,7 @@ const Transactions = () => {
                                 type="button"
                                 title={`Copy: ${row.tracking_number}`}
                                 onClick={() => navigator.clipboard.writeText(row.tracking_number)}
-                                className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border cursor-pointer hover:opacity-80 transition-opacity ${carrier.color}`}
+                                className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wider border cursor-pointer hover:opacity-80 transition-opacity ${carrier.color}`}
                               >
                                 {carrier.label}
                               </button>
@@ -1324,7 +1321,7 @@ const Transactions = () => {
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-1.5 opacity-50 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                         <button
                           onClick={() => startEdit(row)}
                           title="Edit row"

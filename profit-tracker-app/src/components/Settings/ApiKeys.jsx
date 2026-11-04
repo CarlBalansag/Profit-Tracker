@@ -226,7 +226,7 @@ export const ApiKeys = () => {
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-200 font-medium">{key.name || 'Unnamed key'}</span>
                     {key.revoked_at && (
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-red-500/10 text-red-400 border border-red-500/20">Revoked</span>
+                      <span className="px-1.5 py-0.5 rounded text-[11px] font-bold uppercase bg-red-500/10 text-red-400 border border-red-500/20">Revoked</span>
                     )}
                   </div>
                   <p className="text-[11px] text-gray-600 font-mono">{key.key_prefix}…</p>

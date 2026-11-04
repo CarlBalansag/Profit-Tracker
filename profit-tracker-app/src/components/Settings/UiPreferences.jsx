@@ -83,7 +83,7 @@ export function UiPreferences() {
                     <Icon size={18} />
                   </div>
                   <div>
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500 font-bold">{option.eyebrow}</p>
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-gray-500 font-bold">{option.eyebrow}</p>
                     <h2 className="text-sm font-semibold text-white mt-1">{option.name}</h2>
                   </div>
                 </div>

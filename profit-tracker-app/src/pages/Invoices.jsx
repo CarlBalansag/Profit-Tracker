@@ -11,7 +11,7 @@ const Invoices = () => {
           <h1 className="text-2xl font-bold text-white">Invoices</h1>
           <p className="text-sm text-gray-400 mt-1">Create, manage, and generate PDF invoices. Saved to cloud storage.</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors text-white bg-gradient-to-b from-purple-500/80 to-blue-600/80 hover:from-purple-500 hover:to-blue-600 border border-purple-500/50">
+        <button className="page-btn page-btn-primary">
           <Plus className="w-4 h-4" /> New Invoice
         </button>
       </div>

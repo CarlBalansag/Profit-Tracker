@@ -364,17 +364,17 @@ export function Accounts() {
                 
                 <div className="grid grid-cols-2 gap-4 pt-3 border-t border-white/5 text-sm">
                   <div>
-                    <p className="text-gray-500 text-[10px] uppercase font-semibold tracking-wider">Email</p>
+                    <p className="text-gray-500 text-[11px] uppercase font-semibold tracking-wider">Email</p>
                     <p className="text-gray-300 mt-0.5 truncate">{acc.email || '—'}</p>
                   </div>
                   <div>
-                    <p className="text-gray-500 text-[10px] uppercase font-semibold tracking-wider">Username</p>
+                    <p className="text-gray-500 text-[11px] uppercase font-semibold tracking-wider">Username</p>
                     <p className="text-gray-300 mt-0.5 truncate">{acc.username || '—'}</p>
                   </div>
                 </div>
                 {acc.notes && (
                   <div className="mt-3 pt-3 border-t border-white/5">
-                    <p className="text-gray-500 text-[10px] uppercase font-semibold tracking-wider">Notes</p>
+                    <p className="text-gray-500 text-[11px] uppercase font-semibold tracking-wider">Notes</p>
                     <p className="text-gray-400 mt-0.5 text-xs line-clamp-2">{acc.notes}</p>
                   </div>
                 )}

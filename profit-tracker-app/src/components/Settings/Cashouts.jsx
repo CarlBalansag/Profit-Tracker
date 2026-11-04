@@ -563,7 +563,7 @@ export function Cashouts() {
                   </div>
                 </div>
                 {platform.tax_exempt_place && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border bg-green-500/10 text-green-400 border-green-500/20">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wider border bg-green-500/10 text-green-400 border-green-500/20">
                     Tax Exempt
                   </span>
                 )}

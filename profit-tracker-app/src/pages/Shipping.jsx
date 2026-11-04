@@ -80,16 +80,16 @@ function TrackingStatusCell({ trackingNumber, trackingInfo }) {
     <div className="flex flex-col">
       <span className={`text-xs font-semibold ${STATUS_COLORS[trackingInfo.status] || 'text-gray-300'}`}>{trackingInfo.status}</span>
       {trackingInfo.estimatedDelivery && trackingInfo.status !== 'Delivered' && (
-        <span className="text-[10px] text-gray-500">Est. arrival {formatEta(trackingInfo.estimatedDelivery)}</span>
+        <span className="text-[11px] text-gray-500">Est. arrival {formatEta(trackingInfo.estimatedDelivery)}</span>
       )}
-      <span className="text-[10px] text-gray-600">checked {timeAgo(trackingInfo.checkedAt)}</span>
+      <span className="text-[11px] text-gray-600">checked {timeAgo(trackingInfo.checkedAt)}</span>
     </div>
   );
 }
 
 // ─── Inline field label shown only in the stacked mobile card layout ─────────────
 function CellLabel({ children }) {
-  return <span className="md:hidden text-[10px] uppercase font-semibold text-gray-500 tracking-wider mr-2">{children}</span>;
+  return <span className="md:hidden text-[11px] uppercase font-semibold text-gray-500 tracking-wider mr-2">{children}</span>;
 }
 
 // Shared responsive classes: a bordered card block below md, a plain table row at md+.
@@ -182,13 +182,13 @@ function TrackedRow({ row, onCheck, checking, checkDisabled, onSave, saving }) {
                 type="button"
                 title={`Copy: ${row.trackingNumber}`}
                 onClick={() => { navigator.clipboard.writeText(row.trackingNumber); toast.success('Tracking number copied'); }}
-                className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border cursor-pointer hover:opacity-80 transition-opacity ${chip.color}`}
+                className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wider border cursor-pointer hover:opacity-80 transition-opacity ${chip.color}`}
               >
                 {chip.label}
               </button>
             )}
             <div className="flex items-start gap-1 mt-1">
-              <p className="text-xs text-gray-400 font-mono break-all">{row.trackingNumber}</p>
+              <p className="text-xs text-gray-400 tabular-nums break-all">{row.trackingNumber}</p>
               <button
                 type="button"
                 aria-label="Edit tracking number"
@@ -269,12 +269,12 @@ function GroupedTrackedRow({ items, onCheck, checkingIds, checkDisabled, onSave,
               type="button"
               title={`Copy: ${first.trackingNumber}`}
               onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(first.trackingNumber); toast.success('Tracking number copied'); }}
-              className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border cursor-pointer hover:opacity-80 transition-opacity ${chip.color}`}
+              className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wider border cursor-pointer hover:opacity-80 transition-opacity ${chip.color}`}
             >
               {chip.label}
             </button>
           )}
-          <p className="text-xs text-gray-400 mt-1 font-mono break-all">{first.trackingNumber}</p>
+          <p className="text-xs text-gray-400 mt-1 tabular-nums break-all">{first.trackingNumber}</p>
         </td>
         <td className={CELL_MID}>
           <CellLabel>Status</CellLabel>
@@ -386,7 +386,7 @@ function ShippingSection({ title, subtitle, rows, onSave, onCheck, checkingIds, 
               }`}
             >
               {label}
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+              <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-semibold ${
                 view === key ? 'bg-white/10 text-white' : 'bg-white/5 text-gray-500'
               }`}>{count}</span>
             </button>
@@ -397,7 +397,7 @@ function ShippingSection({ title, subtitle, rows, onSave, onCheck, checkingIds, 
       <div className="overflow-x-auto px-3 py-3 md:p-0">
         <table className="w-full text-left block md:table">
           <thead className="hidden md:table-header-group">
-            <tr className="text-[10px] uppercase font-semibold text-gray-500 tracking-widest">
+            <tr className="text-[11px] uppercase font-semibold text-gray-500 tracking-widest">
               <th className="px-4 py-2.5">Item</th>
               {view === 'tracked' ? (
                 <>

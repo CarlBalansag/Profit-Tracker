@@ -253,8 +253,8 @@ const Dashboard = () => {
           ? "rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.22)] animate-in fade-in duration-300 fill-mode-both"
           : "rounded-[24px] p-6 bg-[var(--dp-card-bg)] dp-elevated animate-in slide-in-from-bottom-4 duration-500 fade-in delay-300 fill-mode-both"
         }>
-          <h3 className={isGlass ? "mb-1 px-0.5 text-[10px] font-semibold uppercase tracking-[0.28em] text-white/24" : "text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)] mb-1"}>Status Pipeline</h3>
-          <p className={isGlass ? "mb-3 px-0.5 text-[10px] text-white/18" : "text-[12px] text-[var(--dp-text-secondary)] mb-4"}>
+          <h3 className={isGlass ? "mb-1 px-0.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/24" : "text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)] mb-1"}>Status Pipeline</h3>
+          <p className={isGlass ? "mb-3 px-0.5 text-[11px] text-white/18" : "text-[12px] text-[var(--dp-text-secondary)] mb-4"}>
             Units currently in each stage right now — not a cumulative total. See "Units Sold" below for all units sold in this period regardless of their current status.
           </p>
 
@@ -267,7 +267,7 @@ const Dashboard = () => {
           </div>
 
           {/* Desktop (lg+): show every card at once, unchanged from before */}
-          <div className={isGlass ? "hidden lg:grid grid-cols-3 2xl:grid-cols-4 gap-4" : "hidden lg:grid grid-cols-5 gap-3"}>
+          <div className={isGlass ? "hidden lg:grid grid-cols-3 2xl:grid-cols-4 gap-4" : "hidden lg:grid grid-cols-6 gap-3"}>
             {visiblePipelineCards.map(renderPipelineCard)}
           </div>
         </div>
@@ -315,7 +315,7 @@ const Dashboard = () => {
                       </button>
                     ))}
                   </div>
-                  <div className={isGlass ? "flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-white/25" : "flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>
+                  <div className={isGlass ? "flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-white/25" : "flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>
                     <span className={isGlass ? "rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-1" : "rounded-full px-2 py-1 bg-[var(--dp-bg)]"}>{modeFilter}</span>
                     <span className={isGlass ? "rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-1" : "rounded-full px-2 py-1 bg-[var(--dp-bg)]"}>{dateFilter}</span>
                   </div>
@@ -367,15 +367,15 @@ const Dashboard = () => {
                   safeTopCardsPage * topCardsPerPage + topCardsPerPage
                 );
                 const renderCardRow = (card, i) => (
-                  <div key={i} className={isGlass ? "flex items-center justify-between rounded-2xl border border-white/[0.045] bg-white/[0.02] px-4 py-3" : "flex items-center justify-between gap-3 rounded-2xl bg-[var(--dp-bg)] px-4 py-3"}>
-                    <div className="flex items-center gap-3">
+                  <div key={i} className={isGlass ? "flex items-center justify-between gap-3 rounded-2xl border border-white/[0.045] bg-white/[0.02] px-4 py-3" : "flex items-center justify-between gap-3 rounded-2xl bg-[var(--dp-bg)] px-4 py-3"}>
+                    <div className="flex min-w-0 items-center gap-3">
                       <CreditCard className={isGlass ? "w-4 h-4 text-[#d8a65a]" : "w-4 h-4 text-[var(--dp-text-secondary)]"} />
                       <div className="min-w-0">
                         <p className={isGlass ? "text-sm text-[#e8e2d6]" : `text-[12px] font-medium truncate max-w-[160px] ${i === 0 ? 'text-[var(--dp-text-primary)]' : 'text-[var(--dp-text-secondary)]'}`}>{card.name}</p>
-                        <p className={isGlass ? "text-xs text-white/20" : "text-[10px] text-[var(--dp-text-label)]"}>{card.txns} txns</p>
+                        <p className={isGlass ? "text-xs text-white/20" : "text-[11px] text-[var(--dp-text-label)]"}>{card.txns} txns</p>
                       </div>
                     </div>
-                    <p className={isGlass ? "text-sm font-medium text-[#d8a65a]" : `text-[12px] font-semibold tabular-nums ${i === 0 ? 'text-[var(--dp-accent)]' : 'text-[var(--dp-text-secondary)]'}`}>${formatWholeMoney(card.amount)}</p>
+                    <p className={isGlass ? "shrink-0 whitespace-nowrap text-sm font-medium text-[#d8a65a]" : `text-[12px] font-semibold tabular-nums ${i === 0 ? 'text-[var(--dp-accent)]' : 'text-[var(--dp-text-secondary)]'}`}>${formatWholeMoney(card.amount)}</p>
                   </div>
                 );
                 return (
@@ -383,7 +383,7 @@ const Dashboard = () => {
                     ? "rounded-[20px] p-5 bg-[#181a1c]/72 border border-white/[0.06] shadow-[0_10px_30px_rgba(0,0,0,0.22)]"
                     : "rounded-[24px] p-6 bg-[var(--dp-card-bg)] dp-elevated"
                   }>
-                    <h3 className={isGlass ? "mb-4 text-[10px] font-medium uppercase tracking-[0.22em] text-white/25" : "text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)] mb-3"}>{isGlass ? 'Payment Methods' : 'Top Cards'}</h3>
+                    <h3 className={isGlass ? "mb-4 text-[11px] font-medium uppercase tracking-[0.22em] text-white/25" : "text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)] mb-3"}>{isGlass ? 'Payment Methods' : 'Top Cards'}</h3>
                     {sourceCards.length === 0 ? (
                       <p className={isGlass ? "text-xs text-white/20" : "text-xs text-[var(--dp-text-secondary)]"}>No payment data yet.</p>
                     ) : (
@@ -413,14 +413,14 @@ const Dashboard = () => {
           ? "rounded-[20px] p-5 bg-[#181a1c]/72 border border-white/[0.06] shadow-[0_10px_30px_rgba(0,0,0,0.22)] pb-10 animate-in fade-in duration-300 fill-mode-both"
           : "rounded-[24px] p-6 bg-[var(--dp-card-bg)] dp-elevated pb-8 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-[700ms] fill-mode-both"
         }>
-          <h3 className={isGlass ? "mb-4 text-[10px] font-medium uppercase tracking-[0.22em] text-white/25" : "text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--dp-text-primary)] mb-4"}>Recent Sales</h3>
+          <h3 className={isGlass ? "mb-4 text-[11px] font-medium uppercase tracking-[0.22em] text-white/25" : "text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--dp-text-primary)] mb-4"}>Recent Sales</h3>
           {recent.length === 0 ? (
             <p className={isGlass ? "text-white/20 text-sm text-center py-6" : "text-[var(--dp-text-secondary)] text-sm text-center py-6"}>No recent sales found.</p>
           ) : (
             <div className={isGlass ? "overflow-x-auto pb-4" : "overflow-x-auto dp-scrollbar pb-4"}>
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className={isGlass ? "border-b border-white/10 text-xs font-semibold text-gray-500 uppercase tracking-wider" : "border-b border-[color:var(--dp-border)] text-[10px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>
+                  <tr className={isGlass ? "border-b border-white/10 text-xs font-semibold text-gray-500 uppercase tracking-wider" : "border-b border-[color:var(--dp-border)] text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>
                     {visibleRecentSalesColumns.map(column => (
                       <th key={column.id} className={`${column.id === 'product' ? 'pb-3 pr-4' : column.id === 'date' ? 'pb-3 pl-4' : 'pb-3 px-4'} font-medium`}>
                         {DEFAULT_DASHBOARD_SETTINGS.recentSalesColumns.find(c => c.id === column.id) && {
@@ -476,7 +476,7 @@ const Dashboard = () => {
                             : 'bg-[var(--dp-green-bg)] text-[var(--dp-green-text)]';
                           return (
                             <td key={column.id} className="py-3 px-4">
-                              <span className={isGlass ? `inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase border ${cls}` : `inline-flex items-center rounded-full px-2.5 py-[3px] text-[9px] font-semibold uppercase tracking-[0.04em] ${premiumStatusClass}`}>
+                              <span className={isGlass ? `inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wider uppercase border ${cls}` : `inline-flex items-center rounded-full px-2.5 py-[3px] text-[11px] font-semibold uppercase tracking-[0.04em] ${premiumStatusClass}`}>
                                 {recordStatusLabel(txn.status || 'SOLD')}
                               </span>
                             </td>
@@ -484,7 +484,7 @@ const Dashboard = () => {
                         }
                         if (column.id === 'date') {
                           return (
-                            <td key={column.id} className={isGlass ? "py-3 pl-4 text-gray-500 text-xs whitespace-nowrap" : "py-3 pl-4 text-[var(--dp-text-label)] text-[10px] whitespace-nowrap"}>
+                            <td key={column.id} className={isGlass ? "py-3 pl-4 text-gray-500 text-xs whitespace-nowrap" : "py-3 pl-4 text-[var(--dp-text-label)] text-[11px] whitespace-nowrap"}>
                               {isGlass ? new Date(txn.date).toLocaleDateString() : formatShortDate(txn.date)}
                             </td>
                           );
@@ -567,7 +567,7 @@ const Dashboard = () => {
                   key={val}
                   type="button"
                   onClick={() => setChartView(val)}
-                  className={`px-2.5 py-1 rounded-md text-[10px] font-medium transition-all ${
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
                     chartView === val
                       ? 'bg-white/[0.08] text-[#e8e2d6] border border-white/[0.10]'
                       : 'text-white/25 hover:text-white/50 border border-transparent'
@@ -609,7 +609,7 @@ const Dashboard = () => {
 
       const paymentCardsCard = (
         <div className="h-full rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-6 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
-          <h3 className="mb-5 text-[10px] font-bold uppercase tracking-[0.22em] text-white/22">Payment Cards</h3>
+          <h3 className="mb-5 text-[11px] font-bold uppercase tracking-[0.22em] text-white/22">Payment Cards</h3>
           <div className="space-y-3">
             {topCards.length === 0 ? (
               <p className="text-xs text-white/22">No payment data yet.</p>
@@ -617,12 +617,12 @@ const Dashboard = () => {
               const maxCardAmount = topCards.reduce((m, c) => Math.max(m, c.amount || 0), 1);
               return (
               <div key={card.name} className="rounded-2xl border border-white/[0.045] bg-white/[0.018] px-4 py-4">
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
                   <div>
                     <p className="text-sm font-semibold text-[#e8e2d6]">{card.name}</p>
-                    <p className="mt-1 text-[10px] text-white/22">{card.txns} txns</p>
+                    <p className="mt-1 text-[11px] text-white/22">{card.txns} txns</p>
                   </div>
-                  <p className="font-serif text-xl font-semibold text-[#d8a65a]">${formatMoney(card.amount)}</p>
+                  <p className="whitespace-nowrap font-serif text-lg font-semibold text-[#d8a65a]">${formatMoney(card.amount)}</p>
                 </div>
                 <div className="mt-4 h-1 rounded-full bg-white/[0.04]">
                   <div
@@ -676,8 +676,8 @@ const Dashboard = () => {
       return (
         <div key="recentSales" className="h-full rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-6 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
           <div className="mb-5 flex items-center justify-between">
-            <h3 className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/22">Recent Sales</h3>
-            <button onClick={() => navigate('/transactions')} className="rounded-lg border border-white/[0.05] bg-white/[0.025] px-3 py-1.5 text-[10px] text-white/24">View all -&gt;</button>
+            <h3 className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/22">Recent Sales</h3>
+            <button onClick={() => navigate('/transactions')} className="rounded-lg border border-white/[0.05] bg-white/[0.025] px-3 py-1.5 text-[11px] text-white/24">View all -&gt;</button>
           </div>
           {recent.length === 0 ? (
             <p className="py-12 text-center font-serif text-sm italic text-white/18">No sales yet - start flipping.</p>
@@ -685,7 +685,7 @@ const Dashboard = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="border-b border-[color:var(--border-default)] text-[10px] font-bold uppercase tracking-wider text-white/18">
+                  <tr className="border-b border-[color:var(--border-default)] text-[11px] font-bold uppercase tracking-wider text-white/18">
                     <th className="pb-3 pr-4">Product</th>
                     <th className="pb-3 px-4">Cost</th>
                     <th className="pb-3 px-4">Sale</th>
@@ -698,7 +698,7 @@ const Dashboard = () => {
                       <td className="py-3 pr-4 font-medium text-[#e8e2d6]">{txn.product}</td>
                       <td className="py-3 px-4 text-white/45">${formatMoney(txn.cost ?? 0)}</td>
                       <td className="py-3 px-4 text-[#d8a65a]">${formatMoney(txn.revenue ?? 0)}</td>
-                      <td className="py-3 pl-4 text-[10px] font-bold uppercase tracking-wider text-white/35">{recordStatusLabel(txn.status || 'SOLD')}</td>
+                      <td className="py-3 pl-4 text-[11px] font-bold uppercase tracking-wider text-white/35">{recordStatusLabel(txn.status || 'SOLD')}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -728,7 +728,7 @@ const Dashboard = () => {
             >
               <IconComponent className="h-3.5 w-3.5 text-white/14" />
               <p className={`mt-6 font-serif text-3xl font-semibold ${item.accent ? 'text-[#d8a65a]' : 'text-[#e8e2d6]'}`}>{item.value}</p>
-              <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/20">{item.label}</p>
+              <p className="mt-2 text-[11px] font-bold uppercase tracking-wider text-white/20">{item.label}</p>
             </button>
           );
         })}
@@ -796,7 +796,7 @@ const Dashboard = () => {
 
   if (isGlass) {
     return (
-      <div className="h-full overflow-auto theme-scrollbar w-full max-w-[1800px] 4xl:max-w-[2100px] mx-auto space-y-5 text-[#e8e2d6]">
+      <div className="h-full overflow-auto theme-scrollbar w-full px-4 py-6 sm:px-6 max-w-[1800px] 4xl:max-w-[2100px] mx-auto space-y-5 text-[#e8e2d6]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between animate-in fade-in duration-300">
           <div>
             <h1 className="text-3xl 3xl:text-4xl font-light tracking-tight text-[#e8e2d6]">Welcome back, {user?.username || 'User'}</h1>
@@ -1093,13 +1093,13 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate })
         <div className="flex items-center gap-2">
           <Target size={12} className={isGlass ? 'text-[#d8a65a]' : 'text-[var(--dp-accent)]'} />
           <h3 className={isGlass
-            ? 'text-[10px] font-medium uppercase tracking-[0.22em] text-white/25'
-            : 'text-[10px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)]'
+            ? 'text-[11px] font-medium uppercase tracking-[0.22em] text-white/25'
+            : 'text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)]'
           }>Goals</h3>
         </div>
         <button
           onClick={onNavigate}
-          className={`text-[9px] transition-colors ${isGlass ? 'text-white/20 hover:text-[#d8a65a]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-accent)]'}`}
+          className={`text-[11px] transition-colors ${isGlass ? 'text-white/20 hover:text-[#d8a65a]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-accent)]'}`}
         >
           View all →
         </button>
@@ -1120,11 +1120,11 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate })
           {/* Metric name + pace */}
           <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-1">
-              <p className={`text-[9px] font-medium uppercase tracking-[0.06em] ${isGlass ? 'text-white/30' : 'text-[var(--dp-text-label)]'}`}>
+              <p className={`text-[11px] font-medium uppercase tracking-[0.06em] ${isGlass ? 'text-white/30' : 'text-[var(--dp-text-label)]'}`}>
                 {meta.label}
               </p>
               {paceLabel && (
-                <span className={`text-[8px] font-semibold ${paceColor}`}>{paceLabel}</span>
+                <span className={`text-[11px] font-semibold ${paceColor}`}>{paceLabel}</span>
               )}
             </div>
 
@@ -1135,11 +1135,11 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate })
 
             {/* Target */}
             {hasTarget ? (
-              <p className={`text-[10px] mt-0.5 ${isGlass ? 'text-white/25' : 'text-[var(--dp-text-secondary)]'}`}>
+              <p className={`text-[11px] mt-0.5 ${isGlass ? 'text-white/25' : 'text-[var(--dp-text-secondary)]'}`}>
                 of {fmt(target)} goal{dateFilter === 'All Time' && targetPeriod ? ` (${targetPeriod} target, no all-time target set)` : ''}
               </p>
             ) : (
-              <p className={`text-[10px] mt-0.5 ${isGlass ? 'text-white/20' : 'text-[var(--dp-text-secondary)]'}`}>
+              <p className={`text-[11px] mt-0.5 ${isGlass ? 'text-white/20' : 'text-[var(--dp-text-secondary)]'}`}>
                 {noTargetLabel}
               </p>
             )}
@@ -1177,9 +1177,9 @@ function GlassTopMetricCard({ title, value, subtext, highlight, large, onClick }
       onClick={onClick}
       className={`h-full min-h-[134px] rounded-[16px] border bg-[#181a1c]/72 p-6 text-left shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-colors hover:bg-[#1d1f21]/78 ${highlight ? 'border-[#d8a65a]/16' : 'border-white/[0.06]'}`}
     >
-      <p className={`text-[10px] font-bold uppercase tracking-[0.22em] ${highlight ? 'text-[#d8a65a]/55' : 'text-white/20'}`}>{title}</p>
+      <p className={`text-[11px] font-bold uppercase tracking-[0.22em] ${highlight ? 'text-[#d8a65a]/55' : 'text-white/20'}`}>{title}</p>
       <p className={`mt-3 font-serif font-light leading-none ${large ? 'text-4xl 3xl:text-5xl' : 'text-2xl 3xl:text-3xl'} ${highlight ? 'text-[#d8a65a]' : 'text-[#e8e2d6]'}`}>{value}</p>
-      <p className="mt-3 text-[10px] font-semibold text-white/14">{subtext}</p>
+      <p className="mt-3 text-[11px] font-semibold text-white/14">{subtext}</p>
     </button>
   );
 }
@@ -1211,7 +1211,7 @@ function GlassCircularPipeline({ cards, overflowCards = [], pipeline, onNavigate
 
   return (
     <div className="h-full rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-6 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
-      <h3 className="mb-4 text-[10px] font-bold uppercase tracking-[0.22em] text-white/22">Pipeline</h3>
+      <h3 className="mb-4 text-[11px] font-bold uppercase tracking-[0.22em] text-white/22">Pipeline</h3>
       <div className="flex justify-center">
         <svg width="190" height="168" viewBox="0 0 180 168" aria-label="Status pipeline">
           <circle cx={center} cy={center - 5} r={radius} fill="none" stroke="rgba(255,255,255,0.035)" />
@@ -1249,7 +1249,7 @@ function GlassCircularPipeline({ cards, overflowCards = [], pipeline, onNavigate
           <button
             key={card.id}
             onClick={() => navigateTo(card)}
-            className="rounded-lg border border-[#d8a65a]/14 bg-[#d8a65a]/8 px-3 py-1.5 text-[10px] font-semibold text-[#d8a65a]"
+            className="rounded-lg border border-[#d8a65a]/14 bg-[#d8a65a]/8 px-3 py-1.5 text-[11px] font-semibold text-[#d8a65a]"
           >
             {card.label}: {card.count}
           </button>
@@ -1257,13 +1257,13 @@ function GlassCircularPipeline({ cards, overflowCards = [], pipeline, onNavigate
       </div>
       {overflow.length > 0 && (
         <div className="mt-4 border-t border-white/[0.04] pt-3">
-          <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-white/18">More Statuses</p>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.2em] text-white/18">More Statuses</p>
           <div className="grid grid-cols-2 gap-2">
             {overflow.map(card => (
               <button
                 key={card.id}
                 onClick={() => navigateTo(card)}
-                className="flex items-center justify-between rounded-lg border border-[color:var(--border-default)] bg-white/[0.018] px-2.5 py-2 text-left text-[10px] text-white/24 transition-colors hover:border-[#d8a65a]/14 hover:text-[#e8e2d6]"
+                className="flex items-center justify-between rounded-lg border border-[color:var(--border-default)] bg-white/[0.018] px-2.5 py-2 text-left text-[11px] text-white/24 transition-colors hover:border-[#d8a65a]/14 hover:text-[#e8e2d6]"
               >
                 <span className="truncate">{card.label}</span>
                 <span className="ml-2 font-semibold text-[#d8a65a]">{card.count}</span>
@@ -1333,16 +1333,16 @@ function StatCard({ id, title, modeTag, value, subtext, icon, color, formula = [
     } style={!isGlass && isProfitHero ? { background: 'var(--dp-accent-gradient)' } : undefined}>
       <div className="relative z-10 flex items-start justify-between">
         <div>
-          <p className={isGlass ? "text-[10px] text-white/25 font-medium uppercase tracking-[0.2em]" : `text-[11px] font-medium uppercase tracking-[0.08em] dp-card-title transition-colors duration-300 ${isProfitHero ? 'text-[#ffffff]/75' : 'text-[var(--dp-text-label)]'}`}>
+          <p className={isGlass ? "text-[11px] text-white/25 font-medium uppercase tracking-[0.2em]" : `text-[11px] font-medium uppercase tracking-[0.08em] dp-card-title transition-colors duration-300 ${isProfitHero ? 'text-[#ffffff]/75' : 'text-[var(--dp-text-label)]'}`}>
             {title}
             {modeTag && (
-              <span className={isGlass ? "ml-1.5 text-[9px] font-normal normal-case tracking-normal text-[var(--text-muted)]" : `ml-1.5 text-[10px] font-normal normal-case tracking-normal dp-card-tag transition-colors duration-300 ${isProfitHero ? 'text-[#ffffff]/60' : 'text-[var(--dp-text-label)]'}`}>
+              <span className={isGlass ? "ml-1.5 text-[11px] font-normal normal-case tracking-normal text-[var(--text-muted)]" : `ml-1.5 text-[11px] font-normal normal-case tracking-normal dp-card-tag transition-colors duration-300 ${isProfitHero ? 'text-[#ffffff]/60' : 'text-[var(--dp-text-label)]'}`}>
                 {modeTag}
               </span>
             )}
           </p>
           <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 ${isProfitHero ? 'text-[32px] text-[#ffffff]' : 'text-[22px] text-[var(--dp-text-primary)]'}`}>{value}</p>
-          <p className={isGlass ? "text-[10px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 dp-card-subtext transition-colors duration-300 ${isProfitHero ? 'text-[#ffffff]/70' : 'text-[var(--dp-text-secondary)]'}`}>{subtext}</p>
+          <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 dp-card-subtext transition-colors duration-300 ${isProfitHero ? 'text-[#ffffff]/70' : 'text-[var(--dp-text-secondary)]'}`}>{subtext}</p>
         </div>
         <div className={isGlass ? "w-9 h-9 3xl:w-11 3xl:h-11 rounded-xl bg-white/[0.035] border border-white/[0.05] flex items-center justify-center" : `w-9 h-9 rounded-full flex items-center justify-center dp-card-icon-wrap transition-all duration-300 ${isProfitHero ? 'bg-white/15 text-[#ffffff]' : 'bg-[var(--dp-bg)] text-[var(--dp-text-secondary)]'}`}>
           <IconComponent className={isGlass ? "w-4.5 h-4.5 3xl:w-5 3xl:h-5 text-[#d8a65a]" : "w-4.5 h-4.5 3xl:w-5 3xl:h-5 transition-colors duration-300"} />
@@ -1396,14 +1396,14 @@ function StatCard({ id, title, modeTag, value, subtext, icon, color, formula = [
                   ? `${isGlass ? 'border-white/10' : 'border-[color:var(--dp-border)]'} -top-1.5 border-l border-t`
                   : `${isGlass ? 'border-white/10' : 'border-[color:var(--dp-border)]'} -bottom-1.5 border-r border-b`
               }`} />
-              <p className={isGlass ? `text-[10px] font-medium uppercase tracking-[0.8px] ${textColor}` : `text-[11px] font-semibold uppercase tracking-[0.06em] ${textColor}`}>{title}</p>
+              <p className={isGlass ? `text-[11px] font-medium uppercase tracking-[0.8px] ${textColor}` : `text-[11px] font-semibold uppercase tracking-[0.06em] ${textColor}`}>{title}</p>
               <div className="mt-3 space-y-3">
                 <div>
-                  <p className={isGlass ? "text-[9px] font-medium uppercase tracking-[0.7px] text-[var(--text-muted)]" : "text-[10px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>Calculation</p>
+                  <p className={isGlass ? "text-[11px] font-medium uppercase tracking-[0.7px] text-[var(--text-muted)]" : "text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>Calculation</p>
                   <p className={isGlass ? "mt-1 text-xs font-semibold leading-relaxed text-[var(--text-primary)]" : "mt-1 text-xs font-semibold leading-relaxed text-[var(--dp-text-primary)]"}>{calculation}</p>
                 </div>
                 <div>
-                  <p className={isGlass ? "text-[9px] font-medium uppercase tracking-[0.7px] text-[var(--text-muted)]" : "text-[10px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>Meaning</p>
+                  <p className={isGlass ? "text-[11px] font-medium uppercase tracking-[0.7px] text-[var(--text-muted)]" : "text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>Meaning</p>
                   <p className={isGlass ? "mt-1 text-xs leading-relaxed text-[var(--text-secondary)]" : "mt-1 text-xs leading-relaxed text-[var(--dp-text-secondary)]"}>{description || `${title} is available in the selected dashboard view.`}</p>
                 </div>
               </div>
@@ -1435,7 +1435,7 @@ function PipelineCard({ icon, count, label, statusKey, onNavigate, uiStyle = 'ne
         ? "group relative min-h-[160px] cursor-pointer overflow-hidden rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-5 text-left shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-colors hover:border-[#d8a65a]/18 hover:bg-[#1d1f21]/78"
         : `flex items-center gap-3 rounded-2xl p-4 cursor-pointer border border-[color:var(--dp-border)] ${
             isEmpty
-              ? 'bg-[var(--dp-bg)]/50 opacity-40 hover:opacity-75 transition-opacity'
+              ? 'bg-[var(--dp-bg)]/50 opacity-70 hover:opacity-100 transition-opacity'
               : 'bg-[var(--dp-card-bg)] dp-clickable-pipeline'
           }`
       }
@@ -1446,7 +1446,7 @@ function PipelineCard({ icon, count, label, statusKey, onNavigate, uiStyle = 'ne
             <IconComponent className="h-4 w-4" />
           </div>
           <p className="font-serif text-3xl font-semibold leading-none text-[#d8a65a]">{count}</p>
-          <p className="mt-3 max-w-[75%] text-[10px] font-bold uppercase tracking-wider text-white/20">{label}</p>
+          <p className="mt-3 max-w-[75%] text-[11px] font-bold uppercase tracking-wider text-white/20">{label}</p>
         </>
       ) : (
         <>

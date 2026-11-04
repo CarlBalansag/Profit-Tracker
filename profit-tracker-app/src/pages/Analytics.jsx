@@ -1,3 +1,4 @@
+import StatCard from '../components/UI/StatCard';
 import React, { useState } from 'react';
 import { useDashboard } from '../hooks/useApi';
 import { recordStatusLabel } from '../data/statusWorkflow';
@@ -45,20 +46,10 @@ const THEME = {
   textMuted: 'var(--text-muted)',
 };
 
-const MetricCard = ({ icon: Icon, title, value, subtitle, color, titleColor, valueColor, subtitleColor, topRightIcon: TopRightIcon }) => (
-  <div className="relative p-4 rounded-xl border border-gray-800 bg-[#16161E] overflow-hidden group hover:border-gray-700 transition-colors">
-    {TopRightIcon && (
-      <div className="absolute top-4 right-4"><TopRightIcon size={14} style={{ color }} /></div>
-    )}
-    <div className="relative z-10 flex flex-col h-full">
-      <div className="w-8 h-8 rounded-md flex items-center justify-center mb-3 bg-white/5 border border-white/5">
-        <Icon size={16} style={{ color }} />
-      </div>
-      <div className={`text-[11px] font-bold tracking-wider mb-1 ${titleColor || 'text-gray-400'}`}>{title}</div>
-      <div className={`text-xl font-bold mb-1 ${valueColor || 'text-white'}`}>{value}</div>
-      <div className={`text-[11px] leading-tight ${subtitleColor || 'text-gray-500'} whitespace-pre-line`}>{subtitle}</div>
-    </div>
-  </div>
+const VALUE_TONES = { 'text-green-400': 'green', 'text-red-400': 'red', 'text-yellow-400': 'amber', 'text-amber-400': 'amber', 'text-purple-400': 'accent' };
+
+const MetricCard = ({ icon, title, value, subtitle, color, valueColor }) => (
+  <StatCard label={title} value={value} sub={subtitle} icon={icon} iconColor={color} tone={VALUE_TONES[valueColor] || (valueColor && valueColor !== 'text-white' ? valueColor : 'default')} />
 );
 
 function Analytics() {
@@ -143,7 +134,7 @@ function Analytics() {
   return (
     // The app shell never scrolls; each page owns its scroll container.
     <div className="h-full overflow-auto">
-    <div className="max-w-7xl mx-auto space-y-6 pb-10 px-4 py-6">
+    <div className="w-full max-w-7xl space-y-6 pb-10 px-4 py-6 sm:px-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -167,11 +158,11 @@ function Analytics() {
           <div className="w-px h-6 bg-gray-800 mx-1" />
           <button
             onClick={fetchData}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-800 text-white hover:bg-gray-700 text-sm font-medium transition-colors"
+            className="page-btn page-btn-secondary"
           >
             <RotateCcw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
-          <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-transparent text-gray-400 hover:text-white hover:bg-white/5 text-sm font-medium transition-colors">
+          <button className="page-btn page-btn-secondary">
             <Download size={14} /> Export
           </button>
         </div>
@@ -280,7 +271,7 @@ function Analytics() {
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex-1 min-w-[110px] flex items-center justify-center gap-2 py-2.5 text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
-              activeTab === tab.id ? 'bg-gray-800 text-white shadow-sm' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+              activeTab === tab.id ? 'bg-[var(--accent-bg)] text-[var(--accent)]' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
             }`}
           >
             <tab.icon size={16} /> {tab.label}

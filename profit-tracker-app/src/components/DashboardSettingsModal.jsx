@@ -67,19 +67,19 @@ function FormulaPopup({ formula = [], label, description, onClose }) {
       <div className="mt-3 space-y-3">
         {formula.length > 0 && (
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--dp-text-label)]">Calculation</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--dp-text-label)]">Calculation</p>
             <p className="mt-1 text-xs font-semibold leading-relaxed text-[var(--dp-text-primary)]">{calculation}</p>
           </div>
         )}
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--dp-text-label)]">What It Means</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--dp-text-label)]">What It Means</p>
           <p className="mt-1 text-xs leading-relaxed text-gray-300">{description || `${label} is available in the selected dashboard view.`}</p>
         </div>
       </div>
       <ul className="hidden" aria-hidden="true">
         {formula.map((line, i) => (
           <li key={i} className="flex items-start gap-1.5">
-            <span className="mt-px text-[10px] text-purple-400">›</span>
+            <span className="mt-px text-[11px] text-purple-400">›</span>
             <span className="text-[11px] leading-relaxed text-gray-300">{line}</span>
           </li>
         ))}
@@ -199,9 +199,9 @@ function SectionPanel({
           onClick={onToggle}
           className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
         >
-          <p className={`truncate text-[10px] font-bold uppercase tracking-widest ${visible === false ? 'text-gray-600' : 'text-gray-500'}`}>{title}</p>
+          <p className={`truncate text-[11px] font-bold uppercase tracking-widest ${visible === false ? 'text-gray-600' : 'text-gray-500'}`}>{title}</p>
           <span className="flex shrink-0 items-center gap-2">
-            {meta && <span className="text-[10px] text-gray-600">{meta}</span>}
+            {meta && <span className="text-[11px] text-gray-600">{meta}</span>}
             {collapsed ? (
               <ChevronDown className="h-3.5 w-3.5 text-gray-600" />
             ) : (
@@ -233,8 +233,8 @@ function InfoPreviewCard({ variant, title, children }) {
   return (
     <div className="rounded-xl border border-white/[0.08] bg-[#151820] p-4 shadow-xl">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Style {variant}</p>
-        <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] text-gray-500">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Style {variant}</p>
+        <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[11px] text-gray-500">
           {title}
         </span>
       </div>
@@ -247,7 +247,7 @@ function InfoPopoverPreviews() {
   return (
     <section className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
       <div className="mb-3">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Info Popover Preview</p>
+        <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Info Popover Preview</p>
         <p className="mt-1 text-[11px] text-gray-600">Visual options for the small explanation popups on dashboard metrics.</p>
       </div>
 
@@ -255,7 +255,7 @@ function InfoPopoverPreviews() {
         <InfoPreviewCard variant="1" title="Formula Card">
           <p className="text-xs font-semibold uppercase tracking-wider text-blue-300">Total Cost</p>
           <div className="mt-3 rounded-lg bg-black/20 p-3">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Formula</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Formula</p>
             <p className="mt-1 text-sm font-semibold text-white">Item Cost + Tax + Shipping</p>
           </div>
           <div className="mt-3 space-y-1.5 text-xs text-gray-400">
@@ -269,7 +269,7 @@ function InfoPopoverPreviews() {
           <p className="text-xs font-semibold uppercase tracking-wider text-blue-300">Total Cost</p>
           <p className="mt-3 text-sm font-medium text-white">The full amount spent to buy this inventory.</p>
           <div className="mt-4">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-gray-500">Includes</p>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-500">Includes</p>
             <div className="flex flex-wrap gap-2">
               {['Item price', 'Sales tax', 'Inbound shipping'].map(item => (
                 <span key={item} className="rounded-md border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-xs text-gray-300">{item}</span>
@@ -282,15 +282,15 @@ function InfoPopoverPreviews() {
           <p className="text-xs font-semibold uppercase tracking-wider text-blue-300">Total Cost</p>
           <div className="mt-3 space-y-3">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Definition</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Definition</p>
               <p className="mt-1 text-xs leading-relaxed text-gray-300">Total purchase spend for inventory in the selected date range.</p>
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Calculation</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Calculation</p>
               <p className="mt-1 text-xs font-semibold text-white">(Unit Price x Qty) + Tax + Shipping</p>
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Used For</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Used For</p>
               <p className="mt-1 text-xs leading-relaxed text-gray-300">Tracking how much cash went into inventory.</p>
             </div>
           </div>
@@ -314,7 +314,7 @@ function InfoPopoverPreviews() {
           <p className="mt-3 text-xs text-gray-500">Formula</p>
           <p className="mt-1 text-sm font-semibold text-white">Item Cost + Tax + Shipping</p>
           <div className="mt-4 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.04] p-3">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">Example</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">Example</p>
             <p className="mt-1 text-xs leading-relaxed text-gray-300">$100 item + $8 tax + $5 shipping = <span className="font-semibold text-emerald-300">$113 total cost</span></p>
           </div>
         </InfoPreviewCard>
@@ -769,7 +769,7 @@ export default function DashboardSettingsModal({ settings, onClose, onSave, uiSt
           <div className="space-y-5">
             <div className="flex flex-wrap gap-3">
               <div className="w-full max-w-xs rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">Default Time Frame</p>
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">Default Time Frame</p>
                 <select
                   value={local.defaultDateFilter}
                   onChange={e => setLocal(prev => ({ ...prev, defaultDateFilter: e.target.value }))}
@@ -786,7 +786,7 @@ export default function DashboardSettingsModal({ settings, onClose, onSave, uiSt
                 return (
                   <div className="flex items-center justify-between gap-4 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-4 self-stretch min-w-[200px]">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Payment Methods</p>
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Payment Methods</p>
                       <p className="mt-0.5 text-[11px] text-gray-600">{isVisible ? 'Visible on dashboard' : 'Hidden from dashboard'}</p>
                     </div>
                     <button
@@ -812,7 +812,7 @@ export default function DashboardSettingsModal({ settings, onClose, onSave, uiSt
                 return (
                   <div className="flex items-center justify-between gap-4 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-4 self-stretch min-w-[200px]">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Goals</p>
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Goals</p>
                       <p className="mt-0.5 text-[11px] text-gray-600">{isVisible ? 'Visible on dashboard' : 'Hidden from dashboard'}</p>
                     </div>
                     <button
@@ -836,7 +836,7 @@ export default function DashboardSettingsModal({ settings, onClose, onSave, uiSt
                 return (
                   <div className="flex items-center justify-between gap-4 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-4 self-stretch min-w-[280px]">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Glass Metric</p>
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Glass Metric</p>
                       <p className="mt-0.5 text-[11px] text-gray-600">{count} tile group{count > 1 ? 's' : ''}</p>
                     </div>
                     <div className="flex items-center gap-1.5">

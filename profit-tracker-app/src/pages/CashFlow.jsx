@@ -1,3 +1,4 @@
+import StatCard from '../components/UI/StatCard';
 import React, { useState } from 'react';
 import { useDashboard } from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
@@ -73,7 +74,7 @@ function CashFlow() {
   return (
     // The app shell never scrolls; each page owns its scroll container.
     <div className="h-full overflow-auto">
-    <div className="max-w-6xl mx-auto space-y-8 pb-10 px-4 py-6">
+    <div className="w-full max-w-6xl space-y-8 pb-10 px-4 py-6 sm:px-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -82,7 +83,7 @@ function CashFlow() {
         </div>
         <button
           onClick={refetch}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-800 text-white hover:bg-gray-700 text-sm font-medium transition-colors"
+          className="page-btn page-btn-secondary"
         >
           <RotateCcw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
         </button>
@@ -90,40 +91,27 @@ function CashFlow() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-xl p-5 border border-gray-800 flex justify-between items-start" style={{ backgroundColor: 'var(--accent-bg)' }}>
-          <div>
-            <h3 className="text-[11px] font-bold text-[#60a5fa] uppercase tracking-wider mb-2">Spending Out</h3>
-            <div className="text-xl font-bold text-blue-400 mb-1">{loading ? '…' : `$${fmt(spendingOut)}`}</div>
-            <p className="text-[11px] text-blue-400/60">{s.transactionCount ?? 0} items purchased</p>
-            {s.storeRefunds > 0 && <p className="text-[11px] text-blue-400/60">after ${fmt(s.storeRefunds)} refunded by stores</p>}
-          </div>
-          <div className="w-8 h-8 rounded-full border border-blue-500/30 flex items-center justify-center bg-blue-500/10">
-            <DollarSign size={14} className="text-blue-400" />
-          </div>
-        </div>
-
-        <div className="rounded-xl p-5 border border-gray-800 flex justify-between items-start" style={{ backgroundColor: 'var(--green-bg)' }}>
-          <div>
-            <h3 className="text-[11px] font-bold text-[#4ade80] uppercase tracking-wider mb-2">Coming Back</h3>
-            <div className="text-xl font-bold text-green-400 mb-1">{loading ? '…' : `$${fmt(comingBack)}`}</div>
-            <p className="text-[11px] text-green-400/60">net after buyer fees{includeCashback ? ' + cashback' : ''}</p>
-            {s.buyerRefunds > 0 && <p className="text-[11px] text-green-400/60">after ${fmt(s.buyerRefunds)} refunded to buyers</p>}
-          </div>
-          <div className="w-8 h-8 rounded-full border border-green-500/30 flex items-center justify-center bg-green-500/10">
-            <ArrowRight size={14} className="text-green-400" />
-          </div>
-        </div>
-
-        <div className="rounded-xl p-5 border border-gray-800 flex justify-between items-start" style={{ backgroundColor: 'var(--accent-bg)' }}>
-          <div>
-            <h3 className="text-[11px] font-bold text-[#c084fc] uppercase tracking-wider mb-2">Owed To You</h3>
-            <div className="text-xl font-bold text-purple-400 mb-1">{loading ? '…' : `$${fmt(owedRevenue)}`}</div>
-            <p className="text-[11px] text-purple-400/60">unpaid / in-transit sales</p>
-          </div>
-          <div className="w-8 h-8 rounded-full border border-purple-500/30 flex items-center justify-center bg-purple-500/10">
-            <DollarSign size={14} className="text-purple-400" />
-          </div>
-        </div>
+        <StatCard
+          label="Spending Out"
+          value={loading ? '…' : `$${fmt(spendingOut)}`}
+          sub={<>{s.transactionCount ?? 0} items purchased{s.storeRefunds > 0 && <span className="block">after ${fmt(s.storeRefunds)} refunded by stores</span>}</>}
+          icon={DollarSign}
+          tone="accent"
+        />
+        <StatCard
+          label="Coming Back"
+          value={loading ? '…' : `$${fmt(comingBack)}`}
+          sub={<>net after buyer fees{includeCashback ? ' + cashback' : ''}{s.buyerRefunds > 0 && <span className="block">after ${fmt(s.buyerRefunds)} refunded to buyers</span>}</>}
+          icon={ArrowRight}
+          tone="green"
+        />
+        <StatCard
+          label="Owed To You"
+          value={loading ? '…' : `$${fmt(owedRevenue)}`}
+          sub="unpaid / in-transit sales"
+          icon={DollarSign}
+          tone="accent"
+        />
       </div>
 
       {/* Progress Section */}

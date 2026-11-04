@@ -59,9 +59,9 @@ function EventPill({ eventInfo }) {
         borderRadius: '50%',
         backgroundColor: color,
       }} />
-      <span style={{
+      <span className="calendar-event-text" style={{
         color: color,
-        fontSize: '10px',
+        fontSize: '11px',
         fontWeight: 600,
         overflow: 'hidden',
         textOverflow: 'ellipsis',
@@ -162,7 +162,7 @@ function SubscribePanel({ onClose }) {
           <p><span className="text-[var(--dp-text-primary)] font-medium">Outlook:</span> Add calendar → Subscribe from web → paste the link above</p>
         </div>
 
-        <p className="text-[10px] text-[var(--dp-text-muted)]">
+        <p className="text-[11px] text-[var(--dp-text-muted)]">
           Keep this link private — anyone with it can view your calendar events. If you subscribed before this update, replace the old link with this one.
         </p>
 
@@ -237,21 +237,25 @@ export default function Calendar() {
   const goToday = () => calendarRef.current?.getApi().today();
 
   // Title label for header
+  const monthEvents = [...autoEvents, ...manualEvents]
+    .filter(ev => ev.date?.startsWith(currentMonth))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
   const monthLabel = new Date(currentMonth + '-15').toLocaleDateString('en-US', {
     month: 'long', year: 'numeric',
   });
 
   return (
-    <div className="flex flex-col h-full min-h-0 p-4 md:p-6 gap-4">
+    <div className="flex flex-col h-full min-h-0 overflow-y-auto lg:overflow-hidden px-4 py-6 sm:px-6 gap-4">
       {/* ── Page header ───────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Reselling Calendar</h1>
+          <h1 className="text-2xl font-bold text-white">Calendar</h1>
           <p className="text-xs text-[var(--dp-text-muted)] mt-0.5">Track purchases, sales, payouts and custom events</p>
         </div>
         <button
           onClick={() => setShowSubscribe(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] bg-[var(--dp-card-bg)] rounded-lg transition-colors shadow-xs"
+          className="page-btn page-btn-secondary"
         >
           <Link2 size={13} />
           Subscribe to Calendar
@@ -288,7 +292,7 @@ export default function Calendar() {
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* Legend */}
           <div className="hidden lg:flex flex-col gap-3 px-4 py-4 border-r border-[color:var(--dp-border)] min-w-[140px] w-36 bg-[var(--dp-card-bg)]">
-            <p className="text-[9px] font-semibold uppercase tracking-widest text-[var(--dp-text-label)]">Legend</p>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--dp-text-label)]">Legend</p>
             {[
               { color: '#2563eb', label: 'Purchase',  icon: ShoppingBag },
               { color: '#16a34a', label: 'Sale',       icon: DollarSign },
@@ -317,14 +321,18 @@ export default function Calendar() {
             <style>{`
               .calendar-wrapper a { color: inherit; text-decoration: none; }
               .calendar-wrapper [class*="fc-"] { font-size: 11px; color: var(--dp-text-secondary); }
-              .calendar-wrapper [role="columnheader"] { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dp-text-label) !important; padding: 8px 0 !important; background: var(--dp-bg) !important; border-color: var(--dp-border) !important; }
+              .calendar-wrapper [role="columnheader"] { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dp-text-label) !important; padding: 8px 0 !important; background: var(--dp-bg) !important; border-color: var(--dp-border) !important; }
               .calendar-wrapper [role="gridcell"] { border: 1px solid var(--dp-border) !important; min-height: 100px !important; vertical-align: top !important; background-color: var(--dp-card-bg) !important; }
               .calendar-wrapper [role="gridcell"][aria-current="date"] { background-color: var(--dp-accent-bg) !important; box-shadow: inset 0 0 0 1px var(--dp-accent) !important; }
-              .calendar-wrapper [class*="moreLinkText"], .calendar-wrapper [class*="moreLink"] { color: var(--dp-text-muted) !important; font-size: 10px !important; }
+              .calendar-wrapper [class*="moreLinkText"], .calendar-wrapper [class*="moreLink"] { color: var(--dp-text-muted) !important; font-size: 11px !important; }
               .calendar-wrapper .fc-theme-standard td, .calendar-wrapper .fc-theme-standard th { border-color: var(--dp-border) !important; }
               .calendar-wrapper .fc-scrollgrid { border-color: var(--dp-border) !important; }
               .calendar-wrapper .fc-daygrid-day-frame { background-color: var(--dp-card-bg); }
               .calendar-wrapper .fc-day-other { background-color: var(--dp-bg) !important; opacity: 0.6; }
+              @media (max-width: 767px) {
+                .calendar-wrapper .calendar-event-text { display: none; }
+                .calendar-wrapper [role="gridcell"] { min-height: 64px !important; }
+              }
             `}</style>
             <FullCalendar
               ref={calendarRef}
@@ -352,6 +360,26 @@ export default function Calendar() {
           </div>
         </div>
       </div>
+
+      {/* Phone: month cells only have room for dots, so the events are listed here */}
+      {monthEvents.length > 0 && (
+        <div className="md:hidden rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] divide-y divide-[color:var(--dp-border)]">
+          {monthEvents.map(ev => (
+            <button
+              key={ev.id}
+              type="button"
+              onClick={() => setPopover({ date: ev.date, events: [...autoEvents, ...manualEvents].filter(e => e.date === ev.date) })}
+              className="flex w-full items-center gap-3 px-4 py-3 text-left"
+            >
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: eventBgColor(ev) }} />
+              <span className="min-w-0 flex-1 truncate text-sm text-[var(--dp-text-primary)]">{ev.title}</span>
+              <span className="shrink-0 text-xs text-[var(--dp-text-secondary)]">
+                {new Date(`${ev.date.slice(0, 10)}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Mobile Add button ─────────────────────────────────────────────── */}
       <div className="lg:hidden flex justify-end">

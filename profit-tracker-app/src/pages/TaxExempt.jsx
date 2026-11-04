@@ -1,3 +1,4 @@
+import StatCard from '../components/UI/StatCard';
 import { formatMoney } from '../utils/money';
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
@@ -154,7 +155,7 @@ const TaxExempt = () => {
   return (
     // The app shell never scrolls; each page owns its scroll container.
     <div className="h-full overflow-auto">
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
+    <div className="w-full max-w-6xl space-y-6 px-4 py-6 sm:px-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
@@ -186,77 +187,65 @@ const TaxExempt = () => {
 
       {/* Top row — 4 primary metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="card p-4">
-          <div className="flex items-center mb-1">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Tax-Exempt Sales</p>
-            <InfoTooltip text="Total revenue from sales marked as non-taxable (taxable = No)." />
-          </div>
-          <p className="text-2xl font-bold text-green-400">${formatMoney(exemptRevenue)}</p>
-          <p className="text-xs text-gray-600 mt-0.5">Non-taxable sales</p>
-        </div>
-        <div className="card p-4">
-          <div className="flex items-center mb-1">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Exempt Sales %</p>
-            <InfoTooltip text="Percentage of your total sale transactions that are non-taxable." />
-          </div>
-          <p className="text-2xl font-bold text-blue-400">{exemptSalesPct.toFixed(1)}%</p>
-          <p className="text-xs text-gray-600 mt-0.5">of total transactions</p>
-        </div>
-        <div className="card p-4">
-          <div className="flex items-center mb-1">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Use Tax Due</p>
-            <InfoTooltip text="Sales tax you paid when purchasing exempt inventory. This may be reportable or recoverable depending on your state." />
-          </div>
-          <p className="text-2xl font-bold text-amber-400">${formatMoney(useTaxDue)}</p>
-          <p className="text-xs text-gray-600 mt-0.5">From exempt purchases</p>
-        </div>
-        <div className="card p-4">
-          <div className="flex items-center mb-1">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Exempt Transactions</p>
-            <InfoTooltip text="Total number of individual sale records where the sale was marked non-taxable." />
-          </div>
-          <p className="text-2xl font-bold text-white">{nonTaxableSales.length}</p>
-          <p className="text-xs text-gray-600 mt-0.5">Non-taxable sale records</p>
-        </div>
+        <StatCard
+          label="Tax-Exempt Sales"
+          info={<InfoTooltip text="Total revenue from sales marked as non-taxable (taxable = No)." />}
+          value={`$${formatMoney(exemptRevenue)}`}
+          tone="green"
+          sub="Non-taxable sales"
+        />
+        <StatCard
+          label="Exempt Sales %"
+          info={<InfoTooltip text="Percentage of your total sale transactions that are non-taxable." />}
+          value={`${exemptSalesPct.toFixed(1)}%`}
+          tone="accent"
+          sub="of total transactions"
+        />
+        <StatCard
+          label="Use Tax Due"
+          info={<InfoTooltip text="Sales tax you paid when purchasing exempt inventory. This may be reportable or recoverable depending on your state." />}
+          value={`$${formatMoney(useTaxDue)}`}
+          tone="amber"
+          sub="From exempt purchases"
+        />
+        <StatCard
+          label="Exempt Transactions"
+          info={<InfoTooltip text="Total number of individual sale records where the sale was marked non-taxable." />}
+          value={nonTaxableSales.length}
+          sub="Non-taxable sale records"
+        />
       </div>
 
       {/* Second row — 5 smaller inventory/P&L metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 -mt-2">
-        <div className="card px-3 py-2.5">
-          <div className="flex items-center mb-0.5">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Exempt Inv. Purchased</p>
-            <InfoTooltip text="Total amount spent buying tax-exempt inventory (unit cost × qty + tax + inbound shipping)." />
-          </div>
-          <p className="text-base font-bold text-white">${formatMoney(exemptInventorySpend)}</p>
-        </div>
-        <div className="card px-3 py-2.5">
-          <div className="flex items-center mb-0.5">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Exempt COGS</p>
-            <InfoTooltip text="Cost of goods sold — unit purchase cost × quantity sold for exempt inventory items." />
-          </div>
-          <p className="text-base font-bold text-white">${formatMoney(exemptCOGS)}</p>
-        </div>
-        <div className="card px-3 py-2.5">
-          <div className="flex items-center mb-0.5">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Exempt Revenue</p>
-            <InfoTooltip text="Total sale revenue generated from tax-exempt inventory items." />
-          </div>
-          <p className="text-base font-bold text-green-400">${formatMoney(exemptRevenue)}</p>
-        </div>
-        <div className="card px-3 py-2.5">
-          <div className="flex items-center mb-0.5">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Fees &amp; Shipping</p>
-            <InfoTooltip text="Platform commission fees plus outbound sale shipping, deducted from revenue to reach Exempt Profit." />
-          </div>
-          <p className="text-base font-bold text-amber-400">−${formatMoney(exemptFeesAndShipping)}</p>
-        </div>
-        <div className="card px-3 py-2.5">
-          <div className="flex items-center mb-0.5">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Exempt Profit</p>
-            <InfoTooltip text="Revenue minus COGS minus platform fees and shipping for all exempt inventory sales." />
-          </div>
-          <p className={`text-base font-bold ${exemptProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${formatMoney(exemptProfit)}</p>
-        </div>
+        <StatCard
+          label="Exempt Inv. Purchased"
+          info={<InfoTooltip text="Total amount spent buying tax-exempt inventory (unit cost × qty + tax + inbound shipping)." />}
+          value={`$${formatMoney(exemptInventorySpend)}`}
+        />
+        <StatCard
+          label="Exempt COGS"
+          info={<InfoTooltip text="Cost of goods sold — unit purchase cost × quantity sold for exempt inventory items." />}
+          value={`$${formatMoney(exemptCOGS)}`}
+        />
+        <StatCard
+          label="Exempt Revenue"
+          info={<InfoTooltip text="Total sale revenue generated from tax-exempt inventory items." />}
+          value={`$${formatMoney(exemptRevenue)}`}
+          tone="green"
+        />
+        <StatCard
+          label="Fees &amp; Shipping"
+          info={<InfoTooltip text="Platform commission fees plus outbound sale shipping, deducted from revenue to reach Exempt Profit." />}
+          value={`−$${formatMoney(exemptFeesAndShipping)}`}
+          tone="amber"
+        />
+        <StatCard
+          label="Exempt Profit"
+          info={<InfoTooltip text="Revenue minus COGS minus platform fees and shipping for all exempt inventory sales." />}
+          value={`$${formatMoney(exemptProfit)}`}
+          tone={exemptProfit >= 0 ? 'green' : 'red'}
+        />
       </div>
 
       {/* Chrome-style tabs + Search row */}
@@ -277,7 +266,7 @@ const TaxExempt = () => {
               >
                 {React.createElement(icon, { className: `w-4 h-4 ${active ? 'text-blue-400' : ''}` })}
                 {label}
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
                   active ? 'bg-blue-500/20 text-blue-300' : 'bg-white/5 text-gray-500'
                 }`}>
                   {count}
@@ -315,7 +304,7 @@ const TaxExempt = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/[0.06] text-[10px] uppercase tracking-wider text-gray-500">
+                  <tr className="border-b border-white/[0.06] text-[11px] uppercase tracking-wider text-gray-500">
                     <th className="px-4 py-3 text-left">Product Name</th>
                     <th className="px-4 py-3 text-left">Date</th>
                     <th className="px-4 py-3 text-left">Vendor</th>
@@ -363,7 +352,7 @@ const TaxExempt = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/[0.06] text-[10px] uppercase tracking-wider text-gray-500">
+                  <tr className="border-b border-white/[0.06] text-[11px] uppercase tracking-wider text-gray-500">
                     <th className="px-4 py-3 text-left">Product</th>
                     <th className="px-4 py-3 text-left">Date Sold</th>
                     <th className="px-4 py-3 text-left">Place Sold</th>
@@ -386,7 +375,7 @@ const TaxExempt = () => {
                         <td className="px-4 py-3 text-gray-400">{sale.platform?.name || '—'}</td>
                         <td className="px-4 py-3 text-right text-green-400 font-medium">${formatMoney(saleTotal)}</td>
                         <td className="px-4 py-3 text-center">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border ${sale.taxable ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-gray-500/10 text-gray-400 border-gray-500/20'}`}>
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wider border ${sale.taxable ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-gray-500/10 text-gray-400 border-gray-500/20'}`}>
                             {sale.taxable ? 'Yes' : 'No'}
                           </span>
                         </td>
@@ -394,7 +383,7 @@ const TaxExempt = () => {
                           {sale.sale_tax_collected > 0 ? `$${formatMoney(Number(sale.sale_tax_collected))}` : '—'}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border ${sale.customer_tax_exempt ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-gray-500/10 text-gray-400 border-gray-500/20'}`}>
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wider border ${sale.customer_tax_exempt ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-gray-500/10 text-gray-400 border-gray-500/20'}`}>
                             {sale.customer_tax_exempt ? 'Yes' : 'No'}
                           </span>
                         </td>

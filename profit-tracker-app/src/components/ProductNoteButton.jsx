@@ -150,7 +150,7 @@ const ProductNoteButton = ({ productName }) => {
           )}
 
           {/* Character count */}
-          <p className="text-[10px] text-[var(--dp-text-muted)] text-right -mt-1">{draft.length}/2000</p>
+          <p className="text-[11px] text-[var(--dp-text-muted)] text-right -mt-1">{draft.length}/2000</p>
 
           {/* Actions */}
           <div className="flex items-center gap-2">
@@ -175,7 +175,7 @@ const ProductNoteButton = ({ productName }) => {
             )}
           </div>
 
-          <p className="text-[10px] text-[var(--dp-text-muted)]">Ctrl+Enter to save · Esc to close</p>
+          <p className="text-[11px] text-[var(--dp-text-muted)]">Ctrl+Enter to save · Esc to close</p>
         </div>
       )}
     </div>

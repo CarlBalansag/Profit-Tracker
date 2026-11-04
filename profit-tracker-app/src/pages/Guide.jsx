@@ -69,22 +69,18 @@ const Guide = () => {
   const { start } = useTutorial();
 
   return (
-    <div className="h-full overflow-auto px-4 py-6 sm:px-6 max-w-3xl mx-auto space-y-10">
+    <div className="h-full overflow-auto">
+    <div className="w-full max-w-3xl px-4 py-6 sm:px-6 space-y-10">
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400">
-            <BookOpen className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">Guide</h1>
-            <p className="text-gray-400 text-sm mt-0.5">Everything you need to know about Profit Tracker.</p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Guide</h1>
+          <p className="text-gray-400 text-sm mt-0.5">Everything you need to know about Profit Tracker.</p>
         </div>
         <button
           onClick={start}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors"
+          className="page-btn page-btn-secondary"
         >
           <Play className="w-4 h-4" />
           Replay Introduction Tour
@@ -308,6 +304,7 @@ const Guide = () => {
         </div>
       </section>
 
+    </div>
     </div>
   );
 };

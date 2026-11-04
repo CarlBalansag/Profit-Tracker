@@ -86,7 +86,7 @@ function PillRadio({ options, value, onChange, isGlass, size = 'md' }) {
             type="button"
             onClick={() => onChange(opt.value)}
             className={`relative flex-1 rounded-[9px] transition-all duration-200 font-medium select-none ${
-              isSmall ? 'py-1 text-[10px]' : 'py-1.5 text-[11px]'
+              isSmall ? 'py-1 text-[11px]' : 'py-1.5 text-[11px]'
             } ${active
               ? isGlass
                 ? 'bg-[#d8a65a]/20 text-[#d8a65a] shadow-sm'
@@ -134,7 +134,7 @@ function PaceBadge({ status, isGlass }) {
   };
   const { label, cls } = cfg[status] || cfg.nodata;
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${cls}`}>
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${cls}`}>
       {label}
     </span>
   );
@@ -203,8 +203,8 @@ function GoalModal({ goal, onSave, onClose, isGlass, isSaving }) {
 
           <div>
             <label className={isGlass
-              ? 'block text-[10px] font-semibold uppercase tracking-wider text-white/30 mb-1.5'
-              : 'block text-[10px] font-medium uppercase tracking-[0.7px] text-[var(--text-muted)] mb-1.5'
+              ? 'block text-[11px] font-semibold uppercase tracking-wider text-white/30 mb-1.5'
+              : 'block text-[11px] font-medium uppercase tracking-[0.7px] text-[var(--text-muted)] mb-1.5'
             }>
               {tab} target{metaDef.prefix ? ` (${metaDef.prefix})` : metaDef.suffix.trim() ? ` (${metaDef.suffix.trim()})` : ''}
             </label>
@@ -230,8 +230,8 @@ function GoalModal({ goal, onSave, onClose, isGlass, isSaving }) {
                 if (!val || isNaN(num) || num <= 0) return null;
                 return (
                   <div key={p.value} className="flex justify-between">
-                    <span className={`text-[10px] ${isGlass ? 'text-white/30' : 'text-[var(--text-muted)]'}`}>{p.label}</span>
-                    <span className={`text-[10px] font-semibold ${isGlass ? 'text-[#e8e2d6]' : 'text-[var(--text-primary)]'}`}>
+                    <span className={`text-[11px] ${isGlass ? 'text-white/30' : 'text-[var(--text-muted)]'}`}>{p.label}</span>
+                    <span className={`text-[11px] font-semibold ${isGlass ? 'text-[#e8e2d6]' : 'text-[var(--text-primary)]'}`}>
                       {metaDef.prefix}{num.toLocaleString()}{metaDef.suffix}
                     </span>
                   </div>
@@ -371,13 +371,13 @@ function GoalCard({ metaDef, goal, getStats, trend, isGlass, onEdit, onToggleAct
         </div>
         <div className="flex flex-col gap-1.5">
           <div>
-            <p className={`text-[10px] ${isGlass ? 'text-white/25' : 'text-[var(--text-muted)]'}`}>Current</p>
+            <p className={`text-[11px] ${isGlass ? 'text-white/25' : 'text-[var(--text-muted)]'}`}>Current</p>
             <p className={`text-xl font-semibold tabular-nums ${isGlass ? 'text-[#e8e2d6]' : 'text-[var(--text-primary)]'}`}>
               {fmt(current)}
             </p>
           </div>
           <div>
-            <p className={`text-[10px] ${isGlass ? 'text-white/25' : 'text-[var(--text-muted)]'}`}>Target</p>
+            <p className={`text-[11px] ${isGlass ? 'text-white/25' : 'text-[var(--text-muted)]'}`}>Target</p>
             <p className={`text-sm tabular-nums ${isGlass ? 'text-white/40' : 'text-[var(--text-secondary)]'}`}>
               {hasTarget
                 ? fmt(periodTarget)
@@ -394,13 +394,13 @@ function GoalCard({ metaDef, goal, getStats, trend, isGlass, onEdit, onToggleAct
       {/* Stats row */}
       <div className={`mt-4 grid grid-cols-2 gap-2 rounded-xl p-3 ${isGlass ? 'bg-white/[0.03] border border-white/[0.05]' : 'bg-[var(--bg-elevated)]'}`}>
         <div className="text-center">
-          <p className={`text-[9px] font-medium uppercase tracking-wider mb-0.5 ${isGlass ? 'text-white/22' : 'text-[var(--text-muted)]'}`}>Period</p>
+          <p className={`text-[11px] font-medium uppercase tracking-wider mb-0.5 ${isGlass ? 'text-white/22' : 'text-[var(--text-muted)]'}`}>Period</p>
           <p className={`text-[11px] font-semibold tabular-nums ${isGlass ? 'text-[#e8e2d6]' : 'text-[var(--text-primary)]'}`}>
             {viewPeriod}
           </p>
         </div>
         <div className="text-center">
-          <p className={`text-[9px] font-medium uppercase tracking-wider mb-0.5 ${isGlass ? 'text-white/22' : 'text-[var(--text-muted)]'}`}>Streak</p>
+          <p className={`text-[11px] font-medium uppercase tracking-wider mb-0.5 ${isGlass ? 'text-white/22' : 'text-[var(--text-muted)]'}`}>Streak</p>
           <p className={`text-[11px] font-semibold tabular-nums flex items-center justify-center gap-0.5 ${isGlass ? 'text-[#d8a65a]' : 'text-[var(--accent)]'}`}>
             {streak > 0 ? <><Flame size={11} />{streak}</> : '—'}
           </p>
@@ -416,7 +416,7 @@ function GoalCard({ metaDef, goal, getStats, trend, isGlass, onEdit, onToggleAct
           />
         </div>
         <div className="flex justify-end mt-1">
-          <p className={`text-[9px] ${isGlass ? 'text-white/18' : 'text-[var(--text-muted)]'}`}>
+          <p className={`text-[11px] ${isGlass ? 'text-white/18' : 'text-[var(--text-muted)]'}`}>
             {hasTarget ? `${Math.round(truePct)}% of goal` : 'Set a target to track progress'}
           </p>
         </div>
@@ -487,14 +487,11 @@ export default function Goals() {
     : null;
 
   return (
-    <div className={`h-full overflow-auto theme-scrollbar px-4 py-6 sm:px-6 w-full max-w-[1400px] mx-auto space-y-6 ${isGlass ? 'text-[#e8e2d6]' : 'bg-[var(--bg-base)]'}`}>
+    <div className={`h-full overflow-auto theme-scrollbar px-4 py-6 sm:px-6 w-full space-y-6 ${isGlass ? 'text-[#e8e2d6]' : 'bg-[var(--bg-base)]'}`}>
       <div className="animate-in fade-in duration-300">
-        <div className="flex items-center gap-2.5">
-          <Target size={20} className={isGlass ? 'text-[#d8a65a]' : 'text-[var(--accent)]'} />
-          <h1 className={isGlass ? 'text-3xl font-light tracking-tight text-[#e8e2d6]' : 'text-[18px] font-medium tracking-[-0.3px] text-[var(--text-primary)]'}>
-            Goals
-          </h1>
-        </div>
+        <h1 className={isGlass ? 'text-3xl font-light tracking-tight text-[#e8e2d6]' : 'text-[18px] font-medium tracking-[-0.3px] text-[var(--text-primary)]'}>
+          Goals
+        </h1>
         <p className={`mt-1 text-[11px] ${isGlass ? 'text-white/25' : 'text-[var(--text-muted)]'}`}>
           Track your profit, revenue, and sales targets over time
         </p>

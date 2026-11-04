@@ -133,7 +133,7 @@ function buildOptions(points, uiStyle) {
       inactiveColor: isGlass ? 'rgba(232,226,214,0.14)' : 'rgba(120,120,120,0.25)',
       textStyle: {
         color: textSecondary,
-        fontSize: 10,
+        fontSize: 11,
         fontWeight: 500,
       },
       data: SERIES.map(s => ({ name: s.name, itemStyle: { color: s.color } })),
@@ -145,7 +145,7 @@ function buildOptions(points, uiStyle) {
       axisTick: { show: false },
       axisLabel: {
         color: textMuted,
-        fontSize: 10,
+        fontSize: 11,
         margin: 8,
       },
     },
@@ -157,7 +157,7 @@ function buildOptions(points, uiStyle) {
       axisTick: { show: false },
       axisLabel: {
         color: textMuted,
-        fontSize: 10,
+        fontSize: 11,
         formatter: value => money.format(value),
       },
       splitLine: {

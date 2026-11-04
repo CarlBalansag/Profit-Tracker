@@ -15,7 +15,7 @@ export default function ReturnWindowBadge({ item, className = '' }) {
   return (
     <span
       title={`Return by ${toDateOnly(item.return_by_date)}`}
-      className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${TONES[status.tone]} ${className}`}
+      className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap ${TONES[status.tone]} ${className}`}
     >
       <Undo2 className="w-2.5 h-2.5" />
       {status.label}

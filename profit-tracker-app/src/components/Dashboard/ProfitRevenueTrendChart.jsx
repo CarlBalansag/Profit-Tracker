@@ -255,7 +255,7 @@ function buildOptions(points, chartSeries, uiStyle = 'neon-dark', containerWidth
       icon: 'circle',
       textStyle: {
         color: isGlass ? 'rgba(232,226,214,0.38)' : readThemeVar('--dp-text-secondary', '#6B6B76'),
-        fontSize: 9,
+        fontSize: 11,
         fontWeight: 500,
       },
       data: legendData,
@@ -304,7 +304,7 @@ function buildOptions(points, chartSeries, uiStyle = 'neon-dark', containerWidth
       axisTick: { show: false },
       axisLabel: {
         color: isGlass ? 'rgba(232,226,214,0.32)' : readThemeVar('--dp-text-label', '#8E8E99'),
-        fontSize: 10,
+        fontSize: 11,
         fontFamily: isGlass ? 'Inter, ui-sans-serif, system-ui' : undefined,
         margin: 8,
         formatter: value => {
@@ -327,7 +327,7 @@ function buildOptions(points, chartSeries, uiStyle = 'neon-dark', containerWidth
       axisTick: { show: false },
       axisLabel: {
         color: isGlass ? 'rgba(232,226,214,0.32)' : readThemeVar('--dp-text-label', '#8E8E99'),
-        fontSize: 10,
+        fontSize: 11,
         fontFamily: isGlass ? 'Inter, ui-sans-serif, system-ui' : undefined,
         formatter: value => money.format(value),
       },
@@ -421,7 +421,7 @@ export default function ProfitRevenueTrendChart({ stats, trend, trendMeta = null
                 key={val}
                 type="button"
                 onClick={() => onTrendModeChange(val)}
-                className={`px-2.5 py-1 rounded-md text-[10px] font-medium transition-all ${
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
                   trendMode === val
                     ? isGlassStyle
                       ? 'bg-white/[0.08] text-[#e8e2d6] border border-white/[0.10]'

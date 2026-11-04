@@ -140,11 +140,12 @@ const AddSale = () => {
   };
 
   return (
-    <div className="container max-w-5xl 3xl:max-w-6xl mx-auto px-4 py-6 lg:px-6 h-[calc(100vh-80px)] overflow-y-auto">
+    <div className="h-full overflow-y-auto">
+    <div className="w-full max-w-5xl 3xl:max-w-6xl px-4 py-6 sm:px-6">
       
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Record a Sale</h1>
+        <h1 className="text-2xl font-bold text-white">Record Sale</h1>
         <p className="text-gray-400 text-sm mt-1">Select an item from your current inventory to record its sale data and calculate profit.</p>
       </div>
 
@@ -319,7 +320,7 @@ const AddSale = () => {
                           className="px-3 py-2 text-gray-400 hover:text-white transition-colors border-l border-white/10 flex-shrink-0"
                         >+</button>
                       </div>
-                      <p className="text-[10px] text-gray-500 mt-1">Found {selectedItem.qty_on_hand} in stock</p>
+                      <p className="text-[11px] text-gray-500 mt-1">Found {selectedItem.qty_on_hand} in stock</p>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-400 mb-1.5">Sale Price (per unit) *</label>
@@ -348,7 +349,7 @@ const AddSale = () => {
                         <option value="">From payout</option>
                         {paymentMethods.map(pm => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
                       </select>
-                      <p className="text-[10px] text-gray-500 mt-1">No card if the platform took it out of your payout.</p>
+                      <p className="text-[11px] text-gray-500 mt-1">No card if the platform took it out of your payout.</p>
                     </div>
                   </div>
 
@@ -488,7 +489,7 @@ const AddSale = () => {
                     placeholder="e.g. 'Check eBay comps before listing', 'Bought during outlet drop'..."
                     className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-gray-500/50 transition-colors resize-none"
                   />
-                  <p className="text-[10px] text-gray-600 mt-1 text-right">{(formData.note || '').length}/2000</p>
+                  <p className="text-[11px] text-gray-600 mt-1 text-right">{(formData.note || '').length}/2000</p>
                 </div>
               </div>
 
@@ -512,7 +513,7 @@ const AddSale = () => {
 
             </form>
           ) : (
-            <div className="h-full min-h-[400px] border border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center p-8 bg-[#12121A]/50">
+            <div className="min-h-[400px] lg:sticky lg:top-6 border border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center p-8 bg-[#12121A]/50">
                <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
                  <Package className="w-6 h-6 text-gray-600" />
                </div>
@@ -524,6 +525,7 @@ const AddSale = () => {
 
       </div>
 
+    </div>
     </div>
   );
 };

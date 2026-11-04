@@ -125,7 +125,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
               onChange={handleChange}
               className={inputClass('name')}
             />
-            {errors.name && <p className="text-[10px] text-red-500 font-medium mt-1">{errors.name}</p>}
+            {errors.name && <p className="text-[11px] text-red-500 font-medium mt-1">{errors.name}</p>}
           </div>
 
           {/* Type & Issuer */}
@@ -184,7 +184,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
                 onChange={handleChange}
                 className={inputClass('baseRate')}
               />
-              {errors.baseRate && <p className="text-[10px] text-red-500 font-medium mt-1">{errors.baseRate}</p>}
+              {errors.baseRate && <p className="text-[11px] text-red-500 font-medium mt-1">{errors.baseRate}</p>}
             </div>
           </div>
 
@@ -207,7 +207,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
                   onChange={handleChange}
                   className={inputClass('statement_close_day')}
                 />
-                {errors.statement_close_day && <p className="text-[10px] text-red-500 font-medium mt-1">{errors.statement_close_day}</p>}
+                {errors.statement_close_day && <p className="text-[11px] text-red-500 font-medium mt-1">{errors.statement_close_day}</p>}
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Payment Due (Day)</label>
@@ -221,7 +221,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
                   onChange={handleChange}
                   className={inputClass('due_day')}
                 />
-                {errors.due_day && <p className="text-[10px] text-red-500 font-medium mt-1">{errors.due_day}</p>}
+                {errors.due_day && <p className="text-[11px] text-red-500 font-medium mt-1">{errors.due_day}</p>}
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Credit Limit ($)</label>

@@ -61,7 +61,7 @@ function Settings() {
   return (
     // The app shell never scrolls; each page owns its scroll container.
     <div className="h-full overflow-auto px-4 py-6 sm:px-6">
-    <div className="max-w-5xl mx-auto space-y-6 pb-10">
+    <div className="w-full max-w-5xl space-y-6 pb-10">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white tracking-tight">Settings</h1>
@@ -78,16 +78,16 @@ function Settings() {
               onClick={() => { setActiveTab(item.id); setActiveDataSetupView(null); }}
               className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === item.id
-                  ? 'bg-gray-800 text-white shadow-sm border border-gray-700/50'
+                  ? 'bg-[var(--accent-bg)] text-[var(--accent)] border border-transparent'
                   : (item.disabled ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-white hover:bg-white/5')
               }`}
             >
               <div className="flex items-center gap-3">
-                <item.icon size={16} className={activeTab === item.id ? 'text-white' : 'text-gray-500'} />
+                <item.icon size={16} className={activeTab === item.id ? 'text-[var(--accent)]' : 'text-gray-500'} />
                 {item.label}
               </div>
               {item.tag && (
-                <span className="text-[10px] uppercase font-bold text-gray-600">{item.tag}</span>
+                <span className="text-[11px] uppercase font-bold text-gray-600">{item.tag}</span>
               )}
             </button>
           ))}

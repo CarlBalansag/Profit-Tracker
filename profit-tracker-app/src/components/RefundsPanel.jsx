@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { useRefunds, useRefundMutations } from '../hooks/useApi';
 import { localToday, toDateOnly } from '../utils/returnWindow';
 
-const LABEL = 'block text-[10px] font-semibold uppercase tracking-wider text-[var(--dp-text-label,var(--dp-text-secondary))] mb-1';
+const LABEL = 'block text-[11px] font-semibold uppercase tracking-wider text-[var(--dp-text-label,var(--dp-text-secondary))] mb-1';
 const INPUT = 'w-full bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2 text-sm text-[var(--dp-text-primary)] placeholder-[color:var(--dp-text-muted)] focus:outline-none focus:border-[var(--dp-accent)] transition-colors';
 const SMALL_BTN = 'px-2.5 py-1 rounded-md text-xs font-medium transition-colors disabled:opacity-50';
 const ICON_BTN = 'p-1 rounded-md text-[var(--dp-text-muted)] hover:text-[var(--dp-red-text)] hover:bg-[var(--dp-hover-bg)] transition-colors disabled:opacity-50';

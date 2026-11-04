@@ -69,7 +69,7 @@ export const IssuerLogo = ({ issuer, brand, className = 'w-10 h-10' }) => {
   // Fallback: colour box with initials
   return (
     <div className={`${className} ${getIssuerColor(issuer)} rounded-xl flex items-center justify-center shadow-inner flex-shrink-0`}>
-      <span className="text-white font-bold text-[10px] tracking-tighter uppercase">{getIssuerInitial(issuer)}</span>
+      <span className="text-white font-bold text-[11px] tracking-tighter uppercase">{getIssuerInitial(issuer)}</span>
     </div>
   );
 };

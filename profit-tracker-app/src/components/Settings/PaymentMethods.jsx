@@ -180,7 +180,7 @@ export const PaymentMethods = () => {
       {/* Intelligence Banner */}
       <div className="bg-[#12121A] border border-gray-800 rounded-xl p-6 flex flex-col md:flex-row gap-6 md:items-center justify-between">
          <div>
-            <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-2">Card Intelligence</div>
+            <div className="text-[11px] uppercase font-bold text-gray-500 tracking-wider mb-2">Card Intelligence</div>
             <h2 className="text-xl font-bold text-white flex items-center gap-2"><Crown size={20} className="text-yellow-500" /> Build your elite wallet stack</h2>
             <p className="text-sm text-gray-400 mt-1">Track utilization, available spend, and centralize every perk you can exploit.</p>
          </div>
@@ -234,7 +234,7 @@ export const PaymentMethods = () => {
                       <div className="flex items-center gap-2">
                         <h3 className="text-sm font-bold text-white leading-tight">{card.name}</h3>
                         {card.is_personal && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-purple-500/10 text-purple-400 border border-purple-500/20">Personal</span>
+                          <span className="px-1.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wide bg-purple-500/10 text-purple-400 border border-purple-500/20">Personal</span>
                         )}
                       </div>
                       <p className="text-xs text-gray-500 capitalize">{card.issuer}{card.type === 'debit' ? ' (Debit)' : ''}</p>
@@ -254,19 +254,19 @@ export const PaymentMethods = () => {
               {/* Stats */}
               <div className="grid grid-cols-2 gap-4 mb-4">
                  <div>
-                    <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Default Rate</div>
+                    <div className="text-[11px] uppercase font-bold text-gray-500 tracking-wider">Default Rate</div>
                     <div className="text-base font-bold text-[#6DDBA9] mt-0.5">{card.baseRate.toFixed(2)}%</div>
                  </div>
                  <div>
-                    <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Credit Limit</div>
+                    <div className="text-[11px] uppercase font-bold text-gray-500 tracking-wider">Credit Limit</div>
                     <div className="text-base font-bold text-white mt-0.5">{card.creditLimit != null ? `$${formatMoney(card.creditLimit)}` : 'No limit set'}</div>
                  </div>
                  <div>
-                    <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Available</div>
+                    <div className="text-[11px] uppercase font-bold text-gray-500 tracking-wider">Available</div>
                     <div className="text-sm font-bold text-[#6DDBA9] mt-0.5">{card.availableSpend != null ? `$${formatMoney(card.availableSpend)}` : '—'}</div>
                  </div>
                  <div>
-                    <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Total Spend</div>
+                    <div className="text-[11px] uppercase font-bold text-gray-500 tracking-wider">Total Spend</div>
                     <div className="text-sm font-bold text-white mt-0.5">${formatMoney((card.totalSpend || 0))}</div>
                  </div>
               </div>
@@ -287,7 +287,7 @@ export const PaymentMethods = () => {
                   <Zap size={12} className={isOpen ? 'text-blue-400' : 'text-blue-500'}/>
                   STORE RATES
                   {card.categoryRates.length > 0 && (
-                    <span className={clsx('ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold', isOpen ? 'bg-blue-500/30 text-blue-300' : 'bg-blue-500/20 text-blue-400')}>
+                    <span className={clsx('ml-1 px-1.5 py-0.5 rounded text-[11px] font-bold', isOpen ? 'bg-blue-500/30 text-blue-300' : 'bg-blue-500/20 text-blue-400')}>
                       {card.categoryRates.length}
                     </span>
                   )}
@@ -314,7 +314,7 @@ export const PaymentMethods = () => {
                               <div className="flex items-center gap-1.5">
                                 <span className="text-xs text-gray-300">{r.store}</span>
                                 {r.expires && (
-                                  <span className="text-[10px] text-amber-400/80">
+                                  <span className="text-[11px] text-amber-400/80">
                                     · expires {new Date(r.expires).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                   </span>
                                 )}
@@ -324,7 +324,7 @@ export const PaymentMethods = () => {
                           ))}
                           {expired.length > 0 && (
                             <div className="pt-1">
-                              <p className="text-[10px] uppercase font-bold text-gray-600 tracking-wider mb-1">Expired</p>
+                              <p className="text-[11px] uppercase font-bold text-gray-600 tracking-wider mb-1">Expired</p>
                               {expired.map((r, i) => (
                                 <div key={i} className="flex items-center justify-between px-2 py-1 rounded-lg bg-white/2 opacity-50">
                                   <span className="text-xs text-gray-500 line-through">{r.store}</span>
@@ -347,7 +347,7 @@ export const PaymentMethods = () => {
                     <span className="text-yellow-500 flex items-center gap-1"><Crown size={10} /> Signup Bonus</span>
                     <span className="text-yellow-500">${formatMoney(card.signupBonus)}</span>
                   </div>
-                  <div className="text-[10px] text-gray-500 mb-2">
+                  <div className="text-[11px] text-gray-500 mb-2">
                      ${formatMoney((card.signupBonusSpend || 0))} / ${formatMoney((card.signupBonusReq || 0))}
                   </div>
                 </div>

@@ -74,7 +74,7 @@ function StatusBadge({ status }) {
   return (
     <span style={{
       color, background: bg, border: `1px solid ${border}`,
-      fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em',
+      fontSize: '11px', fontWeight: 700, letterSpacing: '0.06em',
       textTransform: 'uppercase', padding: '2px 7px', borderRadius: '4px',
       whiteSpace: 'nowrap',
     }}>
@@ -104,13 +104,13 @@ function ItemRow({ item }) {
             <StatusBadge status={item.status} />
           </div>
         </td>
-        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, color: 'var(--text-secondary)' }}>
+        <td data-label="Cost" style={{ padding: '10px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-secondary)' }}>
           <span style={item.cost < 0 ? { color: 'var(--green)' } : undefined}>{money(item.cost)}</span>
         </td>
-        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, color: 'var(--text-secondary)' }}>
+        <td data-label="Revenue" style={{ padding: '10px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-secondary)' }}>
           {isPending ? <span style={{ color: 'var(--text-muted)' }}>—</span> : `$${fmt(item.revenue)}`}
         </td>
-        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 600 }}>
+        <td data-label="P&amp;L" style={{ padding: '10px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 600 }}>
           {isPending
             ? <span style={{ color: 'var(--text-muted)' }}>—</span>
             : isLoss
@@ -118,10 +118,10 @@ function ItemRow({ item }) {
             : <span style={{ color: 'var(--green)' }}>+${fmt(item.netPnl)}</span>
           }
         </td>
-        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, color: 'var(--green)' }}>
+        <td data-label="Cashback" style={{ padding: '10px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--green)' }}>
           <span style={item.cashback < 0 ? { color: 'var(--red)' } : undefined}>{money(item.cashback, { plus: true })}</span>
         </td>
-        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+        <td data-label="Redeem" style={{ padding: '10px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>
           {item.lossToRedeem > 0
             ? <span style={{ color: 'var(--red)' }}>${fmt(item.lossToRedeem)}</span>
             : <span style={{ color: 'var(--text-muted)' }}>—</span>
@@ -159,10 +159,10 @@ function ItemRow({ item }) {
                 { label: 'Cashback Redeemed', value: item.lossToRedeem > 0 ? `$${fmt(item.lossToRedeem)}` : '—', color: item.lossToRedeem > 0 ? 'var(--red)' : 'var(--text-muted)' },
               ].map(({ label, value, color }) => (
                 <div key={label}>
-                  <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 3 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 3 }}>
                     {label}
                   </div>
-                  <div style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color }}>
+                  <div style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 600, color }}>
                     {value}
                   </div>
                 </div>
@@ -244,7 +244,7 @@ function CreditCard() {
     <span key={label} title={title} style={{
       display: 'inline-flex', alignItems: 'center', gap: 5,
       padding: '3px 10px', borderRadius: 20, border: `1px solid ${border}`,
-      background: bg, color, fontSize: 10, fontWeight: 700,
+      background: bg, color, fontSize: 11, fontWeight: 700,
       letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap',
       flexShrink: 0,
     }}>
@@ -256,15 +256,15 @@ function CreditCard() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)' }}>
 
       {/* ── Topbar ── */}
-      <div style={{
-        minHeight: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '8px 20px', borderBottom: '1px solid var(--border-default)',
+      <div className="px-4 sm:px-6" style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        paddingTop: 23, paddingBottom: 12, borderBottom: '1px solid var(--border-default)',
         background: 'var(--bg-surface)', flexShrink: 0, gap: 16, flexWrap: 'wrap', rowGap: 8,
       }}>
         {/* Left: title + month nav */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
           <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>
-            Card Tracker
+            Credit Card
           </h1>
           <span style={{ width: 1, height: 16, background: 'var(--border-hover)', flexShrink: 0 }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -316,15 +316,15 @@ function CreditCard() {
             >
               {/* Left: net to pay */}
               <div className="sm:border-r border-[color:var(--border-default)]" style={{ padding: '28px 24px' }}>
-                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
                   Net to Pay · {activeCard?.name ?? 'All Cards'}
                 </div>
-                <div style={{ fontFamily: 'monospace', fontSize: 42, fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--text-primary)', lineHeight: 1 }}>
+                <div style={{ fontVariantNumeric: 'tabular-nums', fontSize: 42, fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--text-primary)', lineHeight: 1 }}>
                   {money(amountToPay)}
                 </div>
                 <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
                   {cashbackToRedeem > 0 && (
-                    <span>Redeem <span style={{ color: 'var(--red)', fontWeight: 600, fontFamily: 'monospace' }}>${fmt(cashbackToRedeem)}</span> to cover losses</span>
+                    <span>Redeem <span style={{ color: 'var(--red)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>${fmt(cashbackToRedeem)}</span> to cover losses</span>
                   )}
                   <span style={{ color: 'var(--text-muted)' }}>{cards.length} card{cards.length !== 1 ? 's' : ''} active</span>
                 </div>
@@ -334,15 +334,15 @@ function CreditCard() {
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <div style={{ flex: 1, padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-default)' }}>
                   <div>
-                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Total Spend</div>
-                    <div style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 700, color: 'var(--accent)' }}>{money(totalSpend)}</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Total Spend</div>
+                    <div style={{ fontVariantNumeric: 'tabular-nums', fontSize: 20, fontWeight: 700, color: 'var(--accent)' }}>{money(totalSpend)}</div>
                   </div>
                   <CreditCardIcon size={18} style={{ color: 'var(--accent)', opacity: 0.5 }} />
                 </div>
                 <div style={{ flex: 1, padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Cashback Earned</div>
-                    <div style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 700, color: 'var(--green)' }}>{money(cashbackEarned)}</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Cashback Earned</div>
+                    <div style={{ fontVariantNumeric: 'tabular-nums', fontSize: 20, fontWeight: 700, color: 'var(--green)' }}>{money(cashbackEarned)}</div>
                   </div>
                   <Sparkles size={18} style={{ color: 'var(--green)', opacity: 0.5 }} />
                 </div>
@@ -383,11 +383,11 @@ function CreditCard() {
                       </span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                         {card.txnCount} item{card.txnCount !== 1 ? 's' : ''}
                         {cardDays !== null ? ` · Due ${cardDueLabel}` : ''}
                       </span>
-                      <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: isActive ? 'var(--text-primary)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 11, fontWeight: 700, color: isActive ? 'var(--text-primary)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                         {money(card.amountToPay)}
                       </span>
                     </div>
@@ -405,26 +405,26 @@ function CreditCard() {
               }}>
                 {creditLimit > 0 && (
                   <>
-                    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                       Utilization
                     </span>
                     <div style={{ flex: '1 1 80px', maxWidth: 160, height: 4, background: 'var(--border-hover)', borderRadius: 2, overflow: 'hidden', minWidth: 60 }}>
                       <div style={{ width: `${utilPct}%`, height: '100%', background: utilColor, borderRadius: 2, transition: 'width 0.3s' }} />
                     </div>
-                    <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: utilTextColor, whiteSpace: 'nowrap' }}>
+                    <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 11, fontWeight: 600, color: utilTextColor, whiteSpace: 'nowrap' }}>
                       {utilPct.toFixed(0)}%
                     </span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                      <span style={{ fontFamily: 'monospace' }}>{money(totalSpend)}</span>
+                      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{money(totalSpend)}</span>
                       <span style={{ color: 'var(--text-muted)', margin: '0 3px' }}>/</span>
-                      <span style={{ fontFamily: 'monospace' }}>${fmt(creditLimit)}</span>
+                      <span style={{ fontVariantNumeric: 'tabular-nums' }}>${fmt(creditLimit)}</span>
                     </span>
                     <span style={{ width: 1, height: 12, background: 'var(--border-hover)', flexShrink: 0 }} />
                   </>
                 )}
                 {minPayment !== null && (
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                    Min payment <span style={{ fontFamily: 'monospace', color: 'var(--text-secondary)', fontWeight: 600 }}>${fmt(minPayment)}</span>
+                    Min payment <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)', fontWeight: 600 }}>${fmt(minPayment)}</span>
                   </span>
                 )}
                 {days !== null && minPayment !== null && (
@@ -433,7 +433,7 @@ function CreditCard() {
                 {days !== null && (
                   <span style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
                     <span style={{ color: 'var(--text-muted)' }}>Due </span>
-                    <span style={{ fontFamily: 'monospace', color: dueColor, fontWeight: 700 }}>
+                    <span style={{ fontVariantNumeric: 'tabular-nums', color: dueColor, fontWeight: 700 }}>
                       {days === 0 ? 'today' : `${days}d`}
                     </span>
                     <span style={{ color: 'var(--text-muted)' }}> · {dueLabel}</span>
@@ -451,7 +451,7 @@ function CreditCard() {
               }}>
                 <AlertTriangle size={14} style={{ color: 'var(--red)', flexShrink: 0, marginTop: 1 }} />
                 <span style={{ fontSize: 12, color: 'var(--red)', fontWeight: 600 }}>
-                  Uncovered Loss: <span style={{ fontFamily: 'monospace' }}>${fmt(uncoveredLoss)}</span>
+                  Uncovered Loss: <span style={{ fontVariantNumeric: 'tabular-nums' }}>${fmt(uncoveredLoss)}</span>
                   <span style={{ fontWeight: 400, marginLeft: 8, opacity: 0.8 }}>— cashback wasn't enough to cover all losses on this card.</span>
                 </span>
               </div>
@@ -464,7 +464,7 @@ function CreditCard() {
               }}>
                 <Sparkles size={14} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 1 }} />
                 <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
-                  Keep <span style={{ fontFamily: 'monospace' }}>${fmt(cashbackToKeep)}</span> as Points
+                  Keep <span style={{ fontVariantNumeric: 'tabular-nums' }}>${fmt(cashbackToKeep)}</span> as Points
                   <span style={{ fontWeight: 400, marginLeft: 8, color: 'var(--text-secondary)' }}>— this cashback stays in your rewards balance after covering losses.</span>
                 </span>
               </div>
@@ -479,13 +479,13 @@ function CreditCard() {
                   <div style={{ fontSize: 12 }}>Transactions made with this card will appear here.</div>
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <table className="phone-cards" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-hover)' }}>
                       {['Item', 'Cost', 'Revenue', 'P&L', 'Cashback', 'Redeem', ''].map((h, i) => (
                         <th key={i} style={{
                           padding: '8px 12px', textAlign: i === 0 ? 'left' : i === 6 ? 'center' : 'right',
-                          fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+                          fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
                           color: 'var(--text-muted)', background: 'var(--bg-surface)',
                           ...(i === 0 && { paddingLeft: 16 }),
                         }}>
@@ -501,14 +501,14 @@ function CreditCard() {
                   </tbody>
                   <tfoot>
                     <tr style={{ borderTop: '1px solid var(--border-hover)', background: 'var(--bg-elevated)' }}>
-                      <td style={{ padding: '10px 16px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>Card Total</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{money(totalSpend)}</td>
+                      <td style={{ padding: '10px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>Card Total</td>
+                      <td data-label="Cost" style={{ padding: '10px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{money(totalSpend)}</td>
                       <td style={{ padding: '10px 12px' }} />
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: activeCard?.totalLosses > 0 ? 'var(--red)' : 'var(--text-muted)' }}>
+                      <td data-label="P&amp;L" style={{ padding: '10px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 700, color: activeCard?.totalLosses > 0 ? 'var(--red)' : 'var(--text-muted)' }}>
                         {activeCard?.totalLosses > 0 ? `-$${fmt(activeCard.totalLosses)}` : '—'}
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: 'var(--green)' }}>{money(cashbackEarned)}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: cashbackToRedeem > 0 ? 'var(--red)' : 'var(--text-muted)' }}>
+                      <td data-label="Cashback" style={{ padding: '10px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 700, color: 'var(--green)' }}>{money(cashbackEarned)}</td>
+                      <td data-label="Redeem" style={{ padding: '10px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 700, color: cashbackToRedeem > 0 ? 'var(--red)' : 'var(--text-muted)' }}>
                         {cashbackToRedeem > 0 ? `$${fmt(cashbackToRedeem)}` : '—'}
                       </td>
                       <td />
@@ -524,12 +524,12 @@ function CreditCard() {
       {/* ── Bottom bar ── */}
       {cards.length > 0 && (
         <div style={{
-          height: 44, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 16px', borderTop: '1px solid var(--border-default)',
+          minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '8px 16px', flexWrap: 'wrap', borderTop: '1px solid var(--border-default)',
           background: 'var(--bg-surface)', flexShrink: 0, gap: 8,
         }}>
           {/* Left: summary pills */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflowX: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
             {cashbackEarned > 0 && pill(`Earned ${money(cashbackEarned)}`, 'var(--green)', 'var(--green-bg)', 'var(--green-soft)')}
             {cashbackToRedeem > 0 && pill(`Redeem $${fmt(cashbackToRedeem)}`, 'var(--red)', 'var(--red-bg)', 'var(--red)')}
             {cashbackToKeep > 0 && pill(`This Card · Keep $${fmt(cashbackToKeep)}`, 'var(--accent)', 'var(--accent-bg)', 'var(--accent-soft)', `Cashback to keep for ${activeCard?.name || 'this card'} only this month, not the combined total shown at the top.`)}
@@ -543,8 +543,8 @@ function CreditCard() {
             background: 'var(--accent-bg)', border: '1px solid var(--accent-soft)',
             flexShrink: 0,
           }}>
-            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Pay</span>
-            <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>{money(amountToPay)}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Pay</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>{money(amountToPay)}</span>
           </div>
         </div>
       )}

@@ -49,13 +49,13 @@ function PreviewModal({ dataUrl, onClose }) {
 function TypeBadge({ type }) {
   if (type === 'inventory') {
     return (
-      <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">
+      <span className="inline-flex w-fit items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">
         <Package className="w-2.5 h-2.5" /> Inventory
       </span>
     );
   }
   return (
-    <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+    <span className="inline-flex w-fit items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
       <Receipt className="w-2.5 h-2.5" /> Expense
     </span>
   );
@@ -185,7 +185,7 @@ const Receipts = () => {
             }`}
           >
             {label}
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+            <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-semibold ${
               tab === key ? 'bg-white/10 text-white' : 'bg-white/5 text-gray-500'
             }`}>{count}</span>
           </button>
@@ -206,9 +206,9 @@ const Receipts = () => {
 
       {/* Table */}
       <div className="card overflow-x-auto bg-[#0f1115] rounded-xl border border-white/6">
-        <table className="w-full text-left whitespace-nowrap">
+        <table className="phone-cards w-full text-left whitespace-nowrap">
           <thead>
-            <tr className="border-b border-white/6 text-[10px] uppercase font-semibold text-gray-500 tracking-widest">
+            <tr className="border-b border-white/6 text-[11px] uppercase font-semibold text-gray-500 tracking-widest">
               <th className="px-4 py-3.5 min-w-50">Item</th>
               <th className="px-4 py-3.5">Type</th>
               <th className="px-4 py-3.5">Date</th>
@@ -232,15 +232,15 @@ const Receipts = () => {
                   <td className="px-4 py-3.5">
                     <p className="text-sm font-medium text-gray-100 leading-tight truncate max-w-65">{item.name}</p>
                   </td>
-                  <td className="px-4 py-3.5">
+                  <td data-label="Type" className="px-4 py-3.5">
                     <TypeBadge type={item.itemType} />
                   </td>
-                  <td className="px-4 py-3.5">
+                  <td data-label="Date" className="px-4 py-3.5">
                     <span className="text-xs text-gray-400 bg-white/4 px-2 py-1 rounded-md">
                       {new Date(item.date).toLocaleDateString()}
                     </span>
                   </td>
-                  <td className="px-4 py-3.5">
+                  <td data-label="Amount" className="px-4 py-3.5">
                     <span className="text-sm font-semibold text-blue-400">${formatMoney((item.amount || 0))}</span>
                   </td>
 
@@ -298,7 +298,7 @@ const Receipts = () => {
                     ) : (
                       <button
                         onClick={() => setAttachingId(attachingId === item.id ? null : item.id)}
-                        className={`flex items-center gap-1.5 px-3 h-7 rounded-lg text-xs font-medium transition-colors border ${
+                        className={`ml-auto flex items-center gap-1.5 px-3 h-7 rounded-lg text-xs font-medium transition-colors border ${
                           attachingId === item.id
                             ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300'
                             : 'bg-white/3 border-white/10 text-gray-400 hover:text-white hover:bg-white/6'
