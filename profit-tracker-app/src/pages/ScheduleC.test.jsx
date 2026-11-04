@@ -93,6 +93,21 @@ describe('Schedule C: sale costs included automatically', () => {
     expect(article.querySelector('button')).toBeNull();
   });
 
+  it('shows refunds to buyers as returns and allowances, separate from expenses', async () => {
+    apiFetch.mockImplementation(async path => response(path.includes('/preferences/') ? { enabled: true } : { ...saleReport(), returns_and_allowances: { line: '2', total: '150.00', count: 1 } }));
+    mount(<ScheduleC />);
+    const note = await screen.findByText(/are returns and allowances/);
+    expect(note.textContent).toContain('$150.00 this year, 1 refund');
+    expect(note.textContent).toContain('not in the worksheet total');
+  });
+
+  it('hides the returns note when there are no refunds', async () => {
+    apiFetch.mockImplementation(async path => response(path.includes('/preferences/') ? { enabled: true } : { ...saleReport(), returns_and_allowances: { line: '2', total: '0.00', count: 0 } }));
+    mount(<ScheduleC />);
+    await screen.findByText('Cup · Shipping label');
+    expect(screen.queryByText(/are returns and allowances/)).toBeNull();
+  });
+
   it('explains that purchase costs are left out on purpose', async () => {
     mount(<ScheduleC />);
     expect(await screen.findByText(/\$53.20 this year, net of gift cards/)).toBeTruthy();

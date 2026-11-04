@@ -1,4 +1,5 @@
 const contract = import('../../shared/scheduleC.mjs');
+const { isRealizedSale } = require('./decimalFinance');
 // Round-trips through cents to avoid binary float drift (e.g. 0.1 + 0.2).
 const toCents = (value) => Math.round(Number(value) * 100);
 const money = (cents) => (cents / 100).toFixed(2);
@@ -15,7 +16,7 @@ const SALE_LINE_CATEGORIES = { SHIPPING_LABEL: 'POSTAGE', SALE_PLATFORM_FEE: 'FE
 // same label or fee entered twice. Flagged, never removed automatically.
 const DUPLICATE_WINDOW_DAYS = 7;
 
-async function expenseWorksheet(expenses, year, derivedLines = []) {
+async function expenseWorksheet(expenses, year, derivedLines = [], saleRefunds = []) {
   const { taxCategories, taxReviewIssues } = await contract;
   const groups = taxCategories.map(category => ({ ...category, total: '0.00', count: 0 }));
   const groupCents = Object.fromEntries(groups.map(group => [group.id, 0]));
@@ -71,6 +72,11 @@ async function expenseWorksheet(expenses, year, derivedLines = []) {
     });
   }
 
+  // Refunds to buyers are returns and allowances (line 2): they lower gross
+  // receipts, so they're reported on their own and never join the expense
+  // total. Counted in the year the money went back, for sales still realized.
+  const returns = saleRefunds.filter(refund => refund.sale && isRealizedSale(refund.sale) && yearOf(refund.date) === year);
+
   const inventoryCostLines = derivedLines.filter(line => line.source === 'purchase' && yearOf(line.date) === year);
   for (const group of groups) group.total = money(groupCents[group.id]);
   rows.sort((a, b) => String(a.name).localeCompare(String(b.name)) || a.id.localeCompare(b.id));
@@ -81,6 +87,7 @@ async function expenseWorksheet(expenses, year, derivedLines = []) {
   return { year, mapping_year: 2025, planning: year !== 2025, accounting_basis: 'cash-method paid expenses; user-confirmed tax treatment', groups, lines, rows,
     total: money(Object.values(groupCents).reduce((sum, cents) => sum + cents, 0)),
     automatic: { total: money(automaticCents), count: automaticCount },
+    returns_and_allowances: { line: '2', total: money(returns.reduce((sum, refund) => sum + toCents(refund.amount), 0)), count: returns.length },
     // Shown for transparency only: these belong to cost of goods sold (Part III).
     inventory_costs_excluded: { total: money(inventoryCostLines.reduce((sum, line) => sum + toCents(line.amount), 0)), count: inventoryCostLines.length },
     pending: rows.filter(row => row.status === 'pending').length,
