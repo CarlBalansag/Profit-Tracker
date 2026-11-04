@@ -54,9 +54,9 @@ const MetricCard = ({ icon: Icon, title, value, subtitle, color, titleColor, val
       <div className="w-8 h-8 rounded-md flex items-center justify-center mb-3 bg-white/5 border border-white/5">
         <Icon size={16} style={{ color }} />
       </div>
-      <div className={`text-[10px] font-bold tracking-wider mb-1 ${titleColor || 'text-gray-400'}`}>{title}</div>
+      <div className={`text-[11px] font-bold tracking-wider mb-1 ${titleColor || 'text-gray-400'}`}>{title}</div>
       <div className={`text-xl font-bold mb-1 ${valueColor || 'text-white'}`}>{value}</div>
-      <div className={`text-[10px] leading-tight ${subtitleColor || 'text-gray-500'} whitespace-pre-line`}>{subtitle}</div>
+      <div className={`text-[11px] leading-tight ${subtitleColor || 'text-gray-500'} whitespace-pre-line`}>{subtitle}</div>
     </div>
   </div>
 );
@@ -458,7 +458,7 @@ function Analytics() {
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-semibold text-gray-100">{p.name}</span>
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border" style={{ color: PLATFORM_TYPE_COLOR[p.type] || THEME.chart1, borderColor: PLATFORM_TYPE_COLOR[p.type] || THEME.chart1 }}>{p.type}</span>
+                          <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded border" style={{ color: PLATFORM_TYPE_COLOR[p.type] || THEME.chart1, borderColor: PLATFORM_TYPE_COLOR[p.type] || THEME.chart1 }}>{p.type}</span>
                         </div>
                         <span className={`text-sm font-bold ${p.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{p.profit >= 0 ? '+' : ''}${fmt(p.profit)} profit</span>
                       </div>
@@ -606,7 +606,7 @@ function Analytics() {
         <div className="rounded-xl border border-gray-800 bg-[#16161E] overflow-x-auto">
           <table className="w-full text-left whitespace-nowrap">
             <thead>
-              <tr className="border-b border-white/6 text-[10px] uppercase font-semibold text-gray-500 tracking-widest">
+              <tr className="border-b border-white/6 text-[11px] uppercase font-semibold text-gray-500 tracking-widest">
                 <th className="px-4 py-3.5">Product</th>
                 <th className="px-4 py-3.5">Platform</th>
                 <th className="px-4 py-3.5">Date</th>
@@ -635,7 +635,7 @@ function Analytics() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded border uppercase bg-green-500/10 text-green-400 border-green-500/20">
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded border uppercase bg-green-500/10 text-green-400 border-green-500/20">
                       {recordStatusLabel(txn.status)}
                     </span>
                   </td>

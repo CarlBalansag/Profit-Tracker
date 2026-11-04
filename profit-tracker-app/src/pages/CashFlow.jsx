@@ -92,10 +92,10 @@ function CashFlow() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="rounded-xl p-5 border border-gray-800 flex justify-between items-start" style={{ backgroundColor: 'var(--accent-bg)' }}>
           <div>
-            <h3 className="text-[10px] font-bold text-[#60a5fa] uppercase tracking-wider mb-2">Spending Out</h3>
+            <h3 className="text-[11px] font-bold text-[#60a5fa] uppercase tracking-wider mb-2">Spending Out</h3>
             <div className="text-xl font-bold text-blue-400 mb-1">{loading ? '…' : `$${fmt(spendingOut)}`}</div>
-            <p className="text-[10px] text-blue-400/60">{s.transactionCount ?? 0} items purchased</p>
-            {s.storeRefunds > 0 && <p className="text-[10px] text-blue-400/60">after ${fmt(s.storeRefunds)} refunded by stores</p>}
+            <p className="text-[11px] text-blue-400/60">{s.transactionCount ?? 0} items purchased</p>
+            {s.storeRefunds > 0 && <p className="text-[11px] text-blue-400/60">after ${fmt(s.storeRefunds)} refunded by stores</p>}
           </div>
           <div className="w-8 h-8 rounded-full border border-blue-500/30 flex items-center justify-center bg-blue-500/10">
             <DollarSign size={14} className="text-blue-400" />
@@ -104,10 +104,10 @@ function CashFlow() {
 
         <div className="rounded-xl p-5 border border-gray-800 flex justify-between items-start" style={{ backgroundColor: 'var(--green-bg)' }}>
           <div>
-            <h3 className="text-[10px] font-bold text-[#4ade80] uppercase tracking-wider mb-2">Coming Back</h3>
+            <h3 className="text-[11px] font-bold text-[#4ade80] uppercase tracking-wider mb-2">Coming Back</h3>
             <div className="text-xl font-bold text-green-400 mb-1">{loading ? '…' : `$${fmt(comingBack)}`}</div>
-            <p className="text-[10px] text-green-400/60">net after buyer fees{includeCashback ? ' + cashback' : ''}</p>
-            {s.buyerRefunds > 0 && <p className="text-[10px] text-green-400/60">after ${fmt(s.buyerRefunds)} refunded to buyers</p>}
+            <p className="text-[11px] text-green-400/60">net after buyer fees{includeCashback ? ' + cashback' : ''}</p>
+            {s.buyerRefunds > 0 && <p className="text-[11px] text-green-400/60">after ${fmt(s.buyerRefunds)} refunded to buyers</p>}
           </div>
           <div className="w-8 h-8 rounded-full border border-green-500/30 flex items-center justify-center bg-green-500/10">
             <ArrowRight size={14} className="text-green-400" />
@@ -116,9 +116,9 @@ function CashFlow() {
 
         <div className="rounded-xl p-5 border border-gray-800 flex justify-between items-start" style={{ backgroundColor: 'var(--accent-bg)' }}>
           <div>
-            <h3 className="text-[10px] font-bold text-[#c084fc] uppercase tracking-wider mb-2">Owed To You</h3>
+            <h3 className="text-[11px] font-bold text-[#c084fc] uppercase tracking-wider mb-2">Owed To You</h3>
             <div className="text-xl font-bold text-purple-400 mb-1">{loading ? '…' : `$${fmt(owedRevenue)}`}</div>
-            <p className="text-[10px] text-purple-400/60">unpaid / in-transit sales</p>
+            <p className="text-[11px] text-purple-400/60">unpaid / in-transit sales</p>
           </div>
           <div className="w-8 h-8 rounded-full border border-purple-500/30 flex items-center justify-center bg-purple-500/10">
             <DollarSign size={14} className="text-purple-400" />
@@ -139,7 +139,7 @@ function CashFlow() {
         </div>
 
         <div className="rounded-xl border border-gray-800 bg-[#12121A] p-6">
-          <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-6">Where Your Money Is</h3>
+          <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-6">Where Your Money Is</h3>
 
           {/* Progress Bar */}
           <div className="h-4 w-full rounded-full bg-gray-800 overflow-hidden flex mb-6">
@@ -149,30 +149,30 @@ function CashFlow() {
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="rounded border border-yellow-500/30 bg-yellow-500/5 p-3">
-              <div className="text-[10px] font-bold text-yellow-500/80 uppercase tracking-wider mb-1">In Transit / Listed</div>
+              <div className="text-[11px] font-bold text-yellow-500/80 uppercase tracking-wider mb-1">In Transit / Listed</div>
               <div className="text-sm font-bold text-yellow-500 mb-0.5">{loading ? '…' : `$${fmt(inTransitValue)}`}</div>
-              <div className="text-[10px] text-yellow-500/60">{inTransitCount} unit{inTransitCount !== 1 ? 's' : ''} · {inTransitPct}%</div>
+              <div className="text-[11px] text-yellow-500/60">{inTransitCount} unit{inTransitCount !== 1 ? 's' : ''} · {inTransitPct}%</div>
             </div>
 
             <div className="rounded border border-green-500/30 bg-green-500/5 p-3">
-              <div className="text-[10px] font-bold text-green-500/80 uppercase tracking-wider mb-1">Sold</div>
+              <div className="text-[11px] font-bold text-green-500/80 uppercase tracking-wider mb-1">Sold</div>
               <div className="text-sm font-bold text-green-500 mb-0.5">{loading ? '…' : `$${fmt(soldRevenue)}`}</div>
-              <div className="text-[10px] text-green-500/60">{soldCount} unit{soldCount !== 1 ? 's' : ''} · {soldPct}%</div>
+              <div className="text-[11px] text-green-500/60">{soldCount} unit{soldCount !== 1 ? 's' : ''} · {soldPct}%</div>
             </div>
 
             {(s.totalCashback ?? 0) > 0 && (
               <div className="rounded border border-purple-500/30 bg-purple-500/5 p-3">
-                <div className="text-[10px] font-bold text-purple-500/80 uppercase tracking-wider mb-1">Cashback Earned</div>
+                <div className="text-[11px] font-bold text-purple-500/80 uppercase tracking-wider mb-1">Cashback Earned</div>
                 <div className="text-sm font-bold text-purple-400 mb-0.5">{loading ? '…' : `$${fmt(s.totalCashback)}`}</div>
-                <div className="text-[10px] text-purple-500/60">at point of purchase</div>
+                <div className="text-[11px] text-purple-500/60">at point of purchase</div>
               </div>
             )}
 
             {owedRevenue > 0 && (
               <div className="rounded border border-amber-500/30 bg-amber-500/5 p-3">
-                <div className="text-[10px] font-bold text-amber-500/80 uppercase tracking-wider mb-1">Unpaid</div>
+                <div className="text-[11px] font-bold text-amber-500/80 uppercase tracking-wider mb-1">Unpaid</div>
                 <div className="text-sm font-bold text-amber-400 mb-0.5">{loading ? '…' : `$${fmt(owedRevenue)}`}</div>
-                <div className="text-[10px] text-amber-500/60">awaiting payout</div>
+                <div className="text-[11px] text-amber-500/60">awaiting payout</div>
               </div>
             )}
           </div>
@@ -181,7 +181,7 @@ function CashFlow() {
 
       {/* By Buyer */}
       <div className="space-y-4">
-        <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">By Buyer</h3>
+        <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1">By Buyer</h3>
 
         {buyers.length === 0 && (
           <div className="rounded-xl border border-gray-800 bg-[#12121A] p-6 text-center text-gray-600 text-sm">No sales data yet.</div>
@@ -205,12 +205,12 @@ function CashFlow() {
                         <span className="font-bold text-white text-sm">{buyer.name}</span>
                         <span className="text-xs text-gray-500">{buyer.items} sale{buyer.items !== 1 ? 's' : ''}</span>
                         {buyer.sales.some(t => t.payout_status === 'unpaid') && (
-                          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-500/10 text-yellow-500 border border-yellow-500/20">
+                          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-yellow-500/10 text-yellow-500 border border-yellow-500/20">
                             <Bell size={10} /> Pending
                           </div>
                         )}
                         {!buyer.sales.some(t => t.payout_status === 'unpaid') && buyer.sales.some(t => t.payout_status === 'partial') && (
-                          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
                             <Bell size={10} /> Partial
                           </div>
                         )}
@@ -223,11 +223,11 @@ function CashFlow() {
 
                   <div className="flex gap-12 text-right">
                     <div>
-                      <div className="text-[10px] text-gray-500 mb-1">Cost</div>
+                      <div className="text-[11px] text-gray-500 mb-1">Cost</div>
                       <div className="text-sm font-bold text-blue-400">${fmt(buyer.spent)}</div>
                     </div>
                     <div>
-                      <div className="text-[10px] text-gray-500 mb-1">Coming Back</div>
+                      <div className="text-[11px] text-gray-500 mb-1">Coming Back</div>
                       <div className="text-sm font-bold text-green-400">
                         ${fmt(buyer.comingBack + (includeCashback ? buyer.cashback : 0))}
                       </div>
@@ -239,7 +239,7 @@ function CashFlow() {
                   <div className="px-14 py-3 bg-black/20 border-t border-gray-800/50">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="text-gray-600 uppercase tracking-wider text-[10px]">
+                        <tr className="text-gray-600 uppercase tracking-wider text-[11px]">
                           <th className="text-left pb-2">Product</th>
                           <th className="text-left pb-2">Date</th>
                           <th className="text-right pb-2">Cost</th>
@@ -255,7 +255,7 @@ function CashFlow() {
                             <td className="py-2 text-gray-300 max-w-[160px] truncate pr-4">
                               {t.product}
                               {t.refunded > 0 && (
-                                <span className="block text-[10px] text-amber-400">
+                                <span className="block text-[11px] text-amber-400">
                                   Refunded ${fmt(t.refunded)}{t.refunded_units > 0 ? ` · ${t.refunded_units} returned` : ''}
                                 </span>
                               )}
@@ -268,7 +268,7 @@ function CashFlow() {
                             </td>
                             <td className="py-2 text-right text-gray-500">{t.payout_account || '—'}</td>
                             <td className="py-2 text-right">
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                              <span className={`px-1.5 py-0.5 rounded text-[11px] font-semibold ${
                                 t.payout_status === 'paid'
                                   ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                                   : t.payout_status === 'partial'
