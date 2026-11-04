@@ -15,6 +15,7 @@ import TransactionDetailModal from '../components/TransactionDetailModal';
 import ProductNoteButton from '../components/ProductNoteButton';
 import { detectCarrier } from '../utils/carrier';
 import { recordStatusLabel } from '../data/statusWorkflow';
+import { formatMoney } from '../utils/money';
 
 // ─── Inline editable cell input ───────────────────────────────────────────────
 function EditInput({ value, onChange, type = 'text', className = '' }) {
@@ -113,7 +114,7 @@ function RefundedBadge({ row }) {
       title={row.isSale ? 'Refunded to the buyer' : 'Refunded by the store'}
       className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border bg-amber-500/10 text-amber-400 border-amber-500/25 whitespace-nowrap"
     >
-      REFUNDED ${row.refundedAmount.toFixed(2)}{units}
+      REFUNDED ${formatMoney(row.refundedAmount)}{units}
     </span>
   );
 }
@@ -928,19 +929,19 @@ const Transactions = () => {
             <div className="flex items-center gap-4 pt-1 border-t border-white/[0.04]">
               <div>
                 <p className="text-[10px] text-gray-600 uppercase tracking-wider mb-0.5">Cost</p>
-                <p className="text-sm font-semibold text-blue-400">${Number.isFinite(row.cost) ? row.cost.toFixed(2) : '0.00'}</p>
+                <p className="text-sm font-semibold text-blue-400">${formatMoney(row.cost)}</p>
               </div>
               {row.sale != null && (
                 <div>
                   <p className="text-[10px] text-gray-600 uppercase tracking-wider mb-0.5">Sale</p>
-                  <p className="text-sm font-semibold text-green-400">${row.sale.toFixed(2)}</p>
+                  <p className="text-sm font-semibold text-green-400">${formatMoney(row.sale)}</p>
                 </div>
               )}
               {Number.isFinite(row.profit) && (
                 <div className="ml-auto">
                   <p className="text-[10px] text-gray-600 uppercase tracking-wider mb-0.5 text-right">Profit</p>
                   <p className={`text-sm font-bold ${row.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {row.profit >= 0 ? '+' : ''}${row.profit.toFixed(2)}
+                    {row.profit >= 0 ? '+' : ''}${formatMoney(row.profit)}
                   </p>
                 </div>
               )}
@@ -1146,7 +1147,7 @@ const Transactions = () => {
                               <p className="text-[10px] text-gray-600 mt-0.5">per unit</p>
                             </div>
                           ) : (
-                            <span className="text-sm font-semibold text-blue-400">${Number.isFinite(row.cost) ? row.cost.toFixed(2) : '0.00'}</span>
+                            <span className="text-sm font-semibold text-blue-400">${formatMoney(row.cost)}</span>
                           )}
                         </td>
                       );
@@ -1158,7 +1159,7 @@ const Transactions = () => {
                               <p className="text-[10px] text-gray-600 mt-0.5">per unit</p>
                             </div>
                           ) : (
-                            <span className="text-sm font-semibold text-green-400">{row.sale ? `$${row.sale.toFixed(2)}` : <span className="text-gray-600 font-normal">—</span>}</span>
+                            <span className="text-sm font-semibold text-green-400">{row.sale ? `$${formatMoney(row.sale)}` : <span className="text-gray-600 font-normal">—</span>}</span>
                           )}
                         </td>
                       );
@@ -1167,7 +1168,7 @@ const Transactions = () => {
                           {isEditing && editData.isSale ? (
                             <EditInput type="number" value={editData.commission_fee} onChange={v => setEditData(d => ({ ...d, commission_fee: v }))} className="w-20 text-red-300" />
                           ) : (
-                            <span className="text-sm font-semibold text-red-400">{row.rawCommission != null ? `-$${row.rawCommission.toFixed(2)}` : <span className="text-gray-600 font-normal">—</span>}</span>
+                            <span className="text-sm font-semibold text-red-400">{row.rawCommission != null ? `-$${formatMoney(row.rawCommission)}` : <span className="text-gray-600 font-normal">—</span>}</span>
                           )}
                         </td>
                       );
@@ -1175,14 +1176,14 @@ const Transactions = () => {
                         <td key="profit" className="px-4 py-3.5">
                           {Number.isFinite(row.profit) ? (
                             <span className={`text-sm font-bold ${row.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              {row.profit >= 0 ? '+' : ''}${row.profit.toFixed(2)}
+                              {row.profit >= 0 ? '+' : ''}${formatMoney(row.profit)}
                             </span>
                           ) : <span className="text-gray-600">—</span>}
                         </td>
                       );
                       case 'cashback': return (
                         <td key="cashback" className="px-4 py-3.5">
-                          <span className="text-xs font-medium text-pink-400">${Number.isFinite(row.cashback) ? row.cashback.toFixed(2) : '0.00'}</span>
+                          <span className="text-xs font-medium text-pink-400">${formatMoney(row.cashback)}</span>
                         </td>
                       );
                       case 'payment': return (
@@ -1214,19 +1215,19 @@ const Transactions = () => {
                       case 'retail': return (
                         <td key="retail" className="px-4 py-3.5">
                           {row.rawSale != null
-                            ? <span className="text-xs font-medium text-gray-300">${row.rawSale.toFixed(2)}</span>
+                            ? <span className="text-xs font-medium text-gray-300">${formatMoney(row.rawSale)}</span>
                             : <span className="text-gray-600">—</span>
                           }
                         </td>
                       );
                       case 'tax': return (
                         <td key="tax" className="px-4 py-3.5">
-                          <span className="text-xs font-medium text-amber-400">${(Number.isFinite(row.tax) ? row.tax : 0).toFixed(2)}</span>
+                          <span className="text-xs font-medium text-amber-400">${formatMoney((Number.isFinite(row.tax) ? row.tax : 0))}</span>
                         </td>
                       );
                       case 'shipping': return (
                         <td key="shipping" className="px-4 py-3.5">
-                          <span className="text-xs font-medium text-sky-400">${(Number.isFinite(row.shipping) ? row.shipping : 0).toFixed(2)}</span>
+                          <span className="text-xs font-medium text-sky-400">${formatMoney((Number.isFinite(row.shipping) ? row.shipping : 0))}</span>
                         </td>
                       );
                       case 'category': return (
