@@ -28,7 +28,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 // POST /api/platforms - single create
 router.post('/', isAuthenticated, validateBody(platform), async (req, res, next) => {
   try {
-    const { name, type, fee_pct, address, notes, tax_exempt_place } = req.body;
+    const { name, type, fee_pct, address, notes, tax_exempt_place, default_return_days } = req.body;
     const platform = await prisma.platform.create({
       data: {
         user_id: req.user.id,
@@ -38,6 +38,7 @@ router.post('/', isAuthenticated, validateBody(platform), async (req, res, next)
         address: address || null,
         notes: notes || null,
         tax_exempt_place: tax_exempt_place === true || tax_exempt_place === 'true',
+        default_return_days: default_return_days ?? null,
       }
     });
     res.json(withExactFields(platform, MAPPINGS.platform));
@@ -85,7 +86,7 @@ router.put('/:id', isAuthenticated, validateBody(updatePlatform), async (req, re
       return res.status(404).json({ error: 'Platform not found' });
     }
 
-    const { name, type, fee_pct, address, notes, tax_exempt_place } = req.body;
+    const { name, type, fee_pct, address, notes, tax_exempt_place, default_return_days } = req.body;
 
     const newTaxExempt = tax_exempt_place !== undefined
       ? (tax_exempt_place === true || tax_exempt_place === 'true')
@@ -101,6 +102,7 @@ router.put('/:id', isAuthenticated, validateBody(updatePlatform), async (req, re
           address: address !== undefined ? address : existing.address,
           notes: notes !== undefined ? notes : existing.notes,
           tax_exempt_place: newTaxExempt,
+          default_return_days: default_return_days !== undefined ? default_return_days : existing.default_return_days,
         }
       });
 

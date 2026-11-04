@@ -7,6 +7,7 @@ import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { toast } from 'sonner';
 import ReturnWindowBadge from './ReturnWindowBadge';
+import { addDays, daysBetween } from '../utils/returnWindow';
 import TransactionNotesPanel from './TransactionNotesPanel';
 import RefundsPanel from './RefundsPanel';
 import { recordStatusLabel } from '../data/statusWorkflow';
@@ -31,7 +32,7 @@ function Field({ label, children, className = '' }) {
 }
 
 // ─── Styled input ──────────────────────────────────────────────────────────────
-function Input({ value, onChange, type = 'text', placeholder = '', className = '', readOnly = false, ariaLabel }) {
+function Input({ value, onChange, type = 'text', placeholder = '', className = '', readOnly = false, ariaLabel, min, step }) {
   return (
     <input
       type={type}
@@ -40,6 +41,8 @@ function Input({ value, onChange, type = 'text', placeholder = '', className = '
       placeholder={placeholder}
       readOnly={readOnly}
       aria-label={ariaLabel}
+      min={min}
+      step={step}
       className={`w-full bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2 text-sm text-[var(--dp-text-primary)] placeholder-[color:var(--dp-text-muted)] focus:outline-none focus:border-[var(--dp-accent)] transition-colors ${readOnly ? 'opacity-60 cursor-default' : ''} ${className}`}
     />
   );
@@ -201,6 +204,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             vendor_id:               d.vendor_id ?? '',
             purchase_date:           d.purchase_date ? d.purchase_date.split('T')[0] : '',
             return_by_date:          d.return_by_date ? d.return_by_date.split('T')[0] : '',
+            return_window_days:      daysBetween(d.purchase_date, d.return_by_date) ?? '',
             qty_on_hand:             d.qty_on_hand,
             category:                d.category ?? '',
             order_number:            d.order_number ?? '',
@@ -291,6 +295,29 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
       cashback_rate: rate,
       cashback_earned: grossBatchCost(prev) * rate / 100,
     }));
+  };
+
+  // The window is stored as a date, so days and purchase date both move it. A
+  // value that can't give a date (an older one before the purchase date) keeps it.
+  const setReturnDays = (days) => setForm(prev => ({
+    ...prev,
+    return_window_days: days,
+    return_by_date: addDays(prev.purchase_date, days),
+  }));
+
+  const setPurchaseDate = (date) => setForm(prev => ({
+    ...prev,
+    purchase_date: date,
+    return_by_date: addDays(date, prev.return_window_days) || prev.return_by_date,
+  }));
+
+  // A new vendor's usual window fills an empty box, and never replaces a value.
+  const fillVendorReturnDays = (vendorId) => {
+    const days = platforms.find(platform => String(platform.id) === String(vendorId))?.default_return_days;
+    if (days === null || days === undefined) return;
+    setForm(prev => (prev.return_window_days === ''
+      ? { ...prev, return_window_days: days, return_by_date: addDays(prev.purchase_date, days) }
+      : prev));
   };
 
   const setCashbackRate = (value) => {
@@ -462,7 +489,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                   <ReadBox value={`$${formatMoney(subtotal)}`} className="text-gray-400" />
                 </Field>
                 <Field label="Purchase Date">
-                  <Input type="date" value={form.purchase_date} onChange={v => set('purchase_date', v)} />
+                  <Input type="date" value={form.purchase_date} onChange={setPurchaseDate} />
                 </Field>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
@@ -483,8 +510,9 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                 </Field>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <Field label="Return by (optional)">
-                  <Input type="date" ariaLabel="Return by" value={form.return_by_date} onChange={v => set('return_by_date', v)} />
+                <Field label="Return window (days, optional)">
+                  <Input type="number" min="0" step="1" ariaLabel="Return window (days)" placeholder="e.g. 30" value={form.return_window_days} onChange={setReturnDays} />
+                  {form.return_by_date && <p className="mt-1 text-[10px] text-gray-500">Return by {form.return_by_date}</p>}
                   <ReturnWindowBadge item={form} className="mt-1.5" />
                 </Field>
               </div>
@@ -506,7 +534,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
               <SectionHeader icon={MapPin}>Purchase Location</SectionHeader>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                 <Field label="Store">
-                  <Sel value={form.vendor_id} onChange={v => applyCashbackDefault(form.payment_method_id, v)} options={vendors} placeholder="Select store…" />
+                  <Sel value={form.vendor_id} onChange={v => { applyCashbackDefault(form.payment_method_id, v); fillVendorReturnDays(v); }} options={vendors} placeholder="Select store…" />
                 </Field>
                 <Field label="Status">
                   <Sel value={form.status} onChange={v => set('status', v)} options={STATUSES.map(s => ({ id: s, name: recordStatusLabel(s) }))} />

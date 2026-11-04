@@ -40,6 +40,8 @@ const AddTransaction = () => {
     qty_purchased: 1,
     purchase_date: localToday(),
     return_window_days: '',
+    // Set once the person types in the box, so a vendor default never overwrites it.
+    return_days_edited: false,
     sales_tax: '',
     shipping_cost_inbound: '',
     fees: '',
@@ -299,6 +301,15 @@ const AddTransaction = () => {
   // Cashback calculation — auto-applies category rate when vendor matches
   const selectedCard = paymentMethods.find(pm => pm.id === formData.payment_method_id);
   const selectedVendor = platforms.find(p => p.id === formData.vendor_id);
+  const vendorReturnDays = selectedVendor?.default_return_days ?? '';
+
+  // Prefill the return window from the vendor until the person edits the box.
+  useEffect(() => {
+    if (formData.return_days_edited) return;
+    setFormData(prev => (String(prev.return_window_days ?? '') === String(vendorReturnDays)
+      ? prev
+      : { ...prev, return_window_days: vendorReturnDays }));
+  }, [vendorReturnDays, formData.return_days_edited]);
 
   const getCategoryRate = (card, vendorName) => {
     if (!card || !vendorName) return null;
@@ -650,11 +661,13 @@ const AddTransaction = () => {
                 <Field label="Return window (days, optional)">
                   <input
                     type="number" min="0" step="1" name="return_window_days" aria-label="Return window (days)"
-                    value={formData.return_window_days} onChange={handleChange}
+                    value={formData.return_window_days}
+                    onChange={e => setFormData(prev => ({ ...prev, return_window_days: e.target.value, return_days_edited: true }))}
                     className={inputCls('blue')} placeholder="e.g. 30"
                   />
                 </Field>
                 <p className="sm:col-span-2 text-xs text-gray-500 pb-2">
+                  {!formData.return_days_edited && vendorReturnDays !== '' && <>{selectedVendor.name}&apos;s usual window. </>}
                   {addDays(formData.purchase_date, formData.return_window_days)
                     ? <>Return to the store by <span className="text-gray-300">{addDays(formData.purchase_date, formData.return_window_days)}</span>. Record Sale and Inventory will count down the days left.</>
                     : <>The store&apos;s return policy. Leave blank if you won&apos;t return it.</>}

@@ -176,7 +176,7 @@ function VendorBadge({ name }) {
 
 // ─── Custom Add Vendor Modal ──────────────────────────────────────────────────
 function CustomModal({ onClose, onSave }) {
-  const [form, setForm] = useState({ name: '', type: 'Vendor', address: '', notes: '' });
+  const [form, setForm] = useState({ name: '', type: 'Vendor', address: '', notes: '', default_return_days: '' });
   const [saving, setSaving] = useState(false);
   const modalRef = useModalKeyboard(true, () => { if (!saving) onClose(); });
 
@@ -247,6 +247,22 @@ function CustomModal({ onClose, onSave }) {
           </div>
 
           <div>
+            <label htmlFor="new-vendor-return-days" className="block text-xs text-gray-400 mb-1.5">Return window (days, optional)</label>
+            <input
+              id="new-vendor-return-days"
+              type="number"
+              min="0"
+              max="3650"
+              step="1"
+              placeholder="e.g. 90"
+              value={form.default_return_days}
+              onChange={e => setForm(f => ({ ...f, default_return_days: e.target.value }))}
+              className="w-full bg-[#0d0d18] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/60"
+            />
+            <p className="text-[11px] text-gray-500 mt-1">Fills in on new purchases from this vendor. You can still change it per purchase.</p>
+          </div>
+
+          <div>
             <label className="block text-xs text-gray-400 mb-1.5">Notes</label>
             <textarea
               rows={3}
@@ -280,6 +296,7 @@ function EditModal({ vendor, onClose, onSave }) {
     name: vendor.name,
     address: vendor.address || '',
     notes: vendor.notes || '',
+    default_return_days: vendor.default_return_days ?? '',
   });
   const [saving, setSaving] = useState(false);
   const modalRef = useModalKeyboard(true, () => { if (!saving) onClose(); });
@@ -296,6 +313,7 @@ function EditModal({ vendor, onClose, onSave }) {
           name: form.name,
           address: form.address,
           notes: form.notes,
+          default_return_days: form.default_return_days,
         })
       });
       const successRes = await requireSuccessfulResponse(res, 'Could not update vendor');
@@ -340,6 +358,22 @@ function EditModal({ vendor, onClose, onSave }) {
               onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
               className="w-full bg-[#0d0d18] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-purple-500/50 transition-colors"
             />
+          </div>
+
+          <div>
+            <label htmlFor="vendor-return-days" className="block text-xs text-gray-400 mb-1.5">Return window (days, optional)</label>
+            <input
+              id="vendor-return-days"
+              type="number"
+              min="0"
+              max="3650"
+              step="1"
+              placeholder="e.g. 90"
+              value={form.default_return_days}
+              onChange={e => setForm(f => ({ ...f, default_return_days: e.target.value }))}
+              className="w-full bg-[#0d0d18] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/60"
+            />
+            <p className="text-[11px] text-gray-500 mt-1">Fills in on new purchases from this vendor. You can still change it per purchase.</p>
           </div>
 
           <div>
@@ -637,6 +671,9 @@ export function Vendors() {
                     </button>
                   </div>
                 </div>
+                {vendor.default_return_days != null && (
+                  <p className="text-xs text-gray-400 mt-2">{vendor.default_return_days}-day returns</p>
+                )}
                 {vendor.notes && (
                   <p className="text-xs text-gray-500 mt-2 italic">{vendor.notes}</p>
                 )}

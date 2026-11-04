@@ -8,13 +8,13 @@ import Inventory from './Inventory';
 import TransactionDetailModal from '../components/TransactionDetailModal';
 import { addDays, daysBetween, localToday, returnWindowStatus } from '../utils/returnWindow';
 
-const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), inventory: [] }));
+const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), inventory: [], platforms: [] }));
 vi.mock('../hooks/useApi', () => ({
   useRefunds: () => ({ data: [], isLoading: false }),
   useRefundMutations: () => ({ add: { mutateAsync: vi.fn(), isPending: false }, remove: { mutateAsync: vi.fn(), isPending: false } }),
   apiFetch: mocks.apiFetch,
   useInventory: () => ({ data: mocks.inventory }),
-  usePlatforms: () => ({ data: [] }),
+  usePlatforms: () => ({ data: mocks.platforms }),
   usePaymentMethods: () => ({ data: [] }),
   useBuyers: () => ({ data: [] }),
   useProductNames: () => ({ data: [] }),
@@ -37,7 +37,7 @@ const item = (over = {}) => ({
 });
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status });
 
-beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); mocks.inventory = [item()]; mocks.apiFetch.mockResolvedValue(json({ id: 'new' })); });
+beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); mocks.inventory = [item()]; mocks.platforms = []; mocks.apiFetch.mockResolvedValue(json({ id: 'new' })); });
 afterEach(cleanup);
 
 describe('return window date math', () => {
@@ -99,6 +99,51 @@ describe('Add Transaction: return window (days)', () => {
   });
 });
 
+describe('Add Transaction: vendor return days', () => {
+  const vendors = [
+    { id: 'v1', name: 'Home Depot', type: 'Vendor', default_return_days: 90 },
+    { id: 'v2', name: 'Target', type: 'Vendor', default_return_days: 30 },
+    { id: 'v3', name: 'No Policy', type: 'Vendor', default_return_days: null },
+  ];
+  const days = () => screen.getByLabelText('Return window (days)');
+  const pick = (id) => fireEvent.change(document.querySelector('select[name="vendor_id"]'), { target: { name: 'vendor_id', value: id } });
+  const mount = () => { mocks.platforms = vendors; render(<MemoryRouter><AddTransaction /></MemoryRouter>); };
+
+  it('prefills from the vendor and follows a change of vendor', () => {
+    mount();
+    pick('v1');
+    expect(days().value).toBe('90');
+    pick('v2');
+    expect(days().value).toBe('30');
+    pick('v3');
+    expect(days().value).toBe('');
+  });
+
+  it('keeps what was typed, including an emptied box', () => {
+    mount();
+    pick('v1');
+    fireEvent.change(days(), { target: { value: '30' } });
+    pick('v2');
+    pick('v1');
+    expect(days().value).toBe('30');
+    fireEvent.change(days(), { target: { value: '' } });
+    pick('v2');
+    expect(days().value).toBe('');
+  });
+
+  it('sends the edited days as the return-by date', async () => {
+    mount();
+    fireEvent.change(document.querySelector('input[name="product_name"]'), { target: { name: 'product_name', value: 'Drill' } });
+    fireEvent.change(document.querySelector('input[name="purchase_date"]'), { target: { name: 'purchase_date', value: '2026-11-02' } });
+    pick('v1');
+    fireEvent.change(days(), { target: { value: '30' } });
+    fireEvent.submit(days().closest('form'));
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledWith('/api/inventory', expect.anything()));
+    const body = JSON.parse(mocks.apiFetch.mock.calls.find(([url]) => url === '/api/inventory')[1].body);
+    expect(body.return_by_date).toBe('2026-12-02');
+  });
+});
+
 describe('Record Sale: days left to return', () => {
   it('shows the badge on the item card and on the selected item', () => {
     render(<MemoryRouter><AddSale /></MemoryRouter>);
@@ -130,30 +175,76 @@ describe('Inventory: days left to return', () => {
   });
 });
 
-describe('Transaction edit window: return by', () => {
-  const open = async (data) => {
+describe('Transaction edit window: return window', () => {
+  const open = async (data, platforms) => {
     mocks.apiFetch.mockResolvedValueOnce(json(data));
-    render(<TransactionDetailModal row={{ rawId: 'inv-1' }} onClose={vi.fn()} onSaved={vi.fn()} />);
-    await waitFor(() => expect(screen.getByLabelText('Return by')).toBeInTheDocument());
-    return screen.getByLabelText('Return by');
+    render(<TransactionDetailModal row={{ rawId: 'inv-1' }} onClose={vi.fn()} onSaved={vi.fn()} platforms={platforms} />);
+    await waitFor(() => expect(screen.getByLabelText('Return window (days)')).toBeInTheDocument());
+    return screen.getByLabelText('Return window (days)');
+  };
+  const save = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Update Transaction' }));
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledWith('/api/inventory/inv-1/transaction', expect.anything()));
   };
   const saved = () => JSON.parse(mocks.apiFetch.mock.calls.find(([url]) => url === '/api/inventory/inv-1/transaction')[1].body).inventory;
 
-  it('loads the date with its badge, and saving unchanged keeps it', async () => {
+  it('shows the window in days, and saving unchanged keeps the date', async () => {
     const input = await open(item());
-    expect(input.value).toBe(addDays(today, 20));
+    expect(input.value).toBe('30');
+    expect(screen.getByText(`Return by ${addDays(today, 20)}`)).toBeInTheDocument();
     expect(screen.getByText('20 days left to return')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Update Transaction' }));
-    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledWith('/api/inventory/inv-1/transaction', expect.anything()));
+    await save();
     expect(saved().return_by_date).toBe(addDays(today, 20));
   });
 
-  it('can clear the date', async () => {
+  it('turns edited days into a date', async () => {
+    const input = await open(item());
+    fireEvent.change(input, { target: { value: '90' } });
+    await save();
+    expect(saved().return_by_date).toBe(addDays(today, 80));
+  });
+
+  it('moves the date when the purchase date changes', async () => {
+    await open(item({ purchase_date: '2026-11-02T12:00:00.000Z', return_by_date: '2026-12-02T12:00:00.000Z' }));
+    fireEvent.change(screen.getByDisplayValue('2026-11-02'), { target: { value: '2026-11-12' } });
+    await save();
+    expect(saved().return_by_date).toBe('2026-12-12');
+  });
+
+  it('can clear the window', async () => {
     const input = await open(item());
     fireEvent.change(input, { target: { value: '' } });
     expect(screen.queryByText(/left to return/)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Update Transaction' }));
-    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledWith('/api/inventory/inv-1/transaction', expect.anything()));
+    await save();
     expect(saved().return_by_date).toBe(null);
+  });
+
+  it('keeps an older date that falls before the purchase date', async () => {
+    await open(item({ purchase_date: '2026-11-10T12:00:00.000Z', return_by_date: '2026-11-05T12:00:00.000Z' }));
+    await save();
+    expect(saved().return_by_date).toBe('2026-11-05');
+  });
+
+  it('leaves an existing purchase with no window empty until the vendor changes', async () => {
+    const vendors = [
+      { id: 'v1', name: 'Target', type: 'Vendor', default_return_days: null },
+      { id: 'v2', name: 'Home Depot', type: 'Vendor', default_return_days: 90 },
+    ];
+    const input = await open(item({ return_by_date: null, vendor_id: 'v1' }), vendors);
+    expect(input.value).toBe('');
+    fireEvent.change(screen.getByDisplayValue('Target'), { target: { value: 'v2' } });
+    expect(input.value).toBe('90');
+    await save();
+    expect(saved().return_by_date).toBe(addDays(today, 80));
+  });
+
+  it('does not replace a window already set when the vendor changes', async () => {
+    const vendors = [
+      { id: 'v1', name: 'Target', type: 'Vendor', default_return_days: null },
+      { id: 'v2', name: 'Home Depot', type: 'Vendor', default_return_days: 90 },
+    ];
+    const input = await open(item({ vendor_id: 'v1' }), vendors);
+    fireEvent.change(screen.getByDisplayValue('Target'), { target: { value: 'v2' } });
+    expect(input.value).toBe('30');
   });
 });

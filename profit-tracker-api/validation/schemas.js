@@ -303,6 +303,11 @@ const paymentMethod = z.object({
   is_personal: optionalBoolish,
 }).passthrough();
 
+const defaultReturnDays = z.preprocess(
+  emptyToNull,
+  z.coerce.number().int().min(0).max(3650).nullable().optional()
+);
+
 const platform = z.object({
   name: requiredString('name'),
   type: optionalString,
@@ -310,6 +315,7 @@ const platform = z.object({
   address: optionalString,
   notes: optionalString,
   tax_exempt_place: optionalBoolish,
+  default_return_days: defaultReturnDays,
 }).passthrough();
 
 const updatePlatform = z.object({
@@ -319,6 +325,7 @@ const updatePlatform = z.object({
   address: optionalString,
   notes: optionalString,
   tax_exempt_place: optionalBoolish,
+  default_return_days: defaultReturnDays,
 }).passthrough();
 
 const platformBatch = z.object({
