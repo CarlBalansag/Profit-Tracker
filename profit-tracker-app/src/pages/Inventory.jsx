@@ -1,4 +1,4 @@
-import { allocatedCost } from '../../../shared/finance.mjs';
+import { allocatedCost, roundCents } from '../../../shared/finance.mjs';
 import React, { useState } from 'react';
 import { useInventory } from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
@@ -35,6 +35,9 @@ const STATUS_COLORS = {
   DISPUTED:       'bg-rose-500/10 text-rose-400 border-rose-500/20',
   CANCELLED:      'bg-gray-500/10 text-gray-400 border-gray-500/20',
 };
+
+// Always two decimals, rounded the way the API rounds, so these match Analytics.
+const money = (value) => roundCents(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const Inventory = () => {
   const { data: rawInventory = [], isLoading } = useInventory();
@@ -112,7 +115,7 @@ const Inventory = () => {
           <div className="flex items-start justify-between relative z-10">
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Inventory Total Cost</p>
-              <h3 className="text-2xl font-bold text-white">${totalCapital.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
+              <h3 className="text-2xl font-bold text-white">${money(totalCapital)}</h3>
             </div>
             <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400">
               <DollarSign className="w-5 h-5" />
@@ -235,8 +238,8 @@ const Inventory = () => {
                     </td>
                     <td className="px-4 py-5">
                       <div className="flex flex-col">
-                        <span className="text-sm font-medium text-gray-300">${allocatedCost(item, item.qty_on_hand).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                        <span className="text-[10px] text-gray-500">${allocatedCost(item, 1).toFixed(2)} / unit</span>
+                        <span className="text-sm font-medium text-gray-300">${money(allocatedCost(item, item.qty_on_hand))}</span>
+                        <span className="text-[10px] text-gray-500">${money(allocatedCost(item, 1))} / unit</span>
                       </div>
                     </td>
                     <td className="px-4 py-5">
@@ -294,7 +297,7 @@ const Inventory = () => {
                     </td>
                     <td className="px-4 py-5">
                       <div className="flex flex-col">
-                        <span className="text-sm font-medium text-gray-300">${group.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                        <span className="text-sm font-medium text-gray-300">${money(group.totalCost)}</span>
                         <span className="text-[10px] text-gray-500">combined total</span>
                       </div>
                     </td>
@@ -343,8 +346,8 @@ const Inventory = () => {
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex flex-col">
-                            <span className="text-sm font-medium text-gray-400">${allocatedCost(item, item.qty_on_hand).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                            <span className="text-[10px] text-gray-600">${allocatedCost(item, 1).toFixed(2)} / unit</span>
+                            <span className="text-sm font-medium text-gray-400">${money(allocatedCost(item, item.qty_on_hand))}</span>
+                            <span className="text-[10px] text-gray-600">${money(allocatedCost(item, 1))} / unit</span>
                           </div>
                         </td>
                         {/* eBay column — empty on child rows */}

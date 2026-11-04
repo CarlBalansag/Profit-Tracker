@@ -1,4 +1,4 @@
-import { allocatedCost, allocatedCashback, effectiveCashbackRate, saleEconomics, isRealizedSale, keptQuantity, keptSaleQuantity } from '../../../shared/finance.mjs';
+import { allocatedCost, allocatedCashback, effectiveCashbackRate, saleEconomics, isRealizedSale, keptQuantity, keptSaleQuantity, heldSaleQuantity, roundCents } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { useInventory, usePlatforms, usePaymentMethods, useBuyers, useInvalidate, apiFetch} from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
@@ -115,6 +115,19 @@ function RefundedBadge({ row }) {
       className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border bg-amber-500/10 text-amber-400 border-amber-500/25 whitespace-nowrap"
     >
       REFUNDED ${formatMoney(row.refundedAmount)}{units}
+    </span>
+  );
+}
+
+// A cancelled, voided or returned sale whose units are in stock again. Their
+// cost moved to the purchase's on-hand row, so this row no longer carries it.
+function BackInStockBadge({ units }) {
+  return (
+    <span
+      title="These units are back in stock, so their cost now sits on the purchase row"
+      className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border bg-teal-500/10 text-teal-400 border-teal-500/25 whitespace-nowrap"
+    >
+      {units} BACK IN STOCK
     </span>
   );
 }
@@ -452,11 +465,14 @@ const Transactions = () => {
 
     if (inv.sales?.length > 0) {
       inv.sales.forEach(sale => {
-        // Proportionally allocate tax, shipping, and fees based on qty sold vs qty purchased
-        const allocatedTax = unitTax * keptSaleQuantity(sale);
-        const allocatedShipping = unitInboundShipping * keptSaleQuantity(sale);
+        // Proportionally allocate tax, shipping, and fees based on qty sold vs qty purchased.
+        // Only units still out of stock count: restored units already carry their
+        // cost on the on-hand row above, and counting them here too adds them twice.
+        const heldUnits = heldSaleQuantity(sale);
+        const allocatedTax = unitTax * heldUnits;
+        const allocatedShipping = unitInboundShipping * heldUnits;
         const economics = saleEconomics(inv, sale);
-        const totalUnitCost = economics.cost;
+        const totalUnitCost = allocatedCost(inv, heldUnits);
         const profit = isRealizedSale(sale) ? economics.netProfit : 0;
         rows.push({
           id: sale.id,
@@ -475,6 +491,8 @@ const Transactions = () => {
           rawQtyPurchased: inv.qty_purchased,
           rawCost: inv.unit_purchase_cost,
           cost: totalUnitCost,
+          soldUnits: isRealizedSale(sale) ? keptSaleQuantity(sale) : 0,
+          restoredUnits: Number(sale.restored_qty) || 0,
           rawSale: sale.unit_price,
           sale: sale.unit_price * sale.quantity,
           profit,
@@ -553,7 +571,10 @@ const Transactions = () => {
   const totalCostSum    = filteredRows.reduce((s, r) => s + (r.cost || 0), 0);
   const totalProfitSum  = filteredRows.filter(r => r.isSale).reduce((s, r) => s + (r.profit || 0), 0);
   const unsoldCount     = filteredRows.filter(r => !r.isSale).reduce((s, r) => s + r.qty, 0);
-  const soldCount       = filteredRows.filter(r => r.isSale).reduce((s, r) => s + r.qty, 0);
+  const soldCount       = filteredRows.reduce((s, r) => s + (r.soldUnits || 0), 0);
+  // One purchase can show as several rows (units left on hand plus each sale).
+  const purchaseCount   = new Set(filteredRows.map(r => r.rawId)).size;
+  const saleRowCount    = filteredRows.filter(r => r.isSale).length;
 
   // Unique vendor/platform options derived from actual rows
   const vendorOptions = [...new Map(
@@ -721,8 +742,9 @@ const Transactions = () => {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-6">
         <div className="rounded-xl border border-white/10 bg-[#16181d] p-3 pl-4 flex flex-col justify-between">
-          <div className="flex items-center gap-2 text-gray-400 text-xs font-medium mb-2"><Package className="w-3.5 h-3.5" /> Total Items</div>
+          <div className="flex items-center gap-2 text-gray-400 text-xs font-medium mb-2"><Package className="w-3.5 h-3.5" /> Rows Shown</div>
           <div className="text-xl font-bold text-white">{filteredRows.length}</div>
+          <div className="text-[10px] text-gray-500 mt-1">{purchaseCount} purchase{purchaseCount !== 1 ? 's' : ''} · {saleRowCount} sale{saleRowCount !== 1 ? 's' : ''}</div>
         </div>
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 pl-4 flex flex-col justify-between">
           <div className="flex items-center gap-2 text-amber-500/80 text-xs font-medium mb-2"><Tag className="w-3.5 h-3.5" /> Unsold Units</div>
@@ -734,11 +756,12 @@ const Transactions = () => {
         </div>
         <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 pl-4 flex flex-col justify-between">
           <div className="flex items-center gap-2 text-red-500/80 text-xs font-medium mb-2"><DollarSign className="w-3.5 h-3.5" /> Total Cost</div>
-          <div className="text-xl font-bold text-red-400">${totalCostSum.toFixed(2)}</div>
+          <div className="text-xl font-bold text-red-400">${roundCents(totalCostSum).toFixed(2)}</div>
+          <div className="text-[10px] text-gray-500 mt-1">Rows shown, less refunds</div>
         </div>
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 pl-4 flex flex-col justify-between">
           <div className="flex items-center gap-2 text-emerald-500/80 text-xs font-medium mb-2"><DollarSign className="w-3.5 h-3.5" /> Total Profit</div>
-          <div className="text-xl font-bold text-emerald-400">${totalProfitSum.toFixed(2)}</div>
+          <div className="text-xl font-bold text-emerald-400">${roundCents(totalProfitSum).toFixed(2)}</div>
         </div>
       </div>
 
@@ -907,6 +930,7 @@ const Transactions = () => {
                 }
                 <p className="text-sm font-semibold text-gray-100 truncate">{row.product}</p>
                 {row.refundedAmount > 0 || row.refundedUnits > 0 ? <RefundedBadge row={row} /> : null}
+                {row.restoredUnits > 0 ? <BackInStockBadge units={row.restoredUnits} /> : null}
                 <ProductNoteButton productName={row.product} />
               </div>
               <button
@@ -1097,6 +1121,7 @@ const Transactions = () => {
                             <div className="flex items-center gap-1">
                               <p className="text-sm font-semibold text-gray-100 leading-tight">{row.product}</p>
                               {row.refundedAmount > 0 || row.refundedUnits > 0 ? <RefundedBadge row={row} /> : null}
+                              {row.restoredUnits > 0 ? <BackInStockBadge units={row.restoredUnits} /> : null}
                               <ProductNoteButton productName={row.product} />
                             </div>
                           )}

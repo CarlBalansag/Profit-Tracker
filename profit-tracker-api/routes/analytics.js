@@ -6,6 +6,7 @@ const { analyticsDashboardQuery } = require('../validation/schemas');
 const { Decimal, decimal, isRealizedSale, batchCost, allocatedCost, effectiveCashbackRate, inventoryCashback, saleEconomics, keptQuantity, keptSaleQuantity } = require('../services/decimalFinance');
 const { pipelineBucketOf } = require('../services/statusTransitions');
 const { payoutStatus } = require('../services/payoutStatus');
+const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -18,6 +19,20 @@ const zero = () => new Decimal(0);
 // everything else (ratios, rates) in Decimal too, then rounds those to the
 // same 2dp for consistent display precision.
 const money = (d) => d.toDecimalPlaces(2).toNumber();
+// Every other screen reads the exact Decimal columns (GET /api/inventory goes
+// through the same substitution). Summing the legacy Float columns here instead
+// left Analytics a cent or more away from them on rows whose Float holds more
+// than two decimals.
+const exactInventory = (inv) => {
+  const result = withExactFields(inv, MAPPINGS.inventory);
+  if (result.payment_method) result.payment_method = withExactFields(result.payment_method, MAPPINGS.paymentMethod);
+  return result;
+};
+const exactSale = (sale) => {
+  const result = withExactFields(sale, MAPPINGS.sales);
+  if (result.inventory) result.inventory = exactInventory(result.inventory);
+  return result;
+};
 
 router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery), async (req, res, next) => {
   try {
@@ -56,7 +71,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     // Only fetch allInventories separately when we know we'll need it (date filter or non-All mode)
     const needsAllInventories = mode !== 'All' || dateFrom;
 
-    const [inventories, sales, allInventoriesFetched] = await Promise.all([
+    const [rawInventories, rawSales, allInventoriesFetched] = await Promise.all([
       prisma.inventory.findMany({
         where: inventoryWhere,
         include: { payment_method: true, vendor: true },
@@ -74,6 +89,9 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
         ? prisma.inventory.findMany({ where: { user_id: userId } })
         : Promise.resolve(null),
     ]);
+
+    const inventories = rawInventories.map(exactInventory);
+    const sales = rawSales.map(exactSale);
 
     // Precompute per-sale cost allocation once — avoids repeating the same
     // arithmetic 4× (stats, cardMap, trend, recentTransactions).
@@ -145,7 +163,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     const roi = soldCost.greaterThan(0) ? profit.div(soldCost).times(100) : zero();
 
     // Inventory value: cost of unsold units on hand (always from all inventory regardless of mode/date)
-    const allInventories = allInventoriesFetched ?? inventories;
+    const allInventories = allInventoriesFetched?.map(exactInventory) ?? inventories;
     const inventoryValue = allInventories.reduce((sum, inv) => sum.plus(allocatedCost(inv, inv.qty_on_hand)), zero());
 
     let inventoryQty = 0;
@@ -487,7 +505,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       buyer: s.buyer?.name || 'Unknown',
       cost: money(saleCost),
       revenue: money(saleRevenue),
-      commission: money(decimal(s.commission_fee_decimal ?? s.commission_fee)),
+      commission: money(decimal(s.commission_fee)),
       refunded: money(decimal(s.refunded_amount || 0)),
       refunded_units: s.refunded_qty || 0,
       cashback: money(saleCashback),

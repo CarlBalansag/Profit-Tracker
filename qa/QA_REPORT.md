@@ -290,3 +290,23 @@ Also surfaced along the way: re-running the original `qa/probe.cjs` bug-reproduc
 The audit exercised the actual frontend and Express route code with isolated fixture data. It did not write to the configured PostgreSQL database. Discord OAuth, actual Cloudinary transfer, eBay interaction, generated calendar subscription polling, and PWA offline behavior were not exercised end to end because those require external side effects or deployment-specific credentials. The calendar feed configuration was checked from repository and environment variable names without exposing their values.
 
 Machine-readable probe evidence is in `qa/probe-results.json`; the reproducible harness is `qa/harness.cjs` and `qa/probe.cjs`.
+
+## Cross-page totals audit (2026-11-03)
+
+Ran on a disposable embedded PostgreSQL database and the Firebase emulator (`qa/firebase-local-server.cjs`); the hosted database was not read or changed. The live figures were explained from the code and reproduced with an eight-purchase fixture, not confirmed against the live rows.
+
+| Gap | Cause | Fixture before | Fixture after | Resolution |
+|---|---|---|---|---|
+| Inventory cost, Inventory vs Analytics | Analytics summed the legacy Float columns while every other screen reads the 2-decimal Decimal mirrors, so a row whose Float holds extra decimals drifted. Inventory also displayed three decimals and rounded differently. | $504.945 vs $504.96 | $504.95 on both | Bug, fixed |
+| Total cost, Transactions vs Analytics | A cancel, void or return action puts units back in stock, and Transactions charged their cost on both the sale row and the on-hand row. | $753.91 vs $714.96 | $714.95 on both | Bug, fixed |
+| Sold units, Transactions vs Analytics | "Sold / Done" counted cancelled sales and units the buyer sent back. | 7 vs 4 | 4 on both | Bug, fixed |
+| Purchase count, Transactions vs Analytics | Transactions counts rows, and one purchase can be several rows. | 13 vs 8 | 13 rows, "8 purchases · 6 sales" | Intentional, relabelled |
+
+With the amounts rounded alike, Transactions Total Cost equals Analytics COST when no filter is on. They still differ by design under a filter: Transactions totals the rows shown, by each row's own date, while Analytics counts purchases by purchase date, or only units sold in a channel view. Both cards now say so.
+
+Known remaining limits:
+
+- A manual "Adjust Quantity On Hand" changes stock without changing any sale, so Transactions Total Cost moves away from purchase spend by the cost of those units. Found by reading `restore_inventory` in `services/statusTransitions.js`; not exercised.
+- In a Cashout or Marketplace view, Transactions still includes the cost of a disputed sale, or of units left out of stock by a partial return, while Analytics counts realized sales only.
+
+Open finding, not fixed here: `CURRENCY_DECIMAL_MIGRATION_PLAN.md` records "no production code reads Float monetary fields", but these still do: `routes/paymentMethods.js` (card spend), `services/cardNetToPay.js`, `routes/receipts.js` and the money reads in `routes/mcp.js`. Reproduce by giving a purchase `unit_purchase_cost = 12.3449` with `unit_purchase_cost_decimal = 12.34` and comparing those totals with Analytics.
