@@ -102,7 +102,12 @@ const ALL_COLUMNS = [
   { key: 'category', label: 'Category' },
   { key: 'tracking', label: 'Tracking' },
 ];
-const DEFAULT_COLS = Object.fromEntries(ALL_COLUMNS.map(c => [c.key, true]));
+// Off by default so Sale and Profit fit on screen. All of these stay in the Columns menu.
+const OPTIONAL_COLS = ['commission', 'cashback', 'payment', 'retail', 'tax', 'shipping', 'category', 'tracking'];
+const DEFAULT_COLS = Object.fromEntries(ALL_COLUMNS.map(c => [c.key, !OPTIONAL_COLS.includes(c.key)]));
+// Every visit used to save the all-on default, so a saved all-on set means nobody chose it.
+// This marker lets someone who really wants every column keep them after the first load.
+const COLS_MIGRATED_KEY = 'txn_visible_cols_v2';
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 // Money back on this purchase (from the store) or sale (to the buyer).
@@ -150,7 +155,11 @@ const Transactions = () => {
   const [visibleCols, setVisibleCols] = useState(() => {
     try {
       const stored = localStorage.getItem('txn_visible_cols');
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const isOldDefault = !localStorage.getItem(COLS_MIGRATED_KEY) && ALL_COLUMNS.every(c => parsed[c.key] !== false);
+        if (!isOldDefault) return parsed;
+      }
     } catch {}
     return DEFAULT_COLS;
   });
@@ -200,6 +209,7 @@ const Transactions = () => {
 
   useEffect(() => {
     localStorage.setItem('txn_visible_cols', JSON.stringify(visibleCols));
+    localStorage.setItem(COLS_MIGRATED_KEY, '1');
   }, [visibleCols]);
 
   useEffect(() => {
