@@ -510,6 +510,19 @@
     accent-color: var(--glass-accent);
   }
 
+  .glass-workspace input:not([type="checkbox"]):not([type="radio"]),
+  .glass-workspace select,
+  .glass-workspace textarea {
+    border-radius: 8px !important;
+  }
+
+  .glass-workspace input:focus,
+  .glass-workspace select:focus,
+  .glass-workspace textarea:focus {
+    border-color: var(--glass-accent) !important;
+    outline: none !important;
+  }
+
   .glass-workspace [class*="text-white"],
   .glass-workspace [class*="text-gray-100"],
   .glass-workspace [class*="text-gray-200"],
