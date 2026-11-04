@@ -6,7 +6,7 @@ import {
   Paperclip, X, Hash, MapPin, ChevronDown, CheckCircle2, StickyNote, AlertTriangle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { addDays } from '../utils/returnWindow';
+import { addDays, localToday } from '../utils/returnWindow';
 import { usePaymentMethods, usePlatforms, useBuyers, useInvalidate, apiFetch, useProductNote, useProductNoteMutations, useProductNames, useRecentTransaction } from '../hooks/useApi';
 import { MAX_RECEIPT_BYTES, RECEIPT_ACCEPT, saveInventoryWithReceipt, validateReceiptFile } from '../hooks/receiptUpload';
 
@@ -37,7 +37,7 @@ const AddTransaction = () => {
     category: '',
     unit_purchase_cost: '',
     qty_purchased: 1,
-    purchase_date: new Date().toISOString().split('T')[0],
+    purchase_date: localToday(),
     return_window_days: '',
     sales_tax: '',
     shipping_cost_inbound: '',
@@ -156,7 +156,7 @@ const AddTransaction = () => {
       payment_method_id: recentTxn.payment_method_id ?? prev.payment_method_id,
       cashback_rate: '',
       cashback_earned: '',
-      purchase_date: new Date().toISOString().split('T')[0],
+      purchase_date: localToday(),
     }));
     setSuggestionDismissed(true);
   };

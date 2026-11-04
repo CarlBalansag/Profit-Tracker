@@ -3,6 +3,11 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '1.09',
+    date: '2026-11-03',
+    notes: 'Add Transaction, Record Sale and Add Expense now default to today\'s date in the evening instead of tomorrow\'s.',
+  },
+  {
     version: '1.08',
     date: '2026-11-03',
     notes: 'A cancelled, voided or returned sale whose units went back into stock can no longer be moved back to an active status. Record a new sale instead.',

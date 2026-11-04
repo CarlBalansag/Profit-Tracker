@@ -3,6 +3,7 @@ import { apiFetch, usePaymentMethods } from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { useNavigate } from 'react-router-dom';
+import { localToday } from '../utils/returnWindow';
 import { toast } from 'sonner';
 import {
   Receipt, Download, Plus, DollarSign,
@@ -50,7 +51,7 @@ const FREQUENCIES = [
 ];
 const FREQ_MAP = Object.fromEntries(FREQUENCIES.map(f => [f.value, f.label]));
 
-const todayStr = () => new Date().toISOString().split('T')[0];
+const todayStr = () => localToday();
 
 const EMPTY_FORM = {
   name: '', amount: '', category: '',

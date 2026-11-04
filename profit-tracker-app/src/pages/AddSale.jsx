@@ -7,6 +7,7 @@ import {
 import clsx from 'clsx';
 import { useNavigate } from 'react-router-dom';
 import ReturnWindowBadge from '../components/ReturnWindowBadge';
+import { localToday } from '../utils/returnWindow';
 import { useInventory, usePlatforms, usePaymentMethods, useInvalidate, apiFetch, useProductNote, useProductNoteMutations } from '../hooks/useApi';
 
 const AddSale = () => {
@@ -30,7 +31,7 @@ const AddSale = () => {
     commission_fee: '',
     sale_shipping: '',
     sale_shipping_payment_method_id: '',
-    sale_date: new Date().toISOString().split('T')[0],
+    sale_date: localToday(),
     payout_date: '',
     taxable: true,
     sale_tax_collected: '',
