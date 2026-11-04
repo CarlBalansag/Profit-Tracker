@@ -14,7 +14,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
     if (typeof req.query.year !== 'string' || !/^\d{4}$/.test(req.query.year) || Number(req.query.year) < 1900) return res.status(400).json({ error: 'Choose a four-digit tax year from 1900 to 9999' });
     const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { schedule_c_enabled: true } });
     if (!user?.schedule_c_enabled) return res.status(403).json({ error: 'Enable Schedule C in Settings first' });
-    const [expenses, inventories] = await Promise.all([
+    const [expenses, inventories, saleRefunds] = await Promise.all([
       prisma.expense.findMany({ where: { user_id: req.user.id } }),
       // Same source the Expenses tab's computed lines use, so the two never disagree.
       prisma.inventory.findMany({
@@ -24,8 +24,9 @@ router.get('/', isAuthenticated, async (req, res, next) => {
           payment_method: { select: { id: true, name: true, type: true } },
         },
       }),
+      prisma.refund.findMany({ where: { user_id: req.user.id, sale_id: { not: null } }, include: { sale: true } }),
     ]);
-    res.json(await expenseWorksheet(withExactList(expenses, MAPPINGS.expense), Number(req.query.year), derivedExpenseLines(inventories)));
+    res.json(await expenseWorksheet(withExactList(expenses, MAPPINGS.expense), Number(req.query.year), derivedExpenseLines(inventories), saleRefunds));
   } catch (error) { next(error); }
 });
 module.exports = router;
