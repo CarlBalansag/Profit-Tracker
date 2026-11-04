@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ListChecks, Truck, Package, Send, CheckCircle2, ChevronLeft, ChevronRight, ArrowUpDown, RefreshCw, Pencil, Check, X } from 'lucide-react';
+import { Truck, Package, Send, CheckCircle2, ChevronLeft, ChevronRight, ArrowUpDown, RefreshCw, Pencil, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useInventory, useSales, useInvalidate, apiFetch } from '../hooks/useApi';
 import useRecordActions from '../hooks/useRecordActions';

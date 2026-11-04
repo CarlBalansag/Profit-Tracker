@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useInventory, useSales, useInvalidate, apiFetch } from '../hooks/useApi';
 import { detectCarrier, carrierTrackingUrl } from '../utils/carrier';
 import { toast } from 'sonner';
-import { Truck, RefreshCw, ExternalLink, Save, ChevronRight, Pencil } from 'lucide-react';
+import { RefreshCw, ExternalLink, Save, ChevronRight, Pencil } from 'lucide-react';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 function timeAgo(iso) {

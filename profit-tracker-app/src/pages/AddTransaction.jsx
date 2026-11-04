@@ -448,7 +448,7 @@ const AddTransaction = () => {
   return (
     // The app shell never scrolls; each page owns its scroll container.
     <div className="h-full overflow-auto">
-    <div className="container max-w-7xl mx-auto px-4 py-6 lg:px-8 lg:py-10">
+    <div className="container max-w-7xl mx-auto px-4 py-6 lg:px-6">
 
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
@@ -770,7 +770,7 @@ const AddTransaction = () => {
 
               {/* Attach Receipt */}
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                <label htmlFor="transaction-receipt" className="block text-xs font-medium text-gray-400 mb-1.5">
                   Attach Receipt <span className="text-gray-600">(optional)</span>
                 </label>
                 <div
@@ -784,6 +784,7 @@ const AddTransaction = () => {
                       : '1 receipt selected'}
                   </span>
                   <input
+                    id="transaction-receipt"
                     ref={fileInputRef}
                     type="file"
                     accept={RECEIPT_ACCEPT}

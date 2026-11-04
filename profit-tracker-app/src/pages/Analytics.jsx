@@ -304,8 +304,8 @@ function Analytics() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={monthlyTrend} margin={{ top: 5, right: 20, left: 0, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={THEME.borderHover} vertical={false} />
-                    <XAxis dataKey="name" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dy={10} />
-                    <YAxis stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
+                    <XAxis dataKey="name" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 11 }} tickLine={false} axisLine={false} dy={10} />
+                    <YAxis stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 11 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
                     <Tooltip contentStyle={{ backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`, borderRadius: '8px' }} itemStyle={{ fontSize: '12px' }} labelStyle={{ color: THEME.textSecondary, fontSize: '12px', marginBottom: '4px' }} formatter={v => `$${fmt(v)}`} />
                     <Legend wrapperStyle={{ bottom: 0, fontSize: '12px' }} iconType="circle" />
                     <Line type="monotone" dataKey="revenue" name="Revenue" stroke={THEME.accent} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
@@ -368,8 +368,8 @@ function Analytics() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke={THEME.borderHover} vertical={false} />
-                    <XAxis dataKey="name" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dy={10} />
-                    <YAxis stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
+                    <XAxis dataKey="name" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 11 }} tickLine={false} axisLine={false} dy={10} />
+                    <YAxis stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 11 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
                     <Tooltip contentStyle={{ backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`, borderRadius: '8px' }} itemStyle={{ color: THEME.textPrimary }} formatter={v => `$${fmt(v)}`} />
                     <Area type="monotone" dataKey="profit" name="Net Profit" stroke={THEME.accent} fillOpacity={1} fill="url(#colorProfit)" />
                   </AreaChart>
@@ -388,8 +388,8 @@ function Analytics() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={periodPLData} margin={{ top: 5, right: 20, left: 0, bottom: 20 }} barSize={40}>
                     <CartesianGrid strokeDasharray="3 3" stroke={THEME.borderHover} vertical={false} />
-                    <XAxis dataKey="name" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dy={10} />
-                    <YAxis stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
+                    <XAxis dataKey="name" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 11 }} tickLine={false} axisLine={false} dy={10} />
+                    <YAxis stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 11 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
                     <Tooltip contentStyle={{ backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`, borderRadius: '8px' }} itemStyle={{ color: THEME.textPrimary }} cursor={{ fill: THEME.borderHover, opacity: 0.4 }} formatter={v => `$${fmt(v)}`} />
                     <Bar dataKey="value" name="P&L" radius={[4, 4, 0, 0]}>
                       {periodPLData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
@@ -443,8 +443,8 @@ function Analytics() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={platformBreakdown} margin={{ top: 5, right: 20, left: 0, bottom: 20 }} barSize={36}>
                       <CartesianGrid strokeDasharray="3 3" stroke={THEME.borderHover} vertical={false} />
-                      <XAxis dataKey="name" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dy={10} />
-                      <YAxis stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
+                      <XAxis dataKey="name" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 11 }} tickLine={false} axisLine={false} dy={10} />
+                      <YAxis stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 11 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
                       <Tooltip contentStyle={{ backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`, borderRadius: '8px' }} itemStyle={{ color: THEME.textPrimary }} formatter={v => `$${fmt(v)}`} />
                       <Bar dataKey="revenue" name="Paid to You" radius={[4, 4, 0, 0]}>
                         {platformBreakdown.map((entry, i) => <Cell key={i} fill={PLATFORM_TYPE_COLOR[entry.type] || THEME.chart1} />)}
@@ -525,8 +525,8 @@ function Analytics() {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={categoryBreakdown} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }} barSize={16}>
                         <CartesianGrid strokeDasharray="3 3" stroke={THEME.borderHover} horizontal={false} />
-                        <XAxis type="number" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
-                        <YAxis type="category" dataKey="category" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} width={90} />
+                        <XAxis type="number" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={v => `$${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} />
+                        <YAxis type="category" dataKey="category" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 11 }} tickLine={false} axisLine={false} width={90} />
                         <Tooltip contentStyle={{ backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`, borderRadius: '8px' }} itemStyle={{ color: THEME.textPrimary }} formatter={(v, n, p) => [`$${fmt(v)} (${fmtPct(p.payload.margin)} margin)`, 'Profit']} />
                         <Bar dataKey="profit" name="Profit" radius={[0, 4, 4, 0]}>
                           {categoryBreakdown.map((entry, i) => <Cell key={i} fill={entry.profit >= 0 ? THEME.green : THEME.red} />)}
@@ -560,8 +560,8 @@ function Analytics() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={cashbackRateTrend} margin={{ top: 5, right: 20, left: 0, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={THEME.borderHover} vertical={false} />
-                    <XAxis dataKey="name" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dy={10} />
-                    <YAxis stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 10 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `${v.toFixed(1)}%`} />
+                    <XAxis dataKey="name" stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 11 }} tickLine={false} axisLine={false} dy={10} />
+                    <YAxis stroke={THEME.textMuted} tick={{ fill: THEME.textSecondary, fontSize: 11 }} tickLine={false} axisLine={false} dx={-10} tickFormatter={v => `${v.toFixed(1)}%`} />
                     <Tooltip contentStyle={{ backgroundColor: THEME.surface, border: `1px solid ${THEME.border}`, borderRadius: '8px' }} itemStyle={{ color: THEME.textPrimary }} formatter={v => `${v.toFixed(2)}%`} />
                     <Line type="monotone" dataKey="rate" name="Cashback Rate" stroke={THEME.accent} strokeWidth={2} dot={{ r: 3 }} />
                   </LineChart>

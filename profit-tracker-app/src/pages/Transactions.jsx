@@ -103,7 +103,7 @@ const ALL_COLUMNS = [
   { key: 'tracking', label: 'Tracking' },
 ];
 // Off by default so Sale and Profit fit on screen. All of these stay in the Columns menu.
-const OPTIONAL_COLS = ['commission', 'cashback', 'payment', 'retail', 'tax', 'shipping', 'category', 'tracking'];
+const OPTIONAL_COLS = ['platform', 'commission', 'cashback', 'payment', 'retail', 'tax', 'shipping', 'category', 'tracking'];
 const DEFAULT_COLS = Object.fromEntries(ALL_COLUMNS.map(c => [c.key, !OPTIONAL_COLS.includes(c.key)]));
 // Every visit used to save the all-on default, so a saved all-on set means nobody chose it.
 // This marker lets someone who really wants every column keep them after the first load.
@@ -614,7 +614,7 @@ const Transactions = () => {
 
   return (
     <>
-    <div className="container max-w-full mx-auto px-4 py-6 lg:px-8 lg:py-8 h-full overflow-y-auto">
+    <div className="container max-w-full mx-auto px-4 py-6 lg:px-6 h-full overflow-y-auto">
       
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
@@ -1124,12 +1124,12 @@ const Transactions = () => {
                         </td>
                       );
                       case 'product': return (
-                        <td key="product" className="px-2 py-3.5 min-w-40">
+                        <td key="product" className="px-2 py-3.5 min-w-40 max-w-[190px]">
                           {isEditing ? (
                             <EditInput value={editData.product} onChange={v => setEditData(d => ({ ...d, product: v }))} className="min-w-[180px]" />
                           ) : (
                             <div className="flex items-center gap-1">
-                              <p className="text-sm font-semibold text-gray-100 leading-tight">{row.product}</p>
+                              <p className="text-sm font-semibold text-gray-100 leading-tight truncate" title={row.product}>{row.product}</p>
                               {row.refundedAmount > 0 || row.refundedUnits > 0 ? <RefundedBadge row={row} /> : null}
                               {row.restoredUnits > 0 ? <BackInStockBadge units={row.restoredUnits} /> : null}
                               <ProductNoteButton productName={row.product} />

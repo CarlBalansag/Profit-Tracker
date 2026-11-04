@@ -1,7 +1,7 @@
 import { formatMoney } from '../utils/money';
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
-import { ShieldCheck, Search, Package, DollarSign, Info } from 'lucide-react';
+import { Search, Package, DollarSign, Info } from 'lucide-react';
 import { PageLoader } from '../components/PageLoader';
 
 function InfoTooltip({ text }) {

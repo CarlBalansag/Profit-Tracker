@@ -140,7 +140,7 @@ const AddSale = () => {
   };
 
   return (
-    <div className="container max-w-5xl 3xl:max-w-6xl mx-auto px-4 py-6 lg:px-8 lg:py-10 h-[calc(100vh-80px)] overflow-y-auto">
+    <div className="container max-w-5xl 3xl:max-w-6xl mx-auto px-4 py-6 lg:px-6 h-[calc(100vh-80px)] overflow-y-auto">
       
       {/* Header */}
       <div className="mb-6">
