@@ -25,7 +25,7 @@ const parseLocalDate = (str) => {
 };
 const toJson = (refund) => refund && ({ ...refund, amount: Number(refund.amount) });
 const money = (value) => decimal(value || 0).toFixed(2);
-const EXCLUDED_SALE_MESSAGE = 'This sale is cancelled, returned or disputed, so it no longer counts toward your totals. Reopen it before changing its refunds.';
+const EXCLUDED_SALE_MESSAGE = "This sale is cancelled, returned or disputed, so it no longer counts toward your totals and its refunds can't be changed.";
 
 // GET /api/refunds?inventory_id=... or ?sale_id=... -- newest first.
 router.get('/', isAuthenticated, async (req, res, next) => {

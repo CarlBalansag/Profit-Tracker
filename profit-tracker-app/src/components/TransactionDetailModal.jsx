@@ -735,7 +735,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                                 kind="sale"
                                 id={sale.id}
                                 maxUnits={Math.max(0, Number(sale._savedQuantity) - (sale.refunded_qty || 0))}
-                                disabledReason={isRealizedSale(sale) ? '' : 'This sale is cancelled, returned or disputed, so it no longer counts toward your totals. Reopen it to record or remove a refund.'}
+                                disabledReason={isRealizedSale(sale) ? '' : "This sale is cancelled, returned or disputed, so it no longer counts toward your totals and its refunds can't be changed."}
                                 onChanged={refreshRefundTotals}
                               />
                             </div>

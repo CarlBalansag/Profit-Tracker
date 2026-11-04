@@ -102,7 +102,7 @@ describe('Transaction edit window: refunds', () => {
     mocks.apiFetch.mockImplementation(async () => json({ ...purchase(), sales: [{ ...purchase().sales[0], status: 'CANCELLED' }] }));
     await open();
     fireEvent.click(screen.getByRole('button', { name: /Refunds/ }));
-    expect(screen.getByText(/Reopen it to record or remove a refund/)).toBeInTheDocument();
+    expect(screen.getByText(/its refunds can.t be changed/)).toBeInTheDocument();
   });
 
   it('keeps the stored cashback on the full original charge when the rate changes', async () => {
