@@ -524,7 +524,7 @@ const Transactions = () => {
       if (!row.product.toLowerCase().includes(q) && !row.vendor.toLowerCase().includes(q) && !row.platform.toLowerCase().includes(q))
         return false;
     }
-    if (filterStatus && row.status?.toUpperCase() !== filterStatus) return false;
+    if (filterStatus && row.status?.toUpperCase() !== filterStatus.toUpperCase()) return false;
     if (filterVendorId && row.vendorId !== filterVendorId) return false;
     if (filterPlatformId && row.platformId !== filterPlatformId) return false;
     if (filterPaymentId && row.paymentMethodId !== filterPaymentId) return false;

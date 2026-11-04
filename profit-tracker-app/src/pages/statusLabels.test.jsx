@@ -13,7 +13,12 @@ const item = (over) => ({
   sales_tax: 0, shipping_cost_inbound: 0, fees: 0, gift_card_amount: 0, status: 'SHIPPED_IN', category: null,
   tracking_number: null, sales: [], ...over,
 });
-const inventory = [item(), item({ id: 'b', product_name: 'Gadget', qty_on_hand: 2, qty_purchased: 2, status: 'SCANNED_IN' })];
+const inventory = [
+  item(),
+  item({ id: 'b', product_name: 'Gadget', qty_on_hand: 2, qty_purchased: 2, status: 'SCANNED_IN' }),
+  item({ id: 'c', product_name: 'Preorder Thing', qty_on_hand: 4, qty_purchased: 4, status: 'Pre Order' }),
+  item({ id: 'd', product_name: 'Shelf Thing', qty_on_hand: 1, qty_purchased: 1, status: 'On Hand' }),
+];
 
 vi.mock('../hooks/useApi', () => ({
   useInventory: () => ({ data: inventory, isLoading: false, refetch: vi.fn() }),
@@ -36,7 +41,7 @@ describe('status labels on Transactions', () => {
     mountTransactions();
     expect(screen.queryByText('Active Listed')).toBeNull();
     const card = screen.getByText('Unsold Units').parentElement;
-    expect(within(card).getByText('5')).toBeTruthy();
+    expect(within(card).getByText('10')).toBeTruthy();
   });
 
   it('shows friendly names in the filter while keeping the stored value', () => {
@@ -52,6 +57,17 @@ describe('status labels on Transactions', () => {
     fireEvent.change(select, { target: { value: 'SHIPPED_IN' } });
     const card = screen.getByText('Unsold Units').parentElement;
     expect(within(card).getByText('3')).toBeTruthy();
+  });
+
+  it.each([
+    ['Pre-order', 'Pre Order', '4'],
+    ['On Hand', 'On Hand', '1'],
+  ])('filters %s rows, whose stored status is mixed case', (label, value, units) => {
+    mountTransactions();
+    const select = screen.getByRole('option', { name: label }).closest('select');
+    fireEvent.change(select, { target: { value } });
+    const card = screen.getByText('Unsold Units').parentElement;
+    expect(within(card).getByText(units)).toBeTruthy();
   });
 
   it('never prints a raw status code in a badge', () => {
