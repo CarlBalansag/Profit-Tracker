@@ -1,6 +1,7 @@
 // Version history shown in the sidebar's "What's New" modal.
-// Newest entry first. Whenever a feature, update, or fix ships, bump the
-// version and add a short, non-technical entry here.
+// Newest entry first. At most one new entry per push to main, in short,
+// non-technical words, and small changes don't get their own version. See
+// rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
     version: '1.14',

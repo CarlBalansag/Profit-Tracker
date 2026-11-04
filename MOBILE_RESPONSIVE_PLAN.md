@@ -14,7 +14,7 @@ This file is the single source of truth for resuming this work across sessions. 
 - Test at: 320, 375, 390, 430, 768, 1024, then 1440 regression.
 - Tailwind breakpoints in this app: `sm`=640, `md`=768, `lg`=1024, `xl`=1280, `3xl`=custom (check `tailwind.config` if used — app uses Tailwind v4 CSS-first config, check `index.css` `@theme` block if present).
 - Commit in small, logical chunks on this branch as pages/components are finished — don't wait for the whole thing to be done to commit.
-- Bump version + changelog entry (`profit-tracker-app/src/data/changelog.js`) once at the end of this effort (or per logical milestone if the user wants incremental releases) per AGENTS.md rule 8 — this is a user-visible behavior change (mobile now works), so it qualifies.
+- Add one What's New entry (`profit-tracker-app/src/data/changelog.js`) at the end of this effort, or one per push if the user wants incremental releases, per AGENTS.md rule 8 — this is a user-visible behavior change (mobile now works), so it qualifies.
 
 ## Baseline findings from initial code audit (2026-10-13)
 
@@ -111,7 +111,7 @@ Goal: find real problems, not guess at them. Use Playwright MCP to load each pag
 
 ## Merge checklist (when Phase 3 is fully checked off)
 
-1. Version bump + changelog entry in `profit-tracker-app/src/data/changelog.js` (compute `+0.01` from `main`'s current top entry at merge time, not when this branch started)
+1. What's New entry in `profit-tracker-app/src/data/changelog.js`, one per push to `main` per AGENTS.md rule 8 (compute `+0.01` from `main`'s current top entry right before pushing, not when this branch started)
 2. Final `npm run lint && npm run build && npm run test` clean
 3. Merge `feature/mobile-responsive-ui` into `main`
 4. Remove this task's row from `TASKS.md` on `main`
