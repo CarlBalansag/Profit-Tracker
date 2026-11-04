@@ -130,7 +130,7 @@ const Login = () => {
 
         <div className="relative max-w-4xl mx-auto">
           {/* Eyebrow */}
-          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-indigo-400/80 mb-6">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-violet-400/80 mb-6">
             Reseller profit tracking
           </p>
 
@@ -144,7 +144,7 @@ const Login = () => {
             Profit Tracker gives resellers a real-time view of P&amp;L, cashback, cash flow, and inventory — without a single spreadsheet.
           </p>
 
-          <div className="flex flex-wrap gap-3 items-center">
+          <div className="flex flex-col gap-4 items-start">
             <FirebaseLoginForm migration={migration} />
             <a href="#how" className="inline-flex items-center gap-1.5 text-[13px] text-white/35 hover:text-white/60 transition-colors">
               How it works <ArrowRight size={13} />
@@ -275,7 +275,7 @@ const Login = () => {
       <section id="features" className="py-24 px-5 sm:px-8">
         <div className="max-w-5xl mx-auto">
           <div className="mb-16">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-indigo-400/80 mb-3">Features</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-violet-400/80 mb-3">Features</p>
             <h2 className="text-3xl sm:text-4xl font-bold leading-tight tracking-tight text-white max-w-lg">
               Everything a reseller actually needs
             </h2>
@@ -398,7 +398,7 @@ const Login = () => {
       <section id="how" className="py-24 px-5 sm:px-8 border-t border-white/[0.05]">
         <div className="max-w-3xl mx-auto">
           <div className="mb-14">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-indigo-400/80 mb-3">Getting started</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-violet-400/80 mb-3">Getting started</p>
             <h2 className="text-3xl font-bold tracking-tight text-white">Up and running in minutes</h2>
           </div>
           <div className="space-y-10">
