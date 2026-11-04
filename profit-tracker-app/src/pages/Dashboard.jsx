@@ -196,12 +196,8 @@ const Dashboard = () => {
       return (
         <div key="statCards" data-tutorial-id="dashboard-stats" className={isGlass
           ? `grid grid-cols-1 sm:grid-cols-2 ${statColClass} gap-3 3xl:gap-4 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both`
-          : "grid min-w-0 grid-cols-1 gap-4 overflow-x-auto dp-scrollbar pb-4 sm:grid-cols-2 lg:grid-cols-none animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both"
-        } style={!isGlass ? {
-          gridTemplateColumns: visibleStatCards.length > 0
-            ? `minmax(360px, 1.4fr) repeat(${Math.max(0, visibleStatCards.length - 1)}, minmax(210px, 1fr))`
-            : undefined,
-        } : undefined}>
+          : "grid min-w-0 grid-cols-1 gap-4 pb-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(200px,1fr))] animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both"
+        }>
           {visibleStatCards.map(cardConfig => {
             const def = STAT_CARD_REGISTRY[cardConfig.id];
             if (!def) return null;
