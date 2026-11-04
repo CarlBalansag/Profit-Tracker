@@ -3,6 +3,21 @@
 // version and add a short, non-technical entry here.
 export const CHANGELOG = [
   {
+    version: '1.13',
+    date: '2026-11-04',
+    notes: "The Schedule C worksheet now shows refunds to buyers as returns and allowances, separate from your expenses.",
+  },
+  {
+    version: '1.12',
+    date: '2026-11-04',
+    notes: "Cash Flow now shows how much was refunded by stores and to buyers, and marks refunded sales.",
+  },
+  {
+    version: '1.11',
+    date: '2026-11-04',
+    notes: "The AI assistant can now record, list and remove refunds.",
+  },
+  {
     version: '1.10',
     date: '2026-11-03',
     notes: 'The AI assistant can now record the shipping cost on a sale and which card paid for the label.',
