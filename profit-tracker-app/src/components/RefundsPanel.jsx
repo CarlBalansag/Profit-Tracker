@@ -1,3 +1,4 @@
+import { formatMoney } from '../utils/money';
 import React, { useState } from 'react';
 import { Trash2, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -78,7 +79,7 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
         <h4 className="text-xs font-semibold text-[var(--dp-text-primary)]">{copy.title}</h4>
         {refunds.length > 0 && (
           <span className="ml-auto text-xs text-emerald-400">
-            −${total.toFixed(2)}{units > 0 ? ` · ${units} unit${units === 1 ? '' : 's'} back` : ''}
+            −${formatMoney(total)}{units > 0 ? ` · ${units} unit${units === 1 ? '' : 's'} back` : ''}
           </span>
         )}
       </div>
@@ -91,7 +92,7 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
             <li key={r.id} className="flex items-start gap-2 rounded-lg px-3 py-2 bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)]">
               <div className="flex-1 min-w-0 text-xs">
                 <p className="text-[var(--dp-text-primary)]">
-                  <span className="font-semibold text-emerald-400">−${Number(r.amount).toFixed(2)}</span>
+                  <span className="font-semibold text-emerald-400">−${formatMoney(Number(r.amount))}</span>
                   {r.quantity > 0 && <span className="text-[var(--dp-text-secondary)]"> · {r.quantity} unit{r.quantity === 1 ? '' : 's'} back</span>}
                   <span className="text-[var(--dp-text-muted)]"> · {toDateOnly(r.date)}</span>
                 </p>
@@ -104,7 +105,7 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
                   <button type="button" disabled={busy} onClick={() => setConfirmId(null)} className={`${SMALL_BTN} text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)]`}>Keep</button>
                 </div>
               ) : (
-                <button type="button" disabled={busy || !!disabledReason} onClick={() => setConfirmId(r.id)} title="Remove refund" aria-label={`Remove refund of $${Number(r.amount).toFixed(2)}`} className={ICON_BTN}>
+                <button type="button" disabled={busy || !!disabledReason} onClick={() => setConfirmId(r.id)} title="Remove refund" aria-label={`Remove refund of $${formatMoney(Number(r.amount))}`} className={ICON_BTN}>
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               )}

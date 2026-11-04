@@ -1,3 +1,4 @@
+import { formatMoney } from '../utils/money';
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
 import { Search, Paperclip, Eye, Trash2, FileText, Package, Receipt, X, Upload } from 'lucide-react';
@@ -240,7 +241,7 @@ const Receipts = () => {
                     </span>
                   </td>
                   <td className="px-4 py-3.5">
-                    <span className="text-sm font-semibold text-blue-400">${(item.amount || 0).toFixed(2)}</span>
+                    <span className="text-sm font-semibold text-blue-400">${formatMoney((item.amount || 0))}</span>
                   </td>
 
                   {/* Receipt thumbnail — only in "with" tab */}

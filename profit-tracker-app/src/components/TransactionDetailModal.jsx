@@ -1,3 +1,4 @@
+import { formatMoney } from '../utils/money';
 import { batchCost, grossBatchCost, effectiveCashbackRate, inventoryCashback, saleEconomics, realizedSummary, isRealizedSale } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useRef } from 'react';
 import { X, DollarSign, Package, CreditCard, Tag, ChevronDown, ChevronUp, StickyNote, Undo2, MapPin, Paperclip, Hash, Truck } from 'lucide-react';
@@ -458,7 +459,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                   <Input type="number" value={form.qty_purchased} onChange={v => set('qty_purchased', v)} />
                 </Field>
                 <Field label="Subtotal">
-                  <ReadBox value={`$${subtotal.toFixed(2)}`} className="text-gray-400" />
+                  <ReadBox value={`$${formatMoney(subtotal)}`} className="text-gray-400" />
                 </Field>
                 <Field label="Purchase Date">
                   <Input type="date" value={form.purchase_date} onChange={v => set('purchase_date', v)} />
@@ -475,9 +476,9 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                   <DollarInput value={form.fees} onChange={v => set('fees', v)} accentClass="focus:border-blue-500/60" />
                 </Field>
                 <Field label="Total Cost">
-                  <ReadBox value={`$${totalCost.toFixed(2)}`} className="text-white font-semibold" />
+                  <ReadBox value={`$${formatMoney(totalCost)}`} className="text-white font-semibold" />
                   {form.refunded_amount > 0 && (
-                    <p className="mt-1 text-[10px] text-emerald-400">After −${Number(form.refunded_amount).toFixed(2)} refunded{form.refunded_qty > 0 ? ` · ${form.refunded_qty} sent back` : ''}</p>
+                    <p className="mt-1 text-[10px] text-emerald-400">After −${formatMoney(Number(form.refunded_amount))} refunded{form.refunded_qty > 0 ? ` · ${form.refunded_qty} sent back` : ''}</p>
                   )}
                 </Field>
               </div>
@@ -611,7 +612,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                           <div className="flex items-center gap-3">
                             <DollarSign className="w-3.5 h-3.5 text-green-400 shrink-0" />
                             <span className="text-sm font-semibold text-white">
-                              ${unitPrice.toFixed(2)} × {qty}
+                              ${formatMoney(unitPrice)} × {qty}
                               {sale.sale_date && (
                                 <span className="text-xs text-gray-500 font-normal ml-2">
                                   · {new Date(sale.sale_date + 'T12:00:00').toLocaleDateString()}
@@ -621,7 +622,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                           </div>
                           <div className="flex items-center gap-3">
                             <span className={`text-sm font-bold ${profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
+                              {profit >= 0 ? '+' : ''}${formatMoney(profit)}
                             </span>
                             {isOpen
                               ? <ChevronUp className="w-3.5 h-3.5 text-gray-500" />
@@ -773,40 +774,40 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                             <div className="rounded-lg bg-white/[0.02] border border-white/[0.04] divide-y divide-white/[0.04] text-xs mt-1">
                               <div className="flex justify-between px-3 py-2">
                                 <span className="text-gray-500">Revenue</span>
-                                <span className="text-green-400">${saleTotal.toFixed(2)}</span>
+                                <span className="text-green-400">${formatMoney(saleTotal)}</span>
                               </div>
                               <div className="flex justify-between px-3 py-2">
                                 <span className="text-gray-500">Cost basis</span>
-                                <span className="text-red-400">-${totalCostForSale.toFixed(2)}</span>
+                                <span className="text-red-400">-${formatMoney(totalCostForSale)}</span>
                               </div>
                               {commission > 0 && (
                                 <div className="flex justify-between px-3 py-2">
                                   <span className="text-gray-500">Commission</span>
-                                  <span className="text-red-400">-${commission.toFixed(2)}</span>
+                                  <span className="text-red-400">-${formatMoney(commission)}</span>
                                 </div>
                               )}
                               {saleShipping > 0 && (
                                 <div className="flex justify-between px-3 py-2">
                                   <span className="text-gray-500">Sale shipping</span>
-                                  <span className="text-red-400">-${saleShipping.toFixed(2)}</span>
+                                  <span className="text-red-400">-${formatMoney(saleShipping)}</span>
                                 </div>
                               )}
                               {sale.refunded_amount > 0 && (
                                 <div className="flex justify-between px-3 py-2">
                                   <span className="text-gray-500">Refunded to buyer{sale.refunded_qty > 0 ? ` (${sale.refunded_qty} returned)` : ''}</span>
-                                  <span className="text-red-400">-${Number(sale.refunded_amount).toFixed(2)}</span>
+                                  <span className="text-red-400">-${formatMoney(Number(sale.refunded_amount))}</span>
                                 </div>
                               )}
                               {saleCashback > 0 && (
                                 <div className="flex justify-between px-3 py-2">
                                   <span className="text-gray-500">Cashback</span>
-                                  <span className="text-emerald-400">+${saleCashback.toFixed(2)}</span>
+                                  <span className="text-emerald-400">+${formatMoney(saleCashback)}</span>
                                 </div>
                               )}
                               <div className="flex justify-between px-3 py-2 font-semibold">
                                 <span className="text-gray-300">Net Profit</span>
                                 <span className={profit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-                                  {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
+                                  {profit >= 0 ? '+' : ''}${formatMoney(profit)}
                                 </span>
                               </div>
                             </div>
@@ -823,7 +824,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                           >
                             <Undo2 className="w-3.5 h-3.5 shrink-0" />
                             <span className="font-medium">Refunds</span>
-                            {sale.refunded_amount > 0 && <span className="text-emerald-400">−${Number(sale.refunded_amount).toFixed(2)}{sale.refunded_qty > 0 ? ` · ${sale.refunded_qty} returned` : ''}</span>}
+                            {sale.refunded_amount > 0 && <span className="text-emerald-400">−${formatMoney(Number(sale.refunded_amount))}{sale.refunded_qty > 0 ? ` · ${sale.refunded_qty} returned` : ''}</span>}
                             {openSaleRefunds.has(sale.id)
                               ? <ChevronUp className="w-3.5 h-3.5 ml-auto text-gray-500" />
                               : <ChevronDown className="w-3.5 h-3.5 ml-auto text-gray-500" />
@@ -883,46 +884,46 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Cost of Goods</span>
-                  <span className="text-white font-medium">${subtotal.toFixed(2)}</span>
+                  <span className="text-white font-medium">${formatMoney(subtotal)}</span>
                 </div>
                 {taxAmt > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Tax</span>
-                    <span className="text-red-400 font-medium">+${taxAmt.toFixed(2)}</span>
+                    <span className="text-red-400 font-medium">+${formatMoney(taxAmt)}</span>
                   </div>
                 )}
                 {shippingAmt > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Shipping</span>
-                    <span className="text-red-400 font-medium">+${shippingAmt.toFixed(2)}</span>
+                    <span className="text-red-400 font-medium">+${formatMoney(shippingAmt)}</span>
                   </div>
                 )}
                 {feesAmt > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Fees</span>
-                    <span className="text-red-400 font-medium">+${feesAmt.toFixed(2)}</span>
+                    <span className="text-red-400 font-medium">+${formatMoney(feesAmt)}</span>
                   </div>
                 )}
                 {giftCardAmt > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Gift Card</span>
-                    <span className="text-emerald-400 font-medium">-${giftCardAmt.toFixed(2)}</span>
+                    <span className="text-emerald-400 font-medium">-${formatMoney(giftCardAmt)}</span>
                   </div>
                 )}
                 {form.refunded_amount > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Refunds from store</span>
-                    <span className="text-emerald-400 font-medium">-${Number(form.refunded_amount).toFixed(2)}</span>
+                    <span className="text-emerald-400 font-medium">-${formatMoney(Number(form.refunded_amount))}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm border-t border-white/[0.06] pt-2">
                   <span className="text-gray-200 font-semibold">Total Cost</span>
-                  <span className="text-white font-bold">${totalCost.toFixed(2)}</span>
+                  <span className="text-white font-bold">${formatMoney(totalCost)}</span>
                 </div>
                 {cbEarned > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Cashback ({cbRate}%){form.refunded_amount > 0 ? ', after refunds' : ''}</span>
-                    <span className="text-emerald-400 font-semibold">+${inventoryCashback(form, cbRate).toFixed(2)}</span>
+                    <span className="text-emerald-400 font-semibold">+${formatMoney(inventoryCashback(form, cbRate))}</span>
                   </div>
                 )}
                 {form._sales.length > 0 && (() => {
@@ -937,35 +938,35 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                     <>
                       <div className="flex justify-between text-sm border-t border-white/[0.06] pt-2">
                         <span className="text-gray-400">Sale Revenue</span>
-                        <span className="text-green-400 font-medium">${totalSaleRevenue.toFixed(2)}</span>
+                        <span className="text-green-400 font-medium">${formatMoney(totalSaleRevenue)}</span>
                       </div>
                       {totalCommissions > 0 && (
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-400">Commissions</span>
-                          <span className="text-red-400 font-medium">-${totalCommissions.toFixed(2)}</span>
+                          <span className="text-red-400 font-medium">-${formatMoney(totalCommissions)}</span>
                         </div>
                       )}
                       {totalSaleShipping > 0 && (
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-400">Sale Shipping</span>
-                          <span className="text-red-400 font-medium">-${totalSaleShipping.toFixed(2)}</span>
+                          <span className="text-red-400 font-medium">-${formatMoney(totalSaleShipping)}</span>
                         </div>
                       )}
                       {totalBuyerRefunds > 0 && (
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-400">Refunds to buyers</span>
-                          <span className="text-red-400 font-medium">-${totalBuyerRefunds.toFixed(2)}</span>
+                          <span className="text-red-400 font-medium">-${formatMoney(totalBuyerRefunds)}</span>
                         </div>
                       )}
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-200 font-semibold">Realized Profit + Cashback</span>
                         <span className={`font-bold ${netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {netProfit >= 0 ? '+' : ''}${netProfit.toFixed(2)}
+                          {netProfit >= 0 ? '+' : ''}${formatMoney(netProfit)}
                         </span>
                       </div>
                       {cbEarned > 0 && (
                         <p className="text-[10px] text-gray-600">
-                          Includes ${summary.cashback.toFixed(2)} sold-unit cashback ({cbRate}%)
+                          Includes ${formatMoney(summary.cashback)} sold-unit cashback ({cbRate}%)
                         </p>
                       )}
                     </>

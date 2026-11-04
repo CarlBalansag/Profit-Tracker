@@ -1,3 +1,4 @@
+import { formatMoney } from '../utils/money';
 import { saleEconomics } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
@@ -201,7 +202,7 @@ const AddSale = () => {
                     </div>
                     <div className="flex items-center gap-4 text-xs">
                       <div className="text-gray-400 font-medium">Stock: <span className="text-gray-200">{item.qty_on_hand}</span></div>
-                      <div className="text-gray-400 font-medium">Cost: <span className="text-blue-400">${item.unit_purchase_cost.toFixed(2)}</span></div>
+                      <div className="text-gray-400 font-medium">Cost: <span className="text-blue-400">${formatMoney(item.unit_purchase_cost)}</span></div>
                     </div>
                     <ReturnWindowBadge item={item} className="mt-2" />
                     <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/5">
@@ -370,7 +371,7 @@ const AddSale = () => {
                             Sale price is{' '}
                             <span className="text-green-400 font-medium">per unit</span>
                             {sp > 0 && qs > 0 && (
-                              <span className="text-gray-600"> (${sp.toFixed(2)} × {qs} = ${saleTotal.toFixed(2)})</span>
+                              <span className="text-gray-600"> (${formatMoney(sp)} × {qs} = ${formatMoney(saleTotal)})</span>
                             )}
                           </span>
                         </label>
@@ -378,32 +379,32 @@ const AddSale = () => {
                         {(sp > 0 || purchaseCost > 0) && (
                           <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] divide-y divide-white/[0.04] text-xs overflow-hidden">
                             <div className="flex justify-between px-4 py-2.5">
-                              <span className="text-gray-400">Cost basis ({qs} × ${unitCost.toFixed(2)}/unit)</span>
-                              <span className="text-gray-200">${purchaseCost.toFixed(2)}</span>
+                              <span className="text-gray-400">Cost basis ({qs} × ${formatMoney(unitCost)}/unit)</span>
+                              <span className="text-gray-200">${formatMoney(purchaseCost)}</span>
                             </div>
                             {commission > 0 && (
                               <div className="flex justify-between px-4 py-2.5">
                                 <span className="text-gray-400">Commission fee</span>
-                                <span className="text-red-400">-${commission.toFixed(2)}</span>
+                                <span className="text-red-400">-${formatMoney(commission)}</span>
                               </div>
                             )}
                             {saleShipping > 0 && (
                               <div className="flex justify-between px-4 py-2.5">
                                 <span className="text-gray-400">Sale shipping</span>
-                                <span className="text-red-400">-${saleShipping.toFixed(2)}</span>
+                                <span className="text-red-400">-${formatMoney(saleShipping)}</span>
                               </div>
                             )}
                             {sp > 0 && (
                               <div className="flex justify-between px-4 py-2.5">
-                                <span className="text-gray-400">Sale total ({qs} × ${sp.toFixed(2)})</span>
-                                <span className="text-green-400">${saleTotal.toFixed(2)}</span>
+                                <span className="text-gray-400">Sale total ({qs} × ${formatMoney(sp)})</span>
+                                <span className="text-green-400">${formatMoney(saleTotal)}</span>
                               </div>
                             )}
                             {sp > 0 && (
                               <div className="flex justify-between px-4 py-2.5 font-semibold">
                                 <span className="text-gray-300">Est. Profit</span>
                                 <span className={profit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-                                  {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
+                                  {profit >= 0 ? '+' : ''}${formatMoney(profit)}
                                 </span>
                               </div>
                             )}

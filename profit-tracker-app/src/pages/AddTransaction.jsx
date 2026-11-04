@@ -1,3 +1,4 @@
+import { formatMoney } from '../utils/money';
 import { batchCost, allocatedCost, effectiveCashbackRate, saleEconomics } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
@@ -470,7 +471,7 @@ const AddTransaction = () => {
                     )}
                     <div className="flex justify-between gap-2">
                       <span className="text-gray-500">Cost</span>
-                      <span className="text-gray-300">${Number(recentTxn.unit_purchase_cost || 0).toFixed(2)}</span>
+                      <span className="text-gray-300">${formatMoney(Number(recentTxn.unit_purchase_cost || 0))}</span>
                     </div>
                     <div className="flex justify-between gap-2">
                       <span className="text-gray-500">Qty</span>
@@ -479,25 +480,25 @@ const AddTransaction = () => {
                     {Number(recentTxn.sales_tax) > 0 && (
                       <div className="flex justify-between gap-2">
                         <span className="text-gray-500">Tax</span>
-                        <span className="text-gray-300">${Number(recentTxn.sales_tax).toFixed(2)}</span>
+                        <span className="text-gray-300">${formatMoney(Number(recentTxn.sales_tax))}</span>
                       </div>
                     )}
                     {Number(recentTxn.shipping_cost_inbound) > 0 && (
                       <div className="flex justify-between gap-2">
                         <span className="text-gray-500">Ship</span>
-                        <span className="text-gray-300">${Number(recentTxn.shipping_cost_inbound).toFixed(2)}</span>
+                        <span className="text-gray-300">${formatMoney(Number(recentTxn.shipping_cost_inbound))}</span>
                       </div>
                     )}
                     {Number(recentTxn.fees) > 0 && (
                       <div className="flex justify-between gap-2">
                         <span className="text-gray-500">Fees</span>
-                        <span className="text-gray-300">${Number(recentTxn.fees).toFixed(2)}</span>
+                        <span className="text-gray-300">${formatMoney(Number(recentTxn.fees))}</span>
                       </div>
                     )}
                     {Number(recentTxn.gift_card_amount) > 0 && (
                       <div className="flex justify-between gap-2">
                         <span className="text-gray-500">Gift Card</span>
-                        <span className="text-gray-300">${Number(recentTxn.gift_card_amount).toFixed(2)}</span>
+                        <span className="text-gray-300">${formatMoney(Number(recentTxn.gift_card_amount))}</span>
                       </div>
                     )}
                     <div className="flex justify-between gap-2">
@@ -1147,7 +1148,7 @@ const AddTransaction = () => {
                           Sale price is{' '}
                           <span className="text-green-400 font-medium">per unit</span>
                           {sp > 0 && qs > 0 && (
-                            <span className="text-gray-600"> (${sp.toFixed(2)} × {qs} = ${saleTotal.toFixed(2)})</span>
+                            <span className="text-gray-600"> (${formatMoney(sp)} × {qs} = ${formatMoney(saleTotal)})</span>
                           )}
                         </span>
                       </label>
@@ -1156,12 +1157,12 @@ const AddTransaction = () => {
                         <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] divide-y divide-white/[0.04] text-xs overflow-hidden">
                           <div className="flex justify-between px-4 py-2.5">
                             <span className="text-gray-400">Purchase total</span>
-                            <span className="text-gray-200">${purchaseTotal.toFixed(2)}</span>
+                            <span className="text-gray-200">${formatMoney(purchaseTotal)}</span>
                           </div>
                           {sp > 0 && (
                             <div className="flex justify-between px-4 py-2.5">
-                              <span className="text-gray-400">Sale total ({qs} × ${sp.toFixed(2)})</span>
-                              <span className="text-green-400">${saleTotal.toFixed(2)}</span>
+                              <span className="text-gray-400">Sale total ({qs} × ${formatMoney(sp)})</span>
+                              <span className="text-green-400">${formatMoney(saleTotal)}</span>
                             </div>
                           )}
                         </div>
@@ -1238,34 +1239,34 @@ const AddTransaction = () => {
 
                   return (
                     <div className="space-y-2 text-sm">
-                      <Row label="Subtotal" value={`$${subtotal.toFixed(2)}`} />
-                      {tax      > 0 && <Row label="Tax"      value={`$${tax.toFixed(2)}`} />}
-                      {shipping > 0 && <Row label="Shipping" value={`$${shipping.toFixed(2)}`} />}
-                      {fees     > 0 && <Row label="Fees"     value={`$${fees.toFixed(2)}`} />}
+                      <Row label="Subtotal" value={`$${formatMoney(subtotal)}`} />
+                      {tax      > 0 && <Row label="Tax"      value={`$${formatMoney(tax)}`} />}
+                      {shipping > 0 && <Row label="Shipping" value={`$${formatMoney(shipping)}`} />}
+                      {fees     > 0 && <Row label="Fees"     value={`$${formatMoney(fees)}`} />}
                       {giftCard > 0 && (
-                        <Row label="Gift Card" value={`-$${giftCard.toFixed(2)}`} color="text-blue-400" />
+                        <Row label="Gift Card" value={`-$${formatMoney(giftCard)}`} color="text-blue-400" />
                       )}
 
                       <div className="border-t border-white/[0.06] pt-2">
-                        <Row label="Net Cost" value={`$${Math.max(0, totalCost - giftCard).toFixed(2)}`} color="text-white font-semibold" />
+                        <Row label="Net Cost" value={`$${formatMoney(Math.max(0, totalCost - giftCard))}`} color="text-white font-semibold" />
                       </div>
 
                       {cashbackAmount > 0 && (
-                        <Row label="Cashback earned" value={`+$${cashbackAmount.toFixed(2)}`} color="text-emerald-400" />
+                        <Row label="Cashback earned" value={`+$${formatMoney(cashbackAmount)}`} color="text-emerald-400" />
                       )}
 
                       {itemSold && salePrice > 0 && (
                         <>
                           <div className="border-t border-white/[0.06] pt-2 space-y-2">
-                            <Row label="Sale Revenue" value={`$${totalSale.toFixed(2)}`} color="text-green-400" />
+                            <Row label="Sale Revenue" value={`$${formatMoney(totalSale)}`} color="text-green-400" />
                           </div>
 
                           <div className="border-t border-white/[0.06] pt-2 space-y-2">
                             {saleShipping > 0 && (
-                              <Row label="Sale shipping" value={`-$${saleShipping.toFixed(2)}`} color="text-red-400" />
+                              <Row label="Sale shipping" value={`-$${formatMoney(saleShipping)}`} color="text-red-400" />
                             )}
                             {saleFees > 0 && (
-                              <Row label="Sale fees" value={`-$${saleFees.toFixed(2)}`} color="text-red-400" />
+                              <Row label="Sale fees" value={`-$${formatMoney(saleFees)}`} color="text-red-400" />
                             )}
 
                             {/* Profit / Profit+Cashback toggle — only shown when cashback exists */}
@@ -1293,13 +1294,13 @@ const AddTransaction = () => {
                                 {showCashbackProfit && cashbackAmount > 0 ? 'Est. Profit + Cashback' : 'Est. Profit'}
                               </span>
                               <span className={`font-bold text-base ${(showCashbackProfit ? profit + allocatedCashback : profit) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                {(showCashbackProfit ? profit + allocatedCashback : profit) >= 0 ? '+' : ''}${(showCashbackProfit ? profit + allocatedCashback : profit).toFixed(2)}
+                                {(showCashbackProfit ? profit + allocatedCashback : profit) >= 0 ? '+' : ''}${formatMoney((showCashbackProfit ? profit + allocatedCashback : profit))}
                               </span>
                             </div>
 
                             {showCashbackProfit && cashbackAmount > 0 && (
                               <p className="text-[10px] text-gray-600">
-                                Includes ${allocatedCashback.toFixed(2)} cashback ({cashbackRate}% on ${totalUnitCost.toFixed(2)})
+                                Includes ${formatMoney(allocatedCashback)} cashback ({cashbackRate}% on ${formatMoney(totalUnitCost)})
                               </p>
                             )}
                           </div>

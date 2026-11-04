@@ -1,3 +1,4 @@
+import { formatMoney as formatAmount } from '../utils/money';
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch, usePaymentMethods } from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
@@ -41,7 +42,7 @@ const sumAmounts = rows => rows.reduce((s, e) => s + (Number(e.amount) || 0), 0)
 // Gift card lines are negative credits; show them as "−$50.00", never "$-50.00".
 const formatMoney = value => {
   const rounded = Math.round((Number(value) || 0) * 100) / 100;
-  return `${rounded < 0 ? '−' : ''}$${Math.abs(rounded).toFixed(2)}`;
+  return `${rounded < 0 ? '−' : ''}$${formatAmount(Math.abs(rounded))}`;
 };
 
 const FREQUENCIES = [
@@ -528,7 +529,7 @@ const Expenses = () => {
             <span className="text-xs text-gray-500 uppercase tracking-wider">Recurring / Mo</span>
             <RefreshCw className="w-4 h-4 text-emerald-400" />
           </div>
-          <p className="text-xl font-bold text-white">${recurringMonthly.toFixed(2)}</p>
+          <p className="text-xl font-bold text-white">${formatAmount(recurringMonthly)}</p>
           <p className="text-[11px] text-gray-500 mt-1">{recurring.filter(r => r.active).length} active</p>
         </div>
       </div>
@@ -567,7 +568,7 @@ const Expenses = () => {
                         {!rec.active && <span className="text-[10px] text-gray-500 font-medium">Paused</span>}
                       </div>
                     </div>
-                    <p className="text-base font-bold text-red-400 whitespace-nowrap">${rec.amount.toFixed(2)}</p>
+                    <p className="text-base font-bold text-red-400 whitespace-nowrap">${formatAmount(rec.amount)}</p>
                   </div>
                   {rec.notes && <p className="text-[11px] text-gray-500 mb-3 line-clamp-1">{rec.notes}</p>}
                   <div className="flex items-center justify-between pt-2 border-t border-white/[0.05]">

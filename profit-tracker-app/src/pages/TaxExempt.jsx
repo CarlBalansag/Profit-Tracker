@@ -1,3 +1,4 @@
+import { formatMoney } from '../utils/money';
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
 import { ShieldCheck, Search, Package, DollarSign, Info } from 'lucide-react';
@@ -193,7 +194,7 @@ const TaxExempt = () => {
             <p className="text-[10px] text-gray-500 uppercase tracking-wider">Tax-Exempt Sales</p>
             <InfoTooltip text="Total revenue from sales marked as non-taxable (taxable = No)." />
           </div>
-          <p className="text-2xl font-bold text-green-400">${exemptRevenue.toFixed(2)}</p>
+          <p className="text-2xl font-bold text-green-400">${formatMoney(exemptRevenue)}</p>
           <p className="text-xs text-gray-600 mt-0.5">Non-taxable sales</p>
         </div>
         <div className="card p-4">
@@ -209,7 +210,7 @@ const TaxExempt = () => {
             <p className="text-[10px] text-gray-500 uppercase tracking-wider">Use Tax Due</p>
             <InfoTooltip text="Sales tax you paid when purchasing exempt inventory. This may be reportable or recoverable depending on your state." />
           </div>
-          <p className="text-2xl font-bold text-amber-400">${useTaxDue.toFixed(2)}</p>
+          <p className="text-2xl font-bold text-amber-400">${formatMoney(useTaxDue)}</p>
           <p className="text-xs text-gray-600 mt-0.5">From exempt purchases</p>
         </div>
         <div className="card p-4">
@@ -229,35 +230,35 @@ const TaxExempt = () => {
             <p className="text-[10px] text-gray-500 uppercase tracking-wider">Exempt Inv. Purchased</p>
             <InfoTooltip text="Total amount spent buying tax-exempt inventory (unit cost × qty + tax + inbound shipping)." />
           </div>
-          <p className="text-base font-bold text-white">${exemptInventorySpend.toFixed(2)}</p>
+          <p className="text-base font-bold text-white">${formatMoney(exemptInventorySpend)}</p>
         </div>
         <div className="card px-3 py-2.5">
           <div className="flex items-center mb-0.5">
             <p className="text-[10px] text-gray-500 uppercase tracking-wider">Exempt COGS</p>
             <InfoTooltip text="Cost of goods sold — unit purchase cost × quantity sold for exempt inventory items." />
           </div>
-          <p className="text-base font-bold text-white">${exemptCOGS.toFixed(2)}</p>
+          <p className="text-base font-bold text-white">${formatMoney(exemptCOGS)}</p>
         </div>
         <div className="card px-3 py-2.5">
           <div className="flex items-center mb-0.5">
             <p className="text-[10px] text-gray-500 uppercase tracking-wider">Exempt Revenue</p>
             <InfoTooltip text="Total sale revenue generated from tax-exempt inventory items." />
           </div>
-          <p className="text-base font-bold text-green-400">${exemptRevenue.toFixed(2)}</p>
+          <p className="text-base font-bold text-green-400">${formatMoney(exemptRevenue)}</p>
         </div>
         <div className="card px-3 py-2.5">
           <div className="flex items-center mb-0.5">
             <p className="text-[10px] text-gray-500 uppercase tracking-wider">Fees &amp; Shipping</p>
             <InfoTooltip text="Platform commission fees plus outbound sale shipping, deducted from revenue to reach Exempt Profit." />
           </div>
-          <p className="text-base font-bold text-amber-400">−${exemptFeesAndShipping.toFixed(2)}</p>
+          <p className="text-base font-bold text-amber-400">−${formatMoney(exemptFeesAndShipping)}</p>
         </div>
         <div className="card px-3 py-2.5">
           <div className="flex items-center mb-0.5">
             <p className="text-[10px] text-gray-500 uppercase tracking-wider">Exempt Profit</p>
             <InfoTooltip text="Revenue minus COGS minus platform fees and shipping for all exempt inventory sales." />
           </div>
-          <p className={`text-base font-bold ${exemptProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${exemptProfit.toFixed(2)}</p>
+          <p className={`text-base font-bold ${exemptProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>${formatMoney(exemptProfit)}</p>
         </div>
       </div>
 
@@ -337,8 +338,8 @@ const TaxExempt = () => {
                         </td>
                         <td className="px-4 py-3 text-gray-400">{item.vendor?.name || '—'}</td>
                         <td className="px-4 py-3 text-right text-gray-400">{item.qty_purchased}</td>
-                        <td className="px-4 py-3 text-right text-gray-200">${item.unit_purchase_cost.toFixed(2)}</td>
-                        <td className="px-4 py-3 text-right text-white font-medium">${totalCost.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right text-gray-200">${formatMoney(item.unit_purchase_cost)}</td>
+                        <td className="px-4 py-3 text-right text-white font-medium">${formatMoney(totalCost)}</td>
                       </tr>
                     );
                   })}
@@ -347,7 +348,7 @@ const TaxExempt = () => {
                   <tr className="border-t border-white/[0.08] bg-white/[0.02]">
                     <td colSpan={5} className="px-4 py-3 text-xs font-semibold text-gray-400 text-right">Total Spend</td>
                     <td className="px-4 py-3 text-right font-bold text-white">
-                      ${filteredPurchases.reduce((sum, i) => sum + (i.unit_purchase_cost * i.qty_purchased) + (i.sales_tax || 0) + (i.shipping_cost_inbound || 0), 0).toFixed(2)}
+                      ${formatMoney(filteredPurchases.reduce((sum, i) => sum + (i.unit_purchase_cost * i.qty_purchased) + (i.sales_tax || 0) + (i.shipping_cost_inbound || 0), 0))}
                     </td>
                   </tr>
                 </tfoot>
@@ -386,14 +387,14 @@ const TaxExempt = () => {
                           {new Date(sale.sale_date).toLocaleDateString()}
                         </td>
                         <td className="px-4 py-3 text-gray-400">{sale.platform?.name || '—'}</td>
-                        <td className="px-4 py-3 text-right text-green-400 font-medium">${saleTotal.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right text-green-400 font-medium">${formatMoney(saleTotal)}</td>
                         <td className="px-4 py-3 text-center">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border ${sale.taxable ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-gray-500/10 text-gray-400 border-gray-500/20'}`}>
                             {sale.taxable ? 'Yes' : 'No'}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right text-blue-400">
-                          {sale.sale_tax_collected > 0 ? `$${Number(sale.sale_tax_collected).toFixed(2)}` : '—'}
+                          {sale.sale_tax_collected > 0 ? `$${formatMoney(Number(sale.sale_tax_collected))}` : '—'}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border ${sale.customer_tax_exempt ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-gray-500/10 text-gray-400 border-gray-500/20'}`}>

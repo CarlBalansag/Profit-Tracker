@@ -219,3 +219,12 @@ describe('ThemeSwitch', () => {
     });
   });
 });
+
+describe('ThemeSwitch placement', () => {
+  it('sits in the layout when inline and floats otherwise', () => {
+    const { rerender } = render(<ThemeSwitch />);
+    expect(screen.getByTestId('sticky-theme-switch').className).not.toContain('theme-switch-inline');
+    rerender(<ThemeSwitch inline />);
+    expect(screen.getByTestId('sticky-theme-switch').className).toContain('theme-switch-inline');
+  });
+});

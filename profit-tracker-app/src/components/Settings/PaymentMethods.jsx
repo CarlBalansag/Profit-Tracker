@@ -1,3 +1,4 @@
+import { formatMoney } from '../../utils/money';
 import React, { useState, useEffect } from 'react';
 import { Crown, Zap, Plus, LogOut, ChevronDown, PenSquare, Trash2 } from 'lucide-react';
 import { useInvalidate, apiFetch} from '../../hooks/useApi';
@@ -186,11 +187,11 @@ export const PaymentMethods = () => {
          <div className="flex gap-4 overflow-x-auto">
             <div className="bg-[#0A0A0F] border border-gray-800 rounded-lg p-3 min-w-30 flex-shrink-0">
                <div className="text-xs text-gray-500 font-medium">Total Credit Limit</div>
-               <div className="text-lg font-bold text-white mt-1">${totalCreditLimit.toFixed(2)}</div>
+               <div className="text-lg font-bold text-white mt-1">${formatMoney(totalCreditLimit)}</div>
             </div>
             <div className="bg-[#0A0A0F] border border-gray-800 rounded-lg p-3 min-w-30 flex-shrink-0">
                <div className="text-xs text-gray-500 font-medium">Total Tracked Spend</div>
-               <div className="text-lg font-bold text-[#6DDBA9] mt-1">${totalTrackedSpend.toFixed(2)}</div>
+               <div className="text-lg font-bold text-[#6DDBA9] mt-1">${formatMoney(totalTrackedSpend)}</div>
             </div>
             <div className="bg-[#0A0A0F] border border-gray-800 rounded-lg p-3 min-w-30 flex-shrink-0">
                <div className="text-xs text-gray-500 font-medium">Perks · Active</div>
@@ -258,15 +259,15 @@ export const PaymentMethods = () => {
                  </div>
                  <div>
                     <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Credit Limit</div>
-                    <div className="text-base font-bold text-white mt-0.5">{card.creditLimit != null ? `$${card.creditLimit.toFixed(2)}` : 'No limit set'}</div>
+                    <div className="text-base font-bold text-white mt-0.5">{card.creditLimit != null ? `$${formatMoney(card.creditLimit)}` : 'No limit set'}</div>
                  </div>
                  <div>
                     <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Available</div>
-                    <div className="text-sm font-bold text-[#6DDBA9] mt-0.5">{card.availableSpend != null ? `$${card.availableSpend.toFixed(2)}` : '—'}</div>
+                    <div className="text-sm font-bold text-[#6DDBA9] mt-0.5">{card.availableSpend != null ? `$${formatMoney(card.availableSpend)}` : '—'}</div>
                  </div>
                  <div>
                     <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Total Spend</div>
-                    <div className="text-sm font-bold text-white mt-0.5">${(card.totalSpend || 0).toFixed(2)}</div>
+                    <div className="text-sm font-bold text-white mt-0.5">${formatMoney((card.totalSpend || 0))}</div>
                  </div>
               </div>
 
@@ -344,10 +345,10 @@ export const PaymentMethods = () => {
                 <div className="mt-4 pt-3 border-t border-gray-800/50">
                   <div className="flex justify-between text-xs font-semibold mb-1">
                     <span className="text-yellow-500 flex items-center gap-1"><Crown size={10} /> Signup Bonus</span>
-                    <span className="text-yellow-500">${card.signupBonus.toFixed(2)}</span>
+                    <span className="text-yellow-500">${formatMoney(card.signupBonus)}</span>
                   </div>
                   <div className="text-[10px] text-gray-500 mb-2">
-                     ${(card.signupBonusSpend || 0).toFixed(2)} / ${(card.signupBonusReq || 0).toFixed(2)}
+                     ${formatMoney((card.signupBonusSpend || 0))} / ${formatMoney((card.signupBonusReq || 0))}
                   </div>
                 </div>
               )}
