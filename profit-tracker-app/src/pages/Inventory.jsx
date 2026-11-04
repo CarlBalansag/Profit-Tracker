@@ -69,10 +69,11 @@ const Inventory = () => {
     processedInventory.reduce((acc, item) => {
       const key = item.product_name;
       if (!acc[key]) {
-        acc[key] = { product_name: key, entries: [], totalQty: 0, totalCost: 0 };
+        acc[key] = { product_name: key, entries: [], totalQty: 0, totalCost: 0, oldestDays: 0 };
       }
       acc[key].entries.push(item);
       acc[key].totalQty += item.qty_on_hand;
+      if (item.qty_on_hand > 0) acc[key].oldestDays = Math.max(acc[key].oldestDays, item.daysInInv);
       acc[key].totalCost += allocatedCost(item, item.qty_on_hand);
       return acc;
     }, {})
@@ -84,7 +85,8 @@ const Inventory = () => {
   const totalCapital = processedInventory.reduce((sum, item) => sum + allocatedCost(item, item.qty_on_hand), 0);
   const totalUnits = processedInventory.reduce((sum, item) => sum + item.qty_on_hand, 0);
   const agingUnits = processedInventory.filter(i => i.daysInInv > 30).reduce((sum, item) => sum + item.qty_on_hand, 0);
-  const activeListings = processedInventory.filter(i => i.status === 'LISTED').reduce((sum, item) => sum + item.qty_on_hand, 0);
+  // Same rule as the Listed count on Analytics: is_listed is the real flag, and older rows only have the status.
+  const activeListings = processedInventory.filter(i => i.is_listed || (!i.receiving_status && i.status === 'LISTED')).reduce((sum, item) => sum + item.qty_on_hand, 0);
 
   if (isLoading) return <PageLoader variant="table" />;
 
@@ -291,9 +293,14 @@ const Inventory = () => {
                         {group.totalQty}
                       </span>
                     </td>
-                    {/* Aging — hidden on group row */}
+                    {/* Aging — the oldest batch, since that is what the Aging Stock card counts */}
                     <td className="px-4 py-5">
-                      <span className="text-xs text-gray-600">—</span>
+                      <div className="flex items-center gap-1.5">
+                        <Clock className={`w-3.5 h-3.5 ${group.oldestDays > 90 ? 'text-red-400' : group.oldestDays > 30 ? 'text-amber-400' : 'text-gray-500'}`} />
+                        <span className={`text-xs font-medium ${group.oldestDays > 90 ? 'text-red-400' : group.oldestDays > 30 ? 'text-amber-400' : 'text-gray-400'}`}>
+                          Up to {group.oldestDays} days
+                        </span>
+                      </div>
                     </td>
                     <td className="px-4 py-5">
                       <div className="flex flex-col">
