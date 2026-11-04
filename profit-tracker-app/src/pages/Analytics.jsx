@@ -132,6 +132,14 @@ function Analytics() {
 
   const topStore = topCards[0];
 
+  // COST means different things by view: purchases made in the period, or, for
+  // a single sales channel, what the units sold through it cost.
+  const purchaseCount = s.transactionCount ?? 0;
+  const purchaseLabel = `${purchaseCount} purchase${purchaseCount !== 1 ? 's' : ''}`;
+  const costSubtitle = mode !== 'All'
+    ? `Cost of units sold · ${purchaseLabel}`
+    : `${purchaseLabel}${dateRange === 'All Time' ? '' : ' bought in this period'}, incl. tax & shipping, less refunds`;
+
   return (
     // The app shell never scrolls; each page owns its scroll container.
     <div className="h-full overflow-auto">
@@ -197,7 +205,7 @@ function Analytics() {
         <MetricCard
           icon={ShoppingCart} title="COST" color={THEME.chart3}
           value={loading ? '…' : `$${fmt(s.totalCost)}`}
-          subtitle={`${s.transactionCount ?? 0} buys (incl. tax & shipping)`}
+          subtitle={costSubtitle}
           valueColor="text-white" titleColor="text-[#71465d]" subtitleColor="text-[#71465d]"
         />
         <MetricCard

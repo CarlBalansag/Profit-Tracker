@@ -66,6 +66,19 @@ export function allocatedCashback(inventory = {}, quantity = 0, rate = effective
 // Units of a sale the buyer did not send back. Returned units are back in
 // stock, so their cost belongs to inventory again, not to this sale.
 export const keptSaleQuantity = (sale = {}) => number(sale.quantity) - number(sale.refunded_qty);
+// Units a sale still keeps out of stock: a cancel, void or return action also
+// puts units back (restored_qty), and their cost then sits on the purchase's
+// on-hand row. Mirrors unitsHeld in services/statusTransitions.js.
+export const heldSaleQuantity = (sale = {}) => keptSaleQuantity(sale) - number(sale.restored_qty);
+// Cents the same way the API rounds (half away from zero, on the decimal value),
+// so a total summed in the browser shows the same figure the API reports. Going
+// through toFixed(6) drops the binary noise a long float sum picks up, and the
+// exponent strings shift the decimal point without adding any more of it.
+export function roundCents(value) {
+  const amount = number(value);
+  const cents = Math.round(Number(`${Math.abs(Number(amount.toFixed(6)))}e2`));
+  return (Math.sign(amount) * Number(`${cents}e-2`)) || 0;
+}
 export function saleEconomics(inventory = {}, sale = {}, rate = effectiveCashbackRate(inventory)) {
   const kept = keptSaleQuantity(sale);
   const cost = allocatedCost(inventory, kept);
