@@ -13,7 +13,7 @@ const ICON_BTN = 'p-1 rounded-md text-[var(--dp-text-muted)] hover:text-[var(--d
 const COPY = {
   purchase: {
     title: 'Refunds from the store',
-    hint: 'Money back on this purchase: a return, a price adjustment, a damaged-box credit. Units sent back leave your stock.',
+    hint: 'Money back on this purchase: a return, a price adjustment, a damaged-box credit. Leave Units sent back empty for anything you kept; those units stay available to sell.',
     units: 'Units sent back',
   },
   sale: {
@@ -112,6 +112,12 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
             </li>
           ))}
         </ul>
+      )}
+
+      {kind === 'purchase' && refunds.length > 0 && (
+        <p className="text-xs text-[var(--dp-text-secondary)]">
+          {maxUnits} unit{maxUnits === 1 ? '' : 's'} still available to sell · {units} sent back
+        </p>
       )}
 
       {disabledReason ? (

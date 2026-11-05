@@ -1,5 +1,5 @@
 import { formatMoney } from '../utils/money';
-import { saleEconomics } from '../../../shared/finance.mjs';
+import { allocatedCost, saleEconomics } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import {
@@ -217,7 +217,7 @@ const AddSale = () => {
                     </div>
                     <div className="flex items-center gap-4 text-xs">
                       <div className="text-gray-400 font-medium">Stock: <span className="text-gray-200">{item.qty_on_hand}</span></div>
-                      <div className="text-gray-400 font-medium">Cost: <span className="text-blue-400">${formatMoney(item.unit_purchase_cost)}</span></div>
+                      <div className="text-gray-400 font-medium">Cost: <span className="text-blue-400">${formatMoney(allocatedCost(item, 1))}</span></div>
                     </div>
                     <ReturnWindowBadge item={item} className="mt-2" />
                     <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/5">

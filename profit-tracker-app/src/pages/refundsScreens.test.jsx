@@ -46,7 +46,7 @@ afterEach(cleanup);
 describe('Transactions: refunded rows', () => {
   it('marks the purchase and the sale as refunded and uses the net numbers', () => {
     render(<MemoryRouter><Transactions /></MemoryRouter>);
-    expect(screen.getAllByText('REFUNDED $120.00 · 1 sent back').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('REFUNDED $120.00 · 1 sent back · 3 kept').length).toBeGreaterThan(0);
     expect(screen.getAllByText('REFUNDED $150.00 · 1 returned').length).toBeGreaterThan(0);
   });
 

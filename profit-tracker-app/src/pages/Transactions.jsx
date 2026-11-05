@@ -117,7 +117,9 @@ const COLS_MIGRATED_KEY = 'txn_visible_cols_v2';
 // Money back on this purchase (from the store) or sale (to the buyer).
 // The row's cost/profit already reflect it; the badge says why they changed.
 function RefundedBadge({ row }) {
-  const units = row.refundedUnits > 0 ? ` · ${row.refundedUnits} ${row.isSale ? 'returned' : 'sent back'}` : '';
+  const back = row.refundedUnits > 0 ? ` · ${row.refundedUnits} ${row.isSale ? 'returned' : 'sent back'}` : '';
+  const kept = !row.isSale && row.rawQtyOnHand > 0 ? ` · ${row.rawQtyOnHand} kept` : '';
+  const units = `${back}${kept}`;
   return (
     <span
       title={row.isSale ? 'Refunded to the buyer' : 'Refunded by the store'}
