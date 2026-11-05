@@ -343,7 +343,7 @@ function CreditCard() {
               </div>
 
               {/* Right: mini stats */}
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div className="max-sm:flex-row!" style={{ display: 'flex', flexDirection: 'column' }}>
                 <div style={{ flex: 1, padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-default)' }}>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Total Spend</div>

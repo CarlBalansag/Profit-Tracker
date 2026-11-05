@@ -1095,30 +1095,55 @@ body,
   .phone-cards thead { display: none; }
   .phone-cards tbody,
   .phone-cards tfoot { display: block; width: 100%; }
-  .phone-cards tr { display: block; padding: 12px 16px; border-bottom: 1px solid var(--dp-border); }
+  /* Details sit side by side on one wrapping line, so a long list isn't one
+     label per row. Cells without a label, like the name, take a full row. */
+  .phone-cards tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--dp-border);
+  }
   .phone-cards td {
     display: block;
     width: 100%;
-    padding: 2px 0 !important;
+    min-width: 0;
+    padding: 0 !important;
     text-align: left !important;
     white-space: normal;
+    overflow-wrap: anywhere;
   }
   .phone-cards td[data-label] {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    text-align: right !important;
+    gap: 4px;
+    width: auto;
+    max-width: 100%;
   }
   .phone-cards td[data-label]::before {
     content: attr(data-label);
     flex-shrink: 0;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 500;
     color: var(--dp-text-secondary);
   }
+  /* A date, an amount or a category reads as what it is without a label. */
+  .phone-cards :is(td[data-label="Date"], td[data-label="Amount"], td[data-label="Category"], td[data-label="Type"], td[data-label="Card"], td[data-label="eBay Sold"])::before {
+    display: none;
+  }
+  .phone-cards td[data-label]:last-child,
+  .phone-cards td:not([data-label]):last-child:not(:first-child) {
+    width: auto;
+    margin-left: auto;
+  }
   .phone-cards td:empty,
   .phone-cards td[data-phone-hide] { display: none; }
+}
+
+/* Half-width Dashboard cards have no room for an icon beside the label. */
+@media (max-width: 639px) {
+  [data-tutorial-id="dashboard-stats"] > :not(:first-child) .dp-card-icon-wrap { display: none; }
 }
 
 /* Phones: iOS zooms the page when a field under 16px gets focus, and small
@@ -1129,7 +1154,7 @@ body,
     font-size: 16px !important;
   }
 
-  :is(.carbon-workspace, .glass-workspace) button:not([role="switch"]) {
+  :is(.carbon-workspace, .glass-workspace) button:not([role="switch"]):not(.page-dot) {
     min-width: 32px;
     min-height: 32px;
   }
@@ -1138,6 +1163,9 @@ body,
     width: 20px;
     height: 20px;
   }
+
+  :is(.carbon-workspace, .glass-workspace) input { text-overflow: ellipsis; }
+  :is(.carbon-workspace, .glass-workspace) input::placeholder { text-overflow: ellipsis; }
 }
 
 /* Reduced motion keeps fades and colour changes, which show that something

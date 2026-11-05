@@ -92,7 +92,7 @@ function CashFlow() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2">
         <StatCard
           label="Spending Out"
           value={loading ? '…' : `$${fmt(spendingOut)}`}

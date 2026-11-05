@@ -522,7 +522,7 @@ const Expenses = () => {
       </div>
 
       {/* Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2">
         {[
           { key: 'all',     label: 'Total · Year to Date',    icon: DollarSign, tone: 'accent' },
           { key: 'manual',  label: 'Manual Expenses · YTD',   icon: Pencil, tone: 'accent' },

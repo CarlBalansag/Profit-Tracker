@@ -195,8 +195,8 @@ const Dashboard = () => {
         : null;
       return (
         <div key="statCards" data-tutorial-id="dashboard-stats" className={isGlass
-          ? `grid grid-cols-1 sm:grid-cols-2 ${statColClass} gap-3 3xl:gap-4 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both`
-          : "grid min-w-0 grid-cols-1 gap-4 pb-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(200px,1fr))] animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both"
+          ? `grid grid-cols-2 ${statColClass} gap-3 3xl:gap-4 max-sm:[&>*:first-child]:col-span-2 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both`
+          : "grid min-w-0 grid-cols-2 gap-3 sm:gap-4 pb-4 lg:grid-cols-[repeat(auto-fit,minmax(200px,1fr))] max-sm:[&>*:first-child]:col-span-2 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both"
         }>
           {visibleStatCards.map(cardConfig => {
             const def = STAT_CARD_REGISTRY[cardConfig.id];
@@ -254,7 +254,7 @@ const Dashboard = () => {
           : "rounded-[24px] p-6 bg-[var(--dp-card-bg)] dp-elevated animate-in slide-in-from-bottom-4 duration-500 fade-in delay-300 fill-mode-both"
         }>
           <h3 className={isGlass ? "mb-1 px-0.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/24" : "text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)] mb-1"}>Status Pipeline</h3>
-          <p className={isGlass ? "mb-3 px-0.5 text-[11px] text-white/18" : "text-[12px] text-[var(--dp-text-secondary)] mb-4"}>
+          <p className={isGlass ? "mb-3 hidden px-0.5 text-[11px] text-white/18 sm:block" : "mb-4 hidden text-[12px] text-[var(--dp-text-secondary)] sm:block"}>
             Units currently in each stage right now — not a cumulative total. See "Units Sold" below for all units sold in this period regardless of their current status.
           </p>
 
@@ -515,7 +515,7 @@ const Dashboard = () => {
     if (sectionId === 'statCards') {
       if (!showStatCards) return null;
       return (
-        <div key="statCards" className="grid h-full grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-[1.8fr_1fr_1fr_1fr_0.8fr]">
+        <div key="statCards" className="grid h-full grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-[1.8fr_1fr_1fr_1fr_0.8fr] max-sm:[&>*:first-child]:col-span-2">
           {visibleStatCards.slice(0, 5).map((cardConfig, index) => {
             const def = STAT_CARD_REGISTRY[cardConfig.id];
             if (!def) return null;

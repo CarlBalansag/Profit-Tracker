@@ -27,13 +27,16 @@ export default function PageNav({ count, index, onChange, isGlass = false, label
             key={i}
             type="button"
             onClick={() => onChange(i)}
-            className={`rounded-full transition-all ${
+            className="page-dot flex items-center justify-center p-2 -m-1"
+            aria-label={`Go to ${label} ${i + 1}`}
+            aria-current={i === safeIndex ? 'true' : undefined}
+          >
+            <span className={`block rounded-full transition-all ${
               i === safeIndex
                 ? `w-4 h-1.5 ${isGlass ? 'bg-[#d8a65a]' : 'bg-[var(--dp-accent)]'}`
                 : `w-1.5 h-1.5 ${isGlass ? 'bg-white/[0.15]' : 'bg-[var(--dp-border)]'}`
-            }`}
-            aria-label={`Go to ${label} ${i + 1}`}
-          />
+            }`} />
+          </button>
         ))}
       </div>
 

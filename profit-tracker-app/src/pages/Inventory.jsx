@@ -114,7 +114,7 @@ const Inventory = () => {
       </div>
       
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-in slide-in-from-bottom-4 duration-500 fade-in fill-mode-both">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2 animate-in slide-in-from-bottom-4 duration-500 fade-in fill-mode-both">
         <StatCard label="Inventory Total Cost" value={`$${money(totalCapital)}`} icon={DollarSign} iconColor="var(--accent)" />
         <StatCard label="Units On Hand" value={totalUnits} icon={Package} />
         <StatCard label="Aging Stock (30+ Days)" value={`${agingUnits} units`} sub="Needs liquidation planning" icon={AlertTriangle} tone="red" />
