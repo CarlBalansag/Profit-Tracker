@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.19',
+    date: '2026-11-04',
+    notes: "The app is much easier to use on a phone: summary cards sit side by side, long lists are shorter with a Show more button, and Recent Sales no longer scrolls sideways.",
+  },
+  {
     version: '1.18',
     date: '2026-11-04',
     notes: "Pages show a clear message instead of $0.00 when your data can't load, and the app opens faster. Light mode and the glass theme are easier to read, phones and keyboards work better, and refunds now show how many units you kept.",
