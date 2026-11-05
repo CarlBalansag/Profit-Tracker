@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.18',
+    date: '2026-11-04',
+    notes: "Pages show a clear message instead of $0.00 when your data can't load, and the app opens faster. Light mode and the glass theme are easier to read, phones and keyboards work better, and refunds now show how many units you kept.",
+  },
+  {
     version: '1.17',
     date: '2026-11-04',
     notes: "Pages now look and line up the same across the app, with one style of summary card and button, and Invoices is now in the menu. Tables, filters and the calendar are much easier to use on a phone.",
