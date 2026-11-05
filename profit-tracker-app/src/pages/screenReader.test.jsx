@@ -152,3 +152,10 @@ describe('skip link', () => {
     expect(document.activeElement).toBe(within(document.body).getByRole('main'));
   });
 });
+
+describe('app shell', () => {
+  it('fits the screen Safari actually shows, not the height behind its toolbar', () => {
+    const { container } = render(<MemoryRouter><Shell><p>Page</p></Shell></MemoryRouter>);
+    expect(container.firstChild.className).toContain('h-dvh');
+  });
+});

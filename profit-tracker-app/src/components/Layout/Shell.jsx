@@ -51,11 +51,11 @@ const Shell = ({ children }) => {
   }, [tutorialActive, tutorialStep]);
 
   return (
-    /* Step 1 — shell uses h-screen + overflow-hidden so it truly fills the
+    /* Step 1 — shell uses h-dvh + overflow-hidden so it truly fills the
        viewport and the sidebar + content scroll independently without
        causing body-level overflow. */
     <div className={clsx(
-      "flex h-screen w-full overflow-hidden",
+      "flex h-dvh w-full overflow-hidden",
       isGlass && "bg-[#111315] text-[#e8e2d6]"
     )}>
       <a
