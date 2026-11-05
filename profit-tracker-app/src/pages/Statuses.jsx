@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Truck, Package, Send, CheckCircle2, ChevronLeft, ChevronRight, ArrowUpDown, RefreshCw, Pencil, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { usePhoneList } from '../hooks/usePhoneList';
+import ShowMoreButton from '../components/UI/ShowMoreButton';
 import { useInventory, useSales, useInvalidate, apiFetch } from '../hooks/useApi';
 import useRecordActions from '../hooks/useRecordActions';
 import StatusPipeline from '../components/UI/StatusPipeline';
@@ -551,11 +553,12 @@ function GroupedRecordCard({ records, quickStatus = false }) {
 // a tracking number. A unit of 1 renders exactly as every card always has, so
 // the lists that never group simply pass asUnits(records).
 function CardList({ units: visualUnits, empty, quickStatus = false }) {
+  const { visible, hiddenCount, showMore } = usePhoneList(visualUnits, { step: 10 });
   return (
     <ul className="px-3 pb-3 pt-3 space-y-2.5">
       {visualUnits.length === 0 ? (
         <li className="px-1 py-6 text-center text-xs text-gray-500">{empty}</li>
-      ) : visualUnits.map((unit) => (unit.length === 1
+      ) : visible.map((unit) => (unit.length === 1
         ? (
           <RecordCard
             key={`${unit[0].__kind}-${unit[0].id}`}
@@ -569,6 +572,9 @@ function CardList({ units: visualUnits, empty, quickStatus = false }) {
             quickStatus={quickStatus}
           />
         )))}
+      {hiddenCount > 0 && (
+        <li><ShowMoreButton hiddenCount={hiddenCount} step={10} onClick={showMore} /></li>
+      )}
     </ul>
   );
 }

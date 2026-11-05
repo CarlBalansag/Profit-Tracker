@@ -3,6 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
 import { Search, Paperclip, Eye, Trash2, FileText, Package, Receipt, X, Upload } from 'lucide-react';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
+import { usePhoneList } from '../hooks/usePhoneList';
+import ShowMoreButton from '../components/UI/ShowMoreButton';
 import { toast } from 'sonner';
 import LoadError from '../components/UI/LoadError';
 
@@ -157,6 +159,7 @@ const Receipts = () => {
   const filteredWith    = withReceipts.filter(i => i.name.toLowerCase().includes(q));
   const filteredWithout = withoutReceipts.filter(i => i.name.toLowerCase().includes(q));
   const current = tab === 'with' ? filteredWith : filteredWithout;
+  const phoneReceipts = usePhoneList(current);
 
   if (loadFailed) return <LoadError title="Receipts" what="your receipts" onRetry={retryLoad} retrying={loading} />;
 
@@ -236,7 +239,7 @@ const Receipts = () => {
                 {search ? 'No results match your search.' : tab === 'with' ? 'No receipts attached yet.' : 'All items have receipts attached!'}
               </td></tr>
             )}
-            {!loading && current.map(item => (
+            {!loading && phoneReceipts.visible.map(item => (
               <React.Fragment key={item.id}>
                 <tr className="group hover:bg-white/2 transition-colors">
                   <td className="px-4 py-3.5">
@@ -352,6 +355,8 @@ const Receipts = () => {
             ))}
           </tbody>
         </table>
+
+        <ShowMoreButton hiddenCount={loading ? 0 : phoneReceipts.hiddenCount} onClick={phoneReceipts.showMore} className="my-2" />
 
         {/* Footer count */}
         {!loading && (

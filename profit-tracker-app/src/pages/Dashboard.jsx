@@ -417,7 +417,27 @@ const Dashboard = () => {
           {recent.length === 0 ? (
             <p className={isGlass ? "text-white/20 text-sm text-center py-6" : "text-[var(--dp-text-secondary)] text-sm text-center py-6"}>No recent sales found.</p>
           ) : (
-            <div className={isGlass ? "overflow-x-auto pb-4" : "overflow-x-auto dp-scrollbar pb-4"}>
+            <>
+            {/* Phones: one line per sale instead of a table that scrolls sideways */}
+            <ul className={isGlass ? "divide-y divide-white/5 sm:hidden" : "divide-y divide-[color:var(--dp-border)] sm:hidden"}>
+              {recent.map((txn, i) => (
+                <li key={i} className="flex items-center justify-between gap-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className={isGlass ? "truncate text-sm font-medium text-gray-200" : "truncate text-sm font-medium text-[var(--dp-text-primary)]"}>{txn.product}</p>
+                    <p className={isGlass ? "text-xs text-gray-500" : "text-xs text-[var(--dp-text-secondary)]"}>
+                      {formatShortDate(txn.date)} · {recordStatusLabel(txn.status || 'SOLD')}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className={isGlass ? "text-sm tabular-nums text-green-400" : "text-sm font-medium tabular-nums text-[var(--dp-text-primary)]"}>${formatMoney(txn.revenue ?? 0)}</p>
+                    <p className={`text-xs tabular-nums ${getRowProfit(txn) >= 0 ? 'text-[var(--dp-green-text)]' : 'text-[var(--dp-red-text)]'}`}>
+                      {getRowProfit(txn) >= 0 ? '+' : '-'}${formatWholeMoney(Math.abs(getRowProfit(txn)))}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className={isGlass ? "hidden overflow-x-auto pb-4 sm:block" : "hidden overflow-x-auto dp-scrollbar pb-4 sm:block"}>
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className={isGlass ? "border-b border-white/10 text-xs font-semibold text-gray-500 uppercase tracking-wider" : "border-b border-[color:var(--dp-border)] text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>
@@ -503,6 +523,7 @@ const Dashboard = () => {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </div>
       );

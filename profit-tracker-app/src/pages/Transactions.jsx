@@ -12,6 +12,8 @@ import {
   Zap, Store, Calendar
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { usePhoneList } from '../hooks/usePhoneList';
+import ShowMoreButton from '../components/UI/ShowMoreButton';
 import TransactionDetailModal from '../components/TransactionDetailModal';
 import ProductNoteButton from '../components/ProductNoteButton';
 import { detectCarrier } from '../utils/carrier';
@@ -583,6 +585,9 @@ const Transactions = () => {
     return true;
   });
 
+  // The card list below shows up to the md breakpoint.
+  const phoneRows = usePhoneList(filteredRows, { query: '(max-width: 767px)' });
+
   // ─── Summary stats derived from filteredRows (respond to all active filters) ────
   const totalCostSum    = filteredRows.reduce((s, r) => s + (r.cost || 0), 0);
   const totalProfitSum  = filteredRows.filter(r => r.isSale).reduce((s, r) => s + (r.profit || 0), 0);
@@ -935,7 +940,7 @@ const Transactions = () => {
             {isLoading ? 'Loading transactions...' : rows.length === 0 ? 'No transactions recorded yet.' : 'No results match your filters.'}
           </div>
         )}
-        {filteredRows.map(row => (
+        {phoneRows.visible.map(row => (
           <div
             key={row.id}
             className="card bg-[#0f1115] p-4 rounded-xl border border-white/[0.06] flex flex-col gap-2"
@@ -1020,6 +1025,7 @@ const Transactions = () => {
             </div>
           </div>
         ))}
+        <ShowMoreButton hiddenCount={phoneRows.hiddenCount} onClick={phoneRows.showMore} />
       </div>
 
       {/* Top scrollbar mirror — hidden on mobile, shown md+ */}

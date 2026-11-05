@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch, usePaymentMethods } from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
+import { usePhoneList } from '../hooks/usePhoneList';
+import ShowMoreButton from '../components/UI/ShowMoreButton';
 import { useNavigate } from 'react-router-dom';
 import { localToday } from '../utils/returnWindow';
 import { toast } from 'sonner';
@@ -498,6 +500,8 @@ const Expenses = () => {
     a.click();
   };
 
+  const phoneExpenses = usePhoneList(filtered);
+
   if (loadFailed) return <LoadError title="Expenses" what="your expenses" onRetry={retryLoad} retrying={loading} />;
 
   return (
@@ -691,7 +695,7 @@ const Expenses = () => {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((exp, i) => {
+                {phoneExpenses.visible.map((exp, i) => {
                   const cat        = CATEGORY_MAP[exp.category];
                   const isGenerated = !!exp.recurring_expense_id;
                   const isDerived   = exp.source !== 'manual';
@@ -768,6 +772,7 @@ const Expenses = () => {
                 </tr>
               </tfoot>
             </table>
+            <ShowMoreButton hiddenCount={phoneExpenses.hiddenCount} onClick={phoneExpenses.showMore} className="my-2" />
           </div>
         )}
       </div>

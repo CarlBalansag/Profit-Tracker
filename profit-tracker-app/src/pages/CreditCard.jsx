@@ -534,8 +534,9 @@ function CreditCard() {
       </div>
 
       {/* ── Bottom bar ── */}
+      {/* Everything here is already at the top of the page, so phones drop it unless a loss needs flagging. */}
       {cards.length > 0 && (
-        <div style={{
+        <div className={uncoveredLoss > 0 ? undefined : 'max-sm:hidden!'} style={{
           minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '8px 16px', flexWrap: 'wrap', borderTop: '1px solid var(--border-default)',
           background: 'var(--bg-surface)', flexShrink: 0, gap: 8,
