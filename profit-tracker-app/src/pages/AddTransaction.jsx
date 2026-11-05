@@ -448,7 +448,7 @@ const AddTransaction = () => {
   return (
     // The app shell never scrolls; each page owns its scroll container.
     <div className="h-full overflow-auto">
-    <div className="w-full max-w-7xl px-4 py-6 sm:px-6">
+    <div className="w-full max-w-7xl mx-auto px-4 py-6 sm:px-6">
 
       {/* Header */}
       <div className="flex items-center justify-between mb-6">

@@ -74,7 +74,7 @@ function CashFlow() {
   return (
     // The app shell never scrolls; each page owns its scroll container.
     <div className="h-full overflow-auto">
-    <div className="w-full max-w-6xl space-y-8 pb-10 px-4 py-6 sm:px-6">
+    <div className="w-full max-w-6xl mx-auto space-y-8 pb-10 px-4 py-6 sm:px-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

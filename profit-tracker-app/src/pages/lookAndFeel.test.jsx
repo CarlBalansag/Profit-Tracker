@@ -79,3 +79,19 @@ describe('theme colour rules', () => {
     expect(css).not.toMatch(/\[class\*="(bg|border|text)-(purple|indigo|blue|red|green|amber)"\]/);
   });
 });
+
+describe('page width', () => {
+  it.each([
+    ['AddSale', 'max-w-5xl 3xl:max-w-6xl'],
+    ['AddTransaction', 'max-w-7xl'],
+    ['Analytics', 'max-w-7xl'],
+    ['CashFlow', 'max-w-6xl'],
+    ['Goals', 'max-w-[1400px]'],
+    ['Guide', 'max-w-3xl'],
+    ['Settings', 'max-w-5xl'],
+    ['TaxExempt', 'max-w-6xl'],
+  ])('%s stays centered in the space beside the sidebar', (page, width) => {
+    const source = readFileSync(join(process.cwd(), `src/pages/${page}.jsx`), 'utf8');
+    expect(source).toContain(`${width} mx-auto`);
+  });
+});

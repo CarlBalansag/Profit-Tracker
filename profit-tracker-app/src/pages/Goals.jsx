@@ -487,7 +487,7 @@ export default function Goals() {
     : null;
 
   return (
-    <div className={`h-full overflow-auto theme-scrollbar px-4 py-6 sm:px-6 w-full space-y-6 ${isGlass ? 'text-[#e8e2d6]' : 'bg-[var(--bg-base)]'}`}>
+    <div className={`h-full overflow-auto theme-scrollbar px-4 py-6 sm:px-6 w-full max-w-[1400px] mx-auto space-y-6 ${isGlass ? 'text-[#e8e2d6]' : 'bg-[var(--bg-base)]'}`}>
       <div className="animate-in fade-in duration-300">
         <h1 className={isGlass ? 'text-3xl font-light tracking-tight text-[#e8e2d6]' : 'text-[18px] font-medium tracking-[-0.3px] text-[var(--text-primary)]'}>
           Goals

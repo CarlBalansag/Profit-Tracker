@@ -155,7 +155,7 @@ const TaxExempt = () => {
   return (
     // The app shell never scrolls; each page owns its scroll container.
     <div className="h-full overflow-auto">
-    <div className="w-full max-w-6xl space-y-6 px-4 py-6 sm:px-6">
+    <div className="w-full max-w-6xl mx-auto space-y-6 px-4 py-6 sm:px-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>

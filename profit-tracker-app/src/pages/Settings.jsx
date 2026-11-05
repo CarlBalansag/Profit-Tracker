@@ -61,7 +61,7 @@ function Settings() {
   return (
     // The app shell never scrolls; each page owns its scroll container.
     <div className="h-full overflow-auto px-4 py-6 sm:px-6">
-    <div className="w-full max-w-5xl space-y-6 pb-10">
+    <div className="w-full max-w-5xl mx-auto space-y-6 pb-10">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white tracking-tight">Settings</h1>
