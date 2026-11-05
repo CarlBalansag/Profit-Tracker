@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useCreditCard } from '../hooks/useApi';
 import { recordStatusLabel } from '../data/statusWorkflow';
 import { PageLoader } from '../components/PageLoader';
+import LoadError from '../components/UI/LoadError';
 import {
   CreditCard as CreditCardIcon,
   ChevronLeft,
@@ -183,7 +184,7 @@ function ItemRow({ item }) {
 function CreditCard() {
   const [selectedMonth, setSelectedMonth] = useState(() => toMonthKey(new Date()));
   const [activeCardId, setActiveCardId] = useState(null);
-  const { data, isLoading } = useCreditCard(selectedMonth);
+  const { data, isLoading, isLoadingError, refetch } = useCreditCard(selectedMonth);
 
   const monthLabel = monthKeyToLabel(selectedMonth);
   const isCurrentMonth = selectedMonth === toMonthKey(new Date());
@@ -202,6 +203,7 @@ function CreditCard() {
   })();
 
   if (isLoading) return <PageLoader variant="generic" />;
+  if (isLoadingError) return <LoadError title="Credit Card" what="your credit cards" onRetry={() => refetch()} />;
 
   // ── Derived values for active card ──
   const days = activeCard?.due_day ? daysUntilDue(activeCard.due_day) : null;

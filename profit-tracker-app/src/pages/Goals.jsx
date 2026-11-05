@@ -4,6 +4,7 @@ import { useGoals, useGoalsMutations, useDashboard } from '../hooks/useApi';
 import { useUiPreferences } from '../hooks/useUiPreferences';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { PageLoader } from '../components/PageLoader';
+import LoadError from '../components/UI/LoadError';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -447,10 +448,15 @@ export default function Goals() {
   const { preferences } = useUiPreferences();
   const isGlass = preferences.style === 'glassmorphism-brown';
 
-  const { data: goals = [], isLoading } = useGoals();
+  const goalsQuery = useGoals();
+  const { data: goals = [], isLoading } = goalsQuery;
   const { create, update } = useGoalsMutations();
 
-  const { data: allTimeData } = useDashboard('All', 'All Time');
+  const allTimeQuery = useDashboard('All', 'All Time');
+  const allTimeData = allTimeQuery.data;
+  const sevenDayQuery = useDashboard('All', '7 Days');
+  const thirtyDayQuery = useDashboard('All', '30 Days');
+  const ytdQuery = useDashboard('All', 'YTD');
   const trend = allTimeData?.trend || [];
 
   const [editingMetric, setEditingMetric] = useState(null);
@@ -480,6 +486,11 @@ export default function Goals() {
   }
 
   if (isLoading) return <PageLoader />;
+
+  const failedQueries = [goalsQuery, allTimeQuery, sevenDayQuery, thirtyDayQuery, ytdQuery].filter(q => q.isLoadingError);
+  if (failedQueries.length > 0) {
+    return <LoadError title="Goals" what="your goals" onRetry={() => failedQueries.forEach(q => q.refetch())} />;
+  }
 
   const isSaving = create.isPending || update.isPending;
   const editingGoal = editingMetric

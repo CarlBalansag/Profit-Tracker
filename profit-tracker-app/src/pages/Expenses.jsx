@@ -7,6 +7,7 @@ import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { useNavigate } from 'react-router-dom';
 import { localToday } from '../utils/returnWindow';
 import { toast } from 'sonner';
+import LoadError from '../components/UI/LoadError';
 import {
   Receipt, Download, Plus, DollarSign,
   Search, X, Trash2, Pencil, RefreshCw, Pause, Play, CreditCard, Lock, ExternalLink, Info,
@@ -325,6 +326,8 @@ const Expenses = () => {
   const [derivedFailed, setDerivedFailed] = useState(false);
   const [recurring, setRecurring]     = useState([]);
   const [loading, setLoading]         = useState(true);
+  const [loadFailed, setLoadFailed]   = useState(false);
+  const hasLoaded = useRef(false);
   const { data: paymentMethods = [] } = usePaymentMethods();
 
   const [modalOpen, setModalOpen]         = useState(false);
@@ -350,14 +353,21 @@ const Expenses = () => {
       ]);
       if (expRes.ok) setExpenses(await expRes.json());
       if (recRes.ok) setRecurring(await recRes.json());
+      if (expRes.ok && recRes.ok) hasLoaded.current = true;
+      setLoadFailed(!hasLoaded.current);
       const derivedLines = derRes?.ok ? await derRes.json() : null;
       setDerived(Array.isArray(derivedLines) ? derivedLines : []);
       setDerivedFailed(!Array.isArray(derivedLines));
-    } catch { /* leave as-is */ }
+    } catch {
+      // A later refresh that fails keeps what is already on screen.
+      setLoadFailed(!hasLoaded.current);
+    }
     finally { setLoading(false); }
   };
 
   useEffect(() => { fetchAll(); }, []);
+
+  const retryLoad = () => { setLoading(true); fetchAll(); };
 
   const openAdd = () => { setEditingItem(null); setEditingIsRec(false); setModalOpen(true); };
   const openEditExp = (exp) => { setEditingItem(exp); setEditingIsRec(false); setModalOpen(true); };
@@ -487,6 +497,8 @@ const Expenses = () => {
     a.download = 'expenses.csv';
     a.click();
   };
+
+  if (loadFailed) return <LoadError title="Expenses" what="your expenses" onRetry={retryLoad} retrying={loading} />;
 
   return (
     <div className="h-full overflow-auto px-4 py-6 sm:px-6 space-y-6">

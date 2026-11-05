@@ -10,11 +10,12 @@ import { useNavigate } from 'react-router-dom';
 import ReturnWindowBadge from '../components/ReturnWindowBadge';
 import { localToday } from '../utils/returnWindow';
 import { useInventory, usePlatforms, usePaymentMethods, useInvalidate, apiFetch, useProductNote, useProductNoteMutations } from '../hooks/useApi';
+import LoadError from '../components/UI/LoadError';
 
 const AddSale = () => {
   const navigate = useNavigate();
-  const { data: rawInventory = [], isLoading: inventoryLoading } = useInventory();
-  const { data: platforms = [], isLoading: platformsLoading } = usePlatforms();
+  const { data: rawInventory = [], isLoading: inventoryLoading, isLoadingError: inventoryFailed, refetch: refetchInventory } = useInventory();
+  const { data: platforms = [], isLoading: platformsLoading, isLoadingError: platformsFailed, refetch: refetchPlatforms } = usePlatforms();
   const { data: paymentMethods = [] } = usePaymentMethods();
   const invalidate = useInvalidate();
   const isLoading = inventoryLoading || platformsLoading;
@@ -138,6 +139,19 @@ const AddSale = () => {
       error: (err) => `Failed: ${err.message}`,
     });
   };
+
+  if (inventoryFailed || platformsFailed) {
+    return (
+      <LoadError
+        title="Record Sale"
+        what="your in-stock items"
+        onRetry={() => {
+          if (inventoryFailed) refetchInventory();
+          if (platformsFailed) refetchPlatforms();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto">

@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useDashboard } from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
 import { DollarSign, ArrowRight, Bell, ChevronRight, ChevronDown, RotateCcw } from 'lucide-react';
+import LoadError from '../components/UI/LoadError';
 
 function fmt(n) {
   return (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -17,7 +18,7 @@ function CashFlow() {
   const [includeCashback, setIncludeCashback] = useState(false);
   const [expandedBuyer, setExpandedBuyer]     = useState(null);
 
-  const { data, isLoading: loading, refetch } = useDashboard('All', 'All Time');
+  const { data, isLoading: loading, isLoadingError, refetch } = useDashboard('All', 'All Time');
 
   const s      = data?.stats ?? {};
   const txns   = data?.cashFlowTransactions ?? data?.recentTransactions ?? [];
@@ -70,6 +71,7 @@ function CashFlow() {
   const toggleBuyer = (name) => setExpandedBuyer(expandedBuyer === name ? null : name);
 
   if (loading) return <PageLoader variant="generic" />;
+  if (isLoadingError) return <LoadError title="Cash Flow" what="your cash flow" onRetry={() => refetch()} />;
 
   return (
     // The app shell never scrolls; each page owns its scroll container.

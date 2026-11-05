@@ -3,6 +3,7 @@ import { useInventory, useSales, useInvalidate, apiFetch } from '../hooks/useApi
 import { detectCarrier, carrierTrackingUrl } from '../utils/carrier';
 import { toast } from 'sonner';
 import { RefreshCw, ExternalLink, Save, ChevronRight, Pencil } from 'lucide-react';
+import LoadError from '../components/UI/LoadError';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 function timeAgo(iso) {
@@ -435,8 +436,8 @@ function ShippingSection({ title, subtitle, rows, onSave, onCheck, checkingIds, 
 
 // ─── Page ─────────────────────────────────────────────────────────────────────────
 export default function Shipping() {
-  const { data: inventory = [], isLoading: loadingInventory } = useInventory();
-  const { data: sales = [], isLoading: loadingSales } = useSales();
+  const { data: inventory = [], isLoading: loadingInventory, isLoadingError: inventoryFailed, refetch: refetchInventory } = useInventory();
+  const { data: sales = [], isLoading: loadingSales, isLoadingError: salesFailed, refetch: refetchSales } = useSales();
   const invalidate = useInvalidate();
   const [checkingIds, setCheckingIds] = useState(() => new Set());
   const [savingId, setSavingId] = useState(null);
@@ -536,6 +537,19 @@ export default function Shipping() {
     }
     invalidateFn();
   };
+
+  if (inventoryFailed || salesFailed) {
+    return (
+      <LoadError
+        title="Shipping"
+        what="your shipments"
+        onRetry={() => {
+          if (inventoryFailed) refetchInventory();
+          if (salesFailed) refetchSales();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300 h-full overflow-auto px-4 py-6 sm:px-6">

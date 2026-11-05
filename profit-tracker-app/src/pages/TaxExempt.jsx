@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
 import { Search, Package, DollarSign, Info } from 'lucide-react';
 import { PageLoader } from '../components/PageLoader';
+import LoadError from '../components/UI/LoadError';
 
 function InfoTooltip({ text }) {
   const [show, setShow] = useState(false);
@@ -60,34 +61,38 @@ const TaxExempt = () => {
   const [items, setItems] = useState([]);
   const [sales, setSales] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('purchases');
   const [filterYear, setFilterYear] = useState('all');
   const [filterQuarter, setFilterQuarter] = useState('all');
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [invRes, salesRes] = await Promise.all([
-          apiFetch(`/api/inventory`, { credentials: 'include' }),
-          apiFetch(`/api/sales`, { credentials: 'include' }),
-        ]);
-        if (invRes.ok) {
-          const data = await invRes.json();
-          setItems(data.filter(i => i.tax_exempt === true));
-        }
-        if (salesRes.ok) {
-          const salesData = await salesRes.json();
-          setSales(salesData);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsLoading(false);
+  const fetchData = async () => {
+    try {
+      const [invRes, salesRes] = await Promise.all([
+        apiFetch(`/api/inventory`, { credentials: 'include' }),
+        apiFetch(`/api/sales`, { credentials: 'include' }),
+      ]);
+      if (invRes.ok) {
+        const data = await invRes.json();
+        setItems(data.filter(i => i.tax_exempt === true));
       }
-    };
-    fetchData();
-  }, []);
+      if (salesRes.ok) {
+        const salesData = await salesRes.json();
+        setSales(salesData);
+      }
+      setLoadFailed(!invRes.ok || !salesRes.ok);
+    } catch (err) {
+      console.error(err);
+      setLoadFailed(true);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const retryLoad = () => { setIsLoading(true); fetchData(); };
 
   const q = search.toLowerCase();
 
@@ -150,6 +155,7 @@ const TaxExempt = () => {
     { id: 'sales',     label: 'Sales',     icon: DollarSign, count: filteredSales.length },
   ];
 
+  if (loadFailed) return <LoadError title="Tax Exempt" what="your tax-exempt records" onRetry={retryLoad} retrying={isLoading} />;
   if (isLoading) return <PageLoader variant="taxexempt" />;
 
   return (

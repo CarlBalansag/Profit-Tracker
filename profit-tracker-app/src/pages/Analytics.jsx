@@ -2,6 +2,7 @@ import StatCard from '../components/UI/StatCard';
 import React, { useState } from 'react';
 import { useDashboard } from '../hooks/useApi';
 import { recordStatusLabel } from '../data/statusWorkflow';
+import LoadError from '../components/UI/LoadError';
 import {
   DollarSign, ShoppingCart, TrendingUp, Percent, Gift,
   CreditCard, Store, Package, BarChart2, Download, RotateCcw,
@@ -57,7 +58,7 @@ function Analytics() {
   const [mode, setMode]           = useState('All');
   const [dateRange, setDateRange] = useState('All Time');
 
-  const { data, isLoading: loading, refetch: fetchData } = useDashboard(mode, dateRange);
+  const { data, isLoading: loading, isLoadingError, refetch: fetchData } = useDashboard(mode, dateRange);
 
   const s = data?.stats ?? {};
   const trend = data?.trend ?? [];
@@ -130,6 +131,8 @@ function Analytics() {
   const costSubtitle = mode !== 'All'
     ? `Cost of units sold · ${purchaseLabel}`
     : `${purchaseLabel}${dateRange === 'All Time' ? '' : ' bought in this period'}, incl. tax & shipping, less refunds`;
+
+  if (isLoadingError) return <LoadError title="Analytics & Insights" what="your analytics" onRetry={() => fetchData()} />;
 
   return (
     // The app shell never scrolls; each page owns its scroll container.

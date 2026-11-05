@@ -4,6 +4,7 @@ import { apiFetch } from '../hooks/useApi';
 import { Search, Paperclip, Eye, Trash2, FileText, Package, Receipt, X, Upload } from 'lucide-react';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { toast } from 'sonner';
+import LoadError from '../components/UI/LoadError';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
 function isPdfUrl(url) {
@@ -67,6 +68,8 @@ const Receipts = () => {
   const [withReceipts, setWith]     = useState([]);
   const [withoutReceipts, setWithout] = useState([]);
   const [loading, setLoading]       = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const hasLoaded = useRef(false);
   const [search, setSearch]         = useState('');
   const [previewUrl, setPreviewUrl] = useState(null);
   const [attachingId, setAttachingId] = useState(null); // item id with open attach form
@@ -81,15 +84,20 @@ const Receipts = () => {
         const data = await res.json();
         setWith(data.withReceipts || []);
         setWithout(data.withoutReceipts || []);
+        hasLoaded.current = true;
       }
+      setLoadFailed(!hasLoaded.current);
     } catch (err) {
       console.error(err);
+      setLoadFailed(!hasLoaded.current);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => { fetchAll(); }, []);
+
+  const retryLoad = () => { setLoading(true); fetchAll(); };
 
   const handleFileChange = async (item, file) => {
     if (!file) return;
@@ -149,6 +157,8 @@ const Receipts = () => {
   const filteredWith    = withReceipts.filter(i => i.name.toLowerCase().includes(q));
   const filteredWithout = withoutReceipts.filter(i => i.name.toLowerCase().includes(q));
   const current = tab === 'with' ? filteredWith : filteredWithout;
+
+  if (loadFailed) return <LoadError title="Receipts" what="your receipts" onRetry={retryLoad} retrying={loading} />;
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300 h-full overflow-auto px-4 py-6 sm:px-6">

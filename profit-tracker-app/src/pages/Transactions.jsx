@@ -17,6 +17,7 @@ import ProductNoteButton from '../components/ProductNoteButton';
 import { detectCarrier } from '../utils/carrier';
 import { recordStatusLabel } from '../data/statusWorkflow';
 import { formatMoney } from '../utils/money';
+import LoadError from '../components/UI/LoadError';
 
 // ─── Inline editable cell input ───────────────────────────────────────────────
 function EditInput({ value, onChange, type = 'text', className = '' }) {
@@ -142,7 +143,7 @@ const Transactions = () => {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const { data: transactions = [], isLoading, refetch: refetchTransactions } = useInventory();
+  const { data: transactions = [], isLoading, isLoadingError, refetch: refetchTransactions } = useInventory();
   const { data: platforms = [] } = usePlatforms();
   const { data: paymentMethods = [] } = usePaymentMethods();
   const { data: buyers = [] } = useBuyers();
@@ -615,6 +616,7 @@ const Transactions = () => {
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   if (isLoading) return <PageLoader variant="table" />;
+  if (isLoadingError) return <LoadError title="Transactions" what="your transactions" onRetry={() => refetchTransactions()} />;
 
   return (
     <>

@@ -12,6 +12,7 @@ import { useCalendarEvents, useCalendarAutoEvents, useCalendarToken } from '../h
 import CalendarEventModal from '../components/Calendar/CalendarEventModal';
 import CalendarEventPopover from '../components/Calendar/CalendarEventPopover';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
+import LoadError from '../components/UI/LoadError';
 
 // ─── Color maps ───────────────────────────────────────────────────────────────
 const TYPE_COLOR = {
@@ -188,8 +189,8 @@ export default function Calendar() {
   const [modal, setModal] = useState({ open: false, event: null, defaultDate: null });
   const [showSubscribe, setShowSubscribe] = useState(false);
 
-  const { data: manualEvents = [] } = useCalendarEvents(currentMonth);
-  const { data: autoEvents = [] } = useCalendarAutoEvents(currentMonth);
+  const { data: manualEvents = [], isLoadingError: manualFailed, refetch: refetchManual } = useCalendarEvents(currentMonth);
+  const { data: autoEvents = [], isLoadingError: autoFailed, refetch: refetchAuto } = useCalendarAutoEvents(currentMonth);
 
   // Merge and shape events for FullCalendar
   const fcEvents = useMemo(() => {
@@ -244,6 +245,19 @@ export default function Calendar() {
   const monthLabel = new Date(currentMonth + '-15').toLocaleDateString('en-US', {
     month: 'long', year: 'numeric',
   });
+
+  if (manualFailed || autoFailed) {
+    return (
+      <LoadError
+        title="Calendar"
+        what="your calendar"
+        onRetry={() => {
+          if (manualFailed) refetchManual();
+          if (autoFailed) refetchAuto();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col h-full min-h-0 overflow-y-auto lg:overflow-hidden px-4 py-6 sm:px-6 gap-4">

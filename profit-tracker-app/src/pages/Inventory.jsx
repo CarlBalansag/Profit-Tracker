@@ -8,6 +8,7 @@ import ProductNoteButton from '../components/ProductNoteButton';
 import ReturnWindowBadge from '../components/ReturnWindowBadge';
 import { returnWindowStatus } from '../utils/returnWindow';
 import { recordStatusLabel } from '../data/statusWorkflow';
+import LoadError from '../components/UI/LoadError';
 
 // The batch whose return window runs out first, so a collapsed group still
 // warns about it. Closed windows only count when no batch is still open.
@@ -41,7 +42,7 @@ const STATUS_COLORS = {
 const money = (value) => roundCents(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const Inventory = () => {
-  const { data: rawInventory = [], isLoading } = useInventory();
+  const { data: rawInventory = [], isLoading, isLoadingError, refetch } = useInventory();
   const [expandedGroups, setExpandedGroups] = useState(new Set());
   const toggleGroup = (name) => setExpandedGroups(prev => {
     const next = new Set(prev);
@@ -90,6 +91,7 @@ const Inventory = () => {
   const activeListings = processedInventory.filter(i => i.is_listed || (!i.receiving_status && i.status === 'LISTED')).reduce((sum, item) => sum + item.qty_on_hand, 0);
 
   if (isLoading) return <PageLoader variant="table" />;
+  if (isLoadingError) return <LoadError title="Inventory On Hand" what="your inventory" onRetry={() => refetch()} />;
 
   return (
     <div className="h-full overflow-auto px-4 py-6 sm:px-6 space-y-6">

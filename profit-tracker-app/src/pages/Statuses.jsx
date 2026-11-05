@@ -8,6 +8,7 @@ import ContextualActions from '../components/UI/ContextualActions';
 import MoreActionsMenu from '../components/UI/MoreActionsMenu';
 import QuickStatusSelect from '../components/UI/QuickStatusSelect';
 import { detectCarrier } from '../utils/carrier';
+import LoadError from '../components/UI/LoadError';
 import {
   INVENTORY_RECEIVING_STATUSES,
   SALE_STATUS_ORDER,
@@ -750,8 +751,8 @@ function CompletedSection({ records }) {
 }
 
 export default function Statuses() {
-  const { data: inventory = [], isLoading: loadingInventory } = useInventory();
-  const { data: sales = [], isLoading: loadingSales } = useSales();
+  const { data: inventory = [], isLoading: loadingInventory, isLoadingError: inventoryFailed, refetch: refetchInventory } = useInventory();
+  const { data: sales = [], isLoading: loadingSales, isLoadingError: salesFailed, refetch: refetchSales } = useSales();
 
   const loading = loadingInventory || loadingSales;
 
@@ -775,6 +776,19 @@ export default function Statuses() {
     }
     return { byColumn: grouped, completed: completedList, unassigned: leftover };
   }, [records]);
+
+  if (inventoryFailed || salesFailed) {
+    return (
+      <LoadError
+        title="Statuses"
+        what="your statuses"
+        onRetry={() => {
+          if (inventoryFailed) refetchInventory();
+          if (salesFailed) refetchSales();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300 h-full overflow-auto px-4 py-6 sm:px-6">
