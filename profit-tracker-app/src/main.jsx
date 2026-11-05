@@ -21,6 +21,14 @@ const queryClient = new QueryClient({
   },
 })
 
+// After a release, a tab left open can ask for page files that no longer exist.
+// Reload once to pick up the new version; the guard stops a reload loop.
+window.addEventListener('vite:preloadError', () => {
+  if (sessionStorage.getItem('reloaded-for-update')) return;
+  sessionStorage.setItem('reloaded-for-update', '1');
+  window.location.reload();
+});
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>

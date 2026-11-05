@@ -1,34 +1,35 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { Toaster } from 'sonner';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Shell from './components/Layout/Shell';
 
 // Pages
-import Dashboard from './pages/Dashboard';
-import AddTransaction from './pages/AddTransaction';
-import Inventory from './pages/Inventory';
-import Expenses from './pages/Expenses';
-import Receipts from './pages/Receipts';
-import Invoices from './pages/Invoices';
-import Transactions from './pages/Transactions';
-import Analytics from './pages/Analytics';
-import CashFlow from './pages/CashFlow';
-import CreditCard from './pages/CreditCard';
-import Settings from './pages/Settings';
-import AddSale from './pages/AddSale';
-import TaxExempt from './pages/TaxExempt';
-import Guide from './pages/Guide';
-import Login from './pages/Login';
-import Goals from './pages/Goals';
-import Calendar from './pages/Calendar';
-import Shipping from './pages/Shipping';
-import Statuses from './pages/Statuses';
-import ScheduleC from './pages/ScheduleC';
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const AddTransaction = lazy(() => import('./pages/AddTransaction'));
+const Inventory = lazy(() => import('./pages/Inventory'));
+const Expenses = lazy(() => import('./pages/Expenses'));
+const Receipts = lazy(() => import('./pages/Receipts'));
+const Invoices = lazy(() => import('./pages/Invoices'));
+const Transactions = lazy(() => import('./pages/Transactions'));
+const Analytics = lazy(() => import('./pages/Analytics'));
+const CashFlow = lazy(() => import('./pages/CashFlow'));
+const CreditCard = lazy(() => import('./pages/CreditCard'));
+const Settings = lazy(() => import('./pages/Settings'));
+const AddSale = lazy(() => import('./pages/AddSale'));
+const TaxExempt = lazy(() => import('./pages/TaxExempt'));
+const Guide = lazy(() => import('./pages/Guide'));
+const Login = lazy(() => import('./pages/Login'));
+const Goals = lazy(() => import('./pages/Goals'));
+const Calendar = lazy(() => import('./pages/Calendar'));
+const Shipping = lazy(() => import('./pages/Shipping'));
+const Statuses = lazy(() => import('./pages/Statuses'));
+const ScheduleC = lazy(() => import('./pages/ScheduleC'));
 import { AuthProvider } from './context/AuthContext';
 import { TutorialProvider } from './context/TutorialContext';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import { SCHEDULE_C_ENABLED } from './config/features';
 import ThemeSwitch from './components/UI/ThemeSwitch';
+import { PageLoader } from './components/PageLoader';
 
 
 function App() {
@@ -53,10 +54,11 @@ function App() {
       />
       <Router>
         <Routes>
-          <Route path="/login" element={<><ThemeSwitch /><Login /></>} />
+          <Route path="/login" element={<><ThemeSwitch /><Suspense fallback={null}><Login /></Suspense></>} />
           <Route path="*" element={
             <ProtectedRoute>
               <Shell>
+            <Suspense fallback={<PageLoader />}>
             <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/add-transaction" element={<AddTransaction />} />
@@ -79,6 +81,7 @@ function App() {
           <Route path="/calendar" element={<Calendar />} />
           <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            </Suspense>
           </Shell>
             </ProtectedRoute>
         } />
