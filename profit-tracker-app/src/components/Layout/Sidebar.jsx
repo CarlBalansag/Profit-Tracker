@@ -66,7 +66,6 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <div className="my-2 h-px w-7 bg-white/[0.07]" />
 
             <GlassNavItem icon={BookOpen} label="Guide" to="/guide" />
-            <div className="flex justify-center py-2"><ThemeSwitch inline /></div>
             <GlassNavButton icon={Settings} label="Settings" onClick={() => navigate('/settings')} />
           </div>
         </aside>

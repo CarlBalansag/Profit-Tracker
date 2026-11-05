@@ -77,8 +77,8 @@
     --glass-border: rgba(255, 255, 255, 0.07);
     --glass-border-hover: rgba(216, 166, 90, 0.22);
     --glass-text-primary: #e8e2d6;
-    --glass-text-secondary: rgba(232, 226, 214, 0.52);
-    --glass-text-muted: rgba(232, 226, 214, 0.26);
+    --glass-text-secondary: rgba(232, 226, 214, 0.72);
+    --glass-text-muted: rgba(232, 226, 214, 0.58);
     --glass-accent: #d8a65a;
     --glass-accent-soft: rgba(216, 166, 90, 0.12);
     --glass-green: #8faf82;
@@ -527,6 +527,10 @@
   .glass-workspace textarea:focus {
     border-color: var(--glass-accent) !important;
     outline: none !important;
+  }
+
+  .glass-workspace [class*="text-[#d8a65a]/"] {
+    color: var(--glass-accent) !important;
   }
 
   .glass-workspace [class*="text-white"],
@@ -1133,5 +1137,36 @@ body,
   :is(.carbon-workspace, .glass-workspace) :is(input[type="checkbox"], input[type="radio"]) {
     width: 20px;
     height: 20px;
+  }
+}
+
+/* Reduced motion keeps fades and colour changes, which show that something
+   changed, and drops anything that moves across the screen. */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  .stagger-children > *,
+  .page-transition {
+    animation-name: fadeIn;
+    animation-delay: 0s !important;
+  }
+
+  .carbon-workspace .dp-clickable-card:hover,
+  .carbon-workspace .dp-hero-card:hover,
+  .carbon-workspace .dp-clickable-pipeline:hover {
+    transform: none;
+  }
+
+  .dp-clickable-pipeline::before {
+    transform: none;
+  }
+
+  [style*="sk-shimmer"] {
+    animation: none !important;
   }
 }

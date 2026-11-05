@@ -41,6 +41,8 @@ function mergePreferences(stored) {
 function applyColorTheme(preferences) {
   if (typeof document === 'undefined') return;
   document.documentElement.dataset.uiStyle = preferences.style || DEFAULT_UI_PREFERENCES.style;
+  // The glass theme only comes in dark, so nothing is left on light tokens inside it.
+  if (preferences.style === 'glassmorphism-brown') document.documentElement.dataset.theme = 'dark';
 }
 
 export function useUiPreferences() {
