@@ -242,7 +242,7 @@ export const RECENT_SALES_COLUMN_REGISTRY = {
   platform: { label: 'Place Sold', icon: Send },
   buyer: { label: 'Buyer', icon: Tag },
   cost: { label: 'Cost', icon: ShoppingCart },
-  sale: { label: 'Sale', icon: DollarSign },
+  sale: { label: 'Payout', icon: DollarSign },
   status: { label: 'Status', icon: CircleCheck },
   date: { label: 'Date', icon: Hourglass },
 };

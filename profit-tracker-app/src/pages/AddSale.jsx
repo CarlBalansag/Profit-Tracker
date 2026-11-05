@@ -6,7 +6,7 @@ import {
   Package, DollarSign, Search, Check, Store, Globe, Calendar, CreditCard, StickyNote
 } from 'lucide-react';
 import clsx from 'clsx';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import ReturnWindowBadge from '../components/ReturnWindowBadge';
 import { localToday } from '../utils/returnWindow';
 import { useInventory, usePlatforms, usePaymentMethods, useInvalidate, apiFetch, useProductNote, useProductNoteMutations } from '../hooks/useApi';
@@ -22,6 +22,9 @@ const AddSale = () => {
   // Only items with stock available
   const inventory = rawInventory.filter(i => i.qty_on_hand > 0);
 
+  const location = useLocation();
+  const scrollRef = useRef(null);
+  const preselected = useRef(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [saleTab, setSaleTab] = useState('cashout');
@@ -69,7 +72,20 @@ const AddSale = () => {
     setSelectedItem(item);
     noteAutoFilledRef.current = false;
     setFormData(prev => ({ ...prev, quantity: 1, unit_price: '', note: '' }));
+    // On a phone the list gives way to the form, so start at the top of it.
+    scrollRef.current?.scrollTo?.({ top: 0 });
   };
+
+  // Inventory's Sell button arrives with the batch already chosen.
+  const preselectId = location.state?.inventoryId;
+  useEffect(() => {
+    if (!preselectId || preselected.current) return;
+    const item = inventory.find(i => i.id === preselectId);
+    if (item) {
+      preselected.current = true;
+      handleSelect(item);
+    }
+  });
 
   const filteredInventory = inventory.filter(item => 
     item.product_name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -154,7 +170,7 @@ const AddSale = () => {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div ref={scrollRef} className="h-full overflow-y-auto">
     <div className="w-full max-w-5xl 3xl:max-w-6xl mx-auto px-4 py-6 sm:px-6">
       
       {/* Header */}
@@ -166,7 +182,7 @@ const AddSale = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Left Column: Inventory List */}
-        <div className="lg:col-span-1 space-y-4 flex flex-col h-full">
+        <div className={clsx("lg:col-span-1 space-y-4 flex flex-col h-full", selectedItem && "max-lg:hidden")}>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input 
@@ -237,7 +253,7 @@ const AddSale = () => {
         </div>
 
         {/* Right Column: Sale Entry Form */}
-        <div className="lg:col-span-2">
+        <div className={clsx("lg:col-span-2", !selectedItem && "max-lg:hidden")}>
           {selectedItem ? (
             <form onSubmit={handleSubmit} className="space-y-6 animate-in slide-in-from-bottom-4 fade-in duration-300">
               
@@ -249,6 +265,9 @@ const AddSale = () => {
                   <h2 className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Currently Selling</h2>
                   <p className="text-lg font-bold text-white mt-0.5">{selectedItem.product_name}</p>
                   <ReturnWindowBadge item={selectedItem} className="mt-1" />
+                  <button type="button" onClick={() => setSelectedItem(null)} className="lg:hidden mt-2 text-xs font-medium text-purple-400 underline underline-offset-2">
+                    Change item
+                  </button>
                 </div>
               </div>
 
@@ -380,16 +399,13 @@ const AddSale = () => {
                     const profit = economics.grossProfit;
                     return (
                       <>
-                        <label className="flex items-center gap-2 cursor-pointer select-none">
-                          <input type="checkbox" defaultChecked className="w-3.5 h-3.5 rounded border-gray-600 accent-green-500" readOnly />
-                          <span className="text-xs text-gray-400">
-                            Sale price is{' '}
-                            <span className="text-green-400 font-medium">per unit</span>
-                            {sp > 0 && qs > 0 && (
-                              <span className="text-gray-600"> (${formatMoney(sp)} × {qs} = ${formatMoney(saleTotal)})</span>
-                            )}
-                          </span>
-                        </label>
+                        <p className="text-xs text-gray-400">
+                          Sale price is{' '}
+                          <span className="text-green-400 font-medium">per unit</span>
+                          {sp > 0 && qs > 0 && (
+                            <span className="text-gray-400"> (${formatMoney(sp)} × {qs} = ${formatMoney(saleTotal)})</span>
+                          )}
+                        </p>
 
                         {(sp > 0 || purchaseCost > 0) && (
                           <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] divide-y divide-white/[0.04] text-xs overflow-hidden">

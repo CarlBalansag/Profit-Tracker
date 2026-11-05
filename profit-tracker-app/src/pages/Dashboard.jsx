@@ -429,7 +429,7 @@ const Dashboard = () => {
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className={isGlass ? "text-sm tabular-nums text-green-400" : "text-sm font-medium tabular-nums text-[var(--dp-text-primary)]"}>${formatMoney(txn.revenue ?? 0)}</p>
+                    <p className={isGlass ? "text-sm tabular-nums text-green-400" : "text-sm font-medium tabular-nums text-[var(--dp-text-primary)]"}>${formatMoney(txn.revenue ?? 0)} <span className="text-[11px] font-normal text-[var(--dp-text-secondary)]">payout</span></p>
                     <p className={`text-xs tabular-nums ${getRowProfit(txn) >= 0 ? 'text-[var(--dp-green-text)]' : 'text-[var(--dp-red-text)]'}`}>
                       {getRowProfit(txn) >= 0 ? '+' : '-'}${formatWholeMoney(Math.abs(getRowProfit(txn)))}
                     </p>
@@ -448,7 +448,7 @@ const Dashboard = () => {
                           platform: 'Place Sold',
                           buyer: 'Buyer',
                           cost: 'Cost',
-                          sale: 'Sale',
+                          sale: 'Payout',
                           status: 'Status',
                           date: 'Date',
                         }[column.id]}

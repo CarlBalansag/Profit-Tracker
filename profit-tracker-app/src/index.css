@@ -1146,6 +1146,11 @@ body,
   [data-tutorial-id="dashboard-stats"] > :not(:first-child) .dp-card-icon-wrap { display: none; }
 }
 
+/* Add Transaction opens with the essentials on phones; the rest is one tap away. */
+@media (max-width: 767px) {
+  form:not([data-show-extra="true"]) .phone-extra { display: none; }
+}
+
 /* Phones: iOS zooms the page when a field under 16px gets focus, and small
    controls are hard to tap. Switches keep their size because their thumb is
    positioned against it. */
