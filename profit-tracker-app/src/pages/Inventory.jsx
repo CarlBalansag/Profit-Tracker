@@ -128,7 +128,7 @@ const Inventory = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input 
               type="text" 
-              placeholder="Search by product name or category..." 
+              aria-label="Search by product name or category" placeholder="Search by product name or category..." 
               className="w-full bg-[#0a0a0f] border border-white/10 rounded-lg pl-10 pr-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/50 transition-colors" 
             />
           </div>
@@ -210,7 +210,7 @@ const Inventory = () => {
                       </span>
                     </td>
                     <td data-phone-hide className="px-4 py-5 text-right">
-                      <button className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100">
+                      <button type="button" aria-label="More actions" className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100">
                         <MoreVertical className="w-4 h-4" />
                       </button>
                     </td>
@@ -228,10 +228,18 @@ const Inventory = () => {
                   >
                     <td className="px-4 py-5">
                       <div className="flex items-center gap-2">
-                        {isOpen
-                          ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                          : <ChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                        }
+                        <button
+                          type="button"
+                          aria-expanded={isOpen}
+                          aria-label={`${isOpen ? 'Hide' : 'Show'} batches for ${group.product_name}`}
+                          onClick={(e) => { e.stopPropagation(); toggleGroup(group.product_name); }}
+                          className="-m-1 p-1 rounded flex-shrink-0"
+                        >
+                          {isOpen
+                            ? <ChevronDown className="w-4 h-4 text-gray-400" />
+                            : <ChevronRight className="w-4 h-4 text-gray-500" />
+                          }
+                        </button>
                         <div>
                           <p className="text-sm font-semibold text-gray-200">{group.product_name}</p>
                           <span className="text-[11px] text-gray-500">{group.entries.length} purchase entries</span>
@@ -279,7 +287,7 @@ const Inventory = () => {
                       )}
                     </td>
                     <td data-phone-hide className="px-4 py-5 text-right">
-                      <button className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100" onClick={e => e.stopPropagation()}>
+                      <button type="button" aria-label="More actions" className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100" onClick={e => e.stopPropagation()}>
                         <MoreVertical className="w-4 h-4" />
                       </button>
                     </td>
@@ -325,7 +333,7 @@ const Inventory = () => {
                           </span>
                         </td>
                         <td data-phone-hide className="px-4 py-3.5 text-right">
-                          <button className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100">
+                          <button type="button" aria-label="More actions" className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100">
                             <MoreVertical className="w-4 h-4" />
                           </button>
                         </td>

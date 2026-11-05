@@ -121,6 +121,10 @@ function CashFlow() {
         <div className="flex justify-end items-center gap-3">
           <span className="text-xs text-gray-500">Include cashback</span>
           <button
+            type="button"
+            role="switch"
+            aria-checked={includeCashback}
+            aria-label="Include cashback"
             onClick={() => setIncludeCashback(!includeCashback)}
             className={`w-9 h-5 rounded-full relative transition-colors ${includeCashback ? 'bg-[var(--green)]' : 'bg-gray-700'}`}
           >
@@ -182,8 +186,17 @@ function CashFlow() {
             {buyers.map(buyer => (
               <div key={buyer.name} className="group">
                 <div
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={expandedBuyer === buyer.name}
                   className="p-4 flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors"
                   onClick={() => toggleBuyer(buyer.name)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleBuyer(buyer.name);
+                    }
+                  }}
                 >
                   <div className="flex items-center gap-4">
                     {expandedBuyer === buyer.name

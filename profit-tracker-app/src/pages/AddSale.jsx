@@ -171,7 +171,7 @@ const AddSale = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input 
               type="text" 
-              placeholder="Search in-stock inventory..." 
+              aria-label="Search in-stock inventory" placeholder="Search in-stock inventory..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-[#12121A] border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-purple-500/50 transition-colors shadow-sm"

@@ -20,9 +20,10 @@ import { formatMoney } from '../utils/money';
 import LoadError from '../components/UI/LoadError';
 
 // ─── Inline editable cell input ───────────────────────────────────────────────
-function EditInput({ value, onChange, type = 'text', className = '' }) {
+function EditInput({ value, onChange, type = 'text', className = '', label }) {
   return (
     <input
+      aria-label={label}
       type={type}
       value={value}
       onChange={e => onChange(e.target.value)}
@@ -60,9 +61,10 @@ function StatusBadge({ status }) {
 }
 
 // ─── Inline select ───────────────────────────────────────────────────────────
-function EditSelect({ value, onChange, options, placeholder = 'Select...' }) {
+function EditSelect({ value, onChange, options, placeholder = 'Select...', label }) {
   return (
     <select
+      aria-label={label || placeholder}
       value={value}
       onChange={e => onChange(e.target.value)}
       className="bg-[#0d0d18] border border-indigo-500/40 rounded px-1.5 py-0.5 text-xs text-gray-300 focus:outline-none focus:border-indigo-400 w-full"
@@ -748,6 +750,7 @@ const Transactions = () => {
           </button>
           <button 
             onClick={() => toast('Coming Soon')}
+            aria-label="Table settings"
             className="page-btn page-btn-secondary page-btn-sm page-btn-icon"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -775,7 +778,7 @@ const Transactions = () => {
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search products, stores, platforms..."
+                aria-label="Search products, stores, platforms" placeholder="Search products, stores, platforms..."
                 className="w-full bg-[#16181d] border border-white/5 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-white/20 transition-colors"
               />
             </div>
@@ -814,6 +817,7 @@ const Transactions = () => {
           {/* Dropdowns */}
           <div className={`${showMobileFilters ? 'flex' : 'hidden'} md:flex flex-wrap gap-2 [&>select]:flex-1 [&>select]:min-w-[130px] sm:[&>select]:flex-none sm:[&>select]:min-w-0`}>
             <select
+              aria-label="Filter by status"
               value={filterStatus}
               onChange={e => setFilterStatus(e.target.value)}
               className="bg-[#16181d] border border-white/5 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-white/20 appearance-none"
@@ -822,6 +826,7 @@ const Transactions = () => {
               {STATUSES.map(s => <option key={s} value={s}>{recordStatusLabel(s)}</option>)}
             </select>
             <select
+              aria-label="Filter by store"
               value={filterVendorId}
               onChange={e => setFilterVendorId(e.target.value)}
               className="bg-[#16181d] border border-white/5 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-white/20 appearance-none"
@@ -830,6 +835,7 @@ const Transactions = () => {
               {vendorOptions.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
             </select>
             <select
+              aria-label="Filter by platform"
               value={filterPlatformId}
               onChange={e => setFilterPlatformId(e.target.value)}
               className="bg-[#16181d] border border-white/5 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-white/20 appearance-none"
@@ -838,6 +844,7 @@ const Transactions = () => {
               {platformOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
             <select
+              aria-label="Filter by payment method"
               value={filterPaymentId}
               onChange={e => setFilterPaymentId(e.target.value)}
               className="bg-[#16181d] border border-white/5 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-white/20 appearance-none"
@@ -847,6 +854,7 @@ const Transactions = () => {
             </select>
             {/* Date Range filter */}
             <select
+              aria-label="Filter by date"
               value={filterDateRange}
               onChange={e => setFilterDateRange(e.target.value)}
               className={`border rounded-lg px-3 py-2 text-sm focus:outline-none appearance-none transition-colors ${
@@ -943,6 +951,8 @@ const Transactions = () => {
                 <ProductNoteButton productName={row.product} />
               </div>
               <button
+                type="button"
+                aria-label={`Open details for ${row.product}`}
                 onClick={() => setExpandedRow(row)}
                 className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 text-gray-500 hover:text-white transition-colors"
               >
@@ -1028,6 +1038,7 @@ const Transactions = () => {
               <th className="px-4 py-3.5 w-10 sticky left-0 z-20 bg-[#0f1115]">
                 <input
                   type="checkbox"
+                  aria-label="Select all rows"
                   className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 accent-indigo-500"
                   checked={filteredRows.length > 0 && selectedIds.length === filteredRows.length}
                   onChange={(e) => {
@@ -1085,6 +1096,7 @@ const Transactions = () => {
                   <td className={`px-4 py-3.5 sticky left-0 z-10 ${isEditing ? 'bg-[#1a1530]' : 'bg-[#0f1115]'}`}>
                     <input
                       type="checkbox"
+                      aria-label={`Select ${row.product}`}
                       className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 accent-indigo-500"
                       checked={selectedIds.includes(row.id)}
                       onChange={(e) => {
@@ -1097,10 +1109,14 @@ const Transactions = () => {
                     />
                   </td>
                   <td className="px-2 py-3.5 text-gray-600">
-                    <Maximize2
-                      className="w-3.5 h-3.5 cursor-pointer hover:text-gray-300 transition-colors"
+                    <button
+                      type="button"
+                      aria-label={`Open details for ${row.product}`}
                       onClick={() => setExpandedRow(row)}
-                    />
+                      className="block rounded hover:text-gray-300 transition-colors"
+                    >
+                      <Maximize2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
                   </td>
                   <td className="px-2 py-3.5">
                     {row.isSale
@@ -1116,7 +1132,7 @@ const Transactions = () => {
                       case 'date': return (
                         <td key="date" className="px-4 py-3.5">
                           {isEditing && editData.isSale ? (
-                            <input type="date" value={editData.sale_date || ''} onChange={e => setEditData(d => ({ ...d, sale_date: e.target.value }))} className="bg-[#0d0d18] border border-indigo-500/40 rounded px-1.5 py-0.5 text-xs text-white" title="Sale Date" />
+                            <input aria-label="Sale date" type="date" value={editData.sale_date || ''} onChange={e => setEditData(d => ({ ...d, sale_date: e.target.value }))} className="bg-[#0d0d18] border border-indigo-500/40 rounded px-1.5 py-0.5 text-xs text-white" title="Sale Date" />
                           ) : (
                             <span className="text-xs text-gray-400 bg-white/[0.04] px-2 py-1 rounded-md whitespace-nowrap">{row.date}</span>
                           )}
@@ -1125,7 +1141,7 @@ const Transactions = () => {
                       case 'product': return (
                         <td key="product" className="px-2 py-3.5 min-w-40 max-w-[190px]">
                           {isEditing ? (
-                            <EditInput value={editData.product} onChange={v => setEditData(d => ({ ...d, product: v }))} className="min-w-[180px]" />
+                            <EditInput label="Product" value={editData.product} onChange={v => setEditData(d => ({ ...d, product: v }))} className="min-w-[180px]" />
                           ) : (
                             <div className="flex items-center gap-1">
                               <p className="text-sm font-semibold text-gray-100 leading-tight truncate" title={row.product}>{row.product}</p>
@@ -1167,7 +1183,7 @@ const Transactions = () => {
                       case 'qty': return (
                         <td key="qty" className="px-4 py-3.5 w-16 text-center">
                           {isEditing ? (
-                            <EditInput type="number" value={editData.qty} onChange={v => setEditData(d => ({ ...d, qty: v }))} className="w-14 text-center" />
+                            <EditInput label="Quantity" type="number" value={editData.qty} onChange={v => setEditData(d => ({ ...d, qty: v }))} className="w-14 text-center" />
                           ) : (
                             <span className="text-sm font-semibold text-gray-200">{row.qty}</span>
                           )}
@@ -1177,7 +1193,7 @@ const Transactions = () => {
                         <td key="cost" className="px-4 py-3.5">
                           {isEditing ? (
                             <div>
-                              <EditInput type="number" value={editData.cost} onChange={v => setEditData(d => ({ ...d, cost: v }))} className="w-24" />
+                              <EditInput label="Cost" type="number" value={editData.cost} onChange={v => setEditData(d => ({ ...d, cost: v }))} className="w-24" />
                               <p className="text-[11px] text-gray-600 mt-0.5">per unit</p>
                             </div>
                           ) : (
@@ -1189,7 +1205,7 @@ const Transactions = () => {
                         <td key="sale" className="px-4 py-3.5">
                           {isEditing && editData.isSale ? (
                             <div>
-                              <EditInput type="number" value={editData.sale ?? ''} onChange={v => setEditData(d => ({ ...d, sale: v }))} className="w-24" />
+                              <EditInput label="Sale price" type="number" value={editData.sale ?? ''} onChange={v => setEditData(d => ({ ...d, sale: v }))} className="w-24" />
                               <p className="text-[11px] text-gray-600 mt-0.5">per unit</p>
                             </div>
                           ) : (
@@ -1200,7 +1216,7 @@ const Transactions = () => {
                       case 'commission': return (
                         <td key="commission" className="px-4 py-3.5">
                           {isEditing && editData.isSale ? (
-                            <EditInput type="number" value={editData.commission_fee} onChange={v => setEditData(d => ({ ...d, commission_fee: v }))} className="w-20 text-red-300" />
+                            <EditInput label="Commission" type="number" value={editData.commission_fee} onChange={v => setEditData(d => ({ ...d, commission_fee: v }))} className="w-20 text-red-300" />
                           ) : (
                             <span className="text-sm font-semibold text-red-400">{row.rawCommission != null ? `-$${formatMoney(row.rawCommission)}` : <span className="text-gray-600 font-normal">—</span>}</span>
                           )}
@@ -1224,6 +1240,7 @@ const Transactions = () => {
                         <td key="payment" className="px-4 py-3.5">
                           {isEditing ? (
                             <EditSelect
+                              label="Payment method"
                               value={editData.paymentMethodId}
                               onChange={v => setEditData(d => ({ ...d, paymentMethodId: v }))}
                               options={paymentMethods}
@@ -1238,6 +1255,7 @@ const Transactions = () => {
                         <td key="status" className="px-4 py-3.5 min-w-[130px]">
                           {isEditing ? (
                             <EditSelect
+                              label="Status"
                               value={editData.status}
                               onChange={v => setEditData(d => ({ ...d, status: v }))}
                               options={(row.isSale ? SALE_STATUSES : STATUSES).map(s => ({ id: s, name: recordStatusLabel(s) }))}
@@ -1277,6 +1295,7 @@ const Transactions = () => {
                           {isEditing ? (
                             <input
                               type="text"
+                              aria-label="Tracking number"
                               value={editData.tracking_number || ''}
                               onChange={e => setEditData(d => ({ ...d, tracking_number: e.target.value }))}
                               placeholder="Tracking #"
@@ -1365,11 +1384,11 @@ const Transactions = () => {
           Showing {filteredRows.length}{filteredRows.length !== rows.length ? ` of ${rows.length}` : ''} records
         </div>
         <div className="flex items-center gap-3">
-          <button className="w-7 h-7 flex items-center justify-center rounded border border-white/5 bg-[#16181d] text-gray-500 hover:bg-white/5 transition-colors">
+          <button type="button" aria-label="Previous page" className="w-7 h-7 flex items-center justify-center rounded border border-white/5 bg-[#16181d] text-gray-500 hover:bg-white/5 transition-colors">
             <ChevronLeft className="w-4 h-4" />
           </button>
           <span className="text-xs text-gray-400 font-medium">Page 1 of 1</span>
-          <button className="w-7 h-7 flex items-center justify-center rounded border border-white/5 bg-[#16181d] text-gray-500 hover:bg-white/5 transition-colors">
+          <button type="button" aria-label="Next page" className="w-7 h-7 flex items-center justify-center rounded border border-white/5 bg-[#16181d] text-gray-500 hover:bg-white/5 transition-colors">
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>

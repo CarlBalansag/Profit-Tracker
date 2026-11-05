@@ -458,7 +458,7 @@ const Login = () => {
           <div className="divide-y divide-white/[0.05]">
             {faqs.map((f, i) => (
               <div key={i}>
-                <button
+                <button aria-label="Show or hide answer"
                   className="w-full flex items-center justify-between py-4 text-left gap-4"
                   onClick={() => setFaqOpen(faqOpen === i ? null : i)}
                 >

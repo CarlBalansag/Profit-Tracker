@@ -64,7 +64,7 @@ export const QuickAddModal = ({ isOpen, onClose, onAddCards, existingCardIds = [
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-[color:var(--dp-border)]">
           <h2 className="text-lg font-bold text-[var(--dp-text-primary)]">Quick Add Cards</h2>
-          <button onClick={onClose} className="text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors">
+          <button aria-label="Close" onClick={onClose} className="text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors">
             <X size={20} />
           </button>
         </div>

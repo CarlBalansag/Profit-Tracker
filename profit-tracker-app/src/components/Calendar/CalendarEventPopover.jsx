@@ -53,7 +53,7 @@ export default function CalendarEventPopover({ date, events, onClose, onAddEvent
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[color:var(--dp-border)]">
           <span className="text-xs font-semibold text-[var(--dp-text-primary)]">{formatDate(date)}</span>
-          <button onClick={onClose} className="p-1 rounded text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors">
+          <button aria-label="Close" onClick={onClose} className="p-1 rounded text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors">
             <X size={14} />
           </button>
         </div>

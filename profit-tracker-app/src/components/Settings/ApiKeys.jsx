@@ -113,7 +113,7 @@ function NewTokenBanner({ token, onDismiss }) {
       <p className="text-[11px] text-gray-500">This is the only time this key is shown. Paste it into your AI assistant's MCP configuration as the bearer token.</p>
       <div className="flex items-center gap-2">
         <code className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-gray-200 break-all">{token}</code>
-        <button onClick={copy} className="p-2 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/5 flex-shrink-0">
+        <button aria-label="Copy" onClick={copy} className="p-2 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/5 flex-shrink-0">
           <Copy size={14} />
         </button>
       </div>

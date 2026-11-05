@@ -124,7 +124,7 @@ const ProductNoteButton = ({ productName }) => {
               <StickyNote className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
               <p className="text-xs font-semibold text-[var(--dp-text-primary)] truncate">{productName}</p>
             </div>
-            <button
+            <button aria-label="Close"
               type="button"
               onClick={() => setOpen(false)}
               className="text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] flex-shrink-0"

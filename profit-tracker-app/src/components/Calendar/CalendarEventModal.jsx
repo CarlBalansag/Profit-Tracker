@@ -98,7 +98,7 @@ export default function CalendarEventModal({ open, event, defaultDate, onClose }
           <h2 className="text-base font-semibold text-[var(--dp-text-primary)]">
             {isEdit ? 'Edit Event' : 'New Event'}
           </h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors">
+          <button aria-label="Close" onClick={onClose} className="p-1.5 rounded-lg text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors">
             <X size={18} />
           </button>
         </div>

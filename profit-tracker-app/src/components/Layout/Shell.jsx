@@ -58,6 +58,17 @@ const Shell = ({ children }) => {
       "flex h-screen w-full overflow-hidden",
       isGlass && "bg-[#111315] text-[#e8e2d6]"
     )}>
+      <a
+        href="#main-content"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById('main-content')?.focus();
+        }}
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-black"
+      >
+        Skip to main content
+      </a>
+
       <Sidebar
         isOpen={isSidebarOpen}
         setIsOpen={setIsSidebarOpen}
@@ -68,8 +79,8 @@ const Shell = ({ children }) => {
 
       {/* Main content column — flex-1 so it takes remaining width;
           min-w-0 prevents flex children from overflowing their container. */}
-      <main className={clsx(
-        "flex flex-col flex-1 min-w-0 overflow-hidden",
+      <main id="main-content" tabIndex={-1} className={clsx(
+        "flex flex-col flex-1 min-w-0 overflow-hidden outline-none",
         isGlass
           ? "relative bg-[radial-gradient(ellipse_at_20%_20%,rgba(216,166,90,0.035)_0%,transparent_42%),radial-gradient(ellipse_at_80%_80%,rgba(125,140,160,0.035)_0%,transparent_42%),#111315] lg:pl-[76px]"
           : "bg-[var(--dp-bg)]"

@@ -13,6 +13,7 @@ function InfoTooltip({ text }) {
     <span className="relative inline-flex items-center" ref={ref}>
       <button
         type="button"
+        aria-label={text}
         onMouseEnter={() => setShow(true)}
         onMouseLeave={() => setShow(false)}
         onFocus={() => setShow(true)}
@@ -170,6 +171,7 @@ const TaxExempt = () => {
         </div>
         <div className="flex items-center gap-2">
           <select
+            aria-label="Filter by year"
             value={filterYear}
             onChange={e => setFilterYear(e.target.value)}
             className="bg-white/[0.03] border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-blue-500/50 transition-colors appearance-none cursor-pointer"
@@ -180,6 +182,7 @@ const TaxExempt = () => {
             ))}
           </select>
           <select
+            aria-label="Filter by quarter"
             value={filterQuarter}
             onChange={e => setFilterQuarter(e.target.value)}
             className="bg-white/[0.03] border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-blue-500/50 transition-colors appearance-none cursor-pointer"
@@ -289,7 +292,7 @@ const TaxExempt = () => {
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search..."
+            aria-label="Search" placeholder="Search..."
             className="w-full bg-white/[0.03] border border-white/10 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50 transition-colors"
           />
         </div>

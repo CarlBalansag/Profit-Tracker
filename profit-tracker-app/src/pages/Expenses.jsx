@@ -173,7 +173,7 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
                 : 'Add Expense'}
             </h2>
           </div>
-          <button onClick={onClose} className="text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors">
+          <button aria-label="Close" onClick={onClose} className="text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -619,7 +619,7 @@ const Expenses = () => {
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-            <input type="text" placeholder="Search expenses..." value={search} onChange={e => setSearch(e.target.value)}
+            <input type="text" aria-label="Search expenses" placeholder="Search expenses..." value={search} onChange={e => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2 rounded-lg text-sm text-white placeholder-gray-600 bg-white/[0.02] border border-white/10 focus:outline-none focus:border-purple-500/50" />
           </div>
           <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} aria-label="Source"
@@ -633,7 +633,7 @@ const Expenses = () => {
             <option value="" className="bg-gray-900">All Categories</option>
             {filterCategories.map(c => <option key={c.value} value={c.value} className="bg-gray-900">{c.label}</option>)}
           </select>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)} aria-label="Sort expenses"
             className="px-3 py-2 rounded-lg text-sm text-white bg-white/[0.02] border border-white/10 appearance-none focus:outline-none focus:border-purple-500/50 cursor-pointer">
             <option value="DATE_DESC"   className="bg-gray-900">Sort: Newest</option>
             <option value="DATE_ASC"    className="bg-gray-900">Sort: Oldest</option>

@@ -30,7 +30,7 @@ function PreviewModal({ dataUrl, onClose }) {
       <div ref={modalRef} className="relative max-w-3xl w-full max-h-[90vh] rounded-xl overflow-hidden bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated text-[var(--dp-text-primary)]" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-[color:var(--dp-border)]">
           <span className="text-sm font-medium text-[var(--dp-text-primary)]">Receipt Preview</span>
-          <button onClick={onClose} className="p-1 rounded hover:bg-[var(--dp-hover-bg)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors">
+          <button aria-label="Close" onClick={onClose} className="p-1 rounded hover:bg-[var(--dp-hover-bg)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -209,7 +209,7 @@ const Receipts = () => {
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search by name..."
+          aria-label="Search by name" placeholder="Search by name..."
           className="w-full bg-[#16181d] border border-white/5 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-white/20 transition-colors"
         />
       </div>

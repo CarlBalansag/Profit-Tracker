@@ -106,7 +106,7 @@ function TooltipCard({ rect, placement, step, onNext, onBack, onSkip, stepIndex,
           </p>
           <h3 className="text-base font-bold text-white leading-tight">{step.title}</h3>
         </div>
-        <button
+        <button aria-label="Skip tutorial"
           onClick={onSkip}
           className="flex-shrink-0 p-1 text-gray-500 hover:text-white hover:bg-white/10 rounded-md transition-colors"
         >

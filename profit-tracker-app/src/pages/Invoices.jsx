@@ -24,10 +24,10 @@ const Invoices = () => {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input 
             className="input pl-10 w-full bg-white/[0.02] border border-white/10 rounded-lg py-2 text-sm text-white focus:outline-none focus:border-purple-500/50" 
-            placeholder="Search invoices by number, buyer, seller..." 
+            aria-label="Search invoices by number, buyer, seller" placeholder="Search invoices by number, buyer, seller..." 
           />
         </div>
-        <select className="px-3 py-2 rounded-lg text-sm text-white bg-white/[0.02] border border-white/10 appearance-none focus:outline-none focus:border-purple-500/50 w-full sm:w-40 cursor-pointer">
+        <select aria-label="Filter by status" className="px-3 py-2 rounded-lg text-sm text-white bg-white/[0.02] border border-white/10 appearance-none focus:outline-none focus:border-purple-500/50 w-full sm:w-40 cursor-pointer">
           <option value="" className="bg-gray-900 text-white">All Statuses</option>
           <option value="DRAFT" className="bg-gray-900 text-white">DRAFT</option>
           <option value="SENT" className="bg-gray-900 text-white">SENT</option>

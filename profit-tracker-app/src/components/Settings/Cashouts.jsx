@@ -122,7 +122,7 @@ function CustomModal({ onClose, onSave }) {
       <div ref={modalRef} className="w-full max-w-md bg-[#12121e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <h3 className="text-base font-semibold text-white">Add Cashout Group</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+          <button aria-label="Close" onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -223,7 +223,7 @@ function EditModal({ platform, onClose, onSave }) {
       <div ref={modalRef} className="w-full max-w-md bg-[#12121e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <h3 className="text-base font-semibold text-white">Edit Cashout Group</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+          <button aria-label="Close" onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -347,7 +347,7 @@ function QuickAddModal({ existingPlatforms, onClose, onSave }) {
       <div ref={modalRef} className="w-full max-w-lg bg-[#12121e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ maxHeight: '85vh' }}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <h3 className="text-base font-semibold text-white">Quick Add Cashout Groups</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+          <button aria-label="Close" onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -548,13 +548,13 @@ export function Cashouts() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
+                    <button aria-label={`Edit ${platform.name}`}
                       onClick={() => setEditPlatform(platform)}
                       className="p-1 text-gray-500 hover:text-white transition-colors"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
-                    <button
+                    <button aria-label={`Delete ${platform.name}`}
                       onClick={() => handleDelete(platform.id)}
                       className="p-1 text-gray-500 hover:text-red-400 transition-colors"
                     >

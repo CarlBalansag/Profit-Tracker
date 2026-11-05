@@ -471,7 +471,7 @@ const AddTransaction = () => {
                       <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
                       <p className="text-xs font-semibold text-gray-200">Recent match found</p>
                     </div>
-                    <button type="button" onClick={() => setSuggestionDismissed(true)} className="text-gray-600 hover:text-gray-400 transition-colors">
+                    <button aria-label="Dismiss suggestion" type="button" onClick={() => setSuggestionDismissed(true)} className="text-gray-600 hover:text-gray-400 transition-colors">
                       <X className="w-3 h-3" />
                     </button>
                   </div>
@@ -775,7 +775,16 @@ const AddTransaction = () => {
                 </label>
                 <div
                   className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/10 border-dashed cursor-pointer hover:border-amber-500/30 transition-colors"
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Attach receipt"
                   onClick={() => fileInputRef.current?.click()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      fileInputRef.current?.click();
+                    }
+                  }}
                 >
                   <Paperclip className="w-4 h-4 text-gray-500 flex-shrink-0" />
                   <span className="text-xs text-gray-500">
@@ -803,7 +812,7 @@ const AddTransaction = () => {
                       >
                         <Paperclip className="w-3 h-3 text-gray-500" />
                         <span className="max-w-[120px] truncate">{f.name}</span>
-                        <button
+                        <button aria-label="Remove file"
                           type="button"
                           onClick={() => removeFile(i)}
                           className="text-gray-600 hover:text-red-400 transition-colors ml-0.5"

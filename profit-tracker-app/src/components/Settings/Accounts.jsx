@@ -152,7 +152,7 @@ function AddAccountModal({ vendor, platformList, onClose, onSave }) {
       <div ref={modalRef} className="w-full max-w-md bg-[#12121e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <h3 className="text-base font-semibold text-white">Add Account</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+          <button aria-label="Close" onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -312,7 +312,7 @@ export function Accounts() {
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button 
+            <button aria-label="Back" 
               onClick={() => setSelectedVendor(null)}
               className="p-2 rounded-lg border border-white/10 hover:bg-white/5 transition-colors text-gray-400 hover:text-white"
             >
@@ -343,7 +343,7 @@ export function Accounts() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {vendorAccounts.map(acc => (
               <div key={acc.id} className="rounded-xl border border-white/10 bg-[#12121A] p-5 shadow-sm relative group overflow-hidden">
-                <button 
+                <button aria-label="Delete account" 
                   onClick={() => handleAccountDeleted(acc.id, activeVendor.id)}
                   className="absolute top-4 right-4 p-1.5 rounded-md hover:bg-red-500/10 text-gray-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
                 >

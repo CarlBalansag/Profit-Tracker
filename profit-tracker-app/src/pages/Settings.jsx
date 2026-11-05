@@ -117,12 +117,12 @@ function Settings() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <div className="space-y-1.5">
-                    <label className="text-xs text-gray-400">Username</label>
-                    <input type="text" readOnly value={user?.username || ''} className="w-full bg-[#0A0A0F] border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none" />
+                    <label htmlFor="settings-username" className="text-xs text-gray-400">Username</label>
+                    <input id="settings-username" type="text" readOnly value={user?.username || ''} className="w-full bg-[#0A0A0F] border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none" />
                  </div>
                  <div className="space-y-1.5">
-                    <label className="text-xs text-gray-400">Account ID</label>
-                    <input type="text" readOnly value={user?.id || ''} className="w-full bg-[#0A0A0F] border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none" />
+                    <label htmlFor="settings-account-id" className="text-xs text-gray-400">Account ID</label>
+                    <input id="settings-account-id" type="text" readOnly value={user?.id || ''} className="w-full bg-[#0A0A0F] border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none" />
                  </div>
               </div>
 

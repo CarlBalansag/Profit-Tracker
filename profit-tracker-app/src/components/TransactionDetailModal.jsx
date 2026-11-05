@@ -436,7 +436,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             <h2 className="text-base font-semibold text-[var(--dp-text-primary)]">Edit Transaction</h2>
             <p className="text-[11px] text-[var(--dp-text-secondary)] mt-0.5">Make changes and click Update to save.</p>
           </div>
-          <button
+          <button aria-label="Close"
             onClick={dismiss}
             className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--dp-hover-bg)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors"
           >

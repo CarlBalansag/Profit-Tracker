@@ -129,14 +129,22 @@ function ItemRow({ item }) {
           }
         </td>
         <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-          <ChevronDown
-            size={13}
-            style={{
-              color: 'var(--text-muted)',
-              transform: expanded ? 'rotate(180deg)' : 'none',
-              transition: 'transform 0.15s',
-            }}
-          />
+          <button
+            type="button"
+            aria-expanded={expanded}
+            aria-label={expanded ? 'Hide details' : 'Show details'}
+            onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
+            style={{ display: 'inline-flex', padding: 4, margin: -4, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+          >
+            <ChevronDown
+              size={13}
+              style={{
+                color: 'var(--text-muted)',
+                transform: expanded ? 'rotate(180deg)' : 'none',
+                transition: 'transform 0.15s',
+              }}
+            />
+          </button>
         </td>
       </tr>
 
@@ -272,6 +280,7 @@ function CreditCard() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <button
               onClick={() => setSelectedMonth(prev => offsetMonth(prev, -1))}
+              aria-label="Previous month"
               style={{ width: 24, height: 24, borderRadius: 6, background: 'transparent', border: '1px solid var(--border-hover)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
             >
               <ChevronLeft size={12} />
@@ -281,6 +290,7 @@ function CreditCard() {
             </span>
             <button
               onClick={() => setSelectedMonth(prev => offsetMonth(prev, 1))}
+              aria-label="Next month"
               disabled={isCurrentMonth}
               style={{ width: 24, height: 24, borderRadius: 6, background: 'transparent', border: '1px solid var(--border-hover)', color: isCurrentMonth ? 'var(--text-muted)' : 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: isCurrentMonth ? 'not-allowed' : 'pointer', opacity: isCurrentMonth ? 0.4 : 1 }}
             >

@@ -241,13 +241,13 @@ export const PaymentMethods = () => {
                    </div>
                 </div>
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                   <button 
+                   <button aria-label="Edit card" 
                      onClick={() => openEditModal(card)}
                      className="text-gray-500 hover:text-white"
                    >
                      <PenSquare size={14}/>
                    </button>
-                   <button onClick={() => removeCard(card.id)} className="text-red-500 hover:text-red-400"><Trash2 size={14}/></button>
+                   <button aria-label="Delete card" onClick={() => removeCard(card.id)} className="text-red-500 hover:text-red-400"><Trash2 size={14}/></button>
                 </div>
               </div>
 
@@ -274,7 +274,7 @@ export const PaymentMethods = () => {
 
 
               {/* Store Rates Toggle */}
-              <button
+              <button aria-label="Show or hide rates"
                 onClick={(e) => { e.stopPropagation(); toggleRates(rateKey); }}
                 className={clsx(
                   'w-full flex items-center justify-between text-xs font-bold transition-colors py-2 mt-2 border-t px-1 rounded-b-lg',

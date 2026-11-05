@@ -3,6 +3,20 @@ import { useEffect, useRef } from 'react';
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+let dialogIdCount = 0;
+
+// Most modal forms put a <label> beside its field without connecting them, and
+// fields come and go as a form changes. Linking them here covers every modal.
+function linkFieldLabels(dialog) {
+  dialog.querySelectorAll('label:not([for])').forEach((label) => {
+    if (label.querySelector('input, select, textarea')) return;
+    const controls = label.parentElement?.querySelectorAll('input:not([type="hidden"]), select, textarea');
+    if (controls?.length !== 1) return;
+    controls[0].id ||= `dialog-field-${++dialogIdCount}`;
+    label.htmlFor = controls[0].id;
+  });
+}
+
 function getFocusable(container) {
   if (!container) return [];
   return Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR)).filter(
@@ -42,6 +56,24 @@ export function useModalKeyboard(isOpen, onClose, initialFocusRef) {
 
     previouslyFocused.current = document.activeElement;
 
+    // Every modal goes through this hook, so this is where they get announced as
+    // dialogs and named after their own heading.
+    const dialog = containerRef.current;
+    if (dialog) {
+      if (!dialog.hasAttribute('role')) dialog.setAttribute('role', 'dialog');
+      dialog.setAttribute('aria-modal', 'true');
+      if (!dialog.hasAttribute('aria-label') && !dialog.hasAttribute('aria-labelledby')) {
+        const heading = dialog.querySelector('h1, h2, h3');
+        if (heading) {
+          heading.id ||= `dialog-title-${++dialogIdCount}`;
+          dialog.setAttribute('aria-labelledby', heading.id);
+        }
+      }
+      linkFieldLabels(dialog);
+    }
+    const fieldObserver = dialog && new MutationObserver(() => linkFieldLabels(dialog));
+    fieldObserver?.observe(dialog, { childList: true, subtree: true });
+
     const focusTimer = setTimeout(() => {
       const preferred = initialFocusRef?.current;
       const [first] = getFocusable(containerRef.current);
@@ -74,6 +106,7 @@ export function useModalKeyboard(isOpen, onClose, initialFocusRef) {
     document.addEventListener('keydown', handleKeyDown, true);
     return () => {
       clearTimeout(focusTimer);
+      fieldObserver?.disconnect();
       document.removeEventListener('keydown', handleKeyDown, true);
       const restore = previouslyFocused.current;
       if (restore && typeof restore.focus === 'function' && document.contains(restore)) {

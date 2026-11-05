@@ -189,7 +189,7 @@ function GoalModal({ goal, onSave, onClose, isGlass, isSaving }) {
           <h2 className={isGlass ? 'text-base font-semibold text-[#e8e2d6]' : 'text-[14px] font-semibold text-[var(--text-primary)]'}>
             Set {metaDef.label} Goal
           </h2>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
+          <button type="button" aria-label="Close" onClick={onClose} className="rounded-lg p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors">
             <X size={16} />
           </button>
         </div>
@@ -341,6 +341,8 @@ function GoalCard({ metaDef, goal, getStats, trend, isGlass, onEdit, onToggleAct
             </button>
           )}
           <button
+            type="button"
+            aria-label="Edit goal"
             onClick={onEdit}
             className={`rounded-lg p-1.5 transition-colors ${isGlass ? 'text-white/25 hover:text-[#e8e2d6] hover:bg-white/[0.06]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}`}
           >

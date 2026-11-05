@@ -102,7 +102,7 @@ function CardRow({ item, def, onToggle, onMoveUp, onMoveDown, isFirst, isLast })
         : 'border-white/[0.03] bg-transparent'
     } ${!item.visible && !showInfo ? 'opacity-50' : 'opacity-100'} ${showInfo ? 'z-50' : 'z-0'}`}>
       <div className="flex flex-col gap-0.5">
-        <button
+        <button aria-label="Move up"
           onClick={onMoveUp}
           disabled={isFirst}
           className="text-gray-500 transition-colors hover:text-gray-300 disabled:cursor-not-allowed disabled:opacity-45"
@@ -110,7 +110,7 @@ function CardRow({ item, def, onToggle, onMoveUp, onMoveDown, isFirst, isLast })
         >
           <ChevronUp className="h-3 w-3" />
         </button>
-        <button
+        <button aria-label="Move down"
           onClick={onMoveDown}
           disabled={isLast}
           className="text-gray-500 transition-colors hover:text-gray-300 disabled:cursor-not-allowed disabled:opacity-45"
@@ -756,7 +756,7 @@ export default function DashboardSettingsModal({ settings, onClose, onSave, uiSt
             <h2 className="text-base font-semibold text-[var(--dp-text-primary)]">Dashboard Settings</h2>
             <p className="mt-0.5 text-[11px] text-[var(--dp-text-secondary)]">Customize dashboard layout, cards, and chart visibility.</p>
           </div>
-          <button
+          <button aria-label="Close"
             onClick={onClose}
             className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--dp-text-secondary)] transition-colors hover:bg-[var(--dp-hover-bg)] hover:text-[var(--dp-text-primary)]"
             type="button"

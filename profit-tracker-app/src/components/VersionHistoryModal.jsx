@@ -19,7 +19,7 @@ const VersionHistoryModal = ({ open, onClose }) => {
 
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-[color:var(--dp-border)]">
           <h2 className="text-base font-semibold text-[var(--dp-text-primary)]">What's New</h2>
-          <button onClick={onClose} className="text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors">
+          <button aria-label="Close" onClick={onClose} className="text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>

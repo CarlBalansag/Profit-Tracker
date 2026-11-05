@@ -282,9 +282,9 @@ export default function Calendar() {
         <div className="flex items-center justify-between px-4 py-3 border-b border-[color:var(--dp-border)] gap-2 flex-wrap">
           {/* Nav */}
           <div className="flex items-center gap-1">
-            <button onClick={goPrev} className="p-1.5 rounded-lg text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"><ChevronLeft size={16} /></button>
+            <button type="button" aria-label="Previous" onClick={goPrev} className="p-1.5 rounded-lg text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"><ChevronLeft size={16} /></button>
             <button onClick={goToday} className="px-2.5 py-1 text-xs font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] rounded-lg transition-colors border border-[color:var(--dp-border)]">Today</button>
-            <button onClick={goNext} className="p-1.5 rounded-lg text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"><ChevronRight size={16} /></button>
+            <button type="button" aria-label="Next" onClick={goNext} className="p-1.5 rounded-lg text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"><ChevronRight size={16} /></button>
             <span className="text-sm font-semibold text-[var(--dp-text-primary)] ml-1">{monthLabel}</span>
           </div>
 

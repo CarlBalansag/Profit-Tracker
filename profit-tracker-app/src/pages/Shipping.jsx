@@ -256,7 +256,15 @@ function GroupedTrackedRow({ items, onCheck, checkingIds, checkDisabled, onSave,
       <tr className={`${ROW_CLASS} cursor-pointer`} onClick={() => setExpanded(e => !e)}>
         <td className={CELL_FIRST}>
           <div className="flex items-center gap-2">
-            <ChevronRight className={`w-3.5 h-3.5 text-gray-500 shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+            <button
+              type="button"
+              aria-expanded={expanded}
+              aria-label={`${expanded ? 'Hide' : 'Show'} entries for ${label}`}
+              onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
+              className="-m-1 p-1 rounded shrink-0"
+            >
+              <ChevronRight className={`w-3.5 h-3.5 text-gray-500 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+            </button>
             <div>
               <p className="text-sm font-medium text-gray-100 md:truncate md:max-w-60">{label}</p>
               <p className="text-xs text-gray-500">{items.length} entries{combinedQty ? ` · ${combinedQty} units combined` : ''}</p>
