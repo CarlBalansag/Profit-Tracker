@@ -24,21 +24,21 @@
   --color-text-primary: #16161A;
   --color-text-secondary: #16161A;
   --color-text-label: #16161A;
-  --color-text-muted: #6B7280;
+  --color-text-muted: #5F6673;
 
   /* Accent (brand) */
-  --color-accent: #7C3AED;
+  --color-accent: #7434E3;
   --color-accent-solid: #7C3AED; /* filled buttons: must carry white text */
   --color-accent-bg: rgba(124, 58, 237, 0.08);
   --color-accent-gradient: linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%);
 
   /* Status */
   --color-success-bg: #E3F5EA;
-  --color-success-text: #1A9A50;
+  --color-success-text: #137A3A;
   --color-danger-bg: #FCE8E8;
-  --color-danger-text: #D23B3B;
+  --color-danger-text: #C02626;
   --color-warning-bg: #FEF3C7;
-  --color-warning-text: #B45309;
+  --color-warning-text: #A34B08;
   --color-info-bg: #E0F2FE;
   --color-info-text: #0284C7;
   --color-neutral-bg: #F3F4F6;

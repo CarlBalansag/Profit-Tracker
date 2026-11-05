@@ -405,6 +405,7 @@
     border-color: color-mix(in srgb, var(--dp-green-text) 30%, transparent) !important;
   }
 
+  .carbon-workspace :is([class^="text-lime"],[class*=" text-lime"]),
   .carbon-workspace :is([class^="text-green"],[class*=" text-green"]),
   .carbon-workspace :is([class^="text-emerald"],[class*=" text-emerald"]),
   .carbon-workspace :is([class^="text-teal"],[class*=" text-teal"]) {
@@ -1114,4 +1115,23 @@ body,
   }
   .phone-cards td:empty,
   .phone-cards td[data-phone-hide] { display: none; }
+}
+
+/* Phones: iOS zooms the page when a field under 16px gets focus, and small
+   controls are hard to tap. Switches keep their size because their thumb is
+   positioned against it. */
+@media (max-width: 767px) {
+  :is(.carbon-workspace, .glass-workspace) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+    font-size: 16px !important;
+  }
+
+  :is(.carbon-workspace, .glass-workspace) button:not([role="switch"]) {
+    min-width: 32px;
+    min-height: 32px;
+  }
+
+  :is(.carbon-workspace, .glass-workspace) :is(input[type="checkbox"], input[type="radio"]) {
+    width: 20px;
+    height: 20px;
+  }
 }

@@ -61,7 +61,7 @@ function EventPill({ eventInfo }) {
         backgroundColor: color,
       }} />
       <span className="calendar-event-text" style={{
-        color: color,
+        color: `color-mix(in srgb, ${color} 55%, var(--dp-text-primary))`,
         fontSize: '11px',
         fontWeight: 600,
         overflow: 'hidden',

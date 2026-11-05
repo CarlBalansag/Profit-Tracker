@@ -395,7 +395,7 @@ function RecordCard({ record, quickStatus = false }) {
             </span>
           )}
         </div>
-        <p className="text-[11px] font-semibold" style={{ color: visual.color }}>
+        <p className="text-[11px] font-semibold" style={{ color: `color-mix(in srgb, ${visual.color} 50%, var(--dp-text-primary))` }}>
           {statusLabel}
         </p>
         <p className="text-xs text-gray-500 truncate">{counterpartOf(record)}</p>
