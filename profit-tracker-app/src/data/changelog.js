@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.17',
+    date: '2026-11-04',
+    notes: "Pages now look and line up the same across the app, with one style of summary card and button, and Invoices is now in the menu. Tables, filters and the calendar are much easier to use on a phone.",
+  },
+  {
     version: '1.16',
     date: '2026-11-04',
     notes: "Transactions now opens with the key columns so Sale and Profit fit on screen, and the rest are still in the Columns menu. Inventory's listing count now matches Analytics, and the Dashboard, page titles, small text and form fields are clearer and more consistent.",
