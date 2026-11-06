@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.20',
+    date: '2026-11-05',
+    notes: "Phones now have a bottom menu with a quick add button, and Record Sale, Add Transaction and Inventory are quicker to use on a small screen. Inventory also gets a working export and a Sell button.",
+  },
+  {
     version: '1.19',
     date: '2026-11-04',
     notes: "The app is much easier to use on a phone: summary cards sit side by side, long lists are shorter with a Show more button, and Recent Sales no longer scrolls sideways.",
