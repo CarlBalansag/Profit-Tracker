@@ -27,12 +27,18 @@ const ConfirmDialog = ({
   // to remove.
   cancelLabel = 'Go back',
   busy = false,
+  // Keeps the confirm button off until the caller is satisfied, e.g. a typed
+  // phrase. `children` renders below the consequence; `initialFocusRef` is
+  // passed to useModalKeyboard.
+  confirmDisabled = false,
+  initialFocusRef,
+  children,
   onConfirm,
   onClose,
 }) => {
   // Block Escape-to-dismiss while the action is in flight, so a half-sent
   // request cannot lose its dialog.
-  const modalRef = useModalKeyboard(open, () => { if (!busy) onClose?.(); });
+  const modalRef = useModalKeyboard(open, () => { if (!busy) onClose?.(); }, initialFocusRef);
   if (!open) return null;
 
   return (
@@ -63,6 +69,7 @@ const ConfirmDialog = ({
 
         <div className="px-5 py-4">
           <p className="text-sm text-gray-300 whitespace-pre-line">{consequence}</p>
+          {children}
         </div>
 
         <div className="flex justify-end gap-2 px-5 pb-5">
@@ -76,7 +83,7 @@ const ConfirmDialog = ({
           </button>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || confirmDisabled}
             onClick={onConfirm}
             className="px-3 h-8 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold disabled:opacity-50 transition-colors"
           >

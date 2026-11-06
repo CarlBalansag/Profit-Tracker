@@ -80,6 +80,34 @@ export const usePaymentMethods = () =>
     staleTime: 1000 * 60 * 30,
   });
 
+// ─── Data reset ───────────────────────────────────────────────────────────────
+export const useDataReset = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (scope) => {
+      const response = await apiFetch('/api/data-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope, confirmation: 'RESET' }),
+      });
+      if (!response.ok) {
+        const error = new Error('Data reset failed');
+        // The server answered, so its transaction rolled back. A dropped
+        // connection has no response, and then the outcome is unknown.
+        error.rolledBack = true;
+        throw error;
+      }
+      return response.json();
+    },
+    onSuccess: async () => {
+      // This form draft can name a vendor or card that no longer exists.
+      localStorage.removeItem('add_transaction_draft');
+      await qc.cancelQueries();
+      await qc.resetQueries();
+    },
+  });
+};
+
 // ─── Dashboard analytics ──────────────────────────────────────────────────────
 // Longer staleTime: this is the heaviest endpoint and data doesn't change mid-session
 // unless the user explicitly adds a transaction (which calls invalidate.dashboard()).

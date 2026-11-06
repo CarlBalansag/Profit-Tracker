@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { PaymentMethods } from '../components/Settings/PaymentMethods';
 import { ApiKeys } from '../components/Settings/ApiKeys';
+import { DataReset } from '../components/Settings/DataReset';
 import { Vendors } from '../components/Settings/Vendors';
 import { Cashouts } from '../components/Settings/Cashouts';
 import { Marketplaces } from '../components/Settings/Marketplaces';
@@ -154,15 +155,7 @@ function Settings() {
           )}
 
           {/* DATA TAB */}
-          {activeTab === 'data' && (
-            <div className="rounded-xl border border-gray-800 bg-[#12121A] p-6">
-              <div className="py-16 text-center text-gray-500">
-                <FileJson size={28} className="mx-auto mb-3 opacity-40" />
-                <p className="text-sm font-medium text-gray-400">Data export is coming soon.</p>
-                <p className="text-xs text-gray-600 mt-1">You'll be able to export your stores, transactions, inventory, and more from here.</p>
-              </div>
-            </div>
-          )}
+          {activeTab === 'data' && <DataReset />}
 
           {/* AI ASSISTANT TAB */}
           {activeTab === 'ai-assistant' && <ApiKeys />}

@@ -492,7 +492,13 @@ const cashoutItemMatch = z.object({
   inventory_name: optionalString,
 }).strict();
 
+const dataReset = z.object({
+  scope: z.enum(['transactions', 'everything']),
+  confirmation: z.literal('RESET'),
+}).strict();
+
 module.exports = {
+  dataReset,
   createCashoutConnection,
   updateCashoutConnection,
   cashoutItemMatch,

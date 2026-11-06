@@ -38,7 +38,7 @@ function matches(model,row,where={}) {
     if(k==='OR')return v.some(w=>matches(model,row,w));
     if(k==='AND')return v.every(w=>matches(model,row,w));
     const rel=relations(model,row,k); if(rel)return rel[1]&&matches(rel[0],rel[1],v);
-    if(v&&typeof v==='object'&&!(v instanceof Date))return Object.entries(v).every(([op,x])=>op==='gte'?row[k]>=x:op==='lte'?row[k]<=x:op==='lt'?row[k]<x:op==='gt'?row[k]>x:op==='equals'?(v.mode==='insensitive'?String(row[k]).toLowerCase()===String(x).toLowerCase():row[k]===x):op==='in'?x.includes(row[k]):op==='contains'?(row[k]!=null&&(v.mode==='insensitive'?String(row[k]).toLowerCase().includes(String(x).toLowerCase()):String(row[k]).includes(x))):true);
+    if(v&&typeof v==='object'&&!(v instanceof Date))return Object.entries(v).every(([op,x])=>op==='gte'?row[k]>=x:op==='lte'?row[k]<=x:op==='lt'?row[k]<x:op==='gt'?row[k]>x:op==='not'?row[k]!==x:op==='equals'?(v.mode==='insensitive'?String(row[k]).toLowerCase()===String(x).toLowerCase():row[k]===x):op==='in'?x.includes(row[k]):op==='contains'?(row[k]!=null&&(v.mode==='insensitive'?String(row[k]).toLowerCase().includes(String(x).toLowerCase()):String(row[k]).includes(x))):true);
     // A real column is NULL, never undefined: a `field: null` filter matches a
     // fixture row that simply omits the field.
     if(v===null)return row[k]==null;
@@ -58,10 +58,11 @@ function project(model,row,args={}) {
 const prisma={};
 for(const model of Object.keys(db)) {
   prisma[model]={};
-  for(const op of ['findMany','findUnique','findFirst','create','createMany','update','updateMany','delete','deleteMany','upsert'])prisma[model][op]=async(args={})=>{
+  for(const op of ['findMany','count','findUnique','findFirst','create','createMany','update','updateMany','delete','deleteMany','upsert'])prisma[model][op]=async(args={})=>{
     calls.push({model,op,args:structuredClone(args)});
     if(faults[model+'.'+op])throw new Error('Injected '+model+'.'+op+' failure');
     const rows=db[model].filter(x=>matches(model,x,args.where));
+    if(op==='count')return rows.length;
     if(op==='findMany'){
       if(Array.isArray(args.orderBy)){
         // Multi-key orderBy ([{a:'desc'},{b:'asc'}]): first key wins, later keys break ties.
@@ -98,6 +99,7 @@ for(const model of Object.keys(db)) {
     return op==='deleteMany'?{count:rows.length}:rows[0];
   };
 }
+prisma.$queryRaw=async()=>[]; // Row locks mean nothing in this in-memory db.
 let transactionTail=Promise.resolve();
 prisma.$transaction=async fn=>{
   if(typeof fn!=='function')return Promise.all(fn);
@@ -133,7 +135,7 @@ function app() {
       res.status(500).json({ error: err.message });
     }
   });
-  for(const [url,file]of Object.entries({'inventory':'inventory','sales':'sales','platforms':'platforms','payment-methods':'paymentMethods','accounts':'accounts','analytics':'analytics','creditcard':'creditcard','expenses':'expenses','recurring-expenses':'recurringExpenses','receipts':'receipts','goals':'goals','calendar-events':'calendarEvents','product-notes':'productNotes','transaction-notes':'transactionNotes','refunds':'refunds','preferences':'preferences','buyers':'buyers','api-keys':'apiKeys','cashouts':'cashouts'}))app.use('/api/'+url,requireApi('./routes/'+file+'.js'));
+  for(const [url,file]of Object.entries({'inventory':'inventory','sales':'sales','platforms':'platforms','payment-methods':'paymentMethods','accounts':'accounts','analytics':'analytics','creditcard':'creditcard','expenses':'expenses','recurring-expenses':'recurringExpenses','receipts':'receipts','goals':'goals','calendar-events':'calendarEvents','product-notes':'productNotes','transaction-notes':'transactionNotes','refunds':'refunds','preferences':'preferences','buyers':'buyers','api-keys':'apiKeys','cashouts':'cashouts','data-reset':'dataReset'}))app.use('/api/'+url,requireApi('./routes/'+file+'.js'));
   app.use((err,req,res,next)=>res.status(err.status||500).json({error:err.message}));
   return app;
 }
