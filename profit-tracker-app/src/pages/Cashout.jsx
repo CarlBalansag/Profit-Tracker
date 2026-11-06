@@ -466,7 +466,7 @@ export default function Cashout() {
                       </th>
                       <th className="py-3 px-3">Expires</th>
                       <th className="py-3 px-3">Buy At</th>
-                      <th className="py-3 px-3"><span className="sr-only">Actions</span></th>
+                      <th className="py-3 pl-3 pr-6 w-px"><span className="sr-only">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[color:var(--dp-border)]">
@@ -516,7 +516,7 @@ export default function Cashout() {
                           </td>
 
                           {/* Actions */}
-                          <td className="py-3 px-3 text-right">
+                          <td className="py-3 pl-3 pr-6 w-px whitespace-nowrap text-right">
                             <LogPurchaseButton />
                           </td>
                         </tr>
