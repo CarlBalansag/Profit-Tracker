@@ -174,7 +174,7 @@ describe('Cashout Page', () => {
     expect(screen.getByText('No Retail Deal').closest('tr')).toHaveTextContent('—');
   });
 
-  it('filters by category: all deals, above retail, or below retail', () => {
+  it('filters by category: all deals, above retail, or at or below retail', () => {
     currentDeals = {
       results: [{
         connection: mockConnections[0],
@@ -201,7 +201,7 @@ describe('Cashout Page', () => {
     expect(names()).toEqual(['Above Deal']);
 
     fireEvent.change(category, { target: { value: 'close_to_retail' } });
-    expect(names()).toEqual(['Below Deal']);
+    expect(names()).toEqual(['Equal Deal', 'Below Deal']);
 
     fireEvent.change(category, { target: { value: 'all' } });
     expect(names()).toHaveLength(4);
