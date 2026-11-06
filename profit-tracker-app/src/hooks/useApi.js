@@ -324,6 +324,158 @@ export const useInvalidate = () => {
     productNote:     (name) => qc.invalidateQueries({ queryKey: ['product-note', name?.trim().toLowerCase()] }),
     calendarEvents:  () => qc.invalidateQueries({ queryKey: ['calendar-events'] }),
     apiKeys:         () => qc.invalidateQueries({ queryKey: ['api-keys'] }),
+    cashouts:        () => qc.invalidateQueries({ queryKey: ['cashout'] }),
     all:             () => qc.invalidateQueries(),
+  };
+};
+
+// ─── Cashouts ────────────────────────────────────────────────────────────────
+export const useCashoutProviders = () =>
+  useQuery({
+    queryKey: ['cashout', 'providers'],
+    queryFn: () => fetcher('/api/cashouts/providers'),
+    staleTime: 1000 * 60 * 15,
+  });
+
+export const useCashoutConnections = () =>
+  useQuery({
+    queryKey: ['cashout', 'connections'],
+    queryFn: () => fetcher('/api/cashouts/connections'),
+  });
+
+export const useCashoutDeals = (connectionId = null) =>
+  useQuery({
+    queryKey: ['cashout', 'deals', connectionId],
+    queryFn: () => fetcher(`/api/cashouts/deals${connectionId ? `?connectionId=${encodeURIComponent(connectionId)}` : ''}`),
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+  });
+
+export const useCashoutHistory = ({ dealId = null, provider = null } = {}) =>
+  useQuery({
+    queryKey: ['cashout', 'history', dealId, provider],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (dealId) params.append('dealId', dealId);
+      if (provider) params.append('provider', provider);
+      const qs = params.toString();
+      return fetcher(`/api/cashouts/history${qs ? `?${qs}` : ''}`);
+    },
+    staleTime: 60_000,
+  });
+
+export const useCashoutMutations = () => {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['cashout'] });
+
+  const addConnection = useMutation({
+    mutationFn: (data) =>
+      apiFetch('/api/cashouts/connections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).then(async (r) => {
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          throw new Error(e.error || 'Failed to add connection');
+        }
+        return r.json();
+      }),
+    onSuccess: invalidate,
+  });
+
+  const updateConnection = useMutation({
+    mutationFn: ({ id, ...data }) =>
+      apiFetch(`/api/cashouts/connections/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).then(async (r) => {
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          throw new Error(e.error || 'Failed to update connection');
+        }
+        return r.json();
+      }),
+    onSuccess: invalidate,
+  });
+
+  const deleteConnection = useMutation({
+    mutationFn: (id) =>
+      apiFetch(`/api/cashouts/connections/${id}`, { method: 'DELETE' }).then(async (r) => {
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          throw new Error(e.error || 'Failed to delete connection');
+        }
+        return r.json();
+      }),
+    onSuccess: invalidate,
+  });
+
+  const testConnection = useMutation({
+    mutationFn: (id) =>
+      apiFetch(`/api/cashouts/connections/${id}/test`, { method: 'POST' }).then(async (r) => {
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          throw new Error(e.error || 'Failed to test connection');
+        }
+        return r.json();
+      }),
+    onSuccess: invalidate,
+  });
+
+  const syncConnection = useMutation({
+    mutationFn: (id) =>
+      apiFetch(`/api/cashouts/connections/${id}/sync`, { method: 'POST' }).then(async (r) => {
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          const err = new Error(e.error || 'Failed to sync connection');
+          err.cooldown = e.cooldown;
+          err.remainingSeconds = e.remainingSeconds;
+          throw err;
+        }
+        return r.json();
+      }),
+    onSuccess: invalidate,
+  });
+
+  const setMatch = useMutation({
+    mutationFn: (data) =>
+      apiFetch('/api/cashouts/matches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).then(async (r) => {
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          throw new Error(e.error || 'Failed to update match');
+        }
+        return r.json();
+      }),
+    onSuccess: invalidate,
+  });
+
+  const removeMatch = useMutation({
+    mutationFn: ({ provider, external_deal_id }) =>
+      apiFetch(`/api/cashouts/matches?provider=${encodeURIComponent(provider)}&external_deal_id=${encodeURIComponent(external_deal_id)}`, {
+        method: 'DELETE',
+      }).then(async (r) => {
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          throw new Error(e.error || 'Failed to remove match');
+        }
+        return r.json();
+      }),
+    onSuccess: invalidate,
+  });
+
+  return {
+    addConnection,
+    updateConnection,
+    deleteConnection,
+    testConnection,
+    syncConnection,
+    setMatch,
+    removeMatch,
   };
 };

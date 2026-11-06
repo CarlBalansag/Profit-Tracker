@@ -13,7 +13,7 @@ function reset() {
     paymentMethod:[{id:ids.card,user_id:ids.user,name:'QA Credit Card',type:'Credit',default_cashback_rate:2,category_rates:'[]',statement_close_day:15,due_day:10,credit_limit:5000,min_payment_pct:2}],
     inventory:[{id:ids.inventory,user_id:ids.user,product_name:'QA Multi-unit Sneaker',vendor_id:ids.vendor,payment_method_id:ids.card,unit_purchase_cost:100,qty_purchased:5,qty_on_hand:3,sales_tax:40,shipping_cost_inbound:20,fees:10,gift_card_amount:50,cashback_earned:10.4,status:'PURCHASED',category:'Shoes',purchase_date:new Date('2026-09-01T12:00:00Z'),created_at:new Date(),tracking_number:'9400111899223856928499',receipt_url:null,tax_exempt:false,refunded_amount:0,refunded_qty:0}],
     sales:[{id:ids.sale,inventory_id:ids.inventory,platform_id:ids.platform,buyer_id:null,quantity:2,unit_price:150,commission_fee:15,sale_shipping:12,sale_tax_collected:8,taxable:true,customer_tax_exempt:false,status:'SOLD',sale_date:new Date('2026-09-03T12:00:00Z'),payout_date:null,paid_at:null,paid_amount:null,paid_reference:null,payout_account:null,payout_short_amount:null,refunded_amount:0,refunded_qty:0}],
-    expense:[{id:randomUUID(),user_id:ids.user,name:'QA Storage',amount:25,tax_version:0,date:new Date('2026-09-01T12:00:00Z'),category:'Storage'}],recurringExpense:[],refund:[],account:[],goal:[],calendarEvent:[],productNote:[],authAttemptBucket:[],buyer:[],invoice:[],apiKey:[],mcpWriteLog:[],changeLog:[],transactionNote:[],attachment:[]};
+    expense:[{id:randomUUID(),user_id:ids.user,name:'QA Storage',amount:25,tax_version:0,date:new Date('2026-09-01T12:00:00Z'),category:'Storage'}],recurringExpense:[],refund:[],account:[],goal:[],calendarEvent:[],productNote:[],authAttemptBucket:[],buyer:[],invoice:[],apiKey:[],mcpWriteLog:[],changeLog:[],transactionNote:[],attachment:[],cashoutConnection:[],cashoutDealSnapshot:[],cashoutItemMatch:[]};
 }
 reset();
 function relations(model,row,key) {
@@ -29,6 +29,8 @@ function relations(model,row,key) {
   if(key==='buyer') return ['buyer',row.buyer_id?(db.buyer.find(x=>x.id===row.buyer_id)||null):null];
   if(model==='apiKey'&&key==='user') return ['user',db.user.find(x=>x.id===row.user_id)||null];
   if(model==='platform'&&key==='accounts') return ['account',db.account.filter(x=>x.platform_id===row.id)];
+  if(model==='cashoutConnection'&&key==='platform') return ['platform',row.platform_id?(db.platform.find(x=>x.id===row.platform_id)||null):null];
+  if(model==='cashoutDealSnapshot'&&key==='connection') return ['cashoutConnection',db.cashoutConnection.find(x=>x.id===row.connection_id)||null];
   return null;
 }
 function matches(model,row,where={}) {
@@ -118,7 +120,20 @@ function app() {
   app.get('/auth/me',(req,res)=>res.json(db.user[0]));
   app.use('/api/schedule-c', requireApi('./routes/scheduleC'));
   app.use('/mcp', requireApi('./routes/mcp.js'));
-  for(const [url,file]of Object.entries({'inventory':'inventory','sales':'sales','platforms':'platforms','payment-methods':'paymentMethods','accounts':'accounts','analytics':'analytics','creditcard':'creditcard','expenses':'expenses','recurring-expenses':'recurringExpenses','receipts':'receipts','goals':'goals','calendar-events':'calendarEvents','product-notes':'productNotes','transaction-notes':'transactionNotes','refunds':'refunds','preferences':'preferences','buyers':'buyers','api-keys':'apiKeys'}))app.use('/api/'+url,requireApi('./routes/'+file+'.js'));
+  const { verifySyncSecret, runScheduledSync } = requireApi('./services/cashouts/syncScheduler');
+  app.post('/internal/cashouts/sync', async (req, res) => {
+    const authHeader = req.get('Authorization');
+    const verify = verifySyncSecret(authHeader);
+    if (!verify.ok) return res.status(verify.status || 401).json({ error: verify.message });
+    try {
+      const summary = await runScheduledSync();
+      if (summary.status === 'locked') return res.status(409).json(summary);
+      res.json(summary);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+  for(const [url,file]of Object.entries({'inventory':'inventory','sales':'sales','platforms':'platforms','payment-methods':'paymentMethods','accounts':'accounts','analytics':'analytics','creditcard':'creditcard','expenses':'expenses','recurring-expenses':'recurringExpenses','receipts':'receipts','goals':'goals','calendar-events':'calendarEvents','product-notes':'productNotes','transaction-notes':'transactionNotes','refunds':'refunds','preferences':'preferences','buyers':'buyers','api-keys':'apiKeys','cashouts':'cashouts'}))app.use('/api/'+url,requireApi('./routes/'+file+'.js'));
   app.use((err,req,res,next)=>res.status(err.status||500).json({error:err.message}));
   return app;
 }

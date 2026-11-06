@@ -41,6 +41,9 @@ model User {
   change_logs            ChangeLog[]
   transaction_notes      TransactionNote[]
   attachments            Attachment[]
+  cashout_connections    CashoutConnection[]
+  cashout_deal_snapshots CashoutDealSnapshot[]
+  cashout_item_matches   CashoutItemMatch[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -376,6 +379,7 @@ model Platform {
   inventories      Inventory[] // Platforms as vendors
   sales            Sales[]     // Platforms as marketplaces
   accounts         Account[]
+  cashout_connections CashoutConnection[]
 
   @@index([user_id])
 }
@@ -569,6 +573,66 @@ model EbayPriceCache {
   fetched_at     DateTime @updatedAt
 
   @@map("ebay_price_cache")
+}
+
+model CashoutConnection {
+  id             String               @id @default(uuid())
+  user_id        String
+  user           User                 @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  provider       String
+  display_name   String?
+  encrypted_key  String
+  key_last4      String
+  status         String               @default("active")
+  platform_id    String?
+  platform       Platform?            @relation(fields: [platform_id], references: [id], onDelete: SetNull)
+  last_synced_at DateTime?
+  last_error     String?
+  created_at     DateTime             @default(now())
+  updated_at     DateTime             @updatedAt
+  snapshots      CashoutDealSnapshot[]
+  matches        CashoutItemMatch[]
+
+  @@index([user_id])
+  @@index([provider])
+}
+
+model CashoutDealSnapshot {
+  id               String            @id @default(uuid())
+  user_id          String
+  user             User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  connection_id    String
+  connection       CashoutConnection @relation(fields: [connection_id], references: [id], onDelete: Cascade)
+  provider         String
+  external_deal_id String
+  external_item_id String?
+  item_name        String
+  condition        String?
+  payout           Decimal           @db.Decimal(19, 2)
+  retail           Decimal?          @db.Decimal(19, 2)
+  status           String            @default("active")
+  captured_at      DateTime          @default(now())
+
+  @@index([user_id, provider, external_deal_id])
+  @@index([captured_at])
+}
+
+model CashoutItemMatch {
+  id               String             @id @default(uuid())
+  user_id          String
+  user             User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  connection_id    String?
+  connection       CashoutConnection? @relation(fields: [connection_id], references: [id], onDelete: Cascade)
+  provider         String
+  external_deal_id String
+  deal_item_name   String
+  inventory_id     String?
+  inventory_name   String?
+  created_at       DateTime           @default(now())
+  updated_at       DateTime           @updatedAt
+
+  @@unique([user_id, provider, external_deal_id])
+  @@index([user_id])
 }
 
 /// Managed by connect-pg-simple — Prisma should not touch this table

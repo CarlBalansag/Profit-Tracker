@@ -72,6 +72,13 @@ function createFirebaseAuth({ prisma, auth, config }) {
   }
   async function guard(req, res, next) {
     return safe(async () => {
+      if (!config.production && req.session && req.session.devUserId) {
+        const devUser = await prisma.user.findUnique({ where: { id: req.session.devUserId } });
+        if (devUser && !devUser.login_disabled) {
+          req.user = devUser;
+          return next();
+        }
+      }
       const value = cookie(req);
       if (!value) return next();
       if (!config.enabled) throw fail(503, 'Authentication unavailable.');

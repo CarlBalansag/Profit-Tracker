@@ -21,6 +21,7 @@ const Guide = lazy(() => import('./pages/Guide'));
 const Login = lazy(() => import('./pages/Login'));
 const Goals = lazy(() => import('./pages/Goals'));
 const Calendar = lazy(() => import('./pages/Calendar'));
+const Cashout = lazy(() => import('./pages/Cashout'));
 const Shipping = lazy(() => import('./pages/Shipping'));
 const Statuses = lazy(() => import('./pages/Statuses'));
 const ScheduleC = lazy(() => import('./pages/ScheduleC'));
@@ -80,6 +81,7 @@ function App() {
           <Route path="/guide" element={<Guide />} />
           <Route path="/goals" element={<Goals />} />
           <Route path="/calendar" element={<Calendar />} />
+          <Route path="/cashout" element={<Cashout />} />
           <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
             </Suspense>

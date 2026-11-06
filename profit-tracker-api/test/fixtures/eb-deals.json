@@ -1,0 +1,131 @@
+{
+  "total": 3,
+  "data": [
+    {
+      "id": 5232,
+      "name": "Airpod 5 ANC",
+      "image_url": "https://cdn.example.com/deals/images/airpods-5.jpg",
+      "retail": 119.0,
+      "payout": 119.0,
+      "profit_margin": 0.0,
+      "product_links": [
+        {
+          "name": "Retailer A",
+          "url": "https://example.com/product/airpods"
+        }
+      ],
+      "category_id": "4daae85c-ffe1-4337-a3be-e203f0171f1c",
+      "expires_at": 1794988800,
+      "starts_at": null,
+      "featured": true,
+      "notes": "Deliver To: Warehouse Only",
+      "status": "active",
+      "on_sale_now": null,
+      "created_at": 1793919913,
+      "avg_remaining_percentage": 96.4,
+      "items": [
+        {
+          "id": 10356,
+          "name": "AirPods 5 ANC",
+          "condition": "new",
+          "upcs": [
+            "195951378978"
+          ],
+          "purchase_links": [
+            {
+              "name": "Retailer A",
+              "url": "https://example.com/product/airpods"
+            }
+          ],
+          "vendor_limit": 100,
+          "remaining_percentage": 96.4,
+          "commitment": null
+        }
+      ]
+    },
+    {
+      "id": 5230,
+      "name": "Fire TV Stick 4K Select",
+      "image_url": "https://cdn.example.com/deals/images/fire-tv-stick.jpg",
+      "retail": 14.99,
+      "payout": 16.0,
+      "profit_margin": 6.74,
+      "product_links": [
+        {
+          "name": "Retailer B",
+          "url": "https://example.com/product/firetv"
+        }
+      ],
+      "category_id": "4daae85c-ffe1-4337-a3be-e203f0171f1c",
+      "expires_at": 1794902400,
+      "starts_at": null,
+      "featured": true,
+      "notes": "Promo code deal",
+      "status": "active",
+      "on_sale_now": false,
+      "created_at": 1793892925,
+      "avg_remaining_percentage": 97.5,
+      "items": [
+        {
+          "id": 10353,
+          "name": "Fire TV Stick 4K Select",
+          "condition": "DMG_BOX",
+          "upcs": [
+            "840268958794"
+          ],
+          "purchase_links": [
+            {
+              "name": "Retailer B",
+              "url": "https://example.com/product/firetv"
+            }
+          ],
+          "vendor_limit": 100,
+          "remaining_percentage": 97.5,
+          "commitment": null
+        }
+      ]
+    },
+    {
+      "id": 5213,
+      "name": "PS5 Pro",
+      "image_url": "https://cdn.example.com/deals/images/ps5-pro.jpg",
+      "retail": 899.99,
+      "payout": 1140.0,
+      "profit_margin": 26.67,
+      "product_links": [
+        {
+          "name": "Retailer C",
+          "url": "https://example.com/product/ps5pro"
+        }
+      ],
+      "category_id": "4daae85c-ffe1-4337-a3be-e203f0171f1c",
+      "expires_at": 1796025600,
+      "starts_at": null,
+      "featured": false,
+      "notes": null,
+      "status": "active",
+      "on_sale_now": false,
+      "created_at": 1793700000,
+      "avg_remaining_percentage": 98.7,
+      "items": [
+        {
+          "id": 10331,
+          "name": "PS5 Pro",
+          "condition": "new",
+          "upcs": [
+            "711719024538"
+          ],
+          "purchase_links": [
+            {
+              "name": "Retailer C",
+              "url": "https://example.com/product/ps5pro"
+            }
+          ],
+          "vendor_limit": 100,
+          "remaining_percentage": 98.7,
+          "commitment": null
+        }
+      ]
+    }
+  ]
+}
