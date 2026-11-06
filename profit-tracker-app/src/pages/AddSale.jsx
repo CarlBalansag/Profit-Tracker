@@ -83,6 +83,8 @@ const AddSale = () => {
     const item = inventory.find(i => i.id === preselectId);
     if (item) {
       preselected.current = true;
+      // The stock list loads after this page opens, so this can't happen at first render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       handleSelect(item);
     }
   });

@@ -11,12 +11,15 @@ const QUICK_ADD = [
   { to: '/add-sale', label: 'Record Sale', icon: DollarSign },
 ];
 
-const Tab = ({ to, label, icon: Icon, end, colors }) => (
-  <NavLink to={to} end={end} className={({ isActive }) => clsx(ITEM, isActive ? colors.active : colors.idle)}>
-    <Icon size={20} aria-hidden="true" />
-    <span className="truncate">{label}</span>
-  </NavLink>
-);
+const Tab = ({ to, label, icon, end, colors }) => {
+  const Icon = icon;
+  return (
+    <NavLink to={to} end={end} className={({ isActive }) => clsx(ITEM, isActive ? colors.active : colors.idle)}>
+      <Icon size={20} aria-hidden="true" />
+      <span className="truncate">{label}</span>
+    </NavLink>
+  );
+};
 
 // Phone navigation: the places used most, one tap away, with the full menu under More.
 const BottomNav = ({ onMoreClick, isGlass }) => {
@@ -41,20 +44,23 @@ const BottomNav = ({ onMoreClick, isGlass }) => {
               isGlass ? 'border-white/10 bg-[#181a1c]' : 'border-[color:var(--dp-border)] bg-[var(--dp-card-bg)]',
             )}
           >
-            {QUICK_ADD.map(({ to, label, icon: Icon }) => (
-              <Link
-                key={to}
-                to={to}
-                onClick={close}
-                className={clsx(
-                  'flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium',
-                  isGlass ? 'text-[#e8e2d6]' : 'text-[var(--dp-text-primary)]',
-                )}
-              >
-                <Icon size={18} aria-hidden="true" />
-                {label}
-              </Link>
-            ))}
+            {QUICK_ADD.map(({ to, label, icon }) => {
+              const Icon = icon;
+              return (
+                <Link
+                  key={to}
+                  to={to}
+                  onClick={close}
+                  className={clsx(
+                    'flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium',
+                    isGlass ? 'text-[#e8e2d6]' : 'text-[var(--dp-text-primary)]',
+                  )}
+                >
+                  <Icon size={18} aria-hidden="true" />
+                  {label}
+                </Link>
+              );
+            })}
           </div>
         </>
       )}
