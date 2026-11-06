@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Cashout from './Cashout';
+import { estimateDealProfit } from '../utils/cashoutDeals';
 
 const mockProviders = [{ id: 'eb', name: 'ElectronicsBuyer' }];
 const mockConnections = [
@@ -124,6 +125,74 @@ describe('Cashout Page', () => {
     const rows = screen.getAllByRole('row').slice(1);
     expect(rows[0]).toHaveTextContent('Airpod 5 ANC');
     expect(rows[1]).toHaveTextContent('Unmatched Unknown Widget');
+  });
+
+  it('estimates profit as payout minus retail, to the cent', () => {
+    expect(estimateDealProfit({ payout: 1140, retail: 899.99 })).toEqual({ amount: 240.01, pct: 26.67 });
+    expect(estimateDealProfit({ payout: 16, retail: 14.99 })).toEqual({ amount: 1.01, pct: 6.74 });
+    expect(estimateDealProfit({ payout: 35, retail: 40 })).toEqual({ amount: -5, pct: -12.5 });
+    expect(estimateDealProfit({ payout: 119, retail: 119 })).toEqual({ amount: 0, pct: 0 });
+  });
+
+  it('gives no estimate without both prices, rather than a made-up number', () => {
+    expect(estimateDealProfit({ payout: 100, retail: null })).toBeNull();
+    expect(estimateDealProfit({ payout: 100, retail: 0 })).toBeNull();
+    expect(estimateDealProfit({ payout: 0, retail: 100 })).toBeNull();
+    expect(estimateDealProfit({ payout: 'n/a', retail: 100 })).toBeNull();
+  });
+
+  it('shows gains, losses and missing estimates in the Est. Profit column', () => {
+    currentDeals = {
+      results: [{
+        connection: mockConnections[0],
+        deals: [
+          { id: '1', name: 'Gain Deal', retail: 899.99, payout: 1140 },
+          { id: '2', name: 'Loss Deal', retail: 40, payout: 35 },
+          { id: '3', name: 'No Retail Deal', retail: null, payout: 50 },
+        ],
+      }],
+    };
+    render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Est. Profit')).toBeInTheDocument();
+    expect(screen.getByText('+$240.01')).toBeInTheDocument();
+    expect(screen.getByText('+26.67%')).toBeInTheDocument();
+    expect(screen.getByText('-$5.00')).toBeInTheDocument();
+    expect(screen.getByText('-12.5%')).toBeInTheDocument();
+    expect(screen.getByText('No Retail Deal').closest('tr')).toHaveTextContent('—');
+  });
+
+  it('sorts by highest profit with deals that have no estimate last', () => {
+    currentDeals = {
+      results: [{
+        connection: mockConnections[0],
+        deals: [
+          { id: '1', name: 'Biggest Payout Small Profit', retail: 990, payout: 1000 },
+          { id: '2', name: 'No Retail Deal', retail: null, payout: 2000 },
+          { id: '3', name: 'Small Payout Big Profit', retail: 100, payout: 300 },
+          { id: '4', name: 'Loss Deal', retail: 40, payout: 35 },
+        ],
+      }],
+    };
+    render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByDisplayValue('Highest Payout'), { target: { value: 'profit_desc' } });
+
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(rows.map((row) => row.cells[0].textContent)).toEqual([
+      'Small Payout Big Profit',
+      'Biggest Payout Small Profit',
+      'Loss Deal',
+      'No Retail Deal',
+    ]);
   });
 
   it('opens and closes the Manage Connections modal', () => {

@@ -22,6 +22,7 @@ import {
   useCashoutMutations,
 } from '../hooks/useApi';
 import { formatMoney } from '../utils/money';
+import { estimateDealProfit } from '../utils/cashoutDeals';
 import LoadError from '../components/UI/LoadError';
 
 export default function Cashout() {
@@ -32,7 +33,7 @@ export default function Cashout() {
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProvider, setSelectedProvider] = useState('all');
-  const [sortBy, setSortBy] = useState('payout_desc'); // 'payout_desc' | 'updated_desc'
+  const [sortBy, setSortBy] = useState('payout_desc'); // 'payout_desc' | 'profit_desc' | 'updated_desc'
 
   // Cooldown timer state for manual sync
   const [syncCooldownSeconds, setSyncCooldownSeconds] = useState(0);
@@ -88,6 +89,7 @@ export default function Cashout() {
         for (const deal of res.deals) {
           aggregated.push({
             ...deal,
+            estimatedProfit: estimateDealProfit(deal),
             connectionId: res.connection?.id,
             connectionName: res.connection?.displayName || res.connection?.provider,
             connectionProvider: res.connection?.provider,
@@ -120,6 +122,10 @@ export default function Cashout() {
     }).sort((a, b) => {
       if (sortBy === 'payout_desc') {
         return (b.payout || 0) - (a.payout || 0);
+      }
+      if (sortBy === 'profit_desc') {
+        // Deals with no estimate go last rather than counting as $0.
+        return (b.estimatedProfit?.amount ?? -Infinity) - (a.estimatedProfit?.amount ?? -Infinity);
       }
       if (sortBy === 'updated_desc') {
         return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
@@ -349,6 +355,7 @@ export default function Cashout() {
                 className="px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] focus:outline-none"
               >
                 <option value="payout_desc">Highest Payout</option>
+                <option value="profit_desc">Highest Profit</option>
                 <option value="updated_desc">Recently Added</option>
               </select>
             </div>
@@ -368,6 +375,12 @@ export default function Cashout() {
                       <th className="py-3 px-4">Deal / Item</th>
                       <th className="py-3 px-3">Service</th>
                       <th className="py-3 px-3 text-right">Payout</th>
+                      <th
+                        className="py-3 px-3 text-right"
+                        title="Payout minus retail. Doesn't include sales tax, cashback or coupons."
+                      >
+                        Est. Profit
+                      </th>
                       <th className="py-3 px-3">Availability</th>
                       <th className="py-3 px-3 text-center">Link</th>
                     </tr>
@@ -427,6 +440,30 @@ export default function Cashout() {
                               <div className="text-[10px] text-[var(--dp-text-label)]">
                                 Retail ${formatMoney(deal.retail)}
                               </div>
+                            )}
+                          </td>
+
+                          {/* Est. Profit */}
+                          <td className="py-3 px-3 text-right">
+                            {deal.estimatedProfit ? (
+                              <div>
+                                <div
+                                  className={`font-bold ${
+                                    deal.estimatedProfit.amount > 0
+                                      ? 'text-emerald-400'
+                                      : deal.estimatedProfit.amount < 0
+                                      ? 'text-rose-400'
+                                      : 'text-[var(--dp-text-primary)]'
+                                  }`}
+                                >
+                                  {deal.estimatedProfit.amount < 0 ? '-' : '+'}${formatMoney(Math.abs(deal.estimatedProfit.amount))}
+                                </div>
+                                <div className="text-[10px] text-[var(--dp-text-label)]">
+                                  {deal.estimatedProfit.pct > 0 ? '+' : ''}{deal.estimatedProfit.pct}%
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-[var(--dp-text-label)]">—</span>
                             )}
                           </td>
 
