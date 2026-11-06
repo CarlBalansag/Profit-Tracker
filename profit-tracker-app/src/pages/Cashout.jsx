@@ -24,6 +24,7 @@ import {
 } from '../hooks/useApi';
 import { formatMoney } from '../utils/money';
 import { useMatchMedia } from '../hooks/useMatchMedia';
+import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import {
   dealConditionLabels,
   dealLimitLabel,
@@ -46,8 +47,14 @@ const DATA_SETUP_STATE = { tab: 'datasetup', view: 'Cashouts' };
 // Below this the table no longer fits beside the sidebar.
 const DEAL_CARDS_QUERY = '(max-width: 1279px)';
 
+// About what fits on one line of a table row. Longer notes get a More button.
+const NOTE_PREVIEW_LENGTH = 40;
+
+const SELECT_CLASS = 'px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)]';
+
 export default function Cashout() {
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
+  const connectionsModalRef = useModalKeyboard(showConnectionsModal, () => setShowConnectionsModal(false));
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -153,6 +160,10 @@ export default function Cashout() {
 
       return true;
     }).sort((a, b) => {
+      // Expired deals can't be bought, so they sit below every live one.
+      const expiredOrder = isDealExpired(a) - isDealExpired(b);
+      if (expiredOrder !== 0) return expiredOrder;
+
       if (sortBy === 'payout_desc') {
         return (b.payout || 0) - (a.payout || 0);
       }
@@ -369,11 +380,14 @@ export default function Cashout() {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                aria-label="Search deals"
                 placeholder="Search deals, UPCs, items…"
                 className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none focus:border-[var(--dp-accent)]"
               />
               {searchTerm && (
                 <button
+                  type="button"
+                  aria-label="Clear search"
                   onClick={() => setSearchTerm('')}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]"
                 >
@@ -385,9 +399,10 @@ export default function Cashout() {
             <div className="flex flex-wrap items-center gap-2">
               {/* Provider Filter */}
               <select
+                aria-label="Filter by cashout"
                 value={selectedProvider}
                 onChange={(e) => setSelectedProvider(e.target.value)}
-                className="px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] focus:outline-none"
+                className={SELECT_CLASS}
               >
                 <option value="all">All Cashouts</option>
                 {connections.map((c) => (
@@ -402,7 +417,7 @@ export default function Cashout() {
                 aria-label="Filter by category"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] focus:outline-none"
+                className={SELECT_CLASS}
               >
                 <option value="all">All Categories</option>
                 <option value="above_retail">Above Retail</option>
@@ -414,7 +429,7 @@ export default function Cashout() {
                 aria-label="Filter by store"
                 value={selectedStore}
                 onChange={(e) => setSelectedStore(e.target.value)}
-                className="px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] focus:outline-none"
+                className={SELECT_CLASS}
               >
                 <option value="all">All Stores</option>
                 {storeOptions.map((store) => (
@@ -427,7 +442,7 @@ export default function Cashout() {
                 aria-label="Sort deals"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] focus:outline-none"
+                className={SELECT_CLASS}
               >
                 <option value="profit_desc">Highest Profit</option>
                 <option value="payout_desc">Highest Payout</option>
@@ -476,10 +491,11 @@ export default function Cashout() {
                   </thead>
                   <tbody className="divide-y divide-[color:var(--dp-border)]">
                     {filteredDeals.map((deal) => {
+                      const expired = isDealExpired(deal);
                       return (
                         <tr
                           key={`${deal.connectionId}-${deal.id}`}
-                          className="hover:bg-[var(--dp-hover-bg)] transition-colors"
+                          className={`hover:bg-[var(--dp-hover-bg)] transition-colors ${expired ? 'opacity-60' : ''}`}
                         >
                           {/* Deal Info */}
                           <td className="py-3 px-4 max-w-[18rem]">
@@ -505,7 +521,7 @@ export default function Cashout() {
 
                           {/* Est. Profit */}
                           <td className="py-3 px-3 text-right">
-                            <EstProfit profit={deal.estimatedProfit} />
+                            <EstProfit profit={deal.estimatedProfit} expired={expired} />
                           </td>
 
                           {/* Expires */}
@@ -515,12 +531,12 @@ export default function Cashout() {
 
                           {/* Buy At */}
                           <td className="py-3 px-3">
-                            <StoreLinks deal={deal} />
+                            {expired ? <span className="text-[var(--dp-text-label)]">—</span> : <StoreLinks deal={deal} />}
                           </td>
 
                           {/* Actions */}
                           <td className="py-3 pl-3 pr-6 w-px whitespace-nowrap text-right">
-                            <LogPurchaseButton />
+                            {!expired && <LogPurchaseButton />}
                           </td>
                         </tr>
                       );
@@ -536,7 +552,10 @@ export default function Cashout() {
       {/* Connection Management Modal */}
       {showConnectionsModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4">
+          <div
+            ref={connectionsModalRef}
+            className="w-full max-w-lg rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4"
+          >
             <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
               <div className="flex items-center gap-2">
                 <KeyRound size={18} className="text-[var(--dp-accent)]" />
@@ -545,6 +564,8 @@ export default function Cashout() {
                 </h3>
               </div>
               <button
+                type="button"
+                aria-label="Close connections"
                 onClick={() => setShowConnectionsModal(false)}
                 className="text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]"
               >
@@ -604,6 +625,7 @@ export default function Cashout() {
                         }}
                         className="p-1.5 rounded text-rose-400 hover:bg-rose-500/10"
                         title="Delete connection"
+                        aria-label={`Remove ${conn.displayName || conn.provider}`}
                       >
                         <Trash2 size={14} />
                       </button>
@@ -640,56 +662,55 @@ export default function Cashout() {
 
 // Name, image, UPC, note and tags: the same on the table and the phone cards.
 function DealSummary({ deal }) {
-  const { note, address, deliverTo } = parseDealNotes(deal.notes);
+  const { note, address, deliverTo, coupon } = parseDealNotes(deal.notes);
   const limit = dealLimitLabel(deal);
   const conditions = dealConditionLabels(deal);
   const upc = deal.items?.[0]?.upcs?.[0];
 
   return (
-    <div className="flex items-start gap-3">
-      {deal.imageUrl ? (
-        <img
-          src={deal.imageUrl}
-          alt={deal.name}
-          className="w-10 h-10 rounded-lg object-contain bg-white/5 border border-[color:var(--dp-border)] flex-shrink-0"
-        />
-      ) : (
-        <div className="w-10 h-10 rounded-lg bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] flex items-center justify-center text-[var(--dp-text-label)] flex-shrink-0">
-          <Package size={16} />
-        </div>
-      )}
-      <div className="min-w-0">
-        <div className="font-semibold text-[var(--dp-text-primary)] truncate" title={deal.name}>
-          {deal.name}
-        </div>
-        {upc && (
-          <div className="text-[11px] text-[var(--dp-text-label)] font-mono truncate">UPC: {upc}</div>
-        )}
-        {note && (
-          <div className="text-[11px] text-[var(--dp-text-secondary)] line-clamp-1 mt-0.5" title={note}>
-            {note}
+    <div className="space-y-1.5">
+      <div className="flex items-start gap-3">
+        {deal.imageUrl ? (
+          <img
+            src={deal.imageUrl}
+            alt={deal.name}
+            className="w-10 h-10 rounded-lg object-contain bg-white/5 border border-[color:var(--dp-border)] flex-shrink-0"
+          />
+        ) : (
+          <div className="w-10 h-10 rounded-lg bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] flex items-center justify-center text-[var(--dp-text-label)] flex-shrink-0">
+            <Package size={16} />
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-1 mt-1">
-          {deal.featured && (
-            <DealTag className="bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]">
-              <Star size={9} className="fill-current" /> Featured
-            </DealTag>
+        <div className="min-w-0">
+          <div className="font-semibold text-[var(--dp-text-primary)] truncate" title={deal.name}>
+            {deal.name}
+          </div>
+          {upc && (
+            <div className="text-[11px] text-[var(--dp-text-label)] font-mono truncate">UPC: {upc}</div>
           )}
-          {conditions.map((condition) => (
-            <DealTag key={condition} className="bg-rose-500/15 text-rose-400">{condition}</DealTag>
-          ))}
-          {deliverTo && <DealTag className="bg-amber-500/15 text-amber-400">{deliverTo}</DealTag>}
-          {limit && (
-            <DealTag
-              className="bg-[var(--dp-hover-bg)] text-[var(--dp-text-secondary)]"
-              title="The vendor limit ElectronicsBuyer sends for this deal."
-            >
-              {limit}
-            </DealTag>
-          )}
-          {address && <CopyAddressButton address={address} />}
+          {note && <DealNote note={note} />}
         </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-1">
+        {deal.featured && (
+          <DealTag className="bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]">
+            <Star size={9} className="fill-current" /> Featured
+          </DealTag>
+        )}
+        {conditions.map((condition) => (
+          <DealTag key={condition} className="bg-rose-500/15 text-rose-400">{condition}</DealTag>
+        ))}
+        {deliverTo && <DealTag className="bg-amber-500/15 text-amber-400">{deliverTo}</DealTag>}
+        {limit && (
+          <DealTag
+            className="bg-[var(--dp-hover-bg)] text-[var(--dp-text-secondary)]"
+            title="The vendor limit ElectronicsBuyer sends for this deal."
+          >
+            {limit}
+          </DealTag>
+        )}
+        {coupon && <CopyButton value={coupon} label={`Code ${coupon}`} name={`Copy code ${coupon}`} />}
+        {address && <CopyButton value={address} label="Address" name="Copy Address" title={address} />}
       </div>
     </div>
   );
@@ -703,17 +724,38 @@ function DealTag({ className, title, children }) {
   );
 }
 
-function CopyAddressButton({ address }) {
+function DealNote({ note }) {
+  const [expanded, setExpanded] = useState(false);
+  const canExpand = note.length > NOTE_PREVIEW_LENGTH;
+
+  return (
+    <div className="flex items-start gap-1.5 mt-0.5 text-[11px] text-[var(--dp-text-secondary)]">
+      <span className={`min-w-0 ${expanded ? '' : 'line-clamp-1'}`}>{note}</span>
+      {canExpand && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((open) => !open)}
+          className="flex-shrink-0 underline underline-offset-2 hover:text-[var(--dp-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] rounded"
+        >
+          {expanded ? 'Less' : 'More'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function CopyButton({ value, label, name, title }) {
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(address);
+      await navigator.clipboard.writeText(value);
       setCopied(true);
-      toast.success('Address copied');
+      toast.success(`${label} copied`);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.error("Couldn't copy the address");
+      toast.error(`Couldn't copy ${label}`);
     }
   };
 
@@ -721,11 +763,12 @@ function CopyAddressButton({ address }) {
     <button
       type="button"
       onClick={copy}
-      title={address}
-      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
+      title={title}
+      aria-label={copied ? 'Copied' : name}
+      className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)]"
     >
       {copied ? <Check size={10} /> : <Copy size={10} />}
-      {copied ? 'Copied' : 'Copy Address'}
+      {copied ? 'Copied' : label}
     </button>
   );
 }
@@ -736,13 +779,13 @@ const PROFIT_TONES = {
   neutral: 'text-[var(--dp-text-primary)]',
 };
 
-function EstProfit({ profit }) {
+function EstProfit({ profit, expired = false }) {
   if (!profit) return <span className="text-[var(--dp-text-label)]">—</span>;
 
   const { amount, pct, tone } = formatDealProfit(profit);
   return (
     <div className="tabular-nums">
-      <div className={`text-sm font-bold ${PROFIT_TONES[tone]}`}>{amount}</div>
+      <div className={`text-sm font-bold ${PROFIT_TONES[expired ? 'neutral' : tone]}`}>{amount}</div>
       <div className="text-[11px] text-[var(--dp-text-label)]">{pct}</div>
     </div>
   );
@@ -782,8 +825,10 @@ function LogPurchaseButton() {
 }
 
 function DealCard({ deal }) {
+  const expired = isDealExpired(deal);
+
   return (
-    <article className="p-3.5 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-xs space-y-3">
+    <article className={`p-3.5 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-xs space-y-3 ${expired ? 'opacity-60' : ''}`}>
       <DealSummary deal={deal} />
 
       <dl className="grid grid-cols-3 gap-2">
@@ -800,7 +845,7 @@ function DealCard({ deal }) {
             Est. Profit
             <span className="block normal-case tracking-normal">before tax</span>
           </dt>
-          <dd className="mt-0.5"><EstProfit profit={deal.estimatedProfit} /></dd>
+          <dd className="mt-0.5"><EstProfit profit={deal.estimatedProfit} expired={expired} /></dd>
         </div>
       </dl>
 
@@ -809,12 +854,14 @@ function DealCard({ deal }) {
           <DealExpiry expiresAt={deal.expiresAt} />
           <CashoutName name={deal.connectionName} />
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <StoreLinks deal={deal} large />
-          <div className="ml-auto">
-            <LogPurchaseButton />
+        {!expired && (
+          <div className="flex flex-wrap items-center gap-3">
+            <StoreLinks deal={deal} large />
+            <div className="ml-auto">
+              <LogPurchaseButton />
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </article>
   );
@@ -855,7 +902,7 @@ function StoreLink({ link, large }) {
       rel="noopener noreferrer"
       title={link.label}
       aria-label={link.label}
-      className={`${large ? 'w-10 h-10' : 'w-8 h-8'} rounded-full bg-white border border-[color:var(--dp-border)] flex items-center justify-center overflow-hidden flex-shrink-0 hover:ring-2 hover:ring-[var(--dp-accent)] transition-shadow`}
+      className={`${large ? 'w-10 h-10' : 'w-8 h-8'} rounded-full bg-white border border-[color:var(--dp-border)] flex items-center justify-center overflow-hidden flex-shrink-0 hover:ring-2 hover:ring-[var(--dp-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] transition-shadow`}
     >
       {logo ? (
         <img src={logo} alt="" className={`${large ? 'w-6 h-6' : 'w-5 h-5'} object-contain`} onError={() => setLogoFailed(true)} />

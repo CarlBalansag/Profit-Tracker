@@ -126,20 +126,24 @@ export function dealStoreNames(deal) {
   return [...new Set(dealStoreLinks(deal).map((link) => link.name).filter(Boolean))];
 }
 
-// Providers put everything in one free-text note. This pulls out the ship-to
-// address and delivery rule so they don't have to be read on every row. The
-// expected format is "Deliver To: X" plus a "Dropship To:" line with the address
-// on the lines below it; anything else stays in the note, untouched.
+// Providers put everything in one free-text note. This pulls out the coupon code,
+// ship-to address and delivery rule so they don't have to be read on every row.
+// The expected format is "Use Code: X", "Deliver To: X" and a "Dropship To:" line
+// with the address on the lines below it; anything else stays in the note,
+// untouched. Anything a coupon line says after the code, such as the price it
+// gets, stays in the note.
 export function parseDealNotes(notes) {
   const lines = String(notes || '').split('\n').map((line) => line.trim());
   const kept = [];
   const addressLines = [];
   let deliverTo = null;
+  let coupon = null;
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     const delivery = line.match(/^deliver to:\s*(.+)$/i);
     const dropship = line.match(/dropship to:\s*(.*)$/i);
+    const code = line.match(/^use code:\s*([a-z0-9_-]+)(.*)$/i);
 
     if (delivery) {
       deliverTo = delivery[1];
@@ -149,12 +153,16 @@ export function parseDealNotes(notes) {
         i += 1;
         addressLines.push(lines[i]);
       }
+    } else if (code) {
+      coupon = code[1];
+      const detail = code[2].trim();
+      if (detail) kept.push(detail.charAt(0).toUpperCase() + detail.slice(1));
     } else if (line) {
       kept.push(line);
     }
   }
 
-  return { note: kept.join(' '), address: addressLines.join('\n') || null, deliverTo };
+  return { note: kept.join(' '), address: addressLines.join('\n') || null, deliverTo, coupon };
 }
 
 const CONDITION_LABELS = { DMG_BOX: 'Damaged Box' };

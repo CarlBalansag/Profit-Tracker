@@ -299,20 +299,56 @@ describe('Cashout Page', () => {
 
     it('separates the address and delivery rule from the rest of the note', () => {
       expect(parseDealNotes(NOTES)).toEqual({
-        note: 'Use Code: IDEA3FLASH',
+        note: '',
         address: 'CSG LLC\n202 Carson Dr\nBear, DE 19701',
         deliverTo: 'Delaware Only',
+        coupon: 'IDEA3FLASH',
       });
     });
 
     it('handles notes with only an address, or with neither', () => {
-      expect(parseDealNotes('📌 Dropship To:\nCSG LLC\n202 Carson Dr')).toEqual({ note: '', address: 'CSG LLC\n202 Carson Dr', deliverTo: null });
-      expect(parseDealNotes('Deal Extended\nPrice Match Available')).toEqual({ note: 'Deal Extended Price Match Available', address: null, deliverTo: null });
-      expect(parseDealNotes(null)).toEqual({ note: '', address: null, deliverTo: null });
+      expect(parseDealNotes('📌 Dropship To:\nCSG LLC\n202 Carson Dr')).toEqual({ note: '', address: 'CSG LLC\n202 Carson Dr', deliverTo: null, coupon: null });
+      expect(parseDealNotes('Deal Extended\nPrice Match Available')).toEqual({ note: 'Deal Extended Price Match Available', address: null, deliverTo: null, coupon: null });
+      expect(parseDealNotes(null)).toEqual({ note: '', address: null, deliverTo: null, coupon: null });
     });
 
     it('keeps note lines that come after the address block', () => {
-      expect(parseDealNotes('Dropship To:\nCSG LLC\n\nCall first')).toEqual({ note: 'Call first', address: 'CSG LLC', deliverTo: null });
+      expect(parseDealNotes('Dropship To:\nCSG LLC\n\nCall first')).toEqual({ note: 'Call first', address: 'CSG LLC', deliverTo: null, coupon: null });
+    });
+
+    it('keeps what a coupon line says after the code', () => {
+      expect(parseDealNotes('Use Code: SELECT4K to get $14.99')).toMatchObject({ coupon: 'SELECT4K', note: 'To get $14.99' });
+      expect(parseDealNotes('Coupon applied at checkout')).toMatchObject({ coupon: null, note: 'Coupon applied at checkout' });
+    });
+
+    it('opens a long note and closes it again', () => {
+      const note = 'Minimum Price Guarantee (We will aim to raise prices after release)';
+      currentDeals = { results: [{ connection: mockConnections[0], deals: [{ id: '1', name: 'Deal', payout: 10, notes: note }] }] };
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+
+      const more = screen.getByRole('button', { name: 'More' });
+      expect(more).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.getByText(note)).toHaveClass('line-clamp-1');
+
+      fireEvent.click(more);
+      expect(screen.getByRole('button', { name: 'Less' })).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText(note)).not.toHaveClass('line-clamp-1');
+    });
+
+    it('offers no More button on a note that fits', () => {
+      currentDeals = { results: [{ connection: mockConnections[0], deals: [{ id: '1', name: 'Deal', payout: 10, notes: 'Price Match Available' }] }] };
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByText('Price Match Available')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'More' })).not.toBeInTheDocument();
     });
 
     it('copies the address and shows the delivery rule as a tag', async () => {
@@ -326,7 +362,7 @@ describe('Cashout Page', () => {
       );
 
       expect(screen.getByText('Delaware Only')).toBeInTheDocument();
-      expect(screen.getByText('Use Code: IDEA3FLASH')).toBeInTheDocument();
+      expect(screen.queryByText('Use Code: IDEA3FLASH')).not.toBeInTheDocument();
       expect(screen.queryByText(/Carson Dr/)).not.toBeInTheDocument();
 
       await act(async () => {
@@ -335,6 +371,11 @@ describe('Cashout Page', () => {
 
       expect(writeText).toHaveBeenCalledWith('CSG LLC\n202 Carson Dr\nBear, DE 19701');
       expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Copy code IDEA3FLASH' }));
+      });
+      expect(writeText).toHaveBeenCalledWith('IDEA3FLASH');
     });
   });
 
@@ -398,6 +439,21 @@ describe('Cashout Page', () => {
 
       expect(names()).toContain('Expired Deal');
       expect(screen.getByText('Live Deals').nextSibling).toHaveTextContent('3');
+    });
+
+    it('puts expired deals last whatever the sort, with no way to buy', () => {
+      fireEvent.click(screen.getByLabelText('Show expired (1)'));
+
+      // Its $50 estimate would otherwise sort first.
+      expect(names().at(-1)).toBe('Expired Deal');
+      fireEvent.change(screen.getByLabelText('Sort deals'), { target: { value: 'ending_soon' } });
+      expect(names().at(-1)).toBe('Expired Deal');
+
+      const row = screen.getByText('Expired Deal').closest('tr');
+      expect(row).toHaveClass('opacity-60');
+      expect(row.querySelector('a')).toBeNull();
+      expect(within(row).queryByRole('button', { name: 'Log Purchase' })).not.toBeInTheDocument();
+      expect(within(row).getByText('+$50.00')).not.toHaveClass('text-emerald-400');
     });
 
     it('filters to one store, including deals sold at several', () => {
@@ -667,6 +723,34 @@ describe('Cashout Page', () => {
       'Loss Deal',
       'No Retail Deal',
     ]);
+  });
+
+  it('treats Manage Connections as a real dialog', () => {
+    render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Manage Connections/i }));
+    expect(screen.getByRole('dialog', { name: 'Connected Cashout Services' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove EB Primary' })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('names the search and filter controls', () => {
+    render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByLabelText('Filter by cashout')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Search deals'), { target: { value: 'x' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+    expect(screen.getByLabelText('Search deals')).toHaveValue('');
   });
 
   it('opens and closes the Manage Connections modal', () => {
