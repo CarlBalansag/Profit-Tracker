@@ -47,14 +47,17 @@ function Settings() {
 
   if (activeDataSetupView && dataSetupViews[activeDataSetupView]) {
     return (
-      <div className="space-y-4 pb-10">
-        <button
-          onClick={() => setActiveDataSetupView(null)}
-          className="flex items-center gap-2 text-sm text-gray-500 hover:text-white transition-colors"
-        >
-          <ArrowLeft size={16} /> Back to Settings
-        </button>
-        {dataSetupViews[activeDataSetupView]}
+      // Same scroll container and gutters as the main Settings view below.
+      <div className="h-full overflow-auto px-4 py-6 sm:px-6">
+        <div className="w-full max-w-7xl mx-auto space-y-4 pb-10">
+          <button
+            onClick={() => setActiveDataSetupView(null)}
+            className="flex items-center gap-2 text-sm text-gray-500 hover:text-white transition-colors"
+          >
+            <ArrowLeft size={16} /> Back to Settings
+          </button>
+          {dataSetupViews[activeDataSetupView]}
+        </div>
       </div>
     );
   }
