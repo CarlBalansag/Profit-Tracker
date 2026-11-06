@@ -61,6 +61,8 @@ function Analytics() {
   const { data, isLoading: loading, isLoadingError, refetch: fetchData } = useDashboard(mode, dateRange);
 
   const s = data?.stats ?? {};
+  // Profit counts cashback on sold items only; the Cashback card shows every purchase.
+  const soldCashback = (s.profit ?? 0) - (s.totalRevenue ?? 0) + (s.soldCost ?? 0);
   const trend = data?.trend ?? [];
   const topCards = data?.topCards ?? [];
   const platformBreakdown = data?.platformBreakdown ?? [];
@@ -205,7 +207,7 @@ function Analytics() {
         <MetricCard
           icon={TrendingUp} title="PROFIT" color={THEME.green} topRightIcon={TrendingUp}
           value={loading ? '…' : `$${fmt(s.profit)}`}
-          subtitle={`CB $${fmt(s.totalCashback)} · Fees -$${fmt(s.commissionFees)}`}
+          subtitle={`Cashback on sold items $${fmt(soldCashback)}`}
           titleColor="text-green-500/70" valueColor="text-green-400" subtitleColor="text-green-500/50"
         />
         <MetricCard
@@ -245,15 +247,18 @@ function Analytics() {
         <div>
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Profit Calculation</h3>
           <p className="text-sm text-green-400 mb-1">
-            <span className="font-semibold">Profit</span> = Revenue − COGS + Cashback
+            <span className="font-semibold">Profit</span> = Revenue − COGS + Cashback on sold items
             <span className="text-gray-500 ml-2">(commission already deducted from revenue)</span>
+          </p>
+          <p className="text-xs text-gray-400 tabular-nums mb-1">
+            ${fmt(s.totalRevenue)} − ${fmt(s.soldCost)} + ${fmt(soldCashback)} = ${fmt(s.profit)}
           </p>
           <p className="text-xs text-gray-500 mt-1">
             Units sold: <span className="text-gray-300 font-medium">{s.unitsSold ?? 0}</span>
             {' · '}
             Listed: <span className="text-gray-300 font-medium">{s.listedQty ?? 0}</span>
             {' · '}
-            On hand: <span className="text-gray-300 font-medium">{s.inventoryQty ?? 0}</span>
+            Unsold: <span className="text-gray-300 font-medium">{s.inventoryQty ?? 0}</span>
             {s.salesVelocity > 0 && (
               <> · Velocity: <span className="text-gray-300 font-medium">{s.salesVelocity.toFixed(2)}/day</span></>
             )}

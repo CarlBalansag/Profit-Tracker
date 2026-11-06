@@ -1,9 +1,11 @@
 import StatCard from '../components/UI/StatCard';
+import { Link } from 'react-router-dom';
+import { csvText, downloadFile } from '../utils/downloads';
 import { allocatedCost, roundCents } from '../../../shared/finance.mjs';
 import React, { useState } from 'react';
 import { useInventory } from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
-import { Columns3, Plus, Search, Package, AlertTriangle, TrendingUp, DollarSign, Clock, MoreVertical, ListChecks, ChevronRight, ChevronDown, ExternalLink } from 'lucide-react';
+import { Columns3, Plus, Search, Package, AlertTriangle, TrendingUp, DollarSign, Clock, ListChecks, ChevronRight, ChevronDown, ExternalLink } from 'lucide-react';
 import ProductNoteButton from '../components/ProductNoteButton';
 import ReturnWindowBadge from '../components/ReturnWindowBadge';
 import { returnWindowStatus } from '../utils/returnWindow';
@@ -49,6 +51,20 @@ const Inventory = () => {
     next.has(name) ? next.delete(name) : next.add(name);
     return next;
   });
+
+  const exportReport = () => {
+    downloadFile('inventory-on-hand.csv', csvText(processedInventory.map(item => ({
+      Product: item.product_name,
+      Category: item.category || '',
+      Store: item.vendor?.name || '',
+      'Purchase Date': item.purchase_date ? new Date(item.purchase_date).toLocaleDateString() : '',
+      Quantity: item.qty_on_hand,
+      'Cost per Unit': money(allocatedCost(item, 1)),
+      'Total Cost': money(allocatedCost(item, item.qty_on_hand)),
+      'Days Held': item.daysInInv,
+      Status: recordStatusLabel(item.status),
+    }))), 'text/csv');
+  };
 
   const ebayUrl = (productName) =>
     `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(productName)}&LH_Sold=1&LH_Complete=1&_sop=13`;
@@ -103,20 +119,20 @@ const Inventory = () => {
           <p className="text-gray-400 text-sm mt-1">Manage unsold assets, track aging stock, and calculate locked capital.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" className="page-btn page-btn-secondary">
+          <button type="button" onClick={exportReport} className="page-btn page-btn-secondary">
             Export Report
           </button>
-          <button type="button" className="page-btn page-btn-primary">
+          <Link to="/add-transaction" className="page-btn page-btn-primary">
             <Plus className="w-4 h-4" /> 
             Add Inventory
-          </button>
+          </Link>
         </div>
       </div>
       
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2 animate-in slide-in-from-bottom-4 duration-500 fade-in fill-mode-both">
         <StatCard label="Inventory Total Cost" value={`$${money(totalCapital)}`} icon={DollarSign} iconColor="var(--accent)" />
-        <StatCard label="Units On Hand" value={totalUnits} icon={Package} />
+        <StatCard label="Unsold Units" value={totalUnits} icon={Package} />
         <StatCard label="Aging Stock (30+ Days)" value={`${agingUnits} units`} sub="Needs liquidation planning" icon={AlertTriangle} tone="red" />
         <StatCard label="Active Listings" value={`${activeListings} units`} sub="Currently listed for sale" icon={ListChecks} tone="amber" />
       </div>
@@ -201,7 +217,7 @@ const Inventory = () => {
                     <td data-label="eBay Sold" className="px-4 py-5">
                       <a href={ebayUrl(item.product_name)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0a0a0f] hover:bg-white/5 border border-white/10 hover:border-blue-500/40 rounded-lg transition-colors text-gray-500 hover:text-blue-400">
                         <ExternalLink className="w-3.5 h-3.5" />
-                        <span className="text-[11px] font-medium">View Sales</span>
+                        <span className="text-[11px] font-medium">eBay sold prices</span>
                       </a>
                     </td>
                     <td data-label="Status" className="px-4 py-5">
@@ -209,10 +225,10 @@ const Inventory = () => {
                         {recordStatusLabel(item.status)}
                       </span>
                     </td>
-                    <td data-phone-hide className="px-4 py-5 text-right">
-                      <button type="button" aria-label="More actions" className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100">
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
+                    <td className="px-4 py-5 text-right">
+                      <Link to="/add-sale" state={{ inventoryId: item.id }} aria-label={`Sell ${item.product_name}`} className="page-btn page-btn-secondary page-btn-sm">
+                        Sell
+                      </Link>
                     </td>
                   </tr>
                 );
@@ -273,7 +289,7 @@ const Inventory = () => {
                     <td data-label="eBay Sold" className="px-4 py-5">
                       <a href={ebayUrl(group.product_name)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0a0a0f] hover:bg-white/5 border border-white/10 hover:border-blue-500/40 rounded-lg transition-colors text-gray-500 hover:text-blue-400">
                         <ExternalLink className="w-3.5 h-3.5" />
-                        <span className="text-[11px] font-medium">View Sales</span>
+                        <span className="text-[11px] font-medium">eBay sold prices</span>
                       </a>
                     </td>
                     {/* Status: one badge when every batch matches, otherwise Mixed */}
@@ -286,11 +302,7 @@ const Inventory = () => {
                         <span className="text-xs text-gray-400">Mixed</span>
                       )}
                     </td>
-                    <td data-phone-hide className="px-4 py-5 text-right">
-                      <button type="button" aria-label="More actions" className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100" onClick={e => e.stopPropagation()}>
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-                    </td>
+                    <td data-phone-hide className="px-4 py-5" />
                   </tr>
 
                   {/* Child rows */}
@@ -332,10 +344,10 @@ const Inventory = () => {
                             {recordStatusLabel(item.status)}
                           </span>
                         </td>
-                        <td data-phone-hide className="px-4 py-3.5 text-right">
-                          <button type="button" aria-label="More actions" className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100">
-                            <MoreVertical className="w-4 h-4" />
-                          </button>
+                        <td className="px-4 py-3.5 text-right">
+                          <Link to="/add-sale" state={{ inventoryId: item.id }} aria-label={`Sell ${item.product_name}`} className="page-btn page-btn-secondary page-btn-sm">
+                            Sell
+                          </Link>
                         </td>
                       </tr>
                     );

@@ -168,7 +168,7 @@ describe('Inventory: days left to return', () => {
       item({ id: 'c', return_by_date: inDays(-2) }),
       item({ id: 'solo', product_name: 'Solo item', return_by_date: inDays(-1) }),
     ];
-    render(<Inventory />);
+    render(<MemoryRouter><Inventory /></MemoryRouter>);
     expect(screen.getByText('3 days left to return')).toBeInTheDocument();
     expect(screen.queryByText('40 days left to return')).toBeNull();
     expect(screen.getByText('Return window closed')).toBeInTheDocument(); // the single "Solo item" row

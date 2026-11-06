@@ -12,7 +12,7 @@ import { usePaymentMethods, usePlatforms, useBuyers, useInvalidate, apiFetch, us
 import { MAX_RECEIPT_BYTES, RECEIPT_ACCEPT, saveInventoryWithReceipt, validateReceiptFile } from '../hooks/receiptUpload';
 
 // ── Stable module-level components (MUST be outside the component to avoid focus loss) ──
-const Field = ({ label, children }) => {
+const Field = ({ label, children, className }) => {
   const generatedId = useId();
   const wrapperRef = useRef(null);
   const labelRef = useRef(null);
@@ -28,7 +28,7 @@ const Field = ({ label, children }) => {
     }
   });
   return (
-    <div ref={wrapperRef}>
+    <div ref={wrapperRef} className={className}>
       <label ref={labelRef} className="block text-xs font-medium text-gray-400 mb-1.5">{label}</label>
       {children}
     </div>
@@ -39,6 +39,7 @@ const inputCls = (accent = 'purple') =>
   `w-full bg-white/[0.02] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-${accent}-500/50 transition-colors`;
 
 const AddTransaction = () => {
+  const [showExtra, setShowExtra] = useState(false);
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
   const prevCashbackKeyRef = useRef(null);
@@ -458,7 +459,7 @@ const AddTransaction = () => {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} data-show-extra={showExtra}>
         <div className={`grid grid-cols-1 gap-6 ${showSuggestionPanel ? 'lg:grid-cols-5' : 'lg:grid-cols-3'}`}>
 
           {/* ── Recent Transaction Suggestion Panel ──────────────── */}
@@ -667,13 +668,13 @@ const AddTransaction = () => {
                 </Field>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="phone-extra grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Field label="Tax">{dollarInput('sales_tax', '0.00', 'blue')}</Field>
                 <Field label="Shipping Cost">{dollarInput('shipping_cost_inbound', '0.00', 'blue')}</Field>
                 <Field label="Fees">{dollarInput('fees', '0.00', 'blue')}</Field>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+              <div className="phone-extra grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
                 <Field label="Return window (days, optional)">
                   <input
                     type="number" min="0" step="1" name="return_window_days" aria-label="Return window (days)"
@@ -690,7 +691,7 @@ const AddTransaction = () => {
                 </p>
               </div>
 
-              <label className="flex items-center gap-2.5 cursor-pointer select-none w-fit">
+              <label className="phone-extra flex items-center gap-2.5 cursor-pointer select-none w-fit">
                 <input
                   type="checkbox"
                   checked={formData.tax_exempt}
@@ -720,7 +721,7 @@ const AddTransaction = () => {
                   </select>
                 </Field>
 
-                <Field label="Status">
+                <Field label="Status" className="phone-extra">
                   <select
                     name="status" value={formData.status} onChange={handleChange}
                     className={`${inputCls('amber')} appearance-none`}
@@ -744,7 +745,7 @@ const AddTransaction = () => {
               </div>
 
               {/* Row 2: Order Number, Tracking Number */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="phone-extra grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label="Order Number">
                   <div className="relative">
                     <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
@@ -789,7 +790,7 @@ const AddTransaction = () => {
                   <Paperclip className="w-4 h-4 text-gray-500 flex-shrink-0" />
                   <span className="text-xs text-gray-500">
                     {attachedFiles.length === 0
-                      ? 'Click to choose a receipt...'
+                      ? 'Choose a receipt or take a photo...'
                       : '1 receipt selected'}
                   </span>
                   <input
@@ -855,7 +856,7 @@ const AddTransaction = () => {
                   </select>
                 </Field>
 
-                <Field label="Cashback Rate %">
+                <Field label="Cashback Rate %" className="phone-extra">
                   <div className="relative">
                     <input
                       type="number" min="0" step="0.000001"
@@ -874,7 +875,7 @@ const AddTransaction = () => {
                   )}
                 </Field>
 
-                <Field label={<span>Cashback Amount <span className="text-gray-600 normal-case font-normal">(editable)</span></span>}>
+                <Field className="phone-extra" label={<span>Cashback Amount <span className="text-gray-600 normal-case font-normal">(editable)</span></span>}>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                     <input
@@ -895,7 +896,7 @@ const AddTransaction = () => {
               )}
 
               {/* Row 2: Gift Card */}
-              <Field label="Gift Card Used">
+              <Field label="Gift Card Used" className="phone-extra">
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                   <input
@@ -907,8 +908,17 @@ const AddTransaction = () => {
                 </div>
               </Field>
 
-              <p className="text-xs text-gray-400">Cashback uses purchase cost including tax, shipping and fees, less gift cards.</p>
+              <p className="phone-extra text-xs text-gray-400">Cashback uses purchase cost including tax, shipping and fees, less gift cards.</p>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setShowExtra(open => !open)}
+              aria-expanded={showExtra}
+              className="md:hidden page-btn page-btn-secondary w-full justify-center"
+            >
+              {showExtra ? 'Fewer details' : 'More details: tax, shipping, order number, cashback'}
+            </button>
 
             {/* ── "Has item been sold?" toggle ──────────────────── */}
             <button
@@ -1214,7 +1224,7 @@ const AddTransaction = () => {
             )}
 
             {/* ── Product Note ───────────────────────────────────── */}
-            <div className="card p-5 space-y-4">
+            <div className="phone-extra card p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <StickyNote className="w-4 h-4 text-gray-400" />
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Product Note</h3>
@@ -1364,13 +1374,25 @@ const AddTransaction = () => {
 
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all text-white bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-500/20"
+                className="max-md:hidden w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all text-white bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-500/20"
               >
                 <Plus className="w-4 h-4" />
                 Add Transaction
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Phones: Save stays reachable instead of sitting at the end of the page */}
+        <div className="md:hidden sticky bottom-0 z-10 -mx-4 mt-4 flex items-center gap-3 border-t border-white/10 bg-[var(--dp-bg)] px-4 py-2">
+          <div className="min-w-0">
+            <p className="text-[11px] text-gray-400">Net cost</p>
+            <p className="text-sm font-semibold tabular-nums text-white">${formatMoney(Math.max(0, totalCost - (parseFloat(formData.gift_card_amount) || 0)))}</p>
+          </div>
+          <button type="submit" className="page-btn page-btn-primary ml-auto">
+            <Plus className="w-4 h-4" />
+            Add Transaction
+          </button>
         </div>
       </form>
     </div>

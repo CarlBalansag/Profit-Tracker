@@ -15,6 +15,7 @@ import { useAuth } from '../context/AuthContext';
 import { usePhoneList } from '../hooks/usePhoneList';
 import ShowMoreButton from '../components/UI/ShowMoreButton';
 import TransactionDetailModal from '../components/TransactionDetailModal';
+import ConfirmDialog from '../components/UI/ConfirmDialog';
 import ProductNoteButton from '../components/ProductNoteButton';
 import { detectCarrier } from '../utils/carrier';
 import { recordStatusLabel } from '../data/statusWorkflow';
@@ -158,6 +159,8 @@ const Transactions = () => {
   const [editData, setEditData] = useState({});
   const [saving, setSaving] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
   const [visibleCols, setVisibleCols] = useState(() => {
@@ -515,6 +518,7 @@ const Transactions = () => {
           sale: sale.unit_price * sale.quantity,
           profit,
           cashback: economics.cashback,
+          fees: (Number(sale.commission_fee) || 0) + (Number(sale.sale_shipping) || 0),
           payment: inv.payment_method?.name || '',
           paymentMethodId: inv.payment_method_id || '',
           status: sale.status || 'SOLD',
@@ -987,11 +991,23 @@ const Transactions = () => {
                   <p className="text-sm font-semibold text-green-400">${formatMoney(row.sale)}</p>
                 </div>
               )}
+              {row.fees > 0 && (
+                <div>
+                  <p className="text-[11px] text-gray-600 uppercase tracking-wider mb-0.5">Fees</p>
+                  <p className="text-sm font-semibold text-gray-300">-${formatMoney(row.fees)}</p>
+                </div>
+              )}
+              {row.isSale && row.cashback > 0 && (
+                <div>
+                  <p className="text-[11px] text-gray-600 uppercase tracking-wider mb-0.5">Cashback</p>
+                  <p className="text-sm font-semibold text-gray-300">+${formatMoney(row.cashback)}</p>
+                </div>
+              )}
               {Number.isFinite(row.profit) && (
                 <div className="ml-auto">
                   <p className="text-[11px] text-gray-600 uppercase tracking-wider mb-0.5 text-right">Profit</p>
                   <p className={`text-sm font-bold ${row.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {row.profit >= 0 ? '+' : ''}${formatMoney(row.profit)}
+                    {row.profit >= 0 ? '+' : '-'}${formatMoney(Math.abs(row.profit))}
                   </p>
                 </div>
               )}
@@ -1006,27 +1022,35 @@ const Transactions = () => {
                 <Edit2 className="w-3 h-3" /> Edit
               </button>
               <button
-                onClick={() => {
-                  if (confirmDeleteId === row.id) {
-                    removeTxn(row);
-                  } else {
-                    setConfirmDeleteId(row.id);
-                  }
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
-                  confirmDeleteId === row.id
-                    ? 'bg-red-600 hover:bg-red-500 text-white border-red-600'
-                    : 'bg-white/5 hover:bg-red-500/10 text-gray-500 hover:text-red-400 border-white/10'
-                }`}
+                type="button"
+                onClick={() => setDeleteTarget(row)}
+                className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border bg-white/5 hover:bg-red-500/10 text-gray-500 hover:text-red-400 border-white/10"
               >
                 <Trash2 className="w-3 h-3" />
-                {confirmDeleteId === row.id ? 'Confirm' : 'Delete'}
+                Delete
               </button>
             </div>
           </div>
         ))}
         <ShowMoreButton hiddenCount={phoneRows.hiddenCount} onClick={phoneRows.showMore} />
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={deleteTarget?.isSale ? 'Delete this sale?' : 'Delete this purchase?'}
+        consequence={deleteTarget?.isSale
+          ? `The sale of ${deleteTarget.product} and its refunds are removed, and any units it still holds go back into stock.`
+          : `${deleteTarget?.product} is removed along with every sale and refund linked to it. This can't be undone.`}
+        confirmLabel="Delete"
+        busy={deleting}
+        onConfirm={async () => {
+          setDeleting(true);
+          await removeTxn(deleteTarget);
+          setDeleting(false);
+          setDeleteTarget(null);
+        }}
+        onClose={() => setDeleteTarget(null)}
+      />
 
       {/* Top scrollbar mirror — hidden on mobile, shown md+ */}
       <div

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
+import BottomNav from './BottomNav';
 import { Menu } from 'lucide-react';
 import clsx from 'clsx';
 import { useUiPreferences } from '../../hooks/useUiPreferences';
@@ -13,7 +14,7 @@ const Header = ({ onMenuClick, isGlass }) => {
       "lg:hidden flex items-center gap-4 px-4 py-3",
       isGlass ? "border-b border-white/10" : "border-b border-[color:var(--dp-border)] bg-[var(--dp-card-bg)]"
     )}>
-      <button aria-label="Open menu" className={clsx("-m-2.5 p-2.5", isGlass ? "text-gray-400 hover:text-white" : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]")} onClick={onMenuClick}>
+      <button aria-label="Open menu" className={clsx("-m-2.5 p-2.5 max-md:hidden", isGlass ? "text-gray-400 hover:text-white" : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]")} onClick={onMenuClick}>
         <Menu size={24} />
       </button>
       <div className="flex items-center gap-2">
@@ -100,6 +101,8 @@ const Shell = ({ children }) => {
         )}>
           {children}
         </div>
+
+        <BottomNav onMoreClick={() => setIsSidebarOpen(true)} isGlass={isGlass} />
       </main>
       <SpotlightOverlay />
     </div>

@@ -38,6 +38,7 @@ function App() {
       <TutorialProvider>
       <Toaster
         position="bottom-right"
+        mobileOffset={{ bottom: 72 }}
         theme="light"
         richColors
         expand={false}
