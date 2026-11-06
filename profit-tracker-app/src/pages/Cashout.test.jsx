@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Cashout from './Cashout';
-import { dealStoreLinks, estimateDealProfit, formatDealExpiry, storeLogoUrl } from '../utils/cashoutDeals';
+import { dealStoreLinks, estimateDealProfit, formatDealExpiry, formatLastSynced, storeLogoUrl } from '../utils/cashoutDeals';
 
 const mockProviders = [{ id: 'eb', name: 'ElectronicsBuyer' }];
 const mockConnections = [
@@ -205,6 +205,36 @@ describe('Cashout Page', () => {
 
     fireEvent.change(category, { target: { value: 'all' } });
     expect(names()).toHaveLength(4);
+  });
+
+  it('shows the newest sync time in the viewer's time zone', () => {
+    const results = [
+      { lastUpdated: '2026-11-06T15:00:00Z' },
+      { lastUpdated: '2026-11-06T17:52:00Z' },
+      { lastUpdated: null },
+    ];
+    expect(formatLastSynced(results, 'America/Los_Angeles')).toMatch(/Nov 6.*9:52.*AM.*PST/);
+    expect(formatLastSynced(results, 'America/New_York')).toMatch(/Nov 6.*12:52.*PM.*EST/);
+    expect(formatLastSynced([], 'UTC')).toBeNull();
+    expect(formatLastSynced(undefined, 'UTC')).toBeNull();
+  });
+
+  it('shows when deals last synced under Sync now, and nothing before the first sync', () => {
+    const { unmount } = render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+    expect(screen.getByText(/^Last synced /)).toBeInTheDocument();
+    unmount();
+
+    currentDeals = { results: [{ connection: mockConnections[0], deals: [], lastUpdated: null }] };
+    render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+    expect(screen.queryByText(/^Last synced /)).not.toBeInTheDocument();
   });
 
   it('counts down to the expiration date and flags expired deals', () => {

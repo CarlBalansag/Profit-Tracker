@@ -21,7 +21,7 @@ import {
   useCashoutMutations,
 } from '../hooks/useApi';
 import { formatMoney } from '../utils/money';
-import { dealStoreLinks, estimateDealProfit, formatDealExpiry, matchesRetailCategory, storeLogoUrl } from '../utils/cashoutDeals';
+import { dealStoreLinks, estimateDealProfit, formatDealExpiry, formatLastSynced, matchesRetailCategory, storeLogoUrl } from '../utils/cashoutDeals';
 import LoadError from '../components/UI/LoadError';
 
 export default function Cashout() {
@@ -203,6 +203,8 @@ export default function Cashout() {
     }
   };
 
+  const lastSynced = formatLastSynced(dealsData?.results);
+
   return (
     <div className="h-full overflow-y-auto px-4 py-6 sm:px-6 space-y-6">
       {/* Page Header */}
@@ -219,17 +221,24 @@ export default function Cashout() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={handleSyncNow}
-            disabled={syncConnection.isPending || syncCooldownSeconds > 0}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors disabled:opacity-50"
-            title={syncCooldownSeconds > 0 ? `Cooldown: ${syncCooldownSeconds}s` : 'Sync live deals'}
-          >
-            <RefreshCw size={14} className={syncConnection.isPending || dealsFetching ? 'animate-spin' : ''} />
-            <span>{syncCooldownSeconds > 0 ? `Sync (${syncCooldownSeconds}s)` : 'Sync now'}</span>
-          </button>
+        <div className="flex items-start gap-2.5">
+          <div className="flex flex-col items-center gap-1">
+            <button
+              type="button"
+              onClick={handleSyncNow}
+              disabled={syncConnection.isPending || syncCooldownSeconds > 0}
+              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors disabled:opacity-50"
+              title={syncCooldownSeconds > 0 ? `Cooldown: ${syncCooldownSeconds}s` : 'Sync live deals'}
+            >
+              <RefreshCw size={14} className={syncConnection.isPending || dealsFetching ? 'animate-spin' : ''} />
+              <span>{syncCooldownSeconds > 0 ? `Sync (${syncCooldownSeconds}s)` : 'Sync now'}</span>
+            </button>
+            {lastSynced && (
+              <span className="text-[10px] text-[var(--dp-text-label)] whitespace-nowrap">
+                Last synced {lastSynced}
+              </span>
+            )}
+          </div>
 
           <button
             type="button"

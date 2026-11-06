@@ -22,6 +22,25 @@ export function matchesRetailCategory(deal, category) {
   return category === 'above_retail' ? profit.amount > 0 : profit.amount <= 0;
 }
 
+// When the deals on screen were last fetched, newest across all connections. A
+// failed refresh keeps its old time, so this never overstates how fresh they are.
+// Shown in the device's time zone unless one is passed in.
+export function formatLastSynced(results, timeZone) {
+  const times = (results || [])
+    .map((result) => new Date(result.lastUpdated || NaN).getTime())
+    .filter(Number.isFinite);
+  if (times.length === 0) return null;
+
+  return new Date(Math.max(...times)).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+    timeZone,
+  });
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function formatDealExpiry(expiresAt, now = new Date()) {
