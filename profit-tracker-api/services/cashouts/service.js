@@ -65,6 +65,15 @@ async function createConnection(userId, { provider, displayName, apiKey, platfor
 
   const adapter = getAdapter(provider, userId);
 
+  // One key per provider: a second would list every deal twice. A new key
+  // replaces the old one on the existing connection.
+  const existing = await prisma.cashoutConnection.findFirst({ where: { user_id: userId, provider } });
+  if (existing) {
+    const error = new Error('This cashout is already connected. Replace its key instead.');
+    error.status = 409;
+    throw error;
+  }
+
   if (platformId) {
     await requireOwned('platform', platformId, userId, 'Platform');
   }
@@ -153,7 +162,10 @@ async function testConnection(userId, connectionId) {
     await prisma.cashoutConnection.update({
       where: { id: connectionId },
       data: {
-        status: 'attention_needed',
+        // A failed test only means the key is bad if the provider said so. A
+        // timeout or rate limit says nothing about it, and marking it would stop
+        // background sync.
+        ...(err.keyRejected ? { status: 'attention_needed' } : {}),
         last_error: err.message,
       },
     });

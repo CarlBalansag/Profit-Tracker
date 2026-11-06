@@ -14,6 +14,7 @@ import {
   Package,
   Star,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   useCashoutProviders,
@@ -38,9 +39,11 @@ import {
 } from '../utils/cashoutDeals';
 import LoadError from '../components/UI/LoadError';
 
+// API keys are managed only in Data Setup.
+const DATA_SETUP_STATE = { tab: 'datasetup', view: 'Cashouts' };
+
 export default function Cashout() {
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -79,7 +82,6 @@ export default function Cashout() {
 
   const {
     deleteConnection,
-    testConnection,
     syncConnection,
   } = useCashoutMutations();
 
@@ -344,14 +346,14 @@ export default function Cashout() {
           <p className="mt-1.5 text-xs text-[var(--dp-text-secondary)]">
             Connect your ElectronicsBuyer (EB) API key to start viewing live cashout deals.
           </p>
-          <button
-            type="button"
-            onClick={() => setShowAddModal(true)}
+          <Link
+            to="/settings"
+            state={DATA_SETUP_STATE}
             className="mt-5 inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90 transition-opacity"
           >
             <Plus size={14} />
             <span>Add Cashout</span>
-          </button>
+          </Link>
         </div>
       ) : (
         <>
@@ -515,7 +517,7 @@ export default function Cashout() {
 
                           {/* Actions */}
                           <td className="py-3 px-3 text-right">
-                            <LogDealButton />
+                            <LogPurchaseButton />
                           </td>
                         </tr>
                       );
@@ -588,26 +590,7 @@ export default function Cashout() {
                       <button
                         type="button"
                         onClick={async () => {
-                          const t = toast.loading('Testing connection…');
-                          try {
-                            const res = await testConnection.mutateAsync(conn.id);
-                            if (res.success) {
-                              toast.success('Connection verified successfully!', { id: t });
-                            } else {
-                              toast.error(`Verification failed: ${res.message}`, { id: t });
-                            }
-                          } catch (e) {
-                            toast.error(e.message, { id: t });
-                          }
-                        }}
-                        className="px-2.5 py-1 text-xs rounded border border-[color:var(--dp-border)] hover:bg-[var(--dp-hover-bg)] text-[var(--dp-text-secondary)]"
-                      >
-                        Test
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (confirm(`Remove cashout connection "${conn.displayName || conn.provider}"?`)) {
+                          if (confirm(`Remove cashout connection "${conn.displayName || conn.provider}"? Its saved payout records will be deleted.`)) {
                             try {
                               await deleteConnection.mutateAsync(conn.id);
                               toast.success('Connection removed.');
@@ -628,17 +611,14 @@ export default function Cashout() {
             </div>
 
             <div className="flex items-center justify-between border-t border-[color:var(--dp-border)] pt-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowConnectionsModal(false);
-                  setShowAddModal(true);
-                }}
+              <Link
+                to="/settings"
+                state={DATA_SETUP_STATE}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90"
               >
                 <Plus size={14} />
-                <span>Add Another Cashout</span>
-              </button>
+                <span>Add Cashout</span>
+              </Link>
               <button
                 type="button"
                 onClick={() => setShowConnectionsModal(false)}
@@ -649,19 +629,6 @@ export default function Cashout() {
             </div>
           </div>
         </div>
-      )}
-
-      {/* Add Cashout Modal */}
-      {showAddModal && (
-        <AddCashoutModal
-          providers={providers}
-          onClose={() => setShowAddModal(false)}
-          onSuccess={() => {
-            setShowAddModal(false);
-            refetchConnections();
-            refetchDeals();
-          }}
-        />
       )}
 
     </div>
@@ -795,7 +762,7 @@ function StoreLinks({ deal }) {
 
 // Placeholder: it will open a short form that records the purchase and its sale
 // to the cashout. It saves nothing until that's built.
-function LogDealButton({ fullWidth = false }) {
+function LogPurchaseButton({ fullWidth = false }) {
   return (
     <button
       type="button"
@@ -803,7 +770,7 @@ function LogDealButton({ fullWidth = false }) {
       title="Coming soon"
       className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-lg whitespace-nowrap bg-[var(--dp-accent)] text-white opacity-50 cursor-not-allowed ${fullWidth ? 'w-full' : ''}`}
     >
-      Log Deal
+      Log Purchase
     </button>
   );
 }
@@ -833,7 +800,7 @@ function DealCard({ deal }) {
         <StoreLinks deal={deal} />
       </div>
 
-      <LogDealButton fullWidth />
+      <LogPurchaseButton fullWidth />
     </article>
   );
 }
@@ -881,127 +848,5 @@ function StoreLink({ link }) {
         <span className="text-[11px] font-bold text-gray-800">{(link.name || '?').charAt(0).toUpperCase()}</span>
       )}
     </a>
-  );
-}
-
-// ─── Modal: Add Cashout Connection ───────────────────────────────────────────
-function AddCashoutModal({ providers, onClose, onSuccess }) {
-  const [provider, setProvider] = useState(providers[0]?.id || 'eb');
-  const [displayName, setDisplayName] = useState('');
-  const [apiKey, setApiKey] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const { addConnection } = useCashoutMutations();
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!apiKey.trim()) {
-      setError('API key is required.');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      await addConnection.mutateAsync({
-        provider,
-        display_name: displayName.trim() || undefined,
-        api_key: apiKey.trim(),
-      });
-      toast.success('Cashout connected successfully!');
-      onSuccess();
-    } catch (err) {
-      setError(err.message || 'Failed to connect cashout service.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-6 space-y-4">
-        <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
-          <h3 className="font-bold text-base text-[var(--dp-text-primary)]">Add Cashout Connection</h3>
-          <button onClick={onClose} className="text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]">
-            <X size={18} />
-          </button>
-        </div>
-
-        {error && (
-          <div className="p-3 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-300 text-xs flex items-center gap-2">
-            <AlertTriangle size={15} className="flex-shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          <div>
-            <label className="block font-medium text-[var(--dp-text-secondary)] mb-1">Supported Cashout</label>
-            <select
-              value={provider}
-              onChange={(e) => setProvider(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none"
-            >
-              {providers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block font-medium text-[var(--dp-text-secondary)] mb-1">
-              Display Name <span className="text-[var(--dp-text-label)]">(optional)</span>
-            </label>
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="e.g. My EB Account"
-              className="w-full px-3 py-2 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block font-medium text-[var(--dp-text-secondary)] mb-1">
-              API Key <span className="text-rose-400">*</span>
-            </label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Paste your cashout API key"
-              autoComplete="off"
-              className="w-full px-3 py-2 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none font-mono"
-            />
-            <p className="mt-1 text-[10px] text-[var(--dp-text-label)]">
-              Your key will be securely encrypted with AES-256-GCM. It is tested with the provider before saving.
-            </p>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 border-t border-[color:var(--dp-border)] pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="px-3.5 py-2 rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)]"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--dp-accent)] text-white font-semibold hover:opacity-90 disabled:opacity-50"
-            >
-              {loading && <RefreshCw size={12} className="animate-spin" />}
-              <span>{loading ? 'Verifying Key…' : 'Verify & Connect'}</span>
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   );
 }

@@ -64,7 +64,7 @@ const mockMutations = {
 let currentProviders = mockProviders;
 let currentConnections = mockConnections;
 let currentDeals = mockDeals;
-const gainRowButton = () => within(screen.getByText('Gain Deal').closest('tr')).getByRole('button', { name: 'Log Deal' });
+const gainRowButton = () => within(screen.getByText('Gain Deal').closest('tr')).getByRole('button', { name: 'Log Purchase' });
 let dealsState = {};
 let connectionsState = {};
 let providersState = {};
@@ -120,7 +120,8 @@ describe('Cashout Page', () => {
     );
 
     expect(screen.getByText('No cashouts connected')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Add Cashout/i })).toBeInTheDocument();
+    // Keys are entered in Data Setup, so this leads there rather than opening a form.
+    expect(screen.getByRole('link', { name: /Add Cashout/i })).toHaveAttribute('href', '/settings');
   });
 
   it('renders the live deals with their payouts and nothing about our own costs', () => {
@@ -670,6 +671,11 @@ describe('Cashout Page', () => {
     expect(screen.getByText('Connected Cashout Services')).toBeInTheDocument();
     expect(screen.getAllByText('EB Primary').length).toBeGreaterThan(0);
     expect(screen.getByText(/••••••••••••9876/)).toBeInTheDocument();
+
+    // Remove stays here; adding a key happens in Data Setup.
+    expect(screen.getByTitle('Delete connection')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Add Cashout/i })).toHaveAttribute('href', '/settings');
+    expect(screen.queryByPlaceholderText(/API key/i)).not.toBeInTheDocument();
 
     const closeBtn = screen.getByRole('button', { name: 'Close' });
     fireEvent.click(closeBtn);

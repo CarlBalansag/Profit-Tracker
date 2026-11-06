@@ -6,10 +6,12 @@ import {
 import { useInvalidate, apiFetch} from '../../hooks/useApi';
 import { requireSuccessfulResponse } from '../../hooks/apiResponse';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
+import { CashoutIntegrations } from './CashoutIntegrations';
 import { toast } from 'sonner';
 
 // ─── Quick Add Store Directory ────────────────────────────────────────────────
 const QUICK_ADD_STORES = [
+  { name: 'ElectronicsBuyer',       type: 'cashout', category: 'Wholesale / Cashout' },
   { name: 'POINTS4DAYS',            type: 'cashout', category: 'Wholesale / Cashout' },
   { name: 'MaxOutDeals',            type: 'cashout', category: 'Wholesale / Cashout' },
   { name: 'powerbuynetwork',        type: 'cashout', category: 'Wholesale / Cashout' },
@@ -495,6 +497,8 @@ export function Cashouts() {
         <h1 className="text-2xl font-bold text-white">Cashouts</h1>
         <p className="text-sm text-gray-400 mt-1">Manage wholesale buyers and cashout groups.</p>
       </div>
+
+      <CashoutIntegrations />
 
       {/* List */}
       <div>

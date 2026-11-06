@@ -32,7 +32,9 @@ const ebAdapter = {
       });
 
       if (response.status === 401 || response.status === 403) {
-        throw new Error('ElectronicsBuyer rejected the API key (unauthorized or missing read_deals permission).');
+        const err = new Error('ElectronicsBuyer rejected the API key (unauthorized or missing read_deals permission).');
+        err.keyRejected = true;
+        throw err;
       }
 
       if (response.status === 429) {

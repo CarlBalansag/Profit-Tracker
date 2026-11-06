@@ -221,6 +221,39 @@ describe('Cashout Connection CRUD & Tenant Isolation', () => {
     expect(harness.db.cashoutConnection.some(c => c.id === otherConn.id)).toBe(true);
   });
 
+  it('allows one connection per provider, so deals are never listed twice', async () => {
+    const first = await request('POST', '/api/cashouts/connections', { provider: 'eb', api_key: 'first-key' });
+    expect(first.status).toBe(201);
+
+    const second = await request('POST', '/api/cashouts/connections', { provider: 'eb', api_key: 'second-key' });
+    expect(second.status).toBe(409);
+    expect(harness.db.cashoutConnection).toHaveLength(1);
+  });
+
+  it('replacing a key keeps the same connection', async () => {
+    const added = await request('POST', '/api/cashouts/connections', { provider: 'eb', api_key: 'first-key' });
+    const updated = await request('PATCH', `/api/cashouts/connections/${added.body.id}`, { api_key: 'replacement-key' });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body.keyLast4).toBe('-key');
+    expect(harness.db.cashoutConnection).toHaveLength(1);
+    expect(decryptKey(harness.db.cashoutConnection[0].encrypted_key)).toBe('replacement-key');
+  });
+
+  it('only a rejected key marks a tested connection as needing attention', async () => {
+    const added = await request('POST', '/api/cashouts/connections', { provider: 'eb', api_key: 'first-key' });
+
+    vi.spyOn(ebAdapter, 'testKey').mockRejectedValue(new Error('ElectronicsBuyer rate limit exceeded.'));
+    const limited = await request('POST', `/api/cashouts/connections/${added.body.id}/test`);
+    expect(limited.body.success).toBe(false);
+    expect(harness.db.cashoutConnection[0].status).toBe('active');
+    expect(harness.db.cashoutConnection[0].last_error).toContain('rate limit');
+
+    vi.spyOn(ebAdapter, 'testKey').mockRejectedValue(Object.assign(new Error('Key rejected'), { keyRejected: true }));
+    await request('POST', `/api/cashouts/connections/${added.body.id}/test`);
+    expect(harness.db.cashoutConnection[0].status).toBe('attention_needed');
+  });
+
   it('deleting a connection succeeds and re-adding it works', async () => {
     const addRes = await request('POST', '/api/cashouts/connections', {
       provider: 'eb',
