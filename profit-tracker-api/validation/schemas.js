@@ -471,7 +471,31 @@ const createRefund = z.object({
   note: optionalString,
 }).passthrough();
 
+const createCashoutConnection = z.object({
+  provider: requiredString('Provider'),
+  display_name: optionalString,
+  api_key: z.string({ required_error: 'API key is required' }).trim().min(1, 'API key is required'),
+  platform_id: id,
+}).strict();
+
+const updateCashoutConnection = z.object({
+  display_name: optionalString,
+  api_key: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
+  platform_id: id,
+}).strict();
+
+const cashoutItemMatch = z.object({
+  provider: requiredString('Provider'),
+  external_deal_id: requiredString('External deal ID'),
+  deal_item_name: requiredString('Deal item name'),
+  inventory_id: id,
+  inventory_name: optionalString,
+}).strict();
+
 module.exports = {
+  createCashoutConnection,
+  updateCashoutConnection,
+  cashoutItemMatch,
   createRefund,
   createInventory,
   updateInventory,

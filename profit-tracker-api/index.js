@@ -28,6 +28,8 @@ const refundsRouter = require('./routes/refunds');
 const calendarEventsRouter = require('./routes/calendarEvents');
 const buyersRouter = require('./routes/buyers');
 const apiKeysRouter = require('./routes/apiKeys');
+const cashoutsRouter = require('./routes/cashouts');
+const { verifySyncSecret, runScheduledSync } = require('./services/cashouts/syncScheduler');
 const mcpRouter = require('./routes/mcp');
 const { apiKeyAuth } = require('./middleware/apiKeyAuth');
 
@@ -65,6 +67,26 @@ app.use(express.json({ limit: '7mb' }));
 // read. apiKeyAuth is this path's entire auth story; it never falls through
 // to firebaseAuth.guard.
 app.use('/mcp', apiKeyAuth, mcpRouter);
+
+// Background cashout sync — protected by CASHOUT_SYNC_SECRET bearer token.
+// Mounted ahead of CSRF and Firebase session guards as it is called by an external scheduler.
+app.post('/internal/cashouts/sync', async (req, res) => {
+  const authHeader = req.get('Authorization');
+  const verify = verifySyncSecret(authHeader);
+  if (!verify.ok) {
+    return res.status(verify.status || 401).json({ error: verify.message });
+  }
+
+  try {
+    const summary = await runScheduledSync();
+    if (summary.status === 'locked') {
+      return res.status(409).json(summary);
+    }
+    res.json(summary);
+  } catch (err) {
+    res.status(500).json({ error: 'Background sync error: ' + err.message });
+  }
+});
 
 // CSRF protection: every state-changing request from the SPA must include this header.
 // Browsers never attach custom headers to cross-origin simple requests, so its presence
@@ -155,6 +177,7 @@ app.use('/api/refunds', refundsRouter);
 app.use('/api/calendar-events', calendarEventsRouter);
 app.use('/api/buyers', buyersRouter);
 app.use('/api/api-keys', apiKeysRouter);
+app.use('/api/cashouts', cashoutsRouter);
 
 // Health Check
 app.get('/health', (req, res) => {
@@ -169,6 +192,18 @@ app.get('/auth/me', (req, res) => {
   if (req.user) res.json(firebaseAuth.publicUser(req.user));
   else res.status(401).json({ message: 'Unauthorized' });
 });
+
+// Dev-only login switch for local browser testing across accounts
+if (!isProd) {
+  app.post('/auth/dev-login', async (req, res) => {
+    const targetUserId = req.body?.userId || '4a7506f4-77bf-4896-9764-0b0cc369f802';
+    const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!targetUser) return res.status(404).json({ error: 'User not found' });
+    req.session.devUserId = targetUser.id;
+    await new Promise((resolve, reject) => req.session.save((err) => (err ? reject(err) : resolve())));
+    res.json(firebaseAuth.publicUser(targetUser));
+  });
+}
 
 // Mark tutorial as seen
 app.patch('/auth/me', async (req, res) => {

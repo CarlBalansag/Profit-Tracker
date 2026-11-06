@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, CirclePlus, ArrowLeftRight, Package,
   Receipt, FileText, ChartColumn, Wallet, CreditCard as CreditCardIcon,
-  Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, DollarSign, ShieldCheck, BookOpen, Target, CalendarDays, Truck, Sparkles, ListChecks, ScrollText
+  Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, DollarSign, ShieldCheck, BookOpen, Target, CalendarDays, Truck, Sparkles, ListChecks, ScrollText, Coins
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useState } from 'react';
@@ -12,12 +12,15 @@ import { SCHEDULE_C_ENABLED } from '../../config/features';
 import { CURRENT_VERSION } from '../../data/changelog';
 import VersionHistoryModal from '../VersionHistoryModal';
 import ThemeSwitch from '../UI/ThemeSwitch';
+import { useCashoutProviders } from '../../hooks/useCashoutProviders';
 
 const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'neon-dark' }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const navigate = useNavigate();
   const { logout, user } = useAuth();
+  const { data: cashoutProviders = [] } = useCashoutProviders();
+  const hasCashoutAccess = Array.isArray(cashoutProviders) && cashoutProviders.length > 0;
 
   if (uiStyle === 'glassmorphism-brown') {
     return (
@@ -62,6 +65,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <GlassNavItem icon={CreditCardIcon} label="Credit Card" to="/creditcard" />
             <GlassNavItem icon={Target} label="Goals" to="/goals" />
             <GlassNavItem icon={CalendarDays} label="Calendar" to="/calendar" />
+            {hasCashoutAccess && <GlassNavItem icon={Coins} label="Cashout" to="/cashout" />}
 
             <div className="my-2 h-px w-7 bg-white/[0.07]" />
 
@@ -141,6 +145,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <NavItem icon={CreditCardIcon} label="Credit Card" to="/creditcard" isCollapsed={isCollapsed} tutorialId="sidebar-creditcard" />
             <NavItem icon={Target} label="Goals" to="/goals" isCollapsed={isCollapsed} />
             <NavItem icon={CalendarDays} label="Calendar" to="/calendar" isCollapsed={isCollapsed} />
+            {hasCashoutAccess && <NavItem icon={Coins} label="Cashout" to="/cashout" isCollapsed={isCollapsed} />}
           </SidebarSection>
 
         </nav>
