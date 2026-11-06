@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Cashout from './Cashout';
-import { estimateDealProfit } from '../utils/cashoutDeals';
+import { dealStoreLinks, estimateDealProfit, formatDealExpiry, storeLogoUrl } from '../utils/cashoutDeals';
 
 const mockProviders = [{ id: 'eb', name: 'ElectronicsBuyer' }];
 const mockConnections = [
@@ -159,7 +159,7 @@ describe('Cashout Page', () => {
     );
 
     expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(
-      ['Deal / Item', 'Service', 'Payout', 'Retail', 'Est. Profit', 'Availability', 'Link'],
+      ['Deal / Item', 'Service', 'Payout', 'Retail', 'Est. Profit', 'Expires', 'Buy At'],
     );
     const gainRow = screen.getByText('Gain Deal').closest('tr');
     expect(gainRow.cells[2]).toHaveTextContent('$1,140.00');
@@ -172,6 +172,105 @@ describe('Cashout Page', () => {
     expect(screen.getByText('-$5.00')).toBeInTheDocument();
     expect(screen.getByText('-12.5%')).toBeInTheDocument();
     expect(screen.getByText('No Retail Deal').closest('tr')).toHaveTextContent('—');
+  });
+
+  it('counts down to the expiration date and flags expired deals', () => {
+    const now = new Date('2026-11-06T17:00:00Z');
+    expect(formatDealExpiry('2026-11-20T08:00:00Z', now)).toMatchObject({ note: '14 days left', expired: false, urgent: false });
+    expect(formatDealExpiry('2026-11-07T08:00:00Z', now)).toMatchObject({ note: '1 day left', urgent: true });
+    expect(formatDealExpiry('2026-11-05T08:00:00Z', now)).toMatchObject({ note: 'Expired', expired: true });
+    expect(formatDealExpiry(null, now)).toBeNull();
+    expect(formatDealExpiry('not a date', now)).toBeNull();
+  });
+
+  it('lists each purchase link once and says which item it buys when there are several', () => {
+    const shared = { name: 'Amazon', url: 'https://www.amazon.com/dp/1' };
+    expect(dealStoreLinks({
+      items: [{ name: 'PS5 Pro', purchaseLinks: [shared] }],
+      productLinks: [shared],
+    })).toEqual([{ ...shared, label: 'Buy at Amazon' }]);
+
+    const colors = dealStoreLinks({
+      items: [
+        { name: 'Neo Silver', purchaseLinks: [{ name: 'Amazon', url: 'https://ftc.cash/a' }] },
+        { name: 'Neo Black', purchaseLinks: [{ name: 'Amazon', url: 'https://ftc.cash/b' }] },
+      ],
+      productLinks: [],
+    });
+    expect(colors.map((link) => link.label)).toEqual(['Buy Neo Silver at Amazon', 'Buy Neo Black at Amazon']);
+  });
+
+  it('ignores links that are not normal web addresses', () => {
+    expect(dealStoreLinks({
+      items: [{ name: 'Item', purchaseLinks: [{ name: 'Bad', url: 'javascript:alert(1)' }, { name: 'Broken', url: 'nope' }] }],
+    })).toEqual([]);
+  });
+
+  it('finds logos by store name, whatever the link address is', () => {
+    expect(storeLogoUrl('Amazon')).toContain('amazon.com');
+    expect(storeLogoUrl('BestBuy')).toContain('bestbuy.com');
+    expect(storeLogoUrl("Sam's Club")).toContain('samsclub.com');
+    expect(storeLogoUrl('Micro Center')).toContain('microcenter.com');
+    expect(storeLogoUrl('Some New Store')).toBeNull();
+  });
+
+  it('shows the expiration and a store logo that links straight to the purchase page', () => {
+    const expiresAt = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
+    currentDeals = {
+      results: [{
+        connection: mockConnections[0],
+        deals: [{
+          id: '1',
+          name: 'PS5 Pro',
+          retail: 899.99,
+          payout: 1140,
+          expiresAt,
+          avgRemainingPercentage: 40,
+          items: [{
+            name: 'PS5 Pro',
+            purchaseLinks: [
+              { name: 'Amazon', url: 'https://www.amazon.com/dp/1' },
+              { name: 'New Store', url: 'https://example.com/ps5' },
+            ],
+          }],
+        }],
+      }],
+    };
+    render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('5 days left')).toBeInTheDocument();
+    expect(screen.queryByText('Cap')).not.toBeInTheDocument();
+
+    const amazon = screen.getByRole('link', { name: 'Buy at Amazon' });
+    expect(amazon).toHaveAttribute('href', 'https://www.amazon.com/dp/1');
+    expect(amazon).toHaveAttribute('target', '_blank');
+    expect(amazon.querySelector('img')).toHaveAttribute('src', expect.stringContaining('amazon.com'));
+
+    // No known logo falls back to the store's first letter.
+    expect(screen.getByRole('link', { name: 'Buy at New Store' })).toHaveTextContent('N');
+  });
+
+  it('falls back to the first letter when a logo fails to load', () => {
+    currentDeals = {
+      results: [{
+        connection: mockConnections[0],
+        deals: [{ id: '1', name: 'Deal', payout: 10, items: [{ name: 'Deal', purchaseLinks: [{ name: 'Target', url: 'https://www.target.com/p/1' }] }] }],
+      }],
+    };
+    render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+
+    const link = screen.getByRole('link', { name: 'Buy at Target' });
+    fireEvent.error(link.querySelector('img'));
+    expect(link.querySelector('img')).toBeNull();
+    expect(link).toHaveTextContent('T');
   });
 
   it('sorts by highest profit with deals that have no estimate last', () => {

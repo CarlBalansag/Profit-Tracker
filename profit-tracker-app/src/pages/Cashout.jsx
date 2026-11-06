@@ -4,7 +4,6 @@ import {
   RefreshCw,
   Plus,
   Search,
-  ExternalLink,
   AlertTriangle,
   Clock,
   Trash2,
@@ -22,7 +21,7 @@ import {
   useCashoutMutations,
 } from '../hooks/useApi';
 import { formatMoney } from '../utils/money';
-import { estimateDealProfit } from '../utils/cashoutDeals';
+import { dealStoreLinks, estimateDealProfit, formatDealExpiry, storeLogoUrl } from '../utils/cashoutDeals';
 import LoadError from '../components/UI/LoadError';
 
 export default function Cashout() {
@@ -382,8 +381,8 @@ export default function Cashout() {
                       >
                         Est. Profit
                       </th>
-                      <th className="py-3 px-3">Availability</th>
-                      <th className="py-3 px-3 text-center">Link</th>
+                      <th className="py-3 px-3">Expires</th>
+                      <th className="py-3 px-3">Buy At</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[color:var(--dp-border)]">
@@ -468,36 +467,17 @@ export default function Cashout() {
                             )}
                           </td>
 
-                          {/* Availability */}
-                          <td className="py-3 px-3">
-                            <div className="w-24">
-                              <div className="flex items-center justify-between text-[10px] text-[var(--dp-text-label)] mb-1">
-                                <span>Cap</span>
-                                <span>{deal.avgRemainingPercentage ? `${Math.round(deal.avgRemainingPercentage)}%` : 'Active'}</span>
-                              </div>
-                              <div className="w-full h-1.5 rounded-full bg-[var(--dp-hover-bg)] overflow-hidden">
-                                <div
-                                  className="h-full bg-[var(--dp-accent)] rounded-full"
-                                  style={{ width: `${Math.min(100, deal.avgRemainingPercentage || 100)}%` }}
-                                />
-                              </div>
-                            </div>
+                          {/* Expires */}
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            <DealExpiry expiresAt={deal.expiresAt} />
                           </td>
 
-                          {/* Link */}
-                          <td className="py-3 px-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              {deal.productLinks?.[0]?.url && (
-                                <a
-                                  href={deal.productLinks[0].url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-1 rounded text-[var(--dp-text-label)] hover:text-[var(--dp-accent)]"
-                                  title={`Open ${deal.productLinks[0].name || 'Product'}`}
-                                >
-                                  <ExternalLink size={14} />
-                                </a>
-                              )}
+                          {/* Buy At */}
+                          <td className="py-3 px-3">
+                            <div className="flex flex-wrap items-center gap-1.5 min-w-[60px]">
+                              {dealStoreLinks(deal).map((link) => (
+                                <StoreLink key={link.url} link={link} />
+                              ))}
                             </div>
                           </td>
                         </tr>
@@ -706,6 +686,52 @@ export default function Cashout() {
       )}
 
     </div>
+  );
+}
+
+function DealExpiry({ expiresAt }) {
+  const expiry = formatDealExpiry(expiresAt);
+  if (!expiry) return <span className="text-[var(--dp-text-label)]">—</span>;
+
+  return (
+    <div>
+      <div className="font-semibold text-[var(--dp-text-primary)]">{expiry.date}</div>
+      <div
+        className={`text-[10px] ${
+          expiry.expired
+            ? 'text-rose-400'
+            : expiry.urgent
+            ? 'text-amber-400'
+            : 'text-[var(--dp-text-label)]'
+        }`}
+      >
+        {expiry.note}
+      </div>
+    </div>
+  );
+}
+
+// A round store logo linking straight to the purchase page. Shows the store's
+// first letter when there's no known logo or the image doesn't load.
+function StoreLink({ link }) {
+  const [logoFailed, setLogoFailed] = useState(false);
+  const logo = logoFailed ? null : storeLogoUrl(link.name);
+
+  return (
+    <a
+      href={link.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={link.label}
+      aria-label={link.label}
+      className="w-7 h-7 rounded-full bg-white border border-[color:var(--dp-border)] flex items-center justify-center overflow-hidden flex-shrink-0 hover:ring-2 hover:ring-[var(--dp-accent)] transition-shadow"
+    >
+      {logo ? (
+        <img src={logo} alt="" className="w-4 h-4 object-contain" onError={() => setLogoFailed(true)} />
+      ) : (
+        <span className="text-[11px] font-bold text-gray-800">{(link.name || '?').charAt(0).toUpperCase()}</span>
+      )}
+    </a>
   );
 }
 
