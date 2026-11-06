@@ -159,7 +159,7 @@ describe('Cashout Page', () => {
     );
 
     expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(
-      ['Deal / Item', 'Service', 'Payout', 'Retail', 'Est. Profit', 'Expires', 'Buy At'],
+      ['Deal / Item', 'Cashout', 'Payout', 'Retail', 'Est. Profit', 'Expires', 'Buy At'],
     );
     const gainRow = screen.getByText('Gain Deal').closest('tr');
     expect(gainRow.cells[2]).toHaveTextContent('$1,140.00');

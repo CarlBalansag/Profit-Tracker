@@ -339,7 +339,7 @@ export default function Cashout() {
                 onChange={(e) => setSelectedProvider(e.target.value)}
                 className="px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] focus:outline-none"
               >
-                <option value="all">All Services</option>
+                <option value="all">All Cashouts</option>
                 {connections.map((c) => (
                   <option key={c.id} value={c.provider}>
                     {c.displayName || c.provider}
@@ -372,7 +372,7 @@ export default function Cashout() {
                   <thead>
                     <tr className="border-b border-[color:var(--dp-border)] text-[var(--dp-text-label)] uppercase font-semibold text-[10px] tracking-wider">
                       <th className="py-3 px-4">Deal / Item</th>
-                      <th className="py-3 px-3">Service</th>
+                      <th className="py-3 px-3">Cashout</th>
                       <th className="py-3 px-3 text-right">Payout</th>
                       <th className="py-3 px-3 text-right">Retail</th>
                       <th
@@ -514,7 +514,7 @@ export default function Cashout() {
                 <thead>
                   <tr className="border-b border-[color:var(--dp-border)] text-[var(--dp-text-label)] uppercase font-semibold text-[10px] tracking-wider">
                     <th className="py-3 px-4">Captured Time</th>
-                    <th className="py-3 px-3">Service</th>
+                    <th className="py-3 px-3">Cashout</th>
                     <th className="py-3 px-4">Deal / Item</th>
                     <th className="py-3 px-3 text-right">Recorded Payout</th>
                     <th className="py-3 px-3 text-center">Status</th>
@@ -789,7 +789,7 @@ function AddCashoutModal({ providers, onClose, onSuccess }) {
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
-            <label className="block font-medium text-[var(--dp-text-secondary)] mb-1">Supported Service</label>
+            <label className="block font-medium text-[var(--dp-text-secondary)] mb-1">Supported Cashout</label>
             <select
               value={provider}
               onChange={(e) => setProvider(e.target.value)}
