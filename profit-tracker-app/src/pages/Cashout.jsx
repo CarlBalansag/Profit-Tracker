@@ -424,7 +424,7 @@ export default function Cashout() {
                               ${formatMoney(deal.payout)}
                             </div>
                             {deal.retail && (
-                              <div className="text-[10px] text-[var(--dp-text-label)] line-through">
+                              <div className="text-[10px] text-[var(--dp-text-label)]">
                                 Retail ${formatMoney(deal.retail)}
                               </div>
                             )}
