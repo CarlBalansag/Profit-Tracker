@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.21',
+    date: '2026-11-06',
+    notes: "You can now reset your data from Settings > Data: clear just your transactions, or start over completely. A confirmation screen shows exactly what will be deleted first.",
+  },
+  {
     version: '1.20',
     date: '2026-11-05',
     notes: "Phones now have a bottom menu with a quick add button, and Record Sale, Add Transaction and Inventory are quicker to use on a small screen. Inventory also gets a working export and a Sell button.",
