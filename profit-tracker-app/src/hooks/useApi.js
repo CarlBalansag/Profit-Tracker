@@ -379,19 +379,6 @@ export const useCashoutDeals = (connectionId = null) =>
     refetchIntervalInBackground: false,
   });
 
-export const useCashoutHistory = ({ dealId = null, provider = null } = {}) =>
-  useQuery({
-    queryKey: ['cashout', 'history', dealId, provider],
-    queryFn: () => {
-      const params = new URLSearchParams();
-      if (dealId) params.append('dealId', dealId);
-      if (provider) params.append('provider', provider);
-      const qs = params.toString();
-      return fetcher(`/api/cashouts/history${qs ? `?${qs}` : ''}`);
-    },
-    staleTime: 60_000,
-  });
-
 export const useCashoutMutations = () => {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ['cashout'] });

@@ -5,7 +5,6 @@ import {
   Plus,
   Search,
   AlertTriangle,
-  Clock,
   Trash2,
   KeyRound,
   Layers,
@@ -17,7 +16,6 @@ import {
   useCashoutProviders,
   useCashoutConnections,
   useCashoutDeals,
-  useCashoutHistory,
   useCashoutMutations,
 } from '../hooks/useApi';
 import { formatMoney } from '../utils/money';
@@ -25,7 +23,6 @@ import { dealStoreLinks, estimateDealProfit, formatDealExpiry, formatLastSynced,
 import LoadError from '../components/UI/LoadError';
 
 export default function Cashout() {
-  const [activeTab, setActiveTab] = useState('deals'); // 'deals' | 'history'
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -58,12 +55,6 @@ export default function Cashout() {
     refetch: refetchDeals,
     isFetching: dealsFetching,
   } = useCashoutDeals();
-
-  const {
-    data: historyData,
-    isLoading: historyLoading,
-    refetch: refetchHistory,
-  } = useCashoutHistory();
 
   const {
     deleteConnection,
@@ -195,7 +186,6 @@ export default function Cashout() {
       if (anySynced) {
         setSyncCooldownSeconds(60);
         await refetchDeals();
-        await refetchHistory();
         toast.success('Cashout deals synced successfully!', { id: toastId });
       }
     } catch (err) {
@@ -274,33 +264,13 @@ export default function Cashout() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-[color:var(--dp-border)] pb-2 text-sm font-medium">
-        <button
-          onClick={() => setActiveTab('deals')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
-            activeTab === 'deals'
-              ? 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]'
-              : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'
-          }`}
-        >
-          <Layers size={15} />
-          <span>Live Deals</span>
-          <span className="text-xs px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)]">
-            {allDeals.length}
-          </span>
-        </button>
-        <button
-          onClick={() => setActiveTab('history')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
-            activeTab === 'history'
-              ? 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]'
-              : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'
-          }`}
-        >
-          <Clock size={15} />
-          <span>Payout History</span>
-        </button>
+      {/* Deal Count */}
+      <div className="flex items-center gap-2 border-b border-[color:var(--dp-border)] pb-2 text-sm font-medium text-[var(--dp-text-primary)]">
+        <Layers size={15} className="text-[var(--dp-accent)]" />
+        <span>Live Deals</span>
+        <span className="text-xs px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)]">
+          {allDeals.length}
+        </span>
       </div>
 
       {/* Empty State when no connections added yet */}
@@ -322,7 +292,7 @@ export default function Cashout() {
             <span>Add Cashout</span>
           </button>
         </div>
-      ) : activeTab === 'deals' ? (
+      ) : (
         <>
           {/* Search, Filter & Controls */}
           <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
@@ -514,64 +484,6 @@ export default function Cashout() {
             </div>
           )}
         </>
-      ) : (
-        /* Payout History View */
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-[var(--dp-text-secondary)]">
-              {historyData?.trackingSince ? (
-                <>Tracking payouts since <strong>{new Date(historyData.trackingSince).toLocaleDateString()}</strong></>
-              ) : (
-                'Tracking payout history across scheduled syncs'
-              )}
-            </span>
-          </div>
-
-          {historyLoading ? (
-            <div className="p-8 text-center text-xs text-[var(--dp-text-secondary)]">Loading payout history…</div>
-          ) : !historyData?.snapshots || historyData.snapshots.length === 0 ? (
-            <div className="p-8 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-center text-xs text-[var(--dp-text-secondary)]">
-              No price change snapshots recorded yet. Snapshots are recorded when payouts or availability change.
-            </div>
-          ) : (
-            <div className="rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] overflow-hidden shadow-sm">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-[color:var(--dp-border)] text-[var(--dp-text-label)] uppercase font-semibold text-[10px] tracking-wider">
-                    <th className="py-3 px-4">Captured Time</th>
-                    <th className="py-3 px-3">Cashout</th>
-                    <th className="py-3 px-4">Deal / Item</th>
-                    <th className="py-3 px-3 text-right">Recorded Payout</th>
-                    <th className="py-3 px-3 text-center">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[color:var(--dp-border)]">
-                  {historyData.snapshots.map((snap) => (
-                    <tr key={snap.id} className="hover:bg-[var(--dp-hover-bg)]">
-                      <td className="py-3 px-4 text-[var(--dp-text-secondary)]">
-                        {new Date(snap.capturedAt).toLocaleString()}
-                      </td>
-                      <td className="py-3 px-3 font-medium uppercase text-[var(--dp-text-primary)]">
-                        {snap.provider}
-                      </td>
-                      <td className="py-3 px-4 font-semibold text-[var(--dp-text-primary)]">
-                        {snap.itemName}
-                      </td>
-                      <td className="py-3 px-3 text-right font-bold text-emerald-400">
-                        ${formatMoney(snap.payout)}
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400">
-                          {snap.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
       )}
 
       {/* Connection Management Modal */}

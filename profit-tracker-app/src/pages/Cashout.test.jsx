@@ -58,7 +58,6 @@ vi.mock('../hooks/useApi', () => ({
   useCashoutProviders: () => ({ data: currentProviders, isLoading: false, error: null, refetch: vi.fn() }),
   useCashoutConnections: () => ({ data: currentConnections, isLoading: false, error: null, refetch: vi.fn() }),
   useCashoutDeals: () => ({ data: currentDeals, isLoading: false, error: null, refetch: vi.fn(), isFetching: false }),
-  useCashoutHistory: () => ({ data: { snapshots: [] }, isLoading: false, refetch: vi.fn() }),
   useCashoutMutations: () => mockMutations,
 }));
 
@@ -207,7 +206,18 @@ describe('Cashout Page', () => {
     expect(names()).toHaveLength(4);
   });
 
-  it('shows the newest sync time in the viewer's time zone', () => {
+  it('has no Payout History screen', () => {
+    render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByText('Payout History')).not.toBeInTheDocument();
+    expect(screen.getByText('Live Deals')).toBeInTheDocument();
+  });
+
+  it('shows the newest sync time in the viewer time zone', () => {
     const results = [
       { lastUpdated: '2026-11-06T15:00:00Z' },
       { lastUpdated: '2026-11-06T17:52:00Z' },
