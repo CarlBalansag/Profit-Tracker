@@ -43,6 +43,11 @@ export function formatLastSynced(results, timeZone) {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+export function isDealExpired(deal, now = Date.now()) {
+  const expires = deal.expiresAt ? new Date(deal.expiresAt).getTime() : NaN;
+  return Number.isFinite(expires) && expires <= now;
+}
+
 export function formatDealExpiry(expiresAt, now = new Date()) {
   const expires = expiresAt ? new Date(expiresAt) : null;
   if (!expires || Number.isNaN(expires.getTime())) return null;
@@ -101,4 +106,59 @@ export function dealStoreLinks(deal) {
     seen.add(link.url);
     return true;
   });
+}
+
+// Every store a deal can be bought at, once each, for the store filter.
+export function dealStoreNames(deal) {
+  return [...new Set(dealStoreLinks(deal).map((link) => link.name).filter(Boolean))];
+}
+
+// Providers put everything in one free-text note. This pulls out the ship-to
+// address and delivery rule so they don't have to be read on every row. The
+// expected format is "Deliver To: X" plus a "Dropship To:" line with the address
+// on the lines below it; anything else stays in the note, untouched.
+export function parseDealNotes(notes) {
+  const lines = String(notes || '').split('\n').map((line) => line.trim());
+  const kept = [];
+  const addressLines = [];
+  let deliverTo = null;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const delivery = line.match(/^deliver to:\s*(.+)$/i);
+    const dropship = line.match(/dropship to:\s*(.*)$/i);
+
+    if (delivery) {
+      deliverTo = delivery[1];
+    } else if (dropship) {
+      if (dropship[1]) addressLines.push(dropship[1]);
+      while (lines[i + 1]) {
+        i += 1;
+        addressLines.push(lines[i]);
+      }
+    } else if (line) {
+      kept.push(line);
+    }
+  }
+
+  return { note: kept.join(' '), address: addressLines.join('\n') || null, deliverTo };
+}
+
+const CONDITION_LABELS = { DMG_BOX: 'Damaged Box' };
+
+// Only worth pointing out when it isn't new.
+export function dealConditionLabels(deal) {
+  const conditions = (deal.items || []).map((item) => item.condition).filter(Boolean);
+  return [...new Set(conditions)]
+    .filter((condition) => condition.toLowerCase() !== 'new')
+    .map((condition) => CONDITION_LABELS[condition] || condition.replace(/_/g, ' '));
+}
+
+// Items in one deal can have different limits, so this can be a range.
+export function dealLimitLabel(deal) {
+  const limits = (deal.items || []).map((item) => item.vendorLimit).filter((limit) => limit > 0);
+  if (limits.length === 0) return null;
+  const low = Math.min(...limits);
+  const high = Math.max(...limits);
+  return low === high ? `Limit ${low}` : `Limit ${low}–${high}`;
 }

@@ -7,6 +7,11 @@ const { getAdapter, listAvailableCashouts, isProviderAllowedForUser } = require(
 // Key: connectionId -> { deals: CashoutDeal[], fetchedAt: number, error: string | null }
 const dealsCache = new Map();
 
+// After a failed provider request, no new attempt until this time (epoch ms), so
+// repeated clicks and page refreshes can't hammer a provider that is down or
+// rate limiting us. Key: connectionId
+const syncBlockedUntil = new Map();
+
 // 60-second TTL for cache and manual sync cooldown
 const CACHE_TTL_MS = 60 * 1000;
 const MANUAL_SYNC_COOLDOWN_MS = 60 * 1000;
@@ -115,6 +120,7 @@ async function updateConnection(userId, connectionId, { displayName, apiKey, pla
     updateData.last_error = null;
     updateData.last_synced_at = new Date();
     dealsCache.delete(connectionId);
+    syncBlockedUntil.delete(connectionId);
   }
 
   const updated = await prisma.cashoutConnection.update({
@@ -159,6 +165,7 @@ async function testConnection(userId, connectionId) {
 async function deleteConnection(userId, connectionId) {
   await getConnection(userId, connectionId);
   dealsCache.delete(connectionId);
+  syncBlockedUntil.delete(connectionId);
   await prisma.cashoutConnection.delete({
     where: { id: connectionId },
   });
@@ -236,10 +243,22 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
     };
   }
 
+  // Backing off after a failure: show what we have rather than asking again.
+  if (!forceRefresh && cached && now < (syncBlockedUntil.get(connectionId) || 0)) {
+    return {
+      connection: safeConnection(conn),
+      deals: cached.deals,
+      lastUpdated: new Date(cached.fetchedAt).toISOString(),
+      isStale: true,
+      warning: `Refresh is paused after a failed attempt${conn.last_error ? `: ${conn.last_error.replace(/\.$/, '')}` : ''}. Showing last known data.`,
+    };
+  }
+
   try {
     const rawKey = decryptKey(conn.encrypted_key);
     const deals = await adapter.fetchDeals(rawKey);
 
+    syncBlockedUntil.delete(connectionId);
     dealsCache.set(connectionId, {
       deals,
       fetchedAt: now,
@@ -265,16 +284,18 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
       isStale: false,
     };
   } catch (err) {
-    // If the key was rejected (401/403), mark connection as needing attention
-    if (err.keyRejected) {
-      await prisma.cashoutConnection.update({
-        where: { id: connectionId },
-        data: {
-          status: 'attention_needed',
-          last_error: err.message,
-        },
-      });
-    }
+    const waitMs = Math.max(MANUAL_SYNC_COOLDOWN_MS, (err.retryAfter || 0) * 1000);
+    syncBlockedUntil.set(connectionId, Date.now() + waitMs);
+
+    // Always keep the reason so Manage Connections can show it. Only a rejected
+    // key (401/403) needs attention: an outage or rate limit clears up on its own,
+    // and background sync skips connections that need attention.
+    await prisma.cashoutConnection.update({
+      where: { id: connectionId },
+      data: err.keyRejected
+        ? { status: 'attention_needed', last_error: err.message }
+        : { last_error: err.message },
+    });
 
     // If we have cached deals, return them as stale with a warning
     if (cached && cached.deals) {
@@ -283,7 +304,7 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
         deals: cached.deals,
         lastUpdated: new Date(cached.fetchedAt).toISOString(),
         isStale: true,
-        warning: `Failed to refresh: ${err.message}. Showing last known data.`,
+        warning: `Failed to refresh: ${err.message.replace(/\.$/, '')}. Showing last known data.`,
       };
     }
 
@@ -297,20 +318,29 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
 async function syncUserConnection(userId, connectionId) {
   const conn = await getConnection(userId, connectionId);
 
-  // Check 60-second cooldown
-  if (conn.last_synced_at) {
-    const elapsed = Date.now() - new Date(conn.last_synced_at).getTime();
-    if (elapsed < MANUAL_SYNC_COOLDOWN_MS) {
-      const remainingSeconds = Math.ceil((MANUAL_SYNC_COOLDOWN_MS - elapsed) / 1000);
-      const error = new Error(`Sync cooldown active. Please wait ${remainingSeconds}s before syncing again.`);
-      error.status = 429;
-      error.cooldown = true;
-      error.remainingSeconds = remainingSeconds;
-      throw error;
-    }
+  // 60-second cooldown after a successful sync, or longer after a failed one
+  const lastSyncedAt = conn.last_synced_at ? new Date(conn.last_synced_at).getTime() : 0;
+  const readyAt = Math.max(lastSyncedAt + MANUAL_SYNC_COOLDOWN_MS, syncBlockedUntil.get(connectionId) || 0);
+  const remainingMs = readyAt - Date.now();
+  if (remainingMs > 0) {
+    const remainingSeconds = Math.ceil(remainingMs / 1000);
+    const error = new Error(`Sync cooldown active. Please wait ${remainingSeconds}s before syncing again.`);
+    error.status = 429;
+    error.cooldown = true;
+    error.remainingSeconds = remainingSeconds;
+    throw error;
   }
 
-  return fetchConnectionDeals(userId, connectionId, { forceRefresh: true });
+  const result = await fetchConnectionDeals(userId, connectionId, { forceRefresh: true });
+
+  // Old data came back because the refresh failed. That is not a successful sync.
+  if (result.isStale) {
+    const error = new Error(result.warning);
+    error.status = 502;
+    throw error;
+  }
+
+  return result;
 }
 
 /**
@@ -358,4 +388,5 @@ module.exports = {
   syncUserConnection,
   getDealHistory,
   dealsCache,
+  syncBlockedUntil,
 };

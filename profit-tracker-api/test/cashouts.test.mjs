@@ -8,7 +8,7 @@ const harness = require('../../qa/harness.cjs');
 const { encryptKey, decryptKey, maskKey } = require('../services/cashouts/crypto');
 const { getAdapter, listAvailableCashouts } = require('../services/cashouts/registry');
 const ebAdapter = require('../services/cashouts/eb');
-const { dealsCache } = require('../services/cashouts/service');
+const { dealsCache, syncBlockedUntil } = require('../services/cashouts/service');
 const { verifySyncSecret, runScheduledSync } = require('../services/cashouts/syncScheduler');
 
 let server;
@@ -35,6 +35,7 @@ beforeAll(async () => {
 beforeEach(() => {
   harness.reset();
   dealsCache.clear();
+  syncBlockedUntil.clear();
   vi.restoreAllMocks();
   process.env.CASHOUT_KEY_ENCRYPTION_KEY = TEST_ENCRYPTION_KEY;
   process.env.CASHOUT_SYNC_SECRET = TEST_SYNC_SECRET;
@@ -442,6 +443,99 @@ describe('Cache, Snapshots & History', () => {
     expect(res.body.cooldown).toBe(true);
     expect(res.body.remainingSeconds).toBeGreaterThan(0);
     expect(res.body.remainingSeconds).toBeLessThanOrEqual(50);
+  });
+
+  describe('when the provider is failing', () => {
+    const outage = () => { throw new Error('ElectronicsBuyer returned HTTP 503.'); };
+    const expireCache = () => {
+      dealsCache.get(userConn.id).fetchedAt = Date.now() - 120000;
+      userConn.last_synced_at = new Date(Date.now() - 120000);
+    };
+
+    beforeEach(async () => {
+      userConn.last_synced_at = null;
+      vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([{ id: '1', provider: 'eb', name: 'Thing', payout: 10, retail: null, items: [] }]);
+      await request('GET', '/api/cashouts/deals');
+      expireCache();
+    });
+
+    it('reports Sync now as failed, not successful', async () => {
+      vi.spyOn(ebAdapter, 'fetchDeals').mockImplementation(outage);
+      const res = await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+      expect(res.status).toBe(502);
+      expect(res.body.error).toBe('Failed to refresh: ElectronicsBuyer returned HTTP 503. Showing last known data.');
+    });
+
+    it('saves the reason but keeps a temporary failure Active', async () => {
+      vi.spyOn(ebAdapter, 'fetchDeals').mockImplementation(outage);
+      await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+      const saved = harness.db.cashoutConnection.find(c => c.id === userConn.id);
+      expect(saved.last_error).toContain('HTTP 503');
+      expect(saved.status).toBe('active');
+    });
+
+    it('clears the saved reason once a refresh works again', async () => {
+      vi.spyOn(ebAdapter, 'fetchDeals').mockImplementation(outage);
+      await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+
+      vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([]);
+      syncBlockedUntil.clear();
+      const res = await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+
+      expect(res.status).toBe(200);
+      expect(harness.db.cashoutConnection.find(c => c.id === userConn.id).last_error).toBeNull();
+    });
+
+    it('applies the cooldown to failed attempts too', async () => {
+      const fetchDeals = vi.spyOn(ebAdapter, 'fetchDeals').mockImplementation(outage);
+      await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+      const second = await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+      expect(second.status).toBe(429);
+      expect(fetchDeals).toHaveBeenCalledTimes(1);
+    });
+
+    it('waits as long as the provider asks when rate limited', async () => {
+      vi.spyOn(ebAdapter, 'fetchDeals').mockImplementation(() => {
+        const err = new Error('ElectronicsBuyer rate limit exceeded. Retry after 300s.');
+        err.rateLimited = true;
+        err.retryAfter = 300;
+        throw err;
+      });
+      await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+      const second = await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+      expect(second.status).toBe(429);
+      expect(second.body.remainingSeconds).toBeGreaterThan(290);
+    });
+
+    it('shows last known deals on page refresh without asking the provider again', async () => {
+      const fetchDeals = vi.spyOn(ebAdapter, 'fetchDeals').mockImplementation(outage);
+      await request('GET', '/api/cashouts/deals');
+      expect(fetchDeals).toHaveBeenCalledTimes(1);
+
+      const res = await request('GET', '/api/cashouts/deals');
+      expect(fetchDeals).toHaveBeenCalledTimes(1);
+      expect(res.body.results[0].isStale).toBe(true);
+      expect(res.body.results[0].deals).toHaveLength(1);
+      expect(res.body.results[0].warning).toContain('HTTP 503');
+    });
+
+    it('counts a failed refresh as failed in the background sync', async () => {
+      vi.spyOn(ebAdapter, 'fetchDeals').mockImplementation(outage);
+      const res = await request('POST', '/internal/cashouts/sync', undefined, {
+        'Authorization': `Bearer ${TEST_SYNC_SECRET}`,
+      });
+      expect(res.body).toMatchObject({ failed: 1, synced: 0 });
+    });
+
+    it('still marks a rejected key as needing attention', async () => {
+      vi.spyOn(ebAdapter, 'fetchDeals').mockImplementation(() => {
+        const err = new Error('ElectronicsBuyer API key is invalid or revoked.');
+        err.keyRejected = true;
+        throw err;
+      });
+      await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+      expect(harness.db.cashoutConnection.find(c => c.id === userConn.id).status).toBe('attention_needed');
+    });
   });
 });
 

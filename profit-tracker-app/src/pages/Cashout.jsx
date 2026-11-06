@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
+  Check,
   Coins,
+  Copy,
   RefreshCw,
   Plus,
   Search,
@@ -10,6 +12,7 @@ import {
   Layers,
   X,
   Package,
+  Star,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -19,7 +22,20 @@ import {
   useCashoutMutations,
 } from '../hooks/useApi';
 import { formatMoney } from '../utils/money';
-import { dealStoreLinks, estimateDealProfit, formatDealExpiry, formatLastSynced, matchesRetailCategory, storeLogoUrl } from '../utils/cashoutDeals';
+import { useMatchMedia } from '../hooks/useMatchMedia';
+import {
+  dealConditionLabels,
+  dealLimitLabel,
+  dealStoreLinks,
+  dealStoreNames,
+  estimateDealProfit,
+  formatDealExpiry,
+  formatLastSynced,
+  isDealExpired,
+  matchesRetailCategory,
+  parseDealNotes,
+  storeLogoUrl,
+} from '../utils/cashoutDeals';
 import LoadError from '../components/UI/LoadError';
 
 export default function Cashout() {
@@ -30,7 +46,10 @@ export default function Cashout() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProvider, setSelectedProvider] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all'); // 'all' | 'above_retail' | 'close_to_retail'
-  const [sortBy, setSortBy] = useState('payout_desc'); // 'payout_desc' | 'profit_desc' | 'updated_desc'
+  const [selectedStore, setSelectedStore] = useState('all');
+  const [showExpired, setShowExpired] = useState(false);
+  const [sortBy, setSortBy] = useState('profit_desc'); // 'profit_desc' | 'payout_desc' | 'ending_soon' | 'updated_desc'
+  const isPhone = useMatchMedia('(max-width: 767px)');
 
   // Cooldown timer state for manual sync
   const [syncCooldownSeconds, setSyncCooldownSeconds] = useState(0);
@@ -45,12 +64,14 @@ export default function Cashout() {
 
   const {
     data: connections = [],
+    isLoading: connectionsLoading,
     error: connectionsError,
     refetch: refetchConnections,
   } = useCashoutConnections();
 
   const {
     data: dealsData,
+    isLoading: dealsLoading,
     error: dealsError,
     refetch: refetchDeals,
     isFetching: dealsFetching,
@@ -93,9 +114,18 @@ export default function Cashout() {
     return aggregated;
   }, [dealsData]);
 
+  const storeOptions = useMemo(
+    () => [...new Set(allDeals.flatMap(dealStoreNames))].sort((a, b) => a.localeCompare(b)),
+    [allDeals],
+  );
+  const expiredCount = useMemo(() => allDeals.filter((deal) => isDealExpired(deal)).length, [allDeals]);
+
   // Filter & Sort
   const filteredDeals = useMemo(() => {
     return allDeals.filter((deal) => {
+      // Expired deals can't be acted on, so they stay out of the way until asked for
+      if (!showExpired && isDealExpired(deal)) return false;
+
       // Provider filter
       if (selectedProvider !== 'all' && deal.connectionProvider !== selectedProvider) {
         return false;
@@ -103,6 +133,9 @@ export default function Cashout() {
 
       // Category filter
       if (!matchesRetailCategory(deal, selectedCategory)) return false;
+
+      // Store filter
+      if (selectedStore !== 'all' && !dealStoreNames(deal).includes(selectedStore)) return false;
 
       // Search term
       if (searchTerm.trim()) {
@@ -121,12 +154,31 @@ export default function Cashout() {
         // Deals with no estimate go last rather than counting as $0.
         return (b.estimatedProfit?.amount ?? -Infinity) - (a.estimatedProfit?.amount ?? -Infinity);
       }
+      if (sortBy === 'ending_soon') {
+        // Deals with no expiration go last.
+        const expiresAt = (deal) => (deal.expiresAt ? new Date(deal.expiresAt).getTime() : Infinity);
+        return expiresAt(a) === expiresAt(b) ? 0 : expiresAt(a) - expiresAt(b);
+      }
       if (sortBy === 'updated_desc') {
         return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
       }
       return 0;
     });
-  }, [allDeals, selectedProvider, selectedCategory, searchTerm, sortBy]);
+  }, [allDeals, selectedProvider, selectedCategory, selectedStore, showExpired, searchTerm, sortBy]);
+
+  if (providersError || connectionsError || dealsError) {
+    return (
+      <LoadError
+        title="Cashout Deals"
+        what="cashout data"
+        onRetry={() => {
+          refetchProviders();
+          refetchConnections();
+          refetchDeals();
+        }}
+      />
+    );
+  }
 
   // Access check: only show to users in beta / with access to at least 1 provider
   if (!providersLoading && providers.length === 0) {
@@ -140,20 +192,6 @@ export default function Cashout() {
           The Cashout integration is currently in private preview. When it opens to your account, you will be able to connect your cashout services here.
         </p>
       </div>
-    );
-  }
-
-  if (providersError || connectionsError || dealsError) {
-    return (
-      <LoadError
-        title="Cashout Deals"
-        what="cashout data"
-        onRetry={() => {
-          refetchProviders();
-          refetchConnections();
-          refetchDeals();
-        }}
-      />
     );
   }
 
@@ -189,11 +227,24 @@ export default function Cashout() {
         toast.success('Cashout deals synced successfully!', { id: toastId });
       }
     } catch (err) {
+      if (err.cooldown) {
+        toast.info(err.message, { id: toastId });
+        return;
+      }
+      setSyncCooldownSeconds(60);
       toast.error(err.message || 'Failed to sync cashout connections', { id: toastId });
+      refetchDeals();
     }
   };
 
   const lastSynced = formatLastSynced(dealsData?.results);
+  const troubledResult = dealsData?.results?.find((r) => r.isStale || r.connection?.status === 'attention_needed');
+  const troubleMessage = troubledResult && (
+    troubledResult.warning
+    || troubledResult.error
+    || troubledResult.connection?.lastError
+    || 'A cashout connection needs attention.'
+  );
 
   return (
     <div className="h-full overflow-y-auto px-4 py-6 sm:px-6 space-y-6">
@@ -247,13 +298,11 @@ export default function Cashout() {
       </div>
 
       {/* Connection Stale / Attention Needed Warning Banner */}
-      {dealsData?.results?.some((r) => r.isStale || r.connection?.status === 'attention_needed') && (
+      {troubledResult && (
         <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 text-xs flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <AlertTriangle size={16} className="text-amber-400 flex-shrink-0" />
-            <span>
-              One or more cashout connections require attention or returned cached data. Check your connections for details.
-            </span>
+            <span>{troubleMessage}</span>
           </div>
           <button
             onClick={() => setShowConnectionsModal(true)}
@@ -269,12 +318,24 @@ export default function Cashout() {
         <Layers size={15} className="text-[var(--dp-accent)]" />
         <span>Live Deals</span>
         <span className="text-xs px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)]">
-          {allDeals.length}
+          {allDeals.length - expiredCount}
         </span>
+        {expiredCount > 0 && (
+          <label className="ml-auto flex items-center gap-1.5 text-xs font-normal text-[var(--dp-text-secondary)] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showExpired}
+              onChange={(e) => setShowExpired(e.target.checked)}
+            />
+            <span>Show expired ({expiredCount})</span>
+          </label>
+        )}
       </div>
 
       {/* Empty State when no connections added yet */}
-      {connections.length === 0 ? (
+      {connectionsLoading ? (
+        <div className="p-8 text-center text-xs text-[var(--dp-text-secondary)]">Loading cashout deals…</div>
+      ) : connections.length === 0 ? (
         <div className="rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] p-12 text-center max-w-md mx-auto my-8">
           <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-[var(--dp-accent-bg)] flex items-center justify-center text-[var(--dp-accent)]">
             <Coins size={28} />
@@ -342,23 +403,48 @@ export default function Cashout() {
                 <option value="close_to_retail">Close to Retail</option>
               </select>
 
+              {/* Store Filter */}
+              <select
+                aria-label="Filter by store"
+                value={selectedStore}
+                onChange={(e) => setSelectedStore(e.target.value)}
+                className="px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] focus:outline-none"
+              >
+                <option value="all">All Stores</option>
+                {storeOptions.map((store) => (
+                  <option key={store} value={store}>{store}</option>
+                ))}
+              </select>
+
               {/* Sort Dropdown */}
               <select
+                aria-label="Sort deals"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
                 className="px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] focus:outline-none"
               >
-                <option value="payout_desc">Highest Payout</option>
                 <option value="profit_desc">Highest Profit</option>
+                <option value="payout_desc">Highest Payout</option>
+                <option value="ending_soon">Ending Soon</option>
                 <option value="updated_desc">Recently Added</option>
               </select>
             </div>
           </div>
 
           {/* Deals Table / Cards */}
-          {filteredDeals.length === 0 ? (
+          {dealsLoading ? (
             <div className="p-8 text-center rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-xs text-[var(--dp-text-secondary)]">
-              No cashout deals matched your search and filters.
+              Loading cashout deals…
+            </div>
+          ) : filteredDeals.length === 0 ? (
+            <div className="p-8 text-center rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-xs text-[var(--dp-text-secondary)]">
+              {allDeals.length === 0 ? 'No live deals right now.' : 'No cashout deals matched your search and filters.'}
+            </div>
+          ) : isPhone ? (
+            <div className="space-y-3">
+              {filteredDeals.map((deal) => (
+                <DealCard key={`${deal.connectionId}-${deal.id}`} deal={deal} />
+              ))}
             </div>
           ) : (
             <div className="rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] overflow-hidden shadow-sm">
@@ -389,37 +475,10 @@ export default function Cashout() {
                         >
                           {/* Deal Info */}
                           <td className="py-3 px-4 max-w-xs">
-                            <div className="flex items-start gap-3">
-                              {deal.imageUrl ? (
-                                <img
-                                  src={deal.imageUrl}
-                                  alt={deal.name}
-                                  className="w-10 h-10 rounded-lg object-contain bg-white/5 border border-[color:var(--dp-border)] flex-shrink-0"
-                                />
-                              ) : (
-                                <div className="w-10 h-10 rounded-lg bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] flex items-center justify-center text-[var(--dp-text-label)] flex-shrink-0">
-                                  <Package size={16} />
-                                </div>
-                              )}
-                              <div className="min-w-0">
-                                <div className="font-semibold text-[var(--dp-text-primary)] truncate">
-                                  {deal.name}
-                                </div>
-                                {deal.items?.[0]?.upcs?.length > 0 && (
-                                  <div className="text-[10px] text-[var(--dp-text-label)] font-mono truncate">
-                                    UPC: {deal.items[0].upcs[0]}
-                                  </div>
-                                )}
-                                {deal.notes && (
-                                  <div className="text-[10px] text-[var(--dp-text-secondary)] line-clamp-1 mt-0.5" title={deal.notes}>
-                                    {deal.notes}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
+                            <DealSummary deal={deal} />
                           </td>
 
-                          {/* Service */}
+                          {/* Cashout */}
                           <td className="py-3 px-3">
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[var(--dp-hover-bg)] text-[var(--dp-text-primary)] border border-[color:var(--dp-border)]">
                               {deal.connectionName}
@@ -440,26 +499,7 @@ export default function Cashout() {
 
                           {/* Est. Profit */}
                           <td className="py-3 px-3 text-right">
-                            {deal.estimatedProfit ? (
-                              <div>
-                                <div
-                                  className={`font-bold ${
-                                    deal.estimatedProfit.amount > 0
-                                      ? 'text-emerald-400'
-                                      : deal.estimatedProfit.amount < 0
-                                      ? 'text-rose-400'
-                                      : 'text-[var(--dp-text-primary)]'
-                                  }`}
-                                >
-                                  {deal.estimatedProfit.amount < 0 ? '-' : '+'}${formatMoney(Math.abs(deal.estimatedProfit.amount))}
-                                </div>
-                                <div className="text-[10px] text-[var(--dp-text-label)]">
-                                  {deal.estimatedProfit.pct > 0 ? '+' : ''}{deal.estimatedProfit.pct}%
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-[var(--dp-text-label)]">—</span>
-                            )}
+                            <EstProfit profit={deal.estimatedProfit} />
                           </td>
 
                           {/* Expires */}
@@ -469,11 +509,7 @@ export default function Cashout() {
 
                           {/* Buy At */}
                           <td className="py-3 px-3">
-                            <div className="flex flex-wrap items-center gap-1.5 min-w-[60px]">
-                              {dealStoreLinks(deal).map((link) => (
-                                <StoreLink key={link.url} link={link} />
-                              ))}
-                            </div>
+                            <StoreLinks deal={deal} />
                           </td>
                         </tr>
                       );
@@ -623,6 +659,159 @@ export default function Cashout() {
       )}
 
     </div>
+  );
+}
+
+// Name, image, UPC, note and tags: the same on the table and the phone cards.
+function DealSummary({ deal }) {
+  const { note, address, deliverTo } = parseDealNotes(deal.notes);
+  const limit = dealLimitLabel(deal);
+  const conditions = dealConditionLabels(deal);
+  const upc = deal.items?.[0]?.upcs?.[0];
+
+  return (
+    <div className="flex items-start gap-3">
+      {deal.imageUrl ? (
+        <img
+          src={deal.imageUrl}
+          alt={deal.name}
+          className="w-10 h-10 rounded-lg object-contain bg-white/5 border border-[color:var(--dp-border)] flex-shrink-0"
+        />
+      ) : (
+        <div className="w-10 h-10 rounded-lg bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] flex items-center justify-center text-[var(--dp-text-label)] flex-shrink-0">
+          <Package size={16} />
+        </div>
+      )}
+      <div className="min-w-0">
+        <div className="font-semibold text-[var(--dp-text-primary)] truncate" title={deal.name}>
+          {deal.name}
+        </div>
+        {upc && (
+          <div className="text-[10px] text-[var(--dp-text-label)] font-mono truncate">UPC: {upc}</div>
+        )}
+        {note && (
+          <div className="text-[10px] text-[var(--dp-text-secondary)] line-clamp-1 mt-0.5" title={note}>
+            {note}
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-1 mt-1">
+          {deal.featured && (
+            <DealTag className="bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]">
+              <Star size={9} className="fill-current" /> Featured
+            </DealTag>
+          )}
+          {conditions.map((condition) => (
+            <DealTag key={condition} className="bg-rose-500/15 text-rose-400">{condition}</DealTag>
+          ))}
+          {deliverTo && <DealTag className="bg-amber-500/15 text-amber-400">{deliverTo}</DealTag>}
+          {limit && (
+            <DealTag
+              className="bg-[var(--dp-hover-bg)] text-[var(--dp-text-secondary)]"
+              title="The vendor limit ElectronicsBuyer sends for this deal."
+            >
+              {limit}
+            </DealTag>
+          )}
+          {address && <CopyAddressButton address={address} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DealTag({ className, title, children }) {
+  return (
+    <span title={title} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${className}`}>
+      {children}
+    </span>
+  );
+}
+
+function CopyAddressButton({ address }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      toast.success('Address copied');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Couldn't copy the address");
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title={address}
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
+    >
+      {copied ? <Check size={10} /> : <Copy size={10} />}
+      {copied ? 'Copied' : 'Copy Address'}
+    </button>
+  );
+}
+
+function EstProfit({ profit }) {
+  if (!profit) return <span className="text-[var(--dp-text-label)]">—</span>;
+
+  return (
+    <div>
+      <div
+        className={`font-bold ${
+          profit.amount > 0
+            ? 'text-emerald-400'
+            : profit.amount < 0
+            ? 'text-rose-400'
+            : 'text-[var(--dp-text-primary)]'
+        }`}
+      >
+        {profit.amount < 0 ? '-' : '+'}${formatMoney(Math.abs(profit.amount))}
+      </div>
+      <div className="text-[10px] text-[var(--dp-text-label)]">
+        {profit.pct > 0 ? '+' : ''}{profit.pct}%
+      </div>
+    </div>
+  );
+}
+
+function StoreLinks({ deal }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 min-w-[60px]">
+      {dealStoreLinks(deal).map((link) => (
+        <StoreLink key={link.url} link={link} />
+      ))}
+    </div>
+  );
+}
+
+function DealCard({ deal }) {
+  return (
+    <article className="p-3.5 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-xs space-y-3">
+      <DealSummary deal={deal} />
+
+      <dl className="grid grid-cols-3 gap-2">
+        <div>
+          <dt className="text-[10px] text-[var(--dp-text-label)] uppercase tracking-wider">Payout</dt>
+          <dd className="mt-0.5 font-semibold text-[var(--dp-text-primary)]">${formatMoney(deal.payout)}</dd>
+        </div>
+        <div>
+          <dt className="text-[10px] text-[var(--dp-text-label)] uppercase tracking-wider">Retail</dt>
+          <dd className="mt-0.5 text-[var(--dp-text-secondary)]">{deal.retail > 0 ? `$${formatMoney(deal.retail)}` : '—'}</dd>
+        </div>
+        <div>
+          <dt className="text-[10px] text-[var(--dp-text-label)] uppercase tracking-wider">Est. Profit</dt>
+          <dd className="mt-0.5"><EstProfit profit={deal.estimatedProfit} /></dd>
+        </div>
+      </dl>
+
+      <div className="flex items-center justify-between gap-3 pt-2 border-t border-[color:var(--dp-border)]">
+        <DealExpiry expiresAt={deal.expiresAt} />
+        <StoreLinks deal={deal} />
+      </div>
+    </article>
   );
 }
 

@@ -119,8 +119,10 @@ async function runScheduledSync() {
       }
 
       try {
-        await fetchConnectionDeals(conn.user_id, conn.id, { forceRefresh: true });
-        summary.synced++;
+        const result = await fetchConnectionDeals(conn.user_id, conn.id, { forceRefresh: true });
+        // A failed refresh hands back old deals instead of throwing.
+        if (result.isStale) summary.failed++;
+        else summary.synced++;
       } catch (err) {
         summary.failed++;
         // Single connection failure must not abort the rest of the connections
