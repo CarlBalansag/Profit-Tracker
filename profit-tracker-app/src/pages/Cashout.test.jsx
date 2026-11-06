@@ -64,6 +64,7 @@ const mockMutations = {
 let currentProviders = mockProviders;
 let currentConnections = mockConnections;
 let currentDeals = mockDeals;
+const gainRowButton = () => within(screen.getByText('Gain Deal').closest('tr')).getByRole('button', { name: 'Log Deal' });
 let dealsState = {};
 let connectionsState = {};
 let providersState = {};
@@ -193,8 +194,9 @@ describe('Cashout Page', () => {
     );
 
     expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(
-      ['Deal / Item', 'Cashout', 'Payout', 'Retail', 'Est. Profit', 'Expires', 'Buy At'],
+      ['Deal / Item', 'Cashout', 'Payout', 'Retail', 'Est. Profit', 'Expires', 'Buy At', 'Actions'],
     );
+    expect(gainRowButton()).toBeDisabled();
     const gainRow = screen.getByText('Gain Deal').closest('tr');
     expect(gainRow.cells[2]).toHaveTextContent('$1,140.00');
     expect(gainRow.cells[3]).toHaveTextContent('$899.99');

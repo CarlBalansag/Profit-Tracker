@@ -464,6 +464,7 @@ export default function Cashout() {
                       </th>
                       <th className="py-3 px-3">Expires</th>
                       <th className="py-3 px-3">Buy At</th>
+                      <th className="py-3 px-3"><span className="sr-only">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[color:var(--dp-border)]">
@@ -510,6 +511,11 @@ export default function Cashout() {
                           {/* Buy At */}
                           <td className="py-3 px-3">
                             <StoreLinks deal={deal} />
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-3 px-3 text-right">
+                            <LogDealButton />
                           </td>
                         </tr>
                       );
@@ -787,6 +793,21 @@ function StoreLinks({ deal }) {
   );
 }
 
+// Placeholder: it will open a short form that records the purchase and its sale
+// to the cashout. It saves nothing until that's built.
+function LogDealButton({ fullWidth = false }) {
+  return (
+    <button
+      type="button"
+      disabled
+      title="Coming soon"
+      className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-lg whitespace-nowrap bg-[var(--dp-accent)] text-white opacity-50 cursor-not-allowed ${fullWidth ? 'w-full' : ''}`}
+    >
+      Log Deal
+    </button>
+  );
+}
+
 function DealCard({ deal }) {
   return (
     <article className="p-3.5 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-xs space-y-3">
@@ -811,6 +832,8 @@ function DealCard({ deal }) {
         <DealExpiry expiresAt={deal.expiresAt} />
         <StoreLinks deal={deal} />
       </div>
+
+      <LogDealButton fullWidth />
     </article>
   );
 }
