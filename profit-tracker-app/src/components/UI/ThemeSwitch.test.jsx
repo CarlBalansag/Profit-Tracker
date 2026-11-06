@@ -58,6 +58,21 @@ describe('ThemeSwitch', () => {
     expect(toggle).toHaveAttribute('aria-checked', 'true');
   });
 
+  // A deliberate product choice: the wave plays even when the device asks for reduced motion.
+  it('still plays the wave when the device asks for reduced motion', async () => {
+    const light = { matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() };
+    const reduced = { ...light, matches: true };
+    window.matchMedia = vi.fn((media) => (media.includes('reduced-motion') ? reduced : light));
+    render(<ThemeSwitch />);
+
+    fireEvent.click(screen.getByRole('switch'), { clientX: 10, clientY: 10 });
+    await act(async () => {});
+
+    expect(document.startViewTransition).toHaveBeenCalledTimes(1);
+    expect(document.documentElement.animate).toHaveBeenCalled();
+    expect(document.documentElement.dataset.theme).toBe('dark');
+  });
+
   it('pauses page color transitions only while the theme swaps', async () => {
     let finish;
     document.startViewTransition = vi.fn((update) => {
