@@ -204,11 +204,6 @@ export default function ThemeSwitch({ inline = false }) {
       writeOverride(next === systemPrefersDark() ? null : next ? 'dark' : 'light');
     };
 
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-      applyThemeChange(nextIsDark);
-      return;
-    }
-
     // 1. Native View Transitions API (Chrome 111+, Edge, Safari 18+)
     if (document.startViewTransition) {
       // Give each visible card its own layer so it can lift as the wave passes it
