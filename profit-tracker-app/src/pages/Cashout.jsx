@@ -31,6 +31,7 @@ import {
   dealStoreNames,
   estimateDealProfit,
   formatDealExpiry,
+  formatDealProfit,
   formatLastSynced,
   isDealExpired,
   matchesRetailCategory,
@@ -42,6 +43,9 @@ import LoadError from '../components/UI/LoadError';
 // API keys are managed only in Data Setup.
 const DATA_SETUP_STATE = { tab: 'datasetup', view: 'Cashouts' };
 
+// Below this the table no longer fits beside the sidebar.
+const DEAL_CARDS_QUERY = '(max-width: 1279px)';
+
 export default function Cashout() {
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
 
@@ -52,7 +56,7 @@ export default function Cashout() {
   const [selectedStore, setSelectedStore] = useState('all');
   const [showExpired, setShowExpired] = useState(false);
   const [sortBy, setSortBy] = useState('profit_desc'); // 'profit_desc' | 'payout_desc' | 'ending_soon' | 'updated_desc'
-  const isPhone = useMatchMedia('(max-width: 767px)');
+  const showCards = useMatchMedia(DEAL_CARDS_QUERY);
 
   // Cooldown timer state for manual sync
   const [syncCooldownSeconds, setSyncCooldownSeconds] = useState(0);
@@ -277,7 +281,7 @@ export default function Cashout() {
               <span>{syncCooldownSeconds > 0 ? `Sync (${syncCooldownSeconds}s)` : 'Sync now'}</span>
             </button>
             {lastSynced && (
-              <span className="text-[10px] text-[var(--dp-text-label)] whitespace-nowrap">
+              <span className="text-[11px] text-[var(--dp-text-label)] whitespace-nowrap">
                 Last synced {lastSynced}
               </span>
             )}
@@ -286,12 +290,12 @@ export default function Cashout() {
           <button
             type="button"
             onClick={() => setShowConnectionsModal(true)}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90 transition-opacity shadow-sm"
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
           >
             <KeyRound size={14} />
             <span>Manage Connections</span>
             {connections.length > 0 && (
-              <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-black/25 text-[10px]">
+              <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)] text-[11px]">
                 {connections.length}
               </span>
             )}
@@ -442,8 +446,8 @@ export default function Cashout() {
             <div className="p-8 text-center rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-xs text-[var(--dp-text-secondary)]">
               {allDeals.length === 0 ? 'No live deals right now.' : 'No cashout deals matched your search and filters.'}
             </div>
-          ) : isPhone ? (
-            <div className="space-y-3">
+          ) : showCards ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {filteredDeals.map((deal) => (
                 <DealCard key={`${deal.connectionId}-${deal.id}`} deal={deal} />
               ))}
@@ -453,16 +457,17 @@ export default function Cashout() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr className="border-b border-[color:var(--dp-border)] text-[var(--dp-text-label)] uppercase font-semibold text-[10px] tracking-wider">
+                    <tr className="border-b border-[color:var(--dp-border)] text-[var(--dp-text-label)] uppercase font-semibold text-[11px] tracking-wider">
                       <th className="py-3 px-4">Deal / Item</th>
                       <th className="py-3 px-3">Cashout</th>
                       <th className="py-3 px-3 text-right">Payout</th>
                       <th className="py-3 px-3 text-right">Retail</th>
                       <th
-                        className="py-3 px-3 text-right"
+                        className="py-3 px-3 text-right whitespace-nowrap"
                         title="Payout minus retail. Doesn't include sales tax, cashback or coupons."
                       >
                         Est. Profit
+                        <span className="block font-normal normal-case tracking-normal">before tax</span>
                       </th>
                       <th className="py-3 px-3">Expires</th>
                       <th className="py-3 px-3">Buy At</th>
@@ -477,26 +482,24 @@ export default function Cashout() {
                           className="hover:bg-[var(--dp-hover-bg)] transition-colors"
                         >
                           {/* Deal Info */}
-                          <td className="py-3 px-4 max-w-xs">
+                          <td className="py-3 px-4 max-w-[18rem]">
                             <DealSummary deal={deal} />
                           </td>
 
                           {/* Cashout */}
                           <td className="py-3 px-3">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[var(--dp-hover-bg)] text-[var(--dp-text-primary)] border border-[color:var(--dp-border)]">
-                              {deal.connectionName}
-                            </span>
+                            <CashoutName name={deal.connectionName} />
                           </td>
 
                           {/* Payout */}
                           <td className="py-3 px-3 text-right">
-                            <div className="font-semibold text-[var(--dp-text-primary)]">
+                            <div className="font-semibold tabular-nums text-[var(--dp-text-primary)]">
                               ${formatMoney(deal.payout)}
                             </div>
                           </td>
 
                           {/* Retail */}
-                          <td className="py-3 px-3 text-right text-[var(--dp-text-secondary)]">
+                          <td className="py-3 px-3 text-right tabular-nums text-[var(--dp-text-secondary)]">
                             {deal.retail > 0 ? `$${formatMoney(deal.retail)}` : '—'}
                           </td>
 
@@ -566,11 +569,11 @@ export default function Cashout() {
                           {conn.displayName || conn.providerName || conn.provider}
                         </span>
                         {conn.status === 'active' ? (
-                          <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-500/15 text-emerald-400">
+                          <span className="px-1.5 py-0.2 rounded text-[11px] font-semibold bg-emerald-500/15 text-emerald-400">
                             Active
                           </span>
                         ) : (
-                          <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-400">
+                          <span className="px-1.5 py-0.2 rounded text-[11px] font-semibold bg-amber-500/15 text-amber-400">
                             Attention Needed
                           </span>
                         )}
@@ -580,7 +583,7 @@ export default function Cashout() {
                         {conn.lastSyncedAt ? new Date(conn.lastSyncedAt).toLocaleTimeString() : 'Never'}
                       </div>
                       {conn.lastError && (
-                        <div className="text-[10px] text-rose-400 mt-1 max-w-xs truncate" title={conn.lastError}>
+                        <div className="text-[11px] text-rose-400 mt-1 max-w-xs truncate" title={conn.lastError}>
                           Error: {conn.lastError}
                         </div>
                       )}
@@ -660,10 +663,10 @@ function DealSummary({ deal }) {
           {deal.name}
         </div>
         {upc && (
-          <div className="text-[10px] text-[var(--dp-text-label)] font-mono truncate">UPC: {upc}</div>
+          <div className="text-[11px] text-[var(--dp-text-label)] font-mono truncate">UPC: {upc}</div>
         )}
         {note && (
-          <div className="text-[10px] text-[var(--dp-text-secondary)] line-clamp-1 mt-0.5" title={note}>
+          <div className="text-[11px] text-[var(--dp-text-secondary)] line-clamp-1 mt-0.5" title={note}>
             {note}
           </div>
         )}
@@ -694,7 +697,7 @@ function DealSummary({ deal }) {
 
 function DealTag({ className, title, children }) {
   return (
-    <span title={title} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${className}`}>
+    <span title={title} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium whitespace-nowrap ${className}`}>
       {children}
     </span>
   );
@@ -719,7 +722,7 @@ function CopyAddressButton({ address }) {
       type="button"
       onClick={copy}
       title={address}
-      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
     >
       {copied ? <Check size={10} /> : <Copy size={10} />}
       {copied ? 'Copied' : 'Copy Address'}
@@ -727,34 +730,37 @@ function CopyAddressButton({ address }) {
   );
 }
 
+const PROFIT_TONES = {
+  gain: 'text-emerald-400',
+  loss: 'text-rose-400',
+  neutral: 'text-[var(--dp-text-primary)]',
+};
+
 function EstProfit({ profit }) {
   if (!profit) return <span className="text-[var(--dp-text-label)]">—</span>;
 
+  const { amount, pct, tone } = formatDealProfit(profit);
   return (
-    <div>
-      <div
-        className={`font-bold ${
-          profit.amount > 0
-            ? 'text-emerald-400'
-            : profit.amount < 0
-            ? 'text-rose-400'
-            : 'text-[var(--dp-text-primary)]'
-        }`}
-      >
-        {profit.amount < 0 ? '-' : '+'}${formatMoney(Math.abs(profit.amount))}
-      </div>
-      <div className="text-[10px] text-[var(--dp-text-label)]">
-        {profit.pct > 0 ? '+' : ''}{profit.pct}%
-      </div>
+    <div className="tabular-nums">
+      <div className={`text-sm font-bold ${PROFIT_TONES[tone]}`}>{amount}</div>
+      <div className="text-[11px] text-[var(--dp-text-label)]">{pct}</div>
     </div>
   );
 }
 
-function StoreLinks({ deal }) {
+function CashoutName({ name }) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5 min-w-[60px]">
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-[var(--dp-hover-bg)] text-[var(--dp-text-primary)] border border-[color:var(--dp-border)]">
+      {name}
+    </span>
+  );
+}
+
+function StoreLinks({ deal, large = false }) {
+  return (
+    <div className={`flex flex-wrap items-center gap-2 ${large ? '' : 'min-w-[120px]'}`}>
       {dealStoreLinks(deal).map((link) => (
-        <StoreLink key={link.url} link={link} />
+        <StoreLink key={link.url} link={link} large={large} />
       ))}
     </div>
   );
@@ -762,13 +768,13 @@ function StoreLinks({ deal }) {
 
 // Placeholder: it will open a short form that records the purchase and its sale
 // to the cashout. It saves nothing until that's built.
-function LogPurchaseButton({ fullWidth = false }) {
+function LogPurchaseButton() {
   return (
     <button
       type="button"
       disabled
       title="Coming soon"
-      className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-lg whitespace-nowrap bg-[var(--dp-accent)] text-white opacity-50 cursor-not-allowed ${fullWidth ? 'w-full' : ''}`}
+      className="px-2.5 py-1.5 text-[11px] font-medium rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-label)] cursor-not-allowed"
     >
       Log Purchase
     </button>
@@ -782,25 +788,34 @@ function DealCard({ deal }) {
 
       <dl className="grid grid-cols-3 gap-2">
         <div>
-          <dt className="text-[10px] text-[var(--dp-text-label)] uppercase tracking-wider">Payout</dt>
-          <dd className="mt-0.5 font-semibold text-[var(--dp-text-primary)]">${formatMoney(deal.payout)}</dd>
+          <dt className="text-[11px] text-[var(--dp-text-label)] uppercase tracking-wider">Payout</dt>
+          <dd className="mt-0.5 font-semibold tabular-nums text-[var(--dp-text-primary)]">${formatMoney(deal.payout)}</dd>
         </div>
         <div>
-          <dt className="text-[10px] text-[var(--dp-text-label)] uppercase tracking-wider">Retail</dt>
-          <dd className="mt-0.5 text-[var(--dp-text-secondary)]">{deal.retail > 0 ? `$${formatMoney(deal.retail)}` : '—'}</dd>
+          <dt className="text-[11px] text-[var(--dp-text-label)] uppercase tracking-wider">Retail</dt>
+          <dd className="mt-0.5 tabular-nums text-[var(--dp-text-secondary)]">{deal.retail > 0 ? `$${formatMoney(deal.retail)}` : '—'}</dd>
         </div>
         <div>
-          <dt className="text-[10px] text-[var(--dp-text-label)] uppercase tracking-wider">Est. Profit</dt>
+          <dt className="text-[11px] text-[var(--dp-text-label)] uppercase tracking-wider">
+            Est. Profit
+            <span className="block normal-case tracking-normal">before tax</span>
+          </dt>
           <dd className="mt-0.5"><EstProfit profit={deal.estimatedProfit} /></dd>
         </div>
       </dl>
 
-      <div className="flex items-center justify-between gap-3 pt-2 border-t border-[color:var(--dp-border)]">
-        <DealExpiry expiresAt={deal.expiresAt} />
-        <StoreLinks deal={deal} />
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[color:var(--dp-border)]">
+        <div className="flex items-center gap-3">
+          <DealExpiry expiresAt={deal.expiresAt} />
+          <CashoutName name={deal.connectionName} />
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <StoreLinks deal={deal} large />
+          <div className="ml-auto">
+            <LogPurchaseButton />
+          </div>
+        </div>
       </div>
-
-      <LogPurchaseButton fullWidth />
     </article>
   );
 }
@@ -813,7 +828,7 @@ function DealExpiry({ expiresAt }) {
     <div>
       <div className="font-semibold text-[var(--dp-text-primary)]">{expiry.date}</div>
       <div
-        className={`text-[10px] ${
+        className={`text-[11px] ${
           expiry.expired
             ? 'text-rose-400'
             : expiry.urgent
@@ -829,7 +844,7 @@ function DealExpiry({ expiresAt }) {
 
 // A round store logo linking straight to the purchase page. Shows the store's
 // first letter when there's no known logo or the image doesn't load.
-function StoreLink({ link }) {
+function StoreLink({ link, large }) {
   const [logoFailed, setLogoFailed] = useState(false);
   const logo = logoFailed ? null : storeLogoUrl(link.name);
 
@@ -840,10 +855,10 @@ function StoreLink({ link }) {
       rel="noopener noreferrer"
       title={link.label}
       aria-label={link.label}
-      className="w-7 h-7 rounded-full bg-white border border-[color:var(--dp-border)] flex items-center justify-center overflow-hidden flex-shrink-0 hover:ring-2 hover:ring-[var(--dp-accent)] transition-shadow"
+      className={`${large ? 'w-10 h-10' : 'w-8 h-8'} rounded-full bg-white border border-[color:var(--dp-border)] flex items-center justify-center overflow-hidden flex-shrink-0 hover:ring-2 hover:ring-[var(--dp-accent)] transition-shadow`}
     >
       {logo ? (
-        <img src={logo} alt="" className="w-4 h-4 object-contain" onError={() => setLogoFailed(true)} />
+        <img src={logo} alt="" className={`${large ? 'w-6 h-6' : 'w-5 h-5'} object-contain`} onError={() => setLogoFailed(true)} />
       ) : (
         <span className="text-[11px] font-bold text-gray-800">{(link.name || '?').charAt(0).toUpperCase()}</span>
       )}

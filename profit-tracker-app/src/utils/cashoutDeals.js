@@ -1,4 +1,5 @@
 import { roundCents } from '../../../shared/finance.mjs';
+import { formatMoney } from './money';
 
 // What a deal earns if the item is bought at retail. Tax, cashback and coupons
 // aren't known here, so this is only an estimate, and without both prices there
@@ -10,6 +11,18 @@ export function estimateDealProfit(deal) {
   return {
     amount: roundCents(payout - retail),
     pct: roundCents(((payout - retail) / retail) * 100),
+  };
+}
+
+// How an estimate reads on screen. A few cents on an expensive item rounds to 0%,
+// so it's shown as about nothing rather than as a gain or a loss.
+export function formatDealProfit(profit) {
+  const sign = profit.amount < 0 ? '-' : profit.amount > 0 ? '+' : '';
+  const roundsToNothing = profit.pct === 0;
+  return {
+    amount: `${sign}$${formatMoney(Math.abs(profit.amount))}`,
+    pct: roundsToNothing ? (profit.amount === 0 ? '0%' : '~0%') : `${profit.pct > 0 ? '+' : ''}${profit.pct}%`,
+    tone: roundsToNothing ? 'neutral' : profit.amount > 0 ? 'gain' : 'loss',
   };
 }
 

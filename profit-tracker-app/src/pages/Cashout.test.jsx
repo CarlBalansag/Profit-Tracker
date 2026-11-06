@@ -10,6 +10,7 @@ import {
   dealStoreLinks,
   estimateDealProfit,
   formatDealExpiry,
+  formatDealProfit,
   formatLastSynced,
   isDealExpired,
   parseDealNotes,
@@ -170,6 +171,14 @@ describe('Cashout Page', () => {
     expect(estimateDealProfit({ payout: 119, retail: 119 })).toEqual({ amount: 0, pct: 0 });
   });
 
+  it('shows no gain or loss for an even deal or one that rounds to nothing', () => {
+    expect(formatDealProfit({ amount: 240.01, pct: 26.67 })).toEqual({ amount: '+$240.01', pct: '+26.67%', tone: 'gain' });
+    expect(formatDealProfit({ amount: -5, pct: -12.5 })).toEqual({ amount: '-$5.00', pct: '-12.5%', tone: 'loss' });
+    expect(formatDealProfit({ amount: 0, pct: 0 })).toEqual({ amount: '$0.00', pct: '0%', tone: 'neutral' });
+    expect(formatDealProfit({ amount: 0.01, pct: 0 })).toEqual({ amount: '+$0.01', pct: '~0%', tone: 'neutral' });
+    expect(formatDealProfit({ amount: -0.01, pct: 0 })).toEqual({ amount: '-$0.01', pct: '~0%', tone: 'neutral' });
+  });
+
   it('gives no estimate without both prices, rather than a made-up number', () => {
     expect(estimateDealProfit({ payout: 100, retail: null })).toBeNull();
     expect(estimateDealProfit({ payout: 100, retail: 0 })).toBeNull();
@@ -195,7 +204,7 @@ describe('Cashout Page', () => {
     );
 
     expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(
-      ['Deal / Item', 'Cashout', 'Payout', 'Retail', 'Est. Profit', 'Expires', 'Buy At', 'Actions'],
+      ['Deal / Item', 'Cashout', 'Payout', 'Retail', 'Est. Profitbefore tax', 'Expires', 'Buy At', 'Actions'],
     );
     expect(gainRowButton()).toBeDisabled();
     const gainRow = screen.getByText('Gain Deal').closest('tr');
@@ -503,7 +512,7 @@ describe('Cashout Page', () => {
     });
   });
 
-  it('shows cards instead of the table on phones', () => {
+  it('shows cards instead of the table on screens too narrow for it', () => {
     window.matchMedia = (query) => ({ matches: query.includes('max-width'), addEventListener: vi.fn(), removeEventListener: vi.fn() });
     currentDeals = {
       results: [{
@@ -529,6 +538,8 @@ describe('Cashout Page', () => {
     expect(card).toHaveTextContent('$1,140.00');
     expect(card).toHaveTextContent('$899.99');
     expect(card).toHaveTextContent('+$240.01');
+    expect(card).toHaveTextContent('before tax');
+    expect(card).toHaveTextContent('EB Primary');
     expect(within(card).getByRole('link', { name: 'Buy at Amazon' })).toBeInTheDocument();
   });
 
