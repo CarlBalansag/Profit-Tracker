@@ -21,7 +21,7 @@ import {
   useCashoutMutations,
 } from '../hooks/useApi';
 import { formatMoney } from '../utils/money';
-import { dealStoreLinks, estimateDealProfit, formatDealExpiry, storeLogoUrl } from '../utils/cashoutDeals';
+import { dealStoreLinks, estimateDealProfit, formatDealExpiry, matchesRetailCategory, storeLogoUrl } from '../utils/cashoutDeals';
 import LoadError from '../components/UI/LoadError';
 
 export default function Cashout() {
@@ -32,6 +32,7 @@ export default function Cashout() {
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProvider, setSelectedProvider] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('all'); // 'all' | 'above_retail' | 'close_to_retail'
   const [sortBy, setSortBy] = useState('payout_desc'); // 'payout_desc' | 'profit_desc' | 'updated_desc'
 
   // Cooldown timer state for manual sync
@@ -109,6 +110,9 @@ export default function Cashout() {
         return false;
       }
 
+      // Category filter
+      if (!matchesRetailCategory(deal, selectedCategory)) return false;
+
       // Search term
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
@@ -131,7 +135,7 @@ export default function Cashout() {
       }
       return 0;
     });
-  }, [allDeals, selectedProvider, searchTerm, sortBy]);
+  }, [allDeals, selectedProvider, selectedCategory, searchTerm, sortBy]);
 
   // Access check: only show to users in beta / with access to at least 1 provider
   if (!providersLoading && providers.length === 0) {
@@ -345,6 +349,18 @@ export default function Cashout() {
                     {c.displayName || c.provider}
                   </option>
                 ))}
+              </select>
+
+              {/* Category Filter */}
+              <select
+                aria-label="Filter by category"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] focus:outline-none"
+              >
+                <option value="all">All Categories</option>
+                <option value="above_retail">Above Retail</option>
+                <option value="close_to_retail">Close to Retail</option>
               </select>
 
               {/* Sort Dropdown */}

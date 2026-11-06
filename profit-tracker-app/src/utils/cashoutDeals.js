@@ -13,6 +13,15 @@ export function estimateDealProfit(deal) {
   };
 }
 
+// Above Retail pays more than retail and Close to Retail pays less. A deal paying
+// exactly retail, or with no retail price, only appears under All Categories.
+export function matchesRetailCategory(deal, category) {
+  if (category === 'all') return true;
+  const profit = estimateDealProfit(deal);
+  if (!profit) return false;
+  return category === 'above_retail' ? profit.amount > 0 : profit.amount < 0;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function formatDealExpiry(expiresAt, now = new Date()) {

@@ -174,6 +174,39 @@ describe('Cashout Page', () => {
     expect(screen.getByText('No Retail Deal').closest('tr')).toHaveTextContent('—');
   });
 
+  it('filters by category: all deals, above retail, or below retail', () => {
+    currentDeals = {
+      results: [{
+        connection: mockConnections[0],
+        deals: [
+          { id: '1', name: 'Above Deal', retail: 1349.99, payout: 1350 },
+          { id: '2', name: 'Below Deal', retail: 40, payout: 35 },
+          { id: '3', name: 'Equal Deal', retail: 119, payout: 119 },
+          { id: '4', name: 'No Retail Deal', retail: null, payout: 50 },
+        ],
+      }],
+    };
+    render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+    const names = () => screen.getAllByRole('row').slice(1).map((row) => row.cells[0].textContent);
+    const category = screen.getByLabelText('Filter by category');
+
+    expect(category).toHaveValue('all');
+    expect(names()).toHaveLength(4);
+
+    fireEvent.change(category, { target: { value: 'above_retail' } });
+    expect(names()).toEqual(['Above Deal']);
+
+    fireEvent.change(category, { target: { value: 'close_to_retail' } });
+    expect(names()).toEqual(['Below Deal']);
+
+    fireEvent.change(category, { target: { value: 'all' } });
+    expect(names()).toHaveLength(4);
+  });
+
   it('counts down to the expiration date and flags expired deals', () => {
     const now = new Date('2026-11-06T17:00:00Z');
     expect(formatDealExpiry('2026-11-20T08:00:00Z', now)).toMatchObject({ note: '14 days left', expired: false, urgent: false });
