@@ -375,6 +375,7 @@ export default function Cashout() {
                       <th className="py-3 px-4">Deal / Item</th>
                       <th className="py-3 px-3">Service</th>
                       <th className="py-3 px-3 text-right">Payout</th>
+                      <th className="py-3 px-3 text-right">Retail</th>
                       <th
                         className="py-3 px-3 text-right"
                         title="Payout minus retail. Doesn't include sales tax, cashback or coupons."
@@ -436,11 +437,11 @@ export default function Cashout() {
                             <div className="font-semibold text-[var(--dp-text-primary)]">
                               ${formatMoney(deal.payout)}
                             </div>
-                            {deal.retail && (
-                              <div className="text-[10px] text-[var(--dp-text-label)]">
-                                Retail ${formatMoney(deal.retail)}
-                              </div>
-                            )}
+                          </td>
+
+                          {/* Retail */}
+                          <td className="py-3 px-3 text-right text-[var(--dp-text-secondary)]">
+                            {deal.retail > 0 ? `$${formatMoney(deal.retail)}` : '—'}
                           </td>
 
                           {/* Est. Profit */}

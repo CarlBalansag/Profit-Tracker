@@ -106,7 +106,7 @@ describe('Cashout Page', () => {
 
     expect(screen.getByText('Cashout Deals')).toBeInTheDocument();
     expect(screen.getByText('Airpod 5 ANC')).toBeInTheDocument();
-    expect(screen.getByText('$119.00')).toBeInTheDocument();
+    expect(screen.getAllByText('$119.00')).toHaveLength(2); // payout and retail
     expect(screen.getByText('Unmatched Unknown Widget')).toBeInTheDocument();
     expect(screen.getByText('$35.00')).toBeInTheDocument();
 
@@ -157,6 +157,14 @@ describe('Cashout Page', () => {
         <Cashout />
       </MemoryRouter>
     );
+
+    expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(
+      ['Deal / Item', 'Service', 'Payout', 'Retail', 'Est. Profit', 'Availability', 'Link'],
+    );
+    const gainRow = screen.getByText('Gain Deal').closest('tr');
+    expect(gainRow.cells[2]).toHaveTextContent('$1,140.00');
+    expect(gainRow.cells[3]).toHaveTextContent('$899.99');
+    expect(screen.getByText('No Retail Deal').closest('tr').cells[3]).toHaveTextContent('—');
 
     expect(screen.getByText('Est. Profit')).toBeInTheDocument();
     expect(screen.getByText('+$240.01')).toBeInTheDocument();
