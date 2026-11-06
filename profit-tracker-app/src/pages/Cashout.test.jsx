@@ -29,20 +29,6 @@ const mockDeals = {
           retail: 119.0,
           payout: 119.0,
           profitMargin: 0.0,
-          financials: {
-            payout: 119.0,
-            unitCost: 90.0,
-            unitCashback: 1.8,
-            estimatedProfit: 30.8,
-            profitMarginPct: 34.22,
-            hasCostData: true,
-          },
-          match: {
-            inventoryId: 'inv-1',
-            productName: 'Airpod 5 ANC',
-            stockStatus: 'in_stock',
-            qtyOnHand: 4,
-          },
         },
         {
           id: '9999',
@@ -50,15 +36,6 @@ const mockDeals = {
           retail: 40.0,
           payout: 35.0,
           profitMargin: -12.5,
-          financials: {
-            payout: 35.0,
-            unitCost: null,
-            unitCashback: null,
-            estimatedProfit: null,
-            profitMarginPct: null,
-            hasCostData: false,
-          },
-          match: null,
         },
       ],
     },
@@ -70,8 +47,6 @@ const mockMutations = {
   deleteConnection: { mutateAsync: vi.fn(), isPending: false },
   testConnection: { mutateAsync: vi.fn(), isPending: false },
   syncConnection: { mutateAsync: vi.fn(), isPending: false },
-  setMatch: { mutateAsync: vi.fn(), isPending: false },
-  removeMatch: { mutateAsync: vi.fn(), isPending: false },
 };
 
 let currentProviders = mockProviders;
@@ -84,8 +59,6 @@ vi.mock('../hooks/useApi', () => ({
   useCashoutDeals: () => ({ data: currentDeals, isLoading: false, error: null, refetch: vi.fn(), isFetching: false }),
   useCashoutHistory: () => ({ data: { snapshots: [] }, isLoading: false, refetch: vi.fn() }),
   useCashoutMutations: () => mockMutations,
-  usePlatforms: () => ({ data: [] }),
-  useInventory: () => ({ data: [] }),
 }));
 
 afterEach(cleanup);
@@ -123,7 +96,7 @@ describe('Cashout Page', () => {
     expect(screen.getByRole('button', { name: /Add Cashout/i })).toBeInTheDocument();
   });
 
-  it('renders live deals table with profit, payout, cost, and stock badge', () => {
+  it('renders the live deals with their payouts and nothing about our own costs', () => {
     render(
       <MemoryRouter>
         <Cashout />
@@ -133,13 +106,24 @@ describe('Cashout Page', () => {
     expect(screen.getByText('Cashout Deals')).toBeInTheDocument();
     expect(screen.getByText('Airpod 5 ANC')).toBeInTheDocument();
     expect(screen.getByText('$119.00')).toBeInTheDocument();
-    expect(screen.getByText('$90.00')).toBeInTheDocument();
-    expect(screen.getByText('+$30.80')).toBeInTheDocument();
-    expect(screen.getByText('In Stock (4)')).toBeInTheDocument();
-
-    // Unmatched item shows "No cost data" and never $0.00
     expect(screen.getByText('Unmatched Unknown Widget')).toBeInTheDocument();
-    expect(screen.getByText('No cost data')).toBeInTheDocument();
+    expect(screen.getByText('$35.00')).toBeInTheDocument();
+
+    for (const removed of [/Your Cost/i, /Cashback/i, /Estimated Profit/i, /Avg Profit/i, /In Stock/i, /No cost data/i, /Match Item/i, /Change Match/i]) {
+      expect(screen.queryByText(removed)).not.toBeInTheDocument();
+    }
+  });
+
+  it('sorts by highest payout by default', () => {
+    render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(rows[0]).toHaveTextContent('Airpod 5 ANC');
+    expect(rows[1]).toHaveTextContent('Unmatched Unknown Widget');
   });
 
   it('opens and closes the Manage Connections modal', () => {

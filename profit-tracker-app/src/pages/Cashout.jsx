@@ -4,22 +4,14 @@ import {
   RefreshCw,
   Plus,
   Search,
-  SlidersHorizontal,
   ExternalLink,
-  CheckCircle2,
   AlertTriangle,
   Clock,
   Trash2,
   KeyRound,
-  TrendingUp,
-  TrendingDown,
   Layers,
-  ArrowUpDown,
   X,
   Package,
-  Sparkles,
-  Link as LinkIcon,
-  HelpCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -28,8 +20,6 @@ import {
   useCashoutDeals,
   useCashoutHistory,
   useCashoutMutations,
-  usePlatforms,
-  useInventory,
 } from '../hooks/useApi';
 import { formatMoney } from '../utils/money';
 import LoadError from '../components/UI/LoadError';
@@ -38,13 +28,11 @@ export default function Cashout() {
   const [activeTab, setActiveTab] = useState('deals'); // 'deals' | 'history'
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [matchingDeal, setMatchingDeal] = useState(null); // deal currently being manually matched
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProvider, setSelectedProvider] = useState('all');
-  const [selectedStockFilter, setSelectedStockFilter] = useState('all'); // 'all' | 'in_stock' | 'past_purchase' | 'no_cost'
-  const [sortBy, setSortBy] = useState('profit_desc'); // 'profit_desc' | 'payout_desc' | 'margin_desc' | 'updated_desc'
+  const [sortBy, setSortBy] = useState('payout_desc'); // 'payout_desc' | 'updated_desc'
 
   // Cooldown timer state for manual sync
   const [syncCooldownSeconds, setSyncCooldownSeconds] = useState(0);
@@ -59,14 +47,12 @@ export default function Cashout() {
 
   const {
     data: connections = [],
-    isLoading: connectionsLoading,
     error: connectionsError,
     refetch: refetchConnections,
   } = useCashoutConnections();
 
   const {
     data: dealsData,
-    isLoading: dealsLoading,
     error: dealsError,
     refetch: refetchDeals,
     isFetching: dealsFetching,
@@ -78,16 +64,10 @@ export default function Cashout() {
     refetch: refetchHistory,
   } = useCashoutHistory();
 
-  const { data: platforms = [] } = usePlatforms();
-  const { data: inventoryList = [] } = useInventory();
-
   const {
-    addConnection,
     deleteConnection,
     testConnection,
     syncConnection,
-    setMatch,
-    removeMatch,
   } = useCashoutMutations();
 
   // Cooldown ticker
@@ -128,67 +108,25 @@ export default function Cashout() {
         return false;
       }
 
-      // Stock filter
-      if (selectedStockFilter === 'in_stock' && deal.match?.stockStatus !== 'in_stock') return false;
-      if (selectedStockFilter === 'past_purchase' && deal.match?.stockStatus !== 'past_purchase') return false;
-      if (selectedStockFilter === 'no_cost' && deal.financials?.hasCostData) return false;
-
       // Search term
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
         const titleMatch = deal.name?.toLowerCase().includes(query);
         const itemMatch = deal.items?.some((i) => i.name?.toLowerCase().includes(query) || i.upcs?.some((u) => u.includes(query)));
-        const invMatch = deal.match?.productName?.toLowerCase().includes(query);
-        if (!titleMatch && !itemMatch && !invMatch) return false;
+        if (!titleMatch && !itemMatch) return false;
       }
 
       return true;
     }).sort((a, b) => {
-      if (sortBy === 'profit_desc') {
-        const pA = a.financials?.estimatedProfit ?? -Infinity;
-        const pB = b.financials?.estimatedProfit ?? -Infinity;
-        return pB - pA;
-      }
       if (sortBy === 'payout_desc') {
-        return (b.financials?.payout || 0) - (a.financials?.payout || 0);
-      }
-      if (sortBy === 'margin_desc') {
-        const mA = a.financials?.profitMarginPct ?? -Infinity;
-        const mB = b.financials?.profitMarginPct ?? -Infinity;
-        return mB - mA;
+        return (b.payout || 0) - (a.payout || 0);
       }
       if (sortBy === 'updated_desc') {
         return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
       }
       return 0;
     });
-  }, [allDeals, selectedProvider, selectedStockFilter, searchTerm, sortBy]);
-
-  // Summary stats
-  const stats = useMemo(() => {
-    let profitableCount = 0;
-    let inStockCount = 0;
-    let totalEstimatedProfit = 0;
-    let profitCount = 0;
-
-    for (const d of filteredDeals) {
-      if (d.financials?.hasCostData && d.financials.estimatedProfit > 0) {
-        profitableCount++;
-        totalEstimatedProfit += d.financials.estimatedProfit;
-        profitCount++;
-      }
-      if (d.match?.stockStatus === 'in_stock') {
-        inStockCount++;
-      }
-    }
-
-    return {
-      totalDeals: filteredDeals.length,
-      profitableCount,
-      inStockCount,
-      avgProfit: profitCount > 0 ? totalEstimatedProfit / profitCount : 0,
-    };
-  }, [filteredDeals]);
+  }, [allDeals, selectedProvider, searchTerm, sortBy]);
 
   // Access check: only show to users in beta / with access to at least 1 provider
   if (!providersLoading && providers.length === 0) {
@@ -268,7 +206,7 @@ export default function Cashout() {
             </span>
           </div>
           <p className="mt-1 text-sm text-[var(--dp-text-secondary)]">
-            Live payouts from connected cashout services matched against your inventory costs.
+            Live payouts from your connected cashout services.
           </p>
         </div>
 
@@ -355,7 +293,7 @@ export default function Cashout() {
           </div>
           <h2 className="text-lg font-bold text-[var(--dp-text-primary)]">No cashouts connected</h2>
           <p className="mt-1.5 text-xs text-[var(--dp-text-secondary)]">
-            Connect your ElectronicsBuyer (EB) API key to start viewing live cashout deals and automatically estimating profit against your inventory.
+            Connect your ElectronicsBuyer (EB) API key to start viewing live cashout deals.
           </p>
           <button
             type="button"
@@ -368,42 +306,6 @@ export default function Cashout() {
         </div>
       ) : activeTab === 'deals' ? (
         <>
-          {/* Stat Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-            <div className="p-4 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)]">
-              <span className="text-[11px] font-medium text-[var(--dp-text-label)] uppercase tracking-wider">
-                Active Deals
-              </span>
-              <p className="mt-1 text-2xl font-bold text-[var(--dp-text-primary)]">
-                {stats.totalDeals}
-              </p>
-            </div>
-            <div className="p-4 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)]">
-              <span className="text-[11px] font-medium text-[var(--dp-text-label)] uppercase tracking-wider">
-                Profitable Deals
-              </span>
-              <p className="mt-1 text-2xl font-bold text-emerald-400">
-                {stats.profitableCount}
-              </p>
-            </div>
-            <div className="p-4 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)]">
-              <span className="text-[11px] font-medium text-[var(--dp-text-label)] uppercase tracking-wider">
-                In Stock Items
-              </span>
-              <p className="mt-1 text-2xl font-bold text-[var(--dp-accent)]">
-                {stats.inStockCount}
-              </p>
-            </div>
-            <div className="p-4 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)]">
-              <span className="text-[11px] font-medium text-[var(--dp-text-label)] uppercase tracking-wider">
-                Avg Profit (Profitable)
-              </span>
-              <p className="mt-1 text-2xl font-bold text-emerald-400">
-                ${formatMoney(stats.avgProfit)}
-              </p>
-            </div>
-          </div>
-
           {/* Search, Filter & Controls */}
           <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
             <div className="relative flex-1 max-w-sm">
@@ -440,27 +342,13 @@ export default function Cashout() {
                 ))}
               </select>
 
-              {/* Stock Filter */}
-              <select
-                value={selectedStockFilter}
-                onChange={(e) => setSelectedStockFilter(e.target.value)}
-                className="px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] focus:outline-none"
-              >
-                <option value="all">All Stock Statuses</option>
-                <option value="in_stock">In Stock Only</option>
-                <option value="past_purchase">Past Purchases</option>
-                <option value="no_cost">No Cost Data</option>
-              </select>
-
               {/* Sort Dropdown */}
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
                 className="px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] focus:outline-none"
               >
-                <option value="profit_desc">Highest Profit</option>
                 <option value="payout_desc">Highest Payout</option>
-                <option value="margin_desc">Highest Margin %</option>
                 <option value="updated_desc">Recently Added</option>
               </select>
             </div>
@@ -480,20 +368,12 @@ export default function Cashout() {
                       <th className="py-3 px-4">Deal / Item</th>
                       <th className="py-3 px-3">Service</th>
                       <th className="py-3 px-3 text-right">Payout</th>
-                      <th className="py-3 px-3 text-right">Your Cost</th>
-                      <th className="py-3 px-3 text-right">Cashback</th>
-                      <th className="py-3 px-3 text-right">Estimated Profit</th>
                       <th className="py-3 px-3">Availability</th>
-                      <th className="py-3 px-3 text-center">Action</th>
+                      <th className="py-3 px-3 text-center">Link</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[color:var(--dp-border)]">
                     {filteredDeals.map((deal) => {
-                      const hasCost = deal.financials?.hasCostData;
-                      const profit = deal.financials?.estimatedProfit;
-                      const isProfitPositive = hasCost && profit > 0;
-                      const isProfitNegative = hasCost && profit < 0;
-
                       return (
                         <tr
                           key={`${deal.connectionId}-${deal.id}`}
@@ -541,74 +421,12 @@ export default function Cashout() {
                           {/* Payout */}
                           <td className="py-3 px-3 text-right">
                             <div className="font-semibold text-[var(--dp-text-primary)]">
-                              ${formatMoney(deal.financials.payout)}
+                              ${formatMoney(deal.payout)}
                             </div>
                             {deal.retail && (
                               <div className="text-[10px] text-[var(--dp-text-label)] line-through">
                                 Retail ${formatMoney(deal.retail)}
                               </div>
-                            )}
-                          </td>
-
-                          {/* Your Cost */}
-                          <td className="py-3 px-3 text-right">
-                            {hasCost ? (
-                              <div>
-                                <div className="font-semibold text-[var(--dp-text-primary)]">
-                                  ${formatMoney(deal.financials.unitCost)}
-                                </div>
-                                <div className="flex items-center justify-end gap-1 mt-0.5">
-                                  {deal.match.stockStatus === 'in_stock' ? (
-                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
-                                      In Stock ({deal.match.qtyOnHand})
-                                    </span>
-                                  ) : (
-                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-medium bg-gray-500/15 text-gray-400 border border-gray-500/20">
-                                      Past Purchase
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-[var(--dp-hover-bg)] text-[var(--dp-text-label)]">
-                                No cost data
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Cashback */}
-                          <td className="py-3 px-3 text-right text-[var(--dp-text-secondary)]">
-                            {hasCost && deal.financials.unitCashback > 0 ? (
-                              <span className="text-emerald-400 font-medium">
-                                +${formatMoney(deal.financials.unitCashback)}
-                              </span>
-                            ) : (
-                              '—'
-                            )}
-                          </td>
-
-                          {/* Estimated Profit */}
-                          <td className="py-3 px-3 text-right">
-                            {hasCost ? (
-                              <div>
-                                <div
-                                  className={`font-bold text-sm ${
-                                    isProfitPositive
-                                      ? 'text-emerald-400'
-                                      : isProfitNegative
-                                      ? 'text-rose-400'
-                                      : 'text-[var(--dp-text-primary)]'
-                                  }`}
-                                >
-                                  {profit >= 0 ? `+$${formatMoney(profit)}` : `-$${formatMoney(Math.abs(profit))}`}
-                                </div>
-                                <div className="text-[10px] text-[var(--dp-text-label)]">
-                                  {deal.financials.profitMarginPct >= 0 ? '+' : ''}
-                                  {deal.financials.profitMarginPct}% ROI
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-[var(--dp-text-label)]">—</span>
                             )}
                           </td>
 
@@ -628,18 +446,9 @@ export default function Cashout() {
                             </div>
                           </td>
 
-                          {/* Action */}
+                          {/* Link */}
                           <td className="py-3 px-3 text-center">
                             <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setMatchingDeal(deal)}
-                                className="px-2 py-1 text-[11px] rounded border border-[color:var(--dp-border)] hover:bg-[var(--dp-hover-bg)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] transition-colors"
-                                title="Change inventory match"
-                              >
-                                {deal.match ? 'Change Match' : 'Match Item'}
-                              </button>
-
                               {deal.productLinks?.[0]?.url && (
                                 <a
                                   href={deal.productLinks[0].url}
@@ -849,7 +658,6 @@ export default function Cashout() {
       {showAddModal && (
         <AddCashoutModal
           providers={providers}
-          platforms={platforms}
           onClose={() => setShowAddModal(false)}
           onSuccess={() => {
             setShowAddModal(false);
@@ -859,56 +667,19 @@ export default function Cashout() {
         />
       )}
 
-      {/* Manual Match Inventory Modal */}
-      {matchingDeal && (
-        <ManualMatchModal
-          deal={matchingDeal}
-          inventoryList={inventoryList}
-          onClose={() => setMatchingDeal(null)}
-          onSave={async (inventoryId) => {
-            const t = toast.loading('Saving match…');
-            try {
-              if (inventoryId) {
-                await setMatch.mutateAsync({
-                  provider: matchingDeal.connectionProvider,
-                  external_deal_id: matchingDeal.id,
-                  deal_item_name: matchingDeal.name,
-                  inventory_id: inventoryId,
-                });
-                toast.success('Match saved successfully!', { id: t });
-              } else {
-                await removeMatch.mutateAsync({
-                  provider: matchingDeal.connectionProvider,
-                  external_deal_id: matchingDeal.id,
-                });
-                toast.success('Custom match removed.', { id: t });
-              }
-              setMatchingDeal(null);
-              refetchDeals();
-            } catch (err) {
-              toast.error(err.message, { id: t });
-            }
-          }}
-        />
-      )}
     </div>
   );
 }
 
 // ─── Modal: Add Cashout Connection ───────────────────────────────────────────
-function AddCashoutModal({ providers, platforms, onClose, onSuccess }) {
+function AddCashoutModal({ providers, onClose, onSuccess }) {
   const [provider, setProvider] = useState(providers[0]?.id || 'eb');
   const [displayName, setDisplayName] = useState('');
   const [apiKey, setApiKey] = useState('');
-  const [platformId, setPlatformId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const { addConnection } = useCashoutMutations();
-
-  const cashoutPlatforms = useMemo(() => {
-    return platforms.filter((p) => p.type?.toLowerCase() === 'cashout' || p.type?.toLowerCase() === 'marketplace');
-  }, [platforms]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -925,7 +696,6 @@ function AddCashoutModal({ providers, platforms, onClose, onSuccess }) {
         provider,
         display_name: displayName.trim() || undefined,
         api_key: apiKey.trim(),
-        platform_id: platformId || undefined,
       });
       toast.success('Cashout connected successfully!');
       onSuccess();
@@ -999,24 +769,6 @@ function AddCashoutModal({ providers, platforms, onClose, onSuccess }) {
             </p>
           </div>
 
-          <div>
-            <label className="block font-medium text-[var(--dp-text-secondary)] mb-1">
-              Link to Cashout Platform <span className="text-[var(--dp-text-label)]">(optional fee deduction)</span>
-            </label>
-            <select
-              value={platformId}
-              onChange={(e) => setPlatformId(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none"
-            >
-              <option value="">None (0% fee)</option>
-              {cashoutPlatforms.map((plat) => (
-                <option key={plat.id} value={plat.id}>
-                  {plat.name} ({plat.fee_pct || 0}% fee)
-                </option>
-              ))}
-            </select>
-          </div>
-
           <div className="flex items-center justify-end gap-2 border-t border-[color:var(--dp-border)] pt-4">
             <button
               type="button"
@@ -1036,121 +788,6 @@ function AddCashoutModal({ providers, platforms, onClose, onSuccess }) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
-  );
-}
-
-// ─── Modal: Manual Inventory Match ───────────────────────────────────────────
-function ManualMatchModal({ deal, inventoryList, onClose, onSave }) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedInvId, setSelectedInvId] = useState(deal.match?.inventoryId || null);
-
-  const filteredInventory = useMemo(() => {
-    if (!searchTerm.trim()) return inventoryList.slice(0, 30);
-    const q = searchTerm.toLowerCase();
-    return inventoryList.filter((inv) => inv.product_name?.toLowerCase().includes(q)).slice(0, 50);
-  }, [inventoryList, searchTerm]);
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-lg rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-6 space-y-4 text-xs">
-        <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
-          <div>
-            <h3 className="font-bold text-base text-[var(--dp-text-primary)]">Match Inventory Item</h3>
-            <p className="text-[11px] text-[var(--dp-text-secondary)]">Pair this deal with your purchases to compute cost & profit.</p>
-          </div>
-          <button onClick={onClose} className="text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]">
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Current Deal Summary */}
-        <div className="p-3 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-bg)] flex items-center justify-between">
-          <div>
-            <div className="font-semibold text-[var(--dp-text-primary)]">{deal.name}</div>
-            <div className="text-[10px] text-[var(--dp-text-label)]">Cashout Payout: ${formatMoney(deal.financials.payout)}</div>
-          </div>
-          {deal.match && (
-            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400">
-              Matched: {deal.match.productName}
-            </span>
-          )}
-        </div>
-
-        {/* Search */}
-        <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--dp-text-label)]" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search your inventory by product name…"
-            className="w-full pl-9 pr-3 py-2 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none"
-          />
-        </div>
-
-        {/* Inventory Item Selection List */}
-        <div className="max-h-60 overflow-y-auto space-y-1.5 divide-y divide-[color:var(--dp-border)]/40">
-          {filteredInventory.map((inv) => {
-            const isSelected = selectedInvId === inv.id;
-            return (
-              <div
-                key={inv.id}
-                onClick={() => setSelectedInvId(inv.id)}
-                className={`p-2.5 rounded-lg cursor-pointer flex items-center justify-between transition-colors ${
-                  isSelected
-                    ? 'bg-[var(--dp-accent-bg)] border border-[color:var(--dp-accent)]/30'
-                    : 'hover:bg-[var(--dp-hover-bg)]'
-                }`}
-              >
-                <div>
-                  <div className="font-medium text-[var(--dp-text-primary)]">{inv.product_name}</div>
-                  <div className="text-[10px] text-[var(--dp-text-label)]">
-                    Purchased {new Date(inv.purchase_date).toLocaleDateString()} • Unit cost: ${formatMoney(inv.unit_purchase_cost)}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span
-                    className={`px-1.5 py-0.2 rounded text-[9px] font-semibold ${
-                      inv.qty_on_hand > 0 ? 'bg-emerald-500/15 text-emerald-400' : 'bg-gray-500/15 text-gray-400'
-                    }`}
-                  >
-                    {inv.qty_on_hand > 0 ? `${inv.qty_on_hand} on hand` : 'Sold out'}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center justify-between border-t border-[color:var(--dp-border)] pt-4">
-          <button
-            type="button"
-            onClick={() => onSave(null)}
-            className="text-xs text-rose-400 hover:underline"
-          >
-            Clear custom match
-          </button>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-3.5 py-2 rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)]"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => onSave(selectedInvId)}
-              disabled={!selectedInvId}
-              className="px-4 py-2 rounded-lg bg-[var(--dp-accent)] text-white font-semibold hover:opacity-90 disabled:opacity-50"
-            >
-              Save Match
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

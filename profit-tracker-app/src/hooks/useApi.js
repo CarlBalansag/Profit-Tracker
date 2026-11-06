@@ -467,43 +467,11 @@ export const useCashoutMutations = () => {
     onSuccess: invalidate,
   });
 
-  const setMatch = useMutation({
-    mutationFn: (data) =>
-      apiFetch('/api/cashouts/matches', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      }).then(async (r) => {
-        if (!r.ok) {
-          const e = await r.json().catch(() => ({}));
-          throw new Error(e.error || 'Failed to update match');
-        }
-        return r.json();
-      }),
-    onSuccess: invalidate,
-  });
-
-  const removeMatch = useMutation({
-    mutationFn: ({ provider, external_deal_id }) =>
-      apiFetch(`/api/cashouts/matches?provider=${encodeURIComponent(provider)}&external_deal_id=${encodeURIComponent(external_deal_id)}`, {
-        method: 'DELETE',
-      }).then(async (r) => {
-        if (!r.ok) {
-          const e = await r.json().catch(() => ({}));
-          throw new Error(e.error || 'Failed to remove match');
-        }
-        return r.json();
-      }),
-    onSuccess: invalidate,
-  });
-
   return {
     addConnection,
     updateConnection,
     deleteConnection,
     testConnection,
     syncConnection,
-    setMatch,
-    removeMatch,
   };
 };

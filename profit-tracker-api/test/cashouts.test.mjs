@@ -264,7 +264,7 @@ describe('Cashout Connection CRUD & Tenant Isolation', () => {
   });
 });
 
-describe('Deals, Profit Calculation & Inventory Matching', () => {
+describe('Live deals list', () => {
   let userConn;
 
   beforeEach(() => {
@@ -317,154 +317,55 @@ describe('Deals, Profit Calculation & Inventory Matching', () => {
     };
     harness.db.cashoutConnection.push(userConn);
 
-    // Setup user inventory for profit matching:
-    // 1. Airpod 5 ANC: cost $90, 2% card cashback, on hand
+    // Same name as a live deal, so any leftover matching would show up here.
     harness.db.inventory.push({
       id: 'inv-airpods-id',
       user_id: harness.ids.user,
       product_name: 'Airpod 5 ANC',
       vendor_id: harness.ids.vendor,
-      payment_method_id: harness.ids.card,
       unit_purchase_cost: 90,
       qty_purchased: 2,
       qty_on_hand: 2,
-      sales_tax: 0,
-      shipping_cost_inbound: 0,
-      fees: 0,
-      gift_card_amount: 0,
-      refunded_amount: 0,
-      refunded_qty: 0,
-      cashback_earned: 3.6,
-      cashback_rate: 2,
       status: 'PURCHASED',
       purchase_date: new Date('2026-10-01T00:00:00Z'),
       created_at: new Date(),
     });
-
-    // 2. Fire TV Stick 4K Select: past purchase (qty_on_hand = 0), cost $10
-    harness.db.inventory.push({
-      id: 'inv-firetv-id',
-      user_id: harness.ids.user,
-      product_name: 'Fire TV Stick 4K Select',
-      vendor_id: harness.ids.vendor,
-      payment_method_id: harness.ids.card,
-      unit_purchase_cost: 10,
-      qty_purchased: 5,
-      qty_on_hand: 0, // Out of stock / historical
-      sales_tax: 0,
-      shipping_cost_inbound: 0,
-      fees: 0,
-      gift_card_amount: 0,
-      refunded_amount: 0,
-      refunded_qty: 0,
-      cashback_earned: 0,
-      cashback_rate: 0,
-      status: 'SOLD',
-      purchase_date: new Date('2026-09-01T00:00:00Z'),
-      created_at: new Date(),
-    });
   });
 
-  it('calculates unit cost, cashback, and estimated profit for matching inventory', async () => {
+  it('returns the provider deals as they are, with payouts and no inventory or profit data', async () => {
     const res = await request('GET', '/api/cashouts/deals');
     expect(res.status).toBe(200);
     expect(res.body.results).toHaveLength(1);
 
     const deals = res.body.results[0].deals;
-    const airpods = deals.find(d => d.id === '5232');
-    expect(airpods).toBeDefined();
-    expect(airpods.financials.hasCostData).toBe(true);
-    expect(airpods.financials.unitCost).toBe(90);
-    expect(airpods.financials.unitCashback).toBe(1.8); // 90 * 2% = 1.80
-    expect(airpods.financials.payout).toBe(119);
-    // Estimated profit = 119 - 90 + 1.80 = 30.80
-    expect(airpods.financials.estimatedProfit).toBe(30.8);
-    expect(airpods.match.stockStatus).toBe('in_stock');
-    expect(airpods.match.matchProductName).toBe('Airpod 5 ANC');
-
-    // Historical match (out of stock)
-    const firetv = deals.find(d => d.id === '5230');
-    expect(firetv).toBeDefined();
-    expect(firetv.financials.hasCostData).toBe(true);
-    expect(firetv.financials.unitCost).toBe(10);
-    // Payout $16 - cost $10 = $6 profit
-    expect(firetv.financials.estimatedProfit).toBe(6);
-    expect(firetv.match.stockStatus).toBe('past_purchase');
-
-    // Unmatched item shows hasCostData: false, never made up or $0
-    const unmatched = deals.find(d => d.id === '9999');
-    expect(unmatched).toBeDefined();
-    expect(unmatched.financials.hasCostData).toBe(false);
-    expect(unmatched.financials.unitCost).toBeNull();
-    expect(unmatched.financials.estimatedProfit).toBeNull();
+    expect(deals.map(d => d.id)).toEqual(['5232', '5230', '9999']);
+    expect(deals.find(d => d.id === '5230').payout).toBe(16);
+    for (const deal of deals) {
+      expect(deal).not.toHaveProperty('match');
+      expect(deal).not.toHaveProperty('financials');
+    }
   });
 
-  it('applies cashout platform fee when connection is linked to a platform', async () => {
-    // Create cashout platform with 5% fee
-    const cashoutPlatform = {
-      id: 'plat-cashout-5pct',
-      user_id: harness.ids.user,
-      name: 'EB Cashout Platform',
-      type: 'Cashout',
-      fee_pct: 5,
-    };
-    harness.db.platform.push(cashoutPlatform);
-
-    // Link connection to this platform
-    userConn.platform_id = cashoutPlatform.id;
+  it('never reads inventory or saved item matches to list deals', async () => {
+    const inventory = vi.spyOn(harness.prisma.inventory, 'findMany');
+    const matches = vi.spyOn(harness.prisma.cashoutItemMatch, 'findMany');
 
     const res = await request('GET', '/api/cashouts/deals');
-    const airpods = res.body.results[0].deals.find(d => d.id === '5232');
-    expect(airpods).toBeDefined();
-    expect(airpods.financials.payout).toBe(119);
-    // 5% fee on $119 = $5.95 fee. Net payout = 119 - 5.95 = 113.05
-    expect(airpods.financials.cashoutFee).toBe(5.95);
-    expect(airpods.financials.netPayout).toBe(113.05);
-    // Profit = 113.05 - 90 (cost) + 1.80 (cashback) = 24.85
-    expect(airpods.financials.estimatedProfit).toBe(24.85);
+
+    expect(res.status).toBe(200);
+    expect(inventory).not.toHaveBeenCalled();
+    expect(matches).not.toHaveBeenCalled();
   });
 
-  it('supports manual item match override and remembers per user', async () => {
-    // Create a new inventory item that doesn't match by name
-    const customInv = {
-      id: '99999999-9999-4999-8999-999999999999',
-      user_id: harness.ids.user,
-      product_name: 'Custom Unbranded Earphones Batch 4',
-      vendor_id: harness.ids.vendor,
-      payment_method_id: harness.ids.card,
-      unit_purchase_cost: 65,
-      qty_purchased: 10,
-      qty_on_hand: 10,
-      sales_tax: 0,
-      shipping_cost_inbound: 0,
-      fees: 0,
-      gift_card_amount: 0,
-      refunded_amount: 0,
-      refunded_qty: 0,
-      cashback_earned: 0,
-      cashback_rate: 0,
-      status: 'PURCHASED',
-      purchase_date: new Date(),
-      created_at: new Date(),
-    };
-    harness.db.inventory.push(customInv);
-
-    // Set manual match for deal 5232 to this custom inventory
-    const matchRes = await request('POST', '/api/cashouts/matches', {
+  it('has no item match routes', async () => {
+    const created = await request('POST', '/api/cashouts/matches', {
       provider: 'eb',
       external_deal_id: '5232',
       deal_item_name: 'AirPods 5 ANC',
-      inventory_id: customInv.id,
     });
-    expect(matchRes.status).toBe(200);
-
-    // Fetch deals again: deal 5232 should now use customInv cost of $65
-    const res = await request('GET', '/api/cashouts/deals');
-    const airpods = res.body.results[0].deals.find(d => d.id === '5232');
-    expect(airpods.match.matchType).toBe('manual');
-    expect(airpods.match.inventoryId).toBe(customInv.id);
-    expect(airpods.financials.unitCost).toBe(65);
-    expect(airpods.financials.estimatedProfit).toBe(54); // 119 - 65 = 54
+    expect(created.status).toBe(404);
+    expect((await request('DELETE', '/api/cashouts/matches?provider=eb&external_deal_id=5232')).status).toBe(404);
+    expect(harness.db.cashoutItemMatch).toHaveLength(0);
   });
 });
 

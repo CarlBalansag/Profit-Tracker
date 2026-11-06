@@ -2,7 +2,6 @@ const prisma = require('../../prisma');
 const { requireOwned } = require('../ownership');
 const { encryptKey, decryptKey, maskKey } = require('./crypto');
 const { getAdapter, listAvailableCashouts, isProviderAllowedForUser } = require('./registry');
-const { allocatedCost, allocatedCashback, roundCents } = require('../../../shared/finance.mjs');
 
 // In-memory cache for live deals per connection
 // Key: connectionId -> { deals: CashoutDeal[], fetchedAt: number, error: string | null }
@@ -23,7 +22,6 @@ function safeConnection(conn) {
     status: conn.status,
     platformId: conn.platform_id,
     platformName: conn.platform?.name || null,
-    platformFeePct: conn.platform?.fee_pct ?? 0,
     lastSyncedAt: conn.last_synced_at,
     lastError: conn.last_error,
     createdAt: conn.created_at,
@@ -34,7 +32,7 @@ function safeConnection(conn) {
 async function listConnections(userId) {
   const connections = await prisma.cashoutConnection.findMany({
     where: { user_id: userId },
-    include: { platform: { select: { id: true, name: true, fee_pct: true } } },
+    include: { platform: { select: { id: true, name: true } } },
     orderBy: { created_at: 'desc' },
   });
   return connections.map(safeConnection);
@@ -43,7 +41,7 @@ async function listConnections(userId) {
 async function getConnection(userId, connectionId) {
   const conn = await prisma.cashoutConnection.findFirst({
     where: { id: connectionId, user_id: userId },
-    include: { platform: { select: { id: true, name: true, fee_pct: true } } },
+    include: { platform: { select: { id: true, name: true } } },
   });
   if (!conn) {
     const error = new Error('Cashout connection not found or access denied');
@@ -84,7 +82,7 @@ async function createConnection(userId, { provider, displayName, apiKey, platfor
       status: 'active',
       last_synced_at: new Date(),
     },
-    include: { platform: { select: { id: true, name: true, fee_pct: true } } },
+    include: { platform: { select: { id: true, name: true } } },
   });
 
   return safeConnection(created);
@@ -122,7 +120,7 @@ async function updateConnection(userId, connectionId, { displayName, apiKey, pla
   const updated = await prisma.cashoutConnection.update({
     where: { id: connectionId },
     data: updateData,
-    include: { platform: { select: { id: true, name: true, fee_pct: true } } },
+    include: { platform: { select: { id: true, name: true } } },
   });
 
   return safeConnection(updated);
@@ -294,181 +292,6 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
 }
 
 /**
- * Find inventory match and calculate profit for deals.
- */
-function normalizeName(name) {
-  if (!name || typeof name !== 'string') return '';
-  return name.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-async function attachProfitToDeals(userId, connection, deals) {
-  if (!Array.isArray(deals) || deals.length === 0) return [];
-
-  // Fetch active inventory for user
-  const inventories = await prisma.inventory.findMany({
-    where: {
-      user_id: userId,
-      NOT: { status: { in: ['CANCELLED', 'RETURNED', 'DISPUTED'] } },
-    },
-    include: { payment_method: true, vendor: true },
-    orderBy: [
-      { qty_on_hand: 'desc' },
-      { purchase_date: 'desc' },
-    ],
-  });
-
-  // Fetch manual overrides
-  const manualMatches = await prisma.cashoutItemMatch.findMany({
-    where: { user_id: userId, provider: connection.provider },
-  });
-
-  const feePct = connection.platformFeePct || 0;
-
-  return deals.map((deal) => {
-    // 1. Check for manual match override
-    const manualMatch = manualMatches.find((m) => m.external_deal_id === deal.id);
-    let matchedInventory = null;
-    let matchType = null;
-
-    if (manualMatch && manualMatch.inventory_id) {
-      matchedInventory = inventories.find((inv) => inv.id === manualMatch.inventory_id) || null;
-      if (matchedInventory) matchType = 'manual';
-    }
-
-    // 2. Automatic matching by product_name if no manual match
-    if (!matchedInventory) {
-      const dealNormalized = normalizeName(deal.name);
-
-      // Prefer on-hand inventory first
-      const onHandMatches = inventories.filter((inv) => inv.qty_on_hand > 0);
-      const pastMatches = inventories.filter((inv) => inv.qty_on_hand === 0);
-
-      // Exact match
-      const exactOnHand = onHandMatches.find((inv) => normalizeName(inv.product_name) === dealNormalized);
-      if (exactOnHand) {
-        matchedInventory = exactOnHand;
-        matchType = 'exact';
-      } else {
-        const exactPast = pastMatches.find((inv) => normalizeName(inv.product_name) === dealNormalized);
-        if (exactPast) {
-          matchedInventory = exactPast;
-          matchType = 'exact';
-        } else {
-          // Substring / word overlap
-          const fuzzyOnHand = onHandMatches.find((inv) => {
-            const invNorm = normalizeName(inv.product_name);
-            return invNorm && (dealNormalized.includes(invNorm) || invNorm.includes(dealNormalized));
-          });
-          if (fuzzyOnHand) {
-            matchedInventory = fuzzyOnHand;
-            matchType = 'estimate';
-          } else {
-            const fuzzyPast = pastMatches.find((inv) => {
-              const invNorm = normalizeName(inv.product_name);
-              return invNorm && (dealNormalized.includes(invNorm) || invNorm.includes(dealNormalized));
-            });
-            if (fuzzyPast) {
-              matchedInventory = fuzzyPast;
-              matchType = 'estimate';
-            }
-          }
-        }
-      }
-    }
-
-    // Profit calculation using shared/finance.mjs
-    const payout = Number(deal.payout) || 0;
-    const cashoutFee = roundCents((payout * feePct) / 100);
-    const netPayout = payout - cashoutFee;
-
-    let unitCost = null;
-    let unitCashback = null;
-    let estimatedProfit = null;
-    let profitMarginPct = null;
-    let stockStatus = 'no_match';
-
-    if (matchedInventory) {
-      unitCost = roundCents(allocatedCost(matchedInventory, 1));
-      unitCashback = roundCents(allocatedCashback(matchedInventory, 1));
-      estimatedProfit = roundCents(netPayout - unitCost + unitCashback);
-      profitMarginPct = unitCost > 0 ? roundCents(((estimatedProfit / unitCost) * 100)) : 0;
-      stockStatus = matchedInventory.qty_on_hand > 0 ? 'in_stock' : 'past_purchase';
-    }
-
-    return {
-      ...deal,
-      match: matchedInventory ? {
-        inventoryId: matchedInventory.id,
-        productName: matchedInventory.product_name,
-        matchProductName: matchedInventory.product_name,
-        matchType,
-        stockStatus,
-        qtyOnHand: matchedInventory.qty_on_hand,
-        purchaseDate: matchedInventory.purchase_date,
-      } : null,
-      financials: {
-        payout,
-        cashoutFee,
-        netPayout,
-        unitCost,
-        unitCashback,
-        estimatedProfit,
-        profitMarginPct,
-        hasCostData: matchedInventory !== null,
-      },
-    };
-  });
-}
-
-/**
- * Set manual item match override.
- */
-async function setItemMatch(userId, { provider, externalDealId, dealItemName, inventoryId, inventoryName }) {
-  if (inventoryId) {
-    await requireOwned('inventory', inventoryId, userId, 'Inventory');
-  }
-
-  const match = await prisma.cashoutItemMatch.upsert({
-    where: {
-      user_id_provider_external_deal_id: {
-        user_id: userId,
-        provider,
-        external_deal_id: externalDealId,
-      },
-    },
-    create: {
-      user_id: userId,
-      provider,
-      external_deal_id: externalDealId,
-      deal_item_name: dealItemName,
-      inventory_id: inventoryId || null,
-      inventory_name: inventoryName || null,
-    },
-    update: {
-      inventory_id: inventoryId || null,
-      inventory_name: inventoryName || null,
-      deal_item_name: dealItemName,
-    },
-  });
-
-  return match;
-}
-
-/**
- * Remove manual match override.
- */
-async function removeItemMatch(userId, { provider, externalDealId }) {
-  await prisma.cashoutItemMatch.deleteMany({
-    where: {
-      user_id: userId,
-      provider,
-      external_deal_id: externalDealId,
-    },
-  });
-  return { success: true };
-}
-
-/**
  * Sync single user connection (manual "Sync now").
  */
 async function syncUserConnection(userId, connectionId) {
@@ -532,9 +355,6 @@ module.exports = {
   testConnection,
   deleteConnection,
   fetchConnectionDeals,
-  attachProfitToDeals,
-  setItemMatch,
-  removeItemMatch,
   syncUserConnection,
   getDealHistory,
   dealsCache,
