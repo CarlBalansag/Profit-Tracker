@@ -1772,7 +1772,7 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('list_cashout_deals', {
-    description: 'List live deals from every connected cashout service. spread_vs_retail is payout minus retail, before tax, shipping or coupons -- not a guarantee of real profit. Raw payout/retail/vendor_limit_total are included so you can run your own math (e.g. spread x vendor_limit_total for total opportunity on one deal).',
+    description: 'List live deals from every connected cashout service. spread_vs_retail is payout minus retail, before tax, shipping or coupons -- not a guarantee of real profit. Raw payout/retail/vendor_limit_total are included so you can run your own math (e.g. spread x vendor_limit_total for total opportunity on one deal). Each item\'s upc field may actually be a manufacturer model/part number -- see id_type. connections in the response shows when each cashout\'s data was last synced.',
     inputSchema: {
       category: z.enum(['all', 'above_retail', 'close_to_retail']).optional().describe('above_retail: spread > 0. close_to_retail: spread <= 0 or unknown retail. Default all.'),
       store: z.string().optional().describe('Filter to deals buyable at this retailer (case-insensitive, partial match).'),
@@ -1784,7 +1784,7 @@ function buildServer(userId, apiKeyId) {
     },
   }, async ({ category, store, cashout, search, include_expired: includeExpired, sort, limit }) => {
     try {
-      const { deals } = await loadLiveCashoutDeals(userId);
+      const { deals, connections } = await loadLiveCashoutDeals(userId);
       const query = (search || '').toLowerCase();
       const storeQuery = (store || '').toLowerCase();
       const cashoutQuery = (cashout || '').toLowerCase();
@@ -1813,24 +1813,42 @@ function buildServer(userId, apiKeyId) {
 
       const total = filtered.length;
       if (limit) filtered = filtered.slice(0, limit);
-      return jsonResult({ deals: filtered, total, truncated: filtered.length < total });
+      return jsonResult({
+        deals: filtered,
+        total,
+        truncated: filtered.length < total,
+        connections: connections.map(({ conn }) => ({
+          cashout: conn.displayName || conn.provider,
+          synced_at: conn.lastSyncedAt || null,
+        })),
+      });
     } catch (err) {
       return errorResult(err.message || 'Failed to list cashout deals');
     }
   });
 
   server.registerTool('get_cashout_deal', {
-    description: 'Re-check one specific cashout deal right before buying, instead of trusting a cached list. Forces a fresh fetch (respecting the normal sync cooldown; falls back to the last known data if the cooldown is active or the refresh fails -- check "fresh" to tell which happened). If found is false, the deal has sold out, expired, or been pulled -- do not buy it.',
+    description: 'Re-check one specific cashout deal right before buying, instead of trusting a cached list. Forces a fresh fetch (respecting the normal sync cooldown; falls back to the last known data if the cooldown is active or the refresh fails -- check "fresh" to tell which happened, and "stale_reason" for why). synced_at always comes from the connection\'s own last-synced record, the same source list_cashout_connections.last_synced_at uses, so a stale response can never claim to be newer than it is. If found is false, the deal has sold out, expired, or been pulled -- do not buy it.',
     inputSchema: { id: z.string().describe('The deal id from list_cashout_deals.') },
   }, async ({ id }) => {
     const connections = await cashoutService.listConnections(userId);
     for (const conn of connections) {
       let result;
       let fresh = true;
+      let staleReason = null;
+      let cooldownSecondsRemaining = null;
+      let fetchError = null;
       try {
         result = await cashoutService.syncUserConnection(userId, conn.id);
       } catch (err) {
         fresh = false;
+        if (err.cooldown) {
+          staleReason = 'cooldown';
+          cooldownSecondsRemaining = err.remainingSeconds ?? null;
+        } else {
+          staleReason = 'fetch_failed';
+          fetchError = err.message;
+        }
         try {
           result = await cashoutService.fetchConnectionDeals(userId, conn.id);
         } catch (err2) {
@@ -1839,14 +1857,26 @@ function buildServer(userId, apiKeyId) {
       }
       const match = (result.deals || []).find((d) => d.id === id);
       if (match) {
-        return jsonResult({ found: true, fresh, synced_at: result.lastUpdated, deal: presentDeal(match, conn) });
+        // Re-read the connection rather than trust result.lastUpdated: this is
+        // the same field list_cashout_connections.last_synced_at reads, so the
+        // two can never disagree about when this cashout was last synced.
+        const current = await cashoutService.getConnection(userId, conn.id);
+        return jsonResult({
+          found: true,
+          fresh,
+          stale_reason: staleReason,
+          cooldown_seconds_remaining: cooldownSecondsRemaining,
+          ...(fetchError ? { error: fetchError } : {}),
+          synced_at: current.last_synced_at ? current.last_synced_at.toISOString() : null,
+          deal: presentDeal(match, conn),
+        });
       }
     }
     return jsonResult({ found: false, reason: 'This deal is no longer listed by any connected cashout -- it may have sold out, expired, or been pulled.' });
   });
 
   server.registerTool('get_cashout_opportunity_summary', {
-    description: 'Aggregate stats across every live cashout deal. estimated_opportunity_at_full_limit is only an estimate of the opportunity -- it ignores real all-in cost (tax, shipping, coupons) and the risk EB rejects a unit, so treat it as a ceiling, not a forecast.',
+    description: 'Aggregate stats across every live cashout deal. estimated_opportunity_at_full_limit is only an estimate of the opportunity -- it ignores real all-in cost (tax, shipping, coupons) and the risk EB rejects a unit, so treat it as a ceiling, not a forecast. by_store.deals_available_at_store counts deals buyable at that store; one deal can be buyable at several stores, so these counts can add up to more than live_deal_count.',
     inputSchema: {},
   }, async () => {
     try {
@@ -1883,7 +1913,7 @@ function buildServer(userId, apiKeyId) {
         best_margin: best ? { deal_id: best.id, deal_name: best.name, amount: best.spread_vs_retail.amount, pct: best.spread_vs_retail.pct } : null,
         avg_margin_pct: withSpread.length ? Math.round((withSpread.reduce((sum, d) => sum + d.spread_vs_retail.pct, 0) / withSpread.length) * 100) / 100 : null,
         estimated_opportunity_at_full_limit: Math.round(opportunity * 100) / 100,
-        by_store: [...byStoreCounts.entries()].map(([store, deal_count]) => ({ store, deal_count })),
+        by_store: [...byStoreCounts.entries()].map(([store, count]) => ({ store, deals_available_at_store: count })),
         by_cashout: byCashout,
       });
     } catch (err) {
