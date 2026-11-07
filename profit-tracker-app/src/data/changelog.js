@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.23',
+    date: '2026-11-07',
+    notes: "Cashout deals can now be viewed as a table or as cards — pick the one you like next to the search box, and it'll remember your choice.",
+  },
+  {
     version: '1.22',
     date: '2026-11-06',
     notes: "Cashout now shows live deals from your connected cashout service — with estimated profit, retail price, expiration, and one-click links to buy. API keys for cashouts and other integrations are now managed from Settings > Data Setup.",
