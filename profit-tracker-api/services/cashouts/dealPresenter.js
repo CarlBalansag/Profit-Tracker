@@ -10,6 +10,32 @@ const roundCents = (n) => Math.round(n * 100) / 100;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+const roundTo1 = (n) => (n === null || n === undefined ? null : Math.round(n * 10) / 10);
+
+// Known affiliate/tracking params to strip from a store URL -- tag, ref,
+// click-tracking IDs and every utm_* variant. Anything else (sku, skuId,
+// a real color/size variant param) is left alone: this is a blocklist of
+// known trackers, not an allowlist, so an unrecognized but legitimate param
+// is never silently dropped.
+const TRACKING_PARAMS = new Set([
+  'tag', 'ref', 'ref_', 'irgwc', 'irclickid', 'clickid', 'click_id', 'wmlspartner',
+  'affiliate', 'aff', 'affid', 'subid', 'pubref', 'cjevent', 'awc', 'ad', 'adid', 'campaignid',
+]);
+function cleanStoreUrl(url) {
+  if (!url) return url;
+  try {
+    const parsed = new URL(url);
+    for (const key of [...parsed.searchParams.keys()]) {
+      if (TRACKING_PARAMS.has(key.toLowerCase()) || /^utm_/i.test(key)) {
+        parsed.searchParams.delete(key);
+      }
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 // payout minus retail, before tax, shipping or coupons -- not a guarantee of
 // take-home profit, just the gap between what the cashout pays and list price.
 function spreadVsRetail(payout, retail) {
@@ -89,20 +115,26 @@ function presentDeal(deal, connection) {
   const now = Date.now();
   const { coupon, deliveryRestriction, shipToAddress } = parseNotes(deal.notes);
 
-  const items = (deal.items || []).map((item) => ({
-    item_id: item.id,
-    name: item.name,
-    condition: item.condition,
-    // Usually a real UPC, but EB sometimes puts a manufacturer model number
-    // here instead (e.g. "83K4000QUS") -- it's whatever the provider sent.
-    upc: item.upcs?.[0] || null,
-    vendor_limit: item.vendorLimit ?? null,
-    remaining_percentage: item.remainingPercentage ?? null,
-    // Always null in every deal seen so far; no documented meaning from EB.
-    // Passed through as-is rather than translated into a confident flag.
-    commitment: item.commitment ?? null,
-    stores: (item.purchaseLinks || []).map((link) => ({ name: link.name, url: link.url })),
-  }));
+  const items = (deal.items || []).map((item) => {
+    const upc = item.upcs?.[0] || null;
+    return {
+      item_id: item.id,
+      name: item.name,
+      condition: item.condition,
+      // UPC or manufacturer model/part number -- EB sometimes puts a model
+      // number here instead of a real UPC (e.g. "83K4000QUS"). id_type is a
+      // best guess from the value's shape: a 12-13 digit string looks like a
+      // real UPC/EAN, anything else is treated as a model/part number.
+      upc,
+      id_type: upc ? (/^\d{12,13}$/.test(upc) ? 'upc' : 'model') : null,
+      vendor_limit: item.vendorLimit ?? null,
+      remaining_percentage: roundTo1(item.remainingPercentage),
+      // Always null in every deal seen so far; no documented meaning from EB.
+      // Passed through as-is rather than translated into a confident flag.
+      commitment: item.commitment ?? null,
+      stores: (item.purchaseLinks || []).map((link) => ({ name: link.name, url: cleanStoreUrl(link.url) })),
+    };
+  });
 
   const vendorLimits = items.map((i) => i.vendor_limit).filter((n) => n > 0);
 
@@ -123,7 +155,7 @@ function presentDeal(deal, connection) {
     expires_at: expiresAt ? expiresAt.toISOString() : null,
     is_expired: expiresAt ? expiresAt.getTime() <= now : false,
     days_left: expiresAt ? Math.ceil((expiresAt.getTime() - now) / DAY_MS) : null,
-    avg_remaining_percentage: deal.avgRemainingPercentage ?? null,
+    avg_remaining_percentage: roundTo1(deal.avgRemainingPercentage),
     coupon_code: coupon,
     delivery_restriction: deliveryRestriction,
     ship_to_address: shipToAddress,

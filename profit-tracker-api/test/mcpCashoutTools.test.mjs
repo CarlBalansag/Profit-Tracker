@@ -73,7 +73,7 @@ const futureIso = (days) => new Date(Date.now() + days * 86400000).toISOString()
 describe('MCP cashout tools', () => {
   it('list_cashout_deals returns nothing and no error when no cashout is connected', async () => {
     const { data } = await callTool('list_cashout_deals', {});
-    expect(data).toEqual({ deals: [], total: 0, truncated: false });
+    expect(data).toEqual({ deals: [], total: 0, truncated: false, connections: [] });
   });
 
   it('list_cashout_deals returns live deals with raw numbers for the AI to do its own math', async () => {
@@ -100,7 +100,43 @@ describe('MCP cashout tools', () => {
     expect(deal.delivery_restriction).toBe('Delaware Only');
     expect(deal.items[0].item_id).toBe('10001');
     expect(deal.items[0].stores).toEqual([{ name: 'Amazon', url: 'https://www.amazon.com/dp/1' }]);
+    expect(deal.items[0].id_type).toBe('upc');
+    expect(deal.items[0].remaining_percentage).toBe(96);
+    expect(deal.avg_remaining_percentage).toBe(96);
     expect(deal.currency).toBe('USD');
+    expect(data.connections).toEqual([{ cashout: 'EB Primary', synced_at: expect.any(String) }]);
+  });
+
+  it('rounds remaining percentages to 1 decimal place', async () => {
+    addConnection();
+    vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([
+      {
+        id: '1', provider: 'eb', name: 'Deal', payout: 10, retail: 8, avgRemainingPercentage: 95.666666,
+        items: [{ id: 'i1', upcs: [], remainingPercentage: 93.333333, purchaseLinks: [] }],
+      },
+    ]);
+    const { data } = await callTool('list_cashout_deals', {});
+    const [deal] = data.deals;
+    expect(deal.avg_remaining_percentage).toBe(95.7);
+    expect(deal.items[0].remaining_percentage).toBe(93.3);
+  });
+
+  it('strips affiliate/tracking params from store URLs but keeps product-identifying ones', async () => {
+    addConnection();
+    vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([
+      {
+        id: '1', provider: 'eb', name: 'Deal', payout: 10, retail: 8,
+        items: [{
+          id: 'i1', upcs: ['83K4000QUS'], purchaseLinks: [
+            { name: 'Amazon', url: 'https://www.amazon.com/dp/B0ABCD1234?tag=aff-20&utm_source=eb&irgwc=1&ref=sr_1_1&sku=B0ABCD1234' },
+          ],
+        }],
+      },
+    ]);
+    const { data } = await callTool('list_cashout_deals', {});
+    const [store] = data.deals[0].items[0].stores;
+    expect(store.url).toBe('https://www.amazon.com/dp/B0ABCD1234?sku=B0ABCD1234');
+    expect(data.deals[0].items[0].id_type).toBe('model');
   });
 
   it('parses a dropship address into structured fields, and says null means unspecified, not "ship anywhere"', async () => {
@@ -158,6 +194,19 @@ describe('MCP cashout tools', () => {
     expect(data).toEqual({ found: false, reason: expect.stringContaining('no longer listed') });
   });
 
+  it('get_cashout_deal reports stale_reason: fetch_failed with the error message when a retry also fails to refresh', async () => {
+    const conn = addConnection({ last_synced_at: new Date(Date.now() - 120000) }); // cooldown clear, forced sync will actually attempt a live fetch
+    dealsCache.set(conn.id, { deals: [{ id: '7', provider: 'eb', name: 'Cached Deal', payout: 10, retail: 8, items: [] }], fetchedAt: Date.now() - 120000, error: null });
+    vi.spyOn(ebAdapter, 'fetchDeals').mockRejectedValue(new Error('ElectronicsBuyer rate limit exceeded.'));
+
+    const { data } = await callTool('get_cashout_deal', { id: '7' });
+    expect(data.found).toBe(true);
+    expect(data.fresh).toBe(false);
+    expect(data.stale_reason).toBe('fetch_failed');
+    expect(data.cooldown_seconds_remaining).toBeNull();
+    expect(data.error).toContain('rate limit');
+  });
+
   it('get_cashout_deal forces a fresh fetch and reports fresh: false when the cooldown blocks it', async () => {
     const conn = addConnection({ last_synced_at: new Date() }); // just synced -- cooldown active
     const fetchSpy = vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([
@@ -169,8 +218,15 @@ describe('MCP cashout tools', () => {
     const { data } = await callTool('get_cashout_deal', { id: '42' });
     expect(data.found).toBe(true);
     expect(data.fresh).toBe(false);
+    expect(data.stale_reason).toBe('cooldown');
+    expect(data.cooldown_seconds_remaining).toEqual(expect.any(Number));
+    expect(data.error).toBeUndefined();
     expect(data.deal.name).toBe('Still Here');
     expect(fetchSpy).not.toHaveBeenCalled();
+
+    // Same source as list_cashout_connections.last_synced_at -- never a newer timestamp.
+    const connections = await callTool('list_cashout_connections', {});
+    expect(data.synced_at).toBe(connections.data[0].last_synced_at);
   });
 
   it('get_cashout_opportunity_summary aggregates across deals and labels the estimate as an estimate', async () => {
@@ -189,6 +245,22 @@ describe('MCP cashout tools', () => {
       Math.round((240.01 * 100 + 5 * 10 + -5 * 5) * 100) / 100
     );
     expect(data.by_cashout).toEqual([{ cashout: 'EB Primary', deal_count: 3, status: 'active' }]);
+    expect(data.by_store).toEqual([]);
+  });
+
+  it('get_cashout_opportunity_summary.by_store counts a deal at every store it is buyable at', async () => {
+    addConnection();
+    vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([
+      { id: '1', provider: 'eb', name: 'Multi-store Deal', payout: 110, retail: 100, items: [{ id: 'i1', purchaseLinks: [{ name: 'Amazon', url: 'https://a' }, { name: 'Target', url: 'https://t' }] }] },
+      { id: '2', provider: 'eb', name: 'Amazon Only', payout: 110, retail: 100, items: [{ id: 'i2', purchaseLinks: [{ name: 'Amazon', url: 'https://a2' }] }] },
+    ]);
+    const { data } = await callTool('get_cashout_opportunity_summary', {});
+    expect(data.live_deal_count).toBe(2);
+    const byStore = Object.fromEntries(data.by_store.map((s) => [s.store, s.deals_available_at_store]));
+    expect(byStore).toEqual({ Amazon: 2, Target: 1 });
+    // 3 total listings across 2 deals -- more than live_deal_count, which is the point.
+    const total = data.by_store.reduce((sum, s) => sum + s.deals_available_at_store, 0);
+    expect(total).toBeGreaterThan(data.live_deal_count);
   });
 
   it('list_cashout_connections lists status without leaking the stored key', async () => {
