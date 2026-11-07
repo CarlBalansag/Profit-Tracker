@@ -4,5 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| feat/cashout-mcp-tools | Add MCP tools so the AI assistant can see cashout deals and compute its own math | profit-tracker-api/routes/mcp.js, profit-tracker-api/services/cashouts/dealPresenter.js, profit-tracker-api/test/mcpCashoutTools.test.mjs | In progress | 2026-11-07 |
 | feat/dashboard-count-up-numbers | Animate big Dashboard numbers (stat cards, Goals widget) counting up on load/refresh/navigation, old->new on update, via framer-motion | profit-tracker-app/package.json, profit-tracker-app/src/components/UI/CountUp.jsx, profit-tracker-app/src/pages/Dashboard.jsx | In progress | 2026-10-22 |

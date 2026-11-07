@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.24',
+    date: '2026-11-07',
+    notes: "Your AI Assistant can now see your live cashout deals and work out the numbers on them itself, right alongside your inventory and sales.",
+  },
+  {
     version: '1.23',
     date: '2026-11-07',
     notes: "Cashout deals can now be viewed as a table or as cards — pick the one you like next to the search box, and it'll remember your choice.",
