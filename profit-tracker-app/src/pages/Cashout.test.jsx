@@ -648,6 +648,35 @@ describe('Cashout Page', () => {
     expect(within(card).getByRole('link', { name: 'Buy at Amazon' })).toBeInTheDocument();
   });
 
+  it('shows a placeholder instead of dropping the row on an expired card, same as the table', () => {
+    window.matchMedia = (query) => ({ matches: query.includes('max-width'), addEventListener: vi.fn(), removeEventListener: vi.fn() });
+    currentDeals = {
+      results: [{
+        connection: mockConnections[0],
+        deals: [{
+          id: '1',
+          name: 'Expired Deal',
+          retail: 50,
+          payout: 40,
+          expiresAt: new Date(Date.now() - 86400000).toISOString(),
+          items: [{ name: 'Expired Deal', purchaseLinks: [{ name: 'Amazon', url: 'https://www.amazon.com/dp/1' }] }],
+        }],
+      }],
+    };
+    render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByLabelText('Show expired (1)'));
+    const card = screen.getByRole('article');
+    expect(card).toHaveClass('opacity-60');
+    expect(within(card).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'Log Purchase' })).not.toBeInTheDocument();
+    expect(card).toHaveTextContent('—');
+  });
+
   it('counts down to the expiration date and flags expired deals', () => {
     const now = new Date('2026-11-06T17:00:00Z');
     expect(formatDealExpiry('2026-11-20T08:00:00Z', now)).toMatchObject({ note: '14 days left', expired: false, urgent: false });
