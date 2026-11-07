@@ -1,7 +1,7 @@
 const prisma = require('../../prisma');
 const { requireOwned } = require('../ownership');
 const { encryptKey, decryptKey, maskKey } = require('./crypto');
-const { getAdapter, listAvailableCashouts, isProviderAllowedForUser } = require('./registry');
+const { getAdapter } = require('./registry');
 
 // In-memory cache for live deals per connection
 // Key: connectionId -> { deals: CashoutDeal[], fetchedAt: number, error: string | null }
@@ -81,6 +81,10 @@ async function createConnection(userId, { provider, displayName, apiKey, platfor
   // Pre-flight check: verify the key with the provider before saving
   await adapter.testKey(apiKey.trim());
 
+  // A key that actually works is the real gate now -- CASHOUT_BETA_USER_IDS is
+  // gone. This is idempotent, so it's safe to set on every successful add.
+  await prisma.user.update({ where: { id: userId }, data: { cashout_access_granted: true } });
+
   // Encrypt the key
   const encryptedKey = encryptKey(apiKey.trim());
   const keyLast4 = maskKey(apiKey);
@@ -156,6 +160,10 @@ async function testConnection(userId, connectionId) {
         last_error: null,
       },
     });
+
+    // Same idempotent grant as createConnection -- a key that still works on
+    // re-test is just as much proof as one that worked the first time.
+    await prisma.user.update({ where: { id: userId }, data: { cashout_access_granted: true } });
 
     return { success: true, message: 'Connection test passed.' };
   } catch (err) {

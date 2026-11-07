@@ -7,7 +7,6 @@ const TIMEOUT_MS = 10000;
 const ebAdapter = {
   id: 'eb',
   name: 'ElectronicsBuyer',
-  public: false, // Beta only initially; controlled by CASHOUT_BETA_USER_IDS
   baseUrl: BASE_URL,
 
   /**

@@ -34,6 +34,9 @@ model User {
   login_disabled         Boolean          @default(false)
   firebase_identity      FirebaseIdentity?
   schedule_c_enabled     Boolean          @default(false)
+  // Set automatically the first time one of this user's cashout keys passes
+  // the provider's own check -- not a manual approval list.
+  cashout_access_granted Boolean          @default(false)
   buyers                 Buyer[]
   invoices               Invoice[]
   api_keys               ApiKey[]
