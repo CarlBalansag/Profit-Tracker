@@ -379,19 +379,6 @@ export const useCashoutDeals = (connectionId = null) =>
     refetchIntervalInBackground: false,
   });
 
-export const useCashoutHistory = ({ dealId = null, provider = null } = {}) =>
-  useQuery({
-    queryKey: ['cashout', 'history', dealId, provider],
-    queryFn: () => {
-      const params = new URLSearchParams();
-      if (dealId) params.append('dealId', dealId);
-      if (provider) params.append('provider', provider);
-      const qs = params.toString();
-      return fetcher(`/api/cashouts/history${qs ? `?${qs}` : ''}`);
-    },
-    staleTime: 60_000,
-  });
-
 export const useCashoutMutations = () => {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ['cashout'] });
@@ -467,43 +454,11 @@ export const useCashoutMutations = () => {
     onSuccess: invalidate,
   });
 
-  const setMatch = useMutation({
-    mutationFn: (data) =>
-      apiFetch('/api/cashouts/matches', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      }).then(async (r) => {
-        if (!r.ok) {
-          const e = await r.json().catch(() => ({}));
-          throw new Error(e.error || 'Failed to update match');
-        }
-        return r.json();
-      }),
-    onSuccess: invalidate,
-  });
-
-  const removeMatch = useMutation({
-    mutationFn: ({ provider, external_deal_id }) =>
-      apiFetch(`/api/cashouts/matches?provider=${encodeURIComponent(provider)}&external_deal_id=${encodeURIComponent(external_deal_id)}`, {
-        method: 'DELETE',
-      }).then(async (r) => {
-        if (!r.ok) {
-          const e = await r.json().catch(() => ({}));
-          throw new Error(e.error || 'Failed to remove match');
-        }
-        return r.json();
-      }),
-    onSuccess: invalidate,
-  });
-
   return {
     addConnection,
     updateConnection,
     deleteConnection,
     testConnection,
     syncConnection,
-    setMatch,
-    removeMatch,
   };
 };

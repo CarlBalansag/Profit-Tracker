@@ -484,14 +484,6 @@ const updateCashoutConnection = z.object({
   platform_id: id,
 }).strict();
 
-const cashoutItemMatch = z.object({
-  provider: requiredString('Provider'),
-  external_deal_id: requiredString('External deal ID'),
-  deal_item_name: requiredString('Deal item name'),
-  inventory_id: id,
-  inventory_name: optionalString,
-}).strict();
-
 const dataReset = z.object({
   scope: z.enum(['transactions', 'everything']),
   confirmation: z.literal('RESET'),
@@ -501,7 +493,6 @@ module.exports = {
   dataReset,
   createCashoutConnection,
   updateCashoutConnection,
-  cashoutItemMatch,
   createRefund,
   createInventory,
   updateInventory,

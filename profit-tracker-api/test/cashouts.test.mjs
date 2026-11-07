@@ -8,7 +8,7 @@ const harness = require('../../qa/harness.cjs');
 const { encryptKey, decryptKey, maskKey } = require('../services/cashouts/crypto');
 const { getAdapter, listAvailableCashouts } = require('../services/cashouts/registry');
 const ebAdapter = require('../services/cashouts/eb');
-const { dealsCache } = require('../services/cashouts/service');
+const { dealsCache, syncBlockedUntil } = require('../services/cashouts/service');
 const { verifySyncSecret, runScheduledSync } = require('../services/cashouts/syncScheduler');
 
 let server;
@@ -35,6 +35,7 @@ beforeAll(async () => {
 beforeEach(() => {
   harness.reset();
   dealsCache.clear();
+  syncBlockedUntil.clear();
   vi.restoreAllMocks();
   process.env.CASHOUT_KEY_ENCRYPTION_KEY = TEST_ENCRYPTION_KEY;
   process.env.CASHOUT_SYNC_SECRET = TEST_SYNC_SECRET;
@@ -220,6 +221,39 @@ describe('Cashout Connection CRUD & Tenant Isolation', () => {
     expect(harness.db.cashoutConnection.some(c => c.id === otherConn.id)).toBe(true);
   });
 
+  it('allows one connection per provider, so deals are never listed twice', async () => {
+    const first = await request('POST', '/api/cashouts/connections', { provider: 'eb', api_key: 'first-key' });
+    expect(first.status).toBe(201);
+
+    const second = await request('POST', '/api/cashouts/connections', { provider: 'eb', api_key: 'second-key' });
+    expect(second.status).toBe(409);
+    expect(harness.db.cashoutConnection).toHaveLength(1);
+  });
+
+  it('replacing a key keeps the same connection', async () => {
+    const added = await request('POST', '/api/cashouts/connections', { provider: 'eb', api_key: 'first-key' });
+    const updated = await request('PATCH', `/api/cashouts/connections/${added.body.id}`, { api_key: 'replacement-key' });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body.keyLast4).toBe('-key');
+    expect(harness.db.cashoutConnection).toHaveLength(1);
+    expect(decryptKey(harness.db.cashoutConnection[0].encrypted_key)).toBe('replacement-key');
+  });
+
+  it('only a rejected key marks a tested connection as needing attention', async () => {
+    const added = await request('POST', '/api/cashouts/connections', { provider: 'eb', api_key: 'first-key' });
+
+    vi.spyOn(ebAdapter, 'testKey').mockRejectedValue(new Error('ElectronicsBuyer rate limit exceeded.'));
+    const limited = await request('POST', `/api/cashouts/connections/${added.body.id}/test`);
+    expect(limited.body.success).toBe(false);
+    expect(harness.db.cashoutConnection[0].status).toBe('active');
+    expect(harness.db.cashoutConnection[0].last_error).toContain('rate limit');
+
+    vi.spyOn(ebAdapter, 'testKey').mockRejectedValue(Object.assign(new Error('Key rejected'), { keyRejected: true }));
+    await request('POST', `/api/cashouts/connections/${added.body.id}/test`);
+    expect(harness.db.cashoutConnection[0].status).toBe('attention_needed');
+  });
+
   it('deleting a connection succeeds and re-adding it works', async () => {
     const addRes = await request('POST', '/api/cashouts/connections', {
       provider: 'eb',
@@ -264,7 +298,7 @@ describe('Cashout Connection CRUD & Tenant Isolation', () => {
   });
 });
 
-describe('Deals, Profit Calculation & Inventory Matching', () => {
+describe('Live deals list', () => {
   let userConn;
 
   beforeEach(() => {
@@ -317,154 +351,55 @@ describe('Deals, Profit Calculation & Inventory Matching', () => {
     };
     harness.db.cashoutConnection.push(userConn);
 
-    // Setup user inventory for profit matching:
-    // 1. Airpod 5 ANC: cost $90, 2% card cashback, on hand
+    // Same name as a live deal, so any leftover matching would show up here.
     harness.db.inventory.push({
       id: 'inv-airpods-id',
       user_id: harness.ids.user,
       product_name: 'Airpod 5 ANC',
       vendor_id: harness.ids.vendor,
-      payment_method_id: harness.ids.card,
       unit_purchase_cost: 90,
       qty_purchased: 2,
       qty_on_hand: 2,
-      sales_tax: 0,
-      shipping_cost_inbound: 0,
-      fees: 0,
-      gift_card_amount: 0,
-      refunded_amount: 0,
-      refunded_qty: 0,
-      cashback_earned: 3.6,
-      cashback_rate: 2,
       status: 'PURCHASED',
       purchase_date: new Date('2026-10-01T00:00:00Z'),
       created_at: new Date(),
     });
-
-    // 2. Fire TV Stick 4K Select: past purchase (qty_on_hand = 0), cost $10
-    harness.db.inventory.push({
-      id: 'inv-firetv-id',
-      user_id: harness.ids.user,
-      product_name: 'Fire TV Stick 4K Select',
-      vendor_id: harness.ids.vendor,
-      payment_method_id: harness.ids.card,
-      unit_purchase_cost: 10,
-      qty_purchased: 5,
-      qty_on_hand: 0, // Out of stock / historical
-      sales_tax: 0,
-      shipping_cost_inbound: 0,
-      fees: 0,
-      gift_card_amount: 0,
-      refunded_amount: 0,
-      refunded_qty: 0,
-      cashback_earned: 0,
-      cashback_rate: 0,
-      status: 'SOLD',
-      purchase_date: new Date('2026-09-01T00:00:00Z'),
-      created_at: new Date(),
-    });
   });
 
-  it('calculates unit cost, cashback, and estimated profit for matching inventory', async () => {
+  it('returns the provider deals as they are, with payouts and no inventory or profit data', async () => {
     const res = await request('GET', '/api/cashouts/deals');
     expect(res.status).toBe(200);
     expect(res.body.results).toHaveLength(1);
 
     const deals = res.body.results[0].deals;
-    const airpods = deals.find(d => d.id === '5232');
-    expect(airpods).toBeDefined();
-    expect(airpods.financials.hasCostData).toBe(true);
-    expect(airpods.financials.unitCost).toBe(90);
-    expect(airpods.financials.unitCashback).toBe(1.8); // 90 * 2% = 1.80
-    expect(airpods.financials.payout).toBe(119);
-    // Estimated profit = 119 - 90 + 1.80 = 30.80
-    expect(airpods.financials.estimatedProfit).toBe(30.8);
-    expect(airpods.match.stockStatus).toBe('in_stock');
-    expect(airpods.match.matchProductName).toBe('Airpod 5 ANC');
-
-    // Historical match (out of stock)
-    const firetv = deals.find(d => d.id === '5230');
-    expect(firetv).toBeDefined();
-    expect(firetv.financials.hasCostData).toBe(true);
-    expect(firetv.financials.unitCost).toBe(10);
-    // Payout $16 - cost $10 = $6 profit
-    expect(firetv.financials.estimatedProfit).toBe(6);
-    expect(firetv.match.stockStatus).toBe('past_purchase');
-
-    // Unmatched item shows hasCostData: false, never made up or $0
-    const unmatched = deals.find(d => d.id === '9999');
-    expect(unmatched).toBeDefined();
-    expect(unmatched.financials.hasCostData).toBe(false);
-    expect(unmatched.financials.unitCost).toBeNull();
-    expect(unmatched.financials.estimatedProfit).toBeNull();
+    expect(deals.map(d => d.id)).toEqual(['5232', '5230', '9999']);
+    expect(deals.find(d => d.id === '5230').payout).toBe(16);
+    for (const deal of deals) {
+      expect(deal).not.toHaveProperty('match');
+      expect(deal).not.toHaveProperty('financials');
+    }
   });
 
-  it('applies cashout platform fee when connection is linked to a platform', async () => {
-    // Create cashout platform with 5% fee
-    const cashoutPlatform = {
-      id: 'plat-cashout-5pct',
-      user_id: harness.ids.user,
-      name: 'EB Cashout Platform',
-      type: 'Cashout',
-      fee_pct: 5,
-    };
-    harness.db.platform.push(cashoutPlatform);
-
-    // Link connection to this platform
-    userConn.platform_id = cashoutPlatform.id;
+  it('never reads inventory or saved item matches to list deals', async () => {
+    const inventory = vi.spyOn(harness.prisma.inventory, 'findMany');
+    const matches = vi.spyOn(harness.prisma.cashoutItemMatch, 'findMany');
 
     const res = await request('GET', '/api/cashouts/deals');
-    const airpods = res.body.results[0].deals.find(d => d.id === '5232');
-    expect(airpods).toBeDefined();
-    expect(airpods.financials.payout).toBe(119);
-    // 5% fee on $119 = $5.95 fee. Net payout = 119 - 5.95 = 113.05
-    expect(airpods.financials.cashoutFee).toBe(5.95);
-    expect(airpods.financials.netPayout).toBe(113.05);
-    // Profit = 113.05 - 90 (cost) + 1.80 (cashback) = 24.85
-    expect(airpods.financials.estimatedProfit).toBe(24.85);
+
+    expect(res.status).toBe(200);
+    expect(inventory).not.toHaveBeenCalled();
+    expect(matches).not.toHaveBeenCalled();
   });
 
-  it('supports manual item match override and remembers per user', async () => {
-    // Create a new inventory item that doesn't match by name
-    const customInv = {
-      id: '99999999-9999-4999-8999-999999999999',
-      user_id: harness.ids.user,
-      product_name: 'Custom Unbranded Earphones Batch 4',
-      vendor_id: harness.ids.vendor,
-      payment_method_id: harness.ids.card,
-      unit_purchase_cost: 65,
-      qty_purchased: 10,
-      qty_on_hand: 10,
-      sales_tax: 0,
-      shipping_cost_inbound: 0,
-      fees: 0,
-      gift_card_amount: 0,
-      refunded_amount: 0,
-      refunded_qty: 0,
-      cashback_earned: 0,
-      cashback_rate: 0,
-      status: 'PURCHASED',
-      purchase_date: new Date(),
-      created_at: new Date(),
-    };
-    harness.db.inventory.push(customInv);
-
-    // Set manual match for deal 5232 to this custom inventory
-    const matchRes = await request('POST', '/api/cashouts/matches', {
+  it('has no item match routes', async () => {
+    const created = await request('POST', '/api/cashouts/matches', {
       provider: 'eb',
       external_deal_id: '5232',
       deal_item_name: 'AirPods 5 ANC',
-      inventory_id: customInv.id,
     });
-    expect(matchRes.status).toBe(200);
-
-    // Fetch deals again: deal 5232 should now use customInv cost of $65
-    const res = await request('GET', '/api/cashouts/deals');
-    const airpods = res.body.results[0].deals.find(d => d.id === '5232');
-    expect(airpods.match.matchType).toBe('manual');
-    expect(airpods.match.inventoryId).toBe(customInv.id);
-    expect(airpods.financials.unitCost).toBe(65);
-    expect(airpods.financials.estimatedProfit).toBe(54); // 119 - 65 = 54
+    expect(created.status).toBe(404);
+    expect((await request('DELETE', '/api/cashouts/matches?provider=eb&external_deal_id=5232')).status).toBe(404);
+    expect(harness.db.cashoutItemMatch).toHaveLength(0);
   });
 });
 
@@ -541,6 +476,99 @@ describe('Cache, Snapshots & History', () => {
     expect(res.body.cooldown).toBe(true);
     expect(res.body.remainingSeconds).toBeGreaterThan(0);
     expect(res.body.remainingSeconds).toBeLessThanOrEqual(50);
+  });
+
+  describe('when the provider is failing', () => {
+    const outage = () => { throw new Error('ElectronicsBuyer returned HTTP 503.'); };
+    const expireCache = () => {
+      dealsCache.get(userConn.id).fetchedAt = Date.now() - 120000;
+      userConn.last_synced_at = new Date(Date.now() - 120000);
+    };
+
+    beforeEach(async () => {
+      userConn.last_synced_at = null;
+      vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([{ id: '1', provider: 'eb', name: 'Thing', payout: 10, retail: null, items: [] }]);
+      await request('GET', '/api/cashouts/deals');
+      expireCache();
+    });
+
+    it('reports Sync now as failed, not successful', async () => {
+      vi.spyOn(ebAdapter, 'fetchDeals').mockImplementation(outage);
+      const res = await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+      expect(res.status).toBe(502);
+      expect(res.body.error).toBe('Failed to refresh: ElectronicsBuyer returned HTTP 503. Showing last known data.');
+    });
+
+    it('saves the reason but keeps a temporary failure Active', async () => {
+      vi.spyOn(ebAdapter, 'fetchDeals').mockImplementation(outage);
+      await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+      const saved = harness.db.cashoutConnection.find(c => c.id === userConn.id);
+      expect(saved.last_error).toContain('HTTP 503');
+      expect(saved.status).toBe('active');
+    });
+
+    it('clears the saved reason once a refresh works again', async () => {
+      vi.spyOn(ebAdapter, 'fetchDeals').mockImplementation(outage);
+      await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+
+      vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([]);
+      syncBlockedUntil.clear();
+      const res = await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+
+      expect(res.status).toBe(200);
+      expect(harness.db.cashoutConnection.find(c => c.id === userConn.id).last_error).toBeNull();
+    });
+
+    it('applies the cooldown to failed attempts too', async () => {
+      const fetchDeals = vi.spyOn(ebAdapter, 'fetchDeals').mockImplementation(outage);
+      await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+      const second = await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+      expect(second.status).toBe(429);
+      expect(fetchDeals).toHaveBeenCalledTimes(1);
+    });
+
+    it('waits as long as the provider asks when rate limited', async () => {
+      vi.spyOn(ebAdapter, 'fetchDeals').mockImplementation(() => {
+        const err = new Error('ElectronicsBuyer rate limit exceeded. Retry after 300s.');
+        err.rateLimited = true;
+        err.retryAfter = 300;
+        throw err;
+      });
+      await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+      const second = await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+      expect(second.status).toBe(429);
+      expect(second.body.remainingSeconds).toBeGreaterThan(290);
+    });
+
+    it('shows last known deals on page refresh without asking the provider again', async () => {
+      const fetchDeals = vi.spyOn(ebAdapter, 'fetchDeals').mockImplementation(outage);
+      await request('GET', '/api/cashouts/deals');
+      expect(fetchDeals).toHaveBeenCalledTimes(1);
+
+      const res = await request('GET', '/api/cashouts/deals');
+      expect(fetchDeals).toHaveBeenCalledTimes(1);
+      expect(res.body.results[0].isStale).toBe(true);
+      expect(res.body.results[0].deals).toHaveLength(1);
+      expect(res.body.results[0].warning).toContain('HTTP 503');
+    });
+
+    it('counts a failed refresh as failed in the background sync', async () => {
+      vi.spyOn(ebAdapter, 'fetchDeals').mockImplementation(outage);
+      const res = await request('POST', '/internal/cashouts/sync', undefined, {
+        'Authorization': `Bearer ${TEST_SYNC_SECRET}`,
+      });
+      expect(res.body).toMatchObject({ failed: 1, synced: 0 });
+    });
+
+    it('still marks a rejected key as needing attention', async () => {
+      vi.spyOn(ebAdapter, 'fetchDeals').mockImplementation(() => {
+        const err = new Error('ElectronicsBuyer API key is invalid or revoked.');
+        err.keyRejected = true;
+        throw err;
+      });
+      await request('POST', `/api/cashouts/connections/${userConn.id}/sync`);
+      expect(harness.db.cashoutConnection.find(c => c.id === userConn.id).status).toBe('attention_needed');
+    });
   });
 });
 

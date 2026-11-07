@@ -2,11 +2,15 @@ const prisma = require('../../prisma');
 const { requireOwned } = require('../ownership');
 const { encryptKey, decryptKey, maskKey } = require('./crypto');
 const { getAdapter, listAvailableCashouts, isProviderAllowedForUser } = require('./registry');
-const { allocatedCost, allocatedCashback, roundCents } = require('../../../shared/finance.mjs');
 
 // In-memory cache for live deals per connection
 // Key: connectionId -> { deals: CashoutDeal[], fetchedAt: number, error: string | null }
 const dealsCache = new Map();
+
+// After a failed provider request, no new attempt until this time (epoch ms), so
+// repeated clicks and page refreshes can't hammer a provider that is down or
+// rate limiting us. Key: connectionId
+const syncBlockedUntil = new Map();
 
 // 60-second TTL for cache and manual sync cooldown
 const CACHE_TTL_MS = 60 * 1000;
@@ -23,7 +27,6 @@ function safeConnection(conn) {
     status: conn.status,
     platformId: conn.platform_id,
     platformName: conn.platform?.name || null,
-    platformFeePct: conn.platform?.fee_pct ?? 0,
     lastSyncedAt: conn.last_synced_at,
     lastError: conn.last_error,
     createdAt: conn.created_at,
@@ -34,7 +37,7 @@ function safeConnection(conn) {
 async function listConnections(userId) {
   const connections = await prisma.cashoutConnection.findMany({
     where: { user_id: userId },
-    include: { platform: { select: { id: true, name: true, fee_pct: true } } },
+    include: { platform: { select: { id: true, name: true } } },
     orderBy: { created_at: 'desc' },
   });
   return connections.map(safeConnection);
@@ -43,7 +46,7 @@ async function listConnections(userId) {
 async function getConnection(userId, connectionId) {
   const conn = await prisma.cashoutConnection.findFirst({
     where: { id: connectionId, user_id: userId },
-    include: { platform: { select: { id: true, name: true, fee_pct: true } } },
+    include: { platform: { select: { id: true, name: true } } },
   });
   if (!conn) {
     const error = new Error('Cashout connection not found or access denied');
@@ -61,6 +64,15 @@ async function createConnection(userId, { provider, displayName, apiKey, platfor
   }
 
   const adapter = getAdapter(provider, userId);
+
+  // One key per provider: a second would list every deal twice. A new key
+  // replaces the old one on the existing connection.
+  const existing = await prisma.cashoutConnection.findFirst({ where: { user_id: userId, provider } });
+  if (existing) {
+    const error = new Error('This cashout is already connected. Replace its key instead.');
+    error.status = 409;
+    throw error;
+  }
 
   if (platformId) {
     await requireOwned('platform', platformId, userId, 'Platform');
@@ -84,7 +96,7 @@ async function createConnection(userId, { provider, displayName, apiKey, platfor
       status: 'active',
       last_synced_at: new Date(),
     },
-    include: { platform: { select: { id: true, name: true, fee_pct: true } } },
+    include: { platform: { select: { id: true, name: true } } },
   });
 
   return safeConnection(created);
@@ -117,12 +129,13 @@ async function updateConnection(userId, connectionId, { displayName, apiKey, pla
     updateData.last_error = null;
     updateData.last_synced_at = new Date();
     dealsCache.delete(connectionId);
+    syncBlockedUntil.delete(connectionId);
   }
 
   const updated = await prisma.cashoutConnection.update({
     where: { id: connectionId },
     data: updateData,
-    include: { platform: { select: { id: true, name: true, fee_pct: true } } },
+    include: { platform: { select: { id: true, name: true } } },
   });
 
   return safeConnection(updated);
@@ -149,7 +162,10 @@ async function testConnection(userId, connectionId) {
     await prisma.cashoutConnection.update({
       where: { id: connectionId },
       data: {
-        status: 'attention_needed',
+        // A failed test only means the key is bad if the provider said so. A
+        // timeout or rate limit says nothing about it, and marking it would stop
+        // background sync.
+        ...(err.keyRejected ? { status: 'attention_needed' } : {}),
         last_error: err.message,
       },
     });
@@ -161,6 +177,7 @@ async function testConnection(userId, connectionId) {
 async function deleteConnection(userId, connectionId) {
   await getConnection(userId, connectionId);
   dealsCache.delete(connectionId);
+  syncBlockedUntil.delete(connectionId);
   await prisma.cashoutConnection.delete({
     where: { id: connectionId },
   });
@@ -238,10 +255,22 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
     };
   }
 
+  // Backing off after a failure: show what we have rather than asking again.
+  if (!forceRefresh && cached && now < (syncBlockedUntil.get(connectionId) || 0)) {
+    return {
+      connection: safeConnection(conn),
+      deals: cached.deals,
+      lastUpdated: new Date(cached.fetchedAt).toISOString(),
+      isStale: true,
+      warning: `Refresh is paused after a failed attempt${conn.last_error ? `: ${conn.last_error.replace(/\.$/, '')}` : ''}. Showing last known data.`,
+    };
+  }
+
   try {
     const rawKey = decryptKey(conn.encrypted_key);
     const deals = await adapter.fetchDeals(rawKey);
 
+    syncBlockedUntil.delete(connectionId);
     dealsCache.set(connectionId, {
       deals,
       fetchedAt: now,
@@ -267,16 +296,18 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
       isStale: false,
     };
   } catch (err) {
-    // If the key was rejected (401/403), mark connection as needing attention
-    if (err.keyRejected) {
-      await prisma.cashoutConnection.update({
-        where: { id: connectionId },
-        data: {
-          status: 'attention_needed',
-          last_error: err.message,
-        },
-      });
-    }
+    const waitMs = Math.max(MANUAL_SYNC_COOLDOWN_MS, (err.retryAfter || 0) * 1000);
+    syncBlockedUntil.set(connectionId, Date.now() + waitMs);
+
+    // Always keep the reason so Manage Connections can show it. Only a rejected
+    // key (401/403) needs attention: an outage or rate limit clears up on its own,
+    // and background sync skips connections that need attention.
+    await prisma.cashoutConnection.update({
+      where: { id: connectionId },
+      data: err.keyRejected
+        ? { status: 'attention_needed', last_error: err.message }
+        : { last_error: err.message },
+    });
 
     // If we have cached deals, return them as stale with a warning
     if (cached && cached.deals) {
@@ -285,7 +316,7 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
         deals: cached.deals,
         lastUpdated: new Date(cached.fetchedAt).toISOString(),
         isStale: true,
-        warning: `Failed to refresh: ${err.message}. Showing last known data.`,
+        warning: `Failed to refresh: ${err.message.replace(/\.$/, '')}. Showing last known data.`,
       };
     }
 
@@ -294,200 +325,34 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
 }
 
 /**
- * Find inventory match and calculate profit for deals.
- */
-function normalizeName(name) {
-  if (!name || typeof name !== 'string') return '';
-  return name.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-async function attachProfitToDeals(userId, connection, deals) {
-  if (!Array.isArray(deals) || deals.length === 0) return [];
-
-  // Fetch active inventory for user
-  const inventories = await prisma.inventory.findMany({
-    where: {
-      user_id: userId,
-      NOT: { status: { in: ['CANCELLED', 'RETURNED', 'DISPUTED'] } },
-    },
-    include: { payment_method: true, vendor: true },
-    orderBy: [
-      { qty_on_hand: 'desc' },
-      { purchase_date: 'desc' },
-    ],
-  });
-
-  // Fetch manual overrides
-  const manualMatches = await prisma.cashoutItemMatch.findMany({
-    where: { user_id: userId, provider: connection.provider },
-  });
-
-  const feePct = connection.platformFeePct || 0;
-
-  return deals.map((deal) => {
-    // 1. Check for manual match override
-    const manualMatch = manualMatches.find((m) => m.external_deal_id === deal.id);
-    let matchedInventory = null;
-    let matchType = null;
-
-    if (manualMatch && manualMatch.inventory_id) {
-      matchedInventory = inventories.find((inv) => inv.id === manualMatch.inventory_id) || null;
-      if (matchedInventory) matchType = 'manual';
-    }
-
-    // 2. Automatic matching by product_name if no manual match
-    if (!matchedInventory) {
-      const dealNormalized = normalizeName(deal.name);
-
-      // Prefer on-hand inventory first
-      const onHandMatches = inventories.filter((inv) => inv.qty_on_hand > 0);
-      const pastMatches = inventories.filter((inv) => inv.qty_on_hand === 0);
-
-      // Exact match
-      const exactOnHand = onHandMatches.find((inv) => normalizeName(inv.product_name) === dealNormalized);
-      if (exactOnHand) {
-        matchedInventory = exactOnHand;
-        matchType = 'exact';
-      } else {
-        const exactPast = pastMatches.find((inv) => normalizeName(inv.product_name) === dealNormalized);
-        if (exactPast) {
-          matchedInventory = exactPast;
-          matchType = 'exact';
-        } else {
-          // Substring / word overlap
-          const fuzzyOnHand = onHandMatches.find((inv) => {
-            const invNorm = normalizeName(inv.product_name);
-            return invNorm && (dealNormalized.includes(invNorm) || invNorm.includes(dealNormalized));
-          });
-          if (fuzzyOnHand) {
-            matchedInventory = fuzzyOnHand;
-            matchType = 'estimate';
-          } else {
-            const fuzzyPast = pastMatches.find((inv) => {
-              const invNorm = normalizeName(inv.product_name);
-              return invNorm && (dealNormalized.includes(invNorm) || invNorm.includes(dealNormalized));
-            });
-            if (fuzzyPast) {
-              matchedInventory = fuzzyPast;
-              matchType = 'estimate';
-            }
-          }
-        }
-      }
-    }
-
-    // Profit calculation using shared/finance.mjs
-    const payout = Number(deal.payout) || 0;
-    const cashoutFee = roundCents((payout * feePct) / 100);
-    const netPayout = payout - cashoutFee;
-
-    let unitCost = null;
-    let unitCashback = null;
-    let estimatedProfit = null;
-    let profitMarginPct = null;
-    let stockStatus = 'no_match';
-
-    if (matchedInventory) {
-      unitCost = roundCents(allocatedCost(matchedInventory, 1));
-      unitCashback = roundCents(allocatedCashback(matchedInventory, 1));
-      estimatedProfit = roundCents(netPayout - unitCost + unitCashback);
-      profitMarginPct = unitCost > 0 ? roundCents(((estimatedProfit / unitCost) * 100)) : 0;
-      stockStatus = matchedInventory.qty_on_hand > 0 ? 'in_stock' : 'past_purchase';
-    }
-
-    return {
-      ...deal,
-      match: matchedInventory ? {
-        inventoryId: matchedInventory.id,
-        productName: matchedInventory.product_name,
-        matchProductName: matchedInventory.product_name,
-        matchType,
-        stockStatus,
-        qtyOnHand: matchedInventory.qty_on_hand,
-        purchaseDate: matchedInventory.purchase_date,
-      } : null,
-      financials: {
-        payout,
-        cashoutFee,
-        netPayout,
-        unitCost,
-        unitCashback,
-        estimatedProfit,
-        profitMarginPct,
-        hasCostData: matchedInventory !== null,
-      },
-    };
-  });
-}
-
-/**
- * Set manual item match override.
- */
-async function setItemMatch(userId, { provider, externalDealId, dealItemName, inventoryId, inventoryName }) {
-  if (inventoryId) {
-    await requireOwned('inventory', inventoryId, userId, 'Inventory');
-  }
-
-  const match = await prisma.cashoutItemMatch.upsert({
-    where: {
-      user_id_provider_external_deal_id: {
-        user_id: userId,
-        provider,
-        external_deal_id: externalDealId,
-      },
-    },
-    create: {
-      user_id: userId,
-      provider,
-      external_deal_id: externalDealId,
-      deal_item_name: dealItemName,
-      inventory_id: inventoryId || null,
-      inventory_name: inventoryName || null,
-    },
-    update: {
-      inventory_id: inventoryId || null,
-      inventory_name: inventoryName || null,
-      deal_item_name: dealItemName,
-    },
-  });
-
-  return match;
-}
-
-/**
- * Remove manual match override.
- */
-async function removeItemMatch(userId, { provider, externalDealId }) {
-  await prisma.cashoutItemMatch.deleteMany({
-    where: {
-      user_id: userId,
-      provider,
-      external_deal_id: externalDealId,
-    },
-  });
-  return { success: true };
-}
-
-/**
  * Sync single user connection (manual "Sync now").
  */
 async function syncUserConnection(userId, connectionId) {
   const conn = await getConnection(userId, connectionId);
 
-  // Check 60-second cooldown
-  if (conn.last_synced_at) {
-    const elapsed = Date.now() - new Date(conn.last_synced_at).getTime();
-    if (elapsed < MANUAL_SYNC_COOLDOWN_MS) {
-      const remainingSeconds = Math.ceil((MANUAL_SYNC_COOLDOWN_MS - elapsed) / 1000);
-      const error = new Error(`Sync cooldown active. Please wait ${remainingSeconds}s before syncing again.`);
-      error.status = 429;
-      error.cooldown = true;
-      error.remainingSeconds = remainingSeconds;
-      throw error;
-    }
+  // 60-second cooldown after a successful sync, or longer after a failed one
+  const lastSyncedAt = conn.last_synced_at ? new Date(conn.last_synced_at).getTime() : 0;
+  const readyAt = Math.max(lastSyncedAt + MANUAL_SYNC_COOLDOWN_MS, syncBlockedUntil.get(connectionId) || 0);
+  const remainingMs = readyAt - Date.now();
+  if (remainingMs > 0) {
+    const remainingSeconds = Math.ceil(remainingMs / 1000);
+    const error = new Error(`Sync cooldown active. Please wait ${remainingSeconds}s before syncing again.`);
+    error.status = 429;
+    error.cooldown = true;
+    error.remainingSeconds = remainingSeconds;
+    throw error;
   }
 
-  return fetchConnectionDeals(userId, connectionId, { forceRefresh: true });
+  const result = await fetchConnectionDeals(userId, connectionId, { forceRefresh: true });
+
+  // Old data came back because the refresh failed. That is not a successful sync.
+  if (result.isStale) {
+    const error = new Error(result.warning);
+    error.status = 502;
+    throw error;
+  }
+
+  return result;
 }
 
 /**
@@ -532,10 +397,8 @@ module.exports = {
   testConnection,
   deleteConnection,
   fetchConnectionDeals,
-  attachProfitToDeals,
-  setItemMatch,
-  removeItemMatch,
   syncUserConnection,
   getDealHistory,
   dealsCache,
+  syncBlockedUntil,
 };

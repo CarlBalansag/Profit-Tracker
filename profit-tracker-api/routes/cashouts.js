@@ -4,7 +4,6 @@ const { validateBody } = require('../middleware/validate');
 const {
   createCashoutConnection,
   updateCashoutConnection,
-  cashoutItemMatch,
 } = require('../validation/schemas');
 const { listAvailableCashouts, isProviderAllowedForUser, getAdapter } = require('../services/cashouts/registry');
 const {
@@ -15,9 +14,6 @@ const {
   testConnection,
   deleteConnection,
   fetchConnectionDeals,
-  attachProfitToDeals,
-  setItemMatch,
-  removeItemMatch,
   syncUserConnection,
   getDealHistory,
 } = require('../services/cashouts/service');
@@ -115,7 +111,7 @@ router.post('/connections/:id/sync', isAuthenticated, async (req, res, next) => 
   }
 });
 
-// GET /api/cashouts/deals — live deals with matching inventory and profit estimates
+// GET /api/cashouts/deals — live deals from each connected cashout service
 router.get('/deals', isAuthenticated, async (req, res, next) => {
   try {
     const connections = await listConnections(req.user.id);
@@ -132,10 +128,9 @@ router.get('/deals', isAuthenticated, async (req, res, next) => {
       targetConnections.map(async (conn) => {
         try {
           const fetchResult = await fetchConnectionDeals(req.user.id, conn.id);
-          const dealsWithProfit = await attachProfitToDeals(req.user.id, conn, fetchResult.deals);
           return {
             connection: conn,
-            deals: dealsWithProfit,
+            deals: fetchResult.deals,
             lastUpdated: fetchResult.lastUpdated,
             isStale: fetchResult.isStale,
             warning: fetchResult.warning || null,
@@ -174,40 +169,6 @@ router.get('/history', isAuthenticated, async (req, res, next) => {
     res.json(history);
   } catch (err) {
     next(err);
-  }
-});
-
-// POST /api/cashouts/matches — set manual item match override
-router.post('/matches', isAuthenticated, validateBody(cashoutItemMatch), async (req, res, next) => {
-  try {
-    const { provider, external_deal_id, deal_item_name, inventory_id, inventory_name } = req.body;
-    const match = await setItemMatch(req.user.id, {
-      provider,
-      externalDealId: external_deal_id,
-      dealItemName: deal_item_name,
-      inventoryId: inventory_id,
-      inventoryName: inventory_name,
-    });
-    res.json(match);
-  } catch (err) {
-    res.status(err.status || 400).json({ error: err.message });
-  }
-});
-
-// DELETE /api/cashouts/matches — remove manual item match override
-router.delete('/matches', isAuthenticated, async (req, res, next) => {
-  try {
-    const { provider, external_deal_id } = req.query;
-    if (!provider || !external_deal_id) {
-      return res.status(400).json({ error: 'provider and external_deal_id query parameters are required.' });
-    }
-    const result = await removeItemMatch(req.user.id, {
-      provider,
-      externalDealId: external_deal_id,
-    });
-    res.json(result);
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
