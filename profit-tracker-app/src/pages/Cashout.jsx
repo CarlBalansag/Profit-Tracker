@@ -792,7 +792,7 @@ function DealCard({ deal }) {
         {expired ? (
           <span className="text-[var(--dp-text-label)]">—</span>
         ) : (
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <StoreLinks deal={deal} large />
             <LogPurchaseButton />
           </div>
