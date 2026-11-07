@@ -20,6 +20,8 @@ const { detectCarrier } = require('../services/tracking');
 const { computeCardDashboard, nextDueDate } = require('../services/cardNetToPay');
 const { recordChanges } = require('../services/changeLog');
 const transactionNotes = require('../services/transactionNotes');
+const cashoutService = require('../services/cashouts/service');
+const { presentDeal } = require('../services/cashouts/dealPresenter');
 
 const toDateOnly = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 const toNum = (d) => (d === null || d === undefined ? 0 : (typeof d.toNumber === 'function' ? d.toNumber() : Number(d)));
@@ -74,6 +76,29 @@ const strictDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM
   const parsed = new Date(Date.UTC(year, month - 1, day));
   return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
 }, 'date must be a real calendar date');
+
+// Every live deal across every connected cashout, each paired with the
+// connection it came from. Uses the same 60s cache fetchConnectionDeals
+// already keeps, so calling this doesn't hammer the provider on every tool
+// call -- only sync_cashout_deals and get_cashout_deal force a fresh fetch.
+async function loadLiveCashoutDeals(userId) {
+  const connections = await cashoutService.listConnections(userId);
+  const perConnection = await Promise.all(connections.map(async (conn) => {
+    try {
+      const result = await cashoutService.fetchConnectionDeals(userId, conn.id);
+      return { conn, result };
+    } catch (err) {
+      return { conn, result: { deals: [], lastUpdated: null, isStale: true, warning: err.message } };
+    }
+  }));
+  const deals = [];
+  for (const { conn, result } of perConnection) {
+    for (const deal of result.deals || []) {
+      deals.push({ deal: presentDeal(deal, conn), connection: conn, synced_at: result.lastUpdated });
+    }
+  }
+  return { deals, connections: perConnection.map(({ conn, result }) => ({ conn, result })) };
+}
 
 function jsonResult(data) {
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
@@ -1744,6 +1769,167 @@ function buildServer(userId, apiKeyId) {
     } catch (err) {
       return errorResult(err.message || 'Failed to list changes');
     }
+  });
+
+  server.registerTool('list_cashout_deals', {
+    description: 'List live deals from every connected cashout service. spread_vs_retail is payout minus retail, before tax, shipping or coupons -- not a guarantee of real profit. Raw payout/retail/vendor_limit_total are included so you can run your own math (e.g. spread x vendor_limit_total for total opportunity on one deal).',
+    inputSchema: {
+      category: z.enum(['all', 'above_retail', 'close_to_retail']).optional().describe('above_retail: spread > 0. close_to_retail: spread <= 0 or unknown retail. Default all.'),
+      store: z.string().optional().describe('Filter to deals buyable at this retailer (case-insensitive, partial match).'),
+      cashout: z.string().optional().describe('Filter to one connected cashout service by its display name (case-insensitive, partial match).'),
+      search: z.string().optional().describe('Match against the deal name or any item UPC.'),
+      include_expired: z.boolean().optional().describe('Default false.'),
+      sort: z.enum(['profit_desc', 'payout_desc', 'ending_soon']).optional().describe('Default profit_desc.'),
+      limit: z.number().int().min(1).max(200).optional(),
+    },
+  }, async ({ category, store, cashout, search, include_expired: includeExpired, sort, limit }) => {
+    try {
+      const { deals } = await loadLiveCashoutDeals(userId);
+      const query = (search || '').toLowerCase();
+      const storeQuery = (store || '').toLowerCase();
+      const cashoutQuery = (cashout || '').toLowerCase();
+      let filtered = deals.filter(({ deal }) => {
+        if (!includeExpired && deal.is_expired) return false;
+        if (cashoutQuery && !deal.cashout.toLowerCase().includes(cashoutQuery)) return false;
+        if (storeQuery && !deal.items.some((item) => item.stores.some((s) => s.name.toLowerCase().includes(storeQuery)))) return false;
+        if (category === 'above_retail' && !(deal.spread_vs_retail && deal.spread_vs_retail.amount > 0)) return false;
+        if (category === 'close_to_retail' && !(!deal.spread_vs_retail || deal.spread_vs_retail.amount <= 0)) return false;
+        if (query) {
+          const nameMatch = deal.name.toLowerCase().includes(query);
+          const upcMatch = deal.items.some((item) => item.upc && item.upc.toLowerCase().includes(query));
+          if (!nameMatch && !upcMatch) return false;
+        }
+        return true;
+      }).map(({ deal }) => deal);
+
+      filtered.sort((a, b) => {
+        if (sort === 'payout_desc') return b.payout - a.payout;
+        if (sort === 'ending_soon') {
+          const da = a.days_left ?? Infinity, db = b.days_left ?? Infinity;
+          return da - db;
+        }
+        return (b.spread_vs_retail?.amount ?? -Infinity) - (a.spread_vs_retail?.amount ?? -Infinity);
+      });
+
+      const total = filtered.length;
+      if (limit) filtered = filtered.slice(0, limit);
+      return jsonResult({ deals: filtered, total, truncated: filtered.length < total });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to list cashout deals');
+    }
+  });
+
+  server.registerTool('get_cashout_deal', {
+    description: 'Re-check one specific cashout deal right before buying, instead of trusting a cached list. Forces a fresh fetch (respecting the normal sync cooldown; falls back to the last known data if the cooldown is active or the refresh fails -- check "fresh" to tell which happened). If found is false, the deal has sold out, expired, or been pulled -- do not buy it.',
+    inputSchema: { id: z.string().describe('The deal id from list_cashout_deals.') },
+  }, async ({ id }) => {
+    const connections = await cashoutService.listConnections(userId);
+    for (const conn of connections) {
+      let result;
+      let fresh = true;
+      try {
+        result = await cashoutService.syncUserConnection(userId, conn.id);
+      } catch (err) {
+        fresh = false;
+        try {
+          result = await cashoutService.fetchConnectionDeals(userId, conn.id);
+        } catch (err2) {
+          continue;
+        }
+      }
+      const match = (result.deals || []).find((d) => d.id === id);
+      if (match) {
+        return jsonResult({ found: true, fresh, synced_at: result.lastUpdated, deal: presentDeal(match, conn) });
+      }
+    }
+    return jsonResult({ found: false, reason: 'This deal is no longer listed by any connected cashout -- it may have sold out, expired, or been pulled.' });
+  });
+
+  server.registerTool('get_cashout_opportunity_summary', {
+    description: 'Aggregate stats across every live cashout deal. estimated_opportunity_at_full_limit is only an estimate of the opportunity -- it ignores real all-in cost (tax, shipping, coupons) and the risk EB rejects a unit, so treat it as a ceiling, not a forecast.',
+    inputSchema: {},
+  }, async () => {
+    try {
+      const { deals, connections } = await loadLiveCashoutDeals(userId);
+      const live = deals.map((d) => d.deal).filter((deal) => !deal.is_expired);
+      const withSpread = live.filter((deal) => deal.spread_vs_retail);
+      const aboveRetail = withSpread.filter((deal) => deal.spread_vs_retail.amount > 0);
+
+      const best = withSpread.reduce((top, deal) => (
+        !top || deal.spread_vs_retail.pct > top.spread_vs_retail.pct ? deal : top
+      ), null);
+
+      const opportunity = live.reduce((sum, deal) => (
+        deal.spread_vs_retail && deal.vendor_limit_total
+          ? sum + deal.spread_vs_retail.amount * deal.vendor_limit_total
+          : sum
+      ), 0);
+
+      const byStoreCounts = new Map();
+      for (const deal of live) {
+        const stores = new Set(deal.items.flatMap((item) => item.stores.map((s) => s.name)));
+        for (const store of stores) byStoreCounts.set(store, (byStoreCounts.get(store) || 0) + 1);
+      }
+
+      const byCashout = connections.map(({ conn, result }) => ({
+        cashout: conn.displayName || conn.provider,
+        deal_count: (result.deals || []).filter((d) => !d.expiresAt || new Date(d.expiresAt).getTime() > Date.now()).length,
+        status: conn.status,
+      }));
+
+      return jsonResult({
+        live_deal_count: live.length,
+        above_retail_count: aboveRetail.length,
+        best_margin: best ? { deal_id: best.id, deal_name: best.name, amount: best.spread_vs_retail.amount, pct: best.spread_vs_retail.pct } : null,
+        avg_margin_pct: withSpread.length ? Math.round((withSpread.reduce((sum, d) => sum + d.spread_vs_retail.pct, 0) / withSpread.length) * 100) / 100 : null,
+        estimated_opportunity_at_full_limit: Math.round(opportunity * 100) / 100,
+        by_store: [...byStoreCounts.entries()].map(([store, deal_count]) => ({ store, deal_count })),
+        by_cashout: byCashout,
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to summarize cashout deals');
+    }
+  });
+
+  server.registerTool('list_cashout_connections', {
+    description: 'List this account\'s connected cashout services and whether each one is working.',
+    inputSchema: {},
+  }, async () => {
+    const connections = await cashoutService.listConnections(userId);
+    return jsonResult(connections.map((c) => ({
+      id: c.id,
+      provider: c.provider,
+      display_name: c.displayName,
+      status: c.status,
+      last_synced_at: c.lastSyncedAt,
+      last_error: c.lastError,
+    })));
+  });
+
+  server.registerTool('sync_cashout_deals', {
+    description: 'Read-only refresh: re-fetch live deals from a connected cashout service right now instead of waiting for the normal 60s cache. Never places or logs a purchase. Subject to the same cooldown as the "Sync now" button -- a connection still cooling down is reported, not retried.',
+    inputSchema: {
+      cashout: z.string().optional().describe('Limit to one connection by display name or provider (case-insensitive, partial match). Omit to sync every connection.'),
+    },
+  }, async ({ cashout }) => {
+    const query = (cashout || '').toLowerCase();
+    const connections = await cashoutService.listConnections(userId);
+    const targets = query
+      ? connections.filter((c) => (c.displayName || '').toLowerCase().includes(query) || c.provider.toLowerCase().includes(query))
+      : connections;
+    if (query && targets.length === 0) {
+      return errorResult(`No connected cashout matches "${cashout}".`);
+    }
+    const results = await Promise.all(targets.map(async (conn) => {
+      const name = conn.displayName || conn.provider;
+      try {
+        const result = await cashoutService.syncUserConnection(userId, conn.id);
+        return { cashout: name, synced: true, deal_count: (result.deals || []).length, cooldown_seconds_remaining: null };
+      } catch (err) {
+        return { cashout: name, synced: false, cooldown_seconds_remaining: err.cooldown ? err.remainingSeconds : null, error: err.message };
+      }
+    }));
+    return jsonResult({ results });
   });
 
   return server;

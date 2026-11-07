@@ -514,7 +514,7 @@ export default function Cashout() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr className="border-b border-[color:var(--dp-border)] text-[var(--dp-text-label)] uppercase font-semibold text-[12px] tracking-wider">
+                    <tr className="border-b border-[color:var(--dp-border)] text-[var(--dp-text-label)] uppercase font-semibold text-[12px] tracking-wider align-top">
                       <th className="py-3 px-4">Deal / Item</th>
                       <th className="py-3 px-3">Cashout</th>
                       <th className="py-3 px-3 text-right">Payout</th>
@@ -842,6 +842,9 @@ function StoreLink({ link, large }) {
       {logo ? (
         <img src={logo} alt="" className={`${large ? 'w-6 h-6' : 'w-5 h-5'} object-contain`} onError={() => setLogoFailed(true)} />
       ) : (
+        // Fixed dark text, not a --dp- token: this circle is always bg-white
+        // like a real store logo, in both themes, so the letter must stay
+        // dark too -- a theme token would turn invisible under dark mode.
         <span className="text-[12px] font-bold text-gray-800">{(link.name || '?').charAt(0).toUpperCase()}</span>
       )}
     </a>
