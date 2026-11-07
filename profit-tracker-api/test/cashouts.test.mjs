@@ -25,7 +25,6 @@ const TEST_SYNC_SECRET = 'super-secret-sync-bearer-token-12345';
 beforeAll(async () => {
   process.env.CASHOUT_KEY_ENCRYPTION_KEY = TEST_ENCRYPTION_KEY;
   process.env.CASHOUT_SYNC_SECRET = TEST_SYNC_SECRET;
-  process.env.CASHOUT_BETA_USER_IDS = `${harness.ids.user},beta-user-2`;
 
   server = harness.app().listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
@@ -39,7 +38,6 @@ beforeEach(() => {
   vi.restoreAllMocks();
   process.env.CASHOUT_KEY_ENCRYPTION_KEY = TEST_ENCRYPTION_KEY;
   process.env.CASHOUT_SYNC_SECRET = TEST_SYNC_SECRET;
-  process.env.CASHOUT_BETA_USER_IDS = `${harness.ids.user},beta-user-2`;
 });
 
 afterAll(() => {
@@ -278,23 +276,36 @@ describe('Cashout Connection CRUD & Tenant Isolation', () => {
     expect(reAddRes.body.keyLast4).toBe('4444');
   });
 
-  it('blocks users not in CASHOUT_BETA_USER_IDS from adding or using non-public cashouts', async () => {
-    // Set beta list to exclude harness.ids.user
-    process.env.CASHOUT_BETA_USER_IDS = 'someone-else-id';
-
-    // Providers list should be empty
+  it('lists every cashout to every signed-in user, with no allow-list to pass first', async () => {
     const providersRes = await request('GET', '/api/cashouts/providers');
     expect(providersRes.status).toBe(200);
-    expect(providersRes.body).toHaveLength(0);
+    expect(providersRes.body).toEqual([{ id: 'eb', name: 'ElectronicsBuyer' }]);
+  });
 
-    // Attempt to add EB connection should be 403 Forbidden
+  it('grants cashout access automatically the first time a key passes the real check', async () => {
+    expect(harness.db.user[0].cashout_access_granted).not.toBe(true);
+
     const addRes = await request('POST', '/api/cashouts/connections', {
       provider: 'eb',
-      display_name: 'Forbidden EB',
+      display_name: 'EB',
       api_key: 'live_secret_key_1234',
     });
-    expect(addRes.status).toBe(403);
-    expect(addRes.body.error).toContain('restricted');
+
+    expect(addRes.status).toBe(201);
+    expect(harness.db.user[0].cashout_access_granted).toBe(true);
+  });
+
+  it('never grants access on a key the provider rejects', async () => {
+    vi.spyOn(ebAdapter, 'testKey').mockRejectedValue(new Error('ElectronicsBuyer rejected the API key'));
+
+    const addRes = await request('POST', '/api/cashouts/connections', {
+      provider: 'eb',
+      display_name: 'EB',
+      api_key: 'bad-key',
+    });
+
+    expect(addRes.status).toBe(400);
+    expect(harness.db.user[0].cashout_access_granted).not.toBe(true);
   });
 });
 
@@ -689,16 +700,16 @@ describe('Background Scheduler & /internal/cashouts/sync', () => {
   it('server starts normally and other routes work when new environment variables are completely missing', async () => {
     delete process.env.CASHOUT_KEY_ENCRYPTION_KEY;
     delete process.env.CASHOUT_SYNC_SECRET;
-    delete process.env.CASHOUT_BETA_USER_IDS;
 
     // Health check works
     const healthRes = await request('GET', '/auth/me');
     expect(healthRes.status).toBe(200);
 
-    // Cashout providers returns empty list cleanly without throwing
+    // Cashout providers still lists what's registered -- it never depended on
+    // an encryption key or sync secret, only on the provider's own key check.
     const providersRes = await request('GET', '/api/cashouts/providers');
     expect(providersRes.status).toBe(200);
-    expect(providersRes.body).toHaveLength(0);
+    expect(providersRes.body).toHaveLength(1);
 
     // Sync route returns 401 without crashing
     const syncRes = await request('POST', '/internal/cashouts/sync');

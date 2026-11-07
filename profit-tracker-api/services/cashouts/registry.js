@@ -4,44 +4,22 @@ const ADAPTERS = {
   [ebAdapter.id]: ebAdapter,
 };
 
-function getBetaUserIds() {
-  const raw = process.env.CASHOUT_BETA_USER_IDS || '';
-  return raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+// Every registered cashout is listed for every signed-in user. Whether a
+// connection actually works depends only on the provider accepting the key --
+// see service.js's createConnection, which grants cashout_access_granted the
+// first time that check passes.
+function listAvailableCashouts() {
+  return Object.values(ADAPTERS).map((adapter) => ({
+    id: adapter.id,
+    name: adapter.name,
+  }));
 }
 
-function isProviderAllowedForUser(adapter, userId) {
-  if (!adapter) return false;
-  if (adapter.public) return true;
-  if (!userId) return false;
-
-  const betaUsers = getBetaUserIds();
-  return betaUsers.includes(userId);
-}
-
-function listAvailableCashouts(userId) {
-  return Object.values(ADAPTERS)
-    .filter((adapter) => isProviderAllowedForUser(adapter, userId))
-    .map((adapter) => ({
-      id: adapter.id,
-      name: adapter.name,
-      public: adapter.public,
-    }));
-}
-
-function getAdapter(providerId, userId) {
+function getAdapter(providerId) {
   const adapter = ADAPTERS[providerId];
   if (!adapter) {
     const error = new Error(`Unsupported cashout provider: "${providerId}"`);
     error.status = 400;
-    throw error;
-  }
-
-  if (userId && !isProviderAllowedForUser(adapter, userId)) {
-    const error = new Error(`Access to cashout provider "${providerId}" is restricted.`);
-    error.status = 403;
     throw error;
   }
 
@@ -52,5 +30,4 @@ module.exports = {
   ADAPTERS,
   listAvailableCashouts,
   getAdapter,
-  isProviderAllowedForUser,
 };

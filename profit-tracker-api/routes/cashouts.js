@@ -5,7 +5,7 @@ const {
   createCashoutConnection,
   updateCashoutConnection,
 } = require('../validation/schemas');
-const { listAvailableCashouts, isProviderAllowedForUser, getAdapter } = require('../services/cashouts/registry');
+const { listAvailableCashouts } = require('../services/cashouts/registry');
 const {
   listConnections,
   getConnection,
@@ -26,7 +26,7 @@ const isAuthenticated = (req, res, next) => {
 // GET /api/cashouts/providers — returns supported services available to the authenticated user
 router.get('/providers', isAuthenticated, (req, res, next) => {
   try {
-    const available = listAvailableCashouts(req.user.id);
+    const available = listAvailableCashouts();
     res.json(available);
   } catch (err) {
     next(err);
