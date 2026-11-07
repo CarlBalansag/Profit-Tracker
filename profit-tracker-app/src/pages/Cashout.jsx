@@ -782,17 +782,15 @@ function DealCard({ deal }) {
         </div>
       </dl>
 
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[color:var(--dp-border)]">
+      <div className="mt-auto space-y-2 pt-2 border-t border-[color:var(--dp-border)]">
         <div className="flex items-center gap-3">
           <DealExpiry expiresAt={deal.expiresAt} />
           <CashoutName name={deal.connectionName} />
         </div>
         {!expired && (
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <StoreLinks deal={deal} large />
-            <div className="ml-auto">
-              <LogPurchaseButton />
-            </div>
+            <LogPurchaseButton />
           </div>
         )}
       </div>
