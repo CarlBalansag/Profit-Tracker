@@ -502,7 +502,7 @@ export default function Cashout() {
               {allDeals.length === 0 ? 'No live deals right now.' : 'No cashout deals matched your search and filters.'}
             </div>
           ) : showCards ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
               {filteredDeals.map((deal) => (
                 <DealCard key={`${deal.connectionId}-${deal.id}`} deal={deal} />
               ))}
@@ -761,7 +761,7 @@ function DealCard({ deal }) {
   const expired = isDealExpired(deal);
 
   return (
-    <article className={`p-3.5 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-xs space-y-3 ${expired ? 'opacity-60' : ''}`}>
+    <article className={`p-3.5 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-xs flex flex-col gap-3 h-full ${expired ? 'opacity-60' : ''}`}>
       <DealSummary deal={deal} />
 
       <dl className="grid grid-cols-3 gap-2">
@@ -782,7 +782,7 @@ function DealCard({ deal }) {
         </div>
       </dl>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[color:var(--dp-border)]">
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[color:var(--dp-border)]">
         <div className="flex items-center gap-3">
           <DealExpiry expiresAt={deal.expiresAt} />
           <CashoutName name={deal.connectionName} />
