@@ -4,4 +4,5 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
+| feat/cashout-view-toggle | Add table/card view toggle icons next to the Cashout search box | profit-tracker-app/src/pages/Cashout.jsx, profit-tracker-app/src/pages/Cashout.test.jsx | In progress | 2026-11-06 |
 | feat/dashboard-count-up-numbers | Animate big Dashboard numbers (stat cards, Goals widget) counting up on load/refresh/navigation, old->new on update, via framer-motion | profit-tracker-app/package.json, profit-tracker-app/src/components/UI/CountUp.jsx, profit-tracker-app/src/pages/Dashboard.jsx | In progress | 2026-10-22 |
