@@ -1777,7 +1777,7 @@ function buildServer(userId, apiKeyId) {
       category: z.enum(['all', 'above_retail', 'close_to_retail']).optional().describe('above_retail: spread > 0. close_to_retail: spread <= 0 or unknown retail. Default all.'),
       store: z.string().optional().describe('Filter to deals buyable at this retailer (case-insensitive, partial match).'),
       cashout: z.string().optional().describe('Filter to one connected cashout service by its display name (case-insensitive, partial match).'),
-      search: z.string().optional().describe('Match against the deal name or any item UPC.'),
+      search: z.string().optional().describe('Match against the deal name, or any item UPC or model number.'),
       include_expired: z.boolean().optional().describe('Default false.'),
       sort: z.enum(['profit_desc', 'payout_desc', 'ending_soon']).optional().describe('Default profit_desc.'),
       limit: z.number().int().min(1).max(200).optional(),

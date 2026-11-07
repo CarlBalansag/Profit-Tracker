@@ -121,22 +121,51 @@ describe('MCP cashout tools', () => {
     expect(deal.items[0].remaining_percentage).toBe(93.3);
   });
 
-  it('strips affiliate/tracking params from store URLs but keeps product-identifying ones', async () => {
+  it('reduces Amazon links to a bare /dp/<ASIN>, dropping ref and every query param', async () => {
     addConnection();
     vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([
-      {
-        id: '1', provider: 'eb', name: 'Deal', payout: 10, retail: 8,
-        items: [{
-          id: 'i1', upcs: ['83K4000QUS'], purchaseLinks: [
-            { name: 'Amazon', url: 'https://www.amazon.com/dp/B0ABCD1234?tag=aff-20&utm_source=eb&irgwc=1&ref=sr_1_1&sku=B0ABCD1234' },
-          ],
-        }],
-      },
+      { id: '1', provider: 'eb', name: 'Deal', payout: 10, retail: 8, items: [{ id: 'i1', upcs: ['83K4000QUS'], purchaseLinks: [{ name: 'Amazon', url: 'https://www.amazon.com/gp/product/B0ABCD1234/ref=ox_sc_saved_image_1?smid=&th=1&tag=aff-20' }] }] },
     ]);
     const { data } = await callTool('list_cashout_deals', {});
     const [store] = data.deals[0].items[0].stores;
-    expect(store.url).toBe('https://www.amazon.com/dp/B0ABCD1234?sku=B0ABCD1234');
+    expect(store.url).toBe('https://www.amazon.com/dp/B0ABCD1234');
     expect(data.deals[0].items[0].id_type).toBe('model');
+  });
+
+  it('reduces Target links to /p/.../A-<TCID>, dropping affiliate query params', async () => {
+    addConnection();
+    vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([
+      { id: '1', provider: 'eb', name: 'Deal', payout: 10, retail: 8, items: [{ id: 'i1', purchaseLinks: [{ name: 'Target', url: 'https://www.target.com/p/some-item/-/A-1013322047?clkid=abc123&afid=Howl&afsrc=1' }] }] },
+    ]);
+    const { data } = await callTool('list_cashout_deals', {});
+    expect(data.deals[0].items[0].stores[0].url).toBe('https://www.target.com/p/some-item/-/A-1013322047');
+  });
+
+  it('reduces Walmart links to /ip/<slug>/<itemId>, dropping Google click-tracking params', async () => {
+    addConnection();
+    vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([
+      { id: '1', provider: 'eb', name: 'Deal', payout: 10, retail: 8, items: [{ id: 'i1', purchaseLinks: [{ name: 'Walmart', url: 'https://www.walmart.com/ip/Some-Item/18235967161?gclid=xyz&gad_source=1&gbraid=abc&wl0=' }] }] },
+    ]);
+    const { data } = await callTool('list_cashout_deals', {});
+    expect(data.deals[0].items[0].stores[0].url).toBe('https://www.walmart.com/ip/Some-Item/18235967161');
+  });
+
+  it('keeps BestBuy\'s full path (its product id lives there) plus skuId if present, drops other params', async () => {
+    addConnection();
+    vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([
+      { id: '1', provider: 'eb', name: 'Deal', payout: 10, retail: 8, items: [{ id: 'i1', purchaseLinks: [{ name: 'BestBuy', url: 'https://www.bestbuy.com/product/some-item/JXHQ37TR86?skuId=JXHQ37TR86&ref=abc&intl_rfl=1' }] }] },
+    ]);
+    const { data } = await callTool('list_cashout_deals', {});
+    expect(data.deals[0].items[0].stores[0].url).toBe('https://www.bestbuy.com/product/some-item/JXHQ37TR86?skuId=JXHQ37TR86');
+  });
+
+  it('strips tracking params from other stores but leaves unrecognized-but-legitimate params alone', async () => {
+    addConnection();
+    vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([
+      { id: '1', provider: 'eb', name: 'Deal', payout: 10, retail: 8, items: [{ id: 'i1', purchaseLinks: [{ name: 'Woot', url: 'https://www.woot.com/offers/some-item?utm_source=eb&ref=abc&variant=blue' }] }] },
+    ]);
+    const { data } = await callTool('list_cashout_deals', {});
+    expect(data.deals[0].items[0].stores[0].url).toBe('https://www.woot.com/offers/some-item?variant=blue');
   });
 
   it('parses a dropship address into structured fields, and says null means unspecified, not "ship anywhere"', async () => {

@@ -12,28 +12,67 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const roundTo1 = (n) => (n === null || n === undefined ? null : Math.round(n * 10) / 10);
 
-// Known affiliate/tracking params to strip from a store URL -- tag, ref,
-// click-tracking IDs and every utm_* variant. Anything else (sku, skuId,
-// a real color/size variant param) is left alone: this is a blocklist of
-// known trackers, not an allowlist, so an unrecognized but legitimate param
-// is never silently dropped.
+// The big four get a per-retailer allowlist instead of a generic blocklist --
+// each one's product identity lives in a specific, known path shape, so
+// reducing to exactly that shape is more reliable than guessing which query
+// params might be trackers. A URL that doesn't match the expected shape
+// (an unfamiliar link format) falls through to the generic cleaner below
+// rather than being mangled.
+function cleanAmazonUrl(parsed) {
+  // /dp/<ASIN> or /gp/product/<ASIN>, both with optional /ref=... after it.
+  const match = parsed.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i);
+  return match ? `${parsed.origin}/dp/${match[1].toUpperCase()}` : null;
+}
+function cleanTargetUrl(parsed) {
+  // /p/<slug>/-/A-<TCID>
+  const match = parsed.pathname.match(/^(\/p\/[^/]+\/-\/A-\d+)/);
+  return match ? `${parsed.origin}${match[1]}` : null;
+}
+function cleanWalmartUrl(parsed) {
+  // /ip/<slug>/<itemId>
+  const match = parsed.pathname.match(/^(\/ip\/[^/]+\/\d+)/);
+  return match ? `${parsed.origin}${match[1]}` : null;
+}
+function cleanBestBuyUrl(parsed) {
+  // BestBuy's product identity lives in the path itself (/product/<slug>/<sku>
+  // or /site/.../<id>.p) -- keep it whole, plus skuId if the link carried one.
+  const skuId = parsed.searchParams.get('skuId');
+  const base = `${parsed.origin}${parsed.pathname}`;
+  return skuId ? `${base}?skuId=${skuId}` : base;
+}
+
+// Every other store: strip known affiliate/tracking params (and gclid/gbraid/
+// gad_*, Google's own click-tracking ids, since EB's links aren't only
+// Amazon-affiliate style) but otherwise leave the URL alone -- an unlisted
+// but legitimate param (sku, variant, color) is never silently dropped.
 const TRACKING_PARAMS = new Set([
-  'tag', 'ref', 'ref_', 'irgwc', 'irclickid', 'clickid', 'click_id', 'wmlspartner',
-  'affiliate', 'aff', 'affid', 'subid', 'pubref', 'cjevent', 'awc', 'ad', 'adid', 'campaignid',
+  'tag', 'ref', 'ref_', 'irgwc', 'irclickid', 'clickid', 'click_id', 'clkid', 'wmlspartner',
+  'affiliate', 'aff', 'affid', 'afid', 'afsrc', 'subid', 'pubref', 'cjevent', 'awc',
+  'ad', 'adid', 'campaignid', 'gclid', 'gbraid', 'gclsrc',
 ]);
+function cleanGenericUrl(parsed) {
+  for (const key of [...parsed.searchParams.keys()]) {
+    if (TRACKING_PARAMS.has(key.toLowerCase()) || /^(utm_|gad_)/i.test(key)) {
+      parsed.searchParams.delete(key);
+    }
+  }
+  return parsed.toString();
+}
+
 function cleanStoreUrl(url) {
   if (!url) return url;
+  let parsed;
   try {
-    const parsed = new URL(url);
-    for (const key of [...parsed.searchParams.keys()]) {
-      if (TRACKING_PARAMS.has(key.toLowerCase()) || /^utm_/i.test(key)) {
-        parsed.searchParams.delete(key);
-      }
-    }
-    return parsed.toString();
+    parsed = new URL(url);
   } catch {
     return url;
   }
+  const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+  if (host === 'amazon.com') return cleanAmazonUrl(parsed) || cleanGenericUrl(parsed);
+  if (host === 'target.com') return cleanTargetUrl(parsed) || cleanGenericUrl(parsed);
+  if (host === 'walmart.com') return cleanWalmartUrl(parsed) || cleanGenericUrl(parsed);
+  if (host === 'bestbuy.com') return cleanBestBuyUrl(parsed);
+  return cleanGenericUrl(parsed);
 }
 
 // payout minus retail, before tax, shipping or coupons -- not a guarantee of
