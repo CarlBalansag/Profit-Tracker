@@ -161,6 +161,10 @@ async function testConnection(userId, connectionId) {
       },
     });
 
+    // Same idempotent grant as createConnection -- a key that still works on
+    // re-test is just as much proof as one that worked the first time.
+    await prisma.user.update({ where: { id: userId }, data: { cashout_access_granted: true } });
+
     return { success: true, message: 'Connection test passed.' };
   } catch (err) {
     await prisma.cashoutConnection.update({

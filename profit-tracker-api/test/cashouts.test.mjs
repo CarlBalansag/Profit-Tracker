@@ -295,6 +295,17 @@ describe('Cashout Connection CRUD & Tenant Isolation', () => {
     expect(harness.db.user[0].cashout_access_granted).toBe(true);
   });
 
+  it('also grants access when an existing, pre-migration connection re-tests successfully', async () => {
+    const added = await request('POST', '/api/cashouts/connections', { provider: 'eb', api_key: 'already-working-key' });
+    // Simulate a connection saved before this flag existed.
+    harness.db.user[0].cashout_access_granted = false;
+
+    const tested = await request('POST', `/api/cashouts/connections/${added.body.id}/test`);
+
+    expect(tested.body.success).toBe(true);
+    expect(harness.db.user[0].cashout_access_granted).toBe(true);
+  });
+
   it('never grants access on a key the provider rejects', async () => {
     vi.spyOn(ebAdapter, 'testKey').mockRejectedValue(new Error('ElectronicsBuyer rejected the API key'));
 
