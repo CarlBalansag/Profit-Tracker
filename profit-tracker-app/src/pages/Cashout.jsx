@@ -12,6 +12,8 @@ import {
   X,
   Package,
   Star,
+  Table,
+  LayoutGrid,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -42,8 +44,11 @@ import LoadError from '../components/UI/LoadError';
 // API keys are managed only in Data Setup.
 const DATA_SETUP_STATE = { tab: 'datasetup', view: 'Cashouts' };
 
-// Below this the table no longer fits beside the sidebar.
+// Below this the table no longer fits beside the sidebar -- cards take over
+// regardless of the view toggle.
 const DEAL_CARDS_QUERY = '(max-width: 1279px)';
+
+const VIEW_MODE_KEY = 'cashoutViewMode';
 
 // About what fits on one line of a table row. Longer notes get a More button.
 const NOTE_PREVIEW_LENGTH = 40;
@@ -58,7 +63,13 @@ export default function Cashout() {
   const [selectedStore, setSelectedStore] = useState('all');
   const [showExpired, setShowExpired] = useState(false);
   const [sortBy, setSortBy] = useState('profit_desc'); // 'profit_desc' | 'payout_desc' | 'ending_soon' | 'updated_desc'
-  const showCards = useMatchMedia(DEAL_CARDS_QUERY);
+  const [viewMode, setViewMode] = useState(() => (localStorage.getItem(VIEW_MODE_KEY) === 'card' ? 'card' : 'table'));
+  const setView = (mode) => {
+    setViewMode(mode);
+    localStorage.setItem(VIEW_MODE_KEY, mode);
+  };
+  const screenForcesCards = useMatchMedia(DEAL_CARDS_QUERY);
+  const showCards = screenForcesCards || viewMode === 'card';
 
   // Cooldown timer state for manual sync
   const [syncCooldownSeconds, setSyncCooldownSeconds] = useState(0);
@@ -262,7 +273,7 @@ export default function Cashout() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-bold text-[var(--dp-text-primary)]">Cashout Deals</h1>
-            <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-[var(--dp-accent-bg)] text-[var(--dp-accent)] border border-[color:var(--dp-accent)]/20">
+            <span className="px-2 py-0.5 text-[12px] font-semibold rounded-full bg-[var(--dp-accent-bg)] text-[var(--dp-accent)] border border-[color:var(--dp-accent)]/20">
               Beta
             </span>
           </div>
@@ -284,7 +295,7 @@ export default function Cashout() {
               <span>{syncCooldownSeconds > 0 ? `Sync (${syncCooldownSeconds}s)` : 'Sync now'}</span>
             </button>
             {lastSynced && (
-              <span className="text-[11px] text-[var(--dp-text-label)] whitespace-nowrap">
+              <span className="text-[12px] text-[var(--dp-text-label)] whitespace-nowrap">
                 Last synced {lastSynced}
               </span>
             )}
@@ -298,7 +309,7 @@ export default function Cashout() {
             <KeyRound size={14} />
             <span>Manage Cashouts</span>
             {connections.length > 0 && (
-              <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)] text-[11px]">
+              <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)] text-[12px]">
                 {connections.length}
               </span>
             )}
@@ -362,7 +373,7 @@ export default function Cashout() {
                   className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-xs"
                 >
                   <span className="font-medium text-[var(--dp-text-primary)]">{provider.name}</span>
-                  <span className="text-[11px] text-[var(--dp-text-label)]">Not connected</span>
+                  <span className="text-[12px] text-[var(--dp-text-label)]">Not connected</span>
                 </li>
               ))}
             </ul>
@@ -380,25 +391,50 @@ export default function Cashout() {
         <>
           {/* Search, Filter & Controls */}
           <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-            <div className="relative flex-1 max-w-sm">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--dp-text-label)]" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                aria-label="Search deals"
-                placeholder="Search deals, UPCs, items…"
-                className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none focus:border-[var(--dp-accent)]"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  aria-label="Clear search"
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]"
-                >
-                  <X size={12} />
-                </button>
+            <div className="flex items-center gap-2 flex-1 max-w-sm">
+              <div className="relative flex-1">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--dp-text-label)]" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  aria-label="Search deals"
+                  placeholder="Search deals, UPCs, items…"
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none focus:border-[var(--dp-accent)]"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+
+              {!screenForcesCards && (
+                <div role="group" aria-label="View" className="flex items-center gap-0.5 p-0.5 ml-1 rounded-lg bg-[var(--dp-hover-bg)] border-l border-[color:var(--dp-border)] flex-shrink-0">
+                  <button
+                    type="button"
+                    aria-label="Table view"
+                    aria-pressed={viewMode === 'table'}
+                    onClick={() => setView('table')}
+                    className={`p-1.5 rounded-md transition-colors ${viewMode === 'table' ? 'bg-[var(--dp-card-bg)] text-[var(--dp-accent)] shadow-sm' : 'text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]'}`}
+                  >
+                    <Table size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Card view"
+                    aria-pressed={viewMode === 'card'}
+                    onClick={() => setView('card')}
+                    className={`p-1.5 rounded-md transition-colors ${viewMode === 'card' ? 'bg-[var(--dp-card-bg)] text-[var(--dp-accent)] shadow-sm' : 'text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]'}`}
+                  >
+                    <LayoutGrid size={15} />
+                  </button>
+                </div>
               )}
             </div>
 
@@ -468,7 +504,7 @@ export default function Cashout() {
               {allDeals.length === 0 ? 'No live deals right now.' : 'No cashout deals matched your search and filters.'}
             </div>
           ) : showCards ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
               {filteredDeals.map((deal) => (
                 <DealCard key={`${deal.connectionId}-${deal.id}`} deal={deal} />
               ))}
@@ -478,7 +514,7 @@ export default function Cashout() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr className="border-b border-[color:var(--dp-border)] text-[var(--dp-text-label)] uppercase font-semibold text-[11px] tracking-wider">
+                    <tr className="border-b border-[color:var(--dp-border)] text-[var(--dp-text-label)] uppercase font-semibold text-[12px] tracking-wider">
                       <th className="py-3 px-4">Deal / Item</th>
                       <th className="py-3 px-3">Cashout</th>
                       <th className="py-3 px-3 text-right">Payout</th>
@@ -585,12 +621,12 @@ function DealSummary({ deal }) {
             {deal.name}
           </div>
           {upc && (
-            <div className="text-[11px] text-[var(--dp-text-label)] font-mono truncate">UPC: {upc}</div>
+            <div className="text-[12px] text-[var(--dp-text-label)] font-mono truncate">UPC: {upc}</div>
           )}
           {note && <DealNote note={note} />}
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1 min-h-[22px]">
         {deal.featured && (
           <DealTag className="bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]">
             <Star size={9} className="fill-current" /> Featured
@@ -617,7 +653,7 @@ function DealSummary({ deal }) {
 
 function DealTag({ className, title, children }) {
   return (
-    <span title={title} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium whitespace-nowrap ${className}`}>
+    <span title={title} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[12px] font-medium whitespace-nowrap ${className}`}>
       {children}
     </span>
   );
@@ -628,7 +664,7 @@ function DealNote({ note }) {
   const canExpand = note.length > NOTE_PREVIEW_LENGTH;
 
   return (
-    <div className="flex items-start gap-1.5 mt-0.5 text-[11px] text-[var(--dp-text-secondary)]">
+    <div className="flex items-start gap-1.5 mt-0.5 text-[12px] text-[var(--dp-text-secondary)]">
       <span className={`min-w-0 ${expanded ? '' : 'line-clamp-1'}`}>{note}</span>
       {canExpand && (
         <button
@@ -664,7 +700,7 @@ function CopyButton({ value, label, name, title }) {
       onClick={copy}
       title={title}
       aria-label={copied ? 'Copied' : name}
-      className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)]"
+      className="inline-flex items-center gap-1 px-2 py-1 rounded text-[12px] font-medium whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)]"
     >
       {copied ? <Check size={10} /> : <Copy size={10} />}
       {copied ? 'Copied' : label}
@@ -685,14 +721,14 @@ function EstProfit({ profit, expired = false }) {
   return (
     <div className="tabular-nums">
       <div className={`text-sm font-bold ${PROFIT_TONES[expired ? 'neutral' : tone]}`}>{amount}</div>
-      <div className="text-[11px] text-[var(--dp-text-label)]">{pct}</div>
+      <div className="text-[12px] text-[var(--dp-text-label)]">{pct}</div>
     </div>
   );
 }
 
 function CashoutName({ name }) {
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-[var(--dp-hover-bg)] text-[var(--dp-text-primary)] border border-[color:var(--dp-border)]">
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-[12px] font-medium bg-[var(--dp-hover-bg)] text-[var(--dp-text-primary)] border border-[color:var(--dp-border)]">
       {name}
     </span>
   );
@@ -716,7 +752,7 @@ function LogPurchaseButton() {
       type="button"
       disabled
       title="Coming soon"
-      className="px-2.5 py-1.5 text-[11px] font-medium rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-label)] cursor-not-allowed"
+      className="px-2.5 py-1.5 text-[12px] font-medium rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-label)] cursor-not-allowed"
     >
       Log Purchase
     </button>
@@ -727,20 +763,20 @@ function DealCard({ deal }) {
   const expired = isDealExpired(deal);
 
   return (
-    <article className={`p-3.5 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-xs space-y-3 ${expired ? 'opacity-60' : ''}`}>
+    <article className={`p-3.5 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-xs flex flex-col gap-3 h-full ${expired ? 'opacity-60' : ''}`}>
       <DealSummary deal={deal} />
 
       <dl className="grid grid-cols-3 gap-2">
         <div>
-          <dt className="text-[11px] text-[var(--dp-text-label)] uppercase tracking-wider">Payout</dt>
+          <dt className="text-[12px] text-[var(--dp-text-label)] uppercase tracking-wider">Payout</dt>
           <dd className="mt-0.5 font-semibold tabular-nums text-[var(--dp-text-primary)]">${formatMoney(deal.payout)}</dd>
         </div>
         <div>
-          <dt className="text-[11px] text-[var(--dp-text-label)] uppercase tracking-wider">Retail</dt>
+          <dt className="text-[12px] text-[var(--dp-text-label)] uppercase tracking-wider">Retail</dt>
           <dd className="mt-0.5 tabular-nums text-[var(--dp-text-secondary)]">{deal.retail > 0 ? `$${formatMoney(deal.retail)}` : '—'}</dd>
         </div>
         <div>
-          <dt className="text-[11px] text-[var(--dp-text-label)] uppercase tracking-wider">
+          <dt className="text-[12px] text-[var(--dp-text-label)] uppercase tracking-wider">
             Est. Profit
             <span className="block normal-case tracking-normal">before tax</span>
           </dt>
@@ -748,17 +784,17 @@ function DealCard({ deal }) {
         </div>
       </dl>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[color:var(--dp-border)]">
+      <div className="mt-auto space-y-2 pt-2 border-t border-[color:var(--dp-border)]">
         <div className="flex items-center gap-3">
           <DealExpiry expiresAt={deal.expiresAt} />
           <CashoutName name={deal.connectionName} />
         </div>
-        {!expired && (
-          <div className="flex flex-wrap items-center gap-3">
+        {expired ? (
+          <span className="text-[var(--dp-text-label)]">—</span>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <StoreLinks deal={deal} large />
-            <div className="ml-auto">
-              <LogPurchaseButton />
-            </div>
+            <LogPurchaseButton />
           </div>
         )}
       </div>
@@ -774,7 +810,7 @@ function DealExpiry({ expiresAt }) {
     <div>
       <div className="font-semibold text-[var(--dp-text-primary)]">{expiry.date}</div>
       <div
-        className={`text-[11px] ${
+        className={`text-[12px] ${
           expiry.expired
             ? 'text-rose-400'
             : expiry.urgent
@@ -806,7 +842,7 @@ function StoreLink({ link, large }) {
       {logo ? (
         <img src={logo} alt="" className={`${large ? 'w-6 h-6' : 'w-5 h-5'} object-contain`} onError={() => setLogoFailed(true)} />
       ) : (
-        <span className="text-[11px] font-bold text-gray-800">{(link.name || '?').charAt(0).toUpperCase()}</span>
+        <span className="text-[12px] font-bold text-gray-800">{(link.name || '?').charAt(0).toUpperCase()}</span>
       )}
     </a>
   );

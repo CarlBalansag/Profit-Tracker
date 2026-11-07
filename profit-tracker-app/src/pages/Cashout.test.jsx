@@ -93,6 +93,7 @@ describe('Cashout Page', () => {
     connectionsState = {};
     providersState = {};
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   afterEach(() => {
@@ -569,6 +570,53 @@ describe('Cashout Page', () => {
     });
   });
 
+  describe('view toggle', () => {
+    it('defaults to the table, with the toggle hidden once the screen forces cards', () => {
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByRole('table')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Table view' })).toHaveAttribute('aria-pressed', 'true');
+
+      window.matchMedia = (query) => ({ matches: query.includes('max-width'), addEventListener: vi.fn(), removeEventListener: vi.fn() });
+      cleanup();
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+      expect(screen.queryByRole('button', { name: 'Table view' })).not.toBeInTheDocument();
+    });
+
+    it('switches to cards on click, and remembers the choice on the next visit', () => {
+      const { unmount } = render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Card view' }));
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+      expect(screen.getAllByRole('article').length).toBeGreaterThan(0);
+      expect(screen.getByRole('button', { name: 'Card view' })).toHaveAttribute('aria-pressed', 'true');
+      unmount();
+
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Card view' })).toHaveAttribute('aria-pressed', 'true');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Table view' }));
+      expect(screen.getByRole('table')).toBeInTheDocument();
+    });
+  });
+
   it('shows cards instead of the table on screens too narrow for it', () => {
     window.matchMedia = (query) => ({ matches: query.includes('max-width'), addEventListener: vi.fn(), removeEventListener: vi.fn() });
     currentDeals = {
@@ -598,6 +646,35 @@ describe('Cashout Page', () => {
     expect(card).toHaveTextContent('before tax');
     expect(card).toHaveTextContent('EB Primary');
     expect(within(card).getByRole('link', { name: 'Buy at Amazon' })).toBeInTheDocument();
+  });
+
+  it('shows a placeholder instead of dropping the row on an expired card, same as the table', () => {
+    window.matchMedia = (query) => ({ matches: query.includes('max-width'), addEventListener: vi.fn(), removeEventListener: vi.fn() });
+    currentDeals = {
+      results: [{
+        connection: mockConnections[0],
+        deals: [{
+          id: '1',
+          name: 'Expired Deal',
+          retail: 50,
+          payout: 40,
+          expiresAt: new Date(Date.now() - 86400000).toISOString(),
+          items: [{ name: 'Expired Deal', purchaseLinks: [{ name: 'Amazon', url: 'https://www.amazon.com/dp/1' }] }],
+        }],
+      }],
+    };
+    render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByLabelText('Show expired (1)'));
+    const card = screen.getByRole('article');
+    expect(card).toHaveClass('opacity-60');
+    expect(within(card).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'Log Purchase' })).not.toBeInTheDocument();
+    expect(card).toHaveTextContent('—');
   });
 
   it('counts down to the expiration date and flags expired deals', () => {
