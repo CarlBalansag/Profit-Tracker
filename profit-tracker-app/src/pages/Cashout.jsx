@@ -7,7 +7,6 @@ import {
   Plus,
   Search,
   AlertTriangle,
-  Trash2,
   KeyRound,
   Layers,
   X,
@@ -24,7 +23,6 @@ import {
 } from '../hooks/useApi';
 import { formatMoney } from '../utils/money';
 import { useMatchMedia } from '../hooks/useMatchMedia';
-import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import {
   dealConditionLabels,
   dealLimitLabel,
@@ -53,9 +51,6 @@ const NOTE_PREVIEW_LENGTH = 40;
 const SELECT_CLASS = 'px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)]';
 
 export default function Cashout() {
-  const [showConnectionsModal, setShowConnectionsModal] = useState(false);
-  const connectionsModalRef = useModalKeyboard(showConnectionsModal, () => setShowConnectionsModal(false));
-
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProvider, setSelectedProvider] = useState('all');
@@ -91,10 +86,7 @@ export default function Cashout() {
     isFetching: dealsFetching,
   } = useCashoutDeals();
 
-  const {
-    deleteConnection,
-    syncConnection,
-  } = useCashoutMutations();
+  const { syncConnection } = useCashoutMutations();
 
   // Cooldown ticker
   useEffect(() => {
@@ -298,19 +290,19 @@ export default function Cashout() {
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowConnectionsModal(true)}
+          <Link
+            to="/settings"
+            state={DATA_SETUP_STATE}
             className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
           >
             <KeyRound size={14} />
-            <span>Manage Connections</span>
+            <span>Manage Cashouts</span>
             {connections.length > 0 && (
               <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)] text-[11px]">
                 {connections.length}
               </span>
             )}
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -321,12 +313,13 @@ export default function Cashout() {
             <AlertTriangle size={16} className="text-amber-400 flex-shrink-0" />
             <span>{troubleMessage}</span>
           </div>
-          <button
-            onClick={() => setShowConnectionsModal(true)}
+          <Link
+            to="/settings"
+            state={DATA_SETUP_STATE}
             className="font-semibold underline hover:text-white"
           >
-            Review Connections
-          </button>
+            Review in Data Setup
+          </Link>
         </div>
       )}
 
@@ -353,21 +346,34 @@ export default function Cashout() {
       {connectionsLoading ? (
         <div className="p-8 text-center text-xs text-[var(--dp-text-secondary)]">Loading cashout deals…</div>
       ) : connections.length === 0 ? (
-        <div className="rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] p-12 text-center max-w-md mx-auto my-8">
+        <div className="rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] p-10 text-center max-w-md mx-auto my-8">
           <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-[var(--dp-accent-bg)] flex items-center justify-center text-[var(--dp-accent)]">
             <Coins size={28} />
           </div>
-          <h2 className="text-lg font-bold text-[var(--dp-text-primary)]">No cashouts connected</h2>
+          <h2 className="text-lg font-bold text-[var(--dp-text-primary)]">See Cashout Deals Now</h2>
           <p className="mt-1.5 text-xs text-[var(--dp-text-secondary)]">
-            Connect your ElectronicsBuyer (EB) API key to start viewing live cashout deals.
+            Connect your API keys to start viewing live cashout deals.
           </p>
+          {providers.length > 0 && (
+            <ul className="mt-4 space-y-1.5 text-left">
+              {providers.map((provider) => (
+                <li
+                  key={provider.id}
+                  className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-xs"
+                >
+                  <span className="font-medium text-[var(--dp-text-primary)]">{provider.name}</span>
+                  <span className="text-[11px] text-[var(--dp-text-label)]">Not connected</span>
+                </li>
+              ))}
+            </ul>
+          )}
           <Link
             to="/settings"
             state={DATA_SETUP_STATE}
             className="mt-5 inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90 transition-opacity"
           >
             <Plus size={14} />
-            <span>Add Cashout</span>
+            <span>Connect your API keys</span>
           </Link>
         </div>
       ) : (
@@ -547,113 +553,6 @@ export default function Cashout() {
             </div>
           )}
         </>
-      )}
-
-      {/* Connection Management Modal */}
-      {showConnectionsModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div
-            ref={connectionsModalRef}
-            className="w-full max-w-lg rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4"
-          >
-            <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
-              <div className="flex items-center gap-2">
-                <KeyRound size={18} className="text-[var(--dp-accent)]" />
-                <h3 className="font-bold text-base text-[var(--dp-text-primary)]">
-                  Connected Cashout Services
-                </h3>
-              </div>
-              <button
-                type="button"
-                aria-label="Close connections"
-                onClick={() => setShowConnectionsModal(false)}
-                className="text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-3 max-h-80 overflow-y-auto">
-              {connections.length === 0 ? (
-                <div className="text-center py-6 text-xs text-[var(--dp-text-secondary)]">
-                  No cashout connections configured.
-                </div>
-              ) : (
-                connections.map((conn) => (
-                  <div
-                    key={conn.id}
-                    className="p-3.5 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-bg)] flex items-center justify-between gap-3 text-xs"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-[var(--dp-text-primary)]">
-                          {conn.displayName || conn.providerName || conn.provider}
-                        </span>
-                        {conn.status === 'active' ? (
-                          <span className="px-1.5 py-0.2 rounded text-[11px] font-semibold bg-emerald-500/15 text-emerald-400">
-                            Active
-                          </span>
-                        ) : (
-                          <span className="px-1.5 py-0.2 rounded text-[11px] font-semibold bg-amber-500/15 text-amber-400">
-                            Attention Needed
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-[var(--dp-text-label)] mt-0.5">
-                        Key: ••••••••••••{conn.keyLast4} • Synced:{' '}
-                        {conn.lastSyncedAt ? new Date(conn.lastSyncedAt).toLocaleTimeString() : 'Never'}
-                      </div>
-                      {conn.lastError && (
-                        <div className="text-[11px] text-rose-400 mt-1 max-w-xs truncate" title={conn.lastError}>
-                          Error: {conn.lastError}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (confirm(`Remove cashout connection "${conn.displayName || conn.provider}"? Its saved payout records will be deleted.`)) {
-                            try {
-                              await deleteConnection.mutateAsync(conn.id);
-                              toast.success('Connection removed.');
-                            } catch (e) {
-                              toast.error(e.message);
-                            }
-                          }
-                        }}
-                        className="p-1.5 rounded text-rose-400 hover:bg-rose-500/10"
-                        title="Delete connection"
-                        aria-label={`Remove ${conn.displayName || conn.provider}`}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="flex items-center justify-between border-t border-[color:var(--dp-border)] pt-3">
-              <Link
-                to="/settings"
-                state={DATA_SETUP_STATE}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90"
-              >
-                <Plus size={14} />
-                <span>Add Cashout</span>
-              </Link>
-              <button
-                type="button"
-                onClick={() => setShowConnectionsModal(false)}
-                className="px-3.5 py-2 text-xs font-medium rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)]"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
     </div>

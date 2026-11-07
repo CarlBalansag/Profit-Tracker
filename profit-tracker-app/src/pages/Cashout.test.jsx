@@ -111,7 +111,7 @@ describe('Cashout Page', () => {
     expect(screen.getByText(/private preview/i)).toBeInTheDocument();
   });
 
-  it('renders "No cashouts connected" when user has access but 0 connections', () => {
+  it('renders "See Cashout Deals Now" with the available integrations when user has access but 0 connections', () => {
     currentConnections = [];
     currentDeals = { results: [] };
     render(
@@ -120,9 +120,10 @@ describe('Cashout Page', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText('No cashouts connected')).toBeInTheDocument();
+    expect(screen.getByText('See Cashout Deals Now')).toBeInTheDocument();
+    expect(screen.getByText('ElectronicsBuyer')).toBeInTheDocument();
     // Keys are entered in Data Setup, so this leads there rather than opening a form.
-    expect(screen.getByRole('link', { name: /Add Cashout/i })).toHaveAttribute('href', '/settings');
+    expect(screen.getByRole('link', { name: /Connect your API keys/i })).toHaveAttribute('href', '/settings');
   });
 
   it('renders the live deals with their payouts and nothing about our own costs', () => {
@@ -499,7 +500,7 @@ describe('Cashout Page', () => {
         </MemoryRouter>
       );
 
-      expect(screen.queryByText('No cashouts connected')).not.toBeInTheDocument();
+      expect(screen.queryByText('See Cashout Deals Now')).not.toBeInTheDocument();
     });
 
     it('shows an error, not "not available", when the access check fails', () => {
@@ -725,21 +726,6 @@ describe('Cashout Page', () => {
     ]);
   });
 
-  it('treats Manage Connections as a real dialog', () => {
-    render(
-      <MemoryRouter>
-        <Cashout />
-      </MemoryRouter>
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: /Manage Connections/i }));
-    expect(screen.getByRole('dialog', { name: 'Connected Cashout Services' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Remove EB Primary' })).toBeInTheDocument();
-
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
-
   it('names the search and filter controls', () => {
     render(
       <MemoryRouter>
@@ -753,29 +739,35 @@ describe('Cashout Page', () => {
     expect(screen.getByLabelText('Search deals')).toHaveValue('');
   });
 
-  it('opens and closes the Manage Connections modal', () => {
+  it('links straight to Data Setup instead of opening its own connections modal', () => {
     render(
       <MemoryRouter>
         <Cashout />
       </MemoryRouter>
     );
 
-    const manageBtn = screen.getByRole('button', { name: /Manage Connections/i });
-    fireEvent.click(manageBtn);
-
-    expect(screen.getByText('Connected Cashout Services')).toBeInTheDocument();
-    expect(screen.getAllByText('EB Primary').length).toBeGreaterThan(0);
-    expect(screen.getByText(/••••••••••••9876/)).toBeInTheDocument();
-
-    // Remove stays here; adding a key happens in Data Setup.
-    expect(screen.getByTitle('Delete connection')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Add Cashout/i })).toHaveAttribute('href', '/settings');
-    expect(screen.queryByPlaceholderText(/API key/i)).not.toBeInTheDocument();
-
-    const closeBtn = screen.getByRole('button', { name: 'Close' });
-    fireEvent.click(closeBtn);
-
+    const manageLink = screen.getByRole('link', { name: /Manage Cashouts/i });
+    expect(manageLink).toHaveAttribute('href', '/settings');
+    expect(manageLink).toHaveTextContent('1');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByText('Connected Cashout Services')).not.toBeInTheDocument();
+  });
+
+  it('points the attention banner at Data Setup instead of a modal', () => {
+    currentDeals = {
+      results: [{
+        connection: { ...mockConnections[0], status: 'attention_needed', lastError: 'ElectronicsBuyer API key is invalid or revoked.' },
+        deals: [],
+      }],
+    };
+    render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+
+    const reviewLink = screen.getByRole('link', { name: 'Review in Data Setup' });
+    expect(reviewLink).toHaveAttribute('href', '/settings');
   });
 
   it('filters deals by search query', () => {
