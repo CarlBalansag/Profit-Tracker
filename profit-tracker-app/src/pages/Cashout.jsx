@@ -12,6 +12,8 @@ import {
   X,
   Package,
   Star,
+  Table,
+  LayoutGrid,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -42,8 +44,11 @@ import LoadError from '../components/UI/LoadError';
 // API keys are managed only in Data Setup.
 const DATA_SETUP_STATE = { tab: 'datasetup', view: 'Cashouts' };
 
-// Below this the table no longer fits beside the sidebar.
+// Below this the table no longer fits beside the sidebar -- cards take over
+// regardless of the view toggle.
 const DEAL_CARDS_QUERY = '(max-width: 1279px)';
+
+const VIEW_MODE_KEY = 'cashoutViewMode';
 
 // About what fits on one line of a table row. Longer notes get a More button.
 const NOTE_PREVIEW_LENGTH = 40;
@@ -58,7 +63,13 @@ export default function Cashout() {
   const [selectedStore, setSelectedStore] = useState('all');
   const [showExpired, setShowExpired] = useState(false);
   const [sortBy, setSortBy] = useState('profit_desc'); // 'profit_desc' | 'payout_desc' | 'ending_soon' | 'updated_desc'
-  const showCards = useMatchMedia(DEAL_CARDS_QUERY);
+  const [viewMode, setViewMode] = useState(() => (localStorage.getItem(VIEW_MODE_KEY) === 'card' ? 'card' : 'table'));
+  const setView = (mode) => {
+    setViewMode(mode);
+    localStorage.setItem(VIEW_MODE_KEY, mode);
+  };
+  const screenForcesCards = useMatchMedia(DEAL_CARDS_QUERY);
+  const showCards = screenForcesCards || viewMode === 'card';
 
   // Cooldown timer state for manual sync
   const [syncCooldownSeconds, setSyncCooldownSeconds] = useState(0);
@@ -401,6 +412,29 @@ export default function Cashout() {
                 </button>
               )}
             </div>
+
+            {!screenForcesCards && (
+              <div role="group" aria-label="View" className="flex items-center gap-0.5 p-0.5 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)]">
+                <button
+                  type="button"
+                  aria-label="Table view"
+                  aria-pressed={viewMode === 'table'}
+                  onClick={() => setView('table')}
+                  className={`p-1.5 rounded-md transition-colors ${viewMode === 'table' ? 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]' : 'text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]'}`}
+                >
+                  <Table size={14} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Card view"
+                  aria-pressed={viewMode === 'card'}
+                  onClick={() => setView('card')}
+                  className={`p-1.5 rounded-md transition-colors ${viewMode === 'card' ? 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]' : 'text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]'}`}
+                >
+                  <LayoutGrid size={14} />
+                </button>
+              </div>
+            )}
 
             <div className="flex flex-wrap items-center gap-2">
               {/* Provider Filter */}

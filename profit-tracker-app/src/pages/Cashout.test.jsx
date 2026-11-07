@@ -93,6 +93,7 @@ describe('Cashout Page', () => {
     connectionsState = {};
     providersState = {};
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   afterEach(() => {
@@ -566,6 +567,53 @@ describe('Cashout Page', () => {
 
       expect(toast.info).toHaveBeenCalledWith('Please wait 30s', expect.anything());
       expect(toast.error).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('view toggle', () => {
+    it('defaults to the table, with the toggle hidden once the screen forces cards', () => {
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByRole('table')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Table view' })).toHaveAttribute('aria-pressed', 'true');
+
+      window.matchMedia = (query) => ({ matches: query.includes('max-width'), addEventListener: vi.fn(), removeEventListener: vi.fn() });
+      cleanup();
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+      expect(screen.queryByRole('button', { name: 'Table view' })).not.toBeInTheDocument();
+    });
+
+    it('switches to cards on click, and remembers the choice on the next visit', () => {
+      const { unmount } = render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Card view' }));
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+      expect(screen.getAllByRole('article').length).toBeGreaterThan(0);
+      expect(screen.getByRole('button', { name: 'Card view' })).toHaveAttribute('aria-pressed', 'true');
+      unmount();
+
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Card view' })).toHaveAttribute('aria-pressed', 'true');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Table view' }));
+      expect(screen.getByRole('table')).toBeInTheDocument();
     });
   });
 
