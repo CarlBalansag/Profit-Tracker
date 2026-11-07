@@ -391,50 +391,52 @@ export default function Cashout() {
         <>
           {/* Search, Filter & Controls */}
           <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-            <div className="relative flex-1 max-w-sm">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--dp-text-label)]" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                aria-label="Search deals"
-                placeholder="Search deals, UPCs, items…"
-                className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none focus:border-[var(--dp-accent)]"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  aria-label="Clear search"
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]"
-                >
-                  <X size={12} />
-                </button>
+            <div className="flex items-center gap-2 flex-1 max-w-sm">
+              <div className="relative flex-1">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--dp-text-label)]" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  aria-label="Search deals"
+                  placeholder="Search deals, UPCs, items…"
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none focus:border-[var(--dp-accent)]"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+
+              {!screenForcesCards && (
+                <div role="group" aria-label="View" className="flex items-center gap-0.5 pl-2 ml-0.5 border-l border-[color:var(--dp-border)] flex-shrink-0">
+                  <button
+                    type="button"
+                    aria-label="Table view"
+                    aria-pressed={viewMode === 'table'}
+                    onClick={() => setView('table')}
+                    className={`p-1.5 rounded-md transition-colors ${viewMode === 'table' ? 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]' : 'text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]'}`}
+                  >
+                    <Table size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Card view"
+                    aria-pressed={viewMode === 'card'}
+                    onClick={() => setView('card')}
+                    className={`p-1.5 rounded-md transition-colors ${viewMode === 'card' ? 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]' : 'text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]'}`}
+                  >
+                    <LayoutGrid size={14} />
+                  </button>
+                </div>
               )}
             </div>
-
-            {!screenForcesCards && (
-              <div role="group" aria-label="View" className="flex items-center gap-0.5 p-0.5 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)]">
-                <button
-                  type="button"
-                  aria-label="Table view"
-                  aria-pressed={viewMode === 'table'}
-                  onClick={() => setView('table')}
-                  className={`p-1.5 rounded-md transition-colors ${viewMode === 'table' ? 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]' : 'text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]'}`}
-                >
-                  <Table size={14} />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Card view"
-                  aria-pressed={viewMode === 'card'}
-                  onClick={() => setView('card')}
-                  className={`p-1.5 rounded-md transition-colors ${viewMode === 'card' ? 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]' : 'text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]'}`}
-                >
-                  <LayoutGrid size={14} />
-                </button>
-              </div>
-            )}
 
             <div className="flex flex-wrap items-center gap-2">
               {/* Provider Filter */}
