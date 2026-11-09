@@ -965,7 +965,7 @@ describe('Cashout Page', () => {
         </MemoryRouter>
       );
 
-      const toggle = screen.getByRole('button', { name: /Commitments/i });
+      const toggle = screen.getByRole('tab', { name: /Commitments/i });
       expect(toggle).toHaveTextContent('1'); // only the active one counts
 
       expect(screen.queryByText('Withdraw')).not.toBeInTheDocument();
