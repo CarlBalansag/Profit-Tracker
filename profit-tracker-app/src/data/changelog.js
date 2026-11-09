@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.25',
+    date: '2026-11-08',
+    notes: "Cashouts can now commit you to a deal's price and submit the shipment's tracking number right from the app (or get your AI Assistant to do it) -- logging the purchase and sale in one step, with a Commitments panel to track everything you've committed to.",
+  },
+  {
     version: '1.24',
     date: '2026-11-07',
     notes: "Your AI Assistant can now see your live cashout deals and work out the numbers on them itself, right alongside your inventory and sales.",
