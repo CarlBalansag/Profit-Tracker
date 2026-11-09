@@ -22,6 +22,8 @@ const { recordChanges } = require('../services/changeLog');
 const transactionNotes = require('../services/transactionNotes');
 const cashoutService = require('../services/cashouts/service');
 const { presentDeal } = require('../services/cashouts/dealPresenter');
+const cashoutCommits = require('../services/cashouts/commits');
+const { logPurchase } = require('../services/cashouts/logPurchase');
 
 const toDateOnly = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 const toNum = (d) => (d === null || d === undefined ? 0 : (typeof d.toNumber === 'function' ? d.toNumber() : Number(d)));
@@ -98,6 +100,40 @@ async function loadLiveCashoutDeals(userId) {
     }
   }
   return { deals, connections: perConnection.map(({ conn, result }) => ({ conn, result })) };
+}
+
+// Resolves the same loose "cashout" name match sync_cashout_deals already
+// uses (display name or provider, case-insensitive, partial) to one
+// connection -- shared so the commit/tracking tools below agree on it.
+async function resolveConnection(userId, cashoutQuery) {
+  const connections = await cashoutService.listConnections(userId);
+  if (!cashoutQuery) {
+    if (connections.length === 1) return connections[0];
+    throw Object.assign(new Error(connections.length === 0
+      ? 'No cashout is connected.'
+      : 'More than one cashout is connected -- pass "cashout" to say which one.'), { toolError: true });
+  }
+  const query = cashoutQuery.toLowerCase();
+  const match = connections.find((c) => (c.displayName || '').toLowerCase().includes(query) || c.provider.toLowerCase().includes(query));
+  if (!match) throw Object.assign(new Error(`No connected cashout matches "${cashoutQuery}".`), { toolError: true });
+  return match;
+}
+
+function presentCommitment(record) {
+  return {
+    id: record.id,
+    cashout: record.connection?.displayName || record.connection?.provider || null,
+    deal_id: record.external_deal_id,
+    item_id: record.external_item_id,
+    provider_commitment_id: record.external_commitment_id,
+    quantity: record.quantity,
+    status: record.status,
+    sale_id: record.sale_id,
+    tracking_codes: record.tracking_codes || [],
+    tracking_submitted_at: record.tracking_submitted_at ? new Date(record.tracking_submitted_at).toISOString() : null,
+    tracking_error: record.tracking_error,
+    created_at: new Date(record.created_at).toISOString(),
+  };
 }
 
 function jsonResult(data) {
@@ -1960,6 +1996,157 @@ function buildServer(userId, apiKeyId) {
       }
     }));
     return jsonResult({ results });
+  });
+
+  server.registerTool('list_cashout_commitments', {
+    description: 'List this account\'s cashout commitments -- pledges already made to send units for a deal line item, at a price locked in regardless of later price changes. Read from our own records (which also carry tracking info the provider itself can\'t give back), not a live provider call.',
+    inputSchema: {
+      cashout: z.string().optional().describe('Filter to one connected cashout by display name or provider (case-insensitive, partial match).'),
+      status: z.enum(['active', 'withdrawn']).optional().describe('Omit for all.'),
+    },
+  }, async ({ cashout, status }) => {
+    try {
+      let connectionId;
+      if (cashout) connectionId = (await resolveConnection(userId, cashout)).id;
+      const records = await cashoutCommits.listLocalCommitments(userId, { connectionId, status });
+      return jsonResult(records.map(presentCommitment));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to list cashout commitments');
+    }
+  });
+
+  server.registerTool('commit_cashout_deal', {
+    description: 'Pledge units to a cashout deal line item -- a real, binding commitment: the cashout will pay the price locked in now even if it drops later, and expects you to send that many units. One commitment per item; committing to an item you\'re already committed to fails rather than creating a second one. This does not submit tracking or record a purchase -- see log_cashout_purchase for the combined action used when you already have a tracking number in hand.',
+    inputSchema: {
+      cashout: z.string().optional().describe('Which connected cashout, by display name or provider. Omit when only one is connected.'),
+      deal_id: z.string().describe('The deal id from list_cashout_deals.'),
+      item_id: z.string().describe('The item_id from that deal\'s items[] (list_cashout_deals / get_cashout_deal).'),
+      quantity: z.number().int().min(1).describe('Units to commit. Capped by the item\'s vendor_limit and what\'s left on the deal.'),
+    },
+  }, async ({ cashout, deal_id, item_id, quantity }) => {
+    try {
+      const conn = await resolveConnection(userId, cashout);
+      const record = await cashoutCommits.createCommitment(userId, conn.id, { dealId: deal_id, itemId: item_id, quantity });
+      await logWrite(userId, apiKeyId, 'commit_cashout_deal', { cashout: conn.displayName || conn.provider, deal_id, item_id, quantity });
+      return jsonResult(presentCommitment({ ...record, connection: conn }));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to commit to this deal');
+    }
+  });
+
+  server.registerTool('update_cashout_commitment', {
+    description: 'Change the quantity on an existing cashout commitment. Must stay at least 1 -- use delete_cashout_commitment to withdraw entirely.',
+    inputSchema: {
+      commitment_id: z.string().describe('The id from list_cashout_commitments / commit_cashout_deal (our own record id, not the provider\'s).'),
+      quantity: z.number().int().min(1),
+    },
+  }, async ({ commitment_id, quantity }) => {
+    try {
+      const record = await cashoutCommits.updateCommitment(userId, commitment_id, { quantity });
+      await logWrite(userId, apiKeyId, 'update_cashout_commitment', { commitment_id, quantity });
+      return jsonResult(presentCommitment(record));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to update this commitment');
+    }
+  });
+
+  server.registerTool('delete_cashout_commitment', {
+    description: 'Withdraw a cashout commitment. The pledged quantity is freed back to the deal on the provider\'s side immediately -- you can re-commit while the deal is still active. The local record is kept, marked withdrawn, not deleted, so any purchase already logged against it keeps its history.',
+    inputSchema: { commitment_id: z.string().describe('The id from list_cashout_commitments / commit_cashout_deal.') },
+  }, async ({ commitment_id }) => {
+    try {
+      const record = await cashoutCommits.deleteCommitment(userId, commitment_id);
+      await logWrite(userId, apiKeyId, 'delete_cashout_commitment', { commitment_id });
+      return jsonResult(presentCommitment(record));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to withdraw this commitment');
+    }
+  });
+
+  server.registerTool('submit_cashout_tracking', {
+    description: 'Submit inbound shipment tracking numbers to a cashout, on their own (not tied to a specific commitment on the provider\'s side -- it has no such link, only a free-text description). Each code must be 24 characters or fewer; the same codes submitted again within 14 days are rejected, and each account has an unpublished weekly cap -- on that specific error, do not retry automatically.',
+    inputSchema: {
+      cashout: z.string().optional().describe('Which connected cashout. Omit when only one is connected.'),
+      tracking_codes: z.array(z.string()).min(1).describe('Tracking numbers, 24 characters or fewer each.'),
+      description: z.string().describe('Brief note on what this shipment contains, e.g. the deal name.'),
+      insured_value: z.number().min(200).max(1500).optional().describe('Declared insurance value in USD, $200-$1500. Omit to skip insurance.'),
+    },
+  }, async ({ cashout, tracking_codes: trackingCodes, description, insured_value: insuredValue }) => {
+    try {
+      const conn = await resolveConnection(userId, cashout);
+      const result = await cashoutCommits.submitTracking(userId, conn.id, { trackingCodes, description, insuredValue });
+      await logWrite(userId, apiKeyId, 'submit_cashout_tracking', { cashout: conn.displayName || conn.provider, tracking_codes: trackingCodes });
+      return jsonResult({ received_tracking_codes: result?.received_tracking_codes || [] });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to submit tracking');
+    }
+  });
+
+  server.registerTool('list_cashout_tracking_submissions', {
+    description: 'List tracking numbers previously submitted to a cashout, newest first. This is the provider\'s own record, not ours -- it has no link back to which commitment or purchase each one was for.',
+    inputSchema: {
+      cashout: z.string().optional().describe('Which connected cashout. Omit when only one is connected.'),
+      limit: z.number().int().min(1).max(100).optional(),
+      offset: z.number().int().min(0).optional(),
+    },
+  }, async ({ cashout, limit, offset }) => {
+    try {
+      const conn = await resolveConnection(userId, cashout);
+      const result = await cashoutCommits.listTrackingSubmissions(userId, conn.id, { limit, offset });
+      return jsonResult({ tracking_numbers: result?.tracking_numbers || [], total: result?.total ?? 0 });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to list tracking submissions');
+    }
+  });
+
+  server.registerTool('log_cashout_purchase', {
+    description: 'The full action for a cashout item you have already bought and shipped: commits to the deal line item with the provider, submits the tracking number, then records the purchase and its sale in this app together (the same combined write Add Transaction does). Only call this once you actually have a tracking number -- it is required, since by the time this is used the item has shipped. If the commit itself is refused (deal closed, already committed, over the limit), nothing is written at all. If only the tracking submission fails, the purchase/sale/commitment are still saved, with the tracking failure reported back for a retry later via submit_cashout_tracking.',
+    inputSchema: {
+      cashout: z.string().optional().describe('Which connected cashout. Omit when only one is connected.'),
+      deal_id: z.string().describe('The deal id from list_cashout_deals.'),
+      item_id: z.string().describe('The item_id from that deal\'s items[].'),
+      deal_name: z.string().optional().describe('For your own purchase record and the tracking description; defaults to a generic label if omitted.'),
+      item_name: z.string().optional().describe('Defaults to deal_name if omitted.'),
+      quantity: z.number().int().min(1),
+      tracking_codes: z.array(z.string()).min(1).describe('At least one tracking number -- required.'),
+      insured_value: z.number().min(200).max(1500).optional(),
+      store: z.string().describe('Where you actually bought it (an existing Vendor by name, case-insensitive).'),
+      payment_method: z.string().describe('Which saved payment method you used (by name).'),
+      unit_cost: z.number().min(0).describe('What you actually paid per unit, including any coupon.'),
+      tax_exempt: z.boolean().optional().describe('Default false.'),
+      sales_tax: z.number().min(0).optional().describe('Total sales tax paid, default 0.'),
+      cashback_rate: z.number().min(0).optional(),
+      cashback_earned: z.number().min(0).optional(),
+      unit_payout: z.number().min(0).describe('What the cashout will pay per unit -- the deal\'s payout price.'),
+      purchase_date: z.string().optional().describe('YYYY-MM-DD, defaults to today.'),
+      sale_date: z.string().optional().describe('YYYY-MM-DD, defaults to purchase_date.'),
+    },
+  }, async ({
+    cashout, deal_id, item_id, deal_name, item_name, quantity, tracking_codes: trackingCodes, insured_value: insuredValue,
+    store, payment_method, unit_cost: unitCost, tax_exempt: taxExempt, sales_tax: salesTax,
+    cashback_rate: cashbackRate, cashback_earned: cashbackEarned, unit_payout: unitPayout, purchase_date: purchaseDate, sale_date: saleDate,
+  }) => {
+    try {
+      const conn = await resolveConnection(userId, cashout);
+      const vendor = await findOrCreateVendor(userId, store);
+      const paymentMethod = await findPaymentMethod(userId, payment_method);
+      const result = await logPurchase(userId, {
+        connectionId: conn.id, dealId: deal_id, itemId: item_id, dealName: deal_name, itemName: item_name,
+        quantity, trackingCodes, insuredValue,
+        vendorId: vendor.id, paymentMethodId: paymentMethod.id, unitCost, taxExempt, salesTax,
+        cashbackRate, cashbackEarned, purchaseDate, unitPayout, saleDate,
+      });
+      await logWrite(userId, apiKeyId, 'log_cashout_purchase', { cashout: conn.displayName || conn.provider, deal_id, item_id, quantity, tracking_codes: trackingCodes });
+      return jsonResult({
+        tracking_submitted: result.trackingSubmitted,
+        tracking_error: result.trackingError,
+        commitment: presentCommitment({ ...result.commitment, connection: conn }),
+        purchase_id: result.inventory.id,
+        sale_id: result.sale.id,
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to log this purchase');
+    }
   });
 
   return server;

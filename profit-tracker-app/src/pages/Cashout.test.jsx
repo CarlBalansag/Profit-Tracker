@@ -60,10 +60,13 @@ const mockMutations = {
   deleteConnection: { mutateAsync: vi.fn(), isPending: false },
   testConnection: { mutateAsync: vi.fn(), isPending: false },
   syncConnection: { mutateAsync: vi.fn(), isPending: false },
+  logPurchase: { mutateAsync: vi.fn().mockResolvedValue({ tracking_submitted: true }), isPending: false },
+  deleteCommitment: { mutateAsync: vi.fn(), isPending: false },
 };
 
 let currentProviders = mockProviders;
 let currentConnections = mockConnections;
+let currentCommitments = [];
 let currentDeals = mockDeals;
 const gainRowButton = () => within(screen.getByText('Gain Deal').closest('tr')).getByRole('button', { name: 'Log Purchase' });
 let dealsState = {};
@@ -76,6 +79,9 @@ vi.mock('../hooks/useApi', () => ({
   useCashoutConnections: () => ({ data: currentConnections, isLoading: false, error: null, refetch: vi.fn(), ...connectionsState }),
   useCashoutDeals: () => ({ data: currentDeals, isLoading: false, error: null, refetch: refetchDeals, isFetching: false, ...dealsState }),
   useCashoutMutations: () => mockMutations,
+  useCashoutCommitments: () => ({ data: currentCommitments, isLoading: false, error: null }),
+  usePlatforms: () => ({ data: [{ id: 'vendor-1', name: 'Amazon', type: 'Vendor', tax_exempt_place: false }], isLoading: false, error: null }),
+  usePaymentMethods: () => ({ data: [{ id: 'card-1', name: 'QA Card', default_cashback_rate: 2 }], isLoading: false, error: null }),
 }));
 
 vi.mock('sonner', () => ({
@@ -89,6 +95,7 @@ describe('Cashout Page', () => {
     currentProviders = mockProviders;
     currentConnections = mockConnections;
     currentDeals = mockDeals;
+    currentCommitments = [];
     dealsState = {};
     connectionsState = {};
     providersState = {};
@@ -208,7 +215,7 @@ describe('Cashout Page', () => {
     expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(
       ['Deal / Item', 'Cashout', 'Payout', 'Retail', 'Est. Profitbefore tax', 'Expires', 'Buy At', 'Actions'],
     );
-    expect(gainRowButton()).toBeDisabled();
+    expect(gainRowButton()).toBeEnabled();
     const gainRow = screen.getByText('Gain Deal').closest('tr');
     expect(gainRow.cells[2]).toHaveTextContent('$1,140.00');
     expect(gainRow.cells[3]).toHaveTextContent('$899.99');
@@ -859,5 +866,112 @@ describe('Cashout Page', () => {
 
     expect(screen.getByText('Airpod 5 ANC')).toBeInTheDocument();
     expect(screen.queryByText('Unmatched Unknown Widget')).not.toBeInTheDocument();
+  });
+
+  describe('Log Purchase', () => {
+    beforeEach(() => {
+      currentDeals = {
+        results: [{
+          connection: mockConnections[0],
+          deals: [{
+            id: '5213', name: 'PS5 Pro', retail: 899.99, payout: 1140,
+            items: [{ id: '10001', name: 'PS5 Pro' }],
+          }],
+        }],
+      };
+    });
+
+    it('requires a tracking number before committing', async () => {
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Log Purchase' }));
+      expect(screen.getByRole('heading', { name: 'Log Purchase' })).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+      fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-1' } });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' }));
+      });
+
+      expect(screen.getByRole('alert')).toHaveTextContent(/tracking number/i);
+      expect(mockMutations.logPurchase.mutateAsync).not.toHaveBeenCalled();
+    });
+
+    it('commits, logs the purchase, and reports a successful tracking submission', async () => {
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Log Purchase' }));
+      fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+      fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-1' } });
+      fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: '1Z999AA10123456784' } });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' }));
+      });
+
+      expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+        connectionId: 'conn-1',
+        deal_id: '5213',
+        item_id: '10001',
+        quantity: 1,
+        tracking_codes: ['1Z999AA10123456784'],
+        store: 'Amazon',
+        payment_method: 'QA Card',
+        unit_payout: 1140,
+      }));
+      expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Committed'));
+      expect(screen.queryByRole('heading', { name: 'Log Purchase' })).not.toBeInTheDocument();
+    });
+
+    it('shows the server\'s real rejection reason without closing the form', async () => {
+      mockMutations.logPurchase.mutateAsync.mockRejectedValueOnce(new Error('This deal has expired.'));
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Log Purchase' }));
+      fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+      fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-1' } });
+      fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: '1Z999AA10123456784' } });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' }));
+      });
+
+      expect(screen.getByRole('alert')).toHaveTextContent('This deal has expired.');
+      expect(screen.getByRole('heading', { name: 'Log Purchase' })).toBeInTheDocument();
+    });
+  });
+
+  describe('Commitments', () => {
+    it('shows the active commitment count and toggles the panel', () => {
+      currentCommitments = [
+        { id: 'c1', status: 'active', external_deal_id: '5232', external_item_id: '1', quantity: 2, tracking_codes: [], created_at: new Date().toISOString(), connection: { display_name: 'EB Primary' } },
+        { id: 'c2', status: 'withdrawn', external_deal_id: '5232', external_item_id: '2', quantity: 1, tracking_codes: [], created_at: new Date().toISOString(), connection: { display_name: 'EB Primary' } },
+      ];
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+
+      const toggle = screen.getByRole('button', { name: /Commitments/i });
+      expect(toggle).toHaveTextContent('1'); // only the active one counts
+
+      expect(screen.queryByText('Withdraw')).not.toBeInTheDocument();
+      fireEvent.click(toggle);
+      expect(screen.getAllByText('Airpod 5 ANC').length).toBeGreaterThan(0); // c1/c2 resolved from the live deal list
+      expect(screen.getAllByRole('button', { name: 'Withdraw' })).toHaveLength(1); // only the active one
+    });
   });
 });
