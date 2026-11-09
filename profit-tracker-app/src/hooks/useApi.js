@@ -379,6 +379,12 @@ export const useCashoutDeals = (connectionId = null) =>
     refetchIntervalInBackground: false,
   });
 
+export const useCashoutCommitments = () =>
+  useQuery({
+    queryKey: ['cashout', 'commitments'],
+    queryFn: () => fetcher('/api/cashouts/commitments'),
+  });
+
 export const useCashoutMutations = () => {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ['cashout'] });
@@ -454,11 +460,47 @@ export const useCashoutMutations = () => {
     onSuccess: invalidate,
   });
 
+  const logPurchase = useMutation({
+    mutationFn: ({ connectionId, ...data }) =>
+      apiFetch(`/api/cashouts/connections/${connectionId}/log-purchase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).then(async (r) => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          const err = new Error(body.error || 'Failed to log this purchase');
+          err.code = body.code;
+          throw err;
+        }
+        return body;
+      }),
+    onSuccess: () => {
+      invalidate();
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+      qc.invalidateQueries({ queryKey: ['sales'] });
+    },
+  });
+
+  const deleteCommitment = useMutation({
+    mutationFn: (id) =>
+      apiFetch(`/api/cashouts/commitments/${id}`, { method: 'DELETE' }).then(async (r) => {
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          throw new Error(e.error || 'Failed to withdraw this commitment');
+        }
+        return r.json();
+      }),
+    onSuccess: invalidate,
+  });
+
   return {
     addConnection,
     updateConnection,
     deleteConnection,
     testConnection,
     syncConnection,
+    logPurchase,
+    deleteCommitment,
   };
 };

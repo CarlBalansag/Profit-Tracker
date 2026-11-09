@@ -13,7 +13,7 @@ function reset() {
     paymentMethod:[{id:ids.card,user_id:ids.user,name:'QA Credit Card',type:'Credit',default_cashback_rate:2,category_rates:'[]',statement_close_day:15,due_day:10,credit_limit:5000,min_payment_pct:2}],
     inventory:[{id:ids.inventory,user_id:ids.user,product_name:'QA Multi-unit Sneaker',vendor_id:ids.vendor,payment_method_id:ids.card,unit_purchase_cost:100,qty_purchased:5,qty_on_hand:3,sales_tax:40,shipping_cost_inbound:20,fees:10,gift_card_amount:50,cashback_earned:10.4,status:'PURCHASED',category:'Shoes',purchase_date:new Date('2026-09-01T12:00:00Z'),created_at:new Date(),tracking_number:'9400111899223856928499',receipt_url:null,tax_exempt:false,refunded_amount:0,refunded_qty:0}],
     sales:[{id:ids.sale,inventory_id:ids.inventory,platform_id:ids.platform,buyer_id:null,quantity:2,unit_price:150,commission_fee:15,sale_shipping:12,sale_tax_collected:8,taxable:true,customer_tax_exempt:false,status:'SOLD',sale_date:new Date('2026-09-03T12:00:00Z'),payout_date:null,paid_at:null,paid_amount:null,paid_reference:null,payout_account:null,payout_short_amount:null,refunded_amount:0,refunded_qty:0}],
-    expense:[{id:randomUUID(),user_id:ids.user,name:'QA Storage',amount:25,tax_version:0,date:new Date('2026-09-01T12:00:00Z'),category:'Storage'}],recurringExpense:[],refund:[],account:[],goal:[],calendarEvent:[],productNote:[],authAttemptBucket:[],buyer:[],invoice:[],apiKey:[],mcpWriteLog:[],changeLog:[],transactionNote:[],attachment:[],cashoutConnection:[],cashoutDealSnapshot:[],cashoutItemMatch:[]};
+    expense:[{id:randomUUID(),user_id:ids.user,name:'QA Storage',amount:25,tax_version:0,date:new Date('2026-09-01T12:00:00Z'),category:'Storage'}],recurringExpense:[],refund:[],account:[],goal:[],calendarEvent:[],productNote:[],authAttemptBucket:[],buyer:[],invoice:[],apiKey:[],mcpWriteLog:[],changeLog:[],transactionNote:[],attachment:[],cashoutConnection:[],cashoutDealSnapshot:[],cashoutItemMatch:[],cashoutCommitment:[]};
 }
 reset();
 function relations(model,row,key) {
@@ -31,6 +31,8 @@ function relations(model,row,key) {
   if(model==='platform'&&key==='accounts') return ['account',db.account.filter(x=>x.platform_id===row.id)];
   if(model==='cashoutConnection'&&key==='platform') return ['platform',row.platform_id?(db.platform.find(x=>x.id===row.platform_id)||null):null];
   if(model==='cashoutDealSnapshot'&&key==='connection') return ['cashoutConnection',db.cashoutConnection.find(x=>x.id===row.connection_id)||null];
+  if(model==='cashoutCommitment'&&key==='connection') return ['cashoutConnection',db.cashoutConnection.find(x=>x.id===row.connection_id)||null];
+  if(model==='cashoutCommitment'&&key==='sale') return ['sales',row.sale_id?(db.sales.find(x=>x.id===row.sale_id)||null):null];
   return null;
 }
 function matches(model,row,where={}) {
@@ -79,7 +81,7 @@ for(const model of Object.keys(db)) {
     if(op==='findUnique'||op==='findFirst')return project(model,rows[0],args);
     if(op==='create'||op==='createMany'||(op==='upsert'&&!rows.length)) {
       const data=op==='upsert'?args.create:args.data;
-      const created=(Array.isArray(data)?data:[data]).map(x=>({id:randomUUID(),...(model==='inventory'?{status:'PURCHASED',created_at:new Date(),refunded_amount:0,refunded_qty:0}:{}),...(model==='sales'?{refunded_amount:0,refunded_qty:0}:{}),...(model==='refund'?{quantity:0,created_at:new Date()}:{}),...(model==='authAttemptBucket'?{count:1}:{}),...(model==='expense'?{tax_version:0}:{}),...(model==='attachment'?{label:null,kind:null,created_at:new Date()}:{}),...(model==='transactionNote'?{author:'carl',pinned:false,created_at:new Date(),updated_at:new Date(),deleted_at:null}:{}),...x}));
+      const created=(Array.isArray(data)?data:[data]).map(x=>({id:randomUUID(),...(model==='inventory'?{status:'PURCHASED',created_at:new Date(),refunded_amount:0,refunded_qty:0}:{}),...(model==='sales'?{refunded_amount:0,refunded_qty:0}:{}),...(model==='refund'?{quantity:0,created_at:new Date()}:{}),...(model==='authAttemptBucket'?{count:1}:{}),...(model==='expense'?{tax_version:0}:{}),...(model==='attachment'?{label:null,kind:null,created_at:new Date()}:{}),...(model==='transactionNote'?{author:'carl',pinned:false,created_at:new Date(),updated_at:new Date(),deleted_at:null}:{}),...(model==='cashoutCommitment'?{status:'active',tracking_codes:[],sale_id:null,tracking_submitted_at:null,tracking_error:null,created_at:new Date(),updated_at:new Date()}:{}),...x}));
       db[model].push(...created);return op==='createMany'?{count:created.length}:project(model,created[0],args);
     }
     if(op==='update'||op==='updateMany'||op==='upsert'){

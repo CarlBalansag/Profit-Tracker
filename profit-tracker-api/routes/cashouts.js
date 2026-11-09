@@ -17,6 +17,8 @@ const {
   syncUserConnection,
   getDealHistory,
 } = require('../services/cashouts/service');
+const commitsService = require('../services/cashouts/commits');
+const { logPurchase } = require('../services/cashouts/logPurchase');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -169,6 +171,136 @@ router.get('/history', isAuthenticated, async (req, res, next) => {
     res.json(history);
   } catch (err) {
     next(err);
+  }
+});
+
+// GET /api/cashouts/commitments — local commitment records (read_commits' local mirror)
+router.get('/commitments', isAuthenticated, async (req, res, next) => {
+  try {
+    const { connectionId, status } = req.query;
+    const commitments = await commitsService.listLocalCommitments(req.user.id, { connectionId, status });
+    res.json(commitments);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/cashouts/connections/:id/commits — live commitments from the provider
+router.get('/connections/:id/commits', isAuthenticated, async (req, res, next) => {
+  try {
+    const { limit, offset, search, dealStatus, dealId } = req.query;
+    const result = await commitsService.listCommits(req.user.id, req.params.id, {
+      limit: limit ? parseInt(limit, 10) : undefined,
+      offset: offset ? parseInt(offset, 10) : undefined,
+      search,
+      dealStatus,
+      dealId: dealId ? parseInt(dealId, 10) : undefined,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message, code: err.code || null });
+  }
+});
+
+// GET /api/cashouts/connections/:id/commits/:commitmentId — one live commitment
+router.get('/connections/:id/commits/:commitmentId', isAuthenticated, async (req, res, next) => {
+  try {
+    const result = await commitsService.getCommit(req.user.id, req.params.id, req.params.commitmentId);
+    res.json(result);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message, code: err.code || null });
+  }
+});
+
+// POST /api/cashouts/connections/:id/commits — commit to a deal line item on its own
+// (Log Purchase below does this plus tracking plus the purchase/sale records together.)
+router.post('/connections/:id/commits', isAuthenticated, async (req, res, next) => {
+  try {
+    const { deal_id, item_id, quantity } = req.body;
+    const commitment = await commitsService.createCommitment(req.user.id, req.params.id, {
+      dealId: deal_id, itemId: item_id, quantity,
+    });
+    res.status(201).json(commitment);
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code || null });
+  }
+});
+
+// PATCH /api/cashouts/commitments/:id — change a commitment's quantity
+router.patch('/commitments/:id', isAuthenticated, async (req, res, next) => {
+  try {
+    const commitment = await commitsService.updateCommitment(req.user.id, req.params.id, { quantity: req.body.quantity });
+    res.json(commitment);
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code || null });
+  }
+});
+
+// DELETE /api/cashouts/commitments/:id — withdraw a commitment
+router.delete('/commitments/:id', isAuthenticated, async (req, res, next) => {
+  try {
+    const commitment = await commitsService.deleteCommitment(req.user.id, req.params.id);
+    res.json(commitment);
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code || null });
+  }
+});
+
+// POST /api/cashouts/connections/:id/tracking — submit tracking numbers on their own
+router.post('/connections/:id/tracking', isAuthenticated, async (req, res, next) => {
+  try {
+    const { tracking_codes, description, insured_value } = req.body;
+    const result = await commitsService.submitTracking(req.user.id, req.params.id, {
+      trackingCodes: tracking_codes, description, insuredValue: insured_value,
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code || null });
+  }
+});
+
+// GET /api/cashouts/connections/:id/tracking — previously submitted tracking numbers
+router.get('/connections/:id/tracking', isAuthenticated, async (req, res, next) => {
+  try {
+    const { limit, offset } = req.query;
+    const result = await commitsService.listTrackingSubmissions(req.user.id, req.params.id, {
+      limit: limit ? parseInt(limit, 10) : undefined,
+      offset: offset ? parseInt(offset, 10) : undefined,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message, code: err.code || null });
+  }
+});
+
+// POST /api/cashouts/connections/:id/log-purchase — commit, submit tracking, and
+// record the purchase + sale together. The real Log Purchase action.
+router.post('/connections/:id/log-purchase', isAuthenticated, async (req, res, next) => {
+  try {
+    const b = req.body;
+    const result = await logPurchase(req.user.id, {
+      connectionId: req.params.id,
+      dealId: b.deal_id,
+      itemId: b.item_id,
+      dealName: b.deal_name,
+      itemName: b.item_name,
+      quantity: b.quantity,
+      trackingCodes: b.tracking_codes,
+      insuredValue: b.insured_value,
+      vendorId: b.vendor_id,
+      paymentMethodId: b.payment_method_id,
+      unitCost: b.unit_cost,
+      taxExempt: b.tax_exempt,
+      salesTax: b.sales_tax,
+      cashbackRate: b.cashback_rate,
+      cashbackEarned: b.cashback_earned,
+      purchaseDate: b.purchase_date,
+      unitPayout: b.unit_payout,
+      saleDate: b.sale_date,
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code || null });
   }
 });
 

@@ -47,6 +47,7 @@ model User {
   cashout_connections    CashoutConnection[]
   cashout_deal_snapshots CashoutDealSnapshot[]
   cashout_item_matches   CashoutItemMatch[]
+  cashout_commitments    CashoutCommitment[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -354,6 +355,7 @@ model Sales {
   carrier             String?
   tracking_info       Json?
   notes               String?
+  cashout_commitment  CashoutCommitment?
 
   @@index([inventory_id])
   @@index([sale_shipping_payment_method_id])
@@ -595,6 +597,7 @@ model CashoutConnection {
   updated_at     DateTime             @updatedAt
   snapshots      CashoutDealSnapshot[]
   matches        CashoutItemMatch[]
+  commitments    CashoutCommitment[]
 
   @@index([user_id])
   @@index([provider])
@@ -636,6 +639,39 @@ model CashoutItemMatch {
 
   @@unique([user_id, provider, external_deal_id])
   @@index([user_id])
+}
+
+// A pledge to send units for one deal line item, made through Log Purchase.
+// Mirrors the provider's own "one commitment per line item" rule locally
+// (@@unique below) so a duplicate attempt fails fast without a round trip.
+// The provider has no concept of linking a tracking number to a commitment
+// -- tracking_codes here is our own record of what we told it, for our UI
+// only, not something the provider can be queried against.
+model CashoutCommitment {
+  id                      String            @id @default(uuid())
+  user_id                 String
+  user                    User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  connection_id           String
+  connection              CashoutConnection @relation(fields: [connection_id], references: [id], onDelete: Cascade)
+  sale_id                 String?           @unique
+  sale                    Sales?            @relation(fields: [sale_id], references: [id], onDelete: SetNull)
+  external_deal_id        String
+  external_item_id        String
+  external_commitment_id  String            @unique
+  quantity                Int
+  // Mirrors the provider deal's own status at commit time (active/expired/
+  // closed) plus "withdrawn" for our own DELETE. Not kept live in sync after
+  // that -- re-synced the next time this commitment is read from the provider.
+  status                  String            @default("active")
+  tracking_codes          String[]          @default([])
+  tracking_submitted_at   DateTime?
+  tracking_error          String?
+  created_at              DateTime          @default(now())
+  updated_at              DateTime          @updatedAt
+
+  @@unique([connection_id, external_item_id])
+  @@index([user_id])
+  @@index([connection_id])
 }
 
 /// Managed by connect-pg-simple — Prisma should not touch this table

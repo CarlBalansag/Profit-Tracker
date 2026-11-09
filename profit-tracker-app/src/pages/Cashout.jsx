@@ -22,9 +22,13 @@ import {
   useCashoutConnections,
   useCashoutDeals,
   useCashoutMutations,
+  useCashoutCommitments,
+  usePlatforms,
+  usePaymentMethods,
 } from '../hooks/useApi';
 import { formatMoney } from '../utils/money';
 import { useMatchMedia } from '../hooks/useMatchMedia';
+import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import {
   dealConditionLabels,
   dealLimitLabel,
@@ -135,6 +139,10 @@ export default function Cashout() {
     [allDeals],
   );
   const expiredCount = useMemo(() => allDeals.filter((deal) => isDealExpired(deal)).length, [allDeals]);
+
+  const [showCommitments, setShowCommitments] = useState(false);
+  const { data: commitments = [] } = useCashoutCommitments();
+  const activeCommitmentCount = useMemo(() => commitments.filter((c) => c.status === 'active').length, [commitments]);
 
   // Filter & Sort
   const filteredDeals = useMemo(() => {
@@ -341,6 +349,15 @@ export default function Cashout() {
         <span className="text-xs px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)]">
           {allDeals.length - expiredCount}
         </span>
+        <button
+          type="button"
+          onClick={() => setShowCommitments((v) => !v)}
+          aria-pressed={showCommitments}
+          className="flex items-center gap-1.5 text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]"
+        >
+          <span>Commitments</span>
+          <span className="text-xs px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)]">{activeCommitmentCount}</span>
+        </button>
         {expiredCount > 0 && (
           <label className="ml-auto flex items-center gap-1.5 text-xs font-normal text-[var(--dp-text-secondary)] cursor-pointer">
             <input
@@ -352,6 +369,8 @@ export default function Cashout() {
           </label>
         )}
       </div>
+
+      {showCommitments && <CommitmentsPanel commitments={commitments} allDeals={allDeals} />}
 
       {/* Empty State when no connections added yet */}
       {connectionsLoading ? (
@@ -578,7 +597,7 @@ export default function Cashout() {
 
                           {/* Actions */}
                           <td className="py-3 pl-3 pr-6 w-px whitespace-nowrap text-right">
-                            {!expired && <LogPurchaseButton />}
+                            {!expired && <LogPurchaseButton deal={deal} />}
                           </td>
                         </tr>
                       );
@@ -744,18 +763,272 @@ function StoreLinks({ deal, large = false }) {
   );
 }
 
-// Placeholder: it will open a short form that records the purchase and its sale
-// to the cashout. It saves nothing until that's built.
-function LogPurchaseButton() {
+// Pledges already made to a cashout -- read from our own records, since the
+// provider itself has no way to tell us which tracking number went with
+// which commitment. Deal names come from the current live deals list when
+// available; an expired/closed deal still shows its id.
+function CommitmentsPanel({ commitments, allDeals }) {
+  const { deleteCommitment } = useCashoutMutations();
+
+  if (commitments.length === 0) {
+    return (
+      <div className="p-6 text-center rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-xs text-[var(--dp-text-secondary)]">
+        No commitments yet. Log Purchase on a deal commits to it.
+      </div>
+    );
+  }
+
+  const withdraw = async (commitment) => {
+    if (!confirm('Withdraw this commitment? The cashout frees the quantity back to the deal immediately.')) return;
+    try {
+      await deleteCommitment.mutateAsync(commitment.id);
+      toast.success('Commitment withdrawn.');
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
   return (
-    <button
-      type="button"
-      disabled
-      title="Coming soon"
-      className="px-2.5 py-1.5 text-[12px] font-medium rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-label)] cursor-not-allowed"
-    >
-      Log Purchase
-    </button>
+    <div className="rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] divide-y divide-[color:var(--dp-border)] overflow-hidden">
+      {commitments.map((c) => {
+        const deal = allDeals.find((d) => String(d.id) === c.external_deal_id);
+        return (
+          <div key={c.id} className="p-3.5 flex items-center justify-between gap-3 text-xs">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-[var(--dp-text-primary)] truncate">{deal?.name || `Deal #${c.external_deal_id}`}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[11px] font-semibold ${c.status === 'active' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-[var(--dp-hover-bg)] text-[var(--dp-text-label)]'}`}>
+                  {c.status === 'active' ? 'Active' : 'Withdrawn'}
+                </span>
+                {c.sale_id && <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]">Logged</span>}
+              </div>
+              <div className="text-[11px] text-[var(--dp-text-label)] mt-0.5">
+                {c.connection?.display_name || c.connection?.provider} · Qty {c.quantity} · committed {new Date(c.created_at).toLocaleDateString()}
+              </div>
+              {c.tracking_codes?.length > 0 && (
+                <div className="text-[11px] text-[var(--dp-text-secondary)] font-mono mt-0.5">Tracking: {c.tracking_codes.join(', ')}</div>
+              )}
+              {c.tracking_error && (
+                <div className="text-[11px] text-rose-400 mt-0.5" title={c.tracking_error}>Tracking failed: {c.tracking_error}</div>
+              )}
+            </div>
+            {c.status === 'active' && (
+              <button
+                type="button"
+                onClick={() => withdraw(c)}
+                className="flex-shrink-0 px-2.5 py-1.5 text-[11px] font-medium rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)]"
+              >
+                Withdraw
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Commits to the cashout, submits tracking, and records the purchase + sale
+// together -- for an item you've already bought and shipped.
+function LogPurchaseButton({ deal }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap bg-[var(--dp-accent)] text-white hover:opacity-90 transition-opacity"
+      >
+        Log Purchase
+      </button>
+      {open && <LogPurchaseModal deal={deal} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function LogPurchaseModal({ deal, onClose }) {
+  const { data: platforms = [] } = usePlatforms();
+  const { data: paymentMethods = [] } = usePaymentMethods();
+  const { logPurchase } = useCashoutMutations();
+  const vendors = useMemo(() => platforms.filter((p) => p.type === 'Vendor'), [platforms]);
+  const items = deal.items || [];
+  const dealStores = useMemo(() => dealStoreNames(deal), [deal]);
+
+  const [itemId, setItemId] = useState(items[0]?.id || '');
+  const [quantity, setQuantity] = useState(1);
+  const [vendorId, setVendorId] = useState(() => vendors.find((v) => dealStores.includes(v.name))?.id || '');
+  const [paymentMethodId, setPaymentMethodId] = useState('');
+  const [unitCost, setUnitCost] = useState(deal.retail || 0);
+  const [salesTax, setSalesTax] = useState(0);
+  const [trackingNumber, setTrackingNumber] = useState('');
+  const [insuredValue, setInsuredValue] = useState('');
+  const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [error, setError] = useState(null);
+
+  const selectedVendor = vendors.find((v) => v.id === vendorId);
+  const selectedPaymentMethod = paymentMethods.find((m) => m.id === paymentMethodId);
+  const taxExempt = Boolean(selectedVendor?.tax_exempt_place);
+  const cashbackRate = selectedPaymentMethod?.default_cashback_rate || 0;
+  const cashbackEarned = Math.round(Number(unitCost) * quantity * (cashbackRate / 100) * 100) / 100;
+  const selectedItem = items.find((i) => i.id === itemId);
+
+  const modalRef = useModalKeyboard(true, () => !logPurchase.isPending && onClose());
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    if (!itemId) return setError('Pick which item you bought.');
+    if (!vendorId) return setError('Pick the store you bought it from.');
+    if (!paymentMethodId) return setError('Pick the card or account you paid with.');
+    if (!trackingNumber.trim()) return setError('A tracking number is required -- this is for an item that has already shipped.');
+
+    try {
+      const result = await logPurchase.mutateAsync({
+        connectionId: deal.connectionId,
+        deal_id: deal.id,
+        item_id: itemId,
+        deal_name: deal.name,
+        item_name: selectedItem?.name,
+        quantity,
+        tracking_codes: [trackingNumber.trim()],
+        insured_value: insuredValue ? Number(insuredValue) : undefined,
+        store: selectedVendor.name,
+        payment_method: selectedPaymentMethod.name,
+        unit_cost: Number(unitCost) || 0,
+        tax_exempt: taxExempt,
+        sales_tax: taxExempt ? 0 : Number(salesTax) || 0,
+        cashback_rate: cashbackRate || undefined,
+        cashback_earned: cashbackEarned || undefined,
+        unit_payout: deal.payout,
+        purchase_date: purchaseDate,
+      });
+      if (result.tracking_submitted) {
+        toast.success('Committed and logged -- tracking sent to the cashout.');
+      } else {
+        toast.success('Committed and logged, but tracking failed to send.', {
+          description: result.tracking_error || 'Resubmit it from the Commitments section.',
+        });
+      }
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <form
+        ref={modalRef}
+        onSubmit={submit}
+        className="w-full max-w-lg rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4 max-h-[85vh] overflow-y-auto"
+      >
+        <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
+          <div>
+            <h3 className="font-bold text-base text-[var(--dp-text-primary)]">Log Purchase</h3>
+            <p className="text-[11px] text-[var(--dp-text-secondary)] mt-0.5 truncate max-w-xs" title={deal.name}>{deal.name}</p>
+          </div>
+          <button type="button" aria-label="Close" onClick={onClose} className="text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]">
+            <X size={18} />
+          </button>
+        </div>
+
+        <p className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+          This commits to the cashout at today's payout price -- a real, binding pledge -- and submits your tracking number. Only use this once you've actually shipped the item.
+        </p>
+
+        {items.length > 1 && (
+          <div className="space-y-1.5">
+            <label htmlFor="lp-item" className="text-[11px] text-[var(--dp-text-label)]">Which item</label>
+            <select id="lp-item" value={itemId} onChange={(e) => setItemId(e.target.value)} className={SELECT_CLASS + ' w-full'}>
+              {items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label htmlFor="lp-qty" className="text-[11px] text-[var(--dp-text-label)]">Quantity</label>
+            <input id="lp-qty" type="number" min="1" value={quantity} onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
+              className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none" />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="lp-cost" className="text-[11px] text-[var(--dp-text-label)]">Unit cost (what you paid)</label>
+            <input id="lp-cost" type="number" step="0.01" min="0" value={unitCost} onChange={(e) => setUnitCost(e.target.value)}
+              className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label htmlFor="lp-store" className="text-[11px] text-[var(--dp-text-label)]">Store</label>
+            <select id="lp-store" value={vendorId} onChange={(e) => setVendorId(e.target.value)} className={SELECT_CLASS + ' w-full'}>
+              <option value="">Select a store…</option>
+              {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="lp-pay" className="text-[11px] text-[var(--dp-text-label)]">Payment method</label>
+            <select id="lp-pay" value={paymentMethodId} onChange={(e) => setPaymentMethodId(e.target.value)} className={SELECT_CLASS + ' w-full'}>
+              <option value="">Select a card/account…</option>
+              {paymentMethods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label htmlFor="lp-tax" className="text-[11px] text-[var(--dp-text-label)]">Sales tax</label>
+            {taxExempt ? (
+              <p className="text-xs text-[var(--dp-text-secondary)] px-3 py-2">$0.00 (tax-exempt store)</p>
+            ) : (
+              <input id="lp-tax" type="number" step="0.01" min="0" value={salesTax} onChange={(e) => setSalesTax(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none" />
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <span className="text-[11px] text-[var(--dp-text-label)] block">Cashback</span>
+            <p className="text-xs text-[var(--dp-text-secondary)] px-3 py-2">
+              {cashbackRate ? `$${cashbackEarned.toFixed(2)} (${cashbackRate}%)` : '—'}
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="lp-tracking" className="text-[11px] text-[var(--dp-text-label)]">Tracking number</label>
+          <input id="lp-tracking" type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
+            placeholder="1Z999AA10123456784"
+            className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none" />
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="lp-insured" className="text-[11px] text-[var(--dp-text-label)]">Insured value (optional, $200–$1,500)</label>
+          <input id="lp-insured" type="number" min="200" max="1500" step="0.01" value={insuredValue} onChange={(e) => setInsuredValue(e.target.value)}
+            placeholder="Leave blank to skip insurance"
+            className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none" />
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="lp-date" className="text-[11px] text-[var(--dp-text-label)]">Purchase date</label>
+          <input id="lp-date" type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)}
+            className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none" />
+        </div>
+
+        {error && <p role="alert" className="text-xs text-rose-400">{error}</p>}
+
+        <div className="flex items-center justify-end gap-2 border-t border-[color:var(--dp-border)] pt-3">
+          <button type="button" onClick={onClose} disabled={logPurchase.isPending}
+            className="px-3.5 py-2 text-xs font-medium rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)]">
+            Cancel
+          </button>
+          <button type="submit" disabled={logPurchase.isPending}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90 disabled:opacity-50">
+            {logPurchase.isPending && <RefreshCw size={12} className="animate-spin" />}
+            {logPurchase.isPending ? 'Committing…' : 'Commit & Log Purchase'}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -794,7 +1067,7 @@ function DealCard({ deal }) {
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-3">
             <StoreLinks deal={deal} large />
-            <LogPurchaseButton />
+            <LogPurchaseButton deal={deal} />
           </div>
         )}
       </div>
