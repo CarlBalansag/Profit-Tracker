@@ -27,6 +27,7 @@ import {
   usePaymentMethods,
 } from '../hooks/useApi';
 import { formatMoney } from '../utils/money';
+import { displayLabel, statusVisual } from '../data/statusWorkflow';
 import { useMatchMedia } from '../hooks/useMatchMedia';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import {
@@ -342,23 +343,40 @@ export default function Cashout() {
         </div>
       )}
 
-      {/* Deal Count */}
-      <div className="flex items-center gap-2 border-b border-[color:var(--dp-border)] pb-2 text-sm font-medium text-[var(--dp-text-primary)]">
-        <Layers size={15} className="text-[var(--dp-accent)]" />
-        <span>Live Deals</span>
-        <span className="text-xs px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)]">
-          {allDeals.length - expiredCount}
-        </span>
+      {/* Tabs: Live Deals / Commitments */}
+      <div role="tablist" className="flex items-center gap-1 border-b border-[color:var(--dp-border)]">
         <button
           type="button"
-          onClick={() => setShowCommitments((v) => !v)}
-          aria-pressed={showCommitments}
-          className="flex items-center gap-1.5 text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]"
+          role="tab"
+          aria-selected={!showCommitments}
+          onClick={() => setShowCommitments(false)}
+          className={`flex items-center gap-2 px-3.5 py-2.5 -mb-px text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
+            !showCommitments
+              ? 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] text-[var(--dp-text-primary)]'
+              : 'bg-transparent border-transparent text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'
+          }`}
+        >
+          <Layers size={15} className={!showCommitments ? 'text-[var(--dp-accent)]' : ''} />
+          <span>Live Deals</span>
+          <span className="text-xs px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)]">
+            {allDeals.length - expiredCount}
+          </span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={showCommitments}
+          onClick={() => setShowCommitments(true)}
+          className={`flex items-center gap-2 px-3.5 py-2.5 -mb-px text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
+            showCommitments
+              ? 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] text-[var(--dp-text-primary)]'
+              : 'bg-transparent border-transparent text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'
+          }`}
         >
           <span>Commitments</span>
           <span className="text-xs px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)]">{activeCommitmentCount}</span>
         </button>
-        {expiredCount > 0 && (
+        {!showCommitments && expiredCount > 0 && (
           <label className="ml-auto flex items-center gap-1.5 text-xs font-normal text-[var(--dp-text-secondary)] cursor-pointer">
             <input
               type="checkbox"
@@ -373,7 +391,7 @@ export default function Cashout() {
       {showCommitments && <CommitmentsPanel commitments={commitments} allDeals={allDeals} />}
 
       {/* Empty State when no connections added yet */}
-      {connectionsLoading ? (
+      {!showCommitments && (connectionsLoading ? (
         <div className="p-8 text-center text-xs text-[var(--dp-text-secondary)]">Loading cashout deals…</div>
       ) : connections.length === 0 ? (
         <div className="rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] p-10 text-center max-w-md mx-auto my-8">
@@ -608,7 +626,7 @@ export default function Cashout() {
             </div>
           )}
         </>
-      )}
+      ))}
 
     </div>
   );
@@ -789,42 +807,143 @@ function CommitmentsPanel({ commitments, allDeals }) {
   };
 
   return (
-    <div className="rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] divide-y divide-[color:var(--dp-border)] overflow-hidden">
-      {commitments.map((c) => {
-        const deal = allDeals.find((d) => String(d.id) === c.external_deal_id);
-        return (
-          <div key={c.id} className="p-3.5 flex items-center justify-between gap-3 text-xs">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-[var(--dp-text-primary)] truncate">{deal?.name || `Deal #${c.external_deal_id}`}</span>
-                <span className={`px-1.5 py-0.5 rounded text-[11px] font-semibold ${c.status === 'active' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-[var(--dp-hover-bg)] text-[var(--dp-text-label)]'}`}>
-                  {c.status === 'active' ? 'Active' : 'Withdrawn'}
-                </span>
-                {c.sale_id && <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]">Logged</span>}
-              </div>
-              <div className="text-[11px] text-[var(--dp-text-label)] mt-0.5">
-                {c.connection?.display_name || c.connection?.provider} · Qty {c.quantity} · committed {new Date(c.created_at).toLocaleDateString()}
-              </div>
-              {c.tracking_codes?.length > 0 && (
-                <div className="text-[11px] text-[var(--dp-text-secondary)] font-mono mt-0.5">Tracking: {c.tracking_codes.join(', ')}</div>
-              )}
-              {c.tracking_error && (
-                <div className="text-[11px] text-rose-400 mt-0.5" title={c.tracking_error}>Tracking failed: {c.tracking_error}</div>
-              )}
-            </div>
-            {c.status === 'active' && (
-              <button
-                type="button"
-                onClick={() => withdraw(c)}
-                className="flex-shrink-0 px-2.5 py-1.5 text-[11px] font-medium rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)]"
-              >
-                Withdraw
-              </button>
-            )}
-          </div>
-        );
-      })}
+    <div className="rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] overflow-hidden shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full table-fixed text-left border-collapse text-xs">
+          <colgroup>
+            <col className="w-[26%]" />
+            <col className="w-[9%]" />
+            <col className="w-[10%]" />
+            <col className="w-[10%]" />
+            <col className="w-[13%]" />
+            <col className="w-[20%]" />
+            <col className="w-[12%]" />
+          </colgroup>
+          <thead>
+            <tr className="border-b border-[color:var(--dp-border)] text-[var(--dp-text-label)] uppercase font-semibold text-[12px] tracking-wider align-top">
+              <th className="py-3 px-4">Item</th>
+              <th className="py-3 px-3">Cashout</th>
+              <th className="py-3 px-3">Bought At</th>
+              <th className="py-3 px-3">Committed At</th>
+              <th className="py-3 px-3">Status</th>
+              <th className="py-3 px-3">Tracking</th>
+              <th className="py-3 pl-3 pr-6"><span className="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[color:var(--dp-border)]">
+            {commitments.map((c) => {
+              const deal = allDeals.find((d) => String(d.id) === c.external_deal_id);
+              const itemName = c.sale?.inventory?.product_name || deal?.name || `Deal #${c.external_deal_id}`;
+              const upc = deal?.items?.[0]?.upcs?.[0];
+              const unitCost = c.sale?.inventory?.unit_purchase_cost;
+              const unitPayout = c.sale?.unit_price;
+              return (
+                <tr key={c.id} className={`hover:bg-[var(--dp-hover-bg)] transition-colors ${c.status !== 'active' ? 'opacity-60' : ''}`}>
+                  {/* Item */}
+                  <td className="py-3 px-4">
+                    <div className="flex items-start gap-3">
+                      {deal?.imageUrl ? (
+                        <img
+                          src={deal.imageUrl}
+                          alt={itemName}
+                          className="w-10 h-10 rounded-lg object-contain bg-white/5 border border-[color:var(--dp-border)] flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] flex items-center justify-center text-[var(--dp-text-label)] flex-shrink-0">
+                          <Package size={16} />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="font-semibold text-[var(--dp-text-primary)] truncate" title={itemName}>{itemName}</div>
+                        {upc && <div className="text-[12px] text-[var(--dp-text-label)] font-mono truncate">UPC: {upc}</div>}
+                        <div className="text-[12px] text-[var(--dp-text-label)] mt-0.5">
+                          Qty {c.quantity} · {new Date(c.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* Cashout */}
+                  <td className="py-3 px-3">
+                    <CashoutName name={c.connection?.display_name || c.connection?.provider} />
+                  </td>
+
+                  {/* Bought At */}
+                  <td className="py-3 px-3 tabular-nums text-[var(--dp-text-secondary)]">
+                    {unitCost != null ? `$${formatMoney(unitCost)}` : '—'}
+                  </td>
+
+                  {/* Committed At */}
+                  <td className="py-3 px-3">
+                    <div className="font-semibold tabular-nums text-[var(--dp-text-primary)]">
+                      {unitPayout != null ? `$${formatMoney(unitPayout)}` : '—'}
+                    </div>
+                  </td>
+
+                  {/* Status -- the sale's real workflow status when one exists
+                      (the same vocabulary the Statuses page uses), since that
+                      already implies "logged" without a separate badge. */}
+                  <td className="py-3 px-3">
+                    {c.status === 'withdrawn' ? (
+                      <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[var(--dp-hover-bg)] text-[var(--dp-text-label)]">
+                        Withdrawn
+                      </span>
+                    ) : c.sale?.workflow_status ? (
+                      <StatusChip status={c.sale.workflow_status} />
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-500/15 text-amber-400">
+                        Committed
+                      </span>
+                    )}
+                  </td>
+
+                  {/* Tracking */}
+                  <td className="py-3 px-3">
+                    {c.tracking_codes?.length > 0 && (
+                      <div className="text-[11px] text-[var(--dp-text-secondary)] font-mono truncate" title={c.tracking_codes.join(', ')}>
+                        {c.tracking_codes.join(', ')}
+                      </div>
+                    )}
+                    {c.tracking_error && (
+                      <div className="text-[11px] text-rose-400 mt-0.5" title={c.tracking_error}>Tracking failed</div>
+                    )}
+                    {!c.tracking_codes?.length && !c.tracking_error && <span className="text-[var(--dp-text-label)]">—</span>}
+                  </td>
+
+                  {/* Actions */}
+                  <td className="py-3 pl-3 pr-6 whitespace-nowrap text-right">
+                    {c.status === 'active' && (
+                      <button
+                        type="button"
+                        onClick={() => withdraw(c)}
+                        className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
+                      >
+                        Withdraw
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
+  );
+}
+
+// A sale's workflow status, in the same vocabulary and colour the Statuses
+// page uses for it -- so "Outbound"/"Paid" here means the same thing it does
+// there, instead of a separate made-up label.
+function StatusChip({ status }) {
+  const visual = statusVisual(status);
+  return (
+    <span
+      className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold"
+      style={{ backgroundColor: `color-mix(in srgb, ${visual.color} 15%, transparent)`, color: visual.color }}
+    >
+      {displayLabel(status)}
+    </span>
   );
 }
 

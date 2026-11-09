@@ -80,7 +80,7 @@ async function listLocalCommitments(userId, { connectionId, saleId, status } = {
       ...(saleId ? { sale_id: saleId } : {}),
       ...(status ? { status } : {}),
     },
-    include: { connection: true, sale: true },
+    include: { connection: true, sale: { include: { inventory: true } } },
     orderBy: { created_at: 'desc' },
   });
 }
