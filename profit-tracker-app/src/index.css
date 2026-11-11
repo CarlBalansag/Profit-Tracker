@@ -1233,6 +1233,9 @@ body,
   --dp-accent-light: #d9765a;
   --dp-accent-bg: rgba(181, 59, 34, 0.18);
   --dp-accent-gradient: linear-gradient(140deg, #c95128 0%, #b53b22 50%, #992a17 100%);
+  /* Hover red: deeper than the accent, so hovers darken instead of glowing. */
+  --dp-dash-hover: #7a2c1c;
+  --dp-dash-hover-deep: #5e2214;
   --dp-card-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
     inset 0 0 0 1px rgba(255, 255, 255, 0.06),
@@ -1297,4 +1300,50 @@ body,
 :root:not([data-ui-style="glassmorphism-brown"]) .dp-dashboard,
 :root:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar {
   font-family: 'Nunito Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Dashboard hovers: dark red instead of the default purple glow / bright tint. */
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .carbon-workspace .dp-clickable-card:hover,
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-clickable-card:hover {
+  background-color: color-mix(in srgb, var(--dp-dash-hover) 12%, var(--dp-card-bg)) !important;
+  border-color: color-mix(in srgb, var(--dp-dash-hover) 70%, var(--dp-border)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 16px 32px -12px rgba(94, 34, 20, 0.55) !important;
+}
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-clickable-card:hover .dp-card-info-btn {
+  color: var(--dp-accent) !important;
+  background-color: color-mix(in srgb, var(--dp-dash-hover) 30%, transparent) !important;
+}
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-clickable-pipeline::before {
+  background: linear-gradient(90deg, var(--dp-dash-hover-deep) 0%, var(--dp-dash-hover) 100%);
+}
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .carbon-workspace .dp-clickable-pipeline:hover,
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-clickable-pipeline:hover {
+  background-color: color-mix(in srgb, var(--dp-dash-hover) 10%, var(--dp-dash-raised)) !important;
+  border-color: color-mix(in srgb, var(--dp-dash-hover) 70%, var(--dp-border)) !important;
+  box-shadow: 0 14px 28px -12px rgba(94, 34, 20, 0.55) !important;
+}
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-clickable-pipeline:hover .dp-pipeline-icon-wrap {
+  background-color: var(--dp-dash-hover) !important;
+  box-shadow: none;
+}
+
+/* Dashboard scrollbars: hand-styled so hover gets darker, not lighter
+   (scrollbar-color lets Chrome pick its own, brighter hover shade). */
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-scrollbar {
+  scrollbar-color: auto;
+  scrollbar-width: auto;
+}
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--dp-dash-hover);
+  border-radius: 10px;
+}
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--dp-dash-hover-deep);
 }
