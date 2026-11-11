@@ -271,7 +271,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
 
   return (
     <div className="relative flex h-full min-h-[280px] w-full flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-4 pb-5">
         {onTrendModeChange ? (
           <div className={`flex gap-0.5 p-0.5 rounded-lg ${isGlass ? 'bg-white/[0.04] border border-white/[0.06]' : 'bg-[var(--dp-card-bg)] dp-elevated'}`}>
             {[['period', 'Period'], ['cumulative', 'Cumulative']].map(([val, label]) => (
@@ -292,7 +292,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
           </div>
         ) : <span />}
 
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {activeSeries.map(s => {
             const isHidden = hidden.has(s.id);
             return (
@@ -301,7 +301,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
                 type="button"
                 aria-pressed={!isHidden}
                 onClick={() => toggleSeries(s.id)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-[opacity,border-color,color] duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--dp-card-bg)] ${
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-medium transition-[opacity,border-color,color] duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--dp-card-bg)] ${
                   isHidden
                     ? 'border-dashed border-[var(--dp-border-hover)] text-[var(--dp-text-muted)] opacity-55 line-through'
                     : 'border-[var(--dp-border-hover)] bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)]'
@@ -317,7 +317,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
             onClick={play}
             aria-label="Replay chart animation"
             title="Replay"
-            className="ml-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--dp-border-hover)] text-[var(--dp-text-muted)] transition-colors hover:text-[var(--dp-text-primary)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--dp-card-bg)]"
+            className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--dp-border-hover)] text-[var(--dp-text-muted)] transition-colors hover:text-[var(--dp-text-primary)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--dp-card-bg)]"
           >
             <RotateCcw size={13} strokeWidth={2} aria-hidden="true" />
           </button>
