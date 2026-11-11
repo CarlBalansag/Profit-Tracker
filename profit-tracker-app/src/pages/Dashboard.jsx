@@ -333,6 +333,7 @@ const Dashboard = () => {
                   <ProfitCostTrendChart
                     trend={trend}
                     trendMeta={trendMeta}
+                    chartSeries={visibleChartSeries}
                     uiStyle={preferences.style}
                     trendMode={trendMode}
                     onTrendModeChange={setTrendMode}
@@ -607,6 +608,7 @@ const Dashboard = () => {
               <ProfitCostTrendChart
                 trend={trend}
                 trendMeta={trendMeta}
+                chartSeries={visibleChartSeries}
                 uiStyle={preferences.style}
                 trendMode={trendMode}
                 onTrendModeChange={setTrendMode}

@@ -11,14 +11,32 @@ import {
   normalizeTrendPoints,
   toCumulative,
 } from '../../utils/trendPoints';
+import { CHART_SERIES_REGISTRY } from '../../data/dashboardRegistry';
 
 // Colors come from the app palette (colorPalette.css -> index.css --dp-* aliases).
-const SERIES = [
-  { id: 'totalRevenue', label: 'Sale Revenue', color: 'var(--dp-accent-light)', fillOpacity: 0.3 },
-  { id: 'totalCost', label: 'Purchase Spend', color: 'var(--dp-accent)', fillOpacity: 0.3 },
-  { id: 'grossProfit', label: 'Gross Profit', color: 'var(--dp-text-primary)', fillOpacity: 0.16 },
-  { id: 'cashback', label: 'Cashback', color: 'var(--dp-green-text)', fillOpacity: 0.5 },
-];
+const SERIES_STYLE = {
+  totalRevenue: { color: 'var(--dp-accent-light)', fillOpacity: 0.3 },
+  totalCost: { color: 'var(--dp-accent)', fillOpacity: 0.3 },
+  grossProfit: { color: 'var(--dp-text-primary)', fillOpacity: 0.16 },
+  cashback: { color: 'var(--dp-green-text)', fillOpacity: 0.5 },
+  netProfit: { color: 'var(--dp-info-text)', fillOpacity: 0.16 },
+  totalTax: { color: 'var(--dp-warning-text)', fillOpacity: 0.16 },
+  soldCost: { color: 'var(--dp-text-muted)', fillOpacity: 0.16 },
+};
+
+const FALLBACK_SERIES = ['totalRevenue', 'totalCost', 'grossProfit', 'cashback'];
+
+// The Settings line picker passes its visible rows, already sorted.
+function resolveSeries(chartSeries) {
+  const ids = (Array.isArray(chartSeries) ? chartSeries : [])
+    .filter(item => item && item.visible !== false && SERIES_STYLE[item.id] && CHART_SERIES_REGISTRY[item.id])
+    .map(item => item.id);
+  return (ids.length ? ids : FALLBACK_SERIES).map(id => ({
+    id,
+    label: CHART_SERIES_REGISTRY[id].label,
+    ...SERIES_STYLE[id],
+  }));
+}
 
 const EASE_IN_OUT_CUBIC = [0.645, 0.045, 0.355, 1];
 const REVEAL = { duration: 1.5, stagger: 0.65 };
@@ -61,7 +79,7 @@ function SeriesLayer({ clipId, progress, plot, linePath, areaPath, dots, color, 
   );
 }
 
-export default function ProfitCostTrendChart({ trend, trendMeta = null, uiStyle = 'neon-dark', trendMode = 'period', onTrendModeChange }) {
+export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSeries, uiStyle = 'neon-dark', trendMode = 'period', onTrendModeChange }) {
   const isGlass = uiStyle === 'glassmorphism-brown';
   const wrapRef = useRef(null);
   const svgRef = useRef(null);
@@ -75,8 +93,18 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, uiStyle 
   const [hoverIndex, setHoverIndex] = useState(null);
   const hiddenRef = useRef(hidden);
   const startedRef = useRef(false);
-  const controlsRef = useRef([]);
-  const [progress] = useState(() => SERIES.map(() => motionValue(0)));
+  const controlsRef = useRef({});
+  const [progress] = useState(() => Object.fromEntries(Object.keys(SERIES_STYLE).map(id => [id, motionValue(0)])));
+
+  const seriesKey = (Array.isArray(chartSeries) ? chartSeries : [])
+    .filter(item => item && item.visible !== false)
+    .map(item => item.id)
+    .join(',');
+  // Keyed on the visible ids so a new-but-equal settings array doesn't rebuild the chart.
+  const activeSeries = useMemo(
+    () => resolveSeries(seriesKey.split(',').filter(Boolean).map(id => ({ id }))),
+    [seriesKey],
+  );
 
   const inView = useInView(wrapRef, { once: true, amount: 0.35 });
 
@@ -86,7 +114,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, uiStyle 
     () => (trendMode === 'cumulative' ? toCumulative(rawPoints) : fillDailyWindow(rawPoints, trendMeta)),
     [rawPoints, trendMeta, trendMode],
   );
-  const isEmpty = points.length === 0 || points.every(p => SERIES.every(s => !p[s.id]));
+  const isEmpty = points.length === 0 || points.every(p => activeSeries.every(s => !p[s.id]));
 
   // ---- size (rebuilds geometry on resize; animation state lives in motion values) ----
   useLayoutEffect(() => {
@@ -105,7 +133,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, uiStyle 
   const compact = width > 0 && width < 460;
 
   const geo = useMemo(() => {
-    const allValues = points.flatMap(p => SERIES.map(s => p[s.id]));
+    const allValues = points.flatMap(p => activeSeries.map(s => p[s.id]));
     const ticks = niceTicks(Math.min(0, ...allValues), Math.max(0, ...allValues), 5);
     const yMin = ticks[0];
     const yMax = ticks[ticks.length - 1];
@@ -116,7 +144,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, uiStyle 
     const xAt = i => (n > 1 ? plot.left + i * step : plot.left + plot.width / 2);
     const yAt = v => plot.top + plot.height - ((v - yMin) / (yMax - yMin || 1)) * plot.height;
     const baseline = yAt(Math.max(yMin, Math.min(0, yMax)));
-    const series = SERIES.map(s => {
+    const series = activeSeries.map(s => {
       const pts = points.map((p, i) => [xAt(i), yAt(p[s.id])]);
       const linePath = monotonePath(pts);
       const areaPath = pts.length > 1
@@ -126,40 +154,55 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, uiStyle 
     });
     const labelEvery = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(plot.width / (compact ? 58 : 56)))));
     return { ticks, plot, xAt, yAt, step, series, labelEvery, n };
-  }, [points, width, compact]);
+  }, [points, width, compact, activeSeries]);
 
   // ---- animation ----
   const stopAll = useCallback(() => {
-    controlsRef.current.forEach(c => c?.stop());
-    controlsRef.current = [];
+    Object.values(controlsRef.current).forEach(c => c?.stop());
+    controlsRef.current = {};
   }, []);
 
   const play = useCallback(() => {
     stopAll();
     startedRef.current = true;
     let slot = 0;
-    SERIES.forEach((s, i) => {
-      const mv = progress[i];
-      mv.set(0);
+    Object.values(progress).forEach(mv => mv.set(0));
+    activeSeries.forEach((s) => {
+      const mv = progress[s.id];
       if (hiddenRef.current.has(s.id)) return;
       if (reduceMotion) { mv.set(1); return; }
-      controlsRef.current[i] = animate(mv, 1, {
+      controlsRef.current[s.id] = animate(mv, 1, {
         duration: REVEAL.duration,
         delay: slot * REVEAL.stagger,
         ease: EASE_IN_OUT_CUBIC,
       });
       slot += 1;
     });
-  }, [progress, reduceMotion, stopAll]);
+  }, [activeSeries, progress, reduceMotion, stopAll]);
 
   useEffect(() => {
     if (inView && !startedRef.current) play();
   }, [inView, play]);
 
+  // Lines added in Settings after the first reveal wipe in; removed ones reset
+  // so they wipe in again if they come back.
+  useEffect(() => {
+    if (!startedRef.current) return;
+    const ids = new Set(activeSeries.map(s => s.id));
+    Object.entries(progress).forEach(([id, mv]) => {
+      if (!ids.has(id)) {
+        controlsRef.current[id]?.stop();
+        mv.set(0);
+      } else if (!hiddenRef.current.has(id) && mv.get() === 0 && !mv.isAnimating()) {
+        if (reduceMotion) { mv.set(1); return; }
+        controlsRef.current[id] = animate(mv, 1, { duration: SHOW_DURATION, ease: EASE_IN_OUT_CUBIC });
+      }
+    });
+  }, [activeSeries, progress, reduceMotion]);
+
   useEffect(() => stopAll, [stopAll]);
 
   const toggleSeries = (id) => {
-    const i = SERIES.findIndex(s => s.id === id);
     const next = new Set(hiddenRef.current);
     const nowHidden = !next.has(id);
     if (nowHidden) next.add(id); else next.delete(id);
@@ -167,10 +210,10 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, uiStyle 
     setHidden(next);
 
     if (!startedRef.current) return; // the first reveal will honour the new state
-    controlsRef.current[i]?.stop();
+    controlsRef.current[id]?.stop();
     const target = nowHidden ? 0 : 1;
-    if (reduceMotion) { progress[i].set(target); return; }
-    controlsRef.current[i] = animate(progress[i], target, {
+    if (reduceMotion) { progress[id].set(target); return; }
+    controlsRef.current[id] = animate(progress[id], target, {
       duration: nowHidden ? HIDE_DURATION : SHOW_DURATION,
       ease: EASE_IN_OUT_CUBIC,
     });
@@ -251,7 +294,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, uiStyle 
         ) : <span />}
 
         <div className="flex flex-wrap items-center justify-end gap-1.5">
-          {SERIES.map(s => {
+          {activeSeries.map(s => {
             const isHidden = hidden.has(s.id);
             return (
               <button
@@ -325,11 +368,11 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, uiStyle 
             ) : null))}
 
             {/* series */}
-            {geo.series.map((s, i) => (
+            {geo.series.map(s => (
               <SeriesLayer
                 key={s.id}
                 clipId={`${uid}-clip-${s.id}`}
-                progress={progress[i]}
+                progress={progress[s.id]}
                 plot={geo.plot}
                 linePath={s.linePath}
                 areaPath={s.areaPath}

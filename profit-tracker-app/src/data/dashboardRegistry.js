@@ -294,12 +294,12 @@ export const DEFAULT_DASHBOARD_SETTINGS = {
     { id: 'CANCELLED',       visible: false, order: 14 },
   ],
   chartSeries: [
-    { id: 'totalCost',    visible: true,  order: 0 },
-    { id: 'grossProfit',  visible: true,  order: 1 },
-    { id: 'netProfit',    visible: true,  order: 2 },
+    { id: 'totalRevenue', visible: true,  order: 0 },
+    { id: 'totalCost',    visible: true,  order: 1 },
+    { id: 'grossProfit',  visible: true,  order: 2 },
     { id: 'cashback',     visible: true,  order: 3 },
-    { id: 'totalTax',     visible: false, order: 4 },
-    { id: 'totalRevenue', visible: false, order: 5 },
+    { id: 'netProfit',    visible: false, order: 4 },
+    { id: 'totalTax',     visible: false, order: 5 },
     { id: 'soldCost',     visible: false, order: 6 },
   ],
   recentSalesColumns: [
