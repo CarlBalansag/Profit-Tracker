@@ -1204,3 +1204,46 @@ body,
     animation: none !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Dashboard dark look (Dashboard page only, dark mode, not Glassmorphism).
+ * Layered surfaces: sidebar darkest -> page -> floating cards -> inner tiles,
+ * each card lifted by an inner hairline, a faint top highlight and a long soft
+ * shadow. Applies only while the Dashboard is mounted (:has(.dp-dashboard)).
+ * Unlayered on purpose so it wins over the Tailwind utility layer.
+ * ------------------------------------------------------------------------- */
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) {
+  --dp-bg: #0c0c0e;
+  --dp-card-bg: #161619;
+  --dp-hover-bg: #1d1d21;
+  --dp-border: rgba(255, 255, 255, 0.06);
+  --dp-border-hover: rgba(255, 255, 255, 0.12);
+  --dp-dash-sidebar: #08080a;
+  --dp-dash-raised: #1e1e22;
+  --dp-dash-well: rgba(255, 255, 255, 0.025);
+  --dp-card-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 1px 1px rgba(0, 0, 0, 0.25),
+    0 22px 40px -22px rgba(0, 0, 0, 0.75);
+  --dp-card-shadow-hover:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 2px 6px rgba(0, 0, 0, 0.4),
+    0 34px 70px -24px rgba(0, 0, 0, 0.9);
+}
+
+/* Sidebar sits below the page, not floating. */
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar {
+  background-color: var(--dp-dash-sidebar);
+  border-right-color: transparent;
+  box-shadow: 1px 0 0 rgba(0, 0, 0, 0.35), inset -1px 0 0 rgba(255, 255, 255, 0.03);
+}
+
+/* Inside a card: tiles, pills and toggles step up one shade; wells go flat. */
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-dashboard .dp-elevated [class*="bg-[var(--dp-card-bg)]"] {
+  background-color: var(--dp-dash-raised);
+}
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-dashboard .dp-elevated [class*="bg-[var(--dp-bg)]"] {
+  background-color: var(--dp-dash-well);
+}

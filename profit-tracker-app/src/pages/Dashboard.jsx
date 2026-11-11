@@ -910,7 +910,7 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="h-full overflow-auto dp-scrollbar bg-[var(--dp-bg)] font-['Inter']">
+    <div className="dp-dashboard h-full overflow-auto dp-scrollbar bg-[var(--dp-bg)] font-['Inter']">
       <div className="px-4 py-6 sm:px-6 w-full max-w-[1800px] 4xl:max-w-[2100px] mx-auto space-y-6">
 
       {/* Welcome Header */}
