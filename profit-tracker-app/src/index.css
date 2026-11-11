@@ -1237,22 +1237,23 @@ body,
   --dp-dash-hover: #761b27;
   --dp-dash-hover-deep: #56131d;
   /* Layered shadow: several faint layers at growing blur read as one smooth,
-     soft falloff instead of a single hard band. */
+     soft falloff. Each layer's negative spread keeps it from showing above
+     or beside the card, so the shadow sits only underneath. */
   --dp-card-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     inset 0 0 0 1px rgba(255, 255, 255, 0.05),
-    0 1px 2px rgba(0, 0, 0, 0.10),
-    0 3px 6px rgba(0, 0, 0, 0.08),
-    0 8px 16px rgba(0, 0, 0, 0.08),
-    0 12px 24px rgba(0, 0, 0, 0.09),
-    0 20px 40px rgba(0, 0, 0, 0.09);
+    0 2px 3px -1px rgba(0, 0, 0, 0.14),
+    0 6px 10px -4px rgba(0, 0, 0, 0.14),
+    0 12px 20px -8px rgba(0, 0, 0, 0.16),
+    0 20px 32px -14px rgba(0, 0, 0, 0.18),
+    0 28px 44px -20px rgba(0, 0, 0, 0.2);
   --dp-card-shadow-hover:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 2px 4px rgba(0, 0, 0, 0.12),
-    0 6px 12px rgba(0, 0, 0, 0.10),
-    0 14px 28px rgba(0, 0, 0, 0.10),
-    0 28px 56px rgba(0, 0, 0, 0.10);
+    0 2px 4px -1px rgba(0, 0, 0, 0.16),
+    0 8px 12px -5px rgba(0, 0, 0, 0.16),
+    0 16px 24px -10px rgba(0, 0, 0, 0.18),
+    0 28px 44px -18px rgba(0, 0, 0, 0.22);
 }
 
 /* Sidebar sits below the page, not floating. */
@@ -1316,10 +1317,10 @@ body,
   border-color: color-mix(in srgb, var(--dp-dash-hover) 70%, var(--dp-border)) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 2px 4px rgba(0, 0, 0, 0.12),
-    0 6px 12px rgba(86, 19, 29, 0.14),
-    0 12px 24px rgba(86, 19, 29, 0.16),
-    0 20px 40px rgba(86, 19, 29, 0.14) !important;
+    0 2px 4px -1px rgba(0, 0, 0, 0.16),
+    0 8px 12px -5px rgba(86, 19, 29, 0.2),
+    0 16px 24px -10px rgba(86, 19, 29, 0.24),
+    0 28px 44px -18px rgba(86, 19, 29, 0.26) !important;
 }
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-clickable-card:hover .dp-card-info-btn {
   color: var(--dp-accent) !important;
@@ -1333,9 +1334,9 @@ body,
   background-color: color-mix(in srgb, var(--dp-dash-hover) 10%, var(--dp-dash-raised)) !important;
   border-color: color-mix(in srgb, var(--dp-dash-hover) 70%, var(--dp-border)) !important;
   box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.12),
-    0 6px 12px rgba(86, 19, 29, 0.12),
-    0 14px 28px rgba(86, 19, 29, 0.14) !important;
+    0 2px 4px -1px rgba(0, 0, 0, 0.16),
+    0 8px 12px -5px rgba(86, 19, 29, 0.18),
+    0 16px 24px -10px rgba(86, 19, 29, 0.22) !important;
 }
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-clickable-pipeline:hover .dp-pipeline-icon-wrap {
   background-color: var(--dp-dash-hover) !important;
