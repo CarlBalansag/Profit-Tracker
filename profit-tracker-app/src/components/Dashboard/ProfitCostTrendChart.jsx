@@ -136,7 +136,8 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
 
   const geo = useMemo(() => {
     const allValues = points.flatMap(p => activeSeries.map(s => p[s.id]));
-    const ticks = niceTicks(Math.min(0, ...allValues), Math.max(0, ...allValues), 5);
+    // Amounts are never shown below $0, so the axis always starts at zero.
+    const ticks = niceTicks(0, Math.max(0, ...allValues), 5);
     const yMin = ticks[0];
     const yMax = ticks[ticks.length - 1];
     const left = compact ? 44 : 60;
@@ -144,8 +145,8 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
     const n = points.length;
     const step = n > 1 ? plot.width / (n - 1) : 0;
     const xAt = i => (n > 1 ? plot.left + i * step : plot.left + plot.width / 2);
-    const yAt = v => plot.top + plot.height - ((v - yMin) / (yMax - yMin || 1)) * plot.height;
-    const baseline = yAt(Math.max(yMin, Math.min(0, yMax)));
+    const yAt = v => plot.top + plot.height - ((Math.max(0, v) - yMin) / (yMax - yMin || 1)) * plot.height;
+    const baseline = yAt(0);
     const series = activeSeries.map(s => {
       const pts = points.map((p, i) => [xAt(i), yAt(p[s.id])]);
       const linePath = monotonePath(pts);
@@ -343,8 +344,11 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
                   x2={geo.plot.left + geo.plot.width}
                   y1={geo.yAt(t)}
                   y2={geo.yAt(t)}
-                  stroke="var(--dp-border-hover)"
-                  strokeDasharray="3 4"
+                  stroke={t === 0 ? 'var(--dp-text-muted)' : 'var(--dp-border-hover)'}
+                  strokeOpacity={t === 0 ? 0.55 : 1}
+                  strokeWidth={t === 0 ? 1.5 : 1}
+                  strokeDasharray={t === 0 ? '0 5' : '3 4'}
+                  strokeLinecap={t === 0 ? 'round' : 'butt'}
                 />
                 <text x={geo.plot.left - 8} y={geo.yAt(t)} dy="0.32em" textAnchor="end" fontSize={11} fill="var(--dp-text-muted)">
                   {formatTick(t)}
