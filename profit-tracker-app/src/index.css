@@ -792,12 +792,12 @@ body,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--dp-accent) 35%, transparent);
+  background: var(--dp-scroll-thumb, color-mix(in srgb, var(--dp-accent) 35%, transparent));
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--dp-accent) 55%, transparent);
+  background: var(--dp-scroll-thumb-hover, color-mix(in srgb, var(--dp-accent) 60%, #000000));
 }
 
 ::-webkit-scrollbar-corner {
@@ -821,12 +821,12 @@ body,
 }
 
 .theme-scrollbar::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--dp-accent) 35%, transparent);
+  background: var(--dp-scroll-thumb, color-mix(in srgb, var(--dp-accent) 35%, transparent));
   border-radius: 10px;
 }
 
 .theme-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--dp-accent) 55%, transparent);
+  background: var(--dp-scroll-thumb-hover, color-mix(in srgb, var(--dp-accent) 60%, #000000));
 }
 
 /* Light-theme scrollbar for the premium Dashboard (replaces .theme-scrollbar
@@ -848,12 +848,12 @@ body,
 }
 
 .dp-scrollbar::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--dp-accent) 35%, transparent);
+  background: var(--dp-scroll-thumb, color-mix(in srgb, var(--dp-accent) 35%, transparent));
   border-radius: 10px;
 }
 
 .dp-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--dp-accent) 55%, transparent);
+  background: var(--dp-scroll-thumb-hover, color-mix(in srgb, var(--dp-accent) 60%, #000000));
 }
 
 /* Modal Scrollbar Optimization */
@@ -872,12 +872,12 @@ body,
 }
 
 .modal-scrollbar::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--dp-accent) 35%, transparent);
+  background: var(--dp-scroll-thumb, color-mix(in srgb, var(--dp-accent) 35%, transparent));
   border-radius: 10px;
 }
 
 .modal-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--dp-accent) 55%, transparent);
+  background: var(--dp-scroll-thumb-hover, color-mix(in srgb, var(--dp-accent) 60%, #000000));
 }
 
 /* Themed horizontal scrollbar for tables */
@@ -897,12 +897,12 @@ body,
 }
 
 .table-scrollbar::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--dp-accent) 35%, transparent);
+  background: var(--dp-scroll-thumb, color-mix(in srgb, var(--dp-accent) 35%, transparent));
   border-radius: 10px;
 }
 
 .table-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--dp-accent) 55%, transparent);
+  background: var(--dp-scroll-thumb-hover, color-mix(in srgb, var(--dp-accent) 60%, #000000));
 }
 
 /* Thicker horizontal scrollbar on mobile touch screens */
@@ -1233,15 +1233,15 @@ body,
   --dp-accent-light: #d0707c;
   --dp-accent-bg: rgba(158, 36, 51, 0.18);
   --dp-accent-gradient: linear-gradient(140deg, #b02e3e 0%, #9e2433 50%, #821c2a 100%);
-  /* Chart palette: all reds, spread from pale blush to deep wine so each
-     line stays distinguishable by lightness. */
-  --dp-chart-gross: #f3d5d8;
-  --dp-chart-revenue: #e8949d;
-  --dp-chart-tax: #cf6d79;
-  --dp-chart-net: #c03a4b;
-  --dp-chart-spend: #9e2433;
-  --dp-chart-soldcost: #9b6b71;
-  --dp-chart-cashback: #7a1f2c;
+  /* Chart palette ("red cohesive"): red stays the focus, with rose, slate
+     and one purple so every line is still distinct without a rainbow. */
+  --dp-chart-spend: #ef4444;
+  --dp-chart-gross: #f87171;
+  --dp-chart-net: #e5e7eb;
+  --dp-chart-cashback: #fca5a5;
+  --dp-chart-tax: #a78bfa;
+  --dp-chart-revenue: #be123c;
+  --dp-chart-soldcost: #64748b;
   /* Drawn scrollbars: garnet at rest, darker on hover, darkest while dragging. */
   --dp-scroll-track: rgba(255, 255, 255, 0.04);
   --dp-scroll-thumb: #8c1f2d;
@@ -1357,30 +1357,6 @@ body,
   box-shadow: none;
 }
 
-/* Dashboard scrollbars: hand-styled so hover gets darker, not lighter
-   (scrollbar-color lets Chrome pick its own, brighter hover shade). */
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-scrollbar {
-  scrollbar-color: auto;
-  scrollbar-width: auto;
-}
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-scrollbar::-webkit-scrollbar {
-  width: 8px;
-  height: 12px;
-}
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-scrollbar::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 10px;
-}
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--dp-accent-solid);
-  border-radius: 10px;
-}
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--dp-dash-hover-deep);
-}
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-scrollbar::-webkit-scrollbar-thumb:active {
-  background: #3e0d15;
-}
 
 /* One hairline per card: the shadow's inset ring is the outline, so drop the
    extra 1px border cards also carry (it doubled up and looked heavy). */
@@ -1414,7 +1390,7 @@ body,
    --dp-scroll-track / -thumb / -thumb-hover / -thumb-active. */
 .dp-hscrollbar {
   position: relative;
-  height: 12px;
+  height: 8px;
   border-radius: 999px;
   background: var(--dp-scroll-track, rgba(127, 127, 127, 0.12));
   cursor: pointer;
@@ -1446,4 +1422,28 @@ body,
 }
 .dp-no-native-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* Scrollbar hover everywhere. Chromium ignores ::-webkit-scrollbar styling
+   (including :hover) on any element whose scrollbar-color/scrollbar-width is
+   set, and the rules above set them on everything. Where the webkit
+   pseudo-elements exist, reset those two so the styled thumb and its darker
+   hover/active states apply; Firefox (no webkit pseudo) keeps scrollbar-color. */
+@supports selector(::-webkit-scrollbar) {
+  html,
+  body,
+  *,
+  *::before,
+  *::after,
+  .theme-scrollbar,
+  .dp-scrollbar,
+  .modal-scrollbar,
+  .table-scrollbar,
+  .schedule-c-page .sc-queue-list {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+}
+::-webkit-scrollbar-thumb:active {
+  background: var(--dp-scroll-thumb-active, color-mix(in srgb, var(--dp-accent) 45%, #000000));
 }
