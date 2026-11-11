@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { animate, motion, motionValue, useInView, useMotionValue, useReducedMotion, useTransform } from 'motion/react';
+import { animate, motion, motionValue, useInView, useMotionValue, useTransform } from 'motion/react';
 import { RotateCcw } from 'lucide-react';
 import {
   fillDailyWindow,
@@ -45,7 +45,7 @@ const SHOW_DURATION = 1.3;
 
 const MotionRect = motion.rect;
 
-const HEIGHT = 280;
+const MIN_HEIGHT = 280;
 const CLIP_PAD = 8; // lets dots and the line cap at the edges show fully
 
 const moneyFull = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -86,9 +86,9 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
   const tooltipRef = useRef(null);
   const rawId = useId();
   const uid = rawId.replace(/[^a-zA-Z0-9_-]/g, '');
-  const reduceMotion = useReducedMotion();
 
-  const [width, setWidth] = useState(0);
+  const [size, setSize] = useState({ width: 0, height: MIN_HEIGHT });
+  const { width, height } = size;
   const [hidden, setHidden] = useState(() => new Set());
   const [hoverIndex, setHoverIndex] = useState(null);
   const hiddenRef = useRef(hidden);
@@ -120,12 +120,14 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
   useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return undefined;
-    setWidth(el.clientWidth);
+    const measure = () => {
+      const w = Math.round(el.clientWidth);
+      const h = Math.max(MIN_HEIGHT, Math.round(el.clientHeight));
+      setSize(prev => (prev.width === w && prev.height === h ? prev : { width: w, height: h }));
+    };
+    measure();
     if (!('ResizeObserver' in window)) return undefined;
-    const ro = new ResizeObserver(entries => {
-      const next = Math.round(entries[0]?.contentRect?.width ?? el.clientWidth);
-      setWidth(prev => (prev === next ? prev : next));
-    });
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -138,7 +140,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
     const yMin = ticks[0];
     const yMax = ticks[ticks.length - 1];
     const left = compact ? 44 : 60;
-    const plot = { left, top: 12, width: Math.max(10, width - left - 14), height: HEIGHT - 12 - 30 };
+    const plot = { left, top: 12, width: Math.max(10, width - left - 14), height: height - 12 - 30 };
     const n = points.length;
     const step = n > 1 ? plot.width / (n - 1) : 0;
     const xAt = i => (n > 1 ? plot.left + i * step : plot.left + plot.width / 2);
@@ -154,7 +156,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
     });
     const labelEvery = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(plot.width / (compact ? 58 : 56)))));
     return { ticks, plot, xAt, yAt, step, series, labelEvery, n };
-  }, [points, width, compact, activeSeries]);
+  }, [points, width, height, compact, activeSeries]);
 
   // ---- animation ----
   const stopAll = useCallback(() => {
@@ -170,7 +172,6 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
     activeSeries.forEach((s) => {
       const mv = progress[s.id];
       if (hiddenRef.current.has(s.id)) return;
-      if (reduceMotion) { mv.set(1); return; }
       controlsRef.current[s.id] = animate(mv, 1, {
         duration: REVEAL.duration,
         delay: slot * REVEAL.stagger,
@@ -178,7 +179,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
       });
       slot += 1;
     });
-  }, [activeSeries, progress, reduceMotion, stopAll]);
+  }, [activeSeries, progress, stopAll]);
 
   useEffect(() => {
     if (inView && !startedRef.current) play();
@@ -194,11 +195,10 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
         controlsRef.current[id]?.stop();
         mv.set(0);
       } else if (!hiddenRef.current.has(id) && mv.get() === 0 && !mv.isAnimating()) {
-        if (reduceMotion) { mv.set(1); return; }
         controlsRef.current[id] = animate(mv, 1, { duration: SHOW_DURATION, ease: EASE_IN_OUT_CUBIC });
       }
     });
-  }, [activeSeries, progress, reduceMotion]);
+  }, [activeSeries, progress]);
 
   useEffect(() => stopAll, [stopAll]);
 
@@ -212,7 +212,6 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
     if (!startedRef.current) return; // the first reveal will honour the new state
     controlsRef.current[id]?.stop();
     const target = nowHidden ? 0 : 1;
-    if (reduceMotion) { progress[id].set(target); return; }
     controlsRef.current[id] = animate(progress[id], target, {
       duration: nowHidden ? HIDE_DURATION : SHOW_DURATION,
       ease: EASE_IN_OUT_CUBIC,
@@ -325,13 +324,13 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
         </div>
       </div>
 
-      <div ref={wrapRef} className="relative w-full overflow-hidden" style={{ height: HEIGHT }}>
+      <div ref={wrapRef} className="relative w-full flex-1 overflow-hidden" style={{ minHeight: MIN_HEIGHT }}>
         {width > 0 && (
           <svg
             ref={svgRef}
             width={width}
-            height={HEIGHT}
-            className="block select-none tabular-nums"
+            height={height}
+            className="absolute inset-0 block select-none tabular-nums"
             style={{ touchAction: 'pan-y', fontFamily: 'inherit' }}
             role="img"
             aria-label={`Profit and cost trend, ${geo.n} ${geo.n === 1 ? 'point' : 'points'}`}
@@ -413,7 +412,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
               x={0}
               y={0}
               width={width}
-              height={HEIGHT}
+              height={height}
               fill="transparent"
               onPointerMove={handlePointer}
               onPointerDown={handlePointer}
