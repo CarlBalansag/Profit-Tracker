@@ -14,14 +14,16 @@ import {
 import { CHART_SERIES_REGISTRY } from '../../data/dashboardRegistry';
 
 // Colors come from the app palette (colorPalette.css -> index.css --dp-* aliases).
+// A theme can set --dp-chart-* (the Dashboard's dark theme does); otherwise
+// each series falls back to the general palette tokens.
 const SERIES_STYLE = {
-  totalRevenue: { color: 'var(--dp-accent-light)', fillOpacity: 0.3 },
-  totalCost: { color: 'var(--dp-accent)', fillOpacity: 0.3 },
-  grossProfit: { color: 'var(--dp-text-primary)', fillOpacity: 0.16 },
-  cashback: { color: 'var(--dp-green-text)', fillOpacity: 0.5 },
-  netProfit: { color: 'var(--dp-info-text)', fillOpacity: 0.16 },
-  totalTax: { color: 'var(--dp-warning-text)', fillOpacity: 0.16 },
-  soldCost: { color: 'var(--dp-text-muted)', fillOpacity: 0.16 },
+  totalRevenue: { color: 'var(--dp-chart-revenue, var(--dp-accent-light))', fillOpacity: 0.3 },
+  totalCost: { color: 'var(--dp-chart-spend, var(--dp-accent))', fillOpacity: 0.3 },
+  grossProfit: { color: 'var(--dp-chart-gross, var(--dp-text-primary))', fillOpacity: 0.16 },
+  cashback: { color: 'var(--dp-chart-cashback, var(--dp-green-text))', fillOpacity: 0.5 },
+  netProfit: { color: 'var(--dp-chart-net, var(--dp-info-text))', fillOpacity: 0.16 },
+  totalTax: { color: 'var(--dp-chart-tax, var(--dp-warning-text))', fillOpacity: 0.16 },
+  soldCost: { color: 'var(--dp-chart-soldcost, var(--dp-text-muted))', fillOpacity: 0.16 },
 };
 
 const FALLBACK_SERIES = ['totalRevenue', 'totalCost', 'grossProfit', 'cashback'];

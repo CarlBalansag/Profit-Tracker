@@ -1233,6 +1233,14 @@ body,
   --dp-accent-light: #d0707c;
   --dp-accent-bg: rgba(158, 36, 51, 0.18);
   --dp-accent-gradient: linear-gradient(140deg, #b02e3e 0%, #9e2433 50%, #821c2a 100%);
+  /* Chart palette built around garnet: one red, the rest warm/muted tones. */
+  --dp-chart-spend: #9e2433;
+  --dp-chart-revenue: #d9b38c;
+  --dp-chart-gross: #f3f1ed;
+  --dp-chart-net: #7c9cc4;
+  --dp-chart-cashback: #6fae96;
+  --dp-chart-tax: #c99a4e;
+  --dp-chart-soldcost: #7d7f86;
   /* Hover red: deeper than the accent, so hovers darken instead of glowing. */
   --dp-dash-hover: #761b27;
   --dp-dash-hover-deep: #56131d;
