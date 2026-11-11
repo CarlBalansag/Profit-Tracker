@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.26',
+    date: '2026-11-11',
+    notes: "A fresh new look: a darker charcoal theme with a deep red accent and a cleaner font across the app, plus a redesigned Profit & Cost Trend chart on the Dashboard that animates in and lets you tap the key to show or hide each line.",
+  },
+  {
     version: '1.25',
     date: '2026-11-08',
     notes: "Cashouts can now commit you to a deal's price and submit the shipment's tracking number right from the app (or get your AI Assistant to do it) -- logging the purchase and sale in one step, with a Commitments panel to track everything you've committed to.",
