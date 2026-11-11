@@ -1382,3 +1382,12 @@ body,
     margin-bottom: -24px;
   }
 }
+
+/* Paint order: KPI cards are `relative z-0`, which lifts them (and their
+   shadows) above the static section cards that follow, so a shadow reaching
+   into the next section drew on top of it. Putting every Dashboard card on the
+   same positioned layer means later cards paint over the shadow above them,
+   so shadows tuck underneath the next component. */
+:root:not([data-ui-style="glassmorphism-brown"]) .dp-dashboard .dp-elevated:not(.absolute):not(.fixed):not(.sticky) {
+  position: relative;
+}
