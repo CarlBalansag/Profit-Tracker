@@ -53,10 +53,13 @@
  * Dark mode tokens
  * ------------------------------------------------------------------------- */
 :root[data-theme="dark"] {
-  --color-background: #0b0b0b;
-  --color-surface: #121212;
-  --color-hover: #1a1a1a;
+  /* Flat black: cards sit almost on the page color and are separated by a
+     hairline border, not by a lighter gray fill. */
+  --color-background: #09090a;
+  --color-surface: #0e0e0f;
+  --color-hover: #161618;
   --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-hover: rgba(255, 255, 255, 0.14);
 
   --color-text-primary: #EDEDED;
   --color-text-secondary: #A0A0A0;

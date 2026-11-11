@@ -117,6 +117,12 @@
     --toast-shadow: 0 18px 44px rgba(0, 0, 0, 0.32);
   }
   
+  /* Dark mode: the sidebar shares the page color; its border-right separates it. */
+  :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) {
+    --sidebar-bg-start: var(--dp-bg);
+    --sidebar-bg-end: var(--dp-bg);
+  }
+
   html, body, #root {
     height: 100%;
     background-color: var(--dp-bg);
@@ -144,6 +150,19 @@
   }
   .dp-elevated-hover:hover {
     box-shadow: var(--dp-card-shadow-hover);
+  }
+  /* Dark mode: cards are nearly the page color and "float" on a hairline
+     ring, a faint top highlight and a soft drop shadow, instead of being a
+     lighter gray slab. All box-shadow, so no layout shift. */
+  :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) {
+    --dp-card-shadow:
+      0 0 0 1px var(--dp-border),
+      inset 0 1px 0 rgba(255, 255, 255, 0.045),
+      0 12px 32px -14px rgba(0, 0, 0, 0.9);
+    --dp-card-shadow-hover:
+      0 0 0 1px var(--dp-border-hover),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 18px 40px -16px rgba(0, 0, 0, 0.95);
   }
 
   .card {
