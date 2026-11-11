@@ -1125,7 +1125,7 @@ const Transactions = () => {
                       : 'hover:bg-white/[0.025] border-l-2 border-transparent'
                   }`}
                 >
-                  <td className={`px-4 py-3.5 sticky left-0 z-10 ${isEditing ? 'bg-[#1a1530]' : 'bg-[#0f1115]'}`}>
+                  <td className="px-4 py-3.5 sticky left-0 z-10 bg-[#0f1115]">
                     <input
                       type="checkbox"
                       aria-label={`Select ${row.product}`}
@@ -1354,7 +1354,7 @@ const Transactions = () => {
                   })}
 
                   {/* Actions */}
-                  <td className={`px-4 py-3.5 sticky right-0 z-10 ${isEditing ? 'bg-[#1a1530]' : 'bg-[#0f1115]'}`}>
+                  <td className="px-4 py-3.5 sticky right-0 z-10 bg-[#0f1115]">
                     {isEditing ? (
                       <div className="flex items-center gap-2">
                         <button

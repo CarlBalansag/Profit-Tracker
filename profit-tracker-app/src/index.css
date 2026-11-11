@@ -214,6 +214,21 @@
     box-shadow: var(--dp-card-shadow) !important;
   }
 
+  /* Sticky table cells (checkbox / action columns) carry a solid background
+     so rows can scroll under them; they must stay flat, not become cards. */
+  .carbon-workspace td[class*="bg-[#"],
+  .carbon-workspace th[class*="bg-[#"] {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  /* ...and tint along with their row (hover, row being edited). */
+  .carbon-workspace tr:hover > td[class*="bg-[#"] {
+    background-image: linear-gradient(rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.025)) !important;
+  }
+  .carbon-workspace tr[class*="bg-indigo-950"] > td[class*="bg-[#"] {
+    background-image: linear-gradient(rgba(var(--accent-rgb), 0.08), rgba(var(--accent-rgb), 0.08)) !important;
+  }
+
   .carbon-workspace .card-hover:hover,
   .carbon-workspace [class*="hover:bg-[#16161E]"]:hover,
   .carbon-workspace [class*="hover:bg-gray-700"]:hover,
