@@ -19,6 +19,7 @@ import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import ProfitCostTrendChart from '../components/Dashboard/ProfitCostTrendChart';
 import MonthlyProfitSpendChart from '../components/Dashboard/MonthlyProfitSpendChart';
 import PageNav from '../components/UI/PageNav';
+import HScrollbar from '../components/UI/HScrollbar';
 import { formatMoney, formatWholeMoney } from '../utils/money';
 import { recordStatusLabel } from '../data/statusWorkflow';
 
@@ -116,6 +117,7 @@ const Dashboard = () => {
   const [chartView, setChartView] = useState('line'); // 'line' | 'bar'
   const [pipelinePage, setPipelinePage] = useState(0); // mobile-only Status Pipeline pagination
   const [topCardsPage, setTopCardsPage] = useState(0); // Top Cards pagination (3 per page, all breakpoints)
+  const statsRowRef = useRef(null); // KPI row, driven by the drawn scrollbar below it
 
   const { data, isLoading, isError, error, refetch } = useDashboard(modeFilter, dateFilter);
   const { data: goals = [] } = useGoals();
@@ -194,9 +196,10 @@ const Dashboard = () => {
         ? `sold via ${modeFilter}`
         : null;
       return (
-        <div key="statCards" data-tutorial-id="dashboard-stats" className={isGlass
+        <div key="statCards">
+        <div ref={statsRowRef} data-tutorial-id="dashboard-stats" className={isGlass
           ? `grid grid-cols-2 ${statColClass} gap-3 3xl:gap-4 max-sm:[&>*:first-child]:col-span-2 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both`
-          : "grid min-w-0 grid-cols-2 gap-3 sm:gap-4 pb-4 lg:grid-flow-col lg:grid-cols-none lg:auto-cols-[minmax(200px,1fr)] lg:overflow-x-auto dp-scrollbar max-sm:[&>*:first-child]:col-span-2 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both"
+          : "grid min-w-0 grid-cols-2 gap-3 sm:gap-4 pb-4 lg:grid-flow-col lg:grid-cols-none lg:auto-cols-[minmax(200px,1fr)] lg:overflow-x-auto dp-no-native-scrollbar max-sm:[&>*:first-child]:col-span-2 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both"
         }>
           {visibleStatCards.map(cardConfig => {
             const def = STAT_CARD_REGISTRY[cardConfig.id];
@@ -219,6 +222,8 @@ const Dashboard = () => {
               />
             );
           })}
+        </div>
+        {!isGlass && <HScrollbar targetRef={statsRowRef} className="hidden lg:block" />}
         </div>
       );
     }

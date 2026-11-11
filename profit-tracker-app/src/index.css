@@ -1242,6 +1242,11 @@ body,
   --dp-chart-spend: #9e2433;
   --dp-chart-soldcost: #9b6b71;
   --dp-chart-cashback: #7a1f2c;
+  /* Drawn scrollbars: garnet at rest, darker on hover, darkest while dragging. */
+  --dp-scroll-track: rgba(255, 255, 255, 0.04);
+  --dp-scroll-thumb: #8c1f2d;
+  --dp-scroll-thumb-hover: #56131d;
+  --dp-scroll-thumb-active: #3e0d15;
   /* Hover red: deeper than the accent, so hovers darken instead of glowing. */
   --dp-dash-hover: #761b27;
   --dp-dash-hover-deep: #56131d;
@@ -1359,18 +1364,22 @@ body,
   scrollbar-width: auto;
 }
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 12px;
 }
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
 }
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--dp-dash-hover);
+  background: var(--dp-accent-solid);
   border-radius: 10px;
 }
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-scrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--dp-dash-hover-deep);
+}
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-scrollbar::-webkit-scrollbar-thumb:active {
+  background: #3e0d15;
 }
 
 /* One hairline per card: the shadow's inset ring is the outline, so drop the
@@ -1399,4 +1408,42 @@ body,
    so shadows tuck underneath the next component. */
 :root:not([data-ui-style="glassmorphism-brown"]) .dp-dashboard .dp-elevated:not(.absolute):not(.fixed):not(.sticky) {
   position: relative;
+}
+
+/* Drawn horizontal scrollbar (components/UI/HScrollbar.jsx). A theme can set
+   --dp-scroll-track / -thumb / -thumb-hover / -thumb-active. */
+.dp-hscrollbar {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--dp-scroll-track, rgba(127, 127, 127, 0.12));
+  cursor: pointer;
+  touch-action: none;
+}
+/* Invisible but still laid out, so the bar can measure itself and reappear. */
+.dp-hscrollbar--hidden {
+  visibility: hidden;
+}
+.dp-hscrollbar__thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 999px;
+  background: var(--dp-scroll-thumb, color-mix(in srgb, var(--dp-accent) 45%, transparent));
+  cursor: grab;
+  transition: background-color 150ms ease;
+}
+.dp-hscrollbar__thumb:hover {
+  background: var(--dp-scroll-thumb-hover, color-mix(in srgb, var(--dp-accent) 70%, #000000));
+}
+.dp-hscrollbar__thumb:active {
+  background: var(--dp-scroll-thumb-active, color-mix(in srgb, var(--dp-accent) 55%, #000000));
+  cursor: grabbing;
+}
+.dp-no-native-scrollbar {
+  scrollbar-width: none;
+}
+.dp-no-native-scrollbar::-webkit-scrollbar {
+  display: none;
 }
