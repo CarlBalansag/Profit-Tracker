@@ -187,7 +187,7 @@ export const CHART_SERIES_REGISTRY = {
   grossProfit: {
     label: 'Gross Profit',
     icon: TrendingUp,
-    color: '#a78bfa',
+    color: '#f87171',
     formula: ['Running Total of Sale Revenue Minus Cost of Sold Items'],
     description: 'Your Gross Profit (Sale Revenue minus what the sold items cost you), added up across the selected period. Cashback is not included yet.',
   },

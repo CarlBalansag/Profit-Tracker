@@ -36,9 +36,48 @@
   --accent-chart-gross: #f87171;
   --accent-chart-net: #e5e7eb;
   --accent-chart-cashback: #fca5a5;
-  --accent-chart-tax: #a78bfa;
+  --accent-chart-tax: #fb7185;
   --accent-chart-revenue: #be123c;
   --accent-chart-soldcost: #64748b;
+}
+
+/* Tailwind's purple, violet and indigo color scales point at the accent
+ * preset, so every leftover utility class from the old purple theme
+ * (hover:, focus:, gradients, rings, accent-*) follows the brand color too. */
+:root {
+  --color-purple-50: color-mix(in srgb, var(--accent-500) 8%, #ffffff);
+  --color-purple-100: color-mix(in srgb, var(--accent-500) 16%, #ffffff);
+  --color-purple-200: color-mix(in srgb, var(--accent-500) 32%, #ffffff);
+  --color-purple-300: var(--accent-300);
+  --color-purple-400: color-mix(in srgb, var(--accent-500) 70%, var(--accent-300));
+  --color-purple-500: var(--accent-500);
+  --color-purple-600: var(--accent-600);
+  --color-purple-700: var(--accent-700);
+  --color-purple-800: var(--accent-800);
+  --color-purple-900: var(--accent-900);
+  --color-purple-950: color-mix(in srgb, var(--accent-900) 70%, #000000);
+  --color-violet-50: color-mix(in srgb, var(--accent-500) 8%, #ffffff);
+  --color-violet-100: color-mix(in srgb, var(--accent-500) 16%, #ffffff);
+  --color-violet-200: color-mix(in srgb, var(--accent-500) 32%, #ffffff);
+  --color-violet-300: var(--accent-300);
+  --color-violet-400: color-mix(in srgb, var(--accent-500) 70%, var(--accent-300));
+  --color-violet-500: var(--accent-500);
+  --color-violet-600: var(--accent-600);
+  --color-violet-700: var(--accent-700);
+  --color-violet-800: var(--accent-800);
+  --color-violet-900: var(--accent-900);
+  --color-violet-950: color-mix(in srgb, var(--accent-900) 70%, #000000);
+  --color-indigo-50: color-mix(in srgb, var(--accent-500) 8%, #ffffff);
+  --color-indigo-100: color-mix(in srgb, var(--accent-500) 16%, #ffffff);
+  --color-indigo-200: color-mix(in srgb, var(--accent-500) 32%, #ffffff);
+  --color-indigo-300: var(--accent-300);
+  --color-indigo-400: color-mix(in srgb, var(--accent-500) 70%, var(--accent-300));
+  --color-indigo-500: var(--accent-500);
+  --color-indigo-600: var(--accent-600);
+  --color-indigo-700: var(--accent-700);
+  --color-indigo-800: var(--accent-800);
+  --color-indigo-900: var(--accent-900);
+  --color-indigo-950: color-mix(in srgb, var(--accent-900) 70%, #000000);
 }
 
 :root {

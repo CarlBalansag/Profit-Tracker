@@ -4,7 +4,8 @@ import { useCalendarMutations } from '../../hooks/useApi';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 
 const COLOR_OPTIONS = [
-  { value: 'purple', label: 'Purple', hex: '#a855f7' },
+  // 'purple' is the stored value for older events; it now shows the theme accent.
+  { value: 'purple', label: 'Theme', hex: 'var(--dp-accent)' },
   { value: 'blue',   label: 'Blue',   hex: '#3b82f6' },
   { value: 'green',  label: 'Green',  hex: '#22c55e' },
   { value: 'amber',  label: 'Amber',  hex: '#f59e0b' },

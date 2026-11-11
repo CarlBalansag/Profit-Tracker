@@ -6,12 +6,12 @@ const TYPE_CONFIG = {
   purchase:   { label: 'Purchase',    color: '#3b82f6', icon: ShoppingBag },
   sale:       { label: 'Sale',        color: '#22c55e', icon: DollarSign },
   payout:     { label: 'Payout',      color: '#10b981', icon: Banknote },
-  manual:     { label: 'Event',       color: '#a855f7', icon: Calendar },
+  manual:     { label: 'Event',       color: 'var(--dp-accent)', icon: Calendar },
   credit_due: { label: 'CC Due',      color: '#ef4444', icon: CreditCard },
 };
 
 const COLOR_HEX = {
-  purple: '#a855f7',
+  purple: 'var(--dp-accent)',
   blue:   '#3b82f6',
   green:  '#22c55e',
   amber:  '#f59e0b',
@@ -19,8 +19,8 @@ const COLOR_HEX = {
 };
 
 function getEventColor(event) {
-  if (event.color) return COLOR_HEX[event.color] ?? '#a855f7';
-  return TYPE_CONFIG[event.type]?.color ?? '#a855f7';
+  if (event.color) return COLOR_HEX[event.color] ?? 'var(--dp-accent)';
+  return TYPE_CONFIG[event.type]?.color ?? 'var(--dp-accent)';
 }
 
 // Format YYYY-MM-DD as "July 17, 2026"
@@ -76,7 +76,7 @@ export default function CalendarEventPopover({ date, events, onClose, onAddEvent
                       onClick={() => isManual ? onEditEvent(ev) : undefined}
                       className={`w-full flex items-start gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-[var(--dp-hover-bg)] ${isManual ? 'cursor-pointer' : 'cursor-default'}`}
                     >
-                      <span className="flex-shrink-0 mt-0.5 w-5 h-5 rounded flex items-center justify-center" style={{ backgroundColor: `${color}25` }}>
+                      <span className="flex-shrink-0 mt-0.5 w-5 h-5 rounded flex items-center justify-center" style={{ backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)` }}>
                         <Icon size={11} style={{ color }} />
                       </span>
                       <div className="flex-1 min-w-0">

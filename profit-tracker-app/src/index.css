@@ -10,8 +10,17 @@
     --dp-bg: var(--color-background);
     --dp-card-bg: var(--color-surface);
     --dp-card-radius: 24px;
-    --dp-card-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.08);
-    --dp-card-shadow-hover: 0 2px 4px rgba(16, 24, 40, 0.06), 0 16px 40px rgba(16, 24, 40, 0.12);
+    /* Layered, below-only shadows (negative spread keeps them off the top and
+       sides) that stay within 16px, so scroll rows never clip them. */
+    --dp-card-shadow:
+      0 1px 2px rgba(16, 24, 40, 0.05),
+      0 3px 6px -2px rgba(16, 24, 40, 0.06),
+      0 8px 14px -6px rgba(16, 24, 40, 0.08),
+      0 14px 22px -10px rgba(16, 24, 40, 0.10);
+    --dp-card-shadow-hover:
+      0 2px 4px -1px rgba(16, 24, 40, 0.08),
+      0 8px 14px -5px rgba(16, 24, 40, 0.10),
+      0 15px 24px -11px rgba(16, 24, 40, 0.14);
     --dp-card-padding: 24px;
     --dp-border: var(--color-border);
     --dp-border-hover: var(--color-border-hover);
@@ -673,7 +682,10 @@
   transform: translateY(-3px);
   background-color: color-mix(in srgb, var(--dp-accent) 7%, var(--dp-card-bg)) !important;
   border-color: color-mix(in srgb, var(--dp-accent) 45%, var(--dp-border)) !important;
-  box-shadow: 0 14px 30px -4px rgba(var(--accent-rgb), 0.18) !important;
+  box-shadow:
+    0 2px 4px -1px rgba(16, 24, 40, 0.08),
+    0 8px 14px -5px rgba(var(--accent-rgb), 0.12),
+    0 15px 24px -11px rgba(var(--accent-rgb), 0.18) !important;
 }
 
 .carbon-workspace .dp-clickable-card:hover .dp-card-title {
@@ -691,7 +703,7 @@
 .carbon-workspace .dp-clickable-card:hover .dp-card-icon-wrap {
   background-color: var(--dp-accent) !important;
   color: #ffffff !important;
-  box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.30);
+  box-shadow: 0 4px 8px -3px rgba(var(--accent-rgb), 0.30);
 }
 
 .carbon-workspace .dp-clickable-card:hover .dp-card-icon-wrap svg {
@@ -746,7 +758,10 @@
   transform: translateY(-3px);
   background-color: var(--dp-card-bg) !important;
   border-color: color-mix(in srgb, var(--dp-accent) 45%, var(--dp-border)) !important;
-  box-shadow: 0 12px 26px -4px rgba(var(--accent-rgb), 0.16) !important;
+  box-shadow:
+    0 2px 4px -1px rgba(16, 24, 40, 0.08),
+    0 8px 14px -5px rgba(var(--accent-rgb), 0.10),
+    0 15px 24px -11px rgba(var(--accent-rgb), 0.16) !important;
 }
 
 .carbon-workspace .dp-clickable-pipeline:hover::before {
@@ -765,7 +780,7 @@
 .carbon-workspace .dp-clickable-pipeline:hover .dp-pipeline-icon-wrap {
   background-color: var(--dp-accent) !important;
   color: #ffffff !important;
-  box-shadow: 0 4px 10px rgba(var(--accent-rgb), 0.28);
+  box-shadow: 0 4px 8px -3px rgba(var(--accent-rgb), 0.28);
 }
 
 .carbon-workspace .dp-clickable-pipeline:hover .dp-pipeline-icon-wrap svg {

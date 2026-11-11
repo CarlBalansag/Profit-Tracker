@@ -154,7 +154,7 @@ export const isFullyCompleted = (record = {}) => {
 
 // Presentational only: which tile icon and accent colour a status gets.
 export const STATUS_VISUALS = {
-  PRE_ORDER: { icon: Clock, color: '#a78bfa' },
+  PRE_ORDER: { icon: Clock, color: '#2dd4bf' },
   PURCHASED: { icon: ShoppingBag, color: '#60a5fa' },
   INBOUND: { icon: Truck, color: '#facc15' },
   ON_HAND: { icon: Package, color: '#22c55e' },
@@ -163,9 +163,9 @@ export const STATUS_VISUALS = {
   AWAITING_HANDOFF: { icon: ShoppingCart, color: '#f97316' },
   OUTBOUND: { icon: Truck, color: '#38bdf8' },
   HANDED_OVER: { icon: CheckCircle2, color: '#38bdf8' },
-  DELIVERED_TO_AUTHENTICATOR: { icon: ShieldCheck, color: '#818cf8' },
-  AUTHENTICATING: { icon: ShieldCheck, color: '#818cf8' },
-  DELIVERED_TO_PROVIDER: { icon: Store, color: '#818cf8' },
+  DELIVERED_TO_AUTHENTICATOR: { icon: ShieldCheck, color: '#94a3b8' },
+  AUTHENTICATING: { icon: ShieldCheck, color: '#94a3b8' },
+  DELIVERED_TO_PROVIDER: { icon: Store, color: '#94a3b8' },
   WAITING_FOR_SCAN_IN: { icon: ScanLine, color: '#fbbf24' },
   SCANNED_IN: { icon: ScanLine, color: '#fbbf24' },
   ACCEPTED: { icon: CircleCheck, color: '#34d399' },

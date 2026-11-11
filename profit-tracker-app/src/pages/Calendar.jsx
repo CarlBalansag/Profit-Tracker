@@ -19,12 +19,12 @@ const TYPE_COLOR = {
   purchase:    '#2563eb',
   sale:        '#16a34a',
   payout:      '#059669',
-  manual:      '#7c3aed',
+  manual:      'var(--dp-accent)', // theme accent
   credit_due:  '#dc2626',
 };
 
 const NAMED_COLOR = {
-  purple: '#7c3aed',
+  purple: 'var(--dp-accent)', // stored value kept for old events; shows the theme accent
   blue:   '#2563eb',
   green:  '#16a34a',
   amber:  '#d97706',
@@ -33,7 +33,7 @@ const NAMED_COLOR = {
 
 function eventBgColor(ev) {
   if (ev.color && NAMED_COLOR[ev.color]) return NAMED_COLOR[ev.color];
-  return TYPE_COLOR[ev.type] ?? '#7c3aed';
+  return TYPE_COLOR[ev.type] ?? 'var(--dp-accent)';
 }
 
 // ─── Custom event pill — dot + colored text, no background fill ───────────────
@@ -97,7 +97,7 @@ function DayCellContent({ dayNumberText, isToday }) {
           alignItems: 'center',
           justifyContent: 'center',
           flexShrink: 0,
-          boxShadow: isToday ? '0 2px 6px rgba(124, 58, 237, 0.35)' : 'none',
+          boxShadow: isToday ? '0 2px 6px rgba(var(--accent-rgb), 0.35)' : 'none',
         }}>
           {dayNumberText}
         </span>
@@ -311,7 +311,7 @@ export default function Calendar() {
               { color: '#2563eb', label: 'Purchase',  icon: ShoppingBag },
               { color: '#16a34a', label: 'Sale',       icon: DollarSign },
               { color: '#059669', label: 'Payout',     icon: Banknote },
-              { color: '#7c3aed', label: 'Manual',     icon: CalendarDays },
+              { color: 'var(--dp-accent)', label: 'Manual',     icon: CalendarDays },
               { color: '#dc2626', label: 'CC Due',     icon: CreditCard },
             ].map(({ color, label, icon: Icon }) => (
               <div key={label} className="flex items-center gap-2">
