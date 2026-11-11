@@ -30,7 +30,7 @@ vi.mock('../hooks/useUiPreferences', () => ({ useUiPreferences: () => ({ prefere
 vi.mock('../hooks/useDashboardSettings', () => ({
   useDashboardSettings: () => ({ settings: DEFAULT_DASHBOARD_SETTINGS, saveSettings: vi.fn() }),
 }));
-vi.mock('../components/Dashboard/ProfitRevenueTrendChart', () => ({ default: () => null }));
+vi.mock('../components/Dashboard/ProfitCostTrendChart', () => ({ default: () => null }));
 vi.mock('../components/Dashboard/MonthlyProfitSpendChart', () => ({ default: () => null }));
 
 const mount = (style) => {

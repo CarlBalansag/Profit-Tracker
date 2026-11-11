@@ -21,6 +21,7 @@
     --dp-text-muted: var(--color-text-muted);
     --dp-accent: var(--color-accent);
     --dp-accent-solid: var(--color-accent-solid);
+    --dp-accent-light: var(--color-accent-light);
     --dp-accent-bg: var(--color-accent-bg);
     --dp-accent-gradient: var(--color-accent-gradient);
     --dp-green-bg: var(--color-success-bg);

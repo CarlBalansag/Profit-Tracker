@@ -16,7 +16,7 @@ import {
   DEFAULT_DASHBOARD_SETTINGS,
 } from '../data/dashboardRegistry';
 import DashboardSettingsModal from '../components/DashboardSettingsModal';
-import ProfitRevenueTrendChart from '../components/Dashboard/ProfitRevenueTrendChart';
+import ProfitCostTrendChart from '../components/Dashboard/ProfitCostTrendChart';
 import MonthlyProfitSpendChart from '../components/Dashboard/MonthlyProfitSpendChart';
 import PageNav from '../components/UI/PageNav';
 import { formatMoney, formatWholeMoney } from '../utils/money';
@@ -330,13 +330,9 @@ const Dashboard = () => {
                     uiStyle={preferences.style}
                   />
                 ) : (
-                  <ProfitRevenueTrendChart
-                    stats={stats}
+                  <ProfitCostTrendChart
                     trend={trend}
                     trendMeta={trendMeta}
-                    recent={recent}
-                    dateFilter={dateFilter}
-                    chartSeries={visibleChartSeries}
                     uiStyle={preferences.style}
                     trendMode={trendMode}
                     onTrendModeChange={setTrendMode}
@@ -608,13 +604,9 @@ const Dashboard = () => {
                 uiStyle={preferences.style}
               />
             ) : (
-              <ProfitRevenueTrendChart
-                stats={stats}
+              <ProfitCostTrendChart
                 trend={trend}
                 trendMeta={trendMeta}
-                recent={recent}
-                dateFilter={dateFilter}
-                chartSeries={visibleChartSeries}
                 uiStyle={preferences.style}
                 trendMode={trendMode}
                 onTrendModeChange={setTrendMode}
