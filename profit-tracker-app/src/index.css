@@ -673,7 +673,7 @@
   transform: translateY(-3px);
   background-color: color-mix(in srgb, var(--dp-accent) 7%, var(--dp-card-bg)) !important;
   border-color: color-mix(in srgb, var(--dp-accent) 45%, var(--dp-border)) !important;
-  box-shadow: 0 14px 30px -4px rgba(124, 58, 237, 0.18) !important;
+  box-shadow: 0 14px 30px -4px rgba(var(--accent-rgb), 0.18) !important;
 }
 
 .carbon-workspace .dp-clickable-card:hover .dp-card-title {
@@ -691,7 +691,7 @@
 .carbon-workspace .dp-clickable-card:hover .dp-card-icon-wrap {
   background-color: var(--dp-accent) !important;
   color: #ffffff !important;
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.30);
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.30);
 }
 
 .carbon-workspace .dp-clickable-card:hover .dp-card-icon-wrap svg {
@@ -713,7 +713,7 @@
 
 .carbon-workspace .dp-hero-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 18px 38px -4px rgba(124, 58, 237, 0.52) !important;
+  box-shadow: 0 18px 38px -4px rgba(var(--accent-rgb), 0.52) !important;
   filter: brightness(1.04);
 }
 
@@ -735,7 +735,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #7C3AED 0%, #A855F7 100%);
+  background: linear-gradient(90deg, var(--accent-600) 0%, var(--accent-300) 100%);
   opacity: 0;
   transform: scaleX(0.3);
   transform-origin: center;
@@ -746,7 +746,7 @@
   transform: translateY(-3px);
   background-color: var(--dp-card-bg) !important;
   border-color: color-mix(in srgb, var(--dp-accent) 45%, var(--dp-border)) !important;
-  box-shadow: 0 12px 26px -4px rgba(124, 58, 237, 0.16) !important;
+  box-shadow: 0 12px 26px -4px rgba(var(--accent-rgb), 0.16) !important;
 }
 
 .carbon-workspace .dp-clickable-pipeline:hover::before {
@@ -765,7 +765,7 @@
 .carbon-workspace .dp-clickable-pipeline:hover .dp-pipeline-icon-wrap {
   background-color: var(--dp-accent) !important;
   color: #ffffff !important;
-  box-shadow: 0 4px 10px rgba(124, 58, 237, 0.28);
+  box-shadow: 0 4px 10px rgba(var(--accent-rgb), 0.28);
 }
 
 .carbon-workspace .dp-clickable-pipeline:hover .dp-pipeline-icon-wrap svg {
@@ -1206,13 +1206,14 @@ body,
 }
 
 /* ---------------------------------------------------------------------------
- * Dashboard dark look (Dashboard page only, dark mode, not Glassmorphism).
+ * App dark look (every page, dark mode, not Glassmorphism).
  * Layered surfaces: sidebar darkest -> page -> floating cards -> inner tiles,
- * each card lifted by an inner hairline, a faint top highlight and a long soft
- * shadow. Applies only while the Dashboard is mounted (:has(.dp-dashboard)).
+ * each card lifted by an inner hairline, a faint top highlight and a soft
+ * shadow underneath. All accent colors come from the --accent-* preset in
+ * styles/colorPalette.css, so changing the preset recolors everything here.
  * Unlayered on purpose so it wins over the Tailwind utility layer.
  * ------------------------------------------------------------------------- */
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) {
   /* Charcoal scale modelled on the Ignara demo, one step darker. */
   --dp-bg: #1d1f22;
   --dp-card-bg: #25272a;
@@ -1227,29 +1228,25 @@ body,
   --dp-text-secondary: #a4a4a9;
   --dp-text-label: #8f9095;
   --dp-text-muted: #a4a4a9;
-  /* Garnet red replaces purple on the Dashboard. */
-  --dp-accent: #9e2433;
-  --dp-accent-solid: #8c1f2d;
-  --dp-accent-light: #d0707c;
-  --dp-accent-bg: rgba(158, 36, 51, 0.18);
-  --dp-accent-gradient: linear-gradient(140deg, #b02e3e 0%, #9e2433 50%, #821c2a 100%);
-  /* Chart palette ("red cohesive"): red stays the focus, with rose, slate
-     and one purple so every line is still distinct without a rainbow. */
-  --dp-chart-spend: #ef4444;
-  --dp-chart-gross: #f87171;
-  --dp-chart-net: #e5e7eb;
-  --dp-chart-cashback: #fca5a5;
-  --dp-chart-tax: #a78bfa;
-  --dp-chart-revenue: #be123c;
-  --dp-chart-soldcost: #64748b;
-  /* Drawn scrollbars: garnet at rest, darker on hover, darkest while dragging. */
+  /* Accent comes from the --accent-* preset via the palette; dark mode just
+     uses a slightly stronger tint behind accent text. */
+  --dp-accent-bg: rgba(var(--accent-rgb), 0.18);
+  /* Trend-chart palette that ships with the active accent preset. */
+  --dp-chart-spend: var(--accent-chart-spend);
+  --dp-chart-gross: var(--accent-chart-gross);
+  --dp-chart-net: var(--accent-chart-net);
+  --dp-chart-cashback: var(--accent-chart-cashback);
+  --dp-chart-tax: var(--accent-chart-tax);
+  --dp-chart-revenue: var(--accent-chart-revenue);
+  --dp-chart-soldcost: var(--accent-chart-soldcost);
+  /* Scrollbars: accent at rest, darker on hover, darkest while dragging. */
   --dp-scroll-track: rgba(255, 255, 255, 0.04);
-  --dp-scroll-thumb: #8c1f2d;
-  --dp-scroll-thumb-hover: #56131d;
-  --dp-scroll-thumb-active: #3e0d15;
-  /* Hover red: deeper than the accent, so hovers darken instead of glowing. */
-  --dp-dash-hover: #761b27;
-  --dp-dash-hover-deep: #56131d;
+  --dp-scroll-thumb: var(--accent-600);
+  --dp-scroll-thumb-hover: var(--accent-800);
+  --dp-scroll-thumb-active: var(--accent-900);
+  /* Hover accent: deeper than the main accent, so hovers darken, not glow. */
+  --dp-dash-hover: var(--accent-700);
+  --dp-dash-hover-deep: var(--accent-800);
   /* Layered shadow: several faint layers at growing blur read as one smooth,
      soft falloff. Each layer's negative spread keeps it from showing above
      or beside the card, so the shadow sits only underneath. */
@@ -1271,96 +1268,107 @@ body,
 }
 
 /* Sidebar sits below the page, not floating. */
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar {
   background-color: var(--dp-dash-sidebar);
   border-right-color: transparent;
   box-shadow: 1px 0 0 rgba(0, 0, 0, 0.35), inset -1px 0 0 rgba(255, 255, 255, 0.03);
 }
 
 /* Inside a card: tiles, pills and toggles step up one shade; wells go flat. */
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-dashboard .dp-elevated [class*="bg-[var(--dp-card-bg)]"] {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-elevated [class*="bg-[var(--dp-card-bg)]"] {
   background-color: var(--dp-dash-raised);
 }
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-dashboard .dp-elevated [class*="bg-[var(--dp-bg)]"] {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-elevated [class*="bg-[var(--dp-bg)]"] {
   background-color: var(--dp-dash-well);
 }
 
-/* Sidebar nav while the Dashboard is open: rounded rows, warm text, and a
+/* Sidebar nav: rounded rows, warm text, and a
    filled accent pill for the current page (Ignara-style). */
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar a.border-l-2 {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar a.border-l-2 {
   border-left-color: transparent;
   border-radius: 12px;
   font-weight: 600;
   color: #d4d2ce;
 }
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar a.border-l-2 svg {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar a.border-l-2 svg {
   color: var(--dp-text-muted);
 }
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar a.border-l-2:hover {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar a.border-l-2:hover {
   background-color: var(--dp-hover-bg);
   color: var(--dp-text-primary);
 }
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar a.border-l-2[aria-current="page"] {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar a.border-l-2[aria-current="page"] {
   background: var(--dp-accent-gradient);
   color: #ffffff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 10px 22px -14px rgba(86, 19, 29, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 10px 22px -14px rgba(var(--accent-deep-rgb), 0.9);
 }
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar a.border-l-2[aria-current="page"] svg {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar a.border-l-2[aria-current="page"] svg {
   color: #ffffff;
 }
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar .theme-switch[aria-checked="true"] .theme-switch__track {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar .theme-switch[aria-checked="true"] .theme-switch__track {
   background-color: var(--dp-dash-raised);
   border-color: rgba(255, 255, 255, 0.12);
 }
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar .theme-switch[aria-checked="true"] .theme-switch__knob {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar .theme-switch[aria-checked="true"] .theme-switch__knob {
   background-color: var(--dp-text-primary);
 }
 
-/* Dashboard typeface: Nunito Sans for the whole screen while the Dashboard is
-   open (all themes except Glassmorphism, which has its own type). */
-:root:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) body,
-:root:not([data-ui-style="glassmorphism-brown"]) .dp-dashboard,
-:root:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar {
+/* Typeface: Nunito Sans on every page in dark mode (Glassmorphism keeps its
+   own type; light mode keeps Inter). .dp-dashboard sets Inter itself. */
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) body,
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-dashboard {
   font-family: 'Nunito Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Dashboard hovers: dark red instead of the default purple glow / bright tint. */
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .carbon-workspace .dp-clickable-card:hover,
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-clickable-card:hover {
+/* Card hovers: deep accent outline, tint and shadow instead of a bright glow. */
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-clickable-card:hover {
   background-color: color-mix(in srgb, var(--dp-dash-hover) 12%, var(--dp-card-bg)) !important;
   border-color: color-mix(in srgb, var(--dp-dash-hover) 70%, var(--dp-border)) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
     0 2px 4px -1px rgba(0, 0, 0, 0.16),
-    0 7px 10px -4px rgba(86, 19, 29, 0.2),
-    0 11px 16px -7px rgba(86, 19, 29, 0.24),
-    0 15px 24px -11px rgba(86, 19, 29, 0.26) !important;
+    0 7px 10px -4px rgba(var(--accent-deep-rgb), 0.2),
+    0 11px 16px -7px rgba(var(--accent-deep-rgb), 0.24),
+    0 15px 24px -11px rgba(var(--accent-deep-rgb), 0.26) !important;
 }
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-clickable-card:hover .dp-card-info-btn {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-clickable-card:hover .dp-card-info-btn {
   color: var(--dp-accent) !important;
   background-color: color-mix(in srgb, var(--dp-dash-hover) 30%, transparent) !important;
 }
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-clickable-pipeline::before {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-clickable-pipeline::before {
   background: linear-gradient(90deg, var(--dp-dash-hover-deep) 0%, var(--dp-dash-hover) 100%);
 }
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .carbon-workspace .dp-clickable-pipeline:hover,
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-clickable-pipeline:hover {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-clickable-pipeline:hover {
   background-color: color-mix(in srgb, var(--dp-dash-hover) 10%, var(--dp-dash-raised)) !important;
   border-color: color-mix(in srgb, var(--dp-dash-hover) 70%, var(--dp-border)) !important;
   box-shadow:
     0 2px 4px -1px rgba(0, 0, 0, 0.16),
-    0 8px 12px -5px rgba(86, 19, 29, 0.18),
-    0 16px 24px -10px rgba(86, 19, 29, 0.22) !important;
+    0 8px 12px -5px rgba(var(--accent-deep-rgb), 0.18),
+    0 16px 24px -10px rgba(var(--accent-deep-rgb), 0.22) !important;
 }
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-clickable-pipeline:hover .dp-pipeline-icon-wrap {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-clickable-pipeline:hover .dp-pipeline-icon-wrap {
   background-color: var(--dp-dash-hover) !important;
   box-shadow: none;
 }
 
 
+/* Other pages build their panels from the generic `.card` class (filter bars,
+   tables). Give them the same floating hairline + soft shadow as dp-elevated. */
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .card {
+  box-shadow: var(--dp-card-shadow);
+}
+/* The border reset has to live in @layer components: the carbon-workspace
+   panel remap sets this border with !important inside that layer, and a
+   layered !important beats any unlayered one. Higher specificity wins here. */
+@layer components {
+  :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .carbon-workspace .card {
+    border-color: transparent !important;
+  }
+}
+
 /* One hairline per card: the shadow's inset ring is the outline, so drop the
    extra 1px border cards also carry (it doubled up and looked heavy). */
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-elevated {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-elevated {
   border-color: transparent;
 }
 

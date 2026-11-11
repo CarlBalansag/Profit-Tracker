@@ -10,6 +10,37 @@
  * wire up a `data-theme="dark"` attribute (or a prefers-color-scheme
  * media query) to switch between the two.
  */
+/* ---------------------------------------------------------------------------
+ * Accent presets — the ONE place the app's brand color is defined.
+ *
+ * Everything accent-colored (buttons, links, active states, hovers,
+ * scrollbars, card glows, the trend chart) reads these --accent-* variables.
+ * :root holds the default preset (Garnet). To add another color, copy the
+ * block as :root[data-accent="<name>"] { ... } with the same variable names;
+ * a future "Accent color" setting only has to set data-accent on <html>.
+ * ------------------------------------------------------------------------- */
+:root,
+:root[data-accent="garnet"] {
+  --accent-300: #d0707c;   /* light accent: secondary chart line */
+  --accent-500: #9e2433;   /* main accent: active text, icons, outlines */
+  --accent-600: #8c1f2d;   /* filled controls (carry white text), scrollbar thumb */
+  --accent-700: #761b27;   /* hover outline / tint */
+  --accent-800: #56131d;   /* hover darken (scrollbar hover) */
+  --accent-900: #3e0d15;   /* pressed / dragging */
+  --accent-rgb: 158, 36, 51;        /* --accent-500 as r, g, b for rgba() tints */
+  --accent-deep-rgb: 86, 19, 29;    /* --accent-800 as r, g, b for shadows */
+  --accent-gradient: linear-gradient(140deg, #b02e3e 0%, #9e2433 50%, #821c2a 100%);
+
+  /* Trend-chart palette that goes with this accent (dark mode). */
+  --accent-chart-spend: #ef4444;
+  --accent-chart-gross: #f87171;
+  --accent-chart-net: #e5e7eb;
+  --accent-chart-cashback: #fca5a5;
+  --accent-chart-tax: #a78bfa;
+  --accent-chart-revenue: #be123c;
+  --accent-chart-soldcost: #64748b;
+}
+
 :root {
   /* Backgrounds */
   --color-background: #EEF0F3;
@@ -26,12 +57,12 @@
   --color-text-label: #16161A;
   --color-text-muted: #5F6673;
 
-  /* Accent (brand) */
-  --color-accent: #7434E3;
-  --color-accent-solid: #7C3AED; /* filled buttons: must carry white text */
-  --color-accent-light: #A78BFA; /* lightest violet: chart series */
-  --color-accent-bg: rgba(124, 58, 237, 0.08);
-  --color-accent-gradient: linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%);
+  /* Accent (brand) — from the active accent preset above */
+  --color-accent: var(--accent-500);
+  --color-accent-solid: var(--accent-600); /* filled buttons: must carry white text */
+  --color-accent-light: var(--accent-300); /* light accent: chart series */
+  --color-accent-bg: rgba(var(--accent-rgb), 0.08);
+  --color-accent-gradient: var(--accent-gradient);
 
   /* Status */
   --color-success-bg: #E3F5EA;
@@ -63,11 +94,11 @@
   --color-text-label: #8E8E99;
   --color-text-muted: #9CA3AF;
 
-  --color-accent: #A78BFA;
-  --color-accent-solid: #7C3AED; /* filled buttons: must carry white text */
-  --color-accent-light: #C4B5FD; /* lightest violet: chart series */
-  --color-accent-bg: rgba(167, 139, 250, 0.12);
-  --color-accent-gradient: linear-gradient(135deg, #A78BFA 0%, #7C3AED 100%);
+  --color-accent: var(--accent-500);
+  --color-accent-solid: var(--accent-600); /* filled buttons: must carry white text */
+  --color-accent-light: var(--accent-300); /* light accent: chart series */
+  --color-accent-bg: rgba(var(--accent-rgb), 0.16);
+  --color-accent-gradient: var(--accent-gradient);
 
   --color-success-bg: rgba(26, 154, 80, 0.16);
   --color-success-text: #34D399;
