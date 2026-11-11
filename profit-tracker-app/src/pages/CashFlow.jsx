@@ -142,20 +142,20 @@ function CashFlow() {
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="rounded-[var(--dp-card-radius)] border border-yellow-500/35 bg-yellow-500/10 p-4 shadow-[var(--dp-card-shadow)]">
+            <div className="rounded-[var(--dp-card-radius)] border border-yellow-500/35 bg-yellow-500/10 p-4 dp-lifted">
               <div className="text-[11px] font-bold text-yellow-500/80 uppercase tracking-wider mb-1">In Transit / Listed</div>
               <div className="text-lg font-bold text-yellow-500 mb-0.5 tabular-nums">{loading ? '…' : `$${fmt(inTransitValue)}`}</div>
               <div className="text-[11px] text-yellow-500/60">{inTransitCount} unit{inTransitCount !== 1 ? 's' : ''} · {inTransitPct}%</div>
             </div>
 
-            <div className="rounded-[var(--dp-card-radius)] border border-green-500/35 bg-green-500/10 p-4 shadow-[var(--dp-card-shadow)]">
+            <div className="rounded-[var(--dp-card-radius)] border border-green-500/35 bg-green-500/10 p-4 dp-lifted">
               <div className="text-[11px] font-bold text-green-500/80 uppercase tracking-wider mb-1">Sold</div>
               <div className="text-lg font-bold text-green-500 mb-0.5 tabular-nums">{loading ? '…' : `$${fmt(soldRevenue)}`}</div>
               <div className="text-[11px] text-green-500/60">{soldCount} unit{soldCount !== 1 ? 's' : ''} · {soldPct}%</div>
             </div>
 
             {(s.totalCashback ?? 0) > 0 && (
-              <div className="rounded-[var(--dp-card-radius)] border border-purple-500/35 bg-purple-500/10 p-4 shadow-[var(--dp-card-shadow)]">
+              <div className="rounded-[var(--dp-card-radius)] border border-purple-500/35 bg-purple-500/10 p-4 dp-lifted">
                 <div className="text-[11px] font-bold text-purple-500/80 uppercase tracking-wider mb-1">Cashback Earned</div>
                 <div className="text-lg font-bold text-purple-400 mb-0.5 tabular-nums">{loading ? '…' : `$${fmt(s.totalCashback)}`}</div>
                 <div className="text-[11px] text-purple-500/60">at point of purchase</div>
@@ -163,7 +163,7 @@ function CashFlow() {
             )}
 
             {owedRevenue > 0 && (
-              <div className="rounded-[var(--dp-card-radius)] border border-amber-500/35 bg-amber-500/10 p-4 shadow-[var(--dp-card-shadow)]">
+              <div className="rounded-[var(--dp-card-radius)] border border-amber-500/35 bg-amber-500/10 p-4 dp-lifted">
                 <div className="text-[11px] font-bold text-amber-500/80 uppercase tracking-wider mb-1">Unpaid</div>
                 <div className="text-lg font-bold text-amber-400 mb-0.5 tabular-nums">{loading ? '…' : `$${fmt(owedRevenue)}`}</div>
                 <div className="text-[11px] text-amber-500/60">awaiting payout</div>

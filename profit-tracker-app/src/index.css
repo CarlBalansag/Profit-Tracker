@@ -381,6 +381,12 @@
     box-shadow: none !important;
   }
 
+  /* Opt-in: tinted tiles that should float like a KPI card (the reset above
+     strips any shadow-* utility, so they use this class instead). */
+  .carbon-workspace .dp-lifted {
+    box-shadow: var(--dp-card-shadow) !important;
+  }
+
   .carbon-workspace :is([class^="bg-purple"],[class*=" bg-purple"]),
   .carbon-workspace :is([class^="bg-indigo"],[class*=" bg-indigo"]),
   .carbon-workspace :is([class^="bg-blue"],[class*=" bg-blue"]),
@@ -511,7 +517,7 @@
   .carbon-workspace thead tr {
     background-color: transparent !important;
     border-color: var(--dp-border) !important;
-    color: var(--dp-accent) !important;
+    color: var(--dp-table-label, var(--dp-accent)) !important;
     font-size: 11px !important;
     letter-spacing: 0.7px !important;
   }
@@ -1286,6 +1292,8 @@ body,
   --dp-text-label: #b3b3b7;
   --dp-text-muted: #b3b3b7;
   --dp-field-label: #d4d2ce;
+  /* Accent's light step: the base accent is too dark to read at 11px here. */
+  --dp-table-label: var(--dp-accent-light);
   /* Accent comes from the --accent-* preset via the palette; dark mode just
      uses a slightly stronger tint behind accent text. */
   --dp-accent-bg: rgba(var(--accent-rgb), 0.18);
