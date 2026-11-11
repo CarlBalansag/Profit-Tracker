@@ -89,7 +89,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
       
       <aside
         className={clsx(
-          "fixed inset-y-0 left-0 z-50 flex flex-col transition-all duration-300 ease-in-out lg:static lg:translate-x-0 border-r border-[color:var(--dp-border)] bg-[var(--sidebar-bg-start)] dp-elevated dp-sidebar",
+          "fixed inset-y-0 left-0 z-50 flex flex-col transition-all duration-300 ease-in-out lg:static lg:translate-x-0 border-r border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] dp-elevated",
           isOpen ? "translate-x-0" : "-translate-x-full",
           isCollapsed ? "w-[72px]" : "w-64 lg:w-60"
         )}
