@@ -98,7 +98,13 @@ describe('page width', () => {
 
 describe('light mode colours', () => {
   const palette = readFileSync(join(process.cwd(), 'src/styles/colorPalette.css'), 'utf8').split(':root[data-theme="dark"] {')[0];
-  const token = (name) => palette.match(new RegExp(`--color-${name}: *(#[0-9A-Fa-f]{6})`))[1];
+  // Follows var(--x) references (the accent comes from the --accent-* preset).
+  const resolve = (prop) => {
+    const value = palette.match(new RegExp(`${prop}: *([^;]+);`))[1].trim();
+    const ref = value.match(/^var\((--[\w-]+)\)$/);
+    return ref ? resolve(ref[1]) : value.match(/#[0-9A-Fa-f]{6}/)[0];
+  };
+  const token = (name) => resolve(`--color-${name}`);
   const luminance = (hex) => {
     const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
       .map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
