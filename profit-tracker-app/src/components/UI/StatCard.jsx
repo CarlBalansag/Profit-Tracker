@@ -8,7 +8,7 @@ const TONES = {
 };
 
 const StatCard = ({ label, value, sub, icon: Icon, iconColor, tone = 'default', info, compact = false, className = '', ...rest }) => (
-  <div {...rest} className={`relative min-w-0 rounded-xl border border-white/10 bg-white/[0.02] ${compact ? 'p-3 sm:p-4' : 'p-4'} ${className}`}>
+  <div {...rest} className={`card relative min-w-0 ${compact ? 'p-3 sm:p-4' : 'p-4'} ${className}`}>
     {Icon && <Icon size={16} className={`absolute right-4 top-4 ${iconColor ? '' : TONES[tone]}`} style={iconColor ? { color: iconColor } : undefined} />}
     <span className={`${Icon ? 'pr-6 ' : info ? 'max-sm:block max-sm:pr-5 ' : ''}text-[11px] font-semibold uppercase tracking-wider text-gray-400`}>{label}</span>
     {info && <span className="max-sm:absolute max-sm:right-2 max-sm:top-3">{info}</span>}

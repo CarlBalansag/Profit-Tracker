@@ -221,8 +221,8 @@ const AddSale = () => {
                     className={clsx(
                       "w-full text-left p-4 rounded-xl border transition-all relative overflow-hidden group",
                       selectedItem?.id === item.id
-                        ? "bg-purple-500/10 border-purple-500/50 shadow-[0_0_15px_rgba(139,92,246,0.15)]"
-                        : "bg-[#12121A] border-white/10 hover:border-white/20 hover:bg-[#16161E]"
+                        ? "bg-purple-500/10 border-purple-500/50 shadow-[0_0_15px_rgba(var(--accent-rgb),0.15)]"
+                        : "bg-[#12121A] border-white/10 dp-clickable-card"
                     )}
                   >
                     {selectedItem?.id === item.id && (

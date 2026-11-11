@@ -221,6 +221,20 @@
     border-radius: 0 !important;
     box-shadow: none !important;
   }
+  /* Clickable cards painted by the panel remap above (e.g. Record Sale's
+     inventory list) still get the Dashboard KPI hover. It has to live in this
+     layer: the remap's layered !important beats the unlayered hover rules. */
+  .carbon-workspace .dp-clickable-card[class*="bg-[#"]:hover {
+    background: color-mix(in srgb, var(--dp-dash-hover, var(--dp-accent)) 12%, var(--dp-card-bg)) !important;
+    border-color: color-mix(in srgb, var(--dp-dash-hover, var(--dp-accent)) 70%, var(--dp-border)) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 2px 4px -1px rgba(0, 0, 0, 0.12),
+      0 7px 10px -4px rgba(var(--accent-deep-rgb), 0.16),
+      0 11px 16px -7px rgba(var(--accent-deep-rgb), 0.2),
+      0 15px 24px -11px rgba(var(--accent-deep-rgb), 0.22) !important;
+  }
+
   /* ...and tint along with their row (hover, row being edited). */
   .carbon-workspace tr:hover > td[class*="bg-[#"] {
     background-image: linear-gradient(rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.025)) !important;
