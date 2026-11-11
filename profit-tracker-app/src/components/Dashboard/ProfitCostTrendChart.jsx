@@ -140,7 +140,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
     const yMin = ticks[0];
     const yMax = ticks[ticks.length - 1];
     const left = compact ? 44 : 60;
-    const plot = { left, top: 12, width: Math.max(10, width - left - 14), height: height - 12 - 30 };
+    const plot = { left, top: 12, width: Math.max(10, width - left - 14), height: height - 12 - 42 };
     const n = points.length;
     const step = n > 1 ? plot.width / (n - 1) : 0;
     const xAt = i => (n > 1 ? plot.left + i * step : plot.left + plot.width / 2);
@@ -357,7 +357,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
               <text
                 key={p.date}
                 x={geo.xAt(i)}
-                y={geo.plot.top + geo.plot.height + 20}
+                y={geo.plot.top + geo.plot.height + 30}
                 textAnchor={geo.n > 1 && i === 0 ? 'start' : geo.n > 1 && i === geo.n - 1 ? 'end' : 'middle'}
                 fontSize={11}
                 fill="var(--dp-text-muted)"
@@ -427,7 +427,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
             className="pointer-events-none absolute rounded-md border border-[var(--dp-border-hover)] bg-[var(--dp-card-bg)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--dp-text-primary)] shadow-sm whitespace-nowrap"
             style={{
               left: Math.max(22, Math.min(hoverX, width - 22)),
-              top: geo.plot.top + geo.plot.height + 9,
+              top: geo.plot.top + geo.plot.height + 19,
               transform: 'translateX(-50%)',
             }}
           >
