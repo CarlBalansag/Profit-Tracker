@@ -1228,11 +1228,11 @@ body,
   --dp-text-label: #8f9095;
   --dp-text-muted: #a4a4a9;
   /* Darker version of Ignara's ember red replaces purple on the Dashboard. */
-  --dp-accent: #d4452a;
-  --dp-accent-solid: #c13b22;
-  --dp-accent-light: #ec8a6a;
-  --dp-accent-bg: rgba(212, 69, 42, 0.16);
-  --dp-accent-gradient: linear-gradient(140deg, #e46a32 0%, #d4452a 50%, #bf2f1f 100%);
+  --dp-accent: #b53b22;
+  --dp-accent-solid: #a2321b;
+  --dp-accent-light: #d9765a;
+  --dp-accent-bg: rgba(181, 59, 34, 0.18);
+  --dp-accent-gradient: linear-gradient(140deg, #c95128 0%, #b53b22 50%, #992a17 100%);
   --dp-card-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
     inset 0 0 0 1px rgba(255, 255, 255, 0.06),
@@ -1258,4 +1258,35 @@ body,
 }
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-dashboard .dp-elevated [class*="bg-[var(--dp-bg)]"] {
   background-color: var(--dp-dash-well);
+}
+
+/* Sidebar nav while the Dashboard is open: rounded rows, warm text, and a
+   filled accent pill for the current page (Ignara-style). */
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar a.border-l-2 {
+  border-left-color: transparent;
+  border-radius: 12px;
+  font-weight: 600;
+  color: #d4d2ce;
+}
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar a.border-l-2 svg {
+  color: var(--dp-text-muted);
+}
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar a.border-l-2:hover {
+  background-color: var(--dp-hover-bg);
+  color: var(--dp-text-primary);
+}
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar a.border-l-2[aria-current="page"] {
+  background: var(--dp-accent-gradient);
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 10px 22px -14px rgba(153, 42, 23, 0.9);
+}
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar a.border-l-2[aria-current="page"] svg {
+  color: #ffffff;
+}
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar .theme-switch[aria-checked="true"] .theme-switch__track {
+  background-color: var(--dp-dash-raised);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar .theme-switch[aria-checked="true"] .theme-switch__knob {
+  background-color: var(--dp-text-primary);
 }
