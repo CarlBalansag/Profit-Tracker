@@ -1227,15 +1227,15 @@ body,
   --dp-text-secondary: #a4a4a9;
   --dp-text-label: #8f9095;
   --dp-text-muted: #a4a4a9;
-  /* Darker version of Ignara's ember red replaces purple on the Dashboard. */
-  --dp-accent: #b53b22;
-  --dp-accent-solid: #a2321b;
-  --dp-accent-light: #d9765a;
-  --dp-accent-bg: rgba(181, 59, 34, 0.18);
-  --dp-accent-gradient: linear-gradient(140deg, #c95128 0%, #b53b22 50%, #992a17 100%);
+  /* Garnet red replaces purple on the Dashboard. */
+  --dp-accent: #9e2433;
+  --dp-accent-solid: #8c1f2d;
+  --dp-accent-light: #d0707c;
+  --dp-accent-bg: rgba(158, 36, 51, 0.18);
+  --dp-accent-gradient: linear-gradient(140deg, #b02e3e 0%, #9e2433 50%, #821c2a 100%);
   /* Hover red: deeper than the accent, so hovers darken instead of glowing. */
-  --dp-dash-hover: #7a2c1c;
-  --dp-dash-hover-deep: #5e2214;
+  --dp-dash-hover: #761b27;
+  --dp-dash-hover-deep: #56131d;
   --dp-card-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
     inset 0 0 0 1px rgba(255, 255, 255, 0.06),
@@ -1281,7 +1281,7 @@ body,
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar a.border-l-2[aria-current="page"] {
   background: var(--dp-accent-gradient);
   color: #ffffff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 10px 22px -14px rgba(153, 42, 23, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 10px 22px -14px rgba(86, 19, 29, 0.9);
 }
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-sidebar a.border-l-2[aria-current="page"] svg {
   color: #ffffff;
@@ -1307,7 +1307,7 @@ body,
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-clickable-card:hover {
   background-color: color-mix(in srgb, var(--dp-dash-hover) 12%, var(--dp-card-bg)) !important;
   border-color: color-mix(in srgb, var(--dp-dash-hover) 70%, var(--dp-border)) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 16px 32px -12px rgba(94, 34, 20, 0.55) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 16px 32px -12px rgba(86, 19, 29, 0.55) !important;
 }
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-clickable-card:hover .dp-card-info-btn {
   color: var(--dp-accent) !important;
@@ -1320,7 +1320,7 @@ body,
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-clickable-pipeline:hover {
   background-color: color-mix(in srgb, var(--dp-dash-hover) 10%, var(--dp-dash-raised)) !important;
   border-color: color-mix(in srgb, var(--dp-dash-hover) 70%, var(--dp-border)) !important;
-  box-shadow: 0 14px 28px -12px rgba(94, 34, 20, 0.55) !important;
+  box-shadow: 0 14px 28px -12px rgba(86, 19, 29, 0.55) !important;
 }
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]):has(.dp-dashboard) .dp-dashboard .dp-clickable-pipeline:hover .dp-pipeline-icon-wrap {
   background-color: var(--dp-dash-hover) !important;
