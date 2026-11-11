@@ -304,6 +304,12 @@
     color: var(--dp-text-muted) !important;
   }
 
+  /* Every form label reads in one shade, whatever gray class it was given. */
+  .carbon-workspace label:not([class*="bg-"]),
+  .carbon-workspace label[class]:not([class*="bg-"]) {
+    color: var(--dp-field-label, var(--dp-text-primary)) !important;
+  }
+
   .carbon-workspace option {
     background-color: var(--dp-card-bg);
     color: var(--dp-text-primary);
@@ -501,12 +507,18 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Column labels sit on the card itself (no separate band) in the accent red. */
   .carbon-workspace thead tr {
-    background-color: var(--dp-bg) !important;
+    background-color: transparent !important;
     border-color: var(--dp-border) !important;
-    color: var(--dp-text-label) !important;
+    color: var(--dp-accent) !important;
     font-size: 11px !important;
     letter-spacing: 0.7px !important;
+  }
+
+  .carbon-workspace thead th,
+  .carbon-workspace thead th[class] {
+    color: inherit !important;
   }
 
   .carbon-workspace tbody tr {
@@ -1270,9 +1282,10 @@ body,
   --dp-dash-well: rgba(255, 255, 255, 0.04);
   /* Warm off-white text. */
   --dp-text-primary: #f3f1ed;
-  --dp-text-secondary: #a4a4a9;
-  --dp-text-label: #8f9095;
-  --dp-text-muted: #a4a4a9;
+  --dp-text-secondary: #c2c1c4;
+  --dp-text-label: #b3b3b7;
+  --dp-text-muted: #b3b3b7;
+  --dp-field-label: #d4d2ce;
   /* Accent comes from the --accent-* preset via the palette; dark mode just
      uses a slightly stronger tint behind accent text. */
   --dp-accent-bg: rgba(var(--accent-rgb), 0.18);
