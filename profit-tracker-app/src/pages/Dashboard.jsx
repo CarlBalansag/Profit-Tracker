@@ -1291,7 +1291,7 @@ function GlassCircularPipeline({ cards, overflowCards = [], pipeline, onNavigate
   );
 }
 
-function StatCard({ id, title, modeTag, value, subtext, icon, color, formula = [], description, onClick, uiStyle = 'neon-dark' }) {
+function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], description, onClick, uiStyle = 'neon-dark' }) {
   const [open, setOpen] = useState(false);
   const [popoverPosition, setPopoverPosition] = useState('bottom');
   const [popoverCoords, setPopoverCoords] = useState(null);
@@ -1335,33 +1335,30 @@ function StatCard({ id, title, modeTag, value, subtext, icon, color, formula = [
   const glassTextColor = title === 'Net Profit' || title === 'Gross Profit' || title === 'Cashback'
     ? 'text-[#d8a65a]'
     : 'text-[#e8e2d6]';
-  const isProfitHero = id === 'profit' || title === 'Net Profit';
 
   return (
     <div ref={ref} onClick={onClick} className={isGlass
       ? `relative overflow-visible rounded-[20px] bg-[#181a1c]/72 border border-white/[0.06] p-5 sm:p-6 shadow-[0_8px_24px_rgba(0,0,0,0.18)] transition-colors duration-200 hover:bg-[#1d1f21]/78 hover:border-white/[0.09] group${onClick ? ' cursor-pointer' : ''}`
-      : `relative ${open ? 'z-[80]' : 'z-0'} overflow-visible rounded-[24px] p-6 group dp-elevated ${
-          isProfitHero
-            ? 'text-[#ffffff] dp-hero-card'
-            : `bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] border border-[color:var(--dp-border)] ${onClick ? 'dp-clickable-card cursor-pointer' : 'dp-elevated-hover'}`
-        }${onClick && isProfitHero ? ' cursor-pointer' : ''}`
-    } style={!isGlass && isProfitHero ? { background: 'var(--dp-accent-gradient)' } : undefined}>
+      : `relative ${open ? 'z-[80]' : 'z-0'} overflow-visible rounded-[24px] p-6 group dp-elevated bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] border border-[color:var(--dp-border)] ${onClick ? 'dp-clickable-card cursor-pointer' : 'dp-elevated-hover'}`
+    }>
       <div className="relative z-10 flex items-start justify-between">
         <div>
-          <p className={isGlass ? "text-[11px] text-white/25 font-medium uppercase tracking-[0.2em]" : `text-[11px] font-medium uppercase tracking-[0.08em] dp-card-title transition-colors duration-300 ${isProfitHero ? 'text-[#ffffff]/75' : 'text-[var(--dp-text-label)]'}`}>
+          <p className={isGlass ? "text-[11px] text-white/25 font-medium uppercase tracking-[0.2em]" : `text-[11px] font-medium uppercase tracking-[0.08em] dp-card-title transition-colors duration-300 text-[var(--dp-text-label)]`}>
             {title}
             {modeTag && (
-              <span className={isGlass ? "ml-1.5 text-[11px] font-normal normal-case tracking-normal text-[var(--text-muted)]" : `ml-1.5 text-[11px] font-normal normal-case tracking-normal dp-card-tag transition-colors duration-300 ${isProfitHero ? 'text-[#ffffff]/60' : 'text-[var(--dp-text-label)]'}`}>
+              <span className={isGlass ? "ml-1.5 text-[11px] font-normal normal-case tracking-normal text-[var(--text-muted)]" : `ml-1.5 text-[11px] font-normal normal-case tracking-normal dp-card-tag transition-colors duration-300 text-[var(--dp-text-label)]`}>
                 {modeTag}
               </span>
             )}
           </p>
-          <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 ${isProfitHero ? 'text-[32px] text-[#ffffff]' : 'text-[22px] text-[var(--dp-text-primary)]'}`}>{value}</p>
-          <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 dp-card-subtext transition-colors duration-300 ${isProfitHero ? 'text-[#ffffff]/70' : 'text-[var(--dp-text-secondary)]'}`}>{subtext}</p>
+          <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] text-[var(--dp-text-primary)]`}>{value}</p>
+          <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
         </div>
-        <div className={isGlass ? "w-9 h-9 3xl:w-11 3xl:h-11 rounded-xl bg-white/[0.035] border border-white/[0.05] flex items-center justify-center" : `w-9 h-9 rounded-full flex items-center justify-center dp-card-icon-wrap transition-all duration-300 ${isProfitHero ? 'bg-white/15 text-[#ffffff]' : 'bg-[var(--dp-bg)] text-[var(--dp-text-secondary)]'}`}>
-          <IconComponent className={isGlass ? "w-4.5 h-4.5 3xl:w-5 3xl:h-5 text-[#d8a65a]" : "w-4.5 h-4.5 3xl:w-5 3xl:h-5 transition-colors duration-300"} />
-        </div>
+        {isGlass && (
+          <div className="w-9 h-9 3xl:w-11 3xl:h-11 rounded-xl bg-white/[0.035] border border-white/[0.05] flex items-center justify-center">
+            <IconComponent className="w-4.5 h-4.5 3xl:w-5 3xl:h-5 text-[#d8a65a]" />
+          </div>
+        )}
       </div>
       {formula.length > 0 && (
         <>
@@ -1388,7 +1385,7 @@ function StatCard({ id, title, modeTag, value, subtext, icon, color, formula = [
             title="How this is calculated"
             className={isGlass
               ? "absolute bottom-2 right-2 z-20 w-5 h-5 flex items-center justify-center rounded-full text-gray-600 hover:text-gray-300 hover:bg-white/10 transition-colors"
-              : `absolute bottom-3 right-3 z-20 w-5 h-5 flex items-center justify-center rounded-full transition-colors dp-card-info-btn ${isProfitHero ? 'text-[#ffffff]/50 hover:text-[#ffffff] hover:bg-white/15' : 'text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] hover:bg-[var(--dp-bg)]'}`
+              : `absolute bottom-3 right-3 z-20 w-5 h-5 flex items-center justify-center rounded-full transition-colors dp-card-info-btn text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] hover:bg-[var(--dp-bg)]`
             }
           >
             <Info className="w-3 h-3" />
