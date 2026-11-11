@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.27',
+    date: '2026-11-11',
+    notes: "The Credit Card page has a new layout that matches the rest of the app, with clearer sidebar icons, easier-to-read labels, and a sharper Where Your Money Is section on Cash Flow.",
+  },
+  {
     version: '1.26',
     date: '2026-11-11',
     notes: "A fresh new look: a darker charcoal theme with a deep red accent and a cleaner font across the app, plus a redesigned Profit & Cost Trend chart on the Dashboard that animates in and lets you tap the key to show or hide each line.",
