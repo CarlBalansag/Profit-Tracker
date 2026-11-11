@@ -258,7 +258,7 @@ const AddSale = () => {
           {selectedItem ? (
             <form onSubmit={handleSubmit} className="space-y-6 animate-in slide-in-from-bottom-4 fade-in duration-300">
               
-              <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 p-4 flex items-center gap-4 shadow-sm">
+              <div className="rounded-xl border border-white/10 bg-[#12121A] p-4 flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center border border-purple-500/30">
                   <Package className="w-5 h-5 text-purple-400" />
                 </div>
