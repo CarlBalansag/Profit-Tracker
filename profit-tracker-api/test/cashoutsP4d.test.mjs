@@ -150,6 +150,14 @@ describe('Points4Days adapter', () => {
     });
   });
 
+  it('names stores from short links and store subdomains, not the first part of the address', async () => {
+    const links = ['https://a.co/d/09Ayk', 'https://direct.playstation.com/en-us/x', 'https://www.gamestop.com/x', 'https://shop.walmart.com/x', 'https://www.homedepot.com/x', 'https://unknownshop.com/x']
+      .map((url, i) => [i, 'x', 'y', url]);
+    site.rows = [dealRow(1, { t_f_items: [{ ...dealRow(1).t_f_items[0], f_links: links }] })];
+    const [deal] = await p4dAdapter.fetchDeals(LOGIN);
+    expect(deal.items[0].purchaseLinks.map((link) => link.name)).toEqual(['Amazon', 'PlayStation Direct', 'GameStop', 'Walmart', 'Home Depot', 'Unknownshop']);
+  });
+
   it('sends the password exactly as typed, including spaces', async () => {
     site = makeSite({ password: 'hunter2' });
     vi.stubGlobal('fetch', site.fetch);

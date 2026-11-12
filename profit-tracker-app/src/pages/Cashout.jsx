@@ -798,9 +798,9 @@ function CashoutOffers({ deal }) {
   const offers = deal.offers || [deal];
   if (offers.length === 1) return <CashoutName name={deal.connectionName} />;
   return (
-    <div className="flex flex-col items-start gap-1">
+    <div className="flex flex-col items-start gap-1.5">
       {offers.map((offer, index) => (
-        <div key={`${offer.connectionId}-${offer.id}`} className="flex items-center gap-1.5 whitespace-nowrap">
+        <div key={`${offer.connectionId}-${offer.id}`} className={`${OFFER_LINE} gap-1.5 whitespace-nowrap`}>
           <CashoutName name={offer.connectionName} />
           <span className={`tabular-nums text-[12px] ${index === 0 ? 'font-semibold text-emerald-400' : 'text-[var(--dp-text-secondary)]'}`}>
             ${formatMoney(offer.payout)}
@@ -811,6 +811,10 @@ function CashoutOffers({ deal }) {
     </div>
   );
 }
+
+// One line per cashout, the same height as its button, so in the table each
+// cashout lines up with its button in the Actions column.
+const OFFER_LINE = 'flex items-center h-[30px]';
 
 // Each cashout's deal can end on a different day, so a shared row says when
 // each one ends next to its payout.
@@ -831,7 +835,9 @@ function OfferActions({ deal }) {
   return (
     <div className="flex flex-col items-end gap-1.5">
       {offers.map((offer) => (
-        <LogPurchaseButton key={`${offer.connectionId}-${offer.id}`} deal={offer} />
+        <div key={`${offer.connectionId}-${offer.id}`} className={OFFER_LINE}>
+          <LogPurchaseButton deal={offer} />
+        </div>
       ))}
     </div>
   );
@@ -1256,42 +1262,55 @@ function DealCard({ deal }) {
         </div>
       </dl>
 
-      <div className="mt-auto space-y-2 pt-2 border-t border-[color:var(--dp-border)]">
-        <div className="flex items-center gap-3">
-          <DealExpiry expiresAt={deal.expiresAt} />
-          <CashoutOffers deal={deal} />
-        </div>
-        {expired ? (
-          <span className="text-[var(--dp-text-label)]">—</span>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <StoreLinks deal={deal} large />
-            <OfferActions deal={deal} />
-          </div>
-        )}
+      <div className="mt-auto space-y-3 pt-3 border-t border-[color:var(--dp-border)]">
+        {!expired && <StoreLinks deal={deal} large />}
+        <CardOffers deal={deal} expired={expired} />
       </div>
     </article>
   );
 }
 
-function DealExpiry({ expiresAt }) {
-  const expiry = formatDealExpiry(expiresAt);
-  if (!expiry) return <span className="text-[var(--dp-text-label)]">—</span>;
+// The card's footer: one line per cashout with its payout (when there are
+// several), when it ends, and its button on the right.
+function CardOffers({ deal, expired }) {
+  const offers = deal.offers || [deal];
+  const several = offers.length > 1;
+  return (
+    <div className="space-y-1.5">
+      {offers.map((offer, index) => (
+        <div key={`${offer.connectionId}-${offer.id}`} className="flex flex-wrap items-center gap-x-2 gap-y-1.5 min-h-[30px]">
+          <CashoutName name={offer.connectionName} />
+          {several && (
+            <span className={`tabular-nums ${index === 0 ? 'font-semibold text-emerald-400' : 'text-[var(--dp-text-secondary)]'}`}>
+              ${formatMoney(offer.payout)}
+            </span>
+          )}
+          <span className="min-w-0 truncate"><DealExpiry expiresAt={offer.expiresAt} inline /></span>
+          {!expired && <span className="ml-auto flex-shrink-0"><LogPurchaseButton deal={offer} /></span>}
+        </div>
+      ))}
+    </div>
+  );
+}
 
+// Inline (on a card's cashout line) it's one short line, and nothing at all
+// when the deal has no end date.
+function DealExpiry({ expiresAt, inline = false }) {
+  const expiry = formatDealExpiry(expiresAt);
+  if (!expiry) return inline ? null : <span className="text-[var(--dp-text-label)]">—</span>;
+
+  const noteTone = expiry.expired ? 'text-rose-400' : expiry.urgent ? 'text-amber-400' : 'text-[var(--dp-text-label)]';
+  if (inline) {
+    return (
+      <span className="text-[12px] text-[var(--dp-text-secondary)] whitespace-nowrap">
+        {expiry.date} · <span className={noteTone}>{expiry.note}</span>
+      </span>
+    );
+  }
   return (
     <div>
       <div className="font-semibold text-[var(--dp-text-primary)]">{expiry.date}</div>
-      <div
-        className={`text-[12px] ${
-          expiry.expired
-            ? 'text-rose-400'
-            : expiry.urgent
-            ? 'text-amber-400'
-            : 'text-[var(--dp-text-label)]'
-        }`}
-      >
-        {expiry.note}
-      </div>
+      <div className={`text-[12px] ${noteTone}`}>{expiry.note}</div>
     </div>
   );
 }

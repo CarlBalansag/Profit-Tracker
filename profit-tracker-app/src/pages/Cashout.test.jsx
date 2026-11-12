@@ -657,7 +657,7 @@ describe('Cashout Page', () => {
     expect(within(card).getByRole('link', { name: 'Buy at Amazon' })).toBeInTheDocument();
   });
 
-  it('shows a placeholder instead of dropping the row on an expired card, same as the table', () => {
+  it('keeps an expired card with its cashout marked Expired, but no buy links or Log Purchase', () => {
     window.matchMedia = (query) => ({ matches: query.includes('max-width'), addEventListener: vi.fn(), removeEventListener: vi.fn() });
     currentDeals = {
       results: [{
@@ -683,7 +683,8 @@ describe('Cashout Page', () => {
     expect(card).toHaveClass('opacity-60');
     expect(within(card).queryByRole('link')).not.toBeInTheDocument();
     expect(within(card).queryByRole('button', { name: 'Log Purchase' })).not.toBeInTheDocument();
-    expect(card).toHaveTextContent('—');
+    expect(within(card).getByText('EB Primary')).toBeInTheDocument();
+    expect(within(card).getByText('Expired')).toBeInTheDocument();
   });
 
   it('counts down to the expiration date and flags expired deals', () => {
@@ -1070,6 +1071,16 @@ describe('Cashout Page', () => {
       expect(groups.map((g) => g.offers.map((o) => o.id))).toEqual([['b', 'a'], ['c'], ['d'], ['e'], ['f'], ['g']]);
       expect(groups[0].payout).toBe(130);
       expect(groups[0].estimatedProfit).toEqual({ amount: 30, pct: 30 });
+    });
+
+    it('treats differently spelled store names as one store', () => {
+      const [group] = groupDealsByProduct([
+        { ...ebDeal, connectionId: 'eb', items: [{ ...ebDeal.items[0], purchaseLinks: [{ name: 'BestBuy', url: 'https://bestbuy.com/a' }, { name: 'Amazon', url: 'https://amazon.com/a' }] }] },
+        { ...p4dDeal, connectionId: 'p4d', items: [{ ...p4dDeal.items[0], purchaseLinks: [{ name: 'Best Buy', url: 'https://bestbuy.com/b' }, { name: 'Amazon', url: 'https://a.co/b' }, { name: 'Amazon', url: 'https://amazon.com/c' }] }] },
+      ]);
+      expect(groupStoreLinks(group).map((l) => l.name)).toEqual(['Best Buy', 'Amazon']);
+      // One cashout's own links: two links to one store for the same item show once.
+      expect(dealStoreLinks(group.offers[0]).map((l) => l.url)).toEqual(['https://bestbuy.com/b', 'https://a.co/b']);
     });
 
     it('borrows retail from another cashout and lists each store once', () => {

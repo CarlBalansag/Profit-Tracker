@@ -29,15 +29,27 @@ function parseLogin(rawKey) {
 
 const sessionKey = (rawKey) => crypto.createHash('sha256').update(rawKey).digest('hex');
 
-// Store names for the buy links, from the link's address.
+// Store names for the buy links, from the link's address. Matched on the whole
+// host first (short links, store subdomains), then on the site's own name.
+const STORE_HOSTS = {
+  'a.co': 'Amazon', 'amzn.to': 'Amazon', 'amzn.com': 'Amazon',
+  'direct.playstation.com': 'PlayStation Direct',
+};
 const STORE_NAMES = {
   amazon: 'Amazon', bestbuy: 'Best Buy', walmart: 'Walmart', target: 'Target', costco: 'Costco',
   samsclub: "Sam's Club", newegg: 'Newegg', bhphotovideo: 'B&H', apple: 'Apple', staples: 'Staples',
+  gamestop: 'GameStop', dell: 'Dell', microcenter: 'Micro Center', lenovo: 'Lenovo', playstation: 'PlayStation',
+  samsung: 'Samsung', microsoft: 'Microsoft', nintendo: 'Nintendo', hp: 'HP', woot: 'Woot', ebay: 'eBay',
+  homedepot: 'Home Depot', kohls: "Kohl's", lowes: "Lowe's", google: 'Google', sony: 'Sony',
 };
 function storeName(url) {
-  const host = new URL(url).hostname.replace(/^www\./, '');
-  const first = host.split('.')[0];
-  return STORE_NAMES[first] || first.charAt(0).toUpperCase() + first.slice(1);
+  const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+  if (STORE_HOSTS[host]) return STORE_HOSTS[host];
+  // The site's name is the label before the top-level domain: "bestbuy" in
+  // bestbuy.com, "walmart" in shop.walmart.com.
+  const labels = host.split('.');
+  const site = labels.length > 1 ? labels[labels.length - 2] : labels[0];
+  return STORE_NAMES[site] || site.charAt(0).toUpperCase() + site.slice(1);
 }
 
 // Into the same deal shape eb.js returns, so the Cashout page shows it as-is.

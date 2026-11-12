@@ -79,10 +79,18 @@ const STORE_DOMAINS = {
   amazon: 'amazon.com',
   bestbuy: 'bestbuy.com',
   costco: 'costco.com',
+  dell: 'dell.com',
   gamestop: 'gamestop.com',
+  google: 'store.google.com',
+  homedepot: 'homedepot.com',
+  kohls: 'kohls.com',
   lenovo: 'lenovo.com',
+  lowes: 'lowes.com',
+  microsoft: 'microsoft.com',
   microcenter: 'microcenter.com',
+  playstationdirect: 'playstation.com',
   samsclub: 'samsclub.com',
+  staples: 'staples.com',
   sony: 'playstation.com',
   target: 'target.com',
   walmart: 'walmart.com',
@@ -107,18 +115,33 @@ function isWebLink(url) {
 // per item, such as a laptop's colors, so each link says which item it buys.
 export function dealStoreLinks(deal) {
   const items = Array.isArray(deal.items) ? deal.items : [];
-  const fromItems = items.flatMap((item) => (item.purchaseLinks || []).map((link) => ({
+  const fromItems = items.flatMap((item, index) => (item.purchaseLinks || []).map((link) => ({
     ...link,
     label: items.length > 1 ? `Buy ${item.name} at ${link.name}` : `Buy at ${link.name}`,
+    scope: items.length > 1 ? `item-${index}` : 'deal',
   })));
-  const fromDeal = (deal.productLinks || []).map((link) => ({ ...link, label: `Buy at ${link.name}` }));
+  const fromDeal = (deal.productLinks || []).map((link) => ({ ...link, label: `Buy at ${link.name}`, scope: 'deal' }));
 
+  // One link per store: the same address twice, or two links to one store for
+  // the same item (an Amazon short link and an amazon.com one), show once.
   const seen = new Set();
   return [...fromItems, ...fromDeal].filter((link) => {
-    if (!isWebLink(link.url) || seen.has(link.url)) return false;
+    if (!isWebLink(link.url)) return false;
+    const sameStore = link.name ? `${link.scope}:${storeKey(link.name)}` : null;
+    if (seen.has(link.url) || (sameStore && seen.has(sameStore))) return false;
     seen.add(link.url);
+    if (sameStore) seen.add(sameStore);
     return true;
+  }).map((link) => {
+    const { scope, ...rest } = link;
+    void scope;
+    return rest;
   });
+}
+
+// Store names compared loosely, so "BestBuy" and "Best Buy" are one store.
+function storeKey(name) {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 // The UPCs of a single-product deal. Deals with several items (bundles, "pick a
@@ -169,7 +192,7 @@ export function groupStoreLinks(group) {
   if (offers.length === 1) return dealStoreLinks(offers[0]);
   const seen = new Set();
   return offers.flatMap(dealStoreLinks).filter((link) => {
-    const key = String(link.name || link.url).toLowerCase();
+    const key = link.name ? storeKey(link.name) : link.url;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
