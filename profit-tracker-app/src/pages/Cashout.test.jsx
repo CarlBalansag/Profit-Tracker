@@ -1103,10 +1103,38 @@ describe('Cashout Page', () => {
       expect(row.getAllByText('$1,222.00').length).toBe(2); // best payout, in the Cashout and Payout columns
       expect(row.getByText('+$322.01')).toBeInTheDocument(); // best payout against EB's retail
       expect(row.getByText(/ends/)).toBeInTheDocument();
-      expect(row.getAllByRole('button', { name: 'Log Purchase' })).toHaveLength(2); // one per cashout
+      expect(row.getAllByRole('button', { name: 'Log Purchase' })).toHaveLength(1); // one per product
       expect(row.getByRole('link', { name: 'Open on Points4Days' })).toHaveAttribute('href', p4dDeal.dealUrl);
       expect(row.getAllByRole('link', { name: /Buy at Best Buy/ })).toHaveLength(1);
       expect(screen.getByText('Live Deals').parentElement).toHaveTextContent('2');
+    });
+
+    it('has one Log Purchase that picks the cashout, with the Points4Days instructions only for Points4Days', async () => {
+      currentProviders = [...mockProviders, p4dProvider];
+      currentDeals = { results: [{ connection: mockConnections[0], deals: [ebDeal] }, { connection: p4dConnection, deals: [p4dDeal] }] };
+      render(<MemoryRouter><Cashout /></MemoryRouter>);
+      fireEvent.click(screen.getByRole('button', { name: 'Log Purchase' }));
+
+      const cashout = screen.getByLabelText('Cashout');
+      expect(cashout).toHaveDisplayValue('Points4Days -- $1,222.00'); // best payout first
+      expect(screen.getByText(/doesn't commit or send tracking to Points4Days/)).toBeInTheDocument();
+      expect(screen.getByLabelText('Sold to')).toHaveValue('group-p4d');
+
+      fireEvent.change(cashout, { target: { value: '1' } });
+      expect(screen.queryByText(/doesn't commit or send tracking/)).not.toBeInTheDocument();
+      expect(screen.getByText(/real, binding pledge/)).toBeInTheDocument();
+      expect(screen.getByLabelText('Sold to')).toHaveValue('group-eb');
+      expect(screen.getByLabelText(/Insured value/)).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+      fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-1' } });
+      fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: '1Z999AA10123456784' } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' }));
+      });
+      expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+        connectionId: 'conn-1', deal_id: 'eb-1', item_id: 'i1', unit_payout: 1140, unit_cost: 899.99, platform_id: 'group-eb',
+      }));
     });
 
     it('filters by cashout before merging, so each cashout still shows on its own', () => {

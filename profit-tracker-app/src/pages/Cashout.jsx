@@ -630,7 +630,7 @@ export default function Cashout() {
 
                           {/* Actions */}
                           <td className="py-3 pl-3 pr-6 w-px whitespace-nowrap text-right">
-                            {!expired && <OfferActions deal={deal} />}
+                            {!expired && <LogPurchaseButton deal={deal} />}
                           </td>
                         </tr>
                       );
@@ -798,25 +798,47 @@ function summaryDeal(deal) {
 // best first.
 function CashoutOffers({ deal }) {
   const offers = deal.offers || [deal];
-  if (offers.length === 1) return <CashoutName name={deal.connectionName} />;
+  if (offers.length === 1) {
+    return (
+      <div className="flex items-center gap-1.5 whitespace-nowrap">
+        <CashoutName name={deal.connectionName} />
+        <OpenOnCashout offer={deal} />
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col items-start gap-1.5">
       {offers.map((offer, index) => (
-        <div key={`${offer.connectionId}-${offer.id}`} className={`${OFFER_LINE} gap-1.5 whitespace-nowrap`}>
+        <div key={`${offer.connectionId}-${offer.id}`} className="flex items-center gap-1.5 whitespace-nowrap">
           <CashoutName name={offer.connectionName} />
           <span className={`tabular-nums text-[12px] ${index === 0 ? 'font-semibold text-emerald-400' : 'text-[var(--dp-text-secondary)]'}`}>
             ${formatMoney(offer.payout)}
           </span>
           <OfferEnds expiresAt={offer.expiresAt} />
+          <OpenOnCashout offer={offer} />
         </div>
       ))}
     </div>
   );
 }
 
-// One line per cashout, the same height as its button, so in the table each
-// cashout lines up with its button in the Actions column.
-const OFFER_LINE = 'flex items-center h-[30px]';
+// A cashout we can't commit to from here (Points4Days) links to the deal on its
+// website, where the commitment and tracking are done.
+function OpenOnCashout({ offer }) {
+  if (offer.connectionSupportsCommits || !offer.dealUrl) return null;
+  return (
+    <a
+      href={offer.dealUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Open on ${offer.connectionName}`}
+      title={`Open on ${offer.connectionName} to commit`}
+      className="p-1 rounded-md text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
+    >
+      <ExternalLink size={13} />
+    </a>
+  );
+}
 
 // Each cashout's deal can end on a different day, so a shared row says when
 // each one ends next to its payout.
@@ -830,20 +852,6 @@ function OfferEnds({ expiresAt }) {
   );
 }
 
-// One action per cashout: Log Purchase, or a link to the cashout's website.
-function OfferActions({ deal }) {
-  const offers = deal.offers || [deal];
-  if (offers.length === 1) return <LogPurchaseButton deal={deal} />;
-  return (
-    <div className="flex flex-col items-end gap-1.5">
-      {offers.map((offer) => (
-        <div key={`${offer.connectionId}-${offer.id}`} className={OFFER_LINE}>
-          <LogPurchaseButton deal={offer} />
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function StoreLinks({ deal, large = false }) {
   return (
@@ -1023,25 +1031,13 @@ function StatusChip({ status }) {
 
 // Commits to the cashout, submits tracking, and records the purchase + sale
 // together -- for an item you've already bought and shipped.
-// Cashouts we can't commit to yet (Points4Days) also get a link to the deal on
-// their website, where the commitment and tracking are done.
+// One button per product. When several cashouts pay for it, the form asks
+// which one, starting on the best payout.
 function LogPurchaseButton({ deal }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <span className="inline-flex items-center gap-1.5">
-      {!deal.connectionSupportsCommits && deal.dealUrl && (
-        <a
-          href={deal.dealUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={`Open on ${deal.connectionName}`}
-          title={`Open on ${deal.connectionName} to commit`}
-          className="p-1.5 rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
-        >
-          <ExternalLink size={14} />
-        </a>
-      )}
+    <>
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -1049,14 +1045,17 @@ function LogPurchaseButton({ deal }) {
       >
         Log Purchase
       </button>
-      {open && <LogPurchaseModal deal={deal} onClose={() => setOpen(false)} />}
-    </span>
+      {open && <LogPurchaseModal product={deal} onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
 const nameKey = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-function LogPurchaseModal({ deal, onClose }) {
+function LogPurchaseModal({ product, onClose }) {
+  const offers = product.offers || [product];
+  const [offerIndex, setOfferIndex] = useState(0);
+  const deal = offers[offerIndex];
   const { data: platforms = [] } = usePlatforms();
   const { data: paymentMethods = [] } = usePaymentMethods();
   const { logPurchase } = useCashoutMutations();
@@ -1083,11 +1082,18 @@ function LogPurchaseModal({ deal, onClose }) {
   const dealStores = useMemo(() => dealStoreNames(deal), [deal]);
 
   const [itemId, setItemId] = useState(items[0]?.id || '');
+  // Another cashout's deal has its own items and its own group to sell to.
+  const pickCashout = (index) => {
+    setOfferIndex(index);
+    setItemId(offers[index].items?.[0]?.id || '');
+    setSaleToId(null);
+    setError(null);
+  };
   const [quantity, setQuantity] = useState(1);
   const [pickedVendor, setVendorId] = useState(null);
   const vendorId = pickedVendor ?? (vendors.find((v) => dealStores.map(nameKey).includes(nameKey(v.name)))?.id || '');
   const [paymentMethodId, setPaymentMethodId] = useState('');
-  const [unitCost, setUnitCost] = useState(deal.retail || 0);
+  const [unitCost, setUnitCost] = useState(product.retail || deal.retail || 0);
   const [salesTax, setSalesTax] = useState(0);
   const [trackingNumber, setTrackingNumber] = useState('');
   const [insuredValue, setInsuredValue] = useState('');
@@ -1160,12 +1166,25 @@ function LogPurchaseModal({ deal, onClose }) {
         <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
           <div>
             <h3 className="font-bold text-base text-[var(--dp-text-primary)]">Log Purchase</h3>
-            <p className="text-[11px] text-[var(--dp-text-secondary)] mt-0.5 truncate max-w-xs" title={deal.name}>{deal.name}</p>
+            <p className="text-[11px] text-[var(--dp-text-secondary)] mt-0.5 truncate max-w-xs" title={product.name}>{product.name}</p>
           </div>
           <button type="button" aria-label="Close" onClick={onClose} className="text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]">
             <X size={18} />
           </button>
         </div>
+
+        {offers.length > 1 && (
+          <div className="space-y-1.5">
+            <label htmlFor="lp-cashout" className="text-[11px] text-[var(--dp-text-label)]">Cashout</label>
+            <select id="lp-cashout" value={offerIndex} onChange={(e) => pickCashout(Number(e.target.value))} className={SELECT_CLASS + ' w-full'}>
+              {offers.map((offer, index) => (
+                <option key={`${offer.connectionId}-${offer.id}`} value={index}>
+                  {offer.connectionName} -- ${formatMoney(offer.payout)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {recordOnly ? (
           <p className="text-[11px] text-[var(--dp-text-secondary)] bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2">
@@ -1318,24 +1337,27 @@ function DealCard({ deal }) {
 }
 
 // The card's footer: one line per cashout with its payout (when there are
-// several), when it ends, and its button on the right.
+// several) and when it ends, and one Log Purchase button for the product.
 function CardOffers({ deal, expired }) {
   const offers = deal.offers || [deal];
   const several = offers.length > 1;
   return (
-    <div className="space-y-1.5">
-      {offers.map((offer, index) => (
-        <div key={`${offer.connectionId}-${offer.id}`} className="flex flex-wrap items-center gap-x-2 gap-y-1.5 min-h-[30px]">
-          <CashoutName name={offer.connectionName} />
-          {several && (
-            <span className={`tabular-nums ${index === 0 ? 'font-semibold text-emerald-400' : 'text-[var(--dp-text-secondary)]'}`}>
-              ${formatMoney(offer.payout)}
-            </span>
-          )}
-          <span className="min-w-0 truncate"><DealExpiry expiresAt={offer.expiresAt} inline /></span>
-          {!expired && <span className="ml-auto flex-shrink-0"><LogPurchaseButton deal={offer} /></span>}
-        </div>
-      ))}
+    <div className="flex items-end justify-between gap-3">
+      <div className="min-w-0 space-y-1.5">
+        {offers.map((offer, index) => (
+          <div key={`${offer.connectionId}-${offer.id}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 min-h-[26px]">
+            <CashoutName name={offer.connectionName} />
+            {several && (
+              <span className={`tabular-nums ${index === 0 ? 'font-semibold text-emerald-400' : 'text-[var(--dp-text-secondary)]'}`}>
+                ${formatMoney(offer.payout)}
+              </span>
+            )}
+            <DealExpiry expiresAt={offer.expiresAt} inline />
+            {!expired && <OpenOnCashout offer={offer} />}
+          </div>
+        ))}
+      </div>
+      {!expired && <span className="flex-shrink-0"><LogPurchaseButton deal={deal} /></span>}
     </div>
   );
 }
