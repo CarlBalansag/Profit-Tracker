@@ -6,6 +6,7 @@ const { requireOwned } = require('../ownership');
 const statusTransitions = require('../statusTransitions');
 const { getConnection } = require('./service');
 const commitsService = require('./commits');
+const { getAdapter } = require('./registry');
 
 const parseLocalDate = (str) => {
   if (!str) return null;
@@ -33,13 +34,21 @@ const required = (value, label) => {
  * side regardless of whether tracking went through -- with the tracking
  * failure recorded on the commitment row so the UI can show it and let the
  * item be resubmitted later.
+ *
+ * Cashouts we can't commit to yet (Points4Days) skip steps 1 and 2: this only
+ * writes the purchase and sale, and the user commits and sends tracking on the
+ * cashout's own website. A tracking number is optional then; when given, it's
+ * saved on the sale. No commitment row is made, since nothing was committed here.
+ *
+ * The sale goes to the connection's linked cashout group, or to `platformId`
+ * when the form picks one (a connection with no group linked yet).
  */
 async function logPurchase(userId, {
   connectionId, dealId, itemId, dealName, itemName,
   quantity, trackingCodes, insuredValue,
   vendorId, paymentMethodId, unitCost, taxExempt, salesTax,
   cashbackRate, cashbackEarned, purchaseDate,
-  unitPayout, saleDate,
+  unitPayout, saleDate, platformId,
 }) {
   required(connectionId, 'connectionId');
   required(dealId, 'dealId');
@@ -48,39 +57,58 @@ async function logPurchase(userId, {
   required(vendorId, 'Store');
   required(paymentMethodId, 'Payment method');
   const payout = required(unitPayout, 'unitPayout');
-  if (!Array.isArray(trackingCodes) || trackingCodes.length === 0) {
-    throw Object.assign(new Error('At least one tracking number is required.'), { status: 400 });
+  if (!Number.isInteger(Number(qty)) || Number(qty) < 1) {
+    throw Object.assign(new Error('Quantity must be a whole number of at least 1.'), { status: 400 });
+  }
+  if (!(Number(payout) > 0)) {
+    throw Object.assign(new Error('unitPayout must be more than 0.'), { status: 400 });
   }
 
   const conn = await getConnection(userId, connectionId);
-  if (!conn.platform_id) {
+  const recordOnly = typeof getAdapter(conn.provider).createCommit !== 'function';
+  const codes = Array.isArray(trackingCodes)
+    ? trackingCodes.map((code) => String(code || '').trim()).filter(Boolean)
+    : [];
+  if (!recordOnly && codes.length === 0) {
+    throw Object.assign(new Error('At least one tracking number is required.'), { status: 400 });
+  }
+
+  const saleTo = platformId || conn.platform_id;
+  if (!saleTo) {
     throw Object.assign(
-      new Error('This cashout has no linked store/platform to sell to yet -- set one in Data Setup > Cashouts before logging a purchase.'),
+      new Error('Pick which cashout group this sale goes to.'),
       { status: 400 },
     );
+  }
+  const salePlatform = await requireOwned('platform', saleTo, userId, 'Cashout group');
+  if (salePlatform.type !== 'Cashout') {
+    throw Object.assign(new Error('The sale has to go to one of your cashout groups.'), { status: 400 });
   }
   await requireOwned('platform', vendorId, userId, 'Store');
   await requireOwned('paymentMethod', paymentMethodId, userId, 'Payment method');
 
-  // Step 1: commit with EB. Left to throw straight through -- a failure here
-  // (deal closed, already committed, over the limit) means nothing below runs.
-  const commitment = await commitsService.createCommitment(userId, connectionId, {
-    dealId, itemId, quantity: qty,
-  });
-
-  // Step 2: submit tracking. A failure here is caught, not thrown -- see the
-  // doc comment above for why the purchase still gets written either way.
+  let commitment = null;
   let trackingSubmitted = false;
   let trackingError = null;
-  try {
-    await commitsService.submitTracking(userId, connectionId, {
-      trackingCodes,
-      description: `${dealName || 'Cashout deal'} x${qty}`.slice(0, 200),
-      insuredValue,
+  if (!recordOnly) {
+    // Step 1: commit with EB. Left to throw straight through -- a failure here
+    // (deal closed, already committed, over the limit) means nothing below runs.
+    commitment = await commitsService.createCommitment(userId, connectionId, {
+      dealId, itemId, quantity: qty,
     });
-    trackingSubmitted = true;
-  } catch (err) {
-    trackingError = err.message;
+
+    // Step 2: submit tracking. A failure here is caught, not thrown -- see the
+    // doc comment above for why the purchase still gets written either way.
+    try {
+      await commitsService.submitTracking(userId, connectionId, {
+        trackingCodes: codes,
+        description: `${dealName || 'Cashout deal'} x${qty}`.slice(0, 200),
+        insuredValue,
+      });
+      trackingSubmitted = true;
+    } catch (err) {
+      trackingError = err.message;
+    }
   }
 
   // Step 3: our own books. Status starts at the legacy SOLD baseline, then
@@ -89,21 +117,22 @@ async function logPurchase(userId, {
   // applied to the sale instead of the purchase, since a tracking number is
   // already in hand here (that's always true for a cashout -- the sale is
   // never awaiting a tracking number the way a marketplace sale can be).
-  const platform = await prisma.platform.findUnique({ where: { id: conn.platform_id } });
-  const saleWorkflow = statusTransitions.resolveSaleWorkflow(platform?.workflow_preset);
+  const saleWorkflow = statusTransitions.resolveSaleWorkflow(salePlatform.workflow_preset);
   let saleLegacyStatus = 'SOLD';
   let saleWorkflowData = {
     workflow_type: saleWorkflow,
     workflow_status: statusTransitions.legacyWorkflowStatus(saleLegacyStatus, saleWorkflow),
   };
-  const primaryTracking = trackingCodes[0];
-  const advanced = statusTransitions.trackingAttached(
-    'sale',
-    { status: saleLegacyStatus, ...saleWorkflowData },
-    primaryTracking,
-  );
-  if (advanced.legacy_status) saleLegacyStatus = advanced.legacy_status;
-  saleWorkflowData = { ...saleWorkflowData, ...advanced.data };
+  const primaryTracking = codes[0] || null;
+  if (primaryTracking) {
+    const advanced = statusTransitions.trackingAttached(
+      'sale',
+      { status: saleLegacyStatus, ...saleWorkflowData },
+      primaryTracking,
+    );
+    if (advanced.legacy_status) saleLegacyStatus = advanced.legacy_status;
+    saleWorkflowData = { ...saleWorkflowData, ...advanced.data };
+  }
   const statusChangedAt = new Date();
   if (saleWorkflowData.workflow_status) saleWorkflowData.workflow_status_changed_at = statusChangedAt;
 
@@ -130,7 +159,7 @@ async function logPurchase(userId, {
     const createdSale = await tx.sales.create({
       data: {
         inventory_id: createdInventory.id,
-        platform_id: conn.platform_id,
+        platform_id: salePlatform.id,
         quantity: qty,
         unit_price: Number(payout),
         sale_date: parseLocalDate(saleDate || purchaseDate) || new Date(),
@@ -140,11 +169,11 @@ async function logPurchase(userId, {
       },
     });
 
-    const updatedCommitment = await tx.cashoutCommitment.update({
+    const updatedCommitment = commitment && await tx.cashoutCommitment.update({
       where: { id: commitment.id },
       data: {
         sale_id: createdSale.id,
-        tracking_codes: trackingSubmitted ? trackingCodes : [],
+        tracking_codes: trackingSubmitted ? codes : [],
         tracking_submitted_at: trackingSubmitted ? new Date() : null,
         tracking_error: trackingError,
       },
@@ -159,6 +188,7 @@ async function logPurchase(userId, {
     commitment: updatedCommitment,
     trackingSubmitted,
     trackingError,
+    recordedOnly: recordOnly,
   };
 }
 

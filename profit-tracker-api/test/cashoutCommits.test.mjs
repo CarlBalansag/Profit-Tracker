@@ -176,7 +176,7 @@ describe('cashout commits and tracking', () => {
       const spy = vi.spyOn(ebAdapter, 'createCommit');
 
       await expect(logPurchase(harness.ids.user, { ...basePurchaseFields(), connectionId: conn.id }))
-        .rejects.toThrow('no linked store/platform');
+        .rejects.toThrow('Pick which cashout group');
       expect(spy).not.toHaveBeenCalled();
     });
 
@@ -185,6 +185,83 @@ describe('cashout commits and tracking', () => {
       const spy = vi.spyOn(ebAdapter, 'createCommit');
       await expect(logPurchase(harness.ids.user, { ...basePurchaseFields(), connectionId: conn.id, trackingCodes: [] })).rejects.toThrow('tracking number');
       expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('sells to the cashout group the form picked when the connection has none linked', async () => {
+      const conn = seed();
+      conn.platform_id = null;
+      vi.spyOn(ebAdapter, 'createCommit').mockResolvedValue({ id: 'commit-uuid-1', item_id: 101, quantity: 2, created_at: 1732924800 });
+      vi.spyOn(ebAdapter, 'submitTracking').mockResolvedValue({ received_tracking_codes: [] });
+
+      const result = await logPurchase(harness.ids.user, { ...basePurchaseFields(), connectionId: conn.id, platformId: CASHOUT_PLATFORM_ID });
+      expect(result.sale.platform_id).toBe(CASHOUT_PLATFORM_ID);
+    });
+
+    it("refuses to sell to a store, or to a group that isn't yours, before calling the provider", async () => {
+      const conn = seed();
+      const spy = vi.spyOn(ebAdapter, 'createCommit');
+      harness.db.platform.push({ id: 'other-users-group', user_id: 'someone-else', name: 'Theirs', type: 'Cashout' });
+
+      await expect(logPurchase(harness.ids.user, { ...basePurchaseFields(), connectionId: conn.id, platformId: harness.ids.vendor }))
+        .rejects.toThrow('cashout groups');
+      await expect(logPurchase(harness.ids.user, { ...basePurchaseFields(), connectionId: conn.id, platformId: 'other-users-group' }))
+        .rejects.toMatchObject({ status: expect.any(Number) });
+      expect(spy).not.toHaveBeenCalled();
+      expect(harness.db.inventory).toHaveLength(1); // fixture only
+    });
+
+    describe('Points4Days (no commitments yet)', () => {
+      function seedP4d() {
+        process.env.CASHOUT_KEY_ENCRYPTION_KEY = TEST_ENCRYPTION_KEY;
+        harness.db.platform.push({ id: 'p4d-group', user_id: harness.ids.user, name: 'POINTS4DAYS', type: 'Cashout', fee_pct: 0, workflow_preset: 'CASHOUT' });
+        const conn = {
+          id: 'conn-p4d', user_id: harness.ids.user, provider: 'p4d', display_name: null,
+          encrypted_key: encryptKey(JSON.stringify({ email: 'buyer@example.com', password: 'pw' })), key_last4: 'bu•••@example.com',
+          status: 'active', platform_id: null, last_synced_at: new Date(), last_error: null, created_at: new Date(), updated_at: new Date(),
+        };
+        harness.db.cashoutConnection.push(conn);
+        return conn;
+      }
+
+      it('saves only the purchase and sale, with no tracking number and no call to Points4Days', async () => {
+        const conn = seedP4d();
+        const fetchSpy = vi.fn();
+        vi.stubGlobal('fetch', fetchSpy);
+
+        const result = await logPurchase(harness.ids.user, {
+          ...basePurchaseFields(), connectionId: conn.id, trackingCodes: [], platformId: 'p4d-group', unitPayout: 1222,
+        });
+
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(result.recordedOnly).toBe(true);
+        expect(result.commitment).toBeNull();
+        expect(result.trackingSubmitted).toBe(false);
+        expect(result.sale.platform_id).toBe('p4d-group');
+        expect(result.sale.unit_price).toBe(1222);
+        expect(result.sale.tracking_number).toBeNull();
+        expect(result.sale.status).toBe('SOLD');
+        expect(result.inventory.qty_purchased).toBe(2);
+        expect(harness.db.cashoutCommitment).toHaveLength(0);
+        vi.unstubAllGlobals();
+      });
+
+      it('keeps a tracking number on the sale when one is given', async () => {
+        const conn = seedP4d();
+        const result = await logPurchase(harness.ids.user, {
+          ...basePurchaseFields(), connectionId: conn.id, trackingCodes: [' 1Z999AA10123456784 '], platformId: 'p4d-group',
+        });
+        expect(result.sale.tracking_number).toBe('1Z999AA10123456784');
+        expect(result.sale.status).toBe('SHIPPED_OUT');
+      });
+
+      it('still needs a cashout group, store and payment method', async () => {
+        const conn = seedP4d();
+        await expect(logPurchase(harness.ids.user, { ...basePurchaseFields(), connectionId: conn.id, trackingCodes: [] }))
+          .rejects.toThrow('Pick which cashout group');
+        await expect(logPurchase(harness.ids.user, { ...basePurchaseFields(), connectionId: conn.id, platformId: 'p4d-group', vendorId: '' }))
+          .rejects.toThrow('Store is required');
+        expect(harness.db.inventory).toHaveLength(1); // fixture only
+      });
     });
   });
 });

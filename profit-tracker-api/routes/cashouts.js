@@ -301,6 +301,7 @@ router.post('/connections/:id/log-purchase', isAuthenticated, async (req, res, n
       purchaseDate: b.purchase_date,
       unitPayout: b.unit_payout,
       saleDate: b.sale_date,
+      platformId: b.platform_id,
     });
     res.status(201).json(result);
   } catch (err) {

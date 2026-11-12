@@ -14,6 +14,7 @@ import {
   Star,
   Table,
   LayoutGrid,
+  ExternalLink,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -132,6 +133,7 @@ export default function Cashout() {
             connectionName: res.connection?.displayName || providerNames.get(res.connection?.provider) || res.connection?.provider,
             connectionProvider: res.connection?.provider,
             connectionSupportsCommits: !noCommits.has(res.connection?.provider),
+            connectionPlatformId: res.connection?.platformId || null,
             connectionStatus: res.connection?.status,
             connectionError: res.connection?.lastError,
           });
@@ -1021,25 +1023,25 @@ function StatusChip({ status }) {
 
 // Commits to the cashout, submits tracking, and records the purchase + sale
 // together -- for an item you've already bought and shipped.
+// Cashouts we can't commit to yet (Points4Days) also get a link to the deal on
+// their website, where the commitment and tracking are done.
 function LogPurchaseButton({ deal }) {
   const [open, setOpen] = useState(false);
 
-  if (!deal.connectionSupportsCommits) {
-    if (!deal.dealUrl) return null;
-    return (
-      <a
-        href={deal.dealUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
-      >
-        Open on {deal.connectionName}
-      </a>
-    );
-  }
-
   return (
-    <>
+    <span className="inline-flex items-center gap-1.5">
+      {!deal.connectionSupportsCommits && deal.dealUrl && (
+        <a
+          href={deal.dealUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Open on ${deal.connectionName}`}
+          title={`Open on ${deal.connectionName} to commit`}
+          className="p-1.5 rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
+        >
+          <ExternalLink size={14} />
+        </a>
+      )}
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -1048,21 +1050,42 @@ function LogPurchaseButton({ deal }) {
         Log Purchase
       </button>
       {open && <LogPurchaseModal deal={deal} onClose={() => setOpen(false)} />}
-    </>
+    </span>
   );
 }
+
+const nameKey = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 function LogPurchaseModal({ deal, onClose }) {
   const { data: platforms = [] } = usePlatforms();
   const { data: paymentMethods = [] } = usePaymentMethods();
   const { logPurchase } = useCashoutMutations();
   const vendors = useMemo(() => platforms.filter((p) => p.type === 'Vendor'), [platforms]);
+  const cashoutGroups = useMemo(() => platforms.filter((p) => p.type === 'Cashout'), [platforms]);
+  // Points4Days can't take a commitment from here yet, so this only saves the
+  // purchase and sale. Tracking is optional and is kept on the sale.
+  const recordOnly = !deal.connectionSupportsCommits;
+  // The cashout group the sale goes to: the connection's linked one, or picked
+  // here. Preselected by name (Points4Days -> a "POINTS4DAYS" group).
+  const needsSaleTo = !deal.connectionPlatformId;
+  // The lists can still be loading when the form opens, so the preselected
+  // store and group are worked out on each render until the user picks one.
+  const [pickedSaleTo, setSaleToId] = useState(null);
+  const saleToId = pickedSaleTo ?? (() => {
+    // The cashout's name first ("Points4Days"), then its short id ("p4d").
+    for (const name of [deal.connectionName, deal.connectionProvider].map(nameKey).filter(Boolean)) {
+      const match = cashoutGroups.find((g) => nameKey(g.name) === name);
+      if (match) return match.id;
+    }
+    return '';
+  })();
   const items = deal.items || [];
   const dealStores = useMemo(() => dealStoreNames(deal), [deal]);
 
   const [itemId, setItemId] = useState(items[0]?.id || '');
   const [quantity, setQuantity] = useState(1);
-  const [vendorId, setVendorId] = useState(() => vendors.find((v) => dealStores.includes(v.name))?.id || '');
+  const [pickedVendor, setVendorId] = useState(null);
+  const vendorId = pickedVendor ?? (vendors.find((v) => dealStores.map(nameKey).includes(nameKey(v.name)))?.id || '');
   const [paymentMethodId, setPaymentMethodId] = useState('');
   const [unitCost, setUnitCost] = useState(deal.retail || 0);
   const [salesTax, setSalesTax] = useState(0);
@@ -1086,7 +1109,8 @@ function LogPurchaseModal({ deal, onClose }) {
     if (!itemId) return setError('Pick which item you bought.');
     if (!vendorId) return setError('Pick the store you bought it from.');
     if (!paymentMethodId) return setError('Pick the card or account you paid with.');
-    if (!trackingNumber.trim()) return setError('A tracking number is required -- this is for an item that has already shipped.');
+    if (needsSaleTo && !saleToId) return setError('Pick which cashout group you sold it to.');
+    if (!recordOnly && !trackingNumber.trim()) return setError('A tracking number is required -- this is for an item that has already shipped.');
 
     try {
       const result = await logPurchase.mutateAsync({
@@ -1096,8 +1120,9 @@ function LogPurchaseModal({ deal, onClose }) {
         deal_name: deal.name,
         item_name: selectedItem?.name,
         quantity,
-        tracking_codes: [trackingNumber.trim()],
-        insured_value: insuredValue ? Number(insuredValue) : undefined,
+        tracking_codes: trackingNumber.trim() ? [trackingNumber.trim()] : [],
+        insured_value: !recordOnly && insuredValue ? Number(insuredValue) : undefined,
+        platform_id: needsSaleTo ? saleToId : undefined,
         store: selectedVendor.name,
         payment_method: selectedPaymentMethod.name,
         unit_cost: Number(unitCost) || 0,
@@ -1108,7 +1133,11 @@ function LogPurchaseModal({ deal, onClose }) {
         unit_payout: deal.payout,
         purchase_date: purchaseDate,
       });
-      if (result.tracking_submitted) {
+      if (recordOnly) {
+        toast.success('Purchase and sale saved.', {
+          description: `Commit and send tracking on ${deal.connectionName} too.`,
+        });
+      } else if (result.trackingSubmitted ?? result.tracking_submitted) {
         toast.success('Committed and logged -- tracking sent to the cashout.');
       } else {
         toast.success('Committed and logged, but tracking failed to send.', {
@@ -1138,9 +1167,25 @@ function LogPurchaseModal({ deal, onClose }) {
           </button>
         </div>
 
-        <p className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
-          This commits to the cashout at today's payout price -- a real, binding pledge -- and submits your tracking number. Only use this once you've actually shipped the item.
-        </p>
+        {recordOnly ? (
+          <p className="text-[11px] text-[var(--dp-text-secondary)] bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2">
+            This saves the purchase and its sale to {deal.connectionName} at ${formatMoney(deal.payout)} each, in Profit Tracker only. It doesn't commit or send tracking to {deal.connectionName} -- do that on their website.
+          </p>
+        ) : (
+          <p className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+            This commits to the cashout at today's payout price -- a real, binding pledge -- and submits your tracking number. Only use this once you've actually shipped the item.
+          </p>
+        )}
+
+        {needsSaleTo && (
+          <div className="space-y-1.5">
+            <label htmlFor="lp-saleto" className="text-[11px] text-[var(--dp-text-label)]">Sold to</label>
+            <select id="lp-saleto" value={saleToId} onChange={(e) => setSaleToId(e.target.value)} className={SELECT_CLASS + ' w-full'}>
+              <option value="">Select a cashout group…</option>
+              {cashoutGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+          </div>
+        )}
 
         {items.length > 1 && (
           <div className="space-y-1.5">
@@ -1200,18 +1245,18 @@ function LogPurchaseModal({ deal, onClose }) {
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="lp-tracking" className="text-[11px] text-[var(--dp-text-label)]">Tracking number</label>
+          <label htmlFor="lp-tracking" className="text-[11px] text-[var(--dp-text-label)]">Tracking number{recordOnly ? ' (optional)' : ''}</label>
           <input id="lp-tracking" type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
             placeholder="1Z999AA10123456784"
             className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none" />
         </div>
 
-        <div className="space-y-1.5">
+        {!recordOnly && <div className="space-y-1.5">
           <label htmlFor="lp-insured" className="text-[11px] text-[var(--dp-text-label)]">Insured value (optional, $200–$1,500)</label>
           <input id="lp-insured" type="number" min="200" max="1500" step="0.01" value={insuredValue} onChange={(e) => setInsuredValue(e.target.value)}
             placeholder="Leave blank to skip insurance"
             className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none" />
-        </div>
+        </div>}
 
         <div className="space-y-1.5">
           <label htmlFor="lp-date" className="text-[11px] text-[var(--dp-text-label)]">Purchase date</label>
@@ -1229,7 +1274,9 @@ function LogPurchaseModal({ deal, onClose }) {
           <button type="submit" disabled={logPurchase.isPending}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90 disabled:opacity-50">
             {logPurchase.isPending && <RefreshCw size={12} className="animate-spin" />}
-            {logPurchase.isPending ? 'Committing…' : 'Commit & Log Purchase'}
+            {recordOnly
+              ? (logPurchase.isPending ? 'Saving…' : 'Log Purchase')
+              : (logPurchase.isPending ? 'Committing…' : 'Commit & Log Purchase')}
           </button>
         </div>
       </form>

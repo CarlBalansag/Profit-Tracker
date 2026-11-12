@@ -82,7 +82,16 @@ vi.mock('../hooks/useApi', () => ({
   useCashoutDeals: () => ({ data: currentDeals, isLoading: false, error: null, refetch: refetchDeals, isFetching: false, ...dealsState }),
   useCashoutMutations: () => mockMutations,
   useCashoutCommitments: () => ({ data: currentCommitments, isLoading: false, error: null }),
-  usePlatforms: () => ({ data: [{ id: 'vendor-1', name: 'Amazon', type: 'Vendor', tax_exempt_place: false }], isLoading: false, error: null }),
+  usePlatforms: () => ({
+    data: [
+      { id: 'vendor-1', name: 'Amazon', type: 'Vendor', tax_exempt_place: false },
+      { id: 'group-eb', name: 'EB', type: 'Cashout' },
+      { id: 'group-p4d-short', name: 'P4D', type: 'Cashout' }, // listed first: the full name still wins
+      { id: 'group-p4d', name: 'POINTS4DAYS', type: 'Cashout' },
+    ],
+    isLoading: false,
+    error: null,
+  }),
   usePaymentMethods: () => ({ data: [{ id: 'card-1', name: 'QA Card', default_cashback_rate: 2 }], isLoading: false, error: null }),
 }));
 
@@ -929,6 +938,7 @@ describe('Cashout Page', () => {
         store: 'Amazon',
         payment_method: 'QA Card',
         unit_payout: 1140,
+        platform_id: 'group-eb', // no group linked: picked by name in the form
       }));
       expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Committed'));
       expect(screen.queryByRole('heading', { name: 'Log Purchase' })).not.toBeInTheDocument();
@@ -956,6 +966,65 @@ describe('Cashout Page', () => {
     });
   });
 
+  describe('Log Purchase for Points4Days', () => {
+    const p4dConnection = { ...mockConnections[0], id: 'conn-p4d', provider: 'p4d', displayName: null, platformId: null };
+    beforeEach(() => {
+      currentProviders = [...mockProviders, { id: 'p4d', name: 'Points4Days', credentialType: 'login', supportsCommits: false }];
+      currentDeals = {
+        results: [{
+          connection: p4dConnection,
+          deals: [{ id: 'p1', name: 'PS5 Pro', payout: 1222, retail: 899.99, dealUrl: 'https://www.points4days.com/f/x', items: [{ id: '9', name: 'PS5 Pro' }] }],
+        }],
+      };
+    });
+    const openForm = () => {
+      render(<MemoryRouter><Cashout /></MemoryRouter>);
+      fireEvent.click(screen.getByRole('button', { name: 'Log Purchase' }));
+      fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+      fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-1' } });
+    };
+
+    it('saves without a tracking number, says it does not commit, and sells to the matching group', async () => {
+      openForm();
+      expect(screen.getByText(/doesn't commit or send tracking to Points4Days/)).toBeInTheDocument();
+      expect(screen.getByLabelText('Sold to')).toHaveValue('group-p4d');
+      expect(screen.getByLabelText('Tracking number (optional)')).toBeInTheDocument();
+      expect(screen.queryByLabelText(/Insured value/)).not.toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(screen.getAllByRole('button', { name: 'Log Purchase' }).at(-1)); // the form's own button
+      });
+
+      expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+        connectionId: 'conn-p4d',
+        deal_id: 'p1',
+        tracking_codes: [],
+        insured_value: undefined,
+        unit_payout: 1222,
+        platform_id: 'group-p4d',
+      }));
+      expect(toast.success).toHaveBeenCalledWith('Purchase and sale saved.', expect.objectContaining({
+        description: expect.stringContaining('Points4Days'),
+      }));
+    });
+
+    it('asks which group the sale goes to when none matches', async () => {
+      openForm();
+      fireEvent.change(screen.getByLabelText('Sold to'), { target: { value: '' } });
+      await act(async () => {
+        fireEvent.click(screen.getAllByRole('button', { name: 'Log Purchase' }).at(-1));
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent('Pick which cashout group');
+      expect(mockMutations.logPurchase.mutateAsync).not.toHaveBeenCalled();
+    });
+
+    it('does not ask for a group when the connection already has one', () => {
+      currentDeals.results[0].connection = { ...p4dConnection, platformId: 'group-p4d' };
+      openForm();
+      expect(screen.queryByLabelText('Sold to')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Commitments', () => {
     it('shows the active commitment count and toggles the panel', () => {
       currentCommitments = [
@@ -978,7 +1047,7 @@ describe('Cashout Page', () => {
     });
   });
 
-  it('links a Points4Days deal to its website instead of offering Log Purchase', () => {
+  it('offers Log Purchase on a Points4Days deal, next to a link to the deal on its website', () => {
     currentProviders = [...mockProviders, { id: 'p4d', name: 'Points4Days', credentialType: 'login', supportsCommits: false }];
     const p4dConnection = { ...mockConnections[0], id: 'conn-p4d', provider: 'p4d', displayName: null };
     currentDeals = {
@@ -993,7 +1062,7 @@ describe('Cashout Page', () => {
       </MemoryRouter>
     );
 
-    expect(screen.queryByRole('button', { name: 'Log Purchase' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Log Purchase' }).length).toBeGreaterThan(0);
     const links = screen.getAllByRole('link', { name: 'Open on Points4Days' });
     expect(links[0]).toHaveAttribute('href', 'https://www.points4days.com/p/it@deals/deal/9');
     expect(screen.getAllByText('Points4Days').length).toBeGreaterThan(0);
@@ -1034,7 +1103,7 @@ describe('Cashout Page', () => {
       expect(row.getAllByText('$1,222.00').length).toBe(2); // best payout, in the Cashout and Payout columns
       expect(row.getByText('+$322.01')).toBeInTheDocument(); // best payout against EB's retail
       expect(row.getByText(/ends/)).toBeInTheDocument();
-      expect(row.getByRole('button', { name: 'Log Purchase' })).toBeInTheDocument();
+      expect(row.getAllByRole('button', { name: 'Log Purchase' })).toHaveLength(2); // one per cashout
       expect(row.getByRole('link', { name: 'Open on Points4Days' })).toHaveAttribute('href', p4dDeal.dealUrl);
       expect(row.getAllByRole('link', { name: /Buy at Best Buy/ })).toHaveLength(1);
       expect(screen.getByText('Live Deals').parentElement).toHaveTextContent('2');
@@ -1052,7 +1121,7 @@ describe('Cashout Page', () => {
       const rows = screen.getAllByRole('row').slice(1);
       expect(rows).toHaveLength(1);
       expect(within(rows[0]).queryByText('EB Primary')).not.toBeInTheDocument();
-      expect(within(rows[0]).queryByRole('button', { name: 'Log Purchase' })).not.toBeInTheDocument();
+      expect(within(rows[0]).getAllByRole('button', { name: 'Log Purchase' })).toHaveLength(1);
     });
 
     it('merges only single-product deals from different cashouts', () => {
