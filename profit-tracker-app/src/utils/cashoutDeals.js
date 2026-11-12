@@ -121,6 +121,61 @@ export function dealStoreLinks(deal) {
   });
 }
 
+// The UPCs of a single-product deal. Deals with several items (bundles, "pick a
+// color") return none, so they're never merged with another cashout's deal.
+function singleProductUpcs(deal) {
+  const items = Array.isArray(deal.items) ? deal.items : [];
+  if (items.length !== 1) return [];
+  return [...new Set((items[0].upcs || []).map((upc) => String(upc).trim()).filter(Boolean))];
+}
+
+// One entry per product. When different cashouts list the same product (a
+// shared UPC), they become one entry with every cashout's deal in `offers`,
+// highest payout first. The entry itself is the best-paying deal, so payout,
+// profit and sorting use it. Its retail price comes from another offer when the
+// best one has none. Deals from the same cashout are never merged.
+export function groupDealsByProduct(deals) {
+  const groups = [];
+  const byUpc = new Map();
+
+  for (const deal of deals) {
+    const upcs = singleProductUpcs(deal);
+    const group = upcs
+      .map((upc) => byUpc.get(upc))
+      .find((candidate) => candidate && !candidate.some((offer) => offer.connectionId === deal.connectionId));
+    if (group) {
+      group.push(deal);
+    } else {
+      groups.push([deal]);
+    }
+    const target = group || groups[groups.length - 1];
+    for (const upc of upcs) if (!byUpc.has(upc)) byUpc.set(upc, target);
+  }
+
+  return groups.map((offers) => {
+    if (offers.length === 1) return { ...offers[0], offers };
+    const sorted = [...offers].sort((a, b) => (Number(b.payout) || 0) - (Number(a.payout) || 0));
+    const best = sorted[0];
+    const retail = Number(best.retail) > 0 ? best.retail : sorted.find((offer) => Number(offer.retail) > 0)?.retail ?? best.retail;
+    const merged = { ...best, retail, offers: sorted };
+    return { ...merged, estimatedProfit: estimateDealProfit(merged) };
+  });
+}
+
+// The buy links for a product entry: every offer's links, one per store, so the
+// same store isn't shown twice when two cashouts both link to it.
+export function groupStoreLinks(group) {
+  const offers = group.offers || [group];
+  if (offers.length === 1) return dealStoreLinks(offers[0]);
+  const seen = new Set();
+  return offers.flatMap(dealStoreLinks).filter((link) => {
+    const key = String(link.name || link.url).toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // Every store a deal can be bought at, once each, for the store filter.
 export function dealStoreNames(deal) {
   return [...new Set(dealStoreLinks(deal).map((link) => link.name).filter(Boolean))];

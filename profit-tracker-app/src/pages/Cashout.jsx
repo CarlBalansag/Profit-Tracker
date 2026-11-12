@@ -33,12 +33,13 @@ import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import {
   dealConditionLabels,
   dealLimitLabel,
-  dealStoreLinks,
   dealStoreNames,
   estimateDealProfit,
   formatDealExpiry,
   formatDealProfit,
   formatLastSynced,
+  groupDealsByProduct,
+  groupStoreLinks,
   isDealExpired,
   matchesRetailCategory,
   parseDealNotes,
@@ -145,6 +146,11 @@ export default function Cashout() {
     [allDeals],
   );
   const expiredCount = useMemo(() => allDeals.filter((deal) => isDealExpired(deal)).length, [allDeals]);
+  // Live products, counting one listed by two cashouts once, like the table does.
+  const liveProductCount = useMemo(
+    () => groupDealsByProduct(allDeals.filter((deal) => !isDealExpired(deal))).length,
+    [allDeals],
+  );
 
   const [showCommitments, setShowCommitments] = useState(false);
   const { data: commitments = [] } = useCashoutCommitments();
@@ -152,7 +158,7 @@ export default function Cashout() {
 
   // Filter & Sort
   const filteredDeals = useMemo(() => {
-    return allDeals.filter((deal) => {
+    const matching = allDeals.filter((deal) => {
       // Expired deals can't be acted on, so they stay out of the way until asked for
       if (!showExpired && isDealExpired(deal)) return false;
 
@@ -176,7 +182,9 @@ export default function Cashout() {
       }
 
       return true;
-    }).sort((a, b) => {
+    });
+    // One row per product: the same product from several cashouts shares a row.
+    return groupDealsByProduct(matching).sort((a, b) => {
       // Expired deals can't be bought, so they sit below every live one.
       const expiredOrder = isDealExpired(a) - isDealExpired(b);
       if (expiredOrder !== 0) return expiredOrder;
@@ -364,7 +372,7 @@ export default function Cashout() {
           <Layers size={15} className={!showCommitments ? 'text-[var(--dp-accent)]' : ''} />
           <span>Live Deals</span>
           <span className="text-xs px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)]">
-            {allDeals.length - expiredCount}
+            {liveProductCount}
           </span>
         </button>
         <button
@@ -491,7 +499,7 @@ export default function Cashout() {
                 <option value="all">All Cashouts</option>
                 {connections.map((c) => (
                   <option key={c.id} value={c.provider}>
-                    {c.displayName || c.provider}
+                    {c.displayName || providers.find((p) => p.id === c.provider)?.name || c.provider}
                   </option>
                 ))}
               </select>
@@ -583,12 +591,12 @@ export default function Cashout() {
                         >
                           {/* Deal Info */}
                           <td className="py-3 px-4 max-w-[18rem]">
-                            <DealSummary deal={deal} />
+                            <DealSummary deal={summaryDeal(deal)} />
                           </td>
 
                           {/* Cashout */}
                           <td className="py-3 px-3">
-                            <CashoutName name={deal.connectionName} />
+                            <CashoutOffers deal={deal} />
                           </td>
 
                           {/* Payout */}
@@ -620,7 +628,7 @@ export default function Cashout() {
 
                           {/* Actions */}
                           <td className="py-3 pl-3 pr-6 w-px whitespace-nowrap text-right">
-                            {!expired && <LogPurchaseButton deal={deal} />}
+                            {!expired && <OfferActions deal={deal} />}
                           </td>
                         </tr>
                       );
@@ -776,10 +784,63 @@ function CashoutName({ name }) {
   );
 }
 
+// A product row shows the deal of the cashout you can log a purchase with,
+// since its note carries the coupon, address and limits that purchase needs.
+// Otherwise it's the best-paying deal.
+function summaryDeal(deal) {
+  const offers = deal.offers || [deal];
+  return offers.length > 1 ? offers.find((offer) => offer.connectionSupportsCommits) || deal : deal;
+}
+
+// Which cashouts pay for this product. With several, each shows its own payout,
+// best first.
+function CashoutOffers({ deal }) {
+  const offers = deal.offers || [deal];
+  if (offers.length === 1) return <CashoutName name={deal.connectionName} />;
+  return (
+    <div className="flex flex-col items-start gap-1">
+      {offers.map((offer, index) => (
+        <div key={`${offer.connectionId}-${offer.id}`} className="flex items-center gap-1.5 whitespace-nowrap">
+          <CashoutName name={offer.connectionName} />
+          <span className={`tabular-nums text-[12px] ${index === 0 ? 'font-semibold text-emerald-400' : 'text-[var(--dp-text-secondary)]'}`}>
+            ${formatMoney(offer.payout)}
+          </span>
+          <OfferEnds expiresAt={offer.expiresAt} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Each cashout's deal can end on a different day, so a shared row says when
+// each one ends next to its payout.
+function OfferEnds({ expiresAt }) {
+  const expiry = formatDealExpiry(expiresAt);
+  if (!expiry) return null;
+  return (
+    <span className={`text-[12px] ${expiry.urgent || expiry.expired ? 'text-amber-400' : 'text-[var(--dp-text-label)]'}`}>
+      · {expiry.expired ? 'ended' : 'ends'} {expiry.date}
+    </span>
+  );
+}
+
+// One action per cashout: Log Purchase, or a link to the cashout's website.
+function OfferActions({ deal }) {
+  const offers = deal.offers || [deal];
+  if (offers.length === 1) return <LogPurchaseButton deal={deal} />;
+  return (
+    <div className="flex flex-col items-end gap-1.5">
+      {offers.map((offer) => (
+        <LogPurchaseButton key={`${offer.connectionId}-${offer.id}`} deal={offer} />
+      ))}
+    </div>
+  );
+}
+
 function StoreLinks({ deal, large = false }) {
   return (
     <div className={`flex flex-wrap items-center gap-2 ${large ? '' : 'min-w-[120px]'}`}>
-      {dealStoreLinks(deal).map((link) => (
+      {groupStoreLinks(deal).map((link) => (
         <StoreLink key={link.url} link={link} large={large} />
       ))}
     </div>
@@ -1175,7 +1236,7 @@ function DealCard({ deal }) {
 
   return (
     <article className={`p-3.5 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-xs flex flex-col gap-3 h-full ${expired ? 'opacity-60' : ''}`}>
-      <DealSummary deal={deal} />
+      <DealSummary deal={summaryDeal(deal)} />
 
       <dl className="grid grid-cols-3 gap-2">
         <div>
@@ -1198,14 +1259,14 @@ function DealCard({ deal }) {
       <div className="mt-auto space-y-2 pt-2 border-t border-[color:var(--dp-border)]">
         <div className="flex items-center gap-3">
           <DealExpiry expiresAt={deal.expiresAt} />
-          <CashoutName name={deal.connectionName} />
+          <CashoutOffers deal={deal} />
         </div>
         {expired ? (
           <span className="text-[var(--dp-text-label)]">—</span>
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-3">
             <StoreLinks deal={deal} large />
-            <LogPurchaseButton deal={deal} />
+            <OfferActions deal={deal} />
           </div>
         )}
       </div>

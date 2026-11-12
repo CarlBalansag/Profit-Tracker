@@ -12,6 +12,8 @@ import {
   formatDealExpiry,
   formatDealProfit,
   formatLastSynced,
+  groupDealsByProduct,
+  groupStoreLinks,
   isDealExpired,
   parseDealNotes,
   storeLogoUrl,
@@ -994,5 +996,90 @@ describe('Cashout Page', () => {
     const links = screen.getAllByRole('link', { name: 'Open on Points4Days' });
     expect(links[0]).toHaveAttribute('href', 'https://www.points4days.com/p/it@deals/deal/9');
     expect(screen.getAllByText('Points4Days').length).toBeGreaterThan(0);
+  });
+
+  describe('same product on several cashouts', () => {
+    const p4dProvider = { id: 'p4d', name: 'Points4Days', credentialType: 'login', supportsCommits: false };
+    const p4dConnection = { ...mockConnections[0], id: 'conn-p4d', provider: 'p4d', displayName: null };
+    const ebDeal = {
+      id: 'eb-1', name: 'PS5 Pro', payout: 1140, retail: 899.99, notes: 'Use Code: SAVE5',
+      expiresAt: new Date(Date.now() + 10 * 86400000).toISOString(),
+      items: [{ id: 'i1', name: 'PS5 Pro', upcs: ['711719024538'], purchaseLinks: [{ name: 'Best Buy', url: 'https://bestbuy.com/eb' }] }],
+    };
+    const p4dDeal = {
+      id: 'p4d-1', name: 'Sony PlayStation 5 Pro Console', payout: 1222, retail: null,
+      dealUrl: 'https://www.points4days.com/f/it@deals/x',
+      items: [{ id: '9', name: 'PS5 Pro', upcs: ['711719024538'], purchaseLinks: [{ name: 'Best Buy', url: 'https://bestbuy.com/p4d' }, { name: 'Walmart', url: 'https://walmart.com/p4d' }] }],
+    };
+
+    it('shows one row with both cashouts, each with its payout and action', () => {
+      currentProviders = [...mockProviders, p4dProvider];
+      currentDeals = {
+        results: [
+          { connection: mockConnections[0], deals: [ebDeal] },
+          { connection: p4dConnection, deals: [p4dDeal, { id: 'p4d-2', name: 'Only P4D', payout: 50, items: [] }] },
+        ],
+      };
+      render(<MemoryRouter><Cashout /></MemoryRouter>);
+
+      const rows = screen.getAllByRole('row').slice(1);
+      expect(rows).toHaveLength(2);
+      const row = within(rows[0]);
+      expect(row.getByText('PS5 Pro')).toBeInTheDocument(); // EB's deal, which carries the coupon
+      expect(row.getByText('Code SAVE5')).toBeInTheDocument();
+      expect(row.getByText('EB Primary')).toBeInTheDocument();
+      expect(row.getByText('Points4Days')).toBeInTheDocument();
+      expect(row.getByText('$1,140.00')).toBeInTheDocument();
+      expect(row.getAllByText('$1,222.00').length).toBe(2); // best payout, in the Cashout and Payout columns
+      expect(row.getByText('+$322.01')).toBeInTheDocument(); // best payout against EB's retail
+      expect(row.getByText(/ends/)).toBeInTheDocument();
+      expect(row.getByRole('button', { name: 'Log Purchase' })).toBeInTheDocument();
+      expect(row.getByRole('link', { name: 'Open on Points4Days' })).toHaveAttribute('href', p4dDeal.dealUrl);
+      expect(row.getAllByRole('link', { name: /Buy at Best Buy/ })).toHaveLength(1);
+      expect(screen.getByText('Live Deals').parentElement).toHaveTextContent('2');
+    });
+
+    it('filters by cashout before merging, so each cashout still shows on its own', () => {
+      currentProviders = [...mockProviders, p4dProvider];
+      currentConnections = [...mockConnections, p4dConnection];
+      currentDeals = { results: [{ connection: mockConnections[0], deals: [ebDeal] }, { connection: p4dConnection, deals: [p4dDeal] }] };
+      render(<MemoryRouter><Cashout /></MemoryRouter>);
+      const filter = screen.getByDisplayValue('All Cashouts');
+      expect(within(filter).getByRole('option', { name: 'Points4Days' })).toBeInTheDocument();
+      fireEvent.change(filter, { target: { value: 'p4d' } });
+
+      const rows = screen.getAllByRole('row').slice(1);
+      expect(rows).toHaveLength(1);
+      expect(within(rows[0]).queryByText('EB Primary')).not.toBeInTheDocument();
+      expect(within(rows[0]).queryByRole('button', { name: 'Log Purchase' })).not.toBeInTheDocument();
+    });
+
+    it('merges only single-product deals from different cashouts', () => {
+      const deal = (connectionId, id, upcs, payout, extra = {}) => ({
+        connectionId, id, payout, retail: 100, items: [{ id, upcs }], ...extra,
+      });
+      const groups = groupDealsByProduct([
+        deal('eb', 'a', ['1'], 120),
+        deal('p4d', 'b', ['1'], 130),
+        deal('eb', 'c', ['1'], 125), // same cashout as a: its own row
+        deal('p4d', 'd', ['2'], 90, { items: [{ id: 'x', upcs: ['2'] }, { id: 'y', upcs: ['3'] }] }), // bundle
+        deal('eb', 'e', ['2'], 95),
+        deal('eb', 'f', [], 10),
+        deal('p4d', 'g', [], 10),
+      ]);
+      expect(groups.map((g) => g.offers.map((o) => o.id))).toEqual([['b', 'a'], ['c'], ['d'], ['e'], ['f'], ['g']]);
+      expect(groups[0].payout).toBe(130);
+      expect(groups[0].estimatedProfit).toEqual({ amount: 30, pct: 30 });
+    });
+
+    it('borrows retail from another cashout and lists each store once', () => {
+      const [group] = groupDealsByProduct([
+        { ...p4dDeal, connectionId: 'p4d' },
+        { ...ebDeal, connectionId: 'eb' },
+      ]);
+      expect(group.retail).toBe(899.99);
+      expect(group.offers.map((o) => o.id)).toEqual(['p4d-1', 'eb-1']);
+      expect(groupStoreLinks(group).map((l) => l.name)).toEqual(['Best Buy', 'Walmart']);
+    });
   });
 });
