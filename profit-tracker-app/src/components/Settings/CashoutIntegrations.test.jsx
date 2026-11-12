@@ -150,4 +150,49 @@ describe('CashoutIntegrations', () => {
 
     expect(mutations.testConnection.mutateAsync).toHaveBeenCalledWith('conn-1');
   });
+
+  describe('a cashout with no API (Points4Days)', () => {
+    beforeEach(() => {
+      providers = [{ id: 'p4d', name: 'Points4Days', credentialType: 'login', supportsCommits: false }];
+    });
+
+    it('connects with an email and a password sent exactly as typed', async () => {
+      render(<CashoutIntegrations />);
+      expect(screen.queryByLabelText(/API key/)).not.toBeInTheDocument();
+      const password = screen.getByLabelText('Points4Days password');
+      expect(password).toHaveAttribute('type', 'password');
+
+      fireEvent.change(screen.getByLabelText('Points4Days email'), { target: { value: ' buyer@example.com ' } });
+      fireEvent.change(password, { target: { value: ' pass word ' } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Sign In & Connect' }));
+      });
+
+      expect(mutations.addConnection.mutateAsync).toHaveBeenCalledWith({ provider: 'p4d', email: 'buyer@example.com', password: ' pass word ' });
+    });
+
+    it('needs both fields before calling the API', async () => {
+      render(<CashoutIntegrations />);
+      fireEvent.change(screen.getByLabelText('Points4Days email'), { target: { value: 'buyer@example.com' } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Sign In & Connect' }));
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent('Email and password are required.');
+      expect(mutations.addConnection.mutateAsync).not.toHaveBeenCalled();
+    });
+
+    it('shows the masked email and replaces the login', async () => {
+      connections = [{ id: 'conn-2', provider: 'p4d', keyLast4: 'bu•••@example.com', status: 'active', lastError: null }];
+      render(<CashoutIntegrations />);
+      expect(screen.getByText('bu•••@example.com')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Replace Login' }));
+      fireEvent.change(screen.getByLabelText('Points4Days email'), { target: { value: 'new@example.com' } });
+      fireEvent.change(screen.getByLabelText('Points4Days password'), { target: { value: 'pw' } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Sign In & Save' }));
+      });
+      expect(mutations.updateConnection.mutateAsync).toHaveBeenCalledWith({ id: 'conn-2', email: 'new@example.com', password: 'pw' });
+    });
+  });
 });

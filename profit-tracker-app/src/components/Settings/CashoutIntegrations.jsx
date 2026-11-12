@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { KeyRound, Plug, RefreshCw, Trash2 } from 'lucide-react';
+import { KeyRound, Mail, Plug, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCashoutConnections, useCashoutMutations, useCashoutProviders } from '../../hooks/useApi';
 
@@ -22,7 +22,7 @@ export function CashoutIntegrations() {
       <div>
         <h3 className="text-sm font-semibold text-white">Integrations</h3>
         <p className="text-xs text-gray-500 mt-0.5">
-          Connect an API key to see that cashout's live deals on the Cashout page.
+          Connect a cashout to see its live deals on the Cashout page.
         </p>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -93,20 +93,93 @@ function KeyForm({ label, submitLabel, onSubmit, onCancel }) {
   );
 }
 
+const inputClass = 'w-full px-3 py-2 text-sm rounded-lg border border-white/10 bg-[#0d0d18] text-white placeholder-gray-600 focus:outline-none focus:border-green-500/50';
+
+// For cashouts with no API (Points4Days): the user's own website login. The
+// password is sent as typed, never trimmed.
+function LoginForm({ providerName, submitLabel, onSubmit, onCancel }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!email.trim() || !password) {
+      setError('Email and password are required.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onSubmit({ email: email.trim(), password });
+      setEmail('');
+      setPassword('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-2">
+      <input
+        type="email"
+        aria-label={`${providerName} email`}
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder={`${providerName} email`}
+        autoComplete="off"
+        className={inputClass}
+      />
+      <input
+        type="password"
+        aria-label={`${providerName} password`}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder="Password"
+        autoComplete="new-password"
+        className={inputClass}
+      />
+      {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={saving}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+        >
+          {saving && <RefreshCw size={12} className="animate-spin" />}
+          {saving ? 'Signing In…' : submitLabel}
+        </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel} disabled={saving} className="px-3 py-1.5 text-xs text-gray-400 hover:text-white">
+            Cancel
+          </button>
+        )}
+      </div>
+      <p className="text-[11px] text-gray-600">
+        {providerName} has no API, so Profit Tracker signs in as you to read its deals. Your login is checked, then stored encrypted. Deals only for now: commit on the {providerName} website.
+      </p>
+    </form>
+  );
+}
+
 function IntegrationCard({ provider, connection }) {
+  const usesLogin = provider.credentialType === 'login';
   const { addConnection, updateConnection, deleteConnection, testConnection } = useCashoutMutations();
   const [replacing, setReplacing] = useState(false);
   const [testing, setTesting] = useState(false);
 
-  const connect = async (apiKey) => {
-    await addConnection.mutateAsync({ provider: provider.id, api_key: apiKey });
+  const connect = async (secret) => {
+    await addConnection.mutateAsync({ provider: provider.id, ...(usesLogin ? secret : { api_key: secret }) });
     toast.success(`${provider.name} connected.`);
   };
 
-  const replaceKey = async (apiKey) => {
-    await updateConnection.mutateAsync({ id: connection.id, api_key: apiKey });
+  const replaceKey = async (secret) => {
+    await updateConnection.mutateAsync({ id: connection.id, ...(usesLogin ? secret : { api_key: secret }) });
     setReplacing(false);
-    toast.success('API key updated.');
+    toast.success(usesLogin ? 'Login updated.' : 'API key updated.');
   };
 
   const test = async () => {
@@ -124,7 +197,7 @@ function IntegrationCard({ provider, connection }) {
   };
 
   const remove = async () => {
-    if (!window.confirm(`Remove your ${provider.name} key? Its deals will leave the Cashout page, and its saved payout records will be deleted.`)) return;
+    if (!window.confirm(`Remove your ${provider.name} ${usesLogin ? 'login' : 'key'}? Its deals will leave the Cashout page, and its saved payout records will be deleted.`)) return;
     try {
       await deleteConnection.mutateAsync(connection.id);
       toast.success(`${provider.name} removed.`);
@@ -152,20 +225,29 @@ function IntegrationCard({ provider, connection }) {
       </div>
 
       {!connection ? (
-        <KeyForm label={`${provider.name} API key`} submitLabel="Verify & Connect" onSubmit={connect} />
+        usesLogin
+          ? <LoginForm providerName={provider.name} submitLabel="Sign In & Connect" onSubmit={connect} />
+          : <KeyForm label={`${provider.name} API key`} submitLabel="Verify & Connect" onSubmit={connect} />
       ) : (
         <>
           <div className="text-xs text-gray-400">
             <div className="flex items-center gap-1.5 font-mono">
-              <KeyRound size={12} className="text-gray-500" />
-              <span>••••••••{connection.keyLast4}</span>
+              {usesLogin ? <Mail size={12} className="text-gray-500" /> : <KeyRound size={12} className="text-gray-500" />}
+              <span>{usesLogin ? connection.keyLast4 : `••••••••${connection.keyLast4}`}</span>
             </div>
             {connection.lastError && (
               <p className="mt-1.5 text-red-400 break-words">{connection.lastError}</p>
             )}
           </div>
 
-          {replacing ? (
+          {replacing && usesLogin ? (
+            <LoginForm
+              providerName={provider.name}
+              submitLabel="Sign In & Save"
+              onSubmit={replaceKey}
+              onCancel={() => setReplacing(false)}
+            />
+          ) : replacing ? (
             <KeyForm
               label={`New ${provider.name} API key`}
               submitLabel="Verify & Save"
@@ -187,7 +269,7 @@ function IntegrationCard({ provider, connection }) {
                 onClick={() => setReplacing(true)}
                 className="px-3 py-1.5 rounded-lg border border-white/10 text-xs text-gray-300 hover:bg-white/5"
               >
-                Replace Key
+                {usesLogin ? 'Replace Login' : 'Replace Key'}
               </button>
               <button
                 type="button"

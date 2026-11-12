@@ -12,6 +12,9 @@ const notFound = (label) => Object.assign(new Error(`${label} not found or acces
 async function connectionAndAdapter(userId, connectionId) {
   const conn = await getConnection(userId, connectionId);
   const adapter = getAdapter(conn.provider);
+  if (typeof adapter.createCommit !== 'function') {
+    throw Object.assign(new Error(`Commitments and tracking aren't supported for ${adapter.name} yet. Commit on its website.`), { status: 400 });
+  }
   return { conn, adapter, rawKey: decryptKey(conn.encrypted_key) };
 }
 

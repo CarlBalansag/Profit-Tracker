@@ -279,7 +279,10 @@ describe('Cashout Connection CRUD & Tenant Isolation', () => {
   it('lists every cashout to every signed-in user, with no allow-list to pass first', async () => {
     const providersRes = await request('GET', '/api/cashouts/providers');
     expect(providersRes.status).toBe(200);
-    expect(providersRes.body).toEqual([{ id: 'eb', name: 'ElectronicsBuyer' }]);
+    expect(providersRes.body).toEqual([
+      { id: 'eb', name: 'ElectronicsBuyer', credentialType: 'api_key', supportsCommits: true },
+      { id: 'p4d', name: 'Points4Days', credentialType: 'login', supportsCommits: false },
+    ]);
   });
 
   it('grants cashout access automatically the first time a key passes the real check', async () => {
@@ -720,7 +723,7 @@ describe('Background Scheduler & /internal/cashouts/sync', () => {
     // an encryption key or sync secret, only on the provider's own key check.
     const providersRes = await request('GET', '/api/cashouts/providers');
     expect(providersRes.status).toBe(200);
-    expect(providersRes.body).toHaveLength(1);
+    expect(providersRes.body).toHaveLength(2);
 
     // Sync route returns 401 without crashing
     const syncRes = await request('POST', '/internal/cashouts/sync');

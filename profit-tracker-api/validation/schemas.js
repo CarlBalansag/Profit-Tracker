@@ -471,16 +471,26 @@ const createRefund = z.object({
   note: optionalString,
 }).passthrough();
 
+// Cashouts with an API take api_key. Ones without (credentialType 'login',
+// e.g. Points4Days) take the user's email and password instead; the service
+// decides which one the provider needs. The password is never trimmed.
+const cashoutLogin = {
+  email: z.preprocess(emptyToUndefined, z.string().trim().max(320).optional()),
+  password: z.preprocess(emptyToUndefined, z.string().max(500).optional()),
+};
+
 const createCashoutConnection = z.object({
   provider: requiredString('Provider'),
   display_name: optionalString,
-  api_key: z.string({ required_error: 'API key is required' }).trim().min(1, 'API key is required'),
+  api_key: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
+  ...cashoutLogin,
   platform_id: id,
 }).strict();
 
 const updateCashoutConnection = z.object({
   display_name: optionalString,
   api_key: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
+  ...cashoutLogin,
   platform_id: id,
 }).strict();
 

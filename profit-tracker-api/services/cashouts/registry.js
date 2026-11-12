@@ -1,7 +1,9 @@
 const ebAdapter = require('./eb');
+const p4dAdapter = require('./p4d');
 
 const ADAPTERS = {
   [ebAdapter.id]: ebAdapter,
+  [p4dAdapter.id]: p4dAdapter,
 };
 
 // Every registered cashout is listed for every signed-in user. Whether a
@@ -12,6 +14,10 @@ function listAvailableCashouts() {
   return Object.values(ADAPTERS).map((adapter) => ({
     id: adapter.id,
     name: adapter.name,
+    // 'api_key' (paste a key) or 'login' (email and password).
+    credentialType: adapter.credentialType || 'api_key',
+    // Whether Log Purchase can commit through this cashout.
+    supportsCommits: typeof adapter.createCommit === 'function',
   }));
 }
 

@@ -974,4 +974,25 @@ describe('Cashout Page', () => {
       expect(screen.getAllByRole('button', { name: 'Withdraw' })).toHaveLength(1); // only the active one
     });
   });
+
+  it('links a Points4Days deal to its website instead of offering Log Purchase', () => {
+    currentProviders = [...mockProviders, { id: 'p4d', name: 'Points4Days', credentialType: 'login', supportsCommits: false }];
+    const p4dConnection = { ...mockConnections[0], id: 'conn-p4d', provider: 'p4d', displayName: null };
+    currentDeals = {
+      results: [{
+        connection: p4dConnection,
+        deals: [{ id: '9', name: 'P4D Deal', payout: 232, retail: 179, dealUrl: 'https://www.points4days.com/p/it@deals/deal/9', items: [] }],
+      }],
+    };
+    render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByRole('button', { name: 'Log Purchase' })).not.toBeInTheDocument();
+    const links = screen.getAllByRole('link', { name: 'Open on Points4Days' });
+    expect(links[0]).toHaveAttribute('href', 'https://www.points4days.com/p/it@deals/deal/9');
+    expect(screen.getAllByText('Points4Days').length).toBeGreaterThan(0);
+  });
 });

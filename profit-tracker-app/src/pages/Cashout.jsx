@@ -116,6 +116,10 @@ export default function Cashout() {
   // Aggregate deals across connections
   const allDeals = useMemo(() => {
     if (!dealsData?.results) return [];
+    // Cashouts without commit support (Points4Days) get a link to the deal on
+    // their website instead of Log Purchase.
+    const providerNames = new Map(providers.map((p) => [p.id, p.name]));
+    const noCommits = new Set(providers.filter((p) => p.supportsCommits === false).map((p) => p.id));
     const aggregated = [];
     for (const res of dealsData.results) {
       if (Array.isArray(res.deals)) {
@@ -124,8 +128,9 @@ export default function Cashout() {
             ...deal,
             estimatedProfit: estimateDealProfit(deal),
             connectionId: res.connection?.id,
-            connectionName: res.connection?.displayName || res.connection?.provider,
+            connectionName: res.connection?.displayName || providerNames.get(res.connection?.provider) || res.connection?.provider,
             connectionProvider: res.connection?.provider,
+            connectionSupportsCommits: !noCommits.has(res.connection?.provider),
             connectionStatus: res.connection?.status,
             connectionError: res.connection?.lastError,
           });
@@ -133,7 +138,7 @@ export default function Cashout() {
       }
     }
     return aggregated;
-  }, [dealsData]);
+  }, [dealsData, providers]);
 
   const storeOptions = useMemo(
     () => [...new Set(allDeals.flatMap(dealStoreNames))].sort((a, b) => a.localeCompare(b)),
@@ -951,6 +956,20 @@ function StatusChip({ status }) {
 // together -- for an item you've already bought and shipped.
 function LogPurchaseButton({ deal }) {
   const [open, setOpen] = useState(false);
+
+  if (!deal.connectionSupportsCommits) {
+    if (!deal.dealUrl) return null;
+    return (
+      <a
+        href={deal.dealUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
+      >
+        Open on {deal.connectionName}
+      </a>
+    );
+  }
 
   return (
     <>

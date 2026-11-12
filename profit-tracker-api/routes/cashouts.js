@@ -48,11 +48,13 @@ router.get('/connections', isAuthenticated, async (req, res, next) => {
 // POST /api/cashouts/connections — add connection (validates key with provider first)
 router.post('/connections', isAuthenticated, validateBody(createCashoutConnection), async (req, res, next) => {
   try {
-    const { provider, display_name, api_key, platform_id } = req.body;
+    const { provider, display_name, api_key, email, password, platform_id } = req.body;
     const connection = await createConnection(req.user.id, {
       provider,
       displayName: display_name,
       apiKey: api_key,
+      email,
+      password,
       platformId: platform_id,
     });
     res.status(201).json(connection);
@@ -74,10 +76,12 @@ router.post('/connections/:id/test', isAuthenticated, async (req, res, next) => 
 // PATCH /api/cashouts/connections/:id — update connection
 router.patch('/connections/:id', isAuthenticated, validateBody(updateCashoutConnection), async (req, res, next) => {
   try {
-    const { display_name, api_key, platform_id } = req.body;
+    const { display_name, api_key, email, password, platform_id } = req.body;
     const updated = await updateConnection(req.user.id, req.params.id, {
       displayName: display_name,
       apiKey: api_key,
+      email,
+      password,
       platformId: platform_id,
     });
     res.json(updated);

@@ -56,14 +56,27 @@ async function getConnection(userId, connectionId) {
   return conn;
 }
 
-async function createConnection(userId, { provider, displayName, apiKey, platformId }) {
-  if (!apiKey || typeof apiKey !== 'string' || !apiKey.trim()) {
-    const error = new Error('API key is required.');
+// The secret a connection stores: a pasted API key, or for cashouts with no
+// API (credentialType 'login') the user's email and password, which the
+// adapter packs into one string. Returns null when nothing was sent.
+function readCredential(adapter, { apiKey, email, password }) {
+  if (adapter.credentialType === 'login') {
+    if (email === undefined && password === undefined) return null;
+    const raw = adapter.buildCredential({ email, password });
+    return { raw, masked: adapter.maskCredential(raw) };
+  }
+  if (!apiKey || typeof apiKey !== 'string' || !apiKey.trim()) return null;
+  return { raw: apiKey.trim(), masked: maskKey(apiKey) };
+}
+
+async function createConnection(userId, { provider, displayName, apiKey, email, password, platformId }) {
+  const adapter = getAdapter(provider, userId);
+  const credential = readCredential(adapter, { apiKey, email, password });
+  if (!credential) {
+    const error = new Error(adapter.credentialType === 'login' ? 'Email and password are required.' : 'API key is required.');
     error.status = 400;
     throw error;
   }
-
-  const adapter = getAdapter(provider, userId);
 
   // One key per provider: a second would list every deal twice. A new key
   // replaces the old one on the existing connection.
@@ -79,15 +92,15 @@ async function createConnection(userId, { provider, displayName, apiKey, platfor
   }
 
   // Pre-flight check: verify the key with the provider before saving
-  await adapter.testKey(apiKey.trim());
+  await adapter.testKey(credential.raw);
 
   // A key that actually works is the real gate now -- CASHOUT_BETA_USER_IDS is
   // gone. This is idempotent, so it's safe to set on every successful add.
   await prisma.user.update({ where: { id: userId }, data: { cashout_access_granted: true } });
 
   // Encrypt the key
-  const encryptedKey = encryptKey(apiKey.trim());
-  const keyLast4 = maskKey(apiKey);
+  const encryptedKey = encryptKey(credential.raw);
+  const keyLast4 = credential.masked;
 
   const created = await prisma.cashoutConnection.create({
     data: {
@@ -106,7 +119,7 @@ async function createConnection(userId, { provider, displayName, apiKey, platfor
   return safeConnection(created);
 }
 
-async function updateConnection(userId, connectionId, { displayName, apiKey, platformId }) {
+async function updateConnection(userId, connectionId, { displayName, apiKey, email, password, platformId }) {
   const conn = await getConnection(userId, connectionId);
   const adapter = getAdapter(conn.provider, userId);
 
@@ -125,10 +138,11 @@ async function updateConnection(userId, connectionId, { displayName, apiKey, pla
     }
   }
 
-  if (apiKey && typeof apiKey === 'string' && apiKey.trim()) {
-    await adapter.testKey(apiKey.trim());
-    updateData.encrypted_key = encryptKey(apiKey.trim());
-    updateData.key_last4 = maskKey(apiKey);
+  const credential = readCredential(adapter, { apiKey, email, password });
+  if (credential) {
+    await adapter.testKey(credential.raw);
+    updateData.encrypted_key = encryptKey(credential.raw);
+    updateData.key_last4 = credential.masked;
     updateData.status = 'active';
     updateData.last_error = null;
     updateData.last_synced_at = new Date();
