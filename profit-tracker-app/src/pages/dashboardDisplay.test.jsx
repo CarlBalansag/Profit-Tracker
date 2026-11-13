@@ -71,15 +71,15 @@ describe('Dashboard amounts', () => {
 });
 
 describe('Dashboard KPI cards', () => {
-  it('give every card the same label line in All, Cashout and Marketplace, so their height never changes', () => {
+  it('show the mode tag small on the title line, never wrapping, and no tag in All', () => {
     mount('premium');
-    expect(screen.getAllByText('all sales').length).toBeGreaterThan(1);
+    expect(screen.queryByText(/sold via/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Cashout' }));
-    expect(screen.queryByText('all sales')).not.toBeInTheDocument();
-    const tags = screen.getAllByText('sold via Cashout');
-    // Its own line under the title, not text tacked onto the title that wraps.
-    expect(tags[0].tagName).toBe('P');
-    expect(tags[0]).toHaveClass('truncate');
+    const tag = screen.getAllByText('sold via Cashout')[0];
+    expect(tag).toHaveClass('truncate', 'text-[9px]');
+    const titleLine = tag.parentElement;
+    expect(titleLine).toHaveClass('whitespace-nowrap');
+    expect(titleLine).toHaveTextContent(/^Net Profitsold via Cashout$|^.+sold via Cashout$/);
   });
 
   it('keeps the page up with skeleton values while another filter loads', () => {

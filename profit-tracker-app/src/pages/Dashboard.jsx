@@ -196,11 +196,9 @@ const Dashboard = () => {
   function renderDashboardSection(sectionId) {
     if (sectionId === 'statCards') {
       if (!showStatCards || visibleStatCards.length === 0) return null;
-      // Always one line, in every view, so switching All/Cashout/Marketplace
-      // never changes the cards' height.
       const modeTag = modeFilter !== 'All'
         ? `sold via ${modeFilter}`
-        : 'all sales';
+        : null;
       return (
         <div key="statCards">
         <div ref={statsRowRef} data-tutorial-id="dashboard-stats" className={isGlass
@@ -1372,16 +1370,18 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
       : `relative ${open ? 'z-[80]' : 'z-0'} overflow-visible rounded-[24px] p-6 group dp-elevated bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] border border-[color:var(--dp-border)] ${onClick ? 'dp-clickable-card cursor-pointer' : 'dp-elevated-hover'}`
     }>
       <div className="relative z-10 flex items-start justify-between">
-        <div>
-          <p className={isGlass ? "text-[11px] text-white/25 font-medium uppercase tracking-[0.2em] truncate" : `text-[11px] font-medium uppercase tracking-[0.08em] dp-card-title transition-colors duration-300 text-[var(--dp-text-label)] truncate`}>
-            {title}
+        <div className="min-w-0">
+          {/* One line, never wrapping: the mode tag sits small beside the title
+              and is cut short if it doesn't fit, so the card keeps its height
+              in All, Cashout and Marketplace. */}
+          <p className={isGlass ? "flex items-baseline gap-1.5 min-w-0 whitespace-nowrap text-[11px] text-white/25 font-medium uppercase tracking-[0.2em]" : `flex items-baseline gap-1.5 min-w-0 whitespace-nowrap text-[11px] font-medium uppercase tracking-[0.08em] dp-card-title transition-colors duration-300 text-[var(--dp-text-label)]`}>
+            <span className="shrink-0">{title}</span>
+            {modeTag && (
+              <span title={modeTag} className={isGlass ? "min-w-0 truncate text-[9px] font-normal normal-case tracking-normal text-[var(--text-muted)]" : `min-w-0 truncate text-[9px] font-normal normal-case tracking-normal dp-card-tag transition-colors duration-300 text-[var(--dp-text-label)]`}>
+                {modeTag}
+              </span>
+            )}
           </p>
-          {/* Its own line, always present, so the card is the same height in every view */}
-          {modeTag && (
-            <p className={isGlass ? "text-[11px] leading-4 truncate text-[var(--text-muted)]" : `text-[11px] leading-4 truncate dp-card-tag transition-colors duration-300 text-[var(--dp-text-label)]`}>
-              {modeTag}
-            </p>
-          )}
           {loading ? (
             <div aria-busy="true" className="mt-2 space-y-2">
               <span className="sr-only">Loading {title}</span>
