@@ -12,18 +12,14 @@ const {
 // How many items each stage lists. The count and value always cover them all.
 const ITEMS_PER_STAGE = 20;
 
-// Which sale workflows each pipeline view covers, and the steps it shows.
-// Marketplace covers the standard, authenticated and local-handoff paths; the
-// steps only some of them use (authentication, handoff) show only when an item
-// is actually in them.
+// The steps each pipeline view shows. Marketplace's authentication and
+// handoff steps show only when an item is actually in them.
 const VIEWS = {
   cashout: {
-    workflows: ['CASHOUT'],
     stages: SALE_STATUSES_BY_WORKFLOW.CASHOUT,
     optional: [],
   },
   marketplace: {
-    workflows: ['STANDARD_MARKETPLACE', 'AUTH_MARKETPLACE', 'DIRECT_LOCAL'],
     stages: ['AWAITING_SHIPMENT', 'AWAITING_HANDOFF', 'OUTBOUND', 'HANDED_OVER', 'DELIVERED_TO_AUTHENTICATOR', 'AUTHENTICATING', 'WAITING_FOR_PAYMENT', 'PAID'],
     optional: ['AWAITING_HANDOFF', 'HANDED_OVER', 'DELIVERED_TO_AUTHENTICATOR', 'AUTHENTICATING'],
   },
@@ -31,8 +27,17 @@ const VIEWS = {
 
 const money = (d) => d.toDecimalPlaces(2).toNumber();
 
-// The sale's workflow: its own, else its platform's preset, else standard.
-const workflowOf = (sale) => resolveSaleWorkflow(sale.workflow_type || sale.platform?.workflow_preset);
+// Which view a sale belongs to: sold to a Cashout platform, or anything else
+// (a marketplace, or no platform). The same split the dashboard's
+// Cashout/Marketplace filter makes. Not the sale's workflow_type: many older
+// cash-out sales carry the standard-marketplace default there.
+const viewOf = (sale) => (sale.platform?.type === 'Cashout' ? 'cashout' : 'marketplace');
+
+// The sale's workflow, for placing a row from before the status workflow: its
+// own, else its platform's preset, else the one its view implies.
+const workflowOf = (sale) => resolveSaleWorkflow(
+  sale.workflow_type || sale.platform?.workflow_preset || (viewOf(sale) === 'cashout' ? 'CASHOUT' : null),
+);
 
 // The sale's step: its workflow status, or for a row from before the status
 // workflow, the step its legacy status stands for.
@@ -44,9 +49,8 @@ function buildWorkflowPipelines(sales = []) {
     const byStage = new Map(view.stages.map((status) => [status, { status, count: 0, value: decimal(0), items: [] }]));
 
     for (const sale of sales) {
-      const workflow = workflowOf(sale);
-      if (!view.workflows.includes(workflow)) continue;
-      const stage = byStage.get(stageOf(sale, workflow));
+      if (viewOf(sale) !== key) continue;
+      const stage = byStage.get(stageOf(sale, workflowOf(sale)));
       if (!stage) continue; // cancelled, returned, disputed: not a step of the path
       const quantity = keptSaleQuantity(sale);
       if (quantity <= 0) continue;

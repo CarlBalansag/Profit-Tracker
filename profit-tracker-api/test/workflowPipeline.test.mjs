@@ -41,14 +41,29 @@ describe('buildWorkflowPipelines', () => {
     expect(stage(cashout, 'SCANNED_IN')).toMatchObject({ count: 0, value: 0, items: [] });
   });
 
-  it('keeps Cash-out and Marketplace sales apart, by the sale\'s own workflow or its platform\'s', () => {
+  it('keeps Cash-out and Marketplace sales apart by the platform sold to, like the dashboard filter', () => {
     const { cashout, marketplace } = buildWorkflowPipelines([
       sale({ workflow_status: 'AWAITING_SHIPMENT' }),
       sale({ platform: ebay, workflow_status: 'AWAITING_SHIPMENT', unit_price: 50 }),
-      sale({ platform: ebay, workflow_type: 'CASHOUT', workflow_status: 'AWAITING_SHIPMENT', unit_price: 7 }), // its own workflow wins
+      sale({ platform: null, workflow_status: 'AWAITING_SHIPMENT', unit_price: 7 }), // no platform: Marketplace
     ]);
-    expect(stage(cashout, 'AWAITING_SHIPMENT')).toMatchObject({ count: 2, value: 107 });
-    expect(stage(marketplace, 'AWAITING_SHIPMENT')).toMatchObject({ count: 1, value: 50 });
+    expect(stage(cashout, 'AWAITING_SHIPMENT')).toMatchObject({ count: 1, value: 100 });
+    expect(stage(marketplace, 'AWAITING_SHIPMENT')).toMatchObject({ count: 2, value: 57 });
+  });
+
+  it('counts a cash-out sale under Cash-out even when it carries the standard-marketplace workflow', () => {
+    // How most older cash-out sales are stored: platform preset unset, the
+    // sale's workflow_type left at the standard-marketplace default.
+    const noPreset = { ...cashoutPlatform, workflow_preset: null };
+    const { cashout, marketplace } = buildWorkflowPipelines([
+      sale({ platform: noPreset, workflow_type: 'STANDARD_MARKETPLACE', workflow_status: 'PAID' }),
+      sale({ platform: noPreset, workflow_type: 'STANDARD_MARKETPLACE', workflow_status: 'WAITING_FOR_PAYMENT' }),
+      sale({ platform: noPreset, workflow_type: null, workflow_status: null, status: 'SHIPPED_OUT' }),
+    ]);
+    expect(stage(cashout, 'PAID').count).toBe(1);
+    expect(stage(cashout, 'WAITING_FOR_PAYMENT').count).toBe(1);
+    expect(stage(cashout, 'OUTBOUND').count).toBe(1);
+    expect(marketplace.stages.reduce((sum, s) => sum + s.count, 0)).toBe(0);
   });
 
   it('places a row from before the status workflow by its legacy status', () => {
