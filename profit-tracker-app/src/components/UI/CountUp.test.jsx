@@ -37,24 +37,45 @@ describe('CountUp', () => {
     expect(container.querySelector('.sr-only')).toHaveTextContent('$2,313.27');
   });
 
-  it('counts from the old value to the new one when it changes', () => {
-    const { container, rerender } = render(<CountUp value="100" />);
+  it('starts climbing slowly the moment new data is loading', () => {
+    const { container, rerender } = render(<CountUp value="$100.00" />);
     finish(lastRun());
-    rerender(<CountUp value="200" />);
-    const run = lastRun();
-    expect(run.from).toBe(100);
-    expect(run.to).toBe(200);
-    step(run, 150);
-    expect(visible(container)).toBe('150');
+    rerender(<CountUp value="$100.00" pending />);
+    const drift = lastRun();
+    expect(drift.from).toBe(100);
+    expect(drift.to).toBeGreaterThan(100);
+    expect(drift.options.duration).toBeGreaterThan(5); // slow, and it keeps slowing
+    step(drift, 140);
+    expect(visible(container)).toBe('$140.00');
   });
 
-  it('stops the old count when the value changes mid-way', () => {
-    const { rerender } = render(<CountUp value="13.98%" />);
-    const first = lastRun();
-    step(first, 5);
-    rerender(<CountUp value="11.42%" />);
-    expect(first.stopped).toBe(true);
-    expect(lastRun().from).toBe(5);
+  it('counts back down from where the climb got to when the new value arrives', () => {
+    const { container, rerender } = render(<CountUp value="$100.00" />);
+    finish(lastRun());
+    rerender(<CountUp value="$100.00" pending />);
+    const drift = lastRun();
+    step(drift, 200);
+    rerender(<CountUp value="$80.00" />);
+    expect(drift.stopped).toBe(true);
+    // No flash of the new value: it carries on from $200 ...
+    expect(visible(container)).toBe('$200.00');
+    const settle = lastRun();
+    expect(settle.from).toBe(200);
+    expect(settle.to).toBe(80);
+    expect(settle.options.duration).toBeLessThan(drift.options.duration); // faster than the climb
+    step(settle, 120);
+    expect(visible(container)).toBe('$120.00');
+    finish(settle);
+    expect(visible(container)).toBe('$80.00');
+  });
+
+  it('goes back to the same value if the new data matches the old', () => {
+    const { rerender } = render(<CountUp value="33" />);
+    finish(lastRun());
+    rerender(<CountUp value="33" pending />);
+    step(lastRun(), 40);
+    rerender(<CountUp value="33" />);
+    expect(lastRun()).toMatchObject({ from: 40, to: 33 });
   });
 
   it('leaves text without a number alone', () => {

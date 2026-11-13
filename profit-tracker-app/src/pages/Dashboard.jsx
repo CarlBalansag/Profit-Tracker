@@ -360,7 +360,7 @@ const Dashboard = () => {
                   goals={activeGoals}
                   stats={stats}
                   isGlass={isGlass}
-                  dateFilter={dateFilter}
+                  dateFilter={dateFilter} refreshing={refreshing}
                   onNavigate={() => navigate('/goals')}
                 />
               )}
@@ -672,7 +672,7 @@ const Dashboard = () => {
             goals={activeGoals}
             stats={stats}
             isGlass={isGlass}
-            dateFilter={dateFilter}
+            dateFilter={dateFilter} refreshing={refreshing}
             onNavigate={() => navigate('/goals')}
           />
         );
@@ -689,7 +689,7 @@ const Dashboard = () => {
             goals={activeGoals}
             stats={stats}
             isGlass={isGlass}
-            dateFilter={dateFilter}
+            dateFilter={dateFilter} refreshing={refreshing}
             onNavigate={() => navigate('/goals')}
           />
         </div>
@@ -1061,7 +1061,7 @@ function MiniProgressRing({ pct, size = 56, stroke = 5, color, isGlass }) {
   );
 }
 
-function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate }) {
+function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate, refreshing = false }) {
   const [idx, setIdx] = useState(0);
   const goalsWithTarget = goals.filter(g => getTargetForFilter(g, dateFilter).value != null);
   const allGoals = goalsWithTarget.length > 0 ? goalsWithTarget : goals;
@@ -1155,7 +1155,7 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate })
 
             {/* Current value */}
             <p className={`text-[20px] font-bold tabular-nums leading-tight ${isGlass ? 'text-[#e8e2d6]' : 'text-[var(--dp-text-primary)]'}`}>
-              <CountUp value={fmt(current)} />
+              <CountUp value={fmt(current)} pending={refreshing} />
             </p>
 
             {/* Target */}
@@ -1368,7 +1368,7 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
               when the new ones arrive they count from the old value to the new
               one, up or down. Nothing fades or locks in between. */}
           <div aria-busy={loading || undefined}>
-            <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] text-[var(--dp-text-primary)]`}><CountUp value={value} /></p>
+            <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] text-[var(--dp-text-primary)]`}><CountUp value={value} pending={loading} /></p>
             <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
           </div>
         </div>
