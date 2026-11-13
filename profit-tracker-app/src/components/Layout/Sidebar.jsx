@@ -14,6 +14,7 @@ import { CURRENT_VERSION } from '../../data/changelog';
 import VersionHistoryModal from '../VersionHistoryModal';
 import ThemeSwitch from '../UI/ThemeSwitch';
 import { useCashoutProviders } from '../../hooks/useCashoutProviders';
+import { usePrefetchProps } from '../../hooks/usePrefetchPage';
 
 const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'neon-dark' }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -335,6 +336,7 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId }) => (
     to={to}
     title={isCollapsed ? label : undefined}
     data-tutorial-id={tutorialId}
+    {...usePrefetchProps(to)}
     className={({ isActive }) =>
       clsx(
         "relative flex items-center rounded-md border-l-2 border-l-transparent transition-colors",
@@ -354,6 +356,7 @@ const GlassNavItem = ({ icon: Icon, label, to }) => (
   <NavLink
     to={to}
     title={label}
+    {...usePrefetchProps(to)}
     className={({ isActive }) =>
       clsx(
         "group relative flex h-8 w-10 items-center justify-center rounded-xl transition-colors hover:z-10",

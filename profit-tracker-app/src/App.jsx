@@ -1,31 +1,16 @@
-import React, { lazy, Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
+import { prefetchAllPageCode } from './data/pagePrefetch';
 import { Toaster } from 'sonner';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import Shell from './components/Layout/Shell';
 
-// Pages
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const AddTransaction = lazy(() => import('./pages/AddTransaction'));
-const Inventory = lazy(() => import('./pages/Inventory'));
-const Expenses = lazy(() => import('./pages/Expenses'));
-const Receipts = lazy(() => import('./pages/Receipts'));
-const Invoices = lazy(() => import('./pages/Invoices'));
-const Transactions = lazy(() => import('./pages/Transactions'));
-const Analytics = lazy(() => import('./pages/Analytics'));
-const CashFlow = lazy(() => import('./pages/CashFlow'));
-const CreditCard = lazy(() => import('./pages/CreditCard'));
-const Settings = lazy(() => import('./pages/Settings'));
-const AddSale = lazy(() => import('./pages/AddSale'));
-const TaxExempt = lazy(() => import('./pages/TaxExempt'));
-const Guide = lazy(() => import('./pages/Guide'));
-const Login = lazy(() => import('./pages/Login'));
-const Goals = lazy(() => import('./pages/Goals'));
-const Calendar = lazy(() => import('./pages/Calendar'));
-const Cashout = lazy(() => import('./pages/Cashout'));
-const Shipping = lazy(() => import('./pages/Shipping'));
-const Statuses = lazy(() => import('./pages/Statuses'));
-const ScheduleC = lazy(() => import('./pages/ScheduleC'));
+// Pages (lazy, and preloadable by hover/idle prefetch)
+import {
+  Dashboard, AddTransaction, Inventory, Expenses, Receipts, Invoices, Transactions, Analytics,
+  CashFlow, CreditCard, Settings, AddSale, TaxExempt, Guide, Login, Goals, Calendar, Cashout,
+  Shipping, Statuses, ScheduleC,
+} from './pages/lazyPages';
 import { AuthProvider } from './context/AuthContext';
 import { TutorialProvider } from './context/TutorialContext';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
@@ -85,6 +70,15 @@ function AppPages() {
   const location = useLocation();
   const reduceMotion = useReducedMotion();
   const shift = reduceMotion ? 0 : 1;
+
+  // Once the first page is up and the browser is idle, load every other
+  // page's code (not data), so switching never waits on a page's chunk.
+  useEffect(() => {
+    const idle = window.requestIdleCallback ?? ((fn) => setTimeout(fn, 1500));
+    const cancel = window.cancelIdleCallback ?? clearTimeout;
+    const handle = idle(() => prefetchAllPageCode());
+    return () => cancel(handle);
+  }, []);
 
   return (
     <div className="relative h-full min-h-0">

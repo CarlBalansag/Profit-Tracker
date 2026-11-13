@@ -1,6 +1,7 @@
 import { formatMoney } from '../utils/money';
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
+import { RECEIPTS_PAGE_KEY, useCacheArrivals, useOptionalQueryClient } from '../hooks/usePageCache';
 import { Search, Paperclip, Eye, Trash2, FileText, Package, Receipt, X, Upload } from 'lucide-react';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { usePhoneList } from '../hooks/usePhoneList';
@@ -67,11 +68,31 @@ function TypeBadge({ type }) {
 // ── Main Component ─────────────────────────────────────────────────────────────
 const Receipts = () => {
   const [tab, setTab]               = useState('without');
-  const [withReceipts, setWith]     = useState([]);
-  const [withoutReceipts, setWithout] = useState([]);
-  const [loading, setLoading]       = useState(true);
+  // Start from the cached copy (an earlier visit or a hover prefetch) when
+  // there is one; fetchAll below still refreshes it on every visit.
+  const queryClient = useOptionalQueryClient();
+  const [cached] = useState(() => queryClient?.getQueryData(RECEIPTS_PAGE_KEY));
+  const [withReceipts, setWith]     = useState(cached?.withReceipts ?? []);
+  const [withoutReceipts, setWithout] = useState(cached?.withoutReceipts ?? []);
+  const [loading, setLoading]       = useState(!cached);
   const [loadFailed, setLoadFailed] = useState(false);
-  const hasLoaded = useRef(false);
+  const hasLoaded = useRef(Boolean(cached));
+
+  // A hover prefetch that lands before this page's own first load shows at once.
+  useCacheArrivals(queryClient, [RECEIPTS_PAGE_KEY], ([data]) => {
+    if (hasLoaded.current || !data) return;
+    hasLoaded.current = true;
+    setWith(data.withReceipts);
+    setWithout(data.withoutReceipts);
+    setLoadFailed(false);
+    setLoading(false);
+  });
+
+  // Keep the cached copy in step with what's on screen.
+  useEffect(() => {
+    if (!hasLoaded.current) return;
+    queryClient?.setQueryData(RECEIPTS_PAGE_KEY, { withReceipts, withoutReceipts });
+  }, [queryClient, withReceipts, withoutReceipts]);
   const [search, setSearch]         = useState('');
   const [previewUrl, setPreviewUrl] = useState(null);
   const [attachingId, setAttachingId] = useState(null); // item id with open attach form

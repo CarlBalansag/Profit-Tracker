@@ -3,6 +3,7 @@ import { Link, NavLink } from 'react-router-dom';
 import clsx from 'clsx';
 import { ArrowLeftRight, CirclePlus, DollarSign, LayoutDashboard, Menu, Package, Plus } from 'lucide-react';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
+import { usePrefetchProps } from '../../hooks/usePrefetchPage';
 
 const ITEM = 'flex flex-1 flex-col items-center justify-center gap-0.5 h-14 min-w-0 text-[11px] font-medium';
 
@@ -13,11 +14,31 @@ const QUICK_ADD = [
 
 const Tab = ({ to, label, icon, end, colors }) => {
   const Icon = icon;
+  const prefetch = usePrefetchProps(to);
   return (
-    <NavLink to={to} end={end} className={({ isActive }) => clsx(ITEM, isActive ? colors.active : colors.idle)}>
+    <NavLink to={to} end={end} {...prefetch} className={({ isActive }) => clsx(ITEM, isActive ? colors.active : colors.idle)}>
       <Icon size={20} aria-hidden="true" />
       <span className="truncate">{label}</span>
     </NavLink>
+  );
+};
+
+const QuickAddLink = ({ to, label, icon, onClick, isGlass }) => {
+  const Icon = icon;
+  const prefetch = usePrefetchProps(to);
+  return (
+    <Link
+      to={to}
+      onClick={onClick}
+      {...prefetch}
+      className={clsx(
+        'flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium',
+        isGlass ? 'text-[#e8e2d6]' : 'text-[var(--dp-text-primary)]',
+      )}
+    >
+      <Icon size={18} aria-hidden="true" />
+      {label}
+    </Link>
   );
 };
 
@@ -44,23 +65,9 @@ const BottomNav = ({ onMoreClick, isGlass }) => {
               isGlass ? 'border-white/10 bg-[#181a1c]' : 'border-[color:var(--dp-border)] bg-[var(--dp-card-bg)]',
             )}
           >
-            {QUICK_ADD.map(({ to, label, icon }) => {
-              const Icon = icon;
-              return (
-                <Link
-                  key={to}
-                  to={to}
-                  onClick={close}
-                  className={clsx(
-                    'flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium',
-                    isGlass ? 'text-[#e8e2d6]' : 'text-[var(--dp-text-primary)]',
-                  )}
-                >
-                  <Icon size={18} aria-hidden="true" />
-                  {label}
-                </Link>
-              );
-            })}
+            {QUICK_ADD.map(({ to, label, icon }) => (
+              <QuickAddLink key={to} to={to} label={label} icon={icon} onClick={close} isGlass={isGlass} />
+            ))}
           </div>
         </>
       )}
