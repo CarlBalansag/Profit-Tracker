@@ -1,6 +1,7 @@
 import React, { lazy, Suspense } from 'react';
 import { Toaster } from 'sonner';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import Shell from './components/Layout/Shell';
 
 // Pages
@@ -60,8 +61,43 @@ function App() {
           <Route path="*" element={
             <ProtectedRoute>
               <Shell>
-            <Suspense fallback={<PageLoader />}>
-            <Routes>
+              <AppPages />
+          </Shell>
+            </ProtectedRoute>
+        } />
+      </Routes>
+    </Router>
+      </TutorialProvider>
+    </AuthProvider>
+  );
+}
+
+// Page change: the old and new pages crossfade over each other (the old one
+// drifting up a little, the new one rising in from a little below), so there's
+// never an empty frame between them. Only the content area moves; the
+// sidebar, header and bottom nav stay put. Keyed on the pathname, so a
+// query-string change on the same page doesn't replay it. With reduced motion
+// it's the same crossfade with no movement.
+const PAGE_EASE = [0.2, 0.8, 0.2, 1];
+const MotionDiv = motion.div;
+
+function AppPages() {
+  const location = useLocation();
+  const reduceMotion = useReducedMotion();
+  const shift = reduceMotion ? 0 : 1;
+
+  return (
+    <div className="relative h-full min-h-0">
+    <AnimatePresence initial={false}>
+      <MotionDiv
+        key={location.pathname}
+        className="absolute inset-0 min-h-0"
+        initial={{ opacity: 0, y: 10 * shift, zIndex: 1 }}
+        animate={{ opacity: 1, y: 0, zIndex: 1, transition: { duration: reduceMotion ? 0.2 : 0.3, ease: PAGE_EASE } }}
+        exit={{ opacity: 0, y: -6 * shift, zIndex: 0, transition: { duration: 0.2, ease: 'easeOut' } }}
+      >
+        <Suspense fallback={<PageLoader />}>
+          <Routes location={location}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/add-transaction" element={<AddTransaction />} />
           <Route path="/add-sale" element={<AddSale />} />
@@ -83,15 +119,11 @@ function App() {
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/cashout" element={<Cashout />} />
           <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-            </Suspense>
-          </Shell>
-            </ProtectedRoute>
-        } />
-      </Routes>
-    </Router>
-      </TutorialProvider>
-    </AuthProvider>
+          </Routes>
+        </Suspense>
+      </MotionDiv>
+    </AnimatePresence>
+    </div>
   );
 }
 

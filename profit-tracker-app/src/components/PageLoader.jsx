@@ -1,19 +1,10 @@
 import React from 'react';
 
-// Shimmering skeleton block — defaults to the light theme palette
+// Shimmering skeleton block for every page loader. Colors come from the theme
+// (dp-skeleton), so it shows in dark mode too; a fixed near-black tint was
+// invisible there and pages looked blank grey while loading.
 function Sk({ className = '', style }) {
-  return (
-    <div
-      className={`rounded-lg relative overflow-hidden ${className}`}
-      style={{
-        backgroundColor: 'rgba(17,17,17,0.045)',
-        backgroundImage: 'linear-gradient(90deg, transparent 25%, rgba(17,17,17,0.07) 50%, transparent 75%)',
-        backgroundSize: '400% 100%',
-        animation: 'sk-shimmer 1.4s ease-in-out infinite',
-        ...style,
-      }}
-    />
-  );
+  return <div className={`rounded-lg relative overflow-hidden dp-skeleton ${className}`} style={style} />;
 }
 
 // Shimmering skeleton block for the Dashboard, which sits on var(--dp-bg). Its
