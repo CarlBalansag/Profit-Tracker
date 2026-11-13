@@ -36,7 +36,7 @@ describe('buildWorkflowPipelines', () => {
     ]);
     const outbound = stage(cashout, 'OUTBOUND');
     expect(outbound).toMatchObject({ count: 4, value: 1539.99, itemCount: 2 });
-    expect(outbound.items[0]).toMatchObject({ name: 'Item 2', buyer: 'EB', quantity: 1, value: 99.99 }); // newest first
+    expect(outbound.items[0]).toMatchObject({ name: 'Item 2', party: 'EB', quantity: 1, value: 99.99 }); // newest first
     expect(stage(cashout, 'PAID').count).toBe(1);
     expect(stage(cashout, 'SCANNED_IN')).toMatchObject({ count: 0, value: 0, items: [] });
   });
@@ -99,6 +99,34 @@ describe('buildWorkflowPipelines', () => {
     expect(marketplace.stages.map((s) => s.status)).not.toContain('HANDED_OVER');
   });
 
+  it('puts everything in the All view: unsold stock at cost first, then both kinds of sales', () => {
+    const stock = [
+      { id: 'inv-a', product_name: 'Switch 2', receiving_status: 'ON_HAND', qty_on_hand: 3, qty_purchased: 4, unit_purchase_cost: 400, vendor: { name: 'Best Buy' } },
+      { id: 'inv-b', product_name: 'Old row', status: 'SHIPPED_IN', qty_on_hand: 1, qty_purchased: 1, unit_purchase_cost: 50 }, // legacy status
+      { id: 'inv-c', product_name: 'Sold out', receiving_status: 'ON_HAND', qty_on_hand: 0, qty_purchased: 2, unit_purchase_cost: 10 },
+    ];
+    const { all, cashout } = buildWorkflowPipelines([
+      sale({ workflow_status: 'SCANNED_IN' }),
+      sale({ platform: ebay, workflow_status: 'OUTBOUND', unit_price: 60 }),
+    ], stock);
+
+    expect(all.stages.map((s) => s.status).slice(0, 3)).toEqual(['PURCHASED', 'INBOUND', 'ON_HAND']);
+    expect(stage(all, 'ON_HAND')).toMatchObject({ count: 3, value: 1200, itemCount: 1 });
+    expect(stage(all, 'ON_HAND').items[0]).toMatchObject({ name: 'Switch 2', party: 'Best Buy', quantity: 3 });
+    expect(stage(all, 'INBOUND').count).toBe(1);
+    expect(stage(all, 'SCANNED_IN').count).toBe(1); // a Cash-out step
+    expect(stage(all, 'OUTBOUND')).toMatchObject({ count: 1, value: 60 }); // a Marketplace sale
+    // Stock is only in All.
+    expect(cashout.stages.map((s) => s.status)).not.toContain('ON_HAND');
+  });
+
+  it("hides All's rarely used steps until something is in them", () => {
+    const statuses = buildWorkflowPipelines([], []).all.stages.map((s) => s.status);
+    expect(statuses).not.toContain('PRE_ORDER');
+    expect(statuses).not.toContain('AUTHENTICATING');
+    expect(statuses).toContain('SCANNED_IN');
+  });
+
   it('lists at most a page of items per step, while the count and value cover them all', () => {
     const many = Array.from({ length: ITEMS_PER_STAGE + 5 }, () => sale({ workflow_status: 'PAID' }));
     const paid = stage(buildWorkflowPipelines(many).cashout, 'PAID');
@@ -124,10 +152,14 @@ describe('GET /api/analytics/dashboard workflowPipelines', () => {
     const res = await fetch(`${baseUrl}/api/analytics/dashboard?mode=All&date=All%20Time`);
     const body = await res.json();
     expect(res.status).toBe(200);
-    expect(Object.keys(body.workflowPipelines)).toEqual(['cashout', 'marketplace']);
+    expect(Object.keys(body.workflowPipelines)).toEqual(['all', 'cashout', 'marketplace']);
     const units = (pipeline) => pipeline.stages.reduce((sum, s) => sum + s.count, 0);
     // The fixture's one sale is a 2-unit marketplace sale.
     expect(units(body.workflowPipelines.marketplace)).toBe(2);
     expect(units(body.workflowPipelines.cashout)).toBe(0);
+    // All also counts the fixture's unsold stock (All mode only).
+    expect(units(body.workflowPipelines.all)).toBeGreaterThan(2);
+    const filtered = await (await fetch(`${baseUrl}/api/analytics/dashboard?mode=Marketplace&date=All%20Time`)).json();
+    expect(units(filtered.workflowPipelines.all)).toBe(2);
   });
 });

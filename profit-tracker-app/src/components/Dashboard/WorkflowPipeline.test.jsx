@@ -10,14 +10,14 @@ const pipeline = {
     {
       status: 'AWAITING_SHIPMENT', count: 3, value: 1440, itemCount: 2,
       items: [
-        { saleId: 's1', name: 'PS5 Pro', buyer: 'EB', quantity: 2, value: 960, since: '2026-11-12T12:00:00Z' },
-        { saleId: 's2', name: 'Xbox Series X', buyer: 'Points4Days', quantity: 1, value: 480, since: '2026-11-10T12:00:00Z' },
+        { id: 'sale-s1', name: 'PS5 Pro', party: 'EB', quantity: 2, value: 960, since: '2026-11-12T12:00:00Z' },
+        { id: 'sale-s2', name: 'Xbox Series X', party: 'Points4Days', quantity: 1, value: 480, since: '2026-11-10T12:00:00Z' },
       ],
     },
     { status: 'OUTBOUND', count: 0, value: 0, itemCount: 0, items: [] },
     {
       status: 'PAID', count: 25, value: 12345, itemCount: 25,
-      items: Array.from({ length: 20 }, (_, i) => ({ saleId: `p${i}`, name: `Paid ${i}`, buyer: 'EB', quantity: 1, value: 100, since: null })),
+      items: Array.from({ length: 20 }, (_, i) => ({ id: `sale-p${i}`, name: `Paid ${i}`, party: 'EB', quantity: 1, value: 100, since: null })),
     },
   ],
 };

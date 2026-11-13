@@ -1,10 +1,16 @@
-// The Dashboard's Status Pipeline per sale workflow: for Cash-out and for
-// Marketplace, how many units sit in each step of that workflow right now,
-// the money they hold (what the buyer pays for them), and the most recent
-// items in each step. Display only: nothing here writes a record.
-const { decimal, keptSaleQuantity } = require('./decimalFinance');
+// The Dashboard's Status Pipeline, as steps: for everything ("all"), for
+// Cash-out and for Marketplace, how many units sit in each step right now, the
+// money they hold, and the most recent items in each step. Display only:
+// nothing here writes a record.
+//
+// Sold units are worth what the buyer pays for them. The "all" view also starts
+// with the unsold stock (Pre-order, Purchased, Inbound, On Hand), worth what it
+// cost, since that stock isn't tied to Cash-out or Marketplace yet.
+const { decimal, keptSaleQuantity, allocatedCost } = require('./decimalFinance');
 const {
   SALE_STATUSES_BY_WORKFLOW,
+  INVENTORY_RECEIVING_STATUSES,
+  LEGACY_TO_RECEIVING_STATUS,
   resolveSaleWorkflow,
   legacyWorkflowStatus,
 } = require('./statusTransitions');
@@ -12,14 +18,27 @@ const {
 // How many items each stage lists. The count and value always cover them all.
 const ITEMS_PER_STAGE = 20;
 
-// The steps each pipeline view shows. Marketplace's authentication and
-// handoff steps show only when an item is actually in them.
+// The steps each view shows, in order. Steps in `optional` show only when
+// something is in them (a workflow the user may not use at all).
 const VIEWS = {
+  all: {
+    stock: true,
+    sales: ['cashout', 'marketplace'],
+    stages: [
+      ...INVENTORY_RECEIVING_STATUSES,
+      'AWAITING_SHIPMENT', 'AWAITING_HANDOFF', 'OUTBOUND', 'HANDED_OVER',
+      'DELIVERED_TO_PROVIDER', 'DELIVERED_TO_AUTHENTICATOR', 'WAITING_FOR_SCAN_IN', 'SCANNED_IN',
+      'ACCEPTED', 'AUTHENTICATING', 'WAITING_FOR_PAYMENT', 'PAID',
+    ],
+    optional: ['PRE_ORDER', 'AWAITING_HANDOFF', 'HANDED_OVER', 'DELIVERED_TO_AUTHENTICATOR', 'AUTHENTICATING'],
+  },
   cashout: {
+    sales: ['cashout'],
     stages: SALE_STATUSES_BY_WORKFLOW.CASHOUT,
     optional: [],
   },
   marketplace: {
+    sales: ['marketplace'],
     stages: ['AWAITING_SHIPMENT', 'AWAITING_HANDOFF', 'OUTBOUND', 'HANDED_OVER', 'DELIVERED_TO_AUTHENTICATOR', 'AUTHENTICATING', 'WAITING_FOR_PAYMENT', 'PAID'],
     optional: ['AWAITING_HANDOFF', 'HANDED_OVER', 'DELIVERED_TO_AUTHENTICATOR', 'AUTHENTICATING'],
   },
@@ -27,45 +46,90 @@ const VIEWS = {
 
 const money = (d) => d.toDecimalPlaces(2).toNumber();
 
-// Which view a sale belongs to: sold to a Cashout platform, or anything else
+// Which kind of sale this is: sold to a Cashout platform, or anything else
 // (a marketplace, or no platform). The same split the dashboard's
 // Cashout/Marketplace filter makes. Not the sale's workflow_type: many older
 // cash-out sales carry the standard-marketplace default there.
-const viewOf = (sale) => (sale.platform?.type === 'Cashout' ? 'cashout' : 'marketplace');
+const kindOf = (sale) => (sale.platform?.type === 'Cashout' ? 'cashout' : 'marketplace');
 
 // The sale's workflow, for placing a row from before the status workflow: its
-// own, else its platform's preset, else the one its view implies.
+// own, else its platform's preset, else the one its kind implies.
 const workflowOf = (sale) => resolveSaleWorkflow(
-  sale.workflow_type || sale.platform?.workflow_preset || (viewOf(sale) === 'cashout' ? 'CASHOUT' : null),
+  sale.workflow_type || sale.platform?.workflow_preset || (kindOf(sale) === 'cashout' ? 'CASHOUT' : null),
 );
 
 // The sale's step: its workflow status, or for a row from before the status
 // workflow, the step its legacy status stands for.
-const stageOf = (sale, workflow) => sale.workflow_status || legacyWorkflowStatus(sale.status, workflow);
+const saleStageOf = (sale) => sale.workflow_status || legacyWorkflowStatus(sale.status, workflowOf(sale));
 
-function buildWorkflowPipelines(sales = []) {
+// Unsold stock's step: its receiving status, else what its legacy status
+// stands for, else Purchased.
+const stockStageOf = (inventory) =>
+  inventory.receiving_status || LEGACY_TO_RECEIVING_STATUS[inventory.status] || 'PURCHASED';
+
+function saleEntry(sale) {
+  const quantity = keptSaleQuantity(sale);
+  if (quantity <= 0) return null;
+  const value = decimal(sale.unit_price || 0).times(quantity);
+  return {
+    stage: saleStageOf(sale),
+    quantity,
+    value,
+    item: {
+      id: `sale-${sale.id}`,
+      saleId: sale.id,
+      inventoryId: sale.inventory_id,
+      name: sale.inventory?.product_name || 'Item',
+      party: sale.platform?.name || 'Direct',
+      quantity,
+      since: sale.workflow_status_changed_at || sale.sale_date || null,
+    },
+  };
+}
+
+function stockEntry(inventory) {
+  const quantity = Number(inventory.qty_on_hand) || 0;
+  if (quantity <= 0) return null;
+  const value = allocatedCost(inventory, quantity);
+  return {
+    stage: stockStageOf(inventory),
+    quantity,
+    value,
+    item: {
+      id: `inventory-${inventory.id}`,
+      inventoryId: inventory.id,
+      name: inventory.product_name || 'Item',
+      party: inventory.vendor?.name || null,
+      quantity,
+      since: inventory.receiving_status_changed_at || inventory.purchase_date || null,
+    },
+  };
+}
+
+/**
+ * @param sales the dashboard's sales (already mode/date filtered)
+ * @param stock unsold inventory for the "all" view's first steps; pass [] when
+ *   the dashboard is filtered to Cashout or Marketplace, since stock belongs to
+ *   neither yet
+ */
+function buildWorkflowPipelines(sales = [], stock = []) {
+  const saleEntries = sales.map((sale) => ({ kind: kindOf(sale), entry: saleEntry(sale) })).filter((s) => s.entry);
+  const stockEntries = stock.map(stockEntry).filter(Boolean);
+
   const result = {};
   for (const [key, view] of Object.entries(VIEWS)) {
     const byStage = new Map(view.stages.map((status) => [status, { status, count: 0, value: decimal(0), items: [] }]));
+    const entries = [
+      ...(view.stock ? stockEntries : []),
+      ...saleEntries.filter((s) => view.sales.includes(s.kind)).map((s) => s.entry),
+    ];
 
-    for (const sale of sales) {
-      if (viewOf(sale) !== key) continue;
-      const stage = byStage.get(stageOf(sale, workflowOf(sale)));
+    for (const { stage: status, quantity, value, item } of entries) {
+      const stage = byStage.get(status);
       if (!stage) continue; // cancelled, returned, disputed: not a step of the path
-      const quantity = keptSaleQuantity(sale);
-      if (quantity <= 0) continue;
-      const value = decimal(sale.unit_price || 0).times(quantity);
       stage.count += quantity;
       stage.value = stage.value.plus(value);
-      stage.items.push({
-        saleId: sale.id,
-        inventoryId: sale.inventory_id,
-        name: sale.inventory?.product_name || 'Item',
-        buyer: sale.platform?.name || 'Direct',
-        quantity,
-        value: money(value),
-        since: sale.workflow_status_changed_at || sale.sale_date || null,
-      });
+      stage.items.push({ ...item, value: money(value) });
     }
 
     const stages = [...byStage.values()]

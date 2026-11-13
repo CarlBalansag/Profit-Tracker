@@ -78,7 +78,7 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
             {open.items.length === 0 && <p className="py-2 text-[12px] text-[var(--dp-text-secondary)]">Nothing in this step.</p>}
             {open.items.map((item) => (
               <button
-                key={item.saleId}
+                key={item.id}
                 type="button"
                 onClick={() => onNavigate?.('/statuses')}
                 title="Open Statuses to move this item along"
@@ -87,7 +87,7 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
                 <span className="min-w-0 flex-1 truncate text-[var(--dp-text-primary)]">
                   {item.name}{item.quantity > 1 ? ` ×${item.quantity}` : ''}
                 </span>
-                <span className="hidden text-[12px] text-[var(--dp-text-secondary)] sm:inline">{item.buyer}</span>
+                {item.party && <span className="hidden text-[12px] text-[var(--dp-text-secondary)] sm:inline">{item.party}</span>}
                 {sinceLabel(item.since) && (
                   <span className="hidden w-14 text-right text-[12px] text-[var(--dp-text-label)] md:inline">{sinceLabel(item.since)}</span>
                 )}

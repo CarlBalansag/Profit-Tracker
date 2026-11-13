@@ -553,9 +553,11 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       vendorBreakdown,
       categoryBreakdown,
       pipelineCounts,
-      // Per sale workflow (Cash-out, Marketplace): units, money and items in
+      // As steps (all / Cash-out / Marketplace): units, money and items in
       // each step, from the same mode/date-filtered sales as pipelineCounts.
-      workflowPipelines: buildWorkflowPipelines(sales),
+      // The "all" view also counts unsold stock, as the classic pipeline does
+      // in All mode; Cashout/Marketplace stock isn't tied to either yet.
+      workflowPipelines: buildWorkflowPipelines(sales, mode === 'All' ? allInventories : []),
       trend,
       trendMeta,
       recentTransactions: cashFlowTransactions.slice(0, 10),

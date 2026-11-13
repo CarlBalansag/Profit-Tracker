@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Dashboard from './Dashboard';
 import { DEFAULT_DASHBOARD_SETTINGS } from '../data/dashboardRegistry';
@@ -17,6 +17,14 @@ const data = {
     { product: 'Old Row', cost: 10, revenue: 20, profit: 10, status: null, date: '2026-11-01', quantity: 1 },
   ],
   pipelineCounts: { 'Pre Order': 1234 },
+  workflowPipelines: {
+    all: { stages: [
+      { status: 'ON_HAND', count: 1234, value: 50000, itemCount: 0, items: [] },
+      { status: 'PAID', count: 3, value: 900, itemCount: 0, items: [] },
+    ] },
+    cashout: { stages: [{ status: 'SCANNED_IN', count: 2, value: 600, itemCount: 0, items: [] }] },
+    marketplace: { stages: [{ status: 'OUTBOUND', count: 1, value: 50, itemCount: 0, items: [] }] },
+  },
   topCards: [{ name: 'Visa', amount: 4567.8, txns: 3 }],
 };
 
@@ -92,12 +100,24 @@ describe('Dashboard KPI cards', () => {
     expect(screen.getByText(/Welcome back/)).toBeInTheDocument();
   });
 
-  it('counts the status pipeline numbers too, with screen readers getting the final number', () => {
-    const { container } = mount('premium');
-    const counts = [...container.querySelectorAll('.dp-pipeline-count')];
-    expect(counts.length).toBeGreaterThan(0);
-    const count = counts.find((el) => el.querySelector('.sr-only')?.textContent === '1234');
-    expect(count).toBeDefined();
-    expect(count.querySelector('[aria-hidden="true"]')).not.toBeNull();
+  it('opens the Status Pipeline on All, the first tab, showing every step', () => {
+    mount('premium');
+    const tabs = within(screen.getByRole('group', { name: 'Pipeline view' })).getAllByRole('button');
+    expect(tabs.map((t) => t.textContent)).toEqual(['All', 'Cash-out', 'Marketplace']);
+    expect(tabs[0]).toHaveAttribute('aria-pressed', 'true');
+    const onHand = screen.getByRole('button', { name: /^On Hand/ });
+    expect(within(onHand).getByText('1234', { selector: '.sr-only' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Paid/ })).toBeInTheDocument();
+  });
+
+  it('switches the pipeline to the workflow the dashboard filter picks, and back to All', () => {
+    mount('premium');
+    fireEvent.click(screen.getByRole('button', { name: 'Cashout' }));
+    expect(screen.getByRole('button', { name: /^Scanned In/ })).toBeInTheDocument();
+    // The dashboard filter's button comes before the pipeline's own tab.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Marketplace' })[0]);
+    expect(screen.getByRole('button', { name: /^Outbound/ })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'All' })[0]);
+    expect(screen.getByRole('button', { name: /^On Hand/ })).toBeInTheDocument();
   });
 });

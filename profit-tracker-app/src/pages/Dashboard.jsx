@@ -23,9 +23,9 @@ import HScrollbar from '../components/UI/HScrollbar';
 import CountUp from '../components/UI/CountUp';
 import WorkflowPipeline from '../components/Dashboard/WorkflowPipeline';
 
-// Status Pipeline views: each sale workflow's own steps, or the classic grid of
-// every stage ("All").
-const PIPELINE_VIEWS = [['cashout', 'Cash-out'], ['marketplace', 'Marketplace'], ['all', 'All']];
+// Status Pipeline views: every step, stock through paid ("All", the default),
+// or one sale workflow's own steps.
+const PIPELINE_VIEWS = [['all', 'All'], ['cashout', 'Cash-out'], ['marketplace', 'Marketplace']];
 import { formatMoney, formatWholeMoney } from '../utils/money';
 import { recordStatusLabel } from '../data/statusWorkflow';
 
@@ -121,14 +121,12 @@ const Dashboard = () => {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [trendMode, setTrendMode] = useState('period'); // 'period' | 'cumulative'
   const [chartView, setChartView] = useState('line'); // 'line' | 'bar'
-  const [pipelinePage, setPipelinePage] = useState(0); // mobile-only Status Pipeline pagination
-  const [pipelineView, setPipelineView] = useState('cashout'); // 'cashout' | 'marketplace' | 'all' (all = the classic stage grid)
-  // Cashout/Marketplace only have sales of that kind, so the Status Pipeline
-  // follows to the matching workflow.
+  const [pipelineView, setPipelineView] = useState('all'); // 'all' | 'cashout' | 'marketplace'
+  // The Status Pipeline follows the dashboard filter: All shows every step,
+  // Cashout/Marketplace (which only have sales of that kind) their workflow.
   const chooseMode = (mode) => {
     setModeFilter(mode);
-    if (mode === 'Cashout') setPipelineView('cashout');
-    if (mode === 'Marketplace') setPipelineView('marketplace');
+    setPipelineView(mode === 'Cashout' ? 'cashout' : mode === 'Marketplace' ? 'marketplace' : 'all');
   };
   const [topCardsPage, setTopCardsPage] = useState(0); // Top Cards pagination (3 per page, all breakpoints)
   const statsRowRef = useRef(null); // KPI row, driven by the drawn scrollbar below it
@@ -249,30 +247,6 @@ const Dashboard = () => {
 
     if (sectionId === 'pipeline') {
       if (!showPipeline || visiblePipelineCards.length === 0) return null;
-      const pipelinePerPage = 4;
-      const pipelinePageCount = Math.ceil(visiblePipelineCards.length / pipelinePerPage);
-      const safePipelinePage = Math.min(pipelinePage, pipelinePageCount - 1);
-      const mobilePipelineCards = visiblePipelineCards.slice(
-        safePipelinePage * pipelinePerPage,
-        safePipelinePage * pipelinePerPage + pipelinePerPage
-      );
-      const renderPipelineCard = cardConfig => {
-        const def = PIPELINE_CARD_REGISTRY[cardConfig.id];
-        if (!def) return null;
-        return (
-          <PipelineCard
-            key={cardConfig.id}
-            icon={def.icon}
-            count={pipeline[cardConfig.id] || 0}
-            pending={refreshing}
-            label={def.label}
-            color={def.color}
-            statusKey={cardConfig.id}
-            onNavigate={navigate}
-            uiStyle={preferences.style}
-          />
-        );
-      };
       return (
         <div key="pipeline" data-tutorial-id="dashboard-pipeline" className={isGlass
           ? "rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.22)] animate-in fade-in duration-300 fill-mode-both"
@@ -296,37 +270,16 @@ const Dashboard = () => {
           </div>
           <p className={isGlass ? "mb-3 hidden px-0.5 text-[11px] text-white/18 sm:block" : "mb-4 hidden text-[12px] text-[var(--dp-text-secondary)] sm:block"}>
             {pipelineView === 'all'
-              ? 'Units currently in each stage right now — not a cumulative total. See "Units Sold" below for all units sold in this period regardless of their current status.'
+              ? 'Units in each step right now, from unsold stock (at cost) through sold items (at their sale price). Click a step to see its items.'
               : 'Units in each step of this sale workflow right now, with what they sell for. Click a step to see its items.'}
           </p>
 
-          {/* Both views share one grid cell; the hidden one still holds its
-              space, so the card keeps the taller view's height when switching. */}
-          <div className="grid">
-          <div className={`[grid-area:1/1] min-w-0 ${pipelineView === 'all' ? 'invisible pointer-events-none' : ''}`} aria-hidden={pipelineView === 'all'}>
-            <WorkflowPipeline
-              key={pipelineView === 'all' ? 'cashout' : pipelineView}
-              pipeline={workflowPipelines[pipelineView === 'all' ? 'cashout' : pipelineView]}
-              pending={refreshing}
-              onNavigate={navigate}
-            />
-          </div>
-
-          <div className={`[grid-area:1/1] min-w-0 ${pipelineView !== 'all' ? 'invisible pointer-events-none' : ''}`} aria-hidden={pipelineView !== 'all'}>
-          {/* Mobile (below lg): 4 cards at a time, paginated */}
-          <div className="lg:hidden">
-            <div key={safePipelinePage} className={isGlass ? "grid grid-cols-2 gap-4 page-transition" : "grid grid-cols-2 gap-3 page-transition"}>
-              {mobilePipelineCards.map(renderPipelineCard)}
-            </div>
-            <PageNav count={pipelinePageCount} index={safePipelinePage} onChange={setPipelinePage} isGlass={isGlass} />
-          </div>
-
-          {/* Desktop (lg+): show every card at once, unchanged from before */}
-          <div className={isGlass ? "hidden lg:grid grid-cols-3 2xl:grid-cols-4 gap-4" : "hidden lg:grid grid-cols-6 gap-3"}>
-            {visiblePipelineCards.map(renderPipelineCard)}
-          </div>
-          </div>
-          </div>
+          <WorkflowPipeline
+            key={pipelineView}
+            pipeline={workflowPipelines[pipelineView]}
+            pending={refreshing}
+            onNavigate={navigate}
+          />
         </div>
       );
     }
@@ -1487,53 +1440,6 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
             </div>,
             document.body
           )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function PipelineCard({ icon, count, label, statusKey, onNavigate, uiStyle = 'neon-dark', pending = false }) {
-  const isGlass = uiStyle === 'glassmorphism-brown';
-  const IconComponent = icon;
-  const isEmpty = Number(count) === 0;
-  const isAccentStatus = ['PURCHASED', 'SHIPPED', 'On Hand'].includes(statusKey);
-  const isYellowStatus = statusKey === 'Pre Order';
-  const premiumValue = isAccentStatus
-      ? 'text-[var(--dp-accent)]'
-      : isYellowStatus
-        ? 'text-[#C9972E]'
-        : 'text-[var(--dp-text-primary)]';
-  return (
-    <div
-      onClick={() => onNavigate('/statuses')}
-      title={`${count} unit${count === 1 ? '' : 's'} currently in "${label}" status. Click to open Statuses.`}
-      className={isGlass
-        ? "group relative min-h-[160px] cursor-pointer overflow-hidden rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-5 text-left shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-colors hover:border-[#d8a65a]/18 hover:bg-[#1d1f21]/78"
-        : `flex items-center gap-3 rounded-2xl p-4 cursor-pointer border border-[color:var(--dp-border)] ${
-            isEmpty
-              ? 'bg-[var(--dp-bg)]/50 opacity-70 hover:opacity-100 transition-opacity'
-              : 'bg-[var(--dp-card-bg)] dp-clickable-pipeline'
-          }`
-      }
-    >
-      {isGlass ? (
-        <>
-          <div className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.05] bg-white/[0.025] text-[#d8a65a]/75 opacity-75 transition-opacity group-hover:opacity-100">
-            <IconComponent className="h-4 w-4" />
-          </div>
-          <p className="font-serif text-3xl font-semibold leading-none text-[#d8a65a]"><CountUp value={count} pending={pending} /></p>
-          <p className="mt-3 max-w-[75%] text-[11px] font-bold uppercase tracking-wider text-white/20">{label}</p>
-        </>
-      ) : (
-        <>
-          <div className="w-9 h-9 rounded-full bg-[var(--dp-bg)] flex items-center justify-center shrink-0 dp-pipeline-icon-wrap transition-all duration-300">
-            <IconComponent className={`w-4.5 h-4.5 transition-colors duration-300 ${isEmpty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-secondary)]'}`} />
-          </div>
-          <div>
-            <p className={`text-[11px] font-medium uppercase tracking-[0.06em] dp-pipeline-label transition-colors duration-300 ${isEmpty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-secondary)]'}`}>{label}</p>
-            <p className={`text-lg font-bold tabular-nums dp-pipeline-count transition-colors duration-300 ${isEmpty ? 'text-[var(--dp-text-label)]' : premiumValue}`}><CountUp value={count} pending={pending} /></p>
-          </div>
         </>
       )}
     </div>
