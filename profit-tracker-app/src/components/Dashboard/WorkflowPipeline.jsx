@@ -34,8 +34,9 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
     // Fills whatever height the dashboard card gives it, so the step cards
     // stretch instead of leaving a gap.
     <div className="flex h-full flex-col gap-4">
-      {/* Padding inside the scroll box so the cards' shadows aren't cut off. */}
-      <div className="-mx-2 flex min-h-[104px] flex-1 items-stretch gap-1.5 overflow-x-auto px-2 pb-4 pt-1 dp-scrollbar">
+      {/* Padding inside the scroll box so the cards' shadows, and their lift
+          on hover, aren't cut off. */}
+      <div className="-mx-2 flex min-h-[104px] flex-1 items-stretch gap-1.5 overflow-x-auto px-2 pb-4 pt-2 dp-scrollbar">
         {stages.map((stage, index) => {
           const active = openStatus === stage.status;
           const empty = stage.count === 0;
@@ -45,19 +46,19 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
                 type="button"
                 aria-pressed={active}
                 onClick={() => setOpenStatus(active ? null : stage.status)}
-                // Raised like the KPI cards: card surface, their shadow, and a
-                // deeper shadow on hover.
-                className={`flex min-w-[124px] flex-1 flex-col justify-center rounded-[18px] border p-4 text-left dp-elevated dp-elevated-hover transition-[box-shadow,border-color] duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] ${
+                // Raised and clickable like the KPI cards: card surface, their
+                // shadow, and the same hover (lift, accent tint, accent number).
+                className={`flex min-w-[124px] flex-1 flex-col justify-center rounded-[18px] border p-4 text-left cursor-pointer dp-elevated dp-clickable-card focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] ${
                   active
                     ? 'border-[color:var(--dp-accent)] bg-[var(--dp-accent-bg)]'
                     : 'border-[color:var(--dp-border)] bg-[var(--dp-card-bg)]'
                 }`}
               >
-                <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--dp-text-label)]">{displayLabel(stage.status)}</span>
-                <span className={`mt-2 text-[28px] font-bold leading-none tabular-nums ${empty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-primary)]'}`}>
+                <span className="dp-card-title text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--dp-text-label)] transition-colors duration-300">{displayLabel(stage.status)}</span>
+                <span className={`dp-card-value mt-2 text-[28px] font-bold leading-none tabular-nums transition-colors duration-300 ${empty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-primary)]'}`}>
                   <CountUp value={stage.count} pending={pending} />
                 </span>
-                <span className={`mt-1.5 text-[13px] font-semibold tabular-nums ${empty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-primary)] opacity-80'}`}>
+                <span className={`dp-card-subtext mt-1.5 text-[13px] font-semibold tabular-nums transition-colors duration-300 ${empty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-primary)] opacity-80'}`}>
                   <CountUp value={dollars(stage.value)} pending={pending} />
                 </span>
               </button>
