@@ -250,6 +250,7 @@ const Dashboard = () => {
             key={cardConfig.id}
             icon={def.icon}
             count={pipeline[cardConfig.id] || 0}
+            pending={refreshing}
             label={def.label}
             color={def.color}
             statusKey={cardConfig.id}
@@ -1446,7 +1447,7 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
   );
 }
 
-function PipelineCard({ icon, count, label, statusKey, onNavigate, uiStyle = 'neon-dark' }) {
+function PipelineCard({ icon, count, label, statusKey, onNavigate, uiStyle = 'neon-dark', pending = false }) {
   const isGlass = uiStyle === 'glassmorphism-brown';
   const IconComponent = icon;
   const isEmpty = Number(count) === 0;
@@ -1475,7 +1476,7 @@ function PipelineCard({ icon, count, label, statusKey, onNavigate, uiStyle = 'ne
           <div className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.05] bg-white/[0.025] text-[#d8a65a]/75 opacity-75 transition-opacity group-hover:opacity-100">
             <IconComponent className="h-4 w-4" />
           </div>
-          <p className="font-serif text-3xl font-semibold leading-none text-[#d8a65a]">{count}</p>
+          <p className="font-serif text-3xl font-semibold leading-none text-[#d8a65a]"><CountUp value={count} pending={pending} /></p>
           <p className="mt-3 max-w-[75%] text-[11px] font-bold uppercase tracking-wider text-white/20">{label}</p>
         </>
       ) : (
@@ -1485,7 +1486,7 @@ function PipelineCard({ icon, count, label, statusKey, onNavigate, uiStyle = 'ne
           </div>
           <div>
             <p className={`text-[11px] font-medium uppercase tracking-[0.06em] dp-pipeline-label transition-colors duration-300 ${isEmpty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-secondary)]'}`}>{label}</p>
-            <p className={`text-lg font-bold tabular-nums dp-pipeline-count transition-colors duration-300 ${isEmpty ? 'text-[var(--dp-text-label)]' : premiumValue}`}>{count}</p>
+            <p className={`text-lg font-bold tabular-nums dp-pipeline-count transition-colors duration-300 ${isEmpty ? 'text-[var(--dp-text-label)]' : premiumValue}`}><CountUp value={count} pending={pending} /></p>
           </div>
         </>
       )}

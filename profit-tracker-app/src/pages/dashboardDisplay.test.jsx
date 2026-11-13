@@ -16,7 +16,7 @@ const data = {
     { product: 'Big TV', cost: 1234.5, revenue: 2345.6, profit: 1111.1, status: 'SHIPPED_IN', date: '2026-11-01', quantity: 1 },
     { product: 'Old Row', cost: 10, revenue: 20, profit: 10, status: null, date: '2026-11-01', quantity: 1 },
   ],
-  pipelineCounts: {},
+  pipelineCounts: { 'Pre Order': 1234 },
   topCards: [{ name: 'Visa', amount: 4567.8, txns: 3 }],
 };
 
@@ -90,5 +90,14 @@ describe('Dashboard KPI cards', () => {
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
     expect(container.querySelector('.opacity-50, .pointer-events-none, .animate-pulse')).toBeNull();
     expect(screen.getByText(/Welcome back/)).toBeInTheDocument();
+  });
+
+  it('counts the status pipeline numbers too, with screen readers getting the final number', () => {
+    const { container } = mount('premium');
+    const counts = [...container.querySelectorAll('.dp-pipeline-count')];
+    expect(counts.length).toBeGreaterThan(0);
+    const count = counts.find((el) => el.querySelector('.sr-only')?.textContent === '1234');
+    expect(count).toBeDefined();
+    expect(count.querySelector('[aria-hidden="true"]')).not.toBeNull();
   });
 });
