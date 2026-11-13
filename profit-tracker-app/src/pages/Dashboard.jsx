@@ -121,8 +121,8 @@ const Dashboard = () => {
   const statsRowRef = useRef(null); // KPI row, driven by the drawn scrollbar below it
 
   const { data, isLoading, isError, error, refetch, isPlaceholderData } = useDashboard(modeFilter, dateFilter);
-  // A filter change is loading: the last numbers stay up, the KPI values show
-  // skeletons, and everything else dims until the new data arrives.
+  // A filter change is loading: the last numbers stay up, faded, until the new
+  // data arrives; the KPI numbers then count to their new values.
   const refreshing = Boolean(isPlaceholderData);
   const { data: goals = [] } = useGoals();
   useEffect(() => { if (data) setLastUpdated(new Date()); }, [data]);
@@ -1313,12 +1313,6 @@ function GlassCircularPipeline({ cards, overflowCards = [], pipeline, onNavigate
   );
 }
 
-// A shimmering placeholder bar, drawn from the theme's own colors so it shows
-// on both dark and light backgrounds.
-function StatSkeleton({ className = '' }) {
-  return <span aria-hidden="true" className={`block rounded-md dp-skeleton ${className}`} />;
-}
-
 function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], description, onClick, uiStyle = 'neon-dark', loading = false }) {
   const [open, setOpen] = useState(false);
   const [popoverPosition, setPopoverPosition] = useState('bottom');
@@ -1382,18 +1376,13 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
               </span>
             )}
           </p>
-          {loading ? (
-            <div aria-busy="true" className="mt-2 space-y-2">
-              <span className="sr-only">Loading {title}</span>
-              <StatSkeleton className={isGlass ? 'h-8 w-28' : 'h-[33px] w-28'} />
-              <StatSkeleton className="h-3 w-20" />
-            </div>
-          ) : (
-            <>
-              <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] text-[var(--dp-text-primary)]`}><CountUp value={value} /></p>
-              <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
-            </>
-          )}
+          {/* While another filter loads, the last numbers stay up (faded); when
+              the new ones arrive they count from the old value to the new one,
+              up or down. */}
+          <div aria-busy={loading || undefined} className={`transition-opacity duration-300 ${loading ? 'opacity-50' : ''}`}>
+            <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] text-[var(--dp-text-primary)]`}><CountUp value={value} /></p>
+            <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
+          </div>
         </div>
         {isGlass && (
           <div className="w-9 h-9 3xl:w-11 3xl:h-11 rounded-xl bg-white/[0.035] border border-white/[0.05] flex items-center justify-center">

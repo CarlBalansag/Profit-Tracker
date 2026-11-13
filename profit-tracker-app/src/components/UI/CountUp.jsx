@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { animate } from 'framer-motion';
 
-const DURATION_S = 0.9;
+const DURATION_S = 1.4;
 const NUMBER = /-?\d[\d,]*(?:\.\d+)?/;
 
 // The number inside a formatted value ("$2,313.27", "13.98%", "100"), with what
