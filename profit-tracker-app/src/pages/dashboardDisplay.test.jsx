@@ -88,7 +88,7 @@ describe('Dashboard KPI cards', () => {
     expect(screen.queryByText(/^Loading /)).not.toBeInTheDocument();
     expect(container.textContent).toContain('$23,097.20');
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
-    expect(container.querySelector('.opacity-50, .pointer-events-none, .animate-pulse')).toBeNull();
+    expect(container.querySelector('.opacity-50, .animate-pulse, .pointer-events-none:not(.invisible)')).toBeNull();
     expect(screen.getByText(/Welcome back/)).toBeInTheDocument();
   });
 

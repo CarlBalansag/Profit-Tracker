@@ -5,6 +5,7 @@ const { validateQuery } = require('../middleware/validate');
 const { analyticsDashboardQuery } = require('../validation/schemas');
 const { Decimal, decimal, isRealizedSale, batchCost, allocatedCost, effectiveCashbackRate, inventoryCashback, saleEconomics, keptQuantity, keptSaleQuantity } = require('../services/decimalFinance');
 const { pipelineBucketOf } = require('../services/statusTransitions');
+const { buildWorkflowPipelines } = require('../services/workflowPipeline');
 const { payoutStatus } = require('../services/payoutStatus');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 
@@ -552,6 +553,9 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       vendorBreakdown,
       categoryBreakdown,
       pipelineCounts,
+      // Per sale workflow (Cash-out, Marketplace): units, money and items in
+      // each step, from the same mode/date-filtered sales as pipelineCounts.
+      workflowPipelines: buildWorkflowPipelines(sales),
       trend,
       trendMeta,
       recentTransactions: cashFlowTransactions.slice(0, 10),

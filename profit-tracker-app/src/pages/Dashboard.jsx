@@ -21,6 +21,11 @@ import MonthlyProfitSpendChart from '../components/Dashboard/MonthlyProfitSpendC
 import PageNav from '../components/UI/PageNav';
 import HScrollbar from '../components/UI/HScrollbar';
 import CountUp from '../components/UI/CountUp';
+import WorkflowPipeline from '../components/Dashboard/WorkflowPipeline';
+
+// Status Pipeline views: each sale workflow's own steps, or the classic grid of
+// every stage ("All").
+const PIPELINE_VIEWS = [['cashout', 'Cash-out'], ['marketplace', 'Marketplace'], ['all', 'All']];
 import { formatMoney, formatWholeMoney } from '../utils/money';
 import { recordStatusLabel } from '../data/statusWorkflow';
 
@@ -117,6 +122,14 @@ const Dashboard = () => {
   const [trendMode, setTrendMode] = useState('period'); // 'period' | 'cumulative'
   const [chartView, setChartView] = useState('line'); // 'line' | 'bar'
   const [pipelinePage, setPipelinePage] = useState(0); // mobile-only Status Pipeline pagination
+  const [pipelineView, setPipelineView] = useState('cashout'); // 'cashout' | 'marketplace' | 'all' (all = the classic stage grid)
+  // Cashout/Marketplace only have sales of that kind, so the Status Pipeline
+  // follows to the matching workflow.
+  const chooseMode = (mode) => {
+    setModeFilter(mode);
+    if (mode === 'Cashout') setPipelineView('cashout');
+    if (mode === 'Marketplace') setPipelineView('marketplace');
+  };
   const [topCardsPage, setTopCardsPage] = useState(0); // Top Cards pagination (3 per page, all breakpoints)
   const statsRowRef = useRef(null); // KPI row, driven by the drawn scrollbar below it
 
@@ -130,6 +143,7 @@ const Dashboard = () => {
   const recent = data?.recentTransactions || [];
   const stats = normalizeDashboardStats(data?.stats, recent);
   const pipeline = data?.pipelineCounts || {};
+  const workflowPipelines = data?.workflowPipelines || {};
   const topCards = data?.topCards || [];
   const trend = data?.trend || [];
   const trendMeta = data?.trendMeta ?? null;
@@ -264,11 +278,41 @@ const Dashboard = () => {
           ? "rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.22)] animate-in fade-in duration-300 fill-mode-both"
           : "rounded-[24px] p-6 bg-[var(--dp-card-bg)] dp-elevated animate-in slide-in-from-bottom-4 duration-500 fade-in delay-300 fill-mode-both"
         }>
-          <h3 className={isGlass ? "mb-1 px-0.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/24" : "text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)] mb-1"}>Status Pipeline</h3>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h3 className={isGlass ? "mb-1 px-0.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/24" : "text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)] mb-1"}>Status Pipeline</h3>
+            <div role="group" aria-label="Pipeline view" className="flex gap-0.5 rounded-full bg-[var(--dp-bg)] p-0.5">
+              {PIPELINE_VIEWS.map(([view, label]) => (
+                <button
+                  key={view}
+                  type="button"
+                  aria-pressed={pipelineView === view}
+                  onClick={() => setPipelineView(view)}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${pipelineView === view ? 'bg-[var(--dp-card-bg)] text-[var(--dp-accent)] dp-elevated' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <p className={isGlass ? "mb-3 hidden px-0.5 text-[11px] text-white/18 sm:block" : "mb-4 hidden text-[12px] text-[var(--dp-text-secondary)] sm:block"}>
-            Units currently in each stage right now — not a cumulative total. See "Units Sold" below for all units sold in this period regardless of their current status.
+            {pipelineView === 'all'
+              ? 'Units currently in each stage right now — not a cumulative total. See "Units Sold" below for all units sold in this period regardless of their current status.'
+              : 'Units in each step of this sale workflow right now, with what they sell for. Click a step to see its items.'}
           </p>
 
+          {/* Both views share one grid cell; the hidden one still holds its
+              space, so the card keeps the taller view's height when switching. */}
+          <div className="grid">
+          <div className={`[grid-area:1/1] min-w-0 ${pipelineView === 'all' ? 'invisible pointer-events-none' : ''}`} aria-hidden={pipelineView === 'all'}>
+            <WorkflowPipeline
+              key={pipelineView === 'all' ? 'cashout' : pipelineView}
+              pipeline={workflowPipelines[pipelineView === 'all' ? 'cashout' : pipelineView]}
+              pending={refreshing}
+              onNavigate={navigate}
+            />
+          </div>
+
+          <div className={`[grid-area:1/1] min-w-0 ${pipelineView !== 'all' ? 'invisible pointer-events-none' : ''}`} aria-hidden={pipelineView !== 'all'}>
           {/* Mobile (below lg): 4 cards at a time, paginated */}
           <div className="lg:hidden">
             <div key={safePipelinePage} className={isGlass ? "grid grid-cols-2 gap-4 page-transition" : "grid grid-cols-2 gap-3 page-transition"}>
@@ -280,6 +324,8 @@ const Dashboard = () => {
           {/* Desktop (lg+): show every card at once, unchanged from before */}
           <div className={isGlass ? "hidden lg:grid grid-cols-3 2xl:grid-cols-4 gap-4" : "hidden lg:grid grid-cols-6 gap-3"}>
             {visiblePipelineCards.map(renderPipelineCard)}
+          </div>
+          </div>
           </div>
         </div>
       );
@@ -836,7 +882,7 @@ const Dashboard = () => {
               {['All', 'Cashout', 'Marketplace'].map((mode) => (
                 <button
                   key={mode}
-                  onClick={() => setModeFilter(mode)}
+                  onClick={() => chooseMode(mode)}
                   className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg transition-all ${modeFilter === mode ? 'bg-[#d8a65a]/12 text-[#d8a65a] ring-1 ring-[#d8a65a]/25' : 'text-white/30 hover:text-[#e8e2d6] hover:bg-white/[0.04]'}`}
                 >
                   {mode === 'All' && <Layers className="w-3.5 h-3.5" />}
@@ -955,7 +1001,7 @@ const Dashboard = () => {
             {['All', 'Cashout', 'Marketplace'].map((mode) => (
               <button
                 key={mode}
-                onClick={() => setModeFilter(mode)}
+                onClick={() => chooseMode(mode)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-full transition-colors ${modeFilter === mode ? (isGlass ? 'bg-[#d8a65a]/12 text-[#d8a65a] ring-1 ring-[#d8a65a]/25' : 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]') : (isGlass ? 'text-white/30 hover:text-[#e8e2d6] hover:bg-white/[0.04]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]')}`}
               >
                 {mode === 'All' && <Layers className="w-3.5 h-3.5" />}
