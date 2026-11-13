@@ -268,14 +268,15 @@ const Dashboard = () => {
               ))}
             </div>
           </div>
-          <p className={isGlass ? "mb-3 hidden px-0.5 text-[11px] text-white/18 sm:block" : "mb-4 hidden text-[12px] text-[var(--dp-text-secondary)] sm:block"}>
+          {/* One line, whichever tab, so the card's height doesn't shift. */}
+          <p className={isGlass ? "mb-3 hidden truncate px-0.5 text-[11px] text-white/18 sm:block" : "mb-4 hidden truncate text-[12px] text-[var(--dp-text-secondary)] sm:block"}>
             {pipelineView === 'all'
-              ? 'Units in each step right now, from unsold stock (at cost) through sold items (at their sale price). Click a step to see its items.'
-              : 'Units in each step of this sale workflow right now, with what they sell for. Click a step to see its items.'}
+              ? 'Units in each step right now: unsold stock at cost, sold items at their sale price. Click a step to see its items.'
+              : 'Units in each step of this workflow right now, at their sale price. Click a step to see its items.'}
           </p>
 
+          {/* Not remounted per tab: the same steps slide between tabs. */}
           <WorkflowPipeline
-            key={pipelineView}
             pipeline={workflowPipelines[pipelineView]}
             pending={refreshing}
             onNavigate={navigate}

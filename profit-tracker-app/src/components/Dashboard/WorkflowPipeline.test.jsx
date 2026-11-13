@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import WorkflowPipeline from './WorkflowPipeline';
 
 afterEach(cleanup);
@@ -43,7 +43,7 @@ describe('WorkflowPipeline', () => {
     expect(screen.getByRole('button', { name: /^Paid/ })).toBeInTheDocument();
   });
 
-  it('lists a step\'s items when clicked, and closes on a second click', () => {
+  it('lists a step\'s items when clicked, and closes on a second click', async () => {
     const onNavigate = vi.fn();
     render(<WorkflowPipeline pipeline={pipeline} onNavigate={onNavigate} />);
     const step = screen.getByRole('button', { name: /Sold — Waiting to Ship/ });
@@ -56,7 +56,9 @@ describe('WorkflowPipeline', () => {
     expect(onNavigate).toHaveBeenCalledWith('/statuses');
 
     fireEvent.click(step);
-    expect(screen.queryByText('PS5 Pro ×2')).not.toBeInTheDocument();
+    expect(step).toHaveAttribute('aria-pressed', 'false');
+    // The list shrinks away rather than vanishing at once.
+    await waitFor(() => expect(screen.queryByText('PS5 Pro ×2')).not.toBeInTheDocument());
   });
 
   it('says when a step lists only its newest items, and when a step is empty', () => {
@@ -73,5 +75,13 @@ describe('WorkflowPipeline', () => {
     cleanup();
     render(<WorkflowPipeline pipeline={undefined} />);
     expect(screen.getByText('Nothing in any step right now.')).toBeInTheDocument();
+  });
+
+  it('keeps the step row the same height with or without steps', () => {
+    const { container } = render(<WorkflowPipeline pipeline={pipeline} />);
+    expect(container.firstChild.firstChild).toHaveClass('h-[148px]');
+    cleanup();
+    const empty = render(<WorkflowPipeline pipeline={{ stages: [] }} hideEmpty />);
+    expect(empty.container.firstChild.firstChild).toHaveClass('h-[148px]');
   });
 });
