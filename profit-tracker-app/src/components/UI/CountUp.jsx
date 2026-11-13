@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { animate } from 'framer-motion';
 
-const DURATION_MS = 700;
+const DURATION_S = 0.9;
 const NUMBER = /-?\d[\d,]*(?:\.\d+)?/;
 
 // The number inside a formatted value ("$2,313.27", "13.98%", "100"), with what
@@ -29,16 +30,12 @@ function formatLike(parsed, number) {
   return `${parsed.before}${digits}${parsed.after}`;
 }
 
-const canAnimate = () =>
-  typeof window !== 'undefined'
-  && typeof window.requestAnimationFrame === 'function'
-  && !(typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-
 /**
- * Shows a formatted number ("$2,313.27") counting up to its value: from 0 the
- * first time, then from the old value to the new one whenever it changes.
- * Screen readers get only the final value. With reduced motion turned on, or
- * for text without a number, the value is shown as-is.
+ * Shows a formatted number ("$2,313.27") counting up to its value with
+ * framer-motion: from 0 the first time, then from the old value to the new one
+ * whenever it changes. It plays even when the device asks for reduced motion
+ * (a short number count, by choice). Screen readers get only the final value.
+ * Text without a number is shown as-is.
  */
 export default function CountUp({ value }) {
   const text = String(value ?? '');
@@ -46,30 +43,24 @@ export default function CountUp({ value }) {
   const fromRef = useRef(0);
   // The in-between text, tagged with the value it is counting towards, so a
   // stale frame is never shown for a newer value.
-  const [frame, setFrame] = useState(null);
+  const [frame, setFrame] = useState(() => (target ? { for: text, text: formatLike(target, 0) } : null));
 
   useEffect(() => {
     const parsed = parseValue(text);
     if (!parsed) return undefined;
-    if (!canAnimate()) {
-      fromRef.current = parsed.number;
-      return undefined;
-    }
-
-    const from = fromRef.current;
-    const to = parsed.number;
-    let handle;
-    let start;
-    const step = (now) => {
-      if (start === undefined) start = now;
-      const t = Math.min(1, (now - start) / DURATION_MS);
-      const current = from + (to - from) * (1 - (1 - t) ** 3);
-      fromRef.current = current;
-      setFrame(t < 1 ? { for: text, text: formatLike(parsed, current) } : null);
-      if (t < 1) handle = window.requestAnimationFrame(step);
-    };
-    handle = window.requestAnimationFrame(step);
-    return () => window.cancelAnimationFrame(handle);
+    const controls = animate(fromRef.current, parsed.number, {
+      duration: DURATION_S,
+      ease: [0.16, 1, 0.3, 1],
+      onUpdate: (latest) => {
+        fromRef.current = latest;
+        setFrame({ for: text, text: formatLike(parsed, latest) });
+      },
+      onComplete: () => {
+        fromRef.current = parsed.number;
+        setFrame(null);
+      },
+    });
+    return () => controls.stop();
   }, [text]);
 
   if (!target) return <>{text}</>;

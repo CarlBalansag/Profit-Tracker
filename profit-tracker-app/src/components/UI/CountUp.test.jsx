@@ -1,51 +1,65 @@
 import '@testing-library/jest-dom/vitest';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
-import CountUp from './CountUp';
 
-afterEach(() => {
-  cleanup();
-  vi.unstubAllGlobals();
-});
+// framer-motion's animate, driven by hand: each run records its from/to and
+// callbacks so the test can step it.
+const runs = [];
+vi.mock('framer-motion', () => ({
+  animate: (from, to, options) => {
+    const run = { from, to, options, stopped: false };
+    runs.push(run);
+    return { stop: () => { run.stopped = true; } };
+  },
+}));
 
-// Drives requestAnimationFrame by hand: each call to tick() runs the queued frame at that time.
-function fakeFrames() {
-  let queued = null;
-  vi.stubGlobal('requestAnimationFrame', (cb) => { queued = cb; return 1; });
-  vi.stubGlobal('cancelAnimationFrame', () => { queued = null; });
-  return (time) => act(() => { const cb = queued; queued = null; cb?.(time); });
-}
+const { default: CountUp } = await import('./CountUp');
+
+const step = (run, value) => act(() => run.options.onUpdate(value));
+const finish = (run) => act(() => run.options.onComplete());
 const visible = (container) => container.querySelector('[aria-hidden="true"]').textContent;
+const lastRun = () => runs.filter((r) => !r.stopped).at(-1);
+
+beforeEach(() => { runs.length = 0; });
+afterEach(cleanup);
 
 describe('CountUp', () => {
-  it('counts up from 0 in the same format, then lands on the exact value', () => {
-    const tick = fakeFrames();
+  it('starts at 0 in the same format, counts up, then lands on the exact value', () => {
     const { container } = render(<CountUp value="$2,313.27" />);
-    tick(0);
     expect(visible(container)).toBe('$0.00');
-    tick(350);
-    expect(visible(container)).toMatch(/^\$\d{1,3}(,\d{3})*\.\d{2}$/);
-    tick(700);
+    const run = lastRun();
+    expect(run.from).toBe(0);
+    expect(run.to).toBe(2313.27);
+    step(run, 1234.5);
+    expect(visible(container)).toBe('$1,234.50');
+    finish(run);
     expect(visible(container)).toBe('$2,313.27');
     expect(container.querySelector('.sr-only')).toHaveTextContent('$2,313.27');
   });
 
   it('counts from the old value to the new one when it changes', () => {
-    const tick = fakeFrames();
     const { container, rerender } = render(<CountUp value="100" />);
-    tick(0); tick(700);
+    finish(lastRun());
     rerender(<CountUp value="200" />);
-    tick(1000);
-    expect(visible(container)).toBe('100');
-    tick(2000);
-    expect(visible(container)).toBe('200');
+    const run = lastRun();
+    expect(run.from).toBe(100);
+    expect(run.to).toBe(200);
+    step(run, 150);
+    expect(visible(container)).toBe('150');
   });
 
-  it('shows the value as-is with reduced motion, and leaves text without a number alone', () => {
-    vi.stubGlobal('matchMedia', (q) => ({ matches: q.includes('reduce'), addEventListener() {}, removeEventListener() {} }));
-    const { container, rerender } = render(<CountUp value="13.98%" />);
-    expect(visible(container)).toBe('13.98%');
-    rerender(<CountUp value="—" />);
+  it('stops the old count when the value changes mid-way', () => {
+    const { rerender } = render(<CountUp value="13.98%" />);
+    const first = lastRun();
+    step(first, 5);
+    rerender(<CountUp value="11.42%" />);
+    expect(first.stopped).toBe(true);
+    expect(lastRun().from).toBe(5);
+  });
+
+  it('leaves text without a number alone', () => {
+    const { container } = render(<CountUp value="—" />);
     expect(container).toHaveTextContent('—');
+    expect(runs).toHaveLength(0);
   });
 });
