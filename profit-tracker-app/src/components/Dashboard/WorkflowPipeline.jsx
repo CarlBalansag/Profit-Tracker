@@ -20,11 +20,13 @@ const sinceLabel = (since) => {
  */
 export default function WorkflowPipeline({ pipeline, pending = false, onNavigate }) {
   const [openStatus, setOpenStatus] = useState(null);
-  const stages = pipeline?.stages || [];
+  // Only the steps that have something in them, so the strip fits what's
+  // actually going on (still in workflow order).
+  const stages = (pipeline?.stages || []).filter((stage) => stage.count > 0);
   const open = stages.find((stage) => stage.status === openStatus);
 
   if (stages.length === 0) {
-    return <p className="py-6 text-center text-[12px] text-[var(--dp-text-secondary)]">Nothing in this workflow yet.</p>;
+    return <p className="py-6 text-center text-[12px] text-[var(--dp-text-secondary)]">Nothing in any step right now.</p>;
   }
 
   return (
@@ -34,7 +36,6 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
       <div className="flex min-h-[96px] flex-1 items-stretch gap-1 overflow-x-auto pb-1 dp-scrollbar">
         {stages.map((stage, index) => {
           const active = openStatus === stage.status;
-          const empty = stage.count === 0;
           return (
             <React.Fragment key={stage.status}>
               <button
@@ -48,10 +49,10 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
                 }`}
               >
                 <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--dp-text-secondary)]">{displayLabel(stage.status)}</span>
-                <span className={`mt-1.5 text-[28px] font-bold leading-none tabular-nums ${empty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-primary)]'}`}>
+                <span className="mt-1.5 text-[28px] font-bold leading-none tabular-nums text-[var(--dp-text-primary)]">
                   <CountUp value={stage.count} pending={pending} />
                 </span>
-                <span className={`mt-1.5 text-[13px] font-semibold tabular-nums ${empty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-primary)] opacity-80'}`}>
+                <span className="mt-1.5 text-[13px] font-semibold tabular-nums text-[var(--dp-text-primary)] opacity-80">
                   <CountUp value={dollars(stage.value)} pending={pending} />
                 </span>
               </button>
@@ -75,7 +76,6 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
             )}
           </div>
           <div className="mt-2 divide-y divide-[color:var(--dp-border)]">
-            {open.items.length === 0 && <p className="py-2 text-[12px] text-[var(--dp-text-secondary)]">Nothing in this step.</p>}
             {open.items.map((item) => (
               <button
                 key={item.id}
