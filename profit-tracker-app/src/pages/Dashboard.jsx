@@ -121,8 +121,8 @@ const Dashboard = () => {
   const statsRowRef = useRef(null); // KPI row, driven by the drawn scrollbar below it
 
   const { data, isLoading, isError, error, refetch, isPlaceholderData } = useDashboard(modeFilter, dateFilter);
-  // A filter change is loading: the last numbers stay up, faded, until the new
-  // data arrives; the KPI numbers then count to their new values.
+  // A filter change is loading: the page stays exactly as it is, usable, until
+  // the new data arrives; the KPI numbers then count to their new values.
   const refreshing = Boolean(isPlaceholderData);
   const { data: goals = [] } = useGoals();
   useEffect(() => { if (data) setLastUpdated(new Date()); }, [data]);
@@ -984,19 +984,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {dashboardSections.map((section) => {
-        const content = renderDashboardSection(section.id);
-        if (!content || section.id === 'statCards') return content;
-        return (
-          <div
-            key={section.id}
-            aria-busy={refreshing || undefined}
-            className={`transition-opacity duration-200 ${refreshing ? 'opacity-50 pointer-events-none animate-pulse' : ''}`}
-          >
-            {content}
-          </div>
-        );
-      })}
+      {dashboardSections.map(section => renderDashboardSection(section.id))}
 
 
 
@@ -1376,10 +1364,10 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
               </span>
             )}
           </p>
-          {/* While another filter loads, the last numbers stay up (faded); when
-              the new ones arrive they count from the old value to the new one,
-              up or down. */}
-          <div aria-busy={loading || undefined} className={`transition-opacity duration-300 ${loading ? 'opacity-50' : ''}`}>
+          {/* While another filter loads, the last numbers stay up as they are;
+              when the new ones arrive they count from the old value to the new
+              one, up or down. Nothing fades or locks in between. */}
+          <div aria-busy={loading || undefined}>
             <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] text-[var(--dp-text-primary)]`}><CountUp value={value} /></p>
             <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
           </div>

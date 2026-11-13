@@ -82,13 +82,13 @@ describe('Dashboard KPI cards', () => {
     expect(titleLine).toHaveTextContent(/^Net Profitsold via Cashout$|^.+sold via Cashout$/);
   });
 
-  it('keeps the page and the last numbers up, faded, while another filter loads', () => {
+  it('keeps the page and the last numbers up, not faded or locked, while another filter loads', () => {
     placeholder = true;
     const { container } = mount('premium');
     expect(screen.queryByText(/^Loading /)).not.toBeInTheDocument();
     expect(container.textContent).toContain('$23,097.20');
-    const busy = container.querySelector('[aria-busy="true"]');
-    expect(busy).toHaveClass('opacity-50');
+    expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(container.querySelector('.opacity-50, .pointer-events-none, .animate-pulse')).toBeNull();
     expect(screen.getByText(/Welcome back/)).toBeInTheDocument();
   });
 });
