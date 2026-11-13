@@ -16,22 +16,11 @@ function Sk({ className = '', style }) {
   );
 }
 
-// Shimmering skeleton block — light-background variant, used only by the
-// premium Dashboard skeleton, which sits on var(--dp-bg) instead of the
-// app's dark background.
+// Shimmering skeleton block for the Dashboard, which sits on var(--dp-bg). Its
+// colors come from the theme, so it shows on dark backgrounds too (a fixed
+// near-black tint was invisible there and the page looked blank).
 function SkLight({ className = '', style }) {
-  return (
-    <div
-      className={`rounded-[24px] relative overflow-hidden ${className}`}
-      style={{
-        backgroundColor: 'rgba(17,17,17,0.045)',
-        backgroundImage: 'linear-gradient(90deg, transparent 25%, rgba(17,17,17,0.07) 50%, transparent 75%)',
-        backgroundSize: '400% 100%',
-        animation: 'sk-shimmer 1.4s ease-in-out infinite',
-        ...style,
-      }}
-    />
-  );
+  return <div className={`rounded-[24px] relative overflow-hidden dp-skeleton ${className}`} style={style} />;
 }
 
 // ─── Full-page loader layouts per page type ────────────────────────────────────
@@ -175,6 +164,15 @@ if (typeof document !== 'undefined' && !document.getElementById('sk-shimmer-styl
     @keyframes sk-shimmer {
       0%   { background-position: 100% 0; }
       100% { background-position: -100% 0; }
+    }
+    .dp-skeleton {
+      background-color: color-mix(in srgb, var(--dp-text-primary, #888) 7%, transparent);
+      background-image: linear-gradient(90deg, transparent 25%, color-mix(in srgb, var(--dp-text-primary, #888) 9%, transparent) 50%, transparent 75%);
+      background-size: 400% 100%;
+      animation: sk-shimmer 1.4s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .dp-skeleton { animation: none; }
     }
   `;
   document.head.appendChild(style);

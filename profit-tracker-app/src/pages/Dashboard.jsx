@@ -20,6 +20,7 @@ import ProfitCostTrendChart from '../components/Dashboard/ProfitCostTrendChart';
 import MonthlyProfitSpendChart from '../components/Dashboard/MonthlyProfitSpendChart';
 import PageNav from '../components/UI/PageNav';
 import HScrollbar from '../components/UI/HScrollbar';
+import CountUp from '../components/UI/CountUp';
 import { formatMoney, formatWholeMoney } from '../utils/money';
 import { recordStatusLabel } from '../data/statusWorkflow';
 
@@ -119,7 +120,10 @@ const Dashboard = () => {
   const [topCardsPage, setTopCardsPage] = useState(0); // Top Cards pagination (3 per page, all breakpoints)
   const statsRowRef = useRef(null); // KPI row, driven by the drawn scrollbar below it
 
-  const { data, isLoading, isError, error, refetch } = useDashboard(modeFilter, dateFilter);
+  const { data, isLoading, isError, error, refetch, isPlaceholderData } = useDashboard(modeFilter, dateFilter);
+  // A filter change is loading: the last numbers stay up, the KPI values show
+  // skeletons, and everything else dims until the new data arrives.
+  const refreshing = Boolean(isPlaceholderData);
   const { data: goals = [] } = useGoals();
   useEffect(() => { if (data) setLastUpdated(new Date()); }, [data]);
 
@@ -192,9 +196,11 @@ const Dashboard = () => {
   function renderDashboardSection(sectionId) {
     if (sectionId === 'statCards') {
       if (!showStatCards || visibleStatCards.length === 0) return null;
+      // Always one line, in every view, so switching All/Cashout/Marketplace
+      // never changes the cards' height.
       const modeTag = modeFilter !== 'All'
         ? `sold via ${modeFilter}`
-        : null;
+        : 'all sales';
       return (
         <div key="statCards">
         <div ref={statsRowRef} data-tutorial-id="dashboard-stats" className={isGlass
@@ -211,6 +217,7 @@ const Dashboard = () => {
                 id={cardConfig.id}
                 title={def.label}
                 modeTag={modeTag}
+                loading={refreshing}
                 value={def.getValue(stats)}
                 subtext={def.getSubtext(stats)}
                 icon={def.icon}
@@ -979,7 +986,19 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {dashboardSections.map(section => renderDashboardSection(section.id))}
+      {dashboardSections.map((section) => {
+        const content = renderDashboardSection(section.id);
+        if (!content || section.id === 'statCards') return content;
+        return (
+          <div
+            key={section.id}
+            aria-busy={refreshing || undefined}
+            className={`transition-opacity duration-200 ${refreshing ? 'opacity-50 pointer-events-none animate-pulse' : ''}`}
+          >
+            {content}
+          </div>
+        );
+      })}
 
 
 
@@ -1150,7 +1169,7 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate })
 
             {/* Current value */}
             <p className={`text-[20px] font-bold tabular-nums leading-tight ${isGlass ? 'text-[#e8e2d6]' : 'text-[var(--dp-text-primary)]'}`}>
-              {fmt(current)}
+              <CountUp value={fmt(current)} />
             </p>
 
             {/* Target */}
@@ -1296,7 +1315,13 @@ function GlassCircularPipeline({ cards, overflowCards = [], pipeline, onNavigate
   );
 }
 
-function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], description, onClick, uiStyle = 'neon-dark' }) {
+// A shimmering placeholder bar, drawn from the theme's own colors so it shows
+// on both dark and light backgrounds.
+function StatSkeleton({ className = '' }) {
+  return <span aria-hidden="true" className={`block rounded-md dp-skeleton ${className}`} />;
+}
+
+function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], description, onClick, uiStyle = 'neon-dark', loading = false }) {
   const [open, setOpen] = useState(false);
   const [popoverPosition, setPopoverPosition] = useState('bottom');
   const [popoverCoords, setPopoverCoords] = useState(null);
@@ -1348,16 +1373,27 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
     }>
       <div className="relative z-10 flex items-start justify-between">
         <div>
-          <p className={isGlass ? "text-[11px] text-white/25 font-medium uppercase tracking-[0.2em]" : `text-[11px] font-medium uppercase tracking-[0.08em] dp-card-title transition-colors duration-300 text-[var(--dp-text-label)]`}>
+          <p className={isGlass ? "text-[11px] text-white/25 font-medium uppercase tracking-[0.2em] truncate" : `text-[11px] font-medium uppercase tracking-[0.08em] dp-card-title transition-colors duration-300 text-[var(--dp-text-label)] truncate`}>
             {title}
-            {modeTag && (
-              <span className={isGlass ? "ml-1.5 text-[11px] font-normal normal-case tracking-normal text-[var(--text-muted)]" : `ml-1.5 text-[11px] font-normal normal-case tracking-normal dp-card-tag transition-colors duration-300 text-[var(--dp-text-label)]`}>
-                {modeTag}
-              </span>
-            )}
           </p>
-          <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] text-[var(--dp-text-primary)]`}>{value}</p>
-          <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
+          {/* Its own line, always present, so the card is the same height in every view */}
+          {modeTag && (
+            <p className={isGlass ? "text-[11px] leading-4 truncate text-[var(--text-muted)]" : `text-[11px] leading-4 truncate dp-card-tag transition-colors duration-300 text-[var(--dp-text-label)]`}>
+              {modeTag}
+            </p>
+          )}
+          {loading ? (
+            <div aria-busy="true" className="mt-2 space-y-2">
+              <span className="sr-only">Loading {title}</span>
+              <StatSkeleton className={isGlass ? 'h-8 w-28' : 'h-[33px] w-28'} />
+              <StatSkeleton className="h-3 w-20" />
+            </div>
+          ) : (
+            <>
+              <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] text-[var(--dp-text-primary)]`}><CountUp value={value} /></p>
+              <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
+            </>
+          )}
         </div>
         {isGlass && (
           <div className="w-9 h-9 3xl:w-11 3xl:h-11 rounded-xl bg-white/[0.035] border border-white/[0.05] flex items-center justify-center">

@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 
 // Leave VITE_API_URL empty in production when Netlify redirects proxy /api and /auth (see netlify.toml).
 // Set it locally to the API dev server, e.g. http://localhost:3000.
@@ -116,6 +116,10 @@ export const useDashboard = (mode, date) =>
     queryKey: ['dashboard', mode, date],
     queryFn: () => fetcher(`/api/analytics/dashboard?mode=${mode}&date=${encodeURIComponent(date)}`),
     staleTime: 1000 * 60 * 10, // 10 minutes — overrides the global 5-minute default
+    // Switching All/Cashout/Marketplace or the date range keeps the last numbers
+    // on screen (as isPlaceholderData) until the new ones arrive, instead of
+    // blanking the whole page.
+    placeholderData: keepPreviousData,
   });
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────

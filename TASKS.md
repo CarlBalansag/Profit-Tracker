@@ -4,4 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| feat/dashboard-count-up-numbers | Animate big Dashboard numbers (stat cards, Goals widget) counting up on load/refresh/navigation, old->new on update, via framer-motion | profit-tracker-app/package.json, profit-tracker-app/src/components/UI/CountUp.jsx, profit-tracker-app/src/pages/Dashboard.jsx | In progress | 2026-10-22 |
+| feat/dashboard-kpi-loading | Dashboard: KPI cards keep one height in All/Cashout/Marketplace, filter and date changes keep the page up with skeleton values instead of going blank, and big numbers count up (takes over the empty feat/dashboard-count-up-numbers claim) | profit-tracker-app/src/pages/Dashboard.jsx + dashboardDisplay.test.jsx, profit-tracker-app/src/components/UI/CountUp.jsx + test, profit-tracker-app/src/components/PageLoader.jsx, profit-tracker-app/src/hooks/useApi.js (useDashboard only) | In progress | 2026-11-13 |

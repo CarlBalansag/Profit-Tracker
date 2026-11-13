@@ -1,5 +1,6 @@
+import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Dashboard from './Dashboard';
 import { DEFAULT_DASHBOARD_SETTINGS } from '../data/dashboardRegistry';
@@ -20,9 +21,10 @@ const data = {
 };
 
 let uiStyle = 'premium';
+let placeholder = false;
 
 vi.mock('../hooks/useApi', () => ({
-  useDashboard: () => ({ data, isLoading: false, isError: false, refetch: vi.fn() }),
+  useDashboard: () => ({ data, isLoading: false, isError: false, refetch: vi.fn(), isPlaceholderData: placeholder }),
   useGoals: () => ({ data: [] }),
 }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'u1', username: 'Test' } }) }));
@@ -38,7 +40,10 @@ const mount = (style) => {
   return render(<MemoryRouter><Dashboard /></MemoryRouter>);
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  placeholder = false;
+});
 
 describe.each(['premium', 'glass'])('Dashboard display in the %s style', (style) => {
   it('never prints a raw status code', () => {
@@ -62,5 +67,27 @@ describe('Dashboard amounts', () => {
   it('shows stat card totals with thousands separators', () => {
     const { container } = mount('premium');
     expect(container.textContent).toContain('$23,097.20');
+  });
+});
+
+describe('Dashboard KPI cards', () => {
+  it('give every card the same label line in All, Cashout and Marketplace, so their height never changes', () => {
+    mount('premium');
+    expect(screen.getAllByText('all sales').length).toBeGreaterThan(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Cashout' }));
+    expect(screen.queryByText('all sales')).not.toBeInTheDocument();
+    const tags = screen.getAllByText('sold via Cashout');
+    // Its own line under the title, not text tacked onto the title that wraps.
+    expect(tags[0].tagName).toBe('P');
+    expect(tags[0]).toHaveClass('truncate');
+  });
+
+  it('keeps the page up with skeleton values while another filter loads', () => {
+    placeholder = true;
+    const { container } = mount('premium');
+    expect(screen.getAllByText(/^Loading /).length).toBeGreaterThan(0);
+    expect(container.textContent).not.toContain('$23,097.20');
+    expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(screen.getByText(/Welcome back/)).toBeInTheDocument();
   });
 });
