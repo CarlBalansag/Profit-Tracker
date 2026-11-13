@@ -23,18 +23,24 @@ const pipeline = {
 };
 
 describe('WorkflowPipeline', () => {
-  it('shows each step with its units and money, in workflow order', () => {
+  it('shows every step with its units and money, 0 included, in workflow order', () => {
     render(<WorkflowPipeline pipeline={pipeline} />);
     const steps = screen.getAllByRole('button', { pressed: false });
-    // Outbound has nothing in it, so it isn't shown.
     expect(steps.map((b) => b.textContent)).toEqual([
       expect.stringContaining('Sold — Waiting to Ship'),
+      expect.stringContaining('Outbound'),
       expect.stringContaining('Paid'),
     ]);
     // Screen readers get the final numbers.
     expect(within(steps[0]).getByText('3', { selector: '.sr-only' })).toBeInTheDocument();
     expect(within(steps[0]).getByText('$1,440', { selector: '.sr-only' })).toBeInTheDocument();
-    expect(within(steps[1]).getByText('$12,345', { selector: '.sr-only' })).toBeInTheDocument();
+    expect(within(steps[2]).getByText('$12,345', { selector: '.sr-only' })).toBeInTheDocument();
+  });
+
+  it('leaves out steps at 0 when asked (the All tab)', () => {
+    render(<WorkflowPipeline pipeline={pipeline} hideEmpty />);
+    expect(screen.queryByRole('button', { name: /^Outbound/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Paid/ })).toBeInTheDocument();
   });
 
   it('lists a step\'s items when clicked, and closes on a second click', () => {
@@ -53,14 +59,16 @@ describe('WorkflowPipeline', () => {
     expect(screen.queryByText('PS5 Pro ×2')).not.toBeInTheDocument();
   });
 
-  it('says when a step lists only its newest items', () => {
+  it('says when a step lists only its newest items, and when a step is empty', () => {
     render(<WorkflowPipeline pipeline={pipeline} />);
     fireEvent.click(screen.getByRole('button', { name: /^Paid/ }));
     expect(screen.getByText('Newest 20 of 25')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Outbound/ }));
+    expect(screen.getByText('Nothing in this step.')).toBeInTheDocument();
   });
 
   it('says so when no step has anything in it', () => {
-    render(<WorkflowPipeline pipeline={{ stages: [{ status: 'PAID', count: 0, value: 0, itemCount: 0, items: [] }] }} />);
+    render(<WorkflowPipeline pipeline={{ stages: [{ status: 'PAID', count: 0, value: 0, itemCount: 0, items: [] }] }} hideEmpty />);
     expect(screen.getByText('Nothing in any step right now.')).toBeInTheDocument();
     cleanup();
     render(<WorkflowPipeline pipeline={undefined} />);

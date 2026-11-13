@@ -279,6 +279,7 @@ const Dashboard = () => {
             pipeline={workflowPipelines[pipelineView]}
             pending={refreshing}
             onNavigate={navigate}
+            hideEmpty={pipelineView === 'all'}
           />
         </div>
       );
