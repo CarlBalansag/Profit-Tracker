@@ -34,7 +34,8 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
     // Fills whatever height the dashboard card gives it, so the step cards
     // stretch instead of leaving a gap.
     <div className="flex h-full flex-col gap-4">
-      <div className="flex min-h-[96px] flex-1 items-stretch gap-1 overflow-x-auto pb-1 dp-scrollbar">
+      {/* Padding inside the scroll box so the cards' shadows aren't cut off. */}
+      <div className="-mx-2 flex min-h-[104px] flex-1 items-stretch gap-1.5 overflow-x-auto px-2 pb-4 pt-1 dp-scrollbar">
         {stages.map((stage, index) => {
           const active = openStatus === stage.status;
           const empty = stage.count === 0;
@@ -44,14 +45,16 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
                 type="button"
                 aria-pressed={active}
                 onClick={() => setOpenStatus(active ? null : stage.status)}
-                className={`flex min-w-[118px] flex-1 flex-col justify-center rounded-xl border p-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] ${
+                // Raised like the KPI cards: card surface, their shadow, and a
+                // deeper shadow on hover.
+                className={`flex min-w-[124px] flex-1 flex-col justify-center rounded-[18px] border p-4 text-left dp-elevated dp-elevated-hover transition-[box-shadow,border-color] duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] ${
                   active
                     ? 'border-[color:var(--dp-accent)] bg-[var(--dp-accent-bg)]'
-                    : 'border-[color:var(--dp-border)] bg-[var(--dp-bg)] hover:border-[color:var(--dp-border-hover)]'
+                    : 'border-[color:var(--dp-border)] bg-[var(--dp-card-bg)]'
                 }`}
               >
-                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--dp-text-secondary)]">{displayLabel(stage.status)}</span>
-                <span className={`mt-1.5 text-[28px] font-bold leading-none tabular-nums ${empty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-primary)]'}`}>
+                <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--dp-text-label)]">{displayLabel(stage.status)}</span>
+                <span className={`mt-2 text-[28px] font-bold leading-none tabular-nums ${empty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-primary)]'}`}>
                   <CountUp value={stage.count} pending={pending} />
                 </span>
                 <span className={`mt-1.5 text-[13px] font-semibold tabular-nums ${empty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-primary)] opacity-80'}`}>
