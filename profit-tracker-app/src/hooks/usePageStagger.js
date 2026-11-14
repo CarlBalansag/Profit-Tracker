@@ -12,9 +12,13 @@ import { useLayoutEffect } from 'react';
 // after the page opens.
 
 const DESKTOP = '(min-width: 768px)';
-const STAGGER_MS = 70;
+// Cards in a row come in quickly one after another; whole sections (a chart,
+// the Status Pipeline) get more space between them so each one reads as its
+// own step.
+const CARD_STAGGER_MS = 40;
+const SECTION_STAGGER_MS = 150;
+const MAX_DELAY_MS = 1400; // later items share this delay, so nothing waits long
 const DURATION_MS = 420;
-const MAX_STEPS = 10; // later items share the last delay, so nothing waits long
 const WATCH_MS = 2500;
 const MAX_GRID_CARDS = 8;
 const EASE = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
@@ -26,7 +30,7 @@ const isCardGrid = (el) => {
   return kids.length > 1 && kids.length <= MAX_GRID_CARDS && getComputedStyle(el).display === 'grid';
 };
 
-/** The elements that fade in, in page order. */
+/** The elements that fade in, in page order, each marked as a card or not. */
 export function findStaggerItems(root) {
   let node = root;
   while (node && node.children.length === 1) node = node.children[0];
@@ -38,10 +42,22 @@ export function findStaggerItems(root) {
     // in card by card.
     const grid = isCardGrid(section) ? section
       : section.firstElementChild && isCardGrid(section.firstElementChild) ? section.firstElementChild : null;
-    if (grid) items.push(...[...grid.children].filter(isShown));
-    else items.push(section);
+    // Two side-by-side columns (a chart and its side panel) are sections of
+    // their own, not a row of cards.
+    const kids = grid ? [...grid.children].filter(isShown) : [];
+    if (grid) items.push(...kids.map((el) => ({ el, card: kids.length > 2 })));
+    else items.push({ el: section, card: false });
   }
   return items;
+}
+
+/** When each item starts, in ms: quick steps between cards, longer ones before and between sections. */
+export function staggerDelays(items) {
+  let at = 0;
+  return items.map((item, index) => {
+    if (index > 0) at += item.card && items[index - 1].card ? CARD_STAGGER_MS : SECTION_STAGGER_MS;
+    return Math.min(at, MAX_DELAY_MS);
+  });
 }
 
 export default function usePageStagger(ref) {
@@ -52,23 +68,18 @@ export default function usePageStagger(ref) {
 
     const done = new WeakSet();
     const running = [];
-    let step = 0;
-    let lastAt = 0;
+    // A later batch (content after a loader) starts its own sequence.
     const run = () => {
-      const fresh = findStaggerItems(root).filter((el) => !done.has(el));
+      const fresh = findStaggerItems(root).filter(({ el }) => !done.has(el));
       if (!fresh.length) return;
-      // A later batch (content after a loader) starts its own short sequence.
-      const now = performance.now();
-      if (now - lastAt > 300) step = 0;
-      lastAt = now;
-      for (const el of fresh) {
+      const delays = staggerDelays(fresh);
+      fresh.forEach(({ el }, index) => {
         done.add(el);
         running.push(el.animate(
           [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }],
-          { duration: DURATION_MS, delay: Math.min(step, MAX_STEPS) * STAGGER_MS, easing: EASE, fill: 'backwards' },
+          { duration: DURATION_MS, delay: delays[index], easing: EASE, fill: 'backwards' },
         ));
-        step += 1;
-      }
+      });
     };
     run();
 
