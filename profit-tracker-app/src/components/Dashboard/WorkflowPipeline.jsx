@@ -99,7 +99,7 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
     <div className="flex flex-col gap-4">
       {/* Padding inside the scroll box so the cards' shadows, and their lift
           on hover, aren't cut off. */}
-      <div className={ROW_CLASS}>
+      <div className={ROW_CLASS} data-stagger-cards>
         <AnimatePresence initial={false}>
           {stages.length === 0 ? (
             <MotionP

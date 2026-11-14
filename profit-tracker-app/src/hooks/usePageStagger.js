@@ -46,7 +46,14 @@ export function findStaggerItems(root) {
     // their own, not a row of cards.
     const kids = grid ? [...grid.children].filter(isShown) : [];
     if (grid) items.push(...kids.map((el) => ({ el, card: kids.length > 2 })));
-    else items.push({ el: section, card: false });
+    else {
+      items.push({ el: section, card: false });
+      // A row inside a section that asks for it (data-stagger-cards, like the
+      // Status Pipeline's steps) comes in card by card right after it.
+      for (const row of section.querySelectorAll('[data-stagger-cards]')) {
+        items.push(...[...row.children].filter(isShown).map((el) => ({ el, card: true, inner: true })));
+      }
+    }
   }
   return items;
 }
@@ -55,7 +62,9 @@ export function findStaggerItems(root) {
 export function staggerDelays(items) {
   let at = 0;
   return items.map((item, index) => {
-    if (index > 0) at += item.card && items[index - 1].card ? CARD_STAGGER_MS : SECTION_STAGGER_MS;
+    // Cards inside a section start just after it; otherwise a card after a
+    // card is a quick step, and anything else is a section's longer one.
+    if (index > 0) at += (item.card && items[index - 1].card) || item.inner ? CARD_STAGGER_MS : SECTION_STAGGER_MS;
     return Math.min(at, MAX_DELAY_MS);
   });
 }
