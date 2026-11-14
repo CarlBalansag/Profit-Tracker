@@ -4,7 +4,8 @@ import { cleanup, render, screen } from '@testing-library/react';
 import AnimatedLogo from './AnimatedLogo';
 
 // Motion reads prefers-reduced-motion once and caches it, so stubbing
-// matchMedia per test does nothing. Mock the hook instead.
+// matchMedia per test does nothing. Mock the hook instead, to prove the logo
+// ignores it.
 let reduced = false;
 vi.mock('motion/react', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -47,10 +48,11 @@ describe('AnimatedLogo', () => {
     expect(new Set(ids).size).toBe(4);
   });
 
-  it('renders the finished logo straight away with reduced motion', () => {
+  it('still plays the intro when the device asks for reduced motion', () => {
     reduced = true;
     const { container } = render(<AnimatedLogo />);
-    expect(container.querySelector('#p').getAttribute('mask')).toBeNull();
-    expect(container.querySelector('[data-reveal="arrow"]').style.transform || 'none').not.toMatch(/scaleX\(0\)/);
+    expect(container.querySelector('[data-reveal="p"]').getAttribute('stroke-dashoffset')).toBe('0');
+    expect(container.querySelector('[data-reveal="p"]').getAttribute('stroke-dasharray')).toMatch(/^0(px)? /);
+    expect(container.querySelector('[data-reveal="arrow"]').style.transform).toContain('scaleX(0)');
   });
 });

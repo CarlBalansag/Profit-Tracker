@@ -1,5 +1,5 @@
 import React, { useId, useState } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion } from 'motion/react';
 
 // Brand mark: the P and the rising arrow. Hand-traced from the logo PNG, so the
 // shapes are close to the original artwork but not pixel-exact.
@@ -70,17 +70,19 @@ const ARROW_FACES = [
  * straight up the stem, then along the top and around the bowl. Just before it
  * finishes, the arrow draws itself along the trend line from its tail to its
  * tip (0.9s), so the whole intro takes 1.7s. Hovering nudges the arrow 4px up
- * and to the right. With prefers-reduced-motion the logo
- * renders in its final state and does not move on hover.
+ * and to the right.
+ *
+ * The logo animates even when the device asks for reduced motion. That's a
+ * deliberate product choice: the intro is short and plays only when the logo
+ * appears or the sidebar changes.
  */
 export default function AnimatedLogo({ size = 32, label = 'Profit Tracker', className, style }) {
-  const reduceMotion = useReducedMotion();
   const clipId = useId().replace(/:/g, '');
   const hoverShift = HOVER_PX * (VIEW / size);
   // Once the P is fully drawn the mask comes off, so its edges render exactly
   // as they would without one (a mask lightens anti-aliased edge pixels a bit).
   const [pDrawn, setPDrawn] = useState(false);
-  const maskP = !reduceMotion && !pDrawn;
+  const maskP = !pDrawn;
 
   // The P is revealed through a mask: a wide stroke along the P's centerline
   // that draws itself like a pen. The arrow is revealed by a clip rectangle
@@ -110,9 +112,9 @@ export default function AnimatedLogo({ size = 32, label = 'Profit Tracker', clas
       className={className}
       style={{ overflow: 'visible', ...style }}
       shapeRendering="geometricPrecision"
-      initial={reduceMotion ? false : 'hidden'}
+      initial="hidden"
       animate="visible"
-      whileHover={reduceMotion ? undefined : 'hover'}
+      whileHover="hover"
       data-testid="animated-logo"
       {...a11y}
     >
