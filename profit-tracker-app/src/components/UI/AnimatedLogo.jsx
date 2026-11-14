@@ -58,8 +58,9 @@ const ARROW_FACES = [
 /**
  * Animated Profit Tracker logo.
  *
- * On mount the P is revealed from the bottom up (0.4s), then the arrow draws
- * itself along the trend line from its tail to its tip (0.5s). Hovering nudges
+ * On mount the P is revealed from the bottom up (0.7s). Just before it finishes,
+ * the arrow starts drawing itself along the trend line from its tail to its tip
+ * (0.9s), so the whole intro takes 1.5s. Hovering nudges
  * the arrow 4px up and to the right. With prefers-reduced-motion the logo
  * renders in its final state and does not move on hover.
  */
@@ -73,12 +74,12 @@ export default function AnimatedLogo({ size = 32, label = 'Profit Tracker', clas
   // the tail toward the tip.
   const pRevealVariants = {
     hidden: { scaleY: 0 },
-    visible: { scaleY: 1, transition: { duration: 0.4, ease: [0.33, 1, 0.68, 1] } },
+    visible: { scaleY: 1, transition: { duration: 0.7, ease: [0.45, 0, 0.25, 1] } },
   };
 
   const arrowRevealVariants = {
     hidden: { scaleX: 0 },
-    visible: { scaleX: 1, transition: { delay: 0.4, duration: 0.5, ease: [0.45, 0, 0.2, 1] } },
+    visible: { scaleX: 1, transition: { delay: 0.6, duration: 0.9, ease: [0.45, 0, 0.25, 1] } },
   };
 
   const arrowVariants = {
