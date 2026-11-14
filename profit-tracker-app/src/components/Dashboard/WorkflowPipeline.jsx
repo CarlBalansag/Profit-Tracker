@@ -17,15 +17,41 @@ const sinceLabel = (since) => {
   return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-// Smooth, quick and settling: used for steps moving, appearing and leaving,
-// and the item list opening and closing.
+// Smooth, quick and settling: used for steps appearing and leaving, and the
+// item list opening and closing.
 const EASE = [0.16, 1, 0.3, 1];
-const STEP_MOTION = {
-  layout: 'position',
-  initial: { opacity: 0, scale: 0.96 },
-  animate: { opacity: 1, scale: 1 },
-  exit: { opacity: 0, scale: 0.96 },
-  transition: { duration: 0.35, ease: EASE },
+
+// Steps come and go in order instead of all at once: leaving steps go first,
+// one after another from the right, each shrinking its width to nothing so
+// the gap closes smoothly; then new steps come in one after another from the
+// left, each growing to its share of the row and fading in. Steps that stay
+// just resize as the others grow and shrink around them.
+const STEP_MIN_WIDTH = 130;
+const EXIT_STAGGER = 0.05;
+const ENTER_STAGGER = 0.08;
+const ENTER_AFTER_EXITS = 0.28; // when steps also left, new ones wait for them
+const STEP_VARIANTS = {
+  hidden: { opacity: 0, flexGrow: 0, minWidth: '0px', y: 6 },
+  shown: ({ enterDelay }) => ({
+    opacity: 1, flexGrow: 1, minWidth: `${STEP_MIN_WIDTH}px`, y: 0,
+    transition: {
+      delay: enterDelay, duration: 0.42, ease: EASE,
+      // Fade in once it has some width, so its text never shows squeezed.
+      opacity: { delay: enterDelay + 0.14, duration: 0.3, ease: 'easeOut' },
+    },
+  }),
+  gone: ({ exitDelay }) => ({
+    opacity: 0, flexGrow: 0, minWidth: '0px', y: -4,
+    transition: {
+      delay: exitDelay, duration: 0.32, ease: EASE,
+      opacity: { delay: exitDelay, duration: 0.14, ease: 'easeIn' },
+    },
+  }),
+};
+const MESSAGE_MOTION = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1, transition: { delay: 0.2, duration: 0.3 } },
+  exit: { opacity: 0, transition: { duration: 0.15 } },
 };
 
 // The step row is always this tall, steps or not, so switching tabs or filters
@@ -47,16 +73,38 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
   const stages = (pipeline?.stages || []).filter((stage) => !hideEmpty || stage.count > 0);
   const open = stages.find((stage) => stage.status === openStatus);
 
+  // Which steps just arrived (to bring them in left to right) and whether any
+  // left (so the new ones wait their turn). Kept from the previous render.
+  const statusKey = stages.map((stage) => stage.status).join('|');
+  const [shown, setShown] = useState({ key: statusKey, list: stages.map((stage) => stage.status), entering: [], anyLeft: false });
+  if (shown.key !== statusKey) {
+    const now = stages.map((stage) => stage.status);
+    const before = new Set(shown.list);
+    setShown({
+      key: statusKey,
+      list: now,
+      entering: now.filter((status) => !before.has(status)),
+      anyLeft: shown.list.some((status) => !now.includes(status)),
+    });
+  }
+  const stepTiming = (status, index) => {
+    const enterIndex = shown.entering.indexOf(status);
+    return {
+      enterDelay: enterIndex < 0 ? 0 : (shown.anyLeft ? ENTER_AFTER_EXITS : 0.05) + enterIndex * ENTER_STAGGER,
+      exitDelay: (stages.length - 1 - index) * EXIT_STAGGER, // rightmost leaves first
+    };
+  };
+
   return (
     <div className="flex flex-col gap-4">
       {/* Padding inside the scroll box so the cards' shadows, and their lift
           on hover, aren't cut off. */}
       <div className={ROW_CLASS}>
-        <AnimatePresence initial={false} mode="popLayout">
+        <AnimatePresence initial={false}>
           {stages.length === 0 ? (
             <MotionP
               key="empty"
-              {...STEP_MOTION}
+              {...MESSAGE_MOTION}
               className="flex flex-1 items-center justify-center text-[12px] text-[var(--dp-text-secondary)]"
             >
               Nothing in any step right now.
@@ -65,8 +113,17 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
             const active = openStatus === stage.status;
             const empty = stage.count === 0;
             return (
-              // A step and the arrow before it move as one.
-              <MotionDiv key={stage.status} {...STEP_MOTION} className="flex min-w-[130px] flex-1 items-stretch">
+              // A step and the arrow before it come and go as one.
+              <MotionDiv
+                key={stage.status}
+                custom={stepTiming(stage.status, index)}
+                variants={STEP_VARIANTS}
+                initial="hidden"
+                animate="shown"
+                exit="gone"
+                style={{ flexBasis: 0, flexShrink: 1 }}
+                className="flex items-stretch"
+              >
                 {index > 0 && <ChevronRight size={14} aria-hidden="true" className="mx-0.5 flex-shrink-0 self-center text-[var(--dp-text-label)]" />}
                 <button
                   type="button"
