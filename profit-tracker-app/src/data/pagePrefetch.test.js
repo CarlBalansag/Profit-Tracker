@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { PREFETCH_PATHS, prefetchPage } from './pagePrefetch';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PREFETCH_PATHS, prefetchPage, prefetchSharedData, resetSharedDataPrefetch } from './pagePrefetch';
 
 // Page modules are big; the prefetch only needs to call import().
 vi.mock('../pages/Dashboard', () => ({ default: () => null }));
@@ -32,6 +32,42 @@ describe('prefetchPage', () => {
     prefetchPage(client, '/nope');
     expect(client.prefetchQuery).not.toHaveBeenCalled();
     expect(() => prefetchPage(null, '/settings')).not.toThrow();
+  });
+
+  describe('prefetchSharedData', () => {
+    afterEach(() => { resetSharedDataPrefetch(); vi.unstubAllGlobals(); });
+
+    it('loads only the cheap shared data, one request at a time, once per session', async () => {
+      let inFlight = 0;
+      let maxInFlight = 0;
+      const client = {
+        prefetchQuery: vi.fn(async () => {
+          inFlight += 1; maxInFlight = Math.max(maxInFlight, inFlight);
+          await Promise.resolve();
+          inFlight -= 1;
+        }),
+      };
+
+      await prefetchSharedData(client);
+      await prefetchSharedData(client);
+
+      expect(keys(client)).toEqual([
+        '["inventory"]', '["sales"]', '["expenses","page"]', '["receipts","page"]',
+        '["payment-methods"]', '["platforms"]', '["buyers"]',
+      ]);
+      expect(maxInFlight).toBe(1);
+      expect(keys(client).some((k) => k.includes('dashboard') || k.includes('cashout'))).toBe(false);
+    });
+
+    it('skips everything when data saver is on or the connection is very slow', async () => {
+      for (const connection of [{ saveData: true }, { effectiveType: '2g' }]) {
+        resetSharedDataPrefetch();
+        vi.stubGlobal('navigator', { ...navigator, connection });
+        const client = fakeClient();
+        await prefetchSharedData(client);
+        expect(client.prefetchQuery).not.toHaveBeenCalled();
+      }
+    });
   });
 
   it('covers every page in the sidebar', () => {

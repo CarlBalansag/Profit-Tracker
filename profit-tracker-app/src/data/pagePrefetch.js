@@ -108,4 +108,38 @@ export function prefetchAllPageCode() {
   Object.values(PAGES).forEach((page) => page.code().catch(() => {}));
 }
 
+// The cheap data several pages share, preloaded once the app is idle so most
+// pages open fully drawn even on a first click without hovering. The heavy
+// ones (Dashboard analytics for Analytics/Goals/Cash Flow, Cashout, which
+// keeps polling) are left to hover prefetch, for when you're about to open
+// them. Sent one at a time so they never crowd the page you're looking at.
+const SHARED_DATA = () => [
+  inventoryQuery(),      // Transactions, Inventory, Shipping, Statuses, Tax Exempt, Record Sale
+  salesQuery(),          // Shipping, Statuses, Tax Exempt
+  expensesPageQuery(),   // Expenses (3 requests)
+  receiptsPageQuery(),   // Receipts
+  paymentMethodsQuery(), // forms and Expenses
+  platformsQuery(),      // forms and Transactions
+  buyersQuery(),         // forms and Transactions
+];
+
+const slowConnection = () => {
+  const connection = typeof navigator === 'undefined' ? null : navigator.connection;
+  return Boolean(connection?.saveData) || ['slow-2g', '2g'].includes(connection?.effectiveType);
+};
+
+let sharedDataStarted = false;
+
+export async function prefetchSharedData(queryClient) {
+  if (!queryClient || sharedDataStarted || slowConnection()) return;
+  sharedDataStarted = true;
+  for (const query of SHARED_DATA()) {
+    // prefetchQuery never throws; anything loaded in the last 30 s is skipped.
+    await queryClient.prefetchQuery({ ...query, staleTime: Math.max(query.staleTime ?? 0, PREFETCH_FRESH_MS) });
+  }
+}
+
+// For tests: let prefetchSharedData run again.
+export const resetSharedDataPrefetch = () => { sharedDataStarted = false; };
+
 export const PREFETCH_PATHS = Object.keys(PAGES);

@@ -1,5 +1,6 @@
 import React, { Suspense, useEffect } from 'react';
-import { prefetchAllPageCode } from './data/pagePrefetch';
+import { prefetchAllPageCode, prefetchSharedData } from './data/pagePrefetch';
+import { useOptionalQueryClient } from './hooks/usePageCache';
 import { Toaster } from 'sonner';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
@@ -72,13 +73,19 @@ function AppPages() {
   const shift = reduceMotion ? 0 : 1;
 
   // Once the first page is up and the browser is idle, load every other
-  // page's code (not data), so switching never waits on a page's chunk.
+  // page's code, then (a little later, so the first page's own data goes
+  // first) the cheap data several pages share. Heavy data waits for hover.
+  const queryClient = useOptionalQueryClient();
   useEffect(() => {
     const idle = window.requestIdleCallback ?? ((fn) => setTimeout(fn, 1500));
     const cancel = window.cancelIdleCallback ?? clearTimeout;
-    const handle = idle(() => prefetchAllPageCode());
-    return () => cancel(handle);
-  }, []);
+    let dataTimer;
+    const handle = idle(() => {
+      prefetchAllPageCode();
+      dataTimer = setTimeout(() => prefetchSharedData(queryClient), 2000);
+    }, { timeout: 5000 });
+    return () => { cancel(handle); clearTimeout(dataTimer); };
+  }, [queryClient]);
 
   return (
     <div className="relative h-full min-h-0">
