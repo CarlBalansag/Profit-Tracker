@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useId } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 
 // Brand mark: the P and the rising arrow. Hand-traced from the logo PNG, so the
 // shapes are close to the original artwork but not pixel-exact.
 const MotionSvg = motion.svg;
 const MotionG = motion.g;
+const MotionRect = motion.rect;
 
 // The artwork is 336 x 339. The viewBox is a 339 square, centred on it, so the
 // SVG is always a whole number of pixels tall. A fractional height puts every
@@ -14,8 +15,10 @@ const VIEW_X = -(VIEW - 336) / 2;
 const LIGHT = '#b21a33';
 const DARK = '#691222';
 
-// How far the arrow starts from its resting spot (viewBox units, bottom left).
-const ARROW_START = 46;
+// The trend line runs from the arrow's tail (bottom left) to its tip (top
+// right). The draw-on reveal grows along this direction.
+const ARROW_TAIL = [2, 330];
+const ARROW_ANGLE = (Math.atan2(2 - 330, 333 - 2) * 180) / Math.PI;
 // Hover nudge in screen pixels, converted to viewBox units per render size.
 const HOVER_PX = 4;
 
@@ -55,43 +58,32 @@ const ARROW_FACES = [
 /**
  * Animated Profit Tracker logo.
  *
- * On mount the P fades and scales in (0.4s), then the arrow slides in from the
- * bottom left with a slight overshoot (0.5s). Hovering nudges the arrow 4px up
- * and to the right. With prefers-reduced-motion the logo renders in its final
- * state and does not move on hover.
+ * On mount the P is revealed from the bottom up (0.4s), then the arrow draws
+ * itself along the trend line from its tail to its tip (0.5s). Hovering nudges
+ * the arrow 4px up and to the right. With prefers-reduced-motion the logo
+ * renders in its final state and does not move on hover.
  */
 export default function AnimatedLogo({ size = 32, label = 'Profit Tracker', className, style }) {
   const reduceMotion = useReducedMotion();
-  // After the intro, returning from hover should be quick, not replay the
-  // intro's delay and overshoot.
-  const [introDone, setIntroDone] = useState(false);
-  const unitsPerPx = VIEW / size;
-  const hoverShift = HOVER_PX * unitsPerPx;
+  const clipId = useId().replace(/:/g, '');
+  const hoverShift = HOVER_PX * (VIEW / size);
 
-  const pVariants = {
-    hidden: { opacity: 0, scale: 0.88 },
-    visible: { opacity: 1, scale: 1, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } },
+  // The reveals are clip rectangles that grow. The P's rect grows upward from
+  // the bottom edge; the arrow's rect lies along the trend line and grows from
+  // the tail toward the tip.
+  const pRevealVariants = {
+    hidden: { scaleY: 0 },
+    visible: { scaleY: 1, transition: { duration: 0.4, ease: [0.33, 1, 0.68, 1] } },
+  };
+
+  const arrowRevealVariants = {
+    hidden: { scaleX: 0 },
+    visible: { scaleX: 1, transition: { delay: 0.4, duration: 0.5, ease: [0.45, 0, 0.2, 1] } },
   };
 
   const arrowVariants = {
-    hidden: { opacity: 0, x: -ARROW_START, y: ARROW_START },
-    visible: {
-      opacity: 1,
-      x: 0,
-      y: 0,
-      transition: introDone
-        ? { duration: 0.2, ease: 'easeOut' }
-        : {
-          x: { delay: 0.4, duration: 0.5, ease: [0.34, 1.45, 0.64, 1] },
-          y: { delay: 0.4, duration: 0.5, ease: [0.34, 1.45, 0.64, 1] },
-          opacity: { delay: 0.4, duration: 0.1 },
-        },
-    },
-    hover: {
-      x: hoverShift,
-      y: -hoverShift,
-      transition: { duration: 0.2, ease: 'easeOut' },
-    },
+    visible: { x: 0, y: 0, transition: { duration: 0.2, ease: 'easeOut' } },
+    hover: { x: hoverShift, y: -hoverShift, transition: { duration: 0.2, ease: 'easeOut' } },
   };
 
   const a11y = label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true };
@@ -110,15 +102,41 @@ export default function AnimatedLogo({ size = 32, label = 'Profit Tracker', clas
       data-testid="animated-logo"
       {...a11y}
     >
-      <MotionG id="p" variants={pVariants}>
+      <defs>
+        <clipPath id={`${clipId}-p`}>
+          <MotionRect
+            data-reveal="p"
+            x={-10}
+            y={-10}
+            width={360}
+            height={360}
+            style={{ originY: 1 }}
+            variants={pRevealVariants}
+          />
+        </clipPath>
+        {/* A clipPath can't hold a <g>, so the rotation sits on the clipPath. */}
+        <clipPath
+          id={`${clipId}-arrow`}
+          transform={`rotate(${ARROW_ANGLE} ${ARROW_TAIL[0]} ${ARROW_TAIL[1]})`}
+        >
+          <MotionRect
+            data-reveal="arrow"
+            x={ARROW_TAIL[0] - 10}
+            y={ARROW_TAIL[1] - 100}
+            width={490}
+            height={200}
+            style={{ originX: 0 }}
+            variants={arrowRevealVariants}
+          />
+        </clipPath>
+      </defs>
+      <g id="p" clipPath={`url(#${clipId}-p)`}>
         {P_FACES.map((f) => <Face key={f.d} {...f} />)}
-      </MotionG>
-      <MotionG
-        id="arrow"
-        variants={arrowVariants}
-        onAnimationComplete={(name) => { if (name === 'visible') setIntroDone(true); }}
-      >
-        {ARROW_FACES.map((f) => <Face key={f.d} {...f} />)}
+      </g>
+      <MotionG id="arrow" variants={arrowVariants}>
+        <g clipPath={`url(#${clipId}-arrow)`}>
+          {ARROW_FACES.map((f) => <Face key={f.d} {...f} />)}
+        </g>
       </MotionG>
     </MotionSvg>
   );

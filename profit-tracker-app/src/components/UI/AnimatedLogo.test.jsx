@@ -32,20 +32,23 @@ describe('AnimatedLogo', () => {
     expect(screen.getByTestId('animated-logo').getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('starts hidden so the intro can play', () => {
+  it('starts with the P and the arrow fully clipped so the intro can play', () => {
     const { container } = render(<AnimatedLogo />);
-    const arrow = container.querySelector('#arrow');
-    expect(arrow.getAttribute('opacity')).toBe('0');
-    expect(arrow.style.transform).toContain('translateX(-46px)');
+    expect(container.querySelector('[data-reveal="p"]').style.transform).toContain('scaleY(0)');
+    expect(container.querySelector('[data-reveal="arrow"]').style.transform).toContain('scaleX(0)');
+  });
+
+  it('gives each logo its own clip paths', () => {
+    const { container } = render(<><AnimatedLogo /><AnimatedLogo /></>);
+    const ids = [...container.querySelectorAll('clipPath')].map((c) => c.id);
+    expect(new Set(ids).size).toBe(4);
   });
 
   it('renders the finished logo straight away with reduced motion', () => {
     reduced = true;
     const { container } = render(<AnimatedLogo />);
-    for (const id of ['#p', '#arrow']) {
-      const group = container.querySelector(id);
-      expect(group.getAttribute('opacity')).not.toBe('0');
-      expect(group.style.transform || 'none').not.toMatch(/translate|scale\(0/);
+    for (const sel of ['[data-reveal="p"]', '[data-reveal="arrow"]']) {
+      expect(container.querySelector(sel).style.transform || 'none').not.toMatch(/scale[XY]\(0\)/);
     }
   });
 });
