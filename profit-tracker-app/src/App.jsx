@@ -1,4 +1,5 @@
-import React, { Suspense, useEffect } from 'react';
+import React, { Suspense, useEffect, useRef } from 'react';
+import usePageStagger from './hooks/usePageStagger';
 import { prefetchAllPageCode, prefetchSharedData } from './data/pagePrefetch';
 import { useOptionalQueryClient } from './hooks/usePageCache';
 import { Toaster } from 'sonner';
@@ -67,6 +68,14 @@ function App() {
 const PAGE_EASE = [0.2, 0.8, 0.2, 1];
 const MotionDiv = motion.div;
 
+// Each page's sections and cards fade up one after another (desktop only;
+// see hooks/usePageStagger.js). Mounted once per page, inside its crossfade.
+function StaggerIn({ children }) {
+  const ref = useRef(null);
+  usePageStagger(ref);
+  return <div ref={ref} className="h-full min-h-0">{children}</div>;
+}
+
 function AppPages() {
   const location = useLocation();
   const reduceMotion = useReducedMotion();
@@ -97,6 +106,7 @@ function AppPages() {
         animate={{ opacity: 1, y: 0, zIndex: 1, transition: { duration: reduceMotion ? 0.2 : 0.3, ease: PAGE_EASE } }}
         exit={{ opacity: 0, y: -6 * shift, zIndex: 0, transition: { duration: 0.2, ease: 'easeOut' } }}
       >
+        <StaggerIn>
         <Suspense fallback={<PageLoader />}>
           <Routes location={location}>
           <Route path="/" element={<Dashboard />} />
@@ -122,6 +132,7 @@ function AppPages() {
           <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
+        </StaggerIn>
       </MotionDiv>
     </AnimatePresence>
     </div>
