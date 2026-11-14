@@ -13,6 +13,7 @@ import { SCHEDULE_C_ENABLED } from '../../config/features';
 import { CURRENT_VERSION } from '../../data/changelog';
 import VersionHistoryModal from '../VersionHistoryModal';
 import ThemeSwitch from '../UI/ThemeSwitch';
+import AnimatedLogo from '../UI/AnimatedLogo';
 import { useCashoutProviders } from '../../hooks/useCashoutProviders';
 import { usePrefetchProps } from '../../hooks/usePrefetchPage';
 
@@ -47,10 +48,11 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
           <div ref={navRef} className="relative flex flex-col items-center gap-0.5 rounded-[24px] border border-white/[0.07] bg-[#181a1c]/[0.88] px-2 py-3 shadow-[0_12px_32px_rgba(0,0,0,0.28)] backdrop-blur-sm">
             <button
               onClick={() => navigate('/')}
-              className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#d8a65a,#c4873a)] text-sm font-bold text-[#101114] shadow-[0_6px_16px_rgba(216,166,90,0.16)]"
+              className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl"
               title="Profit Tracker"
+              aria-label="Profit Tracker dashboard"
             >
-              P
+              <AnimatedLogo size={28} label={null} />
             </button>
 
             <NavMarker marker={marker} className="rounded-xl bg-[#d8a65a]/10" />
@@ -103,8 +105,8 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
         onClick={(e) => { if (e.target.closest('a')) setIsOpen(false); }}
       >
         <div className={clsx("flex items-center py-5 border-b border-[color:var(--dp-border)]", isCollapsed ? "justify-center px-0 flex-col gap-2" : "gap-3 px-4")}>
-          <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg bg-[var(--dp-accent)]">
-            <span className="text-[#ffffff] font-semibold text-base">P</span>
+          <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center">
+            <AnimatedLogo size={30} label={isCollapsed ? 'Profit Tracker' : null} />
           </div>
 
           {!isCollapsed && (
