@@ -1,4 +1,4 @@
-import React, { useId } from 'react';
+import React, { useId, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 
 // Brand mark: the P and the rising arrow. Hand-traced from the logo PNG, so the
@@ -6,6 +6,7 @@ import { motion, useReducedMotion } from 'motion/react';
 const MotionSvg = motion.svg;
 const MotionG = motion.g;
 const MotionRect = motion.rect;
+const MotionPath = motion.path;
 
 // The artwork is 336 x 339. The viewBox is a 339 square, centred on it, so the
 // SVG is always a whole number of pixels tall. A fractional height puts every
@@ -14,6 +15,13 @@ const VIEW = 339;
 const VIEW_X = -(VIEW - 336) / 2;
 const LIGHT = '#b21a33';
 const DARK = '#691222';
+
+// The pen path that draws the P: up the stem from the bottom-left foot (the
+// "I"), along the top bar, round the right side of the bowl and back along the
+// bottom. The stroke is wide enough to cover the faces on either side of it.
+// It runs a little past both ends of the P so its flat ends cover the corners.
+const P_PEN = 'M38 385 L92 76 L205 86 L252 140 L250 190 L212 240 L70 243';
+const P_PEN_WIDTH = 84;
 
 // The trend line runs from the arrow's tail (bottom left) to its tip (top
 // right). The draw-on reveal grows along this direction.
@@ -58,28 +66,33 @@ const ARROW_FACES = [
 /**
  * Animated Profit Tracker logo.
  *
- * On mount the P is revealed from the bottom up (0.7s). Just before it finishes,
- * the arrow starts drawing itself along the trend line from its tail to its tip
- * (0.9s), so the whole intro takes 1.5s. Hovering nudges
- * the arrow 4px up and to the right. With prefers-reduced-motion the logo
+ * On mount the P is drawn like a pen stroke (0.9s): from the bottom-left foot
+ * straight up the stem, then along the top and around the bowl. Just before it
+ * finishes, the arrow draws itself along the trend line from its tail to its
+ * tip (0.9s), so the whole intro takes 1.7s. Hovering nudges the arrow 4px up
+ * and to the right. With prefers-reduced-motion the logo
  * renders in its final state and does not move on hover.
  */
 export default function AnimatedLogo({ size = 32, label = 'Profit Tracker', className, style }) {
   const reduceMotion = useReducedMotion();
   const clipId = useId().replace(/:/g, '');
   const hoverShift = HOVER_PX * (VIEW / size);
+  // Once the P is fully drawn the mask comes off, so its edges render exactly
+  // as they would without one (a mask lightens anti-aliased edge pixels a bit).
+  const [pDrawn, setPDrawn] = useState(false);
+  const maskP = !reduceMotion && !pDrawn;
 
-  // The reveals are clip rectangles that grow. The P's rect grows upward from
-  // the bottom edge; the arrow's rect lies along the trend line and grows from
-  // the tail toward the tip.
+  // The P is revealed through a mask: a wide stroke along the P's centerline
+  // that draws itself like a pen. The arrow is revealed by a clip rectangle
+  // that lies along the trend line and grows from the tail toward the tip.
   const pRevealVariants = {
-    hidden: { scaleY: 0 },
-    visible: { scaleY: 1, transition: { duration: 0.7, ease: [0.45, 0, 0.25, 1] } },
+    hidden: { pathLength: 0 },
+    visible: { pathLength: 1, transition: { duration: 0.9, ease: [0.4, 0, 0.3, 1] } },
   };
 
   const arrowRevealVariants = {
     hidden: { scaleX: 0 },
-    visible: { scaleX: 1, transition: { delay: 0.6, duration: 0.9, ease: [0.45, 0, 0.25, 1] } },
+    visible: { scaleX: 1, transition: { delay: 0.8, duration: 0.9, ease: [0.45, 0, 0.25, 1] } },
   };
 
   const arrowVariants = {
@@ -104,17 +117,21 @@ export default function AnimatedLogo({ size = 32, label = 'Profit Tracker', clas
       {...a11y}
     >
       <defs>
-        <clipPath id={`${clipId}-p`}>
-          <MotionRect
+        <mask id={`${clipId}-p`} maskUnits="userSpaceOnUse" x={-40} y={-40} width={420} height={440}>
+          <MotionPath
             data-reveal="p"
-            x={-10}
-            y={-10}
-            width={360}
-            height={360}
-            style={{ originY: 1 }}
+            d={P_PEN}
+            fill="none"
+            stroke="#fff"
+            strokeWidth={P_PEN_WIDTH}
+            // Flat ends: a round end on a zero-length stroke still draws a dot,
+            // which would show the P's foot before the drawing starts.
+            strokeLinecap="butt"
+            strokeLinejoin="round"
             variants={pRevealVariants}
+            onAnimationComplete={(name) => { if (name === 'visible') setPDrawn(true); }}
           />
-        </clipPath>
+        </mask>
         {/* A clipPath can't hold a <g>, so the rotation sits on the clipPath. */}
         <clipPath
           id={`${clipId}-arrow`}
@@ -131,7 +148,7 @@ export default function AnimatedLogo({ size = 32, label = 'Profit Tracker', clas
           />
         </clipPath>
       </defs>
-      <g id="p" clipPath={`url(#${clipId}-p)`}>
+      <g id="p" mask={maskP ? `url(#${clipId}-p)` : undefined}>
         {P_FACES.map((f) => <Face key={f.d} {...f} />)}
       </g>
       <MotionG id="arrow" variants={arrowVariants}>

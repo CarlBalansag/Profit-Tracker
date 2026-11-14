@@ -34,21 +34,23 @@ describe('AnimatedLogo', () => {
 
   it('starts with the P and the arrow fully clipped so the intro can play', () => {
     const { container } = render(<AnimatedLogo />);
-    expect(container.querySelector('[data-reveal="p"]').style.transform).toContain('scaleY(0)');
+    const pen = container.querySelector('[data-reveal="p"]');
+    expect(pen.getAttribute('stroke-dashoffset')).toBe('0');
+    expect(pen.getAttribute('stroke-dasharray')).toMatch(/^0(px)? /);
+    expect(container.querySelector('#p').getAttribute('mask')).toMatch(/^url\(#/);
     expect(container.querySelector('[data-reveal="arrow"]').style.transform).toContain('scaleX(0)');
   });
 
   it('gives each logo its own clip paths', () => {
     const { container } = render(<><AnimatedLogo /><AnimatedLogo /></>);
-    const ids = [...container.querySelectorAll('clipPath')].map((c) => c.id);
+    const ids = [...container.querySelectorAll('clipPath, mask')].map((c) => c.id);
     expect(new Set(ids).size).toBe(4);
   });
 
   it('renders the finished logo straight away with reduced motion', () => {
     reduced = true;
     const { container } = render(<AnimatedLogo />);
-    for (const sel of ['[data-reveal="p"]', '[data-reveal="arrow"]']) {
-      expect(container.querySelector(sel).style.transform || 'none').not.toMatch(/scale[XY]\(0\)/);
-    }
+    expect(container.querySelector('#p').getAttribute('mask')).toBeNull();
+    expect(container.querySelector('[data-reveal="arrow"]').style.transform || 'none').not.toMatch(/scaleX\(0\)/);
   });
 });
