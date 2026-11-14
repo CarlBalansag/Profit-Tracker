@@ -7,6 +7,7 @@ import { useUiPreferences } from '../../hooks/useUiPreferences';
 import { useAuth } from '../../context/AuthContext';
 import { useTutorial } from '../../context/TutorialContext';
 import { SpotlightOverlay } from '../Tutorial/SpotlightOverlay';
+import AnimatedLogo from '../UI/AnimatedLogo';
 
 const Header = ({ onMenuClick, isGlass }) => {
   return (
@@ -18,7 +19,7 @@ const Header = ({ onMenuClick, isGlass }) => {
         <Menu size={24} />
       </button>
       <div className="flex items-center gap-2">
-        <div className={clsx("w-7 h-7 rounded flex items-center justify-center text-[#ffffff] font-bold text-xs", isGlass ? "bg-[var(--accent)]" : "bg-[var(--dp-accent)]")}>P</div>
+        <AnimatedLogo size={28} label={null} />
         <span className={isGlass ? "font-bold text-white" : "font-bold text-[var(--dp-text-primary)]"}>Profit Tracker</span>
       </div>
     </header>

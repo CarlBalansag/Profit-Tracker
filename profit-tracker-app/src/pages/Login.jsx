@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import FirebaseLoginForm from '../components/Auth/FirebaseLoginForm';
 import { signupEnabled } from '../services/firebaseAuth';
 import { TrendingUp, CreditCard, Wallet, BarChart2, ArrowRight, CheckCircle, ChevronDown, ShoppingBag, LogIn } from 'lucide-react';
+import AnimatedLogo from '../components/UI/AnimatedLogo';
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
@@ -110,9 +111,7 @@ const Login = () => {
       <header className="sticky top-0 z-50 border-b border-white/[0.05] bg-[#07070a]/90 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-5 sm:px-8 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded bg-[#5865F2] flex items-center justify-center">
-              <span className="text-white font-bold text-xs leading-none">P</span>
-            </div>
+            <AnimatedLogo size={24} label={null} />
             <span className="font-semibold text-[13px] tracking-tight text-white/90">Profit Tracker</span>
           </div>
           <button
@@ -495,9 +494,7 @@ const Login = () => {
       <footer className="border-t border-white/[0.05] px-5 sm:px-8 py-7">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded bg-[#5865F2] flex items-center justify-center">
-              <span className="text-white font-bold text-[10px] leading-none">P</span>
-            </div>
+            <AnimatedLogo size={20} label={null} />
             <span className="text-[12px] text-white/25 font-medium">Profit Tracker</span>
           </div>
           <p className="text-[11px] text-white/15">Built for resellers. Your data stays yours.</p>

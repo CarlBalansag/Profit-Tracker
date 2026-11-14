@@ -52,7 +52,8 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
               title="Profit Tracker"
               aria-label="Profit Tracker dashboard"
             >
-              <AnimatedLogo size={28} label={null} />
+              {/* Keyed on open state so the intro replays when the menu opens or closes. */}
+              <AnimatedLogo key={isOpen ? 'open' : 'closed'} size={28} label={null} />
             </button>
 
             <NavMarker marker={marker} className="rounded-xl bg-[#d8a65a]/10" />
@@ -106,7 +107,13 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
       >
         <div className={clsx("flex items-center py-5 border-b border-[color:var(--dp-border)]", isCollapsed ? "justify-center px-0 flex-col gap-2" : "gap-3 px-4")}>
           <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center">
-            <AnimatedLogo size={30} label={isCollapsed ? 'Profit Tracker' : null} />
+            {/* Keyed on the sidebar's state so the intro replays when it is
+                collapsed or expanded, or opened or closed on mobile. */}
+            <AnimatedLogo
+              key={`${isCollapsed ? 'collapsed' : 'expanded'}-${isOpen ? 'open' : 'closed'}`}
+              size={30}
+              label={isCollapsed ? 'Profit Tracker' : null}
+            />
           </div>
 
           {!isCollapsed && (
