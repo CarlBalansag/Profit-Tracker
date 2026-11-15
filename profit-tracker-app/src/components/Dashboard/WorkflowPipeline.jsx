@@ -27,24 +27,24 @@ const EASE = [0.16, 1, 0.3, 1];
 // left, each growing to its share of the row and fading in. Steps that stay
 // just resize as the others grow and shrink around them.
 const STEP_MIN_WIDTH = 130;
-const EXIT_STAGGER = 0.05;
-const ENTER_STAGGER = 0.08;
-const ENTER_AFTER_EXITS = 0.28; // when steps also left, new ones wait for them
+const EXIT_STAGGER = 0.09;
+const ENTER_STAGGER = 0.14;
+const ENTER_AFTER_EXITS = 0.45; // when steps also left, new ones wait for them
 const STEP_VARIANTS = {
   hidden: { opacity: 0, flexGrow: 0, minWidth: '0px', y: 6 },
   shown: ({ enterDelay }) => ({
     opacity: 1, flexGrow: 1, minWidth: `${STEP_MIN_WIDTH}px`, y: 0,
     transition: {
-      delay: enterDelay, duration: 0.42, ease: EASE,
+      delay: enterDelay, duration: 0.6, ease: EASE,
       // Fade in once it has some width, so its text never shows squeezed.
-      opacity: { delay: enterDelay + 0.14, duration: 0.3, ease: 'easeOut' },
+      opacity: { delay: enterDelay + 0.2, duration: 0.42, ease: 'easeOut' },
     },
   }),
   gone: ({ exitDelay }) => ({
     opacity: 0, flexGrow: 0, minWidth: '0px', y: -4,
     transition: {
-      delay: exitDelay, duration: 0.32, ease: EASE,
-      opacity: { delay: exitDelay, duration: 0.14, ease: 'easeIn' },
+      delay: exitDelay, duration: 0.45, ease: EASE,
+      opacity: { delay: exitDelay, duration: 0.22, ease: 'easeIn' },
     },
   }),
 };
