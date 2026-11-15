@@ -351,7 +351,7 @@ function CreditCard() {
           {/* ── Card picker ── */}
           <div className="space-y-3">
             <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1">Your Cards</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div data-stagger-cards className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {cards.map(card => {
                 const isActive = activeCard?.id === card.id;
                 const cardDays = card.due_day ? daysUntilDue(card.due_day) : null;

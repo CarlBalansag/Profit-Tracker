@@ -17,9 +17,13 @@ const DESKTOP = '(min-width: 768px)';
 // own step.
 const CARD_STAGGER_MS = 40;
 const SECTION_STAGGER_MS = 150;
+const ROW_STAGGER_MS = 70;
 const MAX_DELAY_MS = 2000; // later items share this delay, so nothing waits long
+// Past this many, items are far below the screen and just appear, so a
+// long table doesn't start hundreds of animations.
+const MAX_ANIMATED = 80;
 const DURATION_MS = 420;
-const WATCH_MS = 2500;
+const WATCH_MS = 4000; // long enough for data that loads after the page opens
 const MAX_GRID_CARDS = 8;
 const EASE = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
 
@@ -36,6 +40,16 @@ export function findStaggerItems(root) {
   while (node && node.children.length === 1) node = node.children[0];
   if (!node) return [];
   const items = [];
+  // Inside a section or card, right after it: a table's rows, or a list
+  // marked data-stagger-rows, come in row by row; a row of cards marked
+  // data-stagger-cards (like the Status Pipeline's steps) card by card.
+  const add = (el, card) => {
+    items.push({ el, card });
+    for (const group of el.querySelectorAll('tbody, [data-stagger-rows], [data-stagger-cards]')) {
+      const row = !group.hasAttribute('data-stagger-cards');
+      items.push(...[...group.children].filter(isShown).map((child) => ({ el: child, card: true, inner: true, row })));
+    }
+  };
   for (const section of node.children) {
     if (!isShown(section)) continue;
     // A grid of cards, or a grid of cards wrapped with its scrollbar, comes
@@ -45,15 +59,8 @@ export function findStaggerItems(root) {
     // Two side-by-side columns (a chart and its side panel) are sections of
     // their own, not a row of cards.
     const kids = grid ? [...grid.children].filter(isShown) : [];
-    if (grid) items.push(...kids.map((el) => ({ el, card: kids.length > 2 })));
-    else {
-      items.push({ el: section, card: false });
-      // A row inside a section that asks for it (data-stagger-cards, like the
-      // Status Pipeline's steps) comes in card by card right after it.
-      for (const row of section.querySelectorAll('[data-stagger-cards]')) {
-        items.push(...[...row.children].filter(isShown).map((el) => ({ el, card: true, inner: true })));
-      }
-    }
+    if (grid) kids.forEach((el) => add(el, kids.length > 2));
+    else add(section, false);
   }
   return items;
 }
@@ -62,9 +69,13 @@ export function findStaggerItems(root) {
 export function staggerDelays(items) {
   let at = 0;
   return items.map((item, index) => {
-    // Cards inside a section start just after it; otherwise a card after a
-    // card is a quick step, and anything else is a section's longer one.
-    if (index > 0) at += (item.card && items[index - 1].card) || item.inner ? CARD_STAGGER_MS : SECTION_STAGGER_MS;
+    // Table rows take slower, more visible steps; cards inside a section
+    // start just after it; a card after a card is a quick step; anything else
+    // is a section's longer one.
+    if (index > 0) {
+      if (item.row) at += ROW_STAGGER_MS;
+      else at += (item.card && items[index - 1].card) || item.inner ? CARD_STAGGER_MS : SECTION_STAGGER_MS;
+    }
     return Math.min(at, MAX_DELAY_MS);
   });
 }
@@ -79,7 +90,9 @@ export default function usePageStagger(ref) {
     const running = [];
     // A later batch (content after a loader) starts its own sequence.
     const run = () => {
-      const fresh = findStaggerItems(root).filter(({ el }) => !done.has(el));
+      const all = findStaggerItems(root).filter(({ el }) => !done.has(el));
+      all.forEach(({ el }) => done.add(el));
+      const fresh = all.slice(0, MAX_ANIMATED);
       if (!fresh.length) return;
       const delays = staggerDelays(fresh);
       fresh.forEach(({ el }, index) => {
