@@ -208,9 +208,9 @@ export default function Calendar() {
       </div>
 
       {/* ── Calendar card ─────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-h-0 bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-2xl dp-elevated overflow-hidden">
+      <div className="shrink-0 lg:shrink lg:flex-1 flex flex-col lg:min-h-0 bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-2xl dp-elevated overflow-hidden">
         {/* Legend + Calendar */}
-        <div className="flex flex-1 min-h-0 overflow-hidden">
+        <div className="flex lg:flex-1 lg:min-h-0 lg:overflow-hidden">
           {/* Legend */}
           <div className="hidden lg:flex flex-col gap-3 px-4 py-4 border-r border-[color:var(--dp-border)] min-w-[140px] w-36 bg-[var(--dp-card-bg)]">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--dp-text-label)]">Legend</p>
