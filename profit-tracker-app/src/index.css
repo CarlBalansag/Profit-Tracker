@@ -991,6 +991,31 @@ body,
   transform: translateZ(0);
 }
 
+/* ─── Calendar page: FullCalendar's Breezy theme in the app's colors ────────
+   The palette is pointed at the app's own tokens, so it follows light/dark
+   mode, the UI style and the chosen accent. [data-color-scheme] is the
+   calendar root (Calendar.jsx passes colorScheme), and this outranks the
+   palette file's own :root / [data-color-scheme=dark] values. */
+.calendar-wrapper [data-color-scheme] {
+  --fc-breezy-background: var(--dp-card-bg);
+  --fc-breezy-border: var(--dp-border);
+  --fc-breezy-muted-border: var(--dp-border);
+  --fc-breezy-strong-border: var(--dp-border-hover, var(--dp-border));
+  --fc-breezy-secondary-border: var(--dp-border-hover, var(--dp-border));
+  --fc-breezy-foreground: var(--dp-text-primary);
+  --fc-breezy-strong-foreground: var(--dp-text-primary);
+  --fc-breezy-muted-foreground: var(--dp-text-secondary);
+  --fc-breezy-faint-foreground: var(--dp-text-label);
+  --fc-breezy-secondary: var(--dp-hover-bg);
+  --fc-breezy-secondary-foreground: var(--dp-text-primary);
+  --fc-breezy-popover: var(--dp-card-bg);
+  --fc-breezy-popover-border: var(--dp-border-hover, var(--dp-border));
+  --fc-breezy-selected: var(--dp-accent-bg);
+  --fc-breezy-primary: var(--dp-accent);
+  --fc-breezy-primary-over: var(--dp-accent);
+  --fc-breezy-primary-down: var(--dp-accent);
+}
+
 /* ─── FullCalendar light theme overrides ──────────────────────────────────── */
 .calendar-wrapper .fc {
   --fc-border-color: var(--dp-border);

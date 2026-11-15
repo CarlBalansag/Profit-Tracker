@@ -1,11 +1,14 @@
-import { useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/react/daygrid';
 import timeGridPlugin from '@fullcalendar/react/timegrid';
 import interactionPlugin from '@fullcalendar/react/interaction';
+import breezyTheme from '@fullcalendar/react/themes/breezy';
 import '@fullcalendar/react/skeleton.css';
+import '@fullcalendar/react/themes/breezy/theme.css';
+import '@fullcalendar/react/themes/breezy/palettes/rose.css';
 import {
-  ChevronLeft, ChevronRight, CalendarDays,
+  CalendarDays,
   ShoppingBag, DollarSign, Banknote, Link2, Copy, Check, CreditCard,
 } from 'lucide-react';
 import { useCalendarEvents, useCalendarAutoEvents, useCalendarToken } from '../hooks/useApi';
@@ -36,74 +39,16 @@ function eventBgColor(ev) {
   return TYPE_COLOR[ev.type] ?? 'var(--dp-accent)';
 }
 
-// ─── Custom event pill — dot + colored text, no background fill ───────────────
-function EventPill({ eventInfo }) {
-  const ev = eventInfo.event.extendedProps.raw;
-  const color = eventBgColor(ev);
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '4px',
-        padding: '1px 4px',
-        width: '100%',
-        overflow: 'hidden',
-        cursor: 'pointer',
-      }}
-      title={eventInfo.event.title}
-    >
-      <span style={{
-        flexShrink: 0,
-        width: '6px',
-        height: '6px',
-        borderRadius: '50%',
-        backgroundColor: color,
-      }} />
-      <span className="calendar-event-text" style={{
-        color: `color-mix(in srgb, ${color} 55%, var(--dp-text-primary))`,
-        fontSize: '11px',
-        fontWeight: 600,
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-      }}>
-        {eventInfo.event.title}
-      </span>
-    </div>
-  );
-}
-
-// ─── Custom day cell — adds divider line + highlights today ───────────────────
-function DayCellContent({ dayNumberText, isToday }) {
-  return (
-    <div style={{ width: '100%' }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'flex-end',
-        padding: '2px 4px 3px',
-      }}>
-        <span style={{
-          fontSize: '11px',
-          fontWeight: isToday ? 700 : 500,
-          color: isToday ? '#ffffff' : 'var(--dp-text-secondary)',
-          backgroundColor: isToday ? 'var(--dp-accent)' : 'transparent',
-          borderRadius: '50%',
-          width: isToday ? '20px' : 'auto',
-          height: isToday ? '20px' : 'auto',
-          lineHeight: isToday ? '20px' : 'normal',
-          textAlign: 'center',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-          boxShadow: isToday ? '0 2px 6px rgba(var(--accent-rgb), 0.35)' : 'none',
-        }}>
-          {dayNumberText}
-        </span>
-      </div>
-    </div>
-  );
+// The app's light/dark mode, so the calendar's Breezy theme follows it.
+function useColorScheme() {
+  const read = () => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+  const [scheme, setScheme] = useState(read);
+  useEffect(() => {
+    const observer = new MutationObserver(() => setScheme(read()));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+  return scheme;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -183,8 +128,8 @@ function SubscribePanel({ onClose }) {
 // ─── Main Calendar Page ───────────────────────────────────────────────────────
 export default function Calendar() {
   const calendarRef = useRef(null);
+  const colorScheme = useColorScheme();
   const [currentMonth, setCurrentMonth] = useState(() => toMonthStr(new Date()));
-  const [view, setView] = useState('dayGridMonth');
   const [popover, setPopover] = useState(null); // { date, events }
   const [modal, setModal] = useState({ open: false, event: null, defaultDate: null });
   const [showSubscribe, setShowSubscribe] = useState(false);
@@ -199,9 +144,7 @@ export default function Calendar() {
       title: ev.title,
       start: ev.date,
       end: ev.end_date || undefined,
-      backgroundColor: eventBgColor(ev),
-      borderColor: 'transparent',
-      textColor: '#ffffff',
+      color: eventBgColor(ev),
       extendedProps: { type: ev.type, notes: ev.notes, raw: ev },
     }));
   }, [autoEvents, manualEvents]);
@@ -228,23 +171,11 @@ export default function Calendar() {
     setPopover({ date, events: eventsOnDay });
   };
 
-  const changeView = (newView) => {
-    setView(newView);
-    calendarRef.current?.getApi().changeView(newView);
-  };
-
-  const goNext = () => calendarRef.current?.getApi().next();
-  const goPrev = () => calendarRef.current?.getApi().prev();
-  const goToday = () => calendarRef.current?.getApi().today();
-
   // Title label for header
   const monthEvents = [...autoEvents, ...manualEvents]
     .filter(ev => ev.date?.startsWith(currentMonth))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  const monthLabel = new Date(currentMonth + '-15').toLocaleDateString('en-US', {
-    month: 'long', year: 'numeric',
-  });
 
   if (manualFailed || autoFailed) {
     return (
@@ -278,30 +209,6 @@ export default function Calendar() {
 
       {/* ── Calendar card ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-h-0 bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-2xl dp-elevated overflow-hidden">
-        {/* Toolbar */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[color:var(--dp-border)] gap-2 flex-wrap">
-          {/* Nav */}
-          <div className="flex items-center gap-1">
-            <button type="button" aria-label="Previous" onClick={goPrev} className="p-1.5 rounded-lg text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"><ChevronLeft size={16} /></button>
-            <button onClick={goToday} className="px-2.5 py-1 text-xs font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] rounded-lg transition-colors border border-[color:var(--dp-border)]">Today</button>
-            <button type="button" aria-label="Next" onClick={goNext} className="p-1.5 rounded-lg text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"><ChevronRight size={16} /></button>
-            <span className="text-sm font-semibold text-[var(--dp-text-primary)] ml-1">{monthLabel}</span>
-          </div>
-
-          {/* View toggle */}
-          <div className="flex items-center bg-[var(--dp-bg)] border border-[color:var(--dp-border)] rounded-lg p-0.5">
-            {[['dayGridMonth', 'Month'], ['timeGridWeek', 'Week']].map(([v, label]) => (
-              <button
-                key={v}
-                onClick={() => changeView(v)}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${view === v ? 'bg-[var(--dp-accent)] text-[#ffffff] shadow-xs' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Legend + Calendar */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* Legend */}
@@ -332,40 +239,17 @@ export default function Calendar() {
 
           {/* FullCalendar */}
           <div className="flex-1 min-w-0 overflow-auto p-2 calendar-wrapper bg-[var(--dp-card-bg)]">
-            <style>{`
-              .calendar-wrapper a { color: inherit; text-decoration: none; }
-              .calendar-wrapper [class*="fc-"] { font-size: 11px; color: var(--dp-text-secondary); }
-              .calendar-wrapper [role="columnheader"] { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dp-text-label) !important; padding: 8px 0 !important; background: var(--dp-bg) !important; border-color: var(--dp-border) !important; }
-              .calendar-wrapper [role="gridcell"] { border: 1px solid var(--dp-border) !important; min-height: 100px !important; vertical-align: top !important; background-color: var(--dp-card-bg) !important; }
-              .calendar-wrapper [role="gridcell"][aria-current="date"] { background-color: var(--dp-accent-bg) !important; box-shadow: inset 0 0 0 1px var(--dp-accent) !important; }
-              .calendar-wrapper [class*="moreLinkText"], .calendar-wrapper [class*="moreLink"] { color: var(--dp-text-muted) !important; font-size: 11px !important; }
-              .calendar-wrapper .fc-theme-standard td, .calendar-wrapper .fc-theme-standard th { border-color: var(--dp-border) !important; }
-              .calendar-wrapper .fc-scrollgrid { border-color: var(--dp-border) !important; }
-              .calendar-wrapper .fc-daygrid-day-frame { background-color: var(--dp-card-bg); }
-              .calendar-wrapper .fc-day-other { background-color: var(--dp-bg) !important; opacity: 0.6; }
-              @media (max-width: 767px) {
-                .calendar-wrapper .calendar-event-text { display: none; }
-                .calendar-wrapper [role="gridcell"] { min-height: 64px !important; }
-              }
-            `}</style>
             <FullCalendar
               ref={calendarRef}
-              plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+              plugins={[breezyTheme, dayGridPlugin, timeGridPlugin, interactionPlugin]}
+              colorScheme={colorScheme}
               initialView="dayGridMonth"
-              headerToolbar={false}
+              headerToolbar={{ start: 'prev,next today', center: 'title', end: 'dayGridMonth,timeGridWeek' }}
               events={fcEvents}
               eventClick={handleEventClick}
               dateClick={handleDateClick}
               datesSet={handleDatesSet}
-              eventContent={(eventInfo) => <EventPill eventInfo={eventInfo} />}
-              dayCellTopContent={(args) => (
-                <DayCellContent
-                  dayNumberText={args.dayNumberText}
-                  isToday={args.isToday}
-                />
-              )}
               height="auto"
-              showNonCurrentDates={false}
               fixedWeekCount={false}
               dayMaxEvents={4}
               moreLinkClick={handleMoreLinkClick}
