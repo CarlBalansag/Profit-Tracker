@@ -370,6 +370,165 @@
   .lp-overview-stage { padding: 14px; min-height: 0; border-radius: 22px; }
 }
 
+/* Headline words rise out of a mask. */
+.lp-word-mask { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: 0.06em; margin-bottom: -0.06em; }
+
+/* Store and marketplace names drifting by under the hero. */
+.lp-marquee-mask {
+  display: flex;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #020202 12%, #020202 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #020202 12%, #020202 88%, transparent);
+}
+.lp-marquee-track {
+  display: flex;
+  flex-shrink: 0;
+  gap: 12px;
+  padding-right: 12px;
+  animation: lp-marquee 48s linear infinite;
+}
+.lp-marquee-mask:hover .lp-marquee-track { animation-play-state: paused; }
+.lp-marquee-item {
+  white-space: nowrap;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--lp-border-strong);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--lp-text-2);
+  font-family: 'Archivo', 'Nunito Sans', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+@keyframes lp-marquee { to { transform: translateX(-100%); } }
+
+/* Hover tilt: perspective on the wrapper, a soft light that follows the mouse. */
+.lp-tilt { perspective: 1100px; }
+.lp-tilt-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.lp-tilt:hover .lp-tilt-glow { opacity: 1; }
+
+/* Buttons: a light sweeps across on hover. */
+.lp-btn { position: relative; overflow: hidden; isolation: isolate; }
+.lp-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.22) 50%, transparent 65%);
+  transform: translateX(-120%);
+  transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lp-btn:hover::after { transform: translateX(120%); }
+
+/* How it works: pinned steps and the window that plays each one. */
+.lp-howstep {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+  text-align: left;
+  padding: 16px 18px;
+  border-radius: 18px;
+  color: var(--lp-text);
+  opacity: 0.45;
+  transition: opacity 0.4s, background-color 0.4s;
+}
+.lp-howstep:hover { opacity: 0.75; }
+.lp-howstep.is-on { opacity: 1; background: var(--lp-bg); }
+.lp-howstep-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: var(--lp-well);
+  color: var(--lp-text-2);
+  transition: background-color 0.4s, color 0.4s;
+}
+.lp-howstep.is-on .lp-howstep-icon,
+.lp-howstep-icon.is-on { background: var(--lp-accent-tint); color: var(--lp-accent-text); }
+.lp-howstep-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--lp-text-2);
+  transition: grid-template-rows 0.5s cubic-bezier(0.16, 1, 0.3, 1), margin 0.5s;
+  overflow: hidden;
+}
+.lp-howstep-body > span { min-height: 0; overflow: hidden; }
+.lp-howstep.is-on .lp-howstep-body { grid-template-rows: 1fr; margin-top: 4px; }
+.lp-howprogress { height: 2px; border-radius: 2px; background: var(--lp-well); overflow: hidden; }
+.lp-story-window {
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--lp-bg);
+  border: 1px solid var(--lp-border-strong);
+  box-shadow: 0 40px 90px -40px rgba(2, 2, 2, 0.95), 0 0 0 1px rgba(2, 2, 2, 0.5);
+}
+.lp-field {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 9px;
+  background: var(--lp-sidebar);
+  border: 1px solid var(--lp-border-strong);
+  font-size: 14px;
+  font-weight: 600;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.lp-field.is-active { border-color: rgba(255, 255, 255, 0.34); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.18); }
+.lp-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--lp-accent-text);
+  animation: lp-blink 0.9s steps(1) infinite;
+}
+@keyframes lp-blink { 50% { opacity: 0; } }
+.lp-fake-btn {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--accent-gradient);
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+}
+.lp-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--lp-raised);
+  border: 1px solid var(--lp-border-strong);
+  font-size: 13px;
+  font-weight: 600;
+}
+.lp-receipt { min-height: 118px; }
+.lp-receipt li {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--lp-border);
+  font-size: 14px;
+  color: var(--lp-text-2);
+  font-variant-numeric: tabular-nums;
+}
+.lp-receipt li b { color: var(--lp-text); }
+
 @keyframes lp-pop {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
@@ -382,9 +541,4 @@
 }
 .lp-flash { animation: lp-flash 1400ms ease-out; }
 
-/* Asked for less motion: no drifting or sliding, but fades and the
-   highlight flashes stay so the stories still read. */
-@media (prefers-reduced-motion: reduce) {
-  .lp-pop, .lp-halos::before, .lp-halos::after { animation: none; }
-  .lp-btn { transition: none; }
-}
+

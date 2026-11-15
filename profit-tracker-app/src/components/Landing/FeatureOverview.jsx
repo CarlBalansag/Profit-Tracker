@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ExpensesFragment, PayoutsFragment, PurchaseFragment, SaleFragment } from './Fragments';
 import { EASE_OUT, EASE_QUART } from './landingShared';
+import TiltCard from './TiltCard';
 
 const MotionDiv = motion.div;
 
@@ -85,7 +86,7 @@ export default function FeatureOverview({ items, today }) {
               exit={{ opacity: 0, y: -10, filter: 'blur(6px)', transition: { duration: 0.32, ease: EASE_QUART } }}
               className="w-full"
             >
-              <Current items={items} today={today} />
+              <TiltCard><Current items={items} today={today} /></TiltCard>
             </MotionDiv>
           </AnimatePresence>
         </div>

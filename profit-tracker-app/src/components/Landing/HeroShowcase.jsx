@@ -22,6 +22,15 @@ const NAV = [
 const money = (v) => formatMoney(Math.round(v));
 const moneyWhole = (v) => formatMoney(Math.round(v), { whole: true });
 const pct = (v) => `${(v * 100).toFixed(1)}%`;
+// Sales that land in the hero, one after another: [item, price, where, shipping].
+const HERO_SALES = [
+  ['Travis Scott', '268', 'StockX', ''],
+  ['Steam Deck', '799', 'eBay', ''],
+  ['LEGO Titanic', '849', 'eBay', '24'],
+  ['Owala', '420', 'Mercari', '18'],
+];
+const HERO_TIMES = [2600, 7600, 12600, 17600];
+
 const shortDate = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
 function Kpi({ label, value, format, note, tone, delay }) {
@@ -36,15 +45,16 @@ function Kpi({ label, value, format, note, tone, delay }) {
   );
 }
 
-// The dashboard as it looks in the app, playing a short story on load: the
-// numbers fill in, then a sale lands and every total moves with it.
-function HeroDashboard({ before, after, sold, today, playing }) {
-  const step = useSequence(playing, [2600]);
-  const state = step >= 1 ? after : before;
+// The dashboard as it looks in the app, playing on its own: the numbers fill
+// in, then sales keep landing and every total moves with each one.
+function HeroDashboard({ frames, frame, today }) {
+  const { state, sold } = frames[frame];
   const t = totals(state.items);
   const months = monthlySeries(state.items, today);
-  const max = Math.max(1, ...monthlySeries(after.items, today).map((m) => m.profit));
-  const recent = state.items.filter((x) => x.sale).sort((a, b) => b.sale.soldOn.localeCompare(a.sale.soldOn) || (b.id === sold.id) - (a.id === sold.id)).slice(0, 5);
+  const max = Math.max(1, ...monthlySeries(frames[frames.length - 1].state.items, today).map((m) => m.profit));
+  // Newest first; sales on the same day in the order they landed.
+  const rank = (x) => frames.findIndex((f) => f.sold?.id === x.id);
+  const recent = state.items.filter((x) => x.sale).sort((a, b) => b.sale.soldOn.localeCompare(a.sale.soldOn) || rank(b) - rank(a)).slice(0, 5);
 
   return (
     <div>
@@ -82,7 +92,7 @@ function HeroDashboard({ before, after, sold, today, playing }) {
           <div className="text-[12px] font-extrabold text-[var(--lp-text-2)] mb-2">Recent sales</div>
           <ul className="space-y-1">
             {recent.map((x, i) => {
-              const fresh = x.id === sold.id;
+              const fresh = x.id === sold?.id;
               return (
                 <MotionLi
                   key={x.id}
@@ -182,22 +192,32 @@ export default function HeroShowcase({ items, today }) {
   useMotionValueEvent(scrollY, 'change', (v) => setScrolled(v > 60));
   const spotlight = inMiddle && scrolled;
 
-  // The sale that lands during the intro, run through the demo's own logic.
-  const { before, after, sold } = useMemo(() => {
-    const start = { items, nextId: items.length + 1 };
-    const target = items.find((x) => !x.sale && x.name.startsWith('Travis Scott'));
-    const res = applyAction(start, { type: 'logSale', itemId: target.id, price: '268', platform: 'StockX', shipping: '', date: toISODate(today) });
-    return { before: start, after: res.state, sold: res.item };
+  // The sales that land one after another, run through the demo's own logic.
+  const frames = useMemo(() => {
+    const date = toISODate(today);
+    const out = [{ state: { items, nextId: items.length + 1 }, sold: null }];
+    HERO_SALES.forEach(([prefix, price, platform, shipping]) => {
+      const prev = out[out.length - 1].state;
+      const target = prev.items.find((x) => !x.sale && x.name.startsWith(prefix));
+      if (!target) return;
+      const res = applyAction(prev, { type: 'logSale', itemId: target.id, price, platform, shipping, date });
+      if (!res.error) out.push({ state: res.state, sold: res.item });
+    });
+    return out;
   }, [items, today]);
+  // Keeps going while the window is on screen, then starts over.
+  const onScreen = useInView(stageRef, { amount: 0.15 });
+  const frame = useSequence(playing && onScreen, HERO_TIMES.slice(0, frames.length - 1), 6000);
+  const now = frames[Math.min(frame, frames.length - 1)].state;
 
   useEffect(() => {
     const t = setTimeout(() => setPlaying(true), 400);
     return () => clearTimeout(t);
   }, []);
 
-  const t = totals(after.items);
-  const flow = cashFlow(after.items);
-  const best = [...cardSummary(after.items, today)].sort((a, b) => b.cashback - a.cashback)[0];
+  const t = totals(now.items);
+  const flow = cashFlow(now.items);
+  const best = [...cardSummary(now.items, today)].sort((a, b) => b.cashback - a.cashback)[0];
 
   return (
     <div ref={ref} className="relative mx-auto max-w-[1080px]">
@@ -210,15 +230,15 @@ export default function HeroShowcase({ items, today }) {
         className="relative"
       >
         <AppWindow dimmed={spotlight}>
-          <HeroDashboard before={before} after={after} sold={sold} today={today} playing={playing} />
+          <HeroDashboard frames={frames} frame={Math.min(frame, frames.length - 1)} today={today} />
         </AppWindow>
       </MotionDiv>
 
       <LiftCard className="left-2 sm:left-[-5%] top-[34%]" show={spotlight} delay={0}>
         <div className="flex items-center gap-3.5">
-          <Ring fraction={t.unitsSold / after.items.length} show={spotlight} />
+          <Ring fraction={t.unitsSold / now.items.length} show={spotlight} />
           <div>
-            <div className="lp-display text-[20px] sm:text-[24px] leading-none lp-num whitespace-nowrap">{t.unitsSold} of {after.items.length}</div>
+            <div className="lp-display text-[20px] sm:text-[24px] leading-none lp-num whitespace-nowrap">{t.unitsSold} of {now.items.length}</div>
             <div className="text-[12px] text-[var(--lp-text-3)] mt-1">items sold</div>
           </div>
         </div>

@@ -40,7 +40,7 @@ describe('landing page', () => {
     const links = screen.getAllByRole('link', { name: /^Sign in$/ });
     links.forEach((l) => expect(l).toHaveAttribute('href', '/login'));
     expect(screen.getByRole('heading', { name: /Your whole reselling business/ })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Up and running/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /From checkout to payout/ })).toBeInTheDocument();
   });
 
   it('the overview switches to the feature a visitor picks', () => {

@@ -30,15 +30,24 @@ export function useSeed() {
   return { items: data.items, today };
 }
 
-// Plays a short scripted sequence once `start` turns true: returns the index
-// of the step reached so far. `times` are ms from the start for steps 1..n.
-export function useSequence(start, times) {
+// Plays a short scripted sequence while `start` is true: returns the index of
+// the step reached so far. `times` are ms from the start for steps 1..n.
+// With `replayAfter` (ms), it goes back to step 0 that long after the last
+// step and plays again, for as long as `start` stays true. Each time `start`
+// turns true the sequence begins again from step 0.
+export function useSequence(start, times, replayAfter = 0) {
   const [step, setStep] = useState(0);
+  const [round, setRound] = useState(0);
   const key = times.join(',');
   useEffect(() => {
     if (!start) return undefined;
-    const timers = key.split(',').map((t, i) => setTimeout(() => setStep(i + 1), Number(t)));
+    const ts = key.split(',').map(Number);
+    const timers = [setTimeout(() => setStep(0), 0), ...ts.map((t, i) => setTimeout(() => setStep(i + 1), t))];
+    if (replayAfter) timers.push(setTimeout(() => setRound((r) => r + 1), ts[ts.length - 1] + replayAfter));
     return () => timers.forEach(clearTimeout);
-  }, [start, key]);
+  }, [start, key, replayAfter, round]);
   return step;
 }
+
+// How often the feature stories replay while they stay on screen.
+export const REPLAY_MS = 4500;

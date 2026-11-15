@@ -5,7 +5,7 @@ import {
   byPlatform, calendarEvents, cardOf, cardSummary, cashFlow, cashbackOf, formatMoney, itemProfit,
   saleNet, toISODate, totals,
 } from './demoData';
-import { EASE_OUT, EASE_QUART, blurIn, popIn, useSequence } from './landingShared';
+import { EASE_OUT, EASE_QUART, REPLAY_MS, blurIn, popIn, useSequence } from './landingShared';
 
 // Pieces of the app that explain each feature on the landing page. Each one
 // plays a short story when it scrolls into view (the way Copilot's sections
@@ -24,21 +24,25 @@ export function Tween({ value, from = 0, format = (v) => formatMoney(Math.round(
   const [shown, setShown] = useState(from);
   const current = useRef(from);
   useEffect(() => {
-    if (!start) return undefined;
-    const controls = animate(current.current, value, {
-      duration, delay, ease: EASE_OUT,
+    // Not started (or reset for a replay): glide back to the starting value.
+    const target = start ? value : from;
+    if (current.current === target) return undefined;
+    const controls = animate(current.current, target, {
+      duration: start ? duration : 0.35, delay: start ? delay : 0, ease: EASE_OUT,
       onUpdate: (v) => { current.current = v; setShown(v); },
     });
     return () => controls.stop();
-  }, [value, duration, delay, start]);
+  }, [value, from, duration, delay, start]);
   return <span className="lp-num">{format(shown)}</span>;
 }
 
-// Tells a piece's story once it is mostly on screen.
+// Tells a piece's story once it is mostly on screen, and keeps replaying it
+// while it stays there.
 function useStory(times) {
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, amount: 0.55 });
-  const step = useSequence(inView, times);
+  const onScreen = useInView(ref, { amount: 0.3 });
+  const step = useSequence(inView && onScreen, times, REPLAY_MS);
   return { ref, inView, step };
 }
 

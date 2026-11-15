@@ -5,6 +5,8 @@ import AnimatedLogo from '../components/UI/AnimatedLogo';
 import DemoApp from '../components/Landing/DemoApp';
 import HeroShowcase from '../components/Landing/HeroShowcase';
 import FeatureOverview from '../components/Landing/FeatureOverview';
+import HowItWorks from '../components/Landing/HowItWorks';
+import TiltCard from '../components/Landing/TiltCard';
 import {
   AnalyticsFragment, CalendarFragment, CardsFragment, InventoryFragment,
 } from '../components/Landing/Fragments';
@@ -13,7 +15,7 @@ import { signupEnabled } from '../services/firebaseAuth';
 import '../components/Landing/landing.css';
 
 const MotionDiv = motion.div;
-const MotionLi = motion.li;
+const MotionSpan = motion.span;
 
 const ROWS = [
   {
@@ -42,17 +44,50 @@ const ROWS = [
   },
 ];
 
-const STEPS = [
-  { title: 'Create your account', body: 'Add the cards you use and the marketplaces you sell on.' },
-  { title: 'Log what you buy', body: 'It goes into inventory with its cashback worked out.' },
-  { title: 'Log it when it sells', body: 'Fees, shipping and profit are done for you.' },
-  { title: 'Watch the numbers', body: 'Profit, cards and cash flow stay up to date everywhere.' },
-];
+const HEADLINE = 'Your flips, finally in one place.';
+
+// Places people buy from and sell on. Names only, no logos: these are the
+// kinds of stores and marketplaces the app lets you track, not partners.
+const PLACES = ['eBay', 'StockX', 'GOAT', 'Mercari', 'Facebook Marketplace', 'Nike SNKRS', 'Target', 'Walmart', 'Best Buy', 'Costco', 'LEGO', 'Pokémon Center', 'Amazon', 'Foot Locker'];
 
 const scrollToDemo = () => {
-  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  document.getElementById('demo')?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
+
+// The headline's words rise into place one after another.
+function RisingHeadline({ text }) {
+  return (
+    <h1 className="lp-display text-[clamp(2.6rem,7vw,5.6rem)] leading-[0.98]" aria-label={text}>
+      {text.split(' ').map((word, i) => (
+        <span key={i} className="lp-word-mask" aria-hidden="true">
+          <MotionSpan
+            className="inline-block"
+            initial={{ y: '105%', opacity: 0, filter: 'blur(6px)' }}
+            animate={{ y: '0%', opacity: 1, filter: 'blur(0px)' }}
+            transition={{ y: { duration: 1, ease: EASE_OUT, delay: 0.1 + i * 0.07 }, opacity: { duration: 0.6, ease: EASE_QUART, delay: 0.1 + i * 0.07 }, filter: { duration: 0.8, delay: 0.1 + i * 0.07 } }}
+          >
+            {word}
+          </MotionSpan>
+          {' '}
+        </span>
+      ))}
+    </h1>
+  );
+}
+
+// A slow strip of store and marketplace names under the hero.
+function PlacesStrip() {
+  const row = PLACES.map((p) => <li key={p} className="lp-marquee-item">{p}</li>);
+  return (
+    <div className="lp-marquee" aria-label="Track purchases and sales from any store or marketplace">
+      <p className="text-center text-[13px] font-bold text-[var(--lp-text-3)] mb-4">Track buys and sales from anywhere</p>
+      <div className="lp-marquee-mask">
+        <ul className="lp-marquee-track">{row}</ul>
+        <ul className="lp-marquee-track" aria-hidden="true">{row}</ul>
+      </div>
+    </div>
+  );
+}
 
 function Reveal({ children, className = '', delay = 0 }) {
   return (
@@ -85,9 +120,9 @@ export default function Landing() {
   });
 
   return (
-    // reducedMotion="user": for visitors who ask for less motion, motion drops
-    // movement (sliding, scaling) but keeps fades, numbers and the stories.
-    <MotionConfig reducedMotion="user">
+    // Full motion for every visitor on this page, by the owner's choice: the
+    // animation is how the page explains the app. Nothing flashes or spins.
+    <MotionConfig reducedMotion="never">
     <div className="lp min-h-screen overflow-x-clip">
       <header className="lp-nav">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-3">
@@ -109,22 +144,23 @@ export default function Landing() {
         <section className="relative px-4 sm:px-8 pt-16 sm:pt-24 pb-8 sm:pb-10">
           <div className="lp-halos" aria-hidden="true" />
           <div className="relative max-w-[860px] mx-auto text-center">
-            <motion.h1 {...intro(0)} className="lp-display text-[clamp(2.6rem,7vw,5.6rem)] leading-[0.98]">
-              Your flips, finally in one place.
-            </motion.h1>
-            <motion.p {...intro(0.08)} className="text-[17px] sm:text-[19px] text-[var(--lp-text-2)] leading-relaxed max-w-[600px] mx-auto mt-6">
+            <RisingHeadline text={HEADLINE} />
+            <motion.p {...intro(0.45)} className="text-[17px] sm:text-[19px] text-[var(--lp-text-2)] leading-relaxed max-w-[600px] mx-auto mt-6">
               Inventory, sales, cards and cash flow in one app built for resellers.
             </motion.p>
-            <motion.div {...intro(0.16)} className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 mt-9">
+            <motion.div {...intro(0.55)} className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 mt-9">
               <button type="button" onClick={scrollToDemo} className="lp-btn lp-btn-primary lp-btn-lg">Try the demo</button>
               <Link to="/login" className="lp-btn lp-btn-ghost lp-btn-lg">{accountLabel}</Link>
             </motion.div>
-            <motion.p {...intro(0.22)} className="text-[13px] text-[var(--lp-text-3)] mt-5">
+            <motion.p {...intro(0.65)} className="text-[13px] text-[var(--lp-text-3)] mt-5">
               The demo needs no account and runs on sample data.
             </motion.p>
           </div>
           <div className="relative mt-14 sm:mt-20">
             <HeroShowcase items={items} today={today} />
+          </div>
+          <div className="relative mt-16 sm:mt-20">
+            <PlacesStrip />
           </div>
         </section>
 
@@ -154,7 +190,7 @@ export default function Landing() {
                       <p className="text-[16.5px] text-[var(--lp-text-2)] leading-relaxed mt-4 max-w-[440px]">{row.body}</p>
                     </div>
                     <div className={`lp-panel-media ${i % 2 ? 'md:order-1' : ''}`}>
-                      <Frag items={items} today={today} />
+                      <TiltCard className="w-full max-w-[480px]"><Frag items={items} today={today} /></TiltCard>
                     </div>
                   </article>
                 </Reveal>
@@ -166,25 +202,11 @@ export default function Landing() {
         {/* How it works */}
         <section id="how" className="px-4 sm:px-8 pt-8 pb-24 sm:pb-28 scroll-mt-16" aria-labelledby="how-title">
           <div className="max-w-[1200px] mx-auto">
-            <Reveal className="max-w-[640px] mb-12">
-              <h2 id="how-title" className="lp-display text-[clamp(2rem,4.6vw,3.6rem)] leading-[1.02]">Up and running in an afternoon.</h2>
+            <Reveal className="max-w-[640px] mb-4 md:mb-0">
+              <h2 id="how-title" className="lp-display text-[clamp(2rem,4.6vw,3.6rem)] leading-[1.02]">From checkout to payout.</h2>
+              <p className="text-[17px] text-[var(--lp-text-2)] leading-relaxed mt-4">One pair, start to finish. Keep scrolling.</p>
             </Reveal>
-            <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-10">
-              {STEPS.map((s, i) => (
-                <MotionLi
-                  key={s.title}
-                  className="lp-step"
-                  initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
-                  whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                  viewport={{ once: true, margin: '-12% 0px' }}
-                  transition={{ opacity: { duration: 0.6, ease: EASE_QUART, delay: i * 0.1 }, default: { duration: 0.9, ease: EASE_OUT, delay: i * 0.1 } }}
-                >
-                  <span className="lp-step-num lp-num">{i + 1}</span>
-                  <h3 className="text-[18px] font-extrabold mt-4">{s.title}</h3>
-                  <p className="text-[15px] text-[var(--lp-text-2)] leading-relaxed mt-1.5">{s.body}</p>
-                </MotionLi>
-              ))}
-            </ol>
+            <HowItWorks items={items} today={today} />
           </div>
         </section>
 
