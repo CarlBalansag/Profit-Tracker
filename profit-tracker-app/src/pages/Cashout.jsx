@@ -1050,6 +1050,27 @@ function LogPurchaseButton({ deal }) {
   );
 }
 
+// The Log Purchase window's frame for its confirm and saved screens.
+function ModalShell({ modalRef, title, subtitle, onClose, busy = false, children }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div ref={modalRef} role="dialog" aria-modal="true" aria-label={title}
+        className="w-full max-w-lg rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
+          <div>
+            <h3 className="font-bold text-base text-[var(--dp-text-primary)]">{title}</h3>
+            <p className="text-[11px] text-[var(--dp-text-secondary)] mt-0.5 truncate max-w-xs" title={subtitle}>{subtitle}</p>
+          </div>
+          <button type="button" aria-label="Close" onClick={onClose} disabled={busy} className="text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]">
+            <X size={18} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 const nameKey = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 function LogPurchaseModal({ product, onClose }) {
@@ -1062,7 +1083,7 @@ function LogPurchaseModal({ product, onClose }) {
   const vendors = useMemo(() => platforms.filter((p) => p.type === 'Vendor'), [platforms]);
   const cashoutGroups = useMemo(() => platforms.filter((p) => p.type === 'Cashout'), [platforms]);
   // Points4Days can't take a commitment from here yet, so this only saves the
-  // purchase and sale. Tracking is optional and is kept on the sale.
+  // purchase and sale, with the tracking number on the sale.
   const recordOnly = !deal.connectionSupportsCommits;
   // The cashout group the sale goes to: the connection's linked one, or picked
   // here. Preselected by name (Points4Days -> a "POINTS4DAYS" group).
@@ -1109,15 +1130,30 @@ function LogPurchaseModal({ product, onClose }) {
 
   const modalRef = useModalKeyboard(true, () => !logPurchase.isPending && onClose());
 
-  const submit = async (e) => {
-    e.preventDefault();
-    setError(null);
-    if (!itemId) return setError('Pick which item you bought.');
-    if (!vendorId) return setError('Pick the store you bought it from.');
-    if (!paymentMethodId) return setError('Pick the card or account you paid with.');
-    if (needsSaleTo && !saleToId) return setError('Pick which cashout group you sold it to.');
-    if (!trackingNumber.trim()) return setError('A tracking number is required -- this is for an item that has already shipped.');
+  // 'form' -> (EB only) 'confirm' -> saved. Points4Days goes from 'form'
+  // straight to 'saved', which reminds you to commit on their website.
+  const [stage, setStage] = useState('form');
+  // The keyboard hook only places focus when the window first opens, so each
+  // new screen moves it itself. The confirm screen starts on Back, so Enter
+  // can't commit by accident.
+  useEffect(() => {
+    if (stage === 'form') return;
+    modalRef.current?.querySelector('[data-autofocus]')?.focus();
+  }, [stage, modalRef]);
+  const tracking = trackingNumber.trim();
+  const totalPayout = Math.round(Number(deal.payout) * quantity * 100) / 100;
 
+  const validate = () => {
+    if (!itemId) return 'Pick which item you bought.';
+    if (!vendorId) return 'Pick the store you bought it from.';
+    if (!paymentMethodId) return 'Pick the card or account you paid with.';
+    if (needsSaleTo && !saleToId) return 'Pick which cashout group you sold it to.';
+    if (!tracking) return 'A tracking number is required -- this is for an item that has already shipped.';
+    return null;
+  };
+
+  const save = async () => {
+    setError(null);
     try {
       const result = await logPurchase.mutateAsync({
         connectionId: deal.connectionId,
@@ -1126,7 +1162,7 @@ function LogPurchaseModal({ product, onClose }) {
         deal_name: deal.name,
         item_name: selectedItem?.name,
         quantity,
-        tracking_codes: trackingNumber.trim() ? [trackingNumber.trim()] : [],
+        tracking_codes: [tracking],
         insured_value: !recordOnly && insuredValue ? Number(insuredValue) : undefined,
         platform_id: needsSaleTo ? saleToId : undefined,
         store: selectedVendor.name,
@@ -1140,10 +1176,10 @@ function LogPurchaseModal({ product, onClose }) {
         purchase_date: purchaseDate,
       });
       if (recordOnly) {
-        toast.success('Purchase and sale saved.', {
-          description: `Commit and send tracking on ${deal.connectionName} too.`,
-        });
-      } else if (result.trackingSubmitted ?? result.tracking_submitted) {
+        setStage('saved');
+        return;
+      }
+      if (result.trackingSubmitted ?? result.tracking_submitted) {
         toast.success('Committed and logged -- tracking sent to the cashout.');
       } else {
         toast.success('Committed and logged, but tracking failed to send.', {
@@ -1152,9 +1188,95 @@ function LogPurchaseModal({ product, onClose }) {
       }
       onClose();
     } catch (err) {
+      // A failed commit saves nothing, so the form is the place to fix it.
+      setStage('form');
       setError(err.message);
     }
   };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    const problem = validate();
+    if (problem) return setError(problem);
+    // EB's commit is binding, so it gets one more look before it's sent.
+    if (!recordOnly) return setStage('confirm');
+    await save();
+  };
+
+  const copyTracking = async () => {
+    try {
+      await navigator.clipboard.writeText(tracking);
+      toast.success('Tracking number copied');
+    } catch {
+      toast.error("Couldn't copy the tracking number");
+    }
+  };
+
+  if (stage === 'confirm') {
+    return (
+      <ModalShell modalRef={modalRef} title="Commit to this deal?" subtitle={product.name} onClose={onClose} busy={logPurchase.isPending}>
+        <p className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+          This is a real, binding pledge to {deal.connectionName}. It's sent as soon as you press Commit, along with your tracking number.
+        </p>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
+          <dt className="text-[var(--dp-text-label)]">Item</dt>
+          <dd className="text-[var(--dp-text-primary)]">{selectedItem?.name || deal.name}</dd>
+          <dt className="text-[var(--dp-text-label)]">Quantity</dt>
+          <dd className="text-[var(--dp-text-primary)] tabular-nums">{quantity}</dd>
+          <dt className="text-[var(--dp-text-label)]">Payout</dt>
+          <dd className="text-[var(--dp-text-primary)] tabular-nums">${formatMoney(deal.payout)} each, ${formatMoney(totalPayout)} total</dd>
+          <dt className="text-[var(--dp-text-label)]">Tracking</dt>
+          <dd className="text-[var(--dp-text-primary)] font-mono break-all">{tracking}</dd>
+          {insuredValue && <>
+            <dt className="text-[var(--dp-text-label)]">Insured value</dt>
+            <dd className="text-[var(--dp-text-primary)] tabular-nums">${formatMoney(Number(insuredValue))}</dd>
+          </>}
+        </dl>
+        {error && <p role="alert" className="text-xs text-rose-400">{error}</p>}
+        <div className="flex items-center justify-end gap-2 border-t border-[color:var(--dp-border)] pt-3">
+          <button type="button" data-autofocus onClick={() => setStage('form')} disabled={logPurchase.isPending}
+            className="px-3.5 py-2 text-xs font-medium rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)]">
+            Back
+          </button>
+          <button type="button" onClick={save} disabled={logPurchase.isPending}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90 disabled:opacity-50">
+            {logPurchase.isPending && <RefreshCw size={12} className="animate-spin" />}
+            {logPurchase.isPending ? 'Committing…' : 'Commit'}
+          </button>
+        </div>
+      </ModalShell>
+    );
+  }
+
+  if (stage === 'saved') {
+    return (
+      <ModalShell modalRef={modalRef} title={`Saved. Now commit on ${deal.connectionName}`} subtitle={product.name} onClose={onClose}>
+        <p className="text-xs text-[var(--dp-text-secondary)]">
+          The purchase and its sale are in Profit Tracker. {deal.connectionName} doesn't know about them yet: commit to the deal and send this tracking number on their website.
+        </p>
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-hover-bg)] px-3 py-2">
+          <span className="text-xs font-mono text-[var(--dp-text-primary)] break-all">{tracking}</span>
+          <button type="button" onClick={copyTracking}
+            className="shrink-0 px-2 py-1 text-[11px] font-medium rounded-md border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-card-bg)]">
+            Copy
+          </button>
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t border-[color:var(--dp-border)] pt-3">
+          <button type="button" data-autofocus={deal.dealUrl ? undefined : true} onClick={onClose}
+            className="px-3.5 py-2 text-xs font-medium rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)]">
+            Done
+          </button>
+          {deal.dealUrl && (
+            <a data-autofocus href={deal.dealUrl} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90">
+              Open on {deal.connectionName} <ExternalLink size={12} />
+            </a>
+          )}
+        </div>
+      </ModalShell>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1295,7 +1417,7 @@ function LogPurchaseModal({ product, onClose }) {
             {logPurchase.isPending && <RefreshCw size={12} className="animate-spin" />}
             {recordOnly
               ? (logPurchase.isPending ? 'Saving…' : 'Log Purchase')
-              : (logPurchase.isPending ? 'Committing…' : 'Commit & Log Purchase')}
+              : 'Commit & Log Purchase'}
           </button>
         </div>
       </form>

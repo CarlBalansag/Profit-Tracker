@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { toast } from 'sonner';
 import Cashout from './Cashout';
@@ -913,7 +913,7 @@ describe('Cashout Page', () => {
       expect(mockMutations.logPurchase.mutateAsync).not.toHaveBeenCalled();
     });
 
-    it('commits, logs the purchase, and reports a successful tracking submission', async () => {
+    it('asks to confirm, then commits, logs the purchase, and reports a successful tracking submission', async () => {
       render(
         <MemoryRouter>
           <Cashout />
@@ -929,6 +929,19 @@ describe('Cashout Page', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' }));
       });
 
+      // Nothing is sent yet: the confirm screen shows what's about to be committed.
+      expect(mockMutations.logPurchase.mutateAsync).not.toHaveBeenCalled();
+      expect(screen.getByRole('heading', { name: 'Commit to this deal?' })).toBeInTheDocument();
+      expect(screen.getByText(/real, binding pledge/)).toBeInTheDocument();
+      expect(screen.getByText('$1,140.00 each, $1,140.00 total')).toBeInTheDocument();
+      expect(screen.getByText('1Z999AA10123456784')).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Back' })).toHaveFocus());
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Commit' }));
+      });
+
+      expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledTimes(1);
       expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
         connectionId: 'conn-1',
         deal_id: '5213',
@@ -960,9 +973,39 @@ describe('Cashout Page', () => {
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' }));
       });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Commit' }));
+      });
 
       expect(screen.getByRole('alert')).toHaveTextContent('This deal has expired.');
       expect(screen.getByRole('heading', { name: 'Log Purchase' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Tracking number')).toHaveValue('1Z999AA10123456784');
+    });
+
+    it('goes back to the form from the confirm screen without committing', async () => {
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Log Purchase' }));
+      fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+      fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-1' } });
+      fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '3' } });
+      fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: '1Z999AA10123456784' } });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' }));
+      });
+      expect(screen.getByText('$1,140.00 each, $3,420.00 total')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+      expect(screen.getByRole('heading', { name: 'Log Purchase' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Quantity')).toHaveValue(3);
+      expect(screen.getByLabelText('Tracking number')).toHaveValue('1Z999AA10123456784');
+      expect(mockMutations.logPurchase.mutateAsync).not.toHaveBeenCalled();
     });
   });
 
@@ -1010,9 +1053,17 @@ describe('Cashout Page', () => {
         unit_payout: 1222,
         platform_id: 'group-p4d',
       }));
-      expect(toast.success).toHaveBeenCalledWith('Purchase and sale saved.', expect.objectContaining({
-        description: expect.stringContaining('Points4Days'),
-      }));
+      // No confirm step for Points4Days: it saves, then says to commit on their site.
+      expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('heading', { name: 'Saved. Now commit on Points4Days' })).toBeInTheDocument();
+      expect(screen.getByText(/doesn't know about them yet/)).toBeInTheDocument();
+      expect(screen.getByText('1Z999AA10123456784')).toBeInTheDocument();
+      const open = within(screen.getByRole('dialog')).getByRole('link', { name: /Open on Points4Days/ });
+      expect(open).toHaveAttribute('href', 'https://www.points4days.com/f/x');
+      await waitFor(() => expect(open).toHaveFocus());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+      expect(screen.queryByRole('heading', { name: /Saved/ })).not.toBeInTheDocument();
     });
 
     it('asks which group the sale goes to when none matches', async () => {
@@ -1138,6 +1189,9 @@ describe('Cashout Page', () => {
       fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: '1Z999AA10123456784' } });
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' }));
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Commit' }));
       });
       expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
         connectionId: 'conn-1', deal_id: 'eb-1', item_id: 'i1', unit_payout: 1140, unit_cost: 899.99, platform_id: 'group-eb',
