@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,600..800&display=swap');
+
 /*
  * Landing page + demo look. Same charcoal surfaces and garnet accent as the
  * app's dark mode (index.css "App dark look", styles/colorPalette.css). The
@@ -91,31 +93,16 @@
 .lp-input:focus { outline: none; border-color: rgba(255, 255, 255, 0.34); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.07); }
 .lp-input[aria-invalid="true"] { border-color: var(--lp-loss); }
 
-.lp-eyebrow {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--lp-accent-text);
-}
 
 .lp-num { font-variant-numeric: tabular-nums; }
 
 .lp-scroll { scrollbar-width: thin; scrollbar-color: var(--accent-700) transparent; }
 
-/* Hero backdrop: a soft garnet glow and a faint grid, nothing that moves. */
+/* Sign-in page backdrop: a soft garnet light at the top. */
 .lp-hero-glow {
   background:
     radial-gradient(60% 50% at 50% 0%, rgba(var(--accent-rgb), 0.22), transparent 70%),
     radial-gradient(30% 30% at 85% 20%, rgba(var(--accent-rgb), 0.08), transparent 70%);
-}
-.lp-grid {
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, #020202 30%, transparent 100%);
-  -webkit-mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, #020202 30%, transparent 100%);
 }
 
 /* Sign-in page: restyles the shared FirebaseLoginForm without changing it. */
@@ -155,6 +142,186 @@
 .lp-login-form button.underline:hover { color: var(--lp-text); }
 .lp-login-form button:focus-visible { outline: 2px solid var(--lp-accent-text); outline-offset: 2px; }
 .lp-login-form code { font-size: 12px; color: var(--lp-text); word-break: break-all; }
+
+/* ─── Landing page ───────────────────────────────────────────────────── */
+
+.lp-display {
+  font-family: 'Archivo', 'Nunito Sans', ui-sans-serif, system-ui, sans-serif;
+  font-weight: 750;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.lp-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(17, 18, 20, 0.82);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  border-bottom: 1px solid var(--lp-border);
+}
+.lp-navlink {
+  padding: 0.5rem 0.8rem;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--lp-text-2);
+  border-radius: 8px;
+  transition: color 150ms;
+}
+.lp-navlink:hover { color: var(--lp-text); }
+
+.lp-btn-lg { font-size: 15.5px; padding: 1rem 1.6rem; border-radius: 12px; }
+.lp-btn-light { background: var(--lp-text); color: #3e0d15; }
+.lp-btn-light:hover { background: #ffffff; }
+.lp-btn-onred { border: 1px solid rgba(255, 255, 255, 0.45); color: #fff; }
+.lp-btn-onred:hover { background: rgba(255, 255, 255, 0.1); }
+
+/* Hero: the app window, a soft accent light under it, and the cards that lift out. */
+.lp-window {
+  height: clamp(420px, 52vw, 600px);
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--lp-border-strong);
+  box-shadow: 0 50px 120px -40px rgba(2, 2, 2, 0.95), 0 0 0 1px rgba(2, 2, 2, 0.5);
+  -webkit-mask-image: linear-gradient(#020202 78%, transparent);
+  mask-image: linear-gradient(#020202 78%, transparent);
+}
+.lp-window-haze {
+  position: absolute;
+  inset: 6% -8% 10%;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(var(--accent-rgb), 0.32), transparent 70%);
+  filter: blur(40px);
+  pointer-events: none;
+}
+.lp-pop-card {
+  position: absolute;
+  z-index: 2;
+  width: 220px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(44, 46, 50, 0.86);
+  border: 1px solid var(--lp-border-strong);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 24px 50px -18px rgba(2, 2, 2, 0.9);
+}
+
+/* Pieces of the app used as the illustrations. */
+.lp-frag {
+  width: 100%;
+  background: var(--lp-card);
+  border: 1px solid var(--lp-border-strong);
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 30px 60px -30px rgba(2, 2, 2, 0.9);
+}
+
+/* Overview: four things the app does around one switching piece of the app. */
+.lp-overview {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+.lp-overview-col { display: none; gap: 12px; align-content: center; }
+.lp-overview-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 28px;
+  padding: clamp(20px, 3vw, 40px);
+  background:
+    radial-gradient(80% 70% at 50% 100%, rgba(var(--accent-rgb), 0.28), transparent 70%),
+    var(--lp-bg);
+  border: 1px solid var(--lp-border);
+  min-height: 420px;
+}
+.lp-overview-stage > * { max-width: 420px; }
+.lp-pillar {
+  position: relative;
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 22px 24px;
+  border-radius: 20px;
+  color: var(--lp-text);
+  opacity: 0.55;
+  transition: opacity 250ms, background-color 250ms;
+}
+.lp-pillar:hover { opacity: 0.85; }
+.lp-pillar.is-on { opacity: 1; background: var(--lp-bg); }
+.lp-pillar-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--lp-accent-text);
+}
+.lp-pillar-timer {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 12px;
+  height: 2px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--lp-well);
+}
+@media (min-width: 1024px) {
+  .lp-overview { grid-template-columns: 1fr minmax(380px, 1.1fr) 1fr; gap: 28px; }
+  .lp-overview-col { display: grid; }
+}
+
+/* Feature panels: big rounded blocks, copy on one side, the app on the other. */
+.lp-panel {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 36px;
+  align-items: center;
+  border-radius: 32px;
+  padding: clamp(28px, 5vw, 72px);
+  border: 1px solid var(--lp-border);
+  overflow: hidden;
+}
+.lp-panel-a { background: radial-gradient(70% 90% at 100% 0%, rgba(var(--accent-rgb), 0.22), transparent 65%), var(--lp-bg); }
+.lp-panel-b { background: radial-gradient(70% 90% at 0% 100%, rgba(var(--accent-rgb), 0.16), transparent 65%), #1a1b1e; }
+.lp-panel > * { min-width: 0; }
+.lp-panel-media { display: flex; justify-content: center; }
+.lp-panel-media > * { max-width: 480px; }
+@media (min-width: 768px) {
+  .lp-panel { grid-template-columns: 1fr 1fr; gap: 56px; }
+}
+
+.lp-demo-band {
+  background: linear-gradient(var(--lp-page), #18191c 18%, #18191c 82%, var(--lp-page));
+}
+
+.lp-step { border-top: 1px solid var(--lp-border-strong); padding-top: 22px; }
+.lp-step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--lp-text);
+  background: var(--lp-accent-tint);
+  border: 1px solid rgba(var(--accent-rgb), 0.5);
+}
+
+.lp-close {
+  border-radius: 36px;
+  padding: clamp(48px, 8vw, 110px) clamp(24px, 6vw, 80px);
+  background: var(--accent-gradient);
+  color: #fff;
+  box-shadow: 0 40px 90px -40px rgba(var(--accent-deep-rgb), 0.95);
+}
+
+@media (max-width: 767px) {
+  .lp-pop-card { width: 168px; padding: 12px 14px; border-radius: 14px; }
+  .lp-frag { padding: 16px; border-radius: 16px; }
+  .lp-panel { padding: 24px 18px; border-radius: 24px; }
+  .lp-overview-stage { padding: 14px; min-height: 0; border-radius: 22px; }
+}
 
 @keyframes lp-pop {
   from { opacity: 0; transform: translateY(6px); }

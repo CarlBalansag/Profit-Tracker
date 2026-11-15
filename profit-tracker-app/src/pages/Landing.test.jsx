@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Landing from './Landing';
@@ -11,6 +11,18 @@ vi.mock('../services/firebaseAuth', () => ({ get signupEnabled() { return mocks.
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: mocks.user, loading: mocks.loading }) }));
 
 afterEach(() => { cleanup(); mocks.user = null; mocks.signup = false; mocks.loading = false; });
+
+// jsdom has no IntersectionObserver; the scroll-in animations need one.
+// This one reports every element as on screen right away.
+beforeAll(() => {
+  globalThis.IntersectionObserver ??= class {
+    constructor(cb) { this.cb = cb; }
+    observe(el) { this.cb([{ isIntersecting: true, intersectionRatio: 1, target: el }], this); }
+    unobserve() {}
+    disconnect() {}
+    takeRecords() { return []; }
+  };
+});
 
 function mount() {
   return render(<MemoryRouter><Landing /></MemoryRouter>);
@@ -23,12 +35,29 @@ const kpi = (label) => within(demo()).getAllByText(label)
 describe('landing page', () => {
   it('leads with the demo and links to sign in', () => {
     mount();
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/actually made you/);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Know what every flip actually made/);
     expect(screen.getAllByRole('button', { name: /Try the demo/i }).length).toBeGreaterThan(0);
     const links = screen.getAllByRole('link', { name: /^Sign in$/ });
     links.forEach((l) => expect(l).toHaveAttribute('href', '/login'));
-    expect(screen.getByRole('heading', { name: /Built around how reselling/ })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Four steps/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Your whole reselling business/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Up and running/ })).toBeInTheDocument();
+  });
+
+  it('the overview switches to the feature a visitor picks', () => {
+    mount();
+    const sell = screen.getByRole('button', { name: /Know what each sale made/ });
+    fireEvent.click(sell);
+    expect(sell).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('region', { name: /Selling/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Be ready at tax time/ }));
+    expect(screen.getByRole('region', { name: /Taxes/ })).toBeInTheDocument();
+  });
+
+  it('the hero picture of the app is hidden from screen readers and keyboard', () => {
+    const { container } = mount();
+    const win = container.querySelector('.lp-window');
+    expect(win).toHaveAttribute('aria-hidden', 'true');
+    expect(win.hasAttribute('inert')).toBe(true);
   });
 
   it('offers a free account when signup is open', () => {
