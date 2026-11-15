@@ -382,8 +382,9 @@
 }
 .lp-flash { animation: lp-flash 1400ms ease-out; }
 
+/* Asked for less motion: no drifting or sliding, but fades and the
+   highlight flashes stay so the stories still read. */
 @media (prefers-reduced-motion: reduce) {
-  .lp-pop, .lp-flash, .lp-print, .lp-gain-flash, .lp-scan, .lp-halos::before, .lp-halos::after { animation: none; }
-  .lp-window-body { transition: none; }
+  .lp-pop, .lp-halos::before, .lp-halos::after { animation: none; }
   .lp-btn { transition: none; }
 }

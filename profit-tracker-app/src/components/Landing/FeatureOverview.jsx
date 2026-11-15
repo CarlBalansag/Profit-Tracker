@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { ExpensesFragment, PayoutsFragment, PurchaseFragment, SaleFragment } from './Fragments';
 import { EASE_OUT, EASE_QUART } from './landingShared';
 
@@ -19,13 +19,12 @@ const ROTATE_MS = 6000;
 export default function FeatureOverview({ items, today }) {
   const [active, setActive] = useState(0);
   const [held, setHeld] = useState(false);
-  const reduce = useReducedMotion();
 
   useEffect(() => {
-    if (held || reduce) return undefined;
+    if (held) return undefined;
     const t = setTimeout(() => setActive((a) => (a + 1) % PILLARS.length), ROTATE_MS);
     return () => clearTimeout(t);
-  }, [active, held, reduce]);
+  }, [active, held]);
 
   const pick = (i) => { setActive(i); setHeld(true); };
   const Current = PILLARS[active].Frag;
@@ -44,7 +43,7 @@ export default function FeatureOverview({ items, today }) {
           <span className="lp-pillar-name">{p.name}</span>
           <span className="lp-display block text-[22px] leading-tight mt-1">{p.title}</span>
           <span className="block text-[15px] leading-relaxed text-[var(--lp-text-2)] mt-2">{p.body}</span>
-          {on && !held && !reduce && (
+          {on && !held && (
             <span className="lp-pillar-timer" aria-hidden="true">
               <MotionDiv
                 key={active}
@@ -81,9 +80,9 @@ export default function FeatureOverview({ items, today }) {
           <AnimatePresence mode="wait" initial={false}>
             <MotionDiv
               key={PILLARS[active].id}
-              initial={reduce ? { opacity: 0 } : { opacity: 0, y: 10, filter: 'blur(6px)' }}
+              initial={{ opacity: 0, y: 10, filter: 'blur(6px)' }}
               animate={{ opacity: 1, y: 0, filter: 'blur(0px)', transition: { opacity: { duration: 0.5, ease: EASE_QUART }, default: { duration: 0.8, ease: EASE_OUT } } }}
-              exit={reduce ? { opacity: 0 } : { opacity: 0, y: -10, filter: 'blur(6px)', transition: { duration: 0.32, ease: EASE_QUART } }}
+              exit={{ opacity: 0, y: -10, filter: 'blur(6px)', transition: { duration: 0.32, ease: EASE_QUART } }}
               className="w-full"
             >
               <Current items={items} today={today} />

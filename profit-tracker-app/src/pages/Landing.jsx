@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { motion, useReducedMotion } from 'motion/react';
+import { MotionConfig, motion } from 'motion/react';
 import AnimatedLogo from '../components/UI/AnimatedLogo';
 import DemoApp from '../components/Landing/DemoApp';
 import HeroShowcase from '../components/Landing/HeroShowcase';
@@ -55,11 +55,10 @@ const scrollToDemo = () => {
 };
 
 function Reveal({ children, className = '', delay = 0 }) {
-  const reduce = useReducedMotion();
   return (
     <MotionDiv
       className={className}
-      initial={reduce ? false : { opacity: 0, y: 16, filter: 'blur(6px)' }}
+      initial={{ opacity: 0, y: 16, filter: 'blur(6px)' }}
       whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
       viewport={{ once: true, margin: '-12% 0px' }}
       transition={{ opacity: { duration: 0.7, ease: EASE_QUART, delay }, default: { duration: 1, ease: EASE_OUT, delay } }}
@@ -73,20 +72,22 @@ export default function Landing() {
   const accountLabel = signupEnabled ? 'Create free account' : 'Sign in';
   const { hash } = useLocation();
   const { items, today } = useSeed();
-  const reduce = useReducedMotion();
 
   // "Try the demo first" on the sign-in page links to /#demo.
   useEffect(() => {
     if (hash === '#demo') document.getElementById('demo')?.scrollIntoView({ block: 'start' });
   }, [hash]);
 
-  const intro = (delay) => (reduce ? {} : {
+  const intro = (delay) => ({
     initial: { opacity: 0, y: 12, filter: 'blur(8px)' },
     animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
     transition: { opacity: { duration: 0.7, ease: EASE_QUART, delay }, default: { duration: 1, ease: EASE_OUT, delay } },
   });
 
   return (
+    // reducedMotion="user": for visitors who ask for less motion, motion drops
+    // movement (sliding, scaling) but keeps fades, numbers and the stories.
+    <MotionConfig reducedMotion="user">
     <div className="lp min-h-screen overflow-x-clip">
       <header className="lp-nav">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-3">
@@ -173,7 +174,7 @@ export default function Landing() {
                 <MotionLi
                   key={s.title}
                   className="lp-step"
-                  initial={reduce ? false : { opacity: 0, y: 14, filter: 'blur(6px)' }}
+                  initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
                   whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
                   viewport={{ once: true, margin: '-12% 0px' }}
                   transition={{ opacity: { duration: 0.6, ease: EASE_QUART, delay: i * 0.1 }, default: { duration: 0.9, ease: EASE_OUT, delay: i * 0.1 } }}
@@ -213,5 +214,6 @@ export default function Landing() {
         </div>
       </footer>
     </div>
+    </MotionConfig>
   );
 }

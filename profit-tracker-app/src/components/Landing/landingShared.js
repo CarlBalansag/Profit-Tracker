@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useReducedMotion } from 'motion/react';
 import { createSeed } from './demoData';
 
 // Motion language for the landing page, modelled on Copilot's: opacity eases
@@ -33,15 +32,13 @@ export function useSeed() {
 
 // Plays a short scripted sequence once `start` turns true: returns the index
 // of the step reached so far. `times` are ms from the start for steps 1..n.
-// With reduced motion it jumps straight to the last step.
 export function useSequence(start, times) {
-  const reduce = useReducedMotion();
   const [step, setStep] = useState(0);
   const key = times.join(',');
   useEffect(() => {
-    if (!start || reduce) return undefined;
+    if (!start) return undefined;
     const timers = key.split(',').map((t, i) => setTimeout(() => setStep(i + 1), Number(t)));
     return () => timers.forEach(clearTimeout);
-  }, [start, reduce, key]);
-  return reduce ? times.length : step;
+  }, [start, key]);
+  return step;
 }

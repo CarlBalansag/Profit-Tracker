@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { motion, useInView, useMotionValueEvent, useReducedMotion, useScroll } from 'motion/react';
+import { motion, useInView, useMotionValueEvent, useScroll } from 'motion/react';
 import {
   BarChart3, CalendarDays, Clock, CreditCard, LayoutDashboard, Package, Tag, Wallet,
 } from 'lucide-react';
@@ -39,7 +39,6 @@ function Kpi({ label, value, format, note, tone, delay }) {
 // The dashboard as it looks in the app, playing a short story on load: the
 // numbers fill in, then a sale lands and every total moves with it.
 function HeroDashboard({ before, after, sold, today, playing }) {
-  const reduce = useReducedMotion();
   const step = useSequence(playing, [2600]);
   const state = step >= 1 ? after : before;
   const t = totals(state.items);
@@ -70,7 +69,7 @@ function HeroDashboard({ before, after, sold, today, playing }) {
               <div key={m.key} className="flex-1 h-full flex flex-col justify-end items-center gap-1.5">
                 <MotionDiv
                   className="w-full max-w-[30px] rounded-t-[5px] bg-[var(--lp-accent)] origin-bottom"
-                  initial={reduce ? false : { scaleY: 0 }}
+                  initial={{ scaleY: 0 }}
                   animate={{ scaleY: 1, height: `${Math.max((m.profit / max) * 100, 3)}%` }}
                   transition={{ scaleY: { duration: 0.9, ease: EASE_OUT, delay: 0.7 + i * 0.07 }, height: { duration: 0.8, ease: EASE_OUT } }}
                 />
@@ -87,9 +86,9 @@ function HeroDashboard({ before, after, sold, today, playing }) {
               return (
                 <MotionLi
                   key={x.id}
-                  layout={!reduce}
+                  layout
                   className={`flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 -mx-2 ${fresh ? 'lp-print' : ''}`}
-                  initial={reduce ? false : { opacity: 0, x: -10 }}
+                  initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ opacity: { duration: 0.5, ease: EASE_QUART, delay: fresh ? 0 : 0.9 + i * 0.08 }, x: { duration: 0.7, ease: EASE_OUT, delay: fresh ? 0 : 0.9 + i * 0.08 }, layout: { duration: 0.6, ease: EASE_OUT } }}
                 >
@@ -140,14 +139,13 @@ function AppWindow({ children, dimmed }) {
 }
 
 function Ring({ fraction, show }) {
-  const reduce = useReducedMotion();
   return (
     <svg width="54" height="54" viewBox="0 0 54 54" className="-rotate-90 shrink-0" aria-hidden="true">
       <circle cx="27" cy="27" r="22" fill="none" stroke="rgba(255,255,255,0.09)" strokeWidth="6" />
       <MotionCircle
         cx="27" cy="27" r="22" fill="none" stroke="var(--lp-accent-text)" strokeWidth="6" strokeLinecap="round"
-        initial={{ pathLength: reduce ? fraction : 0 }}
-        animate={{ pathLength: show || reduce ? fraction : 0 }}
+        initial={{ pathLength: 0 }}
+        animate={{ pathLength: show ? fraction : 0 }}
         transition={{ duration: 1.3, ease: EASE_OUT, delay: show ? 0.25 : 0 }}
       />
     </svg>
@@ -157,8 +155,7 @@ function Ring({ fraction, show }) {
 // Cards that lift out of the window while it is in the middle of the screen
 // (the window dims behind them), and settle back in when it leaves.
 function LiftCard({ className, show, delay, children }) {
-  const reduce = useReducedMotion();
-  const visible = show || reduce;
+  const visible = show;
   return (
     <MotionDiv
       className={`lp-pop-card ${className}`}
@@ -177,7 +174,6 @@ function LiftCard({ className, show, delay, children }) {
 export default function HeroShowcase({ items, today }) {
   const ref = useRef(null);
   const stageRef = useRef(null);
-  const reduce = useReducedMotion();
   const [playing, setPlaying] = useState(false);
   const inMiddle = useInView(stageRef, { amount: 0.6 });
   // Only once the visitor scrolls, so the intro plays undimmed first.
@@ -208,12 +204,12 @@ export default function HeroShowcase({ items, today }) {
       <div className="lp-window-haze" aria-hidden="true" />
       <MotionDiv
         ref={stageRef}
-        initial={reduce ? false : { opacity: 0, y: 40, filter: 'blur(8px)' }}
+        initial={{ opacity: 0, y: 40, filter: 'blur(8px)' }}
         animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
         transition={{ opacity: { duration: 0.8, ease: EASE_QUART, delay: 0.2 }, default: { duration: 1.1, ease: EASE_OUT, delay: 0.2 } }}
         className="relative"
       >
-        <AppWindow dimmed={spotlight && !reduce}>
+        <AppWindow dimmed={spotlight}>
           <HeroDashboard before={before} after={after} sold={sold} today={today} playing={playing} />
         </AppWindow>
       </MotionDiv>

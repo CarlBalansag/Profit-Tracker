@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { animate, motion, useInView, useReducedMotion } from 'motion/react';
+import { animate, motion, useInView } from 'motion/react';
 import { Check, CheckCircle2, Clock, Sparkles } from 'lucide-react';
 import {
   byPlatform, calendarEvents, cardOf, cardSummary, cashFlow, cashbackOf, formatMoney, itemProfit,
@@ -21,18 +21,17 @@ const MotionCircle = motion.circle;
 // A number that glides to its new value whenever it changes, starting from
 // `from` the first time.
 export function Tween({ value, from = 0, format = (v) => formatMoney(Math.round(v)), duration = 1.1, delay = 0, start = true }) {
-  const reduce = useReducedMotion();
   const [shown, setShown] = useState(from);
   const current = useRef(from);
   useEffect(() => {
-    if (reduce || !start) return undefined;
+    if (!start) return undefined;
     const controls = animate(current.current, value, {
       duration, delay, ease: EASE_OUT,
       onUpdate: (v) => { current.current = v; setShown(v); },
     });
     return () => controls.stop();
-  }, [value, duration, delay, reduce, start]);
-  return <span className="lp-num">{format(reduce ? value : shown)}</span>;
+  }, [value, duration, delay, start]);
+  return <span className="lp-num">{format(shown)}</span>;
 }
 
 // Tells a piece's story once it is mostly on screen.
@@ -46,14 +45,13 @@ function useStory(times) {
 const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.09, delayChildren: 0.05 } } };
 
 function Frag({ title, aside, children, className = '', storyRef, inView }) {
-  const reduce = useReducedMotion();
   return (
     <MotionDiv
       ref={storyRef}
       className={`lp-frag ${className}`}
       variants={stagger}
-      initial={reduce ? 'show' : 'hidden'}
-      animate={inView || reduce ? 'show' : 'hidden'}
+      initial="hidden"
+      animate={inView ? 'show' : 'hidden'}
     >
       {(title || aside) && (
         <MotionDiv variants={blurIn} className="flex items-center justify-between gap-3 mb-3">
@@ -248,7 +246,6 @@ export function InventoryFragment({ items, today }) {
   const t = totals(items);
   const maxDays = Math.max(30, ...stock.map((x) => daysBetween(x.boughtOn, todayISO)));
   const oldest = [...stock].sort((a, b) => a.boughtOn.localeCompare(b.boughtOn))[0];
-  const reduce = useReducedMotion();
   const { ref, inView, step } = useStory([1500]);
   return (
     <Frag storyRef={ref} inView={inView} title="In stock" aside={<span className="lp-num text-[13px] font-extrabold">{formatMoney(t.inventoryValue)}</span>}>
@@ -267,8 +264,8 @@ export function InventoryFragment({ items, today }) {
                   <MotionDiv
                     className="h-full rounded-full bg-[var(--lp-accent)] origin-left"
                     style={{ width: `${(days / maxDays) * 100}%` }}
-                    initial={reduce ? false : { scaleX: 0 }}
-                    animate={{ scaleX: inView || reduce ? 1 : 0 }}
+                    initial={{ scaleX: 0 }}
+                    animate={{ scaleX: inView ? 1 : 0 }}
                     transition={{ duration: 1, ease: EASE_OUT, delay: 0.35 + i * 0.08 }}
                   />
                 </div>
@@ -293,15 +290,14 @@ export function InventoryFragment({ items, today }) {
 }
 
 function Ring({ fraction, size = 52, play }) {
-  const reduce = useReducedMotion();
   const r = (size - 8) / 2;
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true" className="-rotate-90">
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6" />
       <MotionCircle
         cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--lp-accent-text)" strokeWidth="6" strokeLinecap="round"
-        initial={{ pathLength: reduce ? fraction : 0 }}
-        animate={{ pathLength: play || reduce ? fraction : 0 }}
+        initial={{ pathLength: 0 }}
+        animate={{ pathLength: play ? fraction : 0 }}
         transition={{ duration: 1.2, ease: EASE_OUT, delay: 0.2 }}
       />
     </svg>
@@ -370,7 +366,6 @@ export function CardsFragment({ items, today }) {
 export function AnalyticsFragment({ items }) {
   const platforms = byPlatform(items);
   const max = Math.max(1, ...platforms.map((p) => p.profit));
-  const reduce = useReducedMotion();
   const { ref, inView, step } = useStory([1600]);
   const top = platforms[0];
   return (
@@ -389,8 +384,8 @@ export function AnalyticsFragment({ items }) {
             <MotionDiv
               className="w-full max-w-[44px] rounded-t-md bg-[var(--lp-accent)] origin-bottom"
               style={{ height: `${Math.max((p.profit / max) * 100, 4)}%` }}
-              initial={reduce ? false : { scaleY: 0 }}
-              animate={{ scaleY: inView || reduce ? 1 : 0, opacity: step >= 1 && i > 0 ? 0.4 : 1 }}
+              initial={{ scaleY: 0 }}
+              animate={{ scaleY: inView ? 1 : 0, opacity: step >= 1 && i > 0 ? 0.4 : 1 }}
               transition={{ scaleY: { duration: 0.9, ease: EASE_OUT, delay: 0.2 + i * 0.08 }, opacity: { duration: 0.5 } }}
             />
             <span className="text-[12px] text-[var(--lp-text-3)] truncate">{p.id}</span>
@@ -404,7 +399,6 @@ export function AnalyticsFragment({ items }) {
 // Calendar: the month fills with dots, then the latest busy day opens up.
 export function CalendarFragment({ items, today }) {
   const events = useMemo(() => calendarEvents(items), [items]);
-  const reduce = useReducedMotion();
   const { ref, inView, step } = useStory([1800]);
   const todayISO = toISODate(today);
   const first = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -429,12 +423,12 @@ export function CalendarFragment({ items, today }) {
               <span className="flex gap-0.5 h-1.5">
                 {sold > 0 && (
                   <MotionSpan className="w-1.5 h-1.5 rounded-full bg-[var(--lp-accent-text)]"
-                    initial={reduce ? false : { scale: 0 }} animate={{ scale: inView || reduce ? 1 : 0 }}
+                    initial={{ scale: 0 }} animate={{ scale: inView ? 1 : 0 }}
                     transition={{ type: 'spring', stiffness: 420, damping: 18, delay: 0.3 + i * 0.02 }} />
                 )}
                 {ev.length > sold && (
                   <MotionSpan className="w-1.5 h-1.5 rounded-full bg-[var(--lp-text-3)]"
-                    initial={reduce ? false : { scale: 0 }} animate={{ scale: inView || reduce ? 1 : 0 }}
+                    initial={{ scale: 0 }} animate={{ scale: inView ? 1 : 0 }}
                     transition={{ type: 'spring', stiffness: 420, damping: 18, delay: 0.35 + i * 0.02 }} />
                 )}
               </span>
