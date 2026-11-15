@@ -4,5 +4,5 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| fix/transactions-sold-purchase-refund | Transactions: a refunded row shows a yellow REFUND pill instead of SALE/BUY; a fully sold purchase's store refund shows on its SALE row | profit-tracker-app/src/pages/Transactions.jsx, profit-tracker-app/src/pages/soldPurchaseRefund.test.jsx, profit-tracker-app/src/pages/refundsScreens.test.jsx | In progress | 2026-11-15 |
+| fix/transactions-sold-purchase-refund | Transactions: yellow REFUND box (store refund in the BUY row's Sale column; buyer refund replaces the SALE pill) | profit-tracker-app/src/pages/Transactions.jsx, profit-tracker-app/src/pages/soldPurchaseRefund.test.jsx, profit-tracker-app/src/pages/refundsScreens.test.jsx | In progress | 2026-11-15 |
 | feat/dashboard-count-up-numbers | Animate big Dashboard numbers (stat cards, Goals widget) counting up on load/refresh/navigation, old->new on update, via framer-motion | profit-tracker-app/package.json, profit-tracker-app/src/components/UI/CountUp.jsx, profit-tracker-app/src/pages/Dashboard.jsx | In progress | 2026-10-22 |

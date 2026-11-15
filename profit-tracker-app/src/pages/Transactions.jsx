@@ -118,29 +118,24 @@ const COLS_MIGRATED_KEY = 'txn_visible_cols_v2';
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 // Money back on this row: to the buyer on a sale, or from the store on a
-// purchase. A fully sold purchase has no BUY row, so its store refund shows
-// on its SALE rows instead. The row's cost/profit already reflect it.
-const refundLines = (row) => {
-  const lines = [];
-  if (row.refundedAmount > 0 || row.refundedUnits > 0) {
-    const units = row.refundedUnits > 0 ? ` · ${row.refundedUnits} ${row.isSale ? 'returned' : 'sent back'}` : '';
-    lines.push(`${row.isSale ? 'Refunded to the buyer' : 'Refunded by the store'}: $${formatMoney(row.refundedAmount)}${units}`);
-  }
-  if (row.storeRefundAmount > 0 || row.storeRefundUnits > 0) {
-    const units = row.storeRefundUnits > 0 ? ` · ${row.storeRefundUnits} sent back` : '';
-    lines.push(`Refunded by the store on the purchase: $${formatMoney(row.storeRefundAmount)}${units}`);
-  }
-  return lines;
+// purchase. The row's cost/profit already reflect it.
+const isRefunded = (row) => row.refundedAmount > 0 || row.refundedUnits > 0;
+const refundTitle = (row) => {
+  const units = row.refundedUnits > 0 ? ` · ${row.refundedUnits} ${row.isSale ? 'returned' : 'sent back'}` : '';
+  return `${row.isSale ? 'Refunded to the buyer' : 'Refunded by the store'}: $${formatMoney(row.refundedAmount)}${units}`;
 };
 
 const PILL = 'shrink-0 px-1.5 py-0.5 rounded text-[11px] font-bold tracking-wider border';
 
-// SALE or BUY, or a yellow REFUND when money came back on this row.
+// Yellow REFUND box; the amount shows on hover.
+const RefundPill = ({ row }) => (
+  <span title={refundTitle(row)} className={`${PILL} bg-amber-500/10 text-amber-400 border-amber-500/25`}>REFUND</span>
+);
+
+// SALE or BUY. A sale refunded to the buyer says REFUND instead; a purchase
+// refunded by the store stays BUY and shows REFUND in its Sale column.
 function TypePill({ row }) {
-  const refunds = refundLines(row);
-  if (refunds.length) {
-    return <span title={refunds.join('\n')} className={`${PILL} bg-amber-500/10 text-amber-400 border-amber-500/25`}>REFUND</span>;
-  }
+  if (row.isSale && isRefunded(row)) return <RefundPill row={row} />;
   return row.isSale
     ? <span className={`${PILL} bg-green-500/10 text-green-400 border-green-500/20`}>SALE</span>
     : <span className={`${PILL} bg-blue-500/10 text-blue-400 border-blue-500/20`}>BUY</span>;
@@ -459,14 +454,7 @@ const Transactions = () => {
     // Always show a purchase row if there is unsold stock on hand, OR if the
     // item has no sales at all (qty_on_hand may be 0 due to a data issue — we
     // never want to silently hide a transaction the user recorded).
-    const hasBuyRow = inv.qty_on_hand > 0 || !inv.sales?.length;
-    // With no BUY row (every unit sold), the purchase's store refund is shown
-    // on its SALE rows instead, so it never goes missing.
-    const storeRefundOnSales = hasBuyRow ? {} : {
-      storeRefundAmount: Number(inv.refunded_amount) || 0,
-      storeRefundUnits: Number(inv.refunded_qty) || 0,
-    };
-    if (hasBuyRow) {
+    if (inv.qty_on_hand > 0 || !inv.sales?.length) {
       // A purchase fully sent back to the store shows 0 units (and $0 cost).
       const displayQty = inv.qty_on_hand > 0 ? inv.qty_on_hand : keptUnits;
       const unsoldCost = allocatedCost(inv, displayQty);
@@ -549,7 +537,6 @@ const Transactions = () => {
           rawCommission: sale.commission_fee,
           refundedAmount: Number(sale.refunded_amount) || 0,
           refundedUnits: Number(sale.refunded_qty) || 0,
-          ...storeRefundOnSales,
           rawSaleDate: sale.sale_date,
           rawPayoutDate: sale.payout_date,
         });
@@ -1008,6 +995,12 @@ const Transactions = () => {
                   <p className="text-sm font-semibold text-green-400">${formatMoney(row.sale)}</p>
                 </div>
               )}
+              {!row.isSale && isRefunded(row) && (
+                <div>
+                  <p className="text-[11px] text-gray-600 uppercase tracking-wider mb-0.5">Sale</p>
+                  <RefundPill row={row} />
+                </div>
+              )}
               {row.fees > 0 && (
                 <div>
                   <p className="text-[11px] text-gray-600 uppercase tracking-wider mb-0.5">Fees</p>
@@ -1254,7 +1247,9 @@ const Transactions = () => {
                               <p className="text-[11px] text-gray-600 mt-0.5">per unit</p>
                             </div>
                           ) : (
-                            <span className="text-sm font-semibold text-green-400">{row.sale ? `$${formatMoney(row.sale)}` : <span className="text-gray-600 font-normal">—</span>}</span>
+                            !row.isSale && isRefunded(row)
+                              ? <RefundPill row={row} />
+                              : <span className="text-sm font-semibold text-green-400">{row.sale ? `$${formatMoney(row.sale)}` : <span className="text-gray-600 font-normal">—</span>}</span>
                           )}
                         </td>
                       );

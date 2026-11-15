@@ -50,30 +50,32 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-describe('Transactions: yellow REFUND pill', () => {
-  it('a fully sold purchase with a store refund shows REFUND on its SALE row, with no extra BUY row', () => {
+describe('Transactions: yellow REFUND box', () => {
+
+  it('a store refund on a purchase still on hand: BUY stays, its Sale column says REFUND, the SALE row is untouched', () => {
+    mocks.inventory = [purchase({ onHand: 2 })];
+    render(<MemoryRouter><Transactions /></MemoryRouter>);
+    const rows = desktopRows();
+    const buy = rows.find((row) => pills(row).includes('BUY'));
+    const sale = rows.find((row) => pills(row).includes('SALE'));
+    expect(within(buy).getByTitle('Refunded by the store: $271.80')).toHaveTextContent('REFUND');
+    expect(within(sale).queryByText('REFUND')).toBeNull();
+    expect(pills(buy)).toEqual(['BUY', 'REFUND']);
+  });
+
+  it('a fully sold purchase with a store refund: only its SALE row, which stays SALE', () => {
     mocks.inventory = [purchase()];
     render(<MemoryRouter><Transactions /></MemoryRouter>);
     const rows = desktopRows();
     expect(rows).toHaveLength(1);
-    expect(pills(rows[0])).toEqual(['REFUND']);
-    expect(within(rows[0]).getByTitle('Refunded by the store on the purchase: $271.80')).toBeInTheDocument();
+    expect(pills(rows[0])).toEqual(['SALE']);
+    expect(screen.queryByText('REFUND')).toBeNull();
   });
 
-  it('with units still on hand, the store refund stays on the BUY row and the SALE row says SALE', () => {
-    mocks.inventory = [purchase({ onHand: 2 })];
-    render(<MemoryRouter><Transactions /></MemoryRouter>);
-    const rows = desktopRows();
-    expect(rows.map(pills).flat().sort()).toEqual(['REFUND', 'SALE']);
-    const refundRow = rows.find((row) => pills(row)[0] === 'REFUND');
-    expect(within(refundRow).getByTitle('Refunded by the store: $271.80')).toBeInTheDocument();
-  });
-
-  it('a refund to the buyer shows REFUND on the SALE row', () => {
+  it('a refund to the buyer: the SALE row says REFUND, the BUY row stays BUY', () => {
     mocks.inventory = [purchase({ refund: 0, onHand: 2, saleRefund: '18.16' })];
     render(<MemoryRouter><Transactions /></MemoryRouter>);
-    const rows = desktopRows();
-    expect(rows.map(pills).flat().sort()).toEqual(['BUY', 'REFUND']);
+    expect(desktopRows().map(pills).flat().sort()).toEqual(['BUY', 'REFUND']);
     expect(screen.getAllByTitle('Refunded to the buyer: $18.16').length).toBeGreaterThan(0);
   });
 
