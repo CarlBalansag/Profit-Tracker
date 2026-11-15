@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Login from './Login';
 
@@ -32,10 +32,15 @@ describe('Firebase login page', () => {
     expect(screen.queryByText(/invite-only access/i)).not.toBeInTheDocument();
   });
 
-  it('shows invite-only FAQ text when signup is disabled', () => {
+  it('shows the invite-only note when signup is disabled', () => {
     mount();
-    fireEvent.click(screen.getByText('Is this free to use?'));
-    expect(screen.getByText(/Returning accounts can sign in; new registration is not open yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/Returning accounts can sign in. New registration is not open yet/i)).toBeInTheDocument();
+  });
+
+  it('links back to the landing page and its demo', () => {
+    mount();
+    expect(screen.getByRole('link', { name: /Back to home/i })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: /Try the demo first/i })).toHaveAttribute('href', '/#demo');
   });
 
   it('passes migration mode to the login form only when ?migrate=1 is present', () => {

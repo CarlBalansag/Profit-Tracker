@@ -1,0 +1,174 @@
+/*
+ * Landing page + demo look. Same charcoal surfaces and garnet accent as the
+ * app's dark mode (index.css "App dark look", styles/colorPalette.css). The
+ * accent always comes from the --accent-* preset, so changing the preset
+ * recolors the landing page too. The page is dark in both app themes.
+ */
+.lp {
+  --lp-page: #111214;          /* landing page, one step under the app */
+  --lp-sidebar: #17181b;       /* = --dp-dash-sidebar */
+  --lp-bg: #1d1f22;            /* = --dp-bg */
+  --lp-card: #25272a;          /* = --dp-card-bg */
+  --lp-raised: #2c2e32;        /* = --dp-hover-bg */
+  --lp-well: rgba(255, 255, 255, 0.04);
+  --lp-border: rgba(255, 255, 255, 0.06);
+  --lp-border-strong: rgba(255, 255, 255, 0.12);
+  --lp-text: #f3f1ed;
+  --lp-text-2: #c2c1c4;
+  --lp-text-3: #8f8e93;
+  --lp-accent: var(--accent-500);
+  --lp-accent-text: var(--accent-300);
+  --lp-accent-tint: rgba(var(--accent-rgb), 0.16);
+  --lp-gain: #8fc39e;
+  --lp-loss: #e07b86;
+  --lp-warn: #d9b46a;
+
+  background: var(--lp-page);
+  color: var(--lp-text);
+  font-family: 'Nunito Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.lp ::selection { background: rgba(var(--accent-rgb), 0.45); color: #fff; }
+
+.lp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0.8rem 1.15rem;
+  transition: background-color 150ms, border-color 150ms, color 150ms, transform 150ms;
+  white-space: nowrap;
+}
+.lp-btn:active { transform: translateY(1px); }
+.lp-btn:focus-visible,
+.lp-focus:focus-visible {
+  outline: 2px solid var(--lp-accent-text);
+  outline-offset: 2px;
+}
+.lp-btn-primary {
+  background: var(--accent-gradient);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 6px 20px -8px rgba(var(--accent-deep-rgb), 0.9);
+}
+.lp-btn-primary:hover { background: var(--accent-600); }
+.lp-btn-ghost {
+  border: 1px solid var(--lp-border-strong);
+  color: var(--lp-text);
+  background: rgba(255, 255, 255, 0.02);
+}
+.lp-btn-ghost:hover { background: rgba(255, 255, 255, 0.06); }
+.lp-btn-sm { font-size: 12.5px; padding: 0.55rem 0.8rem; border-radius: 8px; }
+
+.lp-card {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-border);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 2px 6px -2px rgba(2, 2, 2, 0.35);
+}
+
+.lp-label {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--lp-text-2);
+  margin-bottom: 0.35rem;
+}
+.lp-input {
+  width: 100%;
+  background: var(--lp-sidebar);
+  border: 1px solid var(--lp-border-strong);
+  border-radius: 8px;
+  color: var(--lp-text);
+  font-size: 14px;
+  padding: 0.55rem 0.7rem;
+  color-scheme: dark;
+}
+.lp-input:focus { outline: none; border-color: rgba(255, 255, 255, 0.34); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.07); }
+.lp-input[aria-invalid="true"] { border-color: var(--lp-loss); }
+
+.lp-eyebrow {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lp-accent-text);
+}
+
+.lp-num { font-variant-numeric: tabular-nums; }
+
+.lp-scroll { scrollbar-width: thin; scrollbar-color: var(--accent-700) transparent; }
+
+/* Hero backdrop: a soft garnet glow and a faint grid, nothing that moves. */
+.lp-hero-glow {
+  background:
+    radial-gradient(60% 50% at 50% 0%, rgba(var(--accent-rgb), 0.22), transparent 70%),
+    radial-gradient(30% 30% at 85% 20%, rgba(var(--accent-rgb), 0.08), transparent 70%);
+}
+.lp-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, #020202 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, #020202 30%, transparent 100%);
+}
+
+/* Sign-in page: restyles the shared FirebaseLoginForm without changing it. */
+.lp-login-form form { max-width: none; }
+.lp-login-form h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 0.4rem; }
+.lp-login-form label { display: block; font-size: 12.5px; font-weight: 700; color: var(--lp-text-2); margin-bottom: -0.35rem; }
+.lp-login-form p { font-size: 13px; color: var(--lp-text-2); line-height: 1.5; }
+.lp-login-form input {
+  background: var(--lp-sidebar);
+  border: 1px solid var(--lp-border-strong);
+  border-radius: 9px;
+  color: var(--lp-text);
+  padding: 0.65rem 0.8rem;
+  font-size: 14px;
+}
+.lp-login-form input:focus { outline: none; border-color: rgba(255, 255, 255, 0.34); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.07); }
+.lp-login-form button[type="submit"],
+.lp-login-form button.rounded {
+  width: 100%;
+  background: var(--accent-gradient);
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+.lp-login-form button[type="submit"]:hover:not(:disabled),
+.lp-login-form button.rounded:hover:not(:disabled) { background: var(--accent-600); }
+.lp-login-form button.underline {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--lp-text-2);
+  text-decoration-color: rgba(255, 255, 255, 0.25);
+  text-underline-offset: 3px;
+}
+.lp-login-form button.underline:hover { color: var(--lp-text); }
+.lp-login-form button:focus-visible { outline: 2px solid var(--lp-accent-text); outline-offset: 2px; }
+.lp-login-form code { font-size: 12px; color: var(--lp-text); word-break: break-all; }
+
+@keyframes lp-pop {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.lp-pop { animation: lp-pop 220ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+@keyframes lp-flash {
+  0% { background-color: rgba(var(--accent-rgb), 0.28); }
+  100% { background-color: transparent; }
+}
+.lp-flash { animation: lp-flash 1400ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-pop, .lp-flash { animation: none; }
+  .lp-btn { transition: none; }
+}

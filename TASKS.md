@@ -4,4 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| feat/landing-page | New public landing page with interactive demo; login moves to its own page | profit-tracker-app/src/pages/Landing*, profit-tracker-app/src/pages/Login.jsx, profit-tracker-app/src/components/Landing/, profit-tracker-app/src/App.jsx (routes only) | In progress | 2026-11-15 |
+| feat/landing-page | New public landing page with interactive demo; login moves to its own page | profit-tracker-app/src/pages/Landing*, profit-tracker-app/src/pages/Login.jsx, profit-tracker-app/src/components/Landing/, profit-tracker-app/src/App.jsx (routes only), profit-tracker-app/src/pages/lazyPages.js, profit-tracker-app/src/components/Auth/ProtectedRoute.jsx | In progress | 2026-11-15 |
