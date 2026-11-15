@@ -137,7 +137,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
         </div>
 
         <nav ref={navRef} className="relative flex-1 py-3 px-2 space-y-3 overflow-y-auto overflow-x-hidden dp-scrollbar">
-          <NavMarker marker={marker} className="!mt-0 rounded-md bg-[var(--dp-accent-bg)] border-l-2 border-l-[var(--dp-accent)]" />
+          <NavMarker marker={marker} className="!mt-0 rounded-md bg-[var(--dp-accent-bg)]" />
           <SidebarSection title="Core" isCollapsed={isCollapsed} tutorialId="sidebar-section-core">
             <NavItem icon={LayoutDashboard} label="Dashboard" to="/" isCollapsed={isCollapsed} />
             <NavItem icon={ShoppingCart} label="Add Transaction" to="/add-transaction" isCollapsed={isCollapsed} tutorialId="sidebar-add-transaction" />
