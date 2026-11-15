@@ -17,7 +17,7 @@ const DESKTOP = '(min-width: 768px)';
 // own step.
 const CARD_STAGGER_MS = 40;
 const SECTION_STAGGER_MS = 150;
-const MAX_DELAY_MS = 1400; // later items share this delay, so nothing waits long
+const MAX_DELAY_MS = 2000; // later items share this delay, so nothing waits long
 const DURATION_MS = 420;
 const WATCH_MS = 2500;
 const MAX_GRID_CARDS = 8;

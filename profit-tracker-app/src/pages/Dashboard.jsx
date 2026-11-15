@@ -466,7 +466,7 @@ const Dashboard = () => {
                     {!isGlass && <th className="pb-3 px-4 font-medium">Profit</th>}
                   </tr>
                 </thead>
-                <tbody className={isGlass ? "text-sm divide-y divide-white/5" : "text-sm divide-y divide-[color:var(--dp-border)]"}>
+                <tbody data-stagger-cards className={isGlass ? "text-sm divide-y divide-white/5" : "text-sm divide-y divide-[color:var(--dp-border)]"}>
                   {recent.map((txn, i) => (
                     <tr key={i} className={isGlass ? "hover:bg-white/[0.02] transition-colors" : "hover:bg-[var(--dp-hover-bg)] transition-[background] duration-150"}>
                       {visibleRecentSalesColumns.map(column => {
@@ -719,7 +719,7 @@ const Dashboard = () => {
                     <th className="pb-3 pl-4">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/[0.035] text-sm">
+                <tbody data-stagger-cards className="divide-y divide-white/[0.035] text-sm">
                   {recent.slice(0, 4).map((txn, index) => (
                     <tr key={index}>
                       <td className="py-3 pr-4 font-medium text-[#e8e2d6]">{txn.product}</td>
