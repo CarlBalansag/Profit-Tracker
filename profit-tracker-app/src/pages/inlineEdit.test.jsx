@@ -51,10 +51,18 @@ describe('inline transaction edits', () => {
     expect(mocks.fetch.mock.calls[0][0]).toBe('/api/inventory/purchase/transaction');
   });
 
-  it('adds already-sold units when changing the remaining BUY quantity', async () => {
+  it('saves the BUY quantity as the number bought', async () => {
     open(1);
-    fireEvent.change(screen.getAllByRole('spinbutton')[0], { target: { value: '4' } });
+    fireEvent.change(screen.getAllByRole('spinbutton')[0], { target: { value: '6' } });
     expect((await save()).inventory.qty_purchased).toBe(6);
+  });
+
+  it('refuses a BUY quantity below the units already sold', async () => {
+    open(1);
+    fireEvent.change(screen.getAllByRole('spinbutton')[0], { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(mocks.fetch).not.toHaveBeenCalled();
+    expect(mocks.error).toHaveBeenCalledWith("Quantity can't be less than 2: that many are already sold or sent back.");
   });
 
   it('saves an existing SALE and its purchase relationships in one request and keeps a failed draft', async () => {

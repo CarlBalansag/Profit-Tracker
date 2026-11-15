@@ -57,8 +57,9 @@ describe('Transactions summary cards', () => {
     ];
     mountTransactions();
     expect(screen.queryByText('Total Items')).toBeNull();
+    // Every purchase keeps its BUY row, sold or not, plus one row per sale.
     const rows = card('Rows Shown');
-    expect(within(rows).getByText('3')).toBeTruthy();
+    expect(within(rows).getByText('4')).toBeTruthy();
     expect(within(rows).getByText('2 purchases · 2 sales')).toBeTruthy();
   });
 
@@ -76,10 +77,19 @@ describe('Transactions summary cards', () => {
   });
 
   it('rounds a half-cent total up, as the API does', () => {
-    inventory = [item({ sales_tax: 0.01, qty_on_hand: 1 })];
+    // 2 units at $10.0025 = $20.005, counted once on the BUY row.
+    inventory = [item({ unit_purchase_cost: 10.0025, qty_on_hand: 1, sales: [sale({ quantity: 1 })] })];
     mountTransactions();
-    // Only the on-hand unit shows: half of $20.01.
-    expect(within(card('Total Cost')).getByText('$10.01')).toBeTruthy();
+    expect(within(card('Total Cost')).getByText('$20.01')).toBeTruthy();
+  });
+
+  it('counts each purchase once in Total Cost and only on-hand units as unsold', () => {
+    // Bought 2 at $10, sold 1: the BUY row shows both units and $20.00, the
+    // SALE row's $10.00 is not added again.
+    inventory = [item({ qty_on_hand: 1, sales: [sale({ quantity: 1 })] })];
+    mountTransactions();
+    expect(within(card('Total Cost')).getByText('$20.00')).toBeTruthy();
+    expect(within(card('Unsold Units')).getByText('1')).toBeTruthy();
   });
 });
 
