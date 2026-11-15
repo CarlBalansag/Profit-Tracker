@@ -21,6 +21,17 @@ const writeCacheOwner = (id) => {
   try { if (id) localStorage.setItem(CACHE_OWNER_KEY, id); else localStorage.removeItem(CACHE_OWNER_KEY); } catch { /* ignore */ }
 };
 
+// Pages a signed-out visitor can use: the landing page and the sign-in page.
+const PUBLIC_PATHS = new Set(['/', '/login']);
+
+// A first-time or signed-out visitor (no saved owner: signing in saves one,
+// signing out or a 401 clears it) who opens a public page sees it right away
+// instead of waiting on the "Waking up the server" screen for the sign-in
+// check. That check keeps running in the background. Returning users still
+// get the wake-up screen, so they never see the landing page flash first.
+const startsAsVisitor = () =>
+  !readCacheOwner() && typeof window !== 'undefined' && PUBLIC_PATHS.has(window.location.pathname);
+
 export const AuthProvider = ({ children }) => {
   const [user, updateUser] = useState(null);
   // Starts as the owner of the restored cache, so the same user signing in
@@ -39,6 +50,7 @@ export const AuthProvider = ({ children }) => {
     updateUser(nextUser);
   }, [queryClient]);
   const [loading, setLoading] = useState(true);
+  const [visitor] = useState(startsAsVisitor);
   const [serverError, setServerError] = useState(false);
   const [logoutError, setLogoutError] = useState('');
   const [attempt, setAttempt] = useState(1);
@@ -98,11 +110,22 @@ export const AuthProvider = ({ children }) => {
     };
   }, [fetchUser]);
 
-  if (loading) {
+  // The app setting the user itself (sign-in form, sign-out) is newer than
+  // any sign-in check still running, so that check's answer is dropped.
+  const setUserFromApp = useCallback((nextUser) => {
+    requestSequence.current++;
+    setLoading(false);
+    setServerError(false);
+    setUser(nextUser);
+  }, [setUser]);
+
+  if (loading && !visitor) {
     return <ServerWakeUpScreen key={startedAt} startedAt={startedAt} attempt={attempt} />;
   }
 
-  if (serverError) {
+  // A visitor stays on the public page; if the server is down, the sign-in
+  // form reports it when they try to sign in.
+  if (serverError && !visitor) {
     return <ServerWakeUpScreen key={startedAt} startedAt={startedAt} attempt={attempt} failed onRetry={fetchUser} />;
   }
 
@@ -119,7 +142,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, setUser, loading, logout }}>
+    <AuthContext.Provider value={{ user, setUser: setUserFromApp, loading, logout }}>
       {logoutError && <div role="alert" className="bg-red-950 p-3 text-white">{logoutError} <button onClick={logout} className="underline">Retry sign out</button></div>}
       {children}
     </AuthContext.Provider>

@@ -8,6 +8,10 @@ const ProtectedRoute = ({ children, publicHome = null }) => {
   const { user, loading } = useAuth();
   const { pathname } = useLocation();
 
+  // Still checking the sign-in (only reached for a likely signed-out visitor,
+  // see AuthContext): the landing page shows meanwhile.
+  if (loading && publicHome && pathname === '/') return publicHome;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">

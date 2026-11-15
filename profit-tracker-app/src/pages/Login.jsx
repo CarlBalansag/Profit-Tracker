@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import FirebaseLoginForm from '../components/Auth/FirebaseLoginForm';
 import { signupEnabled } from '../services/firebaseAuth';
+import { useAuth } from '../context/AuthContext';
 import AnimatedLogo from '../components/UI/AnimatedLogo';
 import '../components/Landing/landing.css';
 
@@ -14,6 +15,8 @@ const Login = () => {
   // real self-service migration page is built.
   const [searchParams] = useSearchParams();
   const migration = searchParams.get('migrate') === '1';
+  // True while the server is still waking up (see AuthContext).
+  const { loading: serverWaking } = useAuth() ?? {};
 
   return (
     <div className="lp min-h-screen flex flex-col">
@@ -29,6 +32,12 @@ const Login = () => {
             <AnimatedLogo size={40} label={null} />
             <h1 className="text-[15px] font-extrabold tracking-tight mt-3 text-[var(--lp-text-2)]">Profit Tracker</h1>
           </div>
+          {serverWaking && (
+            <p role="status" className="flex items-center justify-center gap-2 text-[12.5px] text-[var(--lp-text-2)] mb-3">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--lp-warn)] animate-pulse" aria-hidden="true" />
+              Waking up the server. Signing in may take up to a minute.
+            </p>
+          )}
           <div className="lp-card p-5 sm:p-6 lp-login-form">
             <FirebaseLoginForm migration={migration} />
           </div>

@@ -6,11 +6,11 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Landing from './Landing';
 import ProtectedRoute from '../components/Auth/ProtectedRoute';
 
-const mocks = vi.hoisted(() => ({ user: null, signup: false }));
+const mocks = vi.hoisted(() => ({ user: null, signup: false, loading: false }));
 vi.mock('../services/firebaseAuth', () => ({ get signupEnabled() { return mocks.signup; } }));
-vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: mocks.user, loading: false }) }));
+vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: mocks.user, loading: mocks.loading }) }));
 
-afterEach(() => { cleanup(); mocks.user = null; mocks.signup = false; });
+afterEach(() => { cleanup(); mocks.user = null; mocks.signup = false; mocks.loading = false; });
 
 function mount() {
   return render(<MemoryRouter><Landing /></MemoryRouter>);
@@ -104,6 +104,16 @@ describe('signed-out routing', () => {
     cleanup();
     app('/inventory');
     expect(screen.getByText('login page')).toBeInTheDocument();
+  });
+
+  it('shows the landing page at / while the sign-in check is still running', () => {
+    mocks.loading = true;
+    app('/');
+    expect(screen.getByText('landing page')).toBeInTheDocument();
+    cleanup();
+    app('/inventory');
+    expect(screen.queryByText('landing page')).not.toBeInTheDocument();
+    expect(screen.queryByText('the app')).not.toBeInTheDocument();
   });
 
   it('signed-in users still get the app at /', () => {
