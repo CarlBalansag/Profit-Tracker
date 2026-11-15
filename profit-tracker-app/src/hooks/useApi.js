@@ -1,4 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { EXPENSES_PAGE_KEY, RECEIPTS_PAGE_KEY } from './usePageCache';
 
 // Leave VITE_API_URL empty in production when Netlify redirects proxy /api and /auth (see netlify.toml).
 // Set it locally to the API dev server, e.g. http://localhost:3000.
@@ -22,19 +23,23 @@ const fetcher = (path) =>
     return r.json();
   });
 
-// ─── Inventory ────────────────────────────────────────────────────────────────
-export const useInventory = () =>
-  useQuery({
-    queryKey: ['inventory'],
-    queryFn: () => fetcher('/api/inventory'),
-  });
+// Several hooks below are thin wrappers over an exported `...Query()`
+// definition, so hover prefetching (data/pagePrefetch.js) warms exactly the
+// cache entries the pages read.
 
-export const useProductNames = () =>
-  useQuery({
-    queryKey: ['product-names'],
-    queryFn: () => fetcher('/api/inventory/product-names'),
-    staleTime: 60_000,
-  });
+// ─── Inventory ────────────────────────────────────────────────────────────────
+export const inventoryQuery = () => ({
+  queryKey: ['inventory'],
+  queryFn: () => fetcher('/api/inventory'),
+});
+export const useInventory = () => useQuery(inventoryQuery());
+
+export const productNamesQuery = () => ({
+  queryKey: ['product-names'],
+  queryFn: () => fetcher('/api/inventory/product-names'),
+  staleTime: 60_000,
+});
+export const useProductNames = () => useQuery(productNamesQuery());
 
 export const useRecentTransaction = (productName) =>
   useQuery({
@@ -45,40 +50,40 @@ export const useRecentTransaction = (productName) =>
   });
 
 // ─── Sales ────────────────────────────────────────────────────────────────────
-export const useSales = () =>
-  useQuery({
-    queryKey: ['sales'],
-    queryFn: () => fetcher('/api/sales'),
-  });
+export const salesQuery = () => ({
+  queryKey: ['sales'],
+  queryFn: () => fetcher('/api/sales'),
+});
+export const useSales = () => useQuery(salesQuery());
 
 // ─── Platforms ────────────────────────────────────────────────────────────────
 // Platforms rarely change — 30-minute cache is safe. Invalidated on settings save.
-export const usePlatforms = () =>
-  useQuery({
-    queryKey: ['platforms'],
-    queryFn: () => fetcher('/api/platforms'),
-    staleTime: 1000 * 60 * 30,
-  });
+export const platformsQuery = () => ({
+  queryKey: ['platforms'],
+  queryFn: () => fetcher('/api/platforms'),
+  staleTime: 1000 * 60 * 30,
+});
+export const usePlatforms = () => useQuery(platformsQuery());
 
 // ─── Buyers ───────────────────────────────────────────────────────────────────
 // Who a sale was actually paid by/through (a marketplace's buyer, a cashout
 // service, or a person) — separate from Platform, which is where it was
 // listed/sold. Rarely changes — 30-minute cache is safe.
-export const useBuyers = () =>
-  useQuery({
-    queryKey: ['buyers'],
-    queryFn: () => fetcher('/api/buyers'),
-    staleTime: 1000 * 60 * 30,
-  });
+export const buyersQuery = () => ({
+  queryKey: ['buyers'],
+  queryFn: () => fetcher('/api/buyers'),
+  staleTime: 1000 * 60 * 30,
+});
+export const useBuyers = () => useQuery(buyersQuery());
 
 // ─── Payment Methods ──────────────────────────────────────────────────────────
 // Payment methods rarely change — 30-minute cache is safe. Invalidated on settings save.
-export const usePaymentMethods = () =>
-  useQuery({
-    queryKey: ['payment-methods'],
-    queryFn: () => fetcher('/api/payment-methods'),
-    staleTime: 1000 * 60 * 30,
-  });
+export const paymentMethodsQuery = () => ({
+  queryKey: ['payment-methods'],
+  queryFn: () => fetcher('/api/payment-methods'),
+  staleTime: 1000 * 60 * 30,
+});
+export const usePaymentMethods = () => useQuery(paymentMethodsQuery());
 
 // ─── Data reset ───────────────────────────────────────────────────────────────
 export const useDataReset = () => {
@@ -111,11 +116,18 @@ export const useDataReset = () => {
 // ─── Dashboard analytics ──────────────────────────────────────────────────────
 // Longer staleTime: this is the heaviest endpoint and data doesn't change mid-session
 // unless the user explicitly adds a transaction (which calls invalidate.dashboard()).
+export const dashboardQuery = (mode, date) => ({
+  queryKey: ['dashboard', mode, date],
+  queryFn: () => fetcher(`/api/analytics/dashboard?mode=${mode}&date=${encodeURIComponent(date)}`),
+  staleTime: 1000 * 60 * 10, // 10 minutes — overrides the global 5-minute default
+});
 export const useDashboard = (mode, date) =>
   useQuery({
-    queryKey: ['dashboard', mode, date],
-    queryFn: () => fetcher(`/api/analytics/dashboard?mode=${mode}&date=${encodeURIComponent(date)}`),
-    staleTime: 1000 * 60 * 10, // 10 minutes — overrides the global 5-minute default
+    ...dashboardQuery(mode, date),
+    // Switching All/Cashout/Marketplace or the date range keeps the last numbers
+    // on screen (as isPlaceholderData) until the new ones arrive, instead of
+    // blanking the whole page.
+    placeholderData: keepPreviousData,
   });
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────
@@ -125,19 +137,51 @@ export const useExpenses = () =>
     queryFn: () => fetcher('/api/expenses'),
   });
 
+// Everything the Expenses page shows, as one cache entry, so a revisit (or a
+// hover prefetch) shows it at once while it refreshes. Keyed under 'expenses'
+// so invalidate.expenses() marks it stale too. Fails if expenses or recurring
+// fail; the derived lines are optional (derivedFailed says they're missing).
+export const expensesPageQuery = () => ({
+  queryKey: EXPENSES_PAGE_KEY,
+  queryFn: async () => {
+    const [expenses, recurring, derived] = await Promise.all([
+      fetcher('/api/expenses'),
+      fetcher('/api/recurring-expenses'),
+      fetcher('/api/expenses/derived').catch(() => null),
+    ]);
+    return {
+      expenses,
+      recurring,
+      derived: Array.isArray(derived) ? derived : [],
+      derivedFailed: !Array.isArray(derived),
+    };
+  },
+  staleTime: 10_000,
+});
+
+// ─── Receipts ─────────────────────────────────────────────────────────────────
+export const receiptsPageQuery = () => ({
+  queryKey: RECEIPTS_PAGE_KEY,
+  queryFn: async () => {
+    const data = await fetcher('/api/receipts');
+    return { withReceipts: data.withReceipts || [], withoutReceipts: data.withoutReceipts || [] };
+  },
+  staleTime: 10_000,
+});
+
 // ─── Credit Card tracker ───────────────────────────────────────────────────────
-export const useCreditCard = (month) =>
-  useQuery({
-    queryKey: ['creditcard', month],
-    queryFn: () => fetcher(`/api/creditcard/dashboard${month ? `?month=${month}` : ''}`),
-  });
+export const creditCardQuery = (month) => ({
+  queryKey: ['creditcard', month],
+  queryFn: () => fetcher(`/api/creditcard/dashboard${month ? `?month=${month}` : ''}`),
+});
+export const useCreditCard = (month) => useQuery(creditCardQuery(month));
 
 // ─── Goals ────────────────────────────────────────────────────────────────────
-export const useGoals = () =>
-  useQuery({
-    queryKey: ['goals'],
-    queryFn: () => fetcher('/api/goals'),
-  });
+export const goalsQuery = () => ({
+  queryKey: ['goals'],
+  queryFn: () => fetcher('/api/goals'),
+});
+export const useGoals = () => useQuery(goalsQuery());
 
 export const useGoalsMutations = () => {
   const qc = useQueryClient();
@@ -281,20 +325,20 @@ export const useRefundMutations = (kind, id) => {
 };
 
 // ─── Calendar Events ──────────────────────────────────────────────────────────
+export const calendarEventsQuery = (month) => ({
+  queryKey: ['calendar-events', month],
+  queryFn: () => fetcher(`/api/calendar-events?month=${month}`),
+});
 export const useCalendarEvents = (month) =>
-  useQuery({
-    queryKey: ['calendar-events', month],
-    queryFn: () => fetcher(`/api/calendar-events?month=${month}`),
-    enabled: !!month,
-  });
+  useQuery({ ...calendarEventsQuery(month), enabled: !!month });
 
+export const calendarAutoEventsQuery = (month) => ({
+  queryKey: ['calendar-auto-events', month],
+  queryFn: () => fetcher(`/api/calendar-events/auto?month=${month}`),
+  staleTime: 1000 * 60 * 5,
+});
 export const useCalendarAutoEvents = (month) =>
-  useQuery({
-    queryKey: ['calendar-auto-events', month],
-    queryFn: () => fetcher(`/api/calendar-events/auto?month=${month}`),
-    enabled: !!month,
-    staleTime: 1000 * 60 * 5,
-  });
+  useQuery({ ...calendarAutoEventsQuery(month), enabled: !!month });
 
 export const useCalendarToken = () =>
   useQuery({
@@ -358,32 +402,35 @@ export const useInvalidate = () => {
 };
 
 // ─── Cashouts ────────────────────────────────────────────────────────────────
-export const useCashoutProviders = () =>
-  useQuery({
-    queryKey: ['cashout', 'providers'],
-    queryFn: () => fetcher('/api/cashouts/providers'),
-    staleTime: 1000 * 60 * 15,
-  });
+export const cashoutProvidersQuery = () => ({
+  queryKey: ['cashout', 'providers'],
+  queryFn: () => fetcher('/api/cashouts/providers'),
+  staleTime: 1000 * 60 * 15,
+});
+export const useCashoutProviders = () => useQuery(cashoutProvidersQuery());
 
-export const useCashoutConnections = () =>
-  useQuery({
-    queryKey: ['cashout', 'connections'],
-    queryFn: () => fetcher('/api/cashouts/connections'),
-  });
+export const cashoutConnectionsQuery = () => ({
+  queryKey: ['cashout', 'connections'],
+  queryFn: () => fetcher('/api/cashouts/connections'),
+});
+export const useCashoutConnections = () => useQuery(cashoutConnectionsQuery());
 
+export const cashoutDealsQuery = (connectionId = null) => ({
+  queryKey: ['cashout', 'deals', connectionId],
+  queryFn: () => fetcher(`/api/cashouts/deals${connectionId ? `?connectionId=${encodeURIComponent(connectionId)}` : ''}`),
+});
 export const useCashoutDeals = (connectionId = null) =>
   useQuery({
-    queryKey: ['cashout', 'deals', connectionId],
-    queryFn: () => fetcher(`/api/cashouts/deals${connectionId ? `?connectionId=${encodeURIComponent(connectionId)}` : ''}`),
+    ...cashoutDealsQuery(connectionId),
     refetchInterval: 60_000,
     refetchIntervalInBackground: false,
   });
 
-export const useCashoutCommitments = () =>
-  useQuery({
-    queryKey: ['cashout', 'commitments'],
-    queryFn: () => fetcher('/api/cashouts/commitments'),
-  });
+export const cashoutCommitmentsQuery = () => ({
+  queryKey: ['cashout', 'commitments'],
+  queryFn: () => fetcher('/api/cashouts/commitments'),
+});
+export const useCashoutCommitments = () => useQuery(cashoutCommitmentsQuery());
 
 export const useCashoutMutations = () => {
   const qc = useQueryClient();

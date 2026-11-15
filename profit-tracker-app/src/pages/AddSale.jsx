@@ -196,7 +196,7 @@ const AddSale = () => {
             />
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-3 pb-8 scrollbar-thin">
+          <div data-stagger-rows className="flex-1 overflow-y-auto space-y-3 pb-8 scrollbar-thin">
             {isLoading ? (
               // Skeleton cards while inventory loads
               Array.from({ length: 5 }).map((_, i) => (

@@ -555,7 +555,7 @@ function GroupedRecordCard({ records, quickStatus = false }) {
 function CardList({ units: visualUnits, empty, quickStatus = false }) {
   const { visible, hiddenCount, showMore } = usePhoneList(visualUnits, { step: 10 });
   return (
-    <ul className="px-3 pb-3 pt-3 space-y-2.5">
+    <ul data-stagger-rows className="px-3 pb-3 pt-3 space-y-2.5">
       {visualUnits.length === 0 ? (
         <li className="px-1 py-6 text-center text-xs text-gray-500">{empty}</li>
       ) : visible.map((unit) => (unit.length === 1

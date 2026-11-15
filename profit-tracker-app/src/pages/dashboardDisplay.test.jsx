@@ -1,5 +1,6 @@
+import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Dashboard from './Dashboard';
 import { DEFAULT_DASHBOARD_SETTINGS } from '../data/dashboardRegistry';
@@ -15,14 +16,23 @@ const data = {
     { product: 'Big TV', cost: 1234.5, revenue: 2345.6, profit: 1111.1, status: 'SHIPPED_IN', date: '2026-11-01', quantity: 1 },
     { product: 'Old Row', cost: 10, revenue: 20, profit: 10, status: null, date: '2026-11-01', quantity: 1 },
   ],
-  pipelineCounts: {},
+  pipelineCounts: { 'Pre Order': 1234 },
+  workflowPipelines: {
+    all: { stages: [
+      { status: 'ON_HAND', count: 1234, value: 50000, itemCount: 0, items: [] },
+      { status: 'PAID', count: 3, value: 900, itemCount: 0, items: [] },
+    ] },
+    cashout: { stages: [{ status: 'SCANNED_IN', count: 2, value: 600, itemCount: 0, items: [] }] },
+    marketplace: { stages: [{ status: 'OUTBOUND', count: 1, value: 50, itemCount: 0, items: [] }] },
+  },
   topCards: [{ name: 'Visa', amount: 4567.8, txns: 3 }],
 };
 
 let uiStyle = 'premium';
+let placeholder = false;
 
 vi.mock('../hooks/useApi', () => ({
-  useDashboard: () => ({ data, isLoading: false, isError: false, refetch: vi.fn() }),
+  useDashboard: () => ({ data, isLoading: false, isError: false, refetch: vi.fn(), isPlaceholderData: placeholder }),
   useGoals: () => ({ data: [] }),
 }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'u1', username: 'Test' } }) }));
@@ -38,7 +48,10 @@ const mount = (style) => {
   return render(<MemoryRouter><Dashboard /></MemoryRouter>);
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  placeholder = false;
+});
 
 describe.each(['premium', 'glass'])('Dashboard display in the %s style', (style) => {
   it('never prints a raw status code', () => {
@@ -62,5 +75,49 @@ describe('Dashboard amounts', () => {
   it('shows stat card totals with thousands separators', () => {
     const { container } = mount('premium');
     expect(container.textContent).toContain('$23,097.20');
+  });
+});
+
+describe('Dashboard KPI cards', () => {
+  it('show the mode tag small on the title line, never wrapping, and no tag in All', () => {
+    mount('premium');
+    expect(screen.queryByText(/sold via/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cashout' }));
+    const tag = screen.getAllByText('sold via Cashout')[0];
+    expect(tag).toHaveClass('truncate', 'text-[9px]');
+    const titleLine = tag.parentElement;
+    expect(titleLine).toHaveClass('whitespace-nowrap');
+    expect(titleLine).toHaveTextContent(/^Net Profitsold via Cashout$|^.+sold via Cashout$/);
+  });
+
+  it('keeps the page and the last numbers up, not faded or locked, while another filter loads', () => {
+    placeholder = true;
+    const { container } = mount('premium');
+    expect(screen.queryByText(/^Loading /)).not.toBeInTheDocument();
+    expect(container.textContent).toContain('$23,097.20');
+    expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(container.querySelector('.opacity-50, .animate-pulse, .pointer-events-none:not(.invisible)')).toBeNull();
+    expect(screen.getByText(/Welcome back/)).toBeInTheDocument();
+  });
+
+  it('opens the Status Pipeline on All, the first tab, showing every step', () => {
+    mount('premium');
+    const tabs = within(screen.getByRole('group', { name: 'Pipeline view' })).getAllByRole('button');
+    expect(tabs.map((t) => t.textContent)).toEqual(['All', 'Cash-out', 'Marketplace']);
+    expect(tabs[0]).toHaveAttribute('aria-pressed', 'true');
+    const onHand = screen.getByRole('button', { name: /^On Hand/ });
+    expect(within(onHand).getByText('1234', { selector: '.sr-only' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Paid/ })).toBeInTheDocument();
+  });
+
+  it('switches the pipeline to the workflow the dashboard filter picks, and back to All', () => {
+    mount('premium');
+    fireEvent.click(screen.getByRole('button', { name: 'Cashout' }));
+    expect(screen.getByRole('button', { name: /^Scanned In/ })).toBeInTheDocument();
+    // The dashboard filter's button comes before the pipeline's own tab.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Marketplace' })[0]);
+    expect(screen.getByRole('button', { name: /^Outbound/ })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'All' })[0]);
+    expect(screen.getByRole('button', { name: /^On Hand/ })).toBeInTheDocument();
   });
 });

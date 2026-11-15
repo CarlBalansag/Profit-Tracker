@@ -74,7 +74,7 @@ function Settings() {
 
       <div className="flex flex-col md:flex-row gap-8">
         {/* Left Sidebar Navigation */}
-        <div className="w-full md:w-56 flex-shrink-0 space-y-1">
+        <div data-stagger-rows className="w-full md:w-56 flex-shrink-0 space-y-1">
           {navItems.map((item) => (
             <button
               key={item.id}

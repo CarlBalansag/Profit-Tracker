@@ -2,6 +2,7 @@ import StatCard from '../components/UI/StatCard';
 import { formatMoney as formatAmount } from '../utils/money';
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch, usePaymentMethods } from '../hooks/useApi';
+import { EXPENSES_PAGE_KEY, useCacheArrivals, useOptionalQueryClient } from '../hooks/usePageCache';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { usePhoneList } from '../hooks/usePhoneList';
@@ -323,14 +324,36 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
 // ─── Main Page ───────────────────────────────────────────────────────────────
 const Expenses = () => {
   const navigate = useNavigate();
-  const [expenses, setExpenses]       = useState([]);
-  const [derived, setDerived]         = useState([]);
-  const [derivedFailed, setDerivedFailed] = useState(false);
-  const [recurring, setRecurring]     = useState([]);
-  const [loading, setLoading]         = useState(true);
+  // Start from the cached copy (an earlier visit or a hover prefetch) when
+  // there is one; fetchAll below still refreshes it on every visit.
+  const queryClient = useOptionalQueryClient();
+  const [cached] = useState(() => queryClient?.getQueryData(EXPENSES_PAGE_KEY));
+  const [expenses, setExpenses]       = useState(cached?.expenses ?? []);
+  const [derived, setDerived]         = useState(cached?.derived ?? []);
+  const [derivedFailed, setDerivedFailed] = useState(cached?.derivedFailed ?? false);
+  const [recurring, setRecurring]     = useState(cached?.recurring ?? []);
+  const [loading, setLoading]         = useState(!cached);
   const [loadFailed, setLoadFailed]   = useState(false);
-  const hasLoaded = useRef(false);
+  const hasLoaded = useRef(Boolean(cached));
   const { data: paymentMethods = [] } = usePaymentMethods();
+
+  // A hover prefetch that lands before this page's own first load shows at once.
+  useCacheArrivals(queryClient, [EXPENSES_PAGE_KEY], ([data]) => {
+    if (hasLoaded.current || !data) return;
+    hasLoaded.current = true;
+    setExpenses(data.expenses);
+    setRecurring(data.recurring);
+    setDerived(data.derived);
+    setDerivedFailed(data.derivedFailed);
+    setLoadFailed(false);
+    setLoading(false);
+  });
+
+  // Keep the cached copy in step with what's on screen, edits included.
+  useEffect(() => {
+    if (!hasLoaded.current) return;
+    queryClient?.setQueryData(EXPENSES_PAGE_KEY, { expenses, recurring, derived, derivedFailed });
+  }, [queryClient, expenses, recurring, derived, derivedFailed]);
 
   const [modalOpen, setModalOpen]         = useState(false);
   const [editingItem, setEditingItem]     = useState(null);

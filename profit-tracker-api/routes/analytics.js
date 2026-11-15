@@ -5,6 +5,7 @@ const { validateQuery } = require('../middleware/validate');
 const { analyticsDashboardQuery } = require('../validation/schemas');
 const { Decimal, decimal, isRealizedSale, batchCost, allocatedCost, effectiveCashbackRate, inventoryCashback, saleEconomics, keptQuantity, keptSaleQuantity } = require('../services/decimalFinance');
 const { pipelineBucketOf } = require('../services/statusTransitions');
+const { buildWorkflowPipelines } = require('../services/workflowPipeline');
 const { payoutStatus } = require('../services/payoutStatus');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 
@@ -552,6 +553,11 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       vendorBreakdown,
       categoryBreakdown,
       pipelineCounts,
+      // As steps (all / Cash-out / Marketplace): units, money and items in
+      // each step, from the same mode/date-filtered sales as pipelineCounts.
+      // The "all" view also counts unsold stock, as the classic pipeline does
+      // in All mode; Cashout/Marketplace stock isn't tied to either yet.
+      workflowPipelines: buildWorkflowPipelines(sales, mode === 'All' ? allInventories : []),
       trend,
       trendMeta,
       recentTransactions: cashFlowTransactions.slice(0, 10),

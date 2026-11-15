@@ -1,18 +1,21 @@
 import React from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, ArrowLeftRight, Boxes,
   ReceiptText, FileText, ChartLine, Wallet, CreditCard as CreditCardIcon,
   Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins
 } from 'lucide-react';
 import clsx from 'clsx';
-import { useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useReducedMotion } from 'motion/react';
 import { useAuth } from '../../context/AuthContext';
 import { SCHEDULE_C_ENABLED } from '../../config/features';
 import { CURRENT_VERSION } from '../../data/changelog';
 import VersionHistoryModal from '../VersionHistoryModal';
 import ThemeSwitch from '../UI/ThemeSwitch';
+import AnimatedLogo from '../UI/AnimatedLogo';
 import { useCashoutProviders } from '../../hooks/useCashoutProviders';
+import { usePrefetchProps } from '../../hooks/usePrefetchPage';
 
 const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'neon-dark' }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -21,8 +24,11 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
   const { logout, user } = useAuth();
   const { data: cashoutProviders = [] } = useCashoutProviders();
   const hasCashoutAccess = Array.isArray(cashoutProviders) && cashoutProviders.length > 0;
+  const isGlass = uiStyle === 'glassmorphism-brown';
+  const navRef = useRef(null);
+  const marker = useNavMarker(navRef, [isCollapsed, isGlass, hasCashoutAccess]);
 
-  if (uiStyle === 'glassmorphism-brown') {
+  if (isGlass) {
     return (
       <>
         {isOpen && (
@@ -39,14 +45,18 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
           )}
           onClick={(e) => { if (e.target.closest('a')) setIsOpen(false); }}
         >
-          <div className="flex flex-col items-center gap-0.5 rounded-[24px] border border-white/[0.07] bg-[#181a1c]/[0.88] px-2 py-3 shadow-[0_12px_32px_rgba(0,0,0,0.28)] backdrop-blur-sm">
+          <div ref={navRef} className="relative flex flex-col items-center gap-0.5 rounded-[24px] border border-white/[0.07] bg-[#181a1c]/[0.88] px-2 py-3 shadow-[0_12px_32px_rgba(0,0,0,0.28)] backdrop-blur-sm">
             <button
               onClick={() => navigate('/')}
-              className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#d8a65a,#c4873a)] text-sm font-bold text-[#101114] shadow-[0_6px_16px_rgba(216,166,90,0.16)]"
+              className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl"
               title="Profit Tracker"
+              aria-label="Profit Tracker dashboard"
             >
-              P
+              {/* Keyed on open state so the intro replays when the menu opens or closes. */}
+              <AnimatedLogo key={isOpen ? 'open' : 'closed'} size={28} label={null} />
             </button>
+
+            <NavMarker marker={marker} className="rounded-xl bg-[#d8a65a]/10" />
 
             <GlassNavItem icon={LayoutDashboard} label="Dashboard" to="/" />
             <GlassNavItem icon={ShoppingCart} label="Add Transaction" to="/add-transaction" />
@@ -96,8 +106,14 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
         onClick={(e) => { if (e.target.closest('a')) setIsOpen(false); }}
       >
         <div className={clsx("flex items-center py-5 border-b border-[color:var(--dp-border)]", isCollapsed ? "justify-center px-0 flex-col gap-2" : "gap-3 px-4")}>
-          <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg bg-[var(--dp-accent)]">
-            <span className="text-[#ffffff] font-semibold text-base">P</span>
+          <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center">
+            {/* Keyed on the sidebar's state so the intro replays when it is
+                collapsed or expanded, or opened or closed on mobile. */}
+            <AnimatedLogo
+              key={`${isCollapsed ? 'collapsed' : 'expanded'}-${isOpen ? 'open' : 'closed'}`}
+              size={30}
+              label={isCollapsed ? 'Profit Tracker' : null}
+            />
           </div>
 
           {!isCollapsed && (
@@ -120,7 +136,8 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
           </button>
         </div>
 
-        <nav className="flex-1 py-3 px-2 space-y-3 overflow-y-auto overflow-x-hidden dp-scrollbar">
+        <nav ref={navRef} className="relative flex-1 py-3 px-2 space-y-3 overflow-y-auto overflow-x-hidden dp-scrollbar">
+          <NavMarker marker={marker} className="!mt-0 rounded-md bg-[var(--dp-accent-bg)]" />
           <SidebarSection title="Core" isCollapsed={isCollapsed} tutorialId="sidebar-section-core">
             <NavItem icon={LayoutDashboard} label="Dashboard" to="/" isCollapsed={isCollapsed} />
             <NavItem icon={ShoppingCart} label="Add Transaction" to="/add-transaction" isCollapsed={isCollapsed} tutorialId="sidebar-add-transaction" />
@@ -208,8 +225,102 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
   );
 };
 
+// The active-item highlight is ONE element per sidebar that glides to the
+// active link: it measures the link (NavLink marks it aria-current="page")
+// inside the nav and moves there with a springy CSS transition. A route
+// change animates; everything else that moves the link (collapsing the
+// sidebar, folding a section, resizing) just follows it with no animation.
+// With reduced motion the glide is a short ease with no overshoot. No marker
+// shows when the active page has no item, or its section is folded.
+const MARKER_GLIDE = 'cubic-bezier(.3,1.35,.5,1)';
+
+function useNavMarker(containerRef, deps) {
+  const { pathname } = useLocation();
+  const [box, setBox] = useState(null);
+  const lastPath = useRef(null);
+
+  const measure = useCallback((animate) => {
+    const container = containerRef.current;
+    if (!container) return;
+    const link = container.querySelector('a[aria-current="page"]');
+    if (!link || link.closest('.hidden')) {
+      setBox((prev) => (prev ? { ...prev, show: false, href: null, animate: false } : prev));
+      return;
+    }
+    const c = container.getBoundingClientRect();
+    const l = link.getBoundingClientRect();
+    const next = {
+      top: l.top - c.top + container.scrollTop - container.clientTop,
+      left: l.left - c.left + container.scrollLeft - container.clientLeft,
+      width: l.width,
+      height: l.height,
+      href: link.getAttribute('href'),
+      show: true,
+    };
+    setBox((prev) => {
+      // A re-measure that lands on the same spot (the active link's classes
+      // changing, say) must not cancel a glide that's under way.
+      const same = prev?.show && prev.href === next.href
+        && ['top', 'left', 'width', 'height'].every((k) => Math.abs(prev[k] - next[k]) < 0.5);
+      if (!animate && same) return prev;
+      // Only glide from a spot it was already showing at.
+      return { ...next, animate: animate && Boolean(prev?.show) };
+    });
+  }, [containerRef]);
+
+  useLayoutEffect(() => {
+    const routeChanged = lastPath.current !== null && lastPath.current !== pathname;
+    lastPath.current = pathname;
+    measure(routeChanged);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, measure, ...deps]);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+    const follow = () => measure(false);
+    let ro = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(follow);
+      ro.observe(container);
+      container.querySelectorAll('a').forEach((a) => ro.observe(a));
+    }
+    // Folding a section flips a class without resizing the nav.
+    const mo = new MutationObserver(follow);
+    mo.observe(container, { attributes: true, attributeFilter: ['class'], subtree: true });
+    return () => { ro?.disconnect(); mo.disconnect(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [measure, ...deps]);
+
+  return box;
+}
+
+const NavMarker = ({ marker, className }) => {
+  const reduceMotion = useReducedMotion();
+  const glide = reduceMotion ? '0.15s ease-out' : `0.45s ${MARKER_GLIDE}`;
+  return (
+    <span
+      aria-hidden="true"
+      data-nav-marker=""
+      data-active-href={marker?.href ?? ''}
+      className={clsx('pointer-events-none absolute', className)}
+      style={{
+        top: marker?.top ?? 0,
+        left: marker?.left ?? 0,
+        width: marker?.width ?? 0,
+        height: marker?.height ?? 0,
+        opacity: marker?.show ? 1 : 0,
+        transition: marker?.animate
+          ? ['top', 'left', 'width', 'height'].map((p) => `${p} ${glide}`).concat('opacity 0.2s').join(', ')
+          : 'opacity 0.2s',
+      }}
+    />
+  );
+};
+
 const SidebarSection = ({ title, children, isCollapsed, tutorialId }) => {
   const [isSectionOpen, setIsSectionOpen] = useState(true);
+  const showsItems = isSectionOpen || isCollapsed;
 
   return (
     <div data-tutorial-id={tutorialId} className={clsx("space-y-0.5", isCollapsed ? "mt-4 first:mt-0" : "")}>
@@ -222,7 +333,7 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId }) => {
           {isSectionOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         </button>
       )}
-      <div className={clsx("space-y-0.5", !isSectionOpen && !isCollapsed ? "hidden" : "block")}>
+      <div className={clsx("space-y-0.5", showsItems ? "block" : "hidden")}>
         {children}
       </div>
     </div>
@@ -234,13 +345,14 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId }) => (
     to={to}
     title={isCollapsed ? label : undefined}
     data-tutorial-id={tutorialId}
+    {...usePrefetchProps(to)}
     className={({ isActive }) =>
       clsx(
-        "flex items-center rounded-md border-l-2 transition-colors",
+        "relative flex items-center rounded-md border-l-2 border-l-transparent transition-colors",
         isCollapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5 lg:py-1 text-[12px] font-medium",
         isActive
-          ? "text-[var(--dp-accent)] bg-[var(--dp-accent-bg)] [border-left-color:var(--dp-accent)] pointer-events-none"
-          : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] border-l-transparent"
+          ? "text-[var(--dp-accent)] pointer-events-none"
+          : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)]"
       )
     }
   >
@@ -253,11 +365,12 @@ const GlassNavItem = ({ icon: Icon, label, to }) => (
   <NavLink
     to={to}
     title={label}
+    {...usePrefetchProps(to)}
     className={({ isActive }) =>
       clsx(
         "group relative flex h-8 w-10 items-center justify-center rounded-xl transition-colors hover:z-10",
         isActive
-          ? "bg-[#d8a65a]/10 text-[#d8a65a] pointer-events-none"
+          ? "text-[#d8a65a] pointer-events-none"
           : "text-white/25 hover:text-[#e8e2d6]"
       )
     }

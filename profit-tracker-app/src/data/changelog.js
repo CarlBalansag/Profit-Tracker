@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.28',
+    date: '2026-11-15',
+    notes: "Pages load faster and glide in smoothly, with an animated logo, a cleaner Status Pipeline and a fresh new Calendar look. Transactions now keeps every purchase's Buy row after it sells, and refunds show up as a yellow Refund tag.",
+  },
+  {
     version: '1.27',
     date: '2026-11-11',
     notes: "The Credit Card page has a new layout that matches the rest of the app, with clearer sidebar icons, easier-to-read labels, and a sharper Where Your Money Is section on Cash Flow.",

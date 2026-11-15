@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { apiFetch } from '../hooks/useApi';
 import ServerWakeUpScreen from '../components/Auth/ServerWakeUpScreen';
 import { useQueryClient } from '@tanstack/react-query';
+import { CACHE_OWNER_KEY, clearPersistedCache } from '../data/persistedCache';
 
 const AuthContext = createContext();
 
@@ -12,13 +13,29 @@ export const useAuth = () => useContext(AuthContext);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const WARMUP_RETRY_DELAYS = [0, 2_000, 4_000, 6_000, 8_000, 10_000, 10_000, 10_000, 10_000, 10_000];
 
+// Whose data the saved cache holds (see data/persistedCache.js). Reading and
+// writing it can fail (private windows, blocked storage); then the cache is
+// simply treated as nobody's and cleared on sign-in.
+const readCacheOwner = () => { try { return localStorage.getItem(CACHE_OWNER_KEY); } catch { return null; } };
+const writeCacheOwner = (id) => {
+  try { if (id) localStorage.setItem(CACHE_OWNER_KEY, id); else localStorage.removeItem(CACHE_OWNER_KEY); } catch { /* ignore */ }
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, updateUser] = useState(null);
-  const userId = useRef(null);
+  // Starts as the owner of the restored cache, so the same user signing in
+  // again keeps it; anyone else (or signing out) clears memory and disk.
+  const userId = useRef(readCacheOwner());
   const queryClient = useQueryClient();
   const setUser = useCallback((nextUser) => {
-    if (userId.current !== (nextUser?.id || null)) { queryClient.cancelQueries(); queryClient.clear(); }
-    userId.current = nextUser?.id || null;
+    const nextId = nextUser?.id ? String(nextUser.id) : null;
+    if (userId.current !== nextId) {
+      queryClient.cancelQueries();
+      queryClient.clear();
+      clearPersistedCache();
+    }
+    userId.current = nextId;
+    writeCacheOwner(nextId);
     updateUser(nextUser);
   }, [queryClient]);
   const [loading, setLoading] = useState(true);

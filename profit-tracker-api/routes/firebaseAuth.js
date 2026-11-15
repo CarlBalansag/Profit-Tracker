@@ -70,6 +70,26 @@ function createFirebaseAuth({ prisma, auth, config }) {
       || !Number.isFinite(claims.auth_time) || now - claims.auth_time > 300 || claims.auth_time > now + 30) throw fail(401, 'Verify your email and sign in again.');
     return claims;
   }
+  // Asking Firebase whether a session cookie was revoked is a network round
+  // trip on every request. The cookie's signature and expiry are still checked
+  // locally on every request, and so is our own session row (sign-out,
+  // logout-all, disabled accounts), so those take effect at once. Only
+  // Firebase's own revocation flag is re-asked at most once a minute per
+  // session, so a session revoked in Firebase alone can last up to a minute.
+  const revocationRecheckMs = config.revocationRecheckMs ?? 60_000;
+  const revocationCheckedAt = new Map(); // session fingerprint -> ms
+  const needsRevocationCheck = fingerprint => {
+    const checkedAt = revocationCheckedAt.get(fingerprint);
+    return checkedAt === undefined || Date.now() - checkedAt >= revocationRecheckMs;
+  };
+  const rememberRevocationCheck = fingerprint => {
+    if (revocationCheckedAt.size >= 5000) {
+      const cutoff = Date.now() - revocationRecheckMs;
+      for (const [key, at] of revocationCheckedAt) if (at < cutoff) revocationCheckedAt.delete(key);
+      if (revocationCheckedAt.size >= 5000) revocationCheckedAt.clear();
+    }
+    revocationCheckedAt.set(fingerprint, Date.now());
+  };
   async function guard(req, res, next) {
     return safe(async () => {
       if (!config.production && req.session && req.session.devUserId) {
@@ -82,11 +102,19 @@ function createFirebaseAuth({ prisma, auth, config }) {
       const value = cookie(req);
       if (!value) return next();
       if (!config.enabled) throw fail(503, 'Authentication unavailable.');
-      const claims = await provider('verifySessionCookie', value, true);
+      const fingerprint = hash(value);
+      const checkRevoked = needsRevocationCheck(fingerprint);
+      let claims;
+      try { claims = await provider('verifySessionCookie', value, checkRevoked); }
+      catch (error) { revocationCheckedAt.delete(fingerprint); throw error; }
       if (claims.aud !== config.projectId || claims.iss !== `https://session.firebase.google.com/${config.projectId}` || !claims.email_verified) throw fail(401, 'Sign-in required.');
-      const row = await prisma.firebaseSession.findUnique({ where: { fingerprint: hash(value) }, include: { identity: { include: { user: true } } } });
+      const row = await prisma.firebaseSession.findUnique({ where: { fingerprint }, include: { identity: { include: { user: true } } } });
       if (!row || row.revoked || row.expires_at <= new Date() || row.identity.project_id !== config.projectId
-        || row.identity.firebase_uid !== claims.uid || row.identity.user.login_disabled) throw fail(401, 'Sign-in required.');
+        || row.identity.firebase_uid !== claims.uid || row.identity.user.login_disabled) {
+        revocationCheckedAt.delete(fingerprint);
+        throw fail(401, 'Sign-in required.');
+      }
+      if (checkRevoked) rememberRevocationCheck(fingerprint);
       if (req.user && req.user.id !== row.identity.user_id) throw fail(409, 'Conflicting sessions. Sign out and try again.');
       req.user = row.identity.user;
       req.firebaseIdentity = row.identity;
@@ -175,6 +203,7 @@ function createFirebaseAuth({ prisma, auth, config }) {
   const logout = safe(async (req, res) => {
     const fingerprints = (req.headers.cookie || '').split(';').map(part => part.trim()).filter(part => part.startsWith(`${cookieName}=`)).map(part => hash(part.slice(cookieName.length + 1)));
     if (fingerprints.length) await prisma.firebaseSession.updateMany({ where: { fingerprint: { in: fingerprints } }, data: { revoked: true } });
+    fingerprints.forEach(fingerprint => revocationCheckedAt.delete(fingerprint));
     res.clearCookie(cookieName, cookieOptions);
     if (req.session) await new Promise((resolve, reject) => req.session.destroy(error => error ? reject(error) : resolve()));
     res.clearCookie('connect.sid', { path: '/' });

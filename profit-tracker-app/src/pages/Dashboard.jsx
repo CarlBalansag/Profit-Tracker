@@ -20,6 +20,12 @@ import ProfitCostTrendChart from '../components/Dashboard/ProfitCostTrendChart';
 import MonthlyProfitSpendChart from '../components/Dashboard/MonthlyProfitSpendChart';
 import PageNav from '../components/UI/PageNav';
 import HScrollbar from '../components/UI/HScrollbar';
+import CountUp from '../components/UI/CountUp';
+import WorkflowPipeline from '../components/Dashboard/WorkflowPipeline';
+
+// Status Pipeline views: every step, stock through paid ("All", the default),
+// or one sale workflow's own steps.
+const PIPELINE_VIEWS = [['all', 'All'], ['cashout', 'Cash-out'], ['marketplace', 'Marketplace']];
 import { formatMoney, formatWholeMoney } from '../utils/money';
 import { recordStatusLabel } from '../data/statusWorkflow';
 
@@ -115,17 +121,27 @@ const Dashboard = () => {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [trendMode, setTrendMode] = useState('period'); // 'period' | 'cumulative'
   const [chartView, setChartView] = useState('line'); // 'line' | 'bar'
-  const [pipelinePage, setPipelinePage] = useState(0); // mobile-only Status Pipeline pagination
+  const [pipelineView, setPipelineView] = useState('all'); // 'all' | 'cashout' | 'marketplace'
+  // The Status Pipeline follows the dashboard filter: All shows every step,
+  // Cashout/Marketplace (which only have sales of that kind) their workflow.
+  const chooseMode = (mode) => {
+    setModeFilter(mode);
+    setPipelineView(mode === 'Cashout' ? 'cashout' : mode === 'Marketplace' ? 'marketplace' : 'all');
+  };
   const [topCardsPage, setTopCardsPage] = useState(0); // Top Cards pagination (3 per page, all breakpoints)
   const statsRowRef = useRef(null); // KPI row, driven by the drawn scrollbar below it
 
-  const { data, isLoading, isError, error, refetch } = useDashboard(modeFilter, dateFilter);
+  const { data, isLoading, isError, error, refetch, isPlaceholderData } = useDashboard(modeFilter, dateFilter);
+  // A filter change is loading: the page stays exactly as it is, usable, until
+  // the new data arrives; the KPI numbers then count to their new values.
+  const refreshing = Boolean(isPlaceholderData);
   const { data: goals = [] } = useGoals();
   useEffect(() => { if (data) setLastUpdated(new Date()); }, [data]);
 
   const recent = data?.recentTransactions || [];
   const stats = normalizeDashboardStats(data?.stats, recent);
   const pipeline = data?.pipelineCounts || {};
+  const workflowPipelines = data?.workflowPipelines || {};
   const topCards = data?.topCards || [];
   const trend = data?.trend || [];
   const trendMeta = data?.trendMeta ?? null;
@@ -211,6 +227,7 @@ const Dashboard = () => {
                 id={cardConfig.id}
                 title={def.label}
                 modeTag={modeTag}
+                loading={refreshing}
                 value={def.getValue(stats)}
                 subtext={def.getSubtext(stats)}
                 icon={def.icon}
@@ -230,51 +247,41 @@ const Dashboard = () => {
 
     if (sectionId === 'pipeline') {
       if (!showPipeline || visiblePipelineCards.length === 0) return null;
-      const pipelinePerPage = 4;
-      const pipelinePageCount = Math.ceil(visiblePipelineCards.length / pipelinePerPage);
-      const safePipelinePage = Math.min(pipelinePage, pipelinePageCount - 1);
-      const mobilePipelineCards = visiblePipelineCards.slice(
-        safePipelinePage * pipelinePerPage,
-        safePipelinePage * pipelinePerPage + pipelinePerPage
-      );
-      const renderPipelineCard = cardConfig => {
-        const def = PIPELINE_CARD_REGISTRY[cardConfig.id];
-        if (!def) return null;
-        return (
-          <PipelineCard
-            key={cardConfig.id}
-            icon={def.icon}
-            count={pipeline[cardConfig.id] || 0}
-            label={def.label}
-            color={def.color}
-            statusKey={cardConfig.id}
-            onNavigate={navigate}
-            uiStyle={preferences.style}
-          />
-        );
-      };
       return (
         <div key="pipeline" data-tutorial-id="dashboard-pipeline" className={isGlass
           ? "rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.22)] animate-in fade-in duration-300 fill-mode-both"
           : "rounded-[24px] p-6 bg-[var(--dp-card-bg)] dp-elevated animate-in slide-in-from-bottom-4 duration-500 fade-in delay-300 fill-mode-both"
         }>
-          <h3 className={isGlass ? "mb-1 px-0.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/24" : "text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)] mb-1"}>Status Pipeline</h3>
-          <p className={isGlass ? "mb-3 hidden px-0.5 text-[11px] text-white/18 sm:block" : "mb-4 hidden text-[12px] text-[var(--dp-text-secondary)] sm:block"}>
-            Units currently in each stage right now — not a cumulative total. See "Units Sold" below for all units sold in this period regardless of their current status.
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h3 className={isGlass ? "mb-1 px-0.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/24" : "text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)] mb-1"}>Status Pipeline</h3>
+            <div role="group" aria-label="Pipeline view" className="flex gap-0.5 rounded-full bg-[var(--dp-bg)] p-0.5">
+              {PIPELINE_VIEWS.map(([view, label]) => (
+                <button
+                  key={view}
+                  type="button"
+                  aria-pressed={pipelineView === view}
+                  onClick={() => setPipelineView(view)}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${pipelineView === view ? 'bg-[var(--dp-card-bg)] text-[var(--dp-accent)] dp-elevated' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* One line, whichever tab, so the card's height doesn't shift. */}
+          <p className={isGlass ? "mb-3 hidden truncate px-0.5 text-[11px] text-white/18 sm:block" : "mb-4 hidden truncate text-[12px] text-[var(--dp-text-secondary)] sm:block"}>
+            {pipelineView === 'all'
+              ? 'Units in each step right now: unsold stock at cost, sold items at their sale price. Click a step to see its items.'
+              : 'Units in each step of this workflow right now, at their sale price. Click a step to see its items.'}
           </p>
 
-          {/* Mobile (below lg): 4 cards at a time, paginated */}
-          <div className="lg:hidden">
-            <div key={safePipelinePage} className={isGlass ? "grid grid-cols-2 gap-4 page-transition" : "grid grid-cols-2 gap-3 page-transition"}>
-              {mobilePipelineCards.map(renderPipelineCard)}
-            </div>
-            <PageNav count={pipelinePageCount} index={safePipelinePage} onChange={setPipelinePage} isGlass={isGlass} />
-          </div>
-
-          {/* Desktop (lg+): show every card at once, unchanged from before */}
-          <div className={isGlass ? "hidden lg:grid grid-cols-3 2xl:grid-cols-4 gap-4" : "hidden lg:grid grid-cols-6 gap-3"}>
-            {visiblePipelineCards.map(renderPipelineCard)}
-          </div>
+          {/* Not remounted per tab: the same steps slide between tabs. */}
+          <WorkflowPipeline
+            pipeline={workflowPipelines[pipelineView]}
+            pending={refreshing}
+            onNavigate={navigate}
+            hideEmpty={pipelineView === 'all'}
+          />
         </div>
       );
     }
@@ -355,7 +362,7 @@ const Dashboard = () => {
                   goals={activeGoals}
                   stats={stats}
                   isGlass={isGlass}
-                  dateFilter={dateFilter}
+                  dateFilter={dateFilter} refreshing={refreshing}
                   onNavigate={() => navigate('/goals')}
                 />
               )}
@@ -667,7 +674,7 @@ const Dashboard = () => {
             goals={activeGoals}
             stats={stats}
             isGlass={isGlass}
-            dateFilter={dateFilter}
+            dateFilter={dateFilter} refreshing={refreshing}
             onNavigate={() => navigate('/goals')}
           />
         );
@@ -684,7 +691,7 @@ const Dashboard = () => {
             goals={activeGoals}
             stats={stats}
             isGlass={isGlass}
-            dateFilter={dateFilter}
+            dateFilter={dateFilter} refreshing={refreshing}
             onNavigate={() => navigate('/goals')}
           />
         </div>
@@ -830,7 +837,7 @@ const Dashboard = () => {
               {['All', 'Cashout', 'Marketplace'].map((mode) => (
                 <button
                   key={mode}
-                  onClick={() => setModeFilter(mode)}
+                  onClick={() => chooseMode(mode)}
                   className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg transition-all ${modeFilter === mode ? 'bg-[#d8a65a]/12 text-[#d8a65a] ring-1 ring-[#d8a65a]/25' : 'text-white/30 hover:text-[#e8e2d6] hover:bg-white/[0.04]'}`}
                 >
                   {mode === 'All' && <Layers className="w-3.5 h-3.5" />}
@@ -949,7 +956,7 @@ const Dashboard = () => {
             {['All', 'Cashout', 'Marketplace'].map((mode) => (
               <button
                 key={mode}
-                onClick={() => setModeFilter(mode)}
+                onClick={() => chooseMode(mode)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-full transition-colors ${modeFilter === mode ? (isGlass ? 'bg-[#d8a65a]/12 text-[#d8a65a] ring-1 ring-[#d8a65a]/25' : 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]') : (isGlass ? 'text-white/30 hover:text-[#e8e2d6] hover:bg-white/[0.04]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]')}`}
               >
                 {mode === 'All' && <Layers className="w-3.5 h-3.5" />}
@@ -1056,7 +1063,7 @@ function MiniProgressRing({ pct, size = 56, stroke = 5, color, isGlass }) {
   );
 }
 
-function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate }) {
+function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate, refreshing = false }) {
   const [idx, setIdx] = useState(0);
   const goalsWithTarget = goals.filter(g => getTargetForFilter(g, dateFilter).value != null);
   const allGoals = goalsWithTarget.length > 0 ? goalsWithTarget : goals;
@@ -1150,7 +1157,7 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate })
 
             {/* Current value */}
             <p className={`text-[20px] font-bold tabular-nums leading-tight ${isGlass ? 'text-[#e8e2d6]' : 'text-[var(--dp-text-primary)]'}`}>
-              {fmt(current)}
+              <CountUp value={fmt(current)} pending={refreshing} />
             </p>
 
             {/* Target */}
@@ -1296,7 +1303,7 @@ function GlassCircularPipeline({ cards, overflowCards = [], pipeline, onNavigate
   );
 }
 
-function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], description, onClick, uiStyle = 'neon-dark' }) {
+function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], description, onClick, uiStyle = 'neon-dark', loading = false }) {
   const [open, setOpen] = useState(false);
   const [popoverPosition, setPopoverPosition] = useState('bottom');
   const [popoverCoords, setPopoverCoords] = useState(null);
@@ -1347,17 +1354,25 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
       : `relative ${open ? 'z-[80]' : 'z-0'} overflow-visible rounded-[24px] p-6 group dp-elevated bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] border border-[color:var(--dp-border)] ${onClick ? 'dp-clickable-card cursor-pointer' : 'dp-elevated-hover'}`
     }>
       <div className="relative z-10 flex items-start justify-between">
-        <div>
-          <p className={isGlass ? "text-[11px] text-white/25 font-medium uppercase tracking-[0.2em]" : `text-[11px] font-medium uppercase tracking-[0.08em] dp-card-title transition-colors duration-300 text-[var(--dp-text-label)]`}>
-            {title}
+        <div className="min-w-0">
+          {/* One line, never wrapping: the mode tag sits small beside the title
+              and is cut short if it doesn't fit, so the card keeps its height
+              in All, Cashout and Marketplace. */}
+          <p className={isGlass ? "flex items-baseline gap-1.5 min-w-0 whitespace-nowrap text-[11px] text-white/25 font-medium uppercase tracking-[0.2em]" : `flex items-baseline gap-1.5 min-w-0 whitespace-nowrap text-[11px] font-medium uppercase tracking-[0.08em] dp-card-title transition-colors duration-300 text-[var(--dp-text-label)]`}>
+            <span className="shrink-0">{title}</span>
             {modeTag && (
-              <span className={isGlass ? "ml-1.5 text-[11px] font-normal normal-case tracking-normal text-[var(--text-muted)]" : `ml-1.5 text-[11px] font-normal normal-case tracking-normal dp-card-tag transition-colors duration-300 text-[var(--dp-text-label)]`}>
+              <span title={modeTag} className={isGlass ? "min-w-0 truncate text-[9px] font-normal normal-case tracking-normal text-[var(--text-muted)]" : `min-w-0 truncate text-[9px] font-normal normal-case tracking-normal dp-card-tag transition-colors duration-300 text-[var(--dp-text-label)]`}>
                 {modeTag}
               </span>
             )}
           </p>
-          <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] text-[var(--dp-text-primary)]`}>{value}</p>
-          <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
+          {/* While another filter loads, the last numbers stay up as they are;
+              when the new ones arrive they count from the old value to the new
+              one, up or down. Nothing fades or locks in between. */}
+          <div aria-busy={loading || undefined}>
+            <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] text-[var(--dp-text-primary)]`}><CountUp value={value} pending={loading} /></p>
+            <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
+          </div>
         </div>
         {isGlass && (
           <div className="w-9 h-9 3xl:w-11 3xl:h-11 rounded-xl bg-white/[0.035] border border-white/[0.05] flex items-center justify-center">
@@ -1427,53 +1442,6 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
             </div>,
             document.body
           )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function PipelineCard({ icon, count, label, statusKey, onNavigate, uiStyle = 'neon-dark' }) {
-  const isGlass = uiStyle === 'glassmorphism-brown';
-  const IconComponent = icon;
-  const isEmpty = Number(count) === 0;
-  const isAccentStatus = ['PURCHASED', 'SHIPPED', 'On Hand'].includes(statusKey);
-  const isYellowStatus = statusKey === 'Pre Order';
-  const premiumValue = isAccentStatus
-      ? 'text-[var(--dp-accent)]'
-      : isYellowStatus
-        ? 'text-[#C9972E]'
-        : 'text-[var(--dp-text-primary)]';
-  return (
-    <div
-      onClick={() => onNavigate('/statuses')}
-      title={`${count} unit${count === 1 ? '' : 's'} currently in "${label}" status. Click to open Statuses.`}
-      className={isGlass
-        ? "group relative min-h-[160px] cursor-pointer overflow-hidden rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-5 text-left shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-colors hover:border-[#d8a65a]/18 hover:bg-[#1d1f21]/78"
-        : `flex items-center gap-3 rounded-2xl p-4 cursor-pointer border border-[color:var(--dp-border)] ${
-            isEmpty
-              ? 'bg-[var(--dp-bg)]/50 opacity-70 hover:opacity-100 transition-opacity'
-              : 'bg-[var(--dp-card-bg)] dp-clickable-pipeline'
-          }`
-      }
-    >
-      {isGlass ? (
-        <>
-          <div className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.05] bg-white/[0.025] text-[#d8a65a]/75 opacity-75 transition-opacity group-hover:opacity-100">
-            <IconComponent className="h-4 w-4" />
-          </div>
-          <p className="font-serif text-3xl font-semibold leading-none text-[#d8a65a]">{count}</p>
-          <p className="mt-3 max-w-[75%] text-[11px] font-bold uppercase tracking-wider text-white/20">{label}</p>
-        </>
-      ) : (
-        <>
-          <div className="w-9 h-9 rounded-full bg-[var(--dp-bg)] flex items-center justify-center shrink-0 dp-pipeline-icon-wrap transition-all duration-300">
-            <IconComponent className={`w-4.5 h-4.5 transition-colors duration-300 ${isEmpty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-secondary)]'}`} />
-          </div>
-          <div>
-            <p className={`text-[11px] font-medium uppercase tracking-[0.06em] dp-pipeline-label transition-colors duration-300 ${isEmpty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-secondary)]'}`}>{label}</p>
-            <p className={`text-lg font-bold tabular-nums dp-pipeline-count transition-colors duration-300 ${isEmpty ? 'text-[var(--dp-text-label)]' : premiumValue}`}>{count}</p>
-          </div>
         </>
       )}
     </div>

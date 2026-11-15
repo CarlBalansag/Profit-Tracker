@@ -18,6 +18,10 @@ const { disable } = require('../scripts/disableFirebaseAccount');
 let pg, prisma, server, base, config, provider, auth, users, privateHash;
 let providerFailure, claimsOverrides, cookieSequence = 0, sessionWriteFailure, cookieFailure, revokeFailure;
 const claimsByCookie = new Map();
+// The checkRevoked flag of every verifySessionCookie call, and cookies Firebase
+// alone has revoked (only a checkRevoked call notices those, like the real SDK).
+let revocationFlags = [];
+const revokedInFirebase = new Set();
 const privatePassword = 'private existing test password';
 const project = 'demo-profittracker';
 const userClaims = uid => ({ uid, aud: project, iss: `https://securetoken.google.com/${project}`, email: `${uid}@example.test`, email_verified: true, auth_time: Date.now() / 1000 });
@@ -51,6 +55,7 @@ beforeEach(async () => {
   users = await Promise.all(['a', 'b'].map(letter => prisma.user.create({ data: { email: `original-${letter}@example.test`, username: `legacy-${letter}`, local_credential: { create: { email: `legacy-${letter}@profittracker.invalid`, password_hash: privateHash, must_change_password: false } } } })));
   config = { enabled: true, production: false, projectId: project, signupEnabled: true, frontend: 'http://frontend.example.test' };
   providerFailure = false; claimsOverrides = {}; sessionWriteFailure = false; cookieFailure = false; revokeFailure = false;
+  revocationFlags = []; revokedInFirebase.clear();
   provider = {
     verifyIdToken: async (uid, revoked) => {
       expect(revoked).toBe(true);
@@ -59,7 +64,7 @@ beforeEach(async () => {
       return { ...userClaims(uid), ...claimsOverrides };
     },
     createSessionCookie: async uid => { if (cookieFailure) throw new Error('private cookie creation error'); const cookie = `fixture-cookie-${++cookieSequence}`; claimsByCookie.set(cookie, { ...userClaims(uid), iss: `https://session.firebase.google.com/${project}` }); return cookie; },
-    verifySessionCookie: async (cookie, revoked) => { expect(revoked).toBe(true); if (providerFailure) throw Object.assign(new Error('private provider outage'), { code: 'auth/internal-error' }); const result = claimsByCookie.get(cookie); if (!result) throw Object.assign(new Error('private invalid cookie'), { code: 'auth/invalid-session-cookie' }); return result; },
+    verifySessionCookie: async (cookie, revoked) => { revocationFlags.push(revoked); if (revokedInFirebase.has(cookie) && revoked) throw Object.assign(new Error('private revoked cookie'), { code: 'auth/session-cookie-revoked' }); if (providerFailure) throw Object.assign(new Error('private provider outage'), { code: 'auth/internal-error' }); const result = claimsByCookie.get(cookie); if (!result) throw Object.assign(new Error('private invalid cookie'), { code: 'auth/invalid-session-cookie' }); return result; },
     revokeRefreshTokens: async uid => { if (revokeFailure) throw new Error('private revoke failure'); for (const [cookie, claims] of claimsByCookie) if (claims.uid === uid) claimsByCookie.delete(cookie); },
     getUser: async uid => ({ uid, email: `${uid}@example.test`, emailVerified: true, disabled: false }),
   };
@@ -147,6 +152,33 @@ describe('Firebase backend with isolated real PostgreSQL', () => {
     await prisma.user.update({ where: { id: a.data.id }, data: { login_disabled: true } });
     expect((await request('/auth/me', undefined, a.cookie)).status).toBe(401);
     claimsByCookie.delete(b.cookie.split('=')[1]); expect((await request('/auth/me', undefined, b.cookie)).status).toBe(401);
+  });
+  it('asks Firebase about revocation on a session\'s first request, then at most once a minute', async () => {
+    const a = await login();
+    revocationFlags = [];
+    expect((await request('/auth/me', undefined, a.cookie)).status).toBe(200);
+    expect((await request('/api/records', undefined, a.cookie)).status).toBe(200);
+    expect((await request('/auth/me', undefined, a.cookie)).status).toBe(200);
+    expect(revocationFlags).toEqual([true, false, false]);
+  });
+  it('re-asks Firebase once the minute is up, and then rejects a session revoked only in Firebase', async () => {
+    config.revocationRecheckMs = 0;
+    auth = createFirebaseAuth({ prisma, auth: provider, config });
+    const a = await login();
+    revocationFlags = [];
+    expect((await request('/auth/me', undefined, a.cookie)).status).toBe(200);
+    revokedInFirebase.add(a.cookie.split('=')[1]);
+    expect((await request('/auth/me', undefined, a.cookie)).status).toBe(401);
+    expect(revocationFlags).toEqual([true, true]);
+  });
+  it('still ends a session at once on logout and on a disabled account, inside the minute', async () => {
+    const a = await login(), b = await login('other-user');
+    expect((await request('/auth/me', undefined, a.cookie)).status).toBe(200);
+    expect((await request('/auth/me', undefined, b.cookie)).status).toBe(200);
+    expect((await request('/auth/logout', {}, a.cookie)).status).toBe(200);
+    expect((await request('/auth/me', undefined, a.cookie)).status).toBe(401);
+    await prisma.user.update({ where: { id: b.data.id }, data: { login_disabled: true } });
+    expect((await request('/auth/me', undefined, b.cookie)).status).toBe(401);
   });
   it('revokes one session on logout, all sessions on logout-all, and permits recovery after an outage', async () => {
     const a = await login(), b = await login('new-user', 'login');

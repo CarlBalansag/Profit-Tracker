@@ -2,6 +2,13 @@ import StatCard from '../components/UI/StatCard';
 import { formatMoney } from '../utils/money';
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
+import { useCacheArrivals, useOptionalQueryClient } from '../hooks/usePageCache';
+
+// The same cache entries Inventory, Shipping and Statuses fill (useInventory,
+// useSales), so this page can show at once when they're already loaded.
+const INVENTORY_KEY = ['inventory'];
+const SALES_KEY = ['sales'];
+const exemptOnly = (inventory) => inventory.filter(i => i.tax_exempt === true);
 import { Search, Package, DollarSign, Info } from 'lucide-react';
 import { PageLoader } from '../components/PageLoader';
 import LoadError from '../components/UI/LoadError';
@@ -59,10 +66,29 @@ const QUARTERS = [
 ];
 
 const TaxExempt = () => {
-  const [items, setItems] = useState([]);
-  const [sales, setSales] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Start from cached inventory and sales when both are there; fetchData
+  // below still refreshes them on every visit.
+  const queryClient = useOptionalQueryClient();
+  const [cached] = useState(() => {
+    const inventory = queryClient?.getQueryData(INVENTORY_KEY);
+    const salesData = queryClient?.getQueryData(SALES_KEY);
+    return Array.isArray(inventory) && Array.isArray(salesData) ? { inventory, salesData } : null;
+  });
+  const [items, setItems] = useState(() => (cached ? exemptOnly(cached.inventory) : []));
+  const [sales, setSales] = useState(cached?.salesData ?? []);
+  const [isLoading, setIsLoading] = useState(!cached);
   const [loadFailed, setLoadFailed] = useState(false);
+  const hasLoaded = useRef(Boolean(cached));
+
+  // A hover prefetch that lands before this page's own first load shows at once.
+  useCacheArrivals(queryClient, [INVENTORY_KEY, SALES_KEY], ([inventory, salesData]) => {
+    if (hasLoaded.current || !Array.isArray(inventory) || !Array.isArray(salesData)) return;
+    hasLoaded.current = true;
+    setItems(exemptOnly(inventory));
+    setSales(salesData);
+    setLoadFailed(false);
+    setIsLoading(false);
+  });
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('purchases');
   const [filterYear, setFilterYear] = useState('all');
@@ -76,16 +102,18 @@ const TaxExempt = () => {
       ]);
       if (invRes.ok) {
         const data = await invRes.json();
-        setItems(data.filter(i => i.tax_exempt === true));
+        setItems(exemptOnly(data));
       }
       if (salesRes.ok) {
         const salesData = await salesRes.json();
         setSales(salesData);
       }
-      setLoadFailed(!invRes.ok || !salesRes.ok);
+      if (invRes.ok && salesRes.ok) hasLoaded.current = true;
+      // A refresh that fails keeps the cached copy that's already on screen.
+      setLoadFailed(!hasLoaded.current && (!invRes.ok || !salesRes.ok));
     } catch (err) {
       console.error(err);
-      setLoadFailed(true);
+      setLoadFailed(!hasLoaded.current);
     } finally {
       setIsLoading(false);
     }

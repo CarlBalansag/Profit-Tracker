@@ -1,30 +1,18 @@
-import React, { lazy, Suspense } from 'react';
+import React, { Suspense, useEffect, useRef } from 'react';
+import usePageStagger from './hooks/usePageStagger';
+import { prefetchAllPageCode, prefetchSharedData } from './data/pagePrefetch';
+import { useOptionalQueryClient } from './hooks/usePageCache';
 import { Toaster } from 'sonner';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import Shell from './components/Layout/Shell';
 
-// Pages
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const AddTransaction = lazy(() => import('./pages/AddTransaction'));
-const Inventory = lazy(() => import('./pages/Inventory'));
-const Expenses = lazy(() => import('./pages/Expenses'));
-const Receipts = lazy(() => import('./pages/Receipts'));
-const Invoices = lazy(() => import('./pages/Invoices'));
-const Transactions = lazy(() => import('./pages/Transactions'));
-const Analytics = lazy(() => import('./pages/Analytics'));
-const CashFlow = lazy(() => import('./pages/CashFlow'));
-const CreditCard = lazy(() => import('./pages/CreditCard'));
-const Settings = lazy(() => import('./pages/Settings'));
-const AddSale = lazy(() => import('./pages/AddSale'));
-const TaxExempt = lazy(() => import('./pages/TaxExempt'));
-const Guide = lazy(() => import('./pages/Guide'));
-const Login = lazy(() => import('./pages/Login'));
-const Goals = lazy(() => import('./pages/Goals'));
-const Calendar = lazy(() => import('./pages/Calendar'));
-const Cashout = lazy(() => import('./pages/Cashout'));
-const Shipping = lazy(() => import('./pages/Shipping'));
-const Statuses = lazy(() => import('./pages/Statuses'));
-const ScheduleC = lazy(() => import('./pages/ScheduleC'));
+// Pages (lazy, and preloadable by hover/idle prefetch)
+import {
+  Dashboard, AddTransaction, Inventory, Expenses, Receipts, Invoices, Transactions, Analytics,
+  CashFlow, CreditCard, Settings, AddSale, TaxExempt, Guide, Login, Goals, Calendar, Cashout,
+  Shipping, Statuses, ScheduleC,
+} from './pages/lazyPages';
 import { AuthProvider } from './context/AuthContext';
 import { TutorialProvider } from './context/TutorialContext';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
@@ -60,8 +48,67 @@ function App() {
           <Route path="*" element={
             <ProtectedRoute>
               <Shell>
-            <Suspense fallback={<PageLoader />}>
-            <Routes>
+              <AppPages />
+          </Shell>
+            </ProtectedRoute>
+        } />
+      </Routes>
+    </Router>
+      </TutorialProvider>
+    </AuthProvider>
+  );
+}
+
+// Page change: the old and new pages crossfade over each other (the old one
+// drifting up a little, the new one rising in from a little below), so there's
+// never an empty frame between them. Only the content area moves; the
+// sidebar, header and bottom nav stay put. Keyed on the pathname, so a
+// query-string change on the same page doesn't replay it. With reduced motion
+// it's the same crossfade with no movement.
+const PAGE_EASE = [0.2, 0.8, 0.2, 1];
+const MotionDiv = motion.div;
+
+// Each page's sections and cards fade up one after another (desktop only;
+// see hooks/usePageStagger.js). Mounted once per page, inside its crossfade.
+function StaggerIn({ children }) {
+  const ref = useRef(null);
+  usePageStagger(ref);
+  return <div ref={ref} className="h-full min-h-0">{children}</div>;
+}
+
+function AppPages() {
+  const location = useLocation();
+  const reduceMotion = useReducedMotion();
+  const shift = reduceMotion ? 0 : 1;
+
+  // Once the first page is up and the browser is idle, load every other
+  // page's code, then (a little later, so the first page's own data goes
+  // first) the cheap data several pages share. Heavy data waits for hover.
+  const queryClient = useOptionalQueryClient();
+  useEffect(() => {
+    const idle = window.requestIdleCallback ?? ((fn) => setTimeout(fn, 1500));
+    const cancel = window.cancelIdleCallback ?? clearTimeout;
+    let dataTimer;
+    const handle = idle(() => {
+      prefetchAllPageCode();
+      dataTimer = setTimeout(() => prefetchSharedData(queryClient), 2000);
+    }, { timeout: 5000 });
+    return () => { cancel(handle); clearTimeout(dataTimer); };
+  }, [queryClient]);
+
+  return (
+    <div className="relative h-full min-h-0">
+    <AnimatePresence initial={false}>
+      <MotionDiv
+        key={location.pathname}
+        className="absolute inset-0 min-h-0"
+        initial={{ opacity: 0, y: 10 * shift, zIndex: 1 }}
+        animate={{ opacity: 1, y: 0, zIndex: 1, transition: { duration: reduceMotion ? 0.2 : 0.3, ease: PAGE_EASE } }}
+        exit={{ opacity: 0, y: -6 * shift, zIndex: 0, transition: { duration: 0.2, ease: 'easeOut' } }}
+      >
+        <StaggerIn>
+        <Suspense fallback={<PageLoader />}>
+          <Routes location={location}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/add-transaction" element={<AddTransaction />} />
           <Route path="/add-sale" element={<AddSale />} />
@@ -83,15 +130,12 @@ function App() {
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/cashout" element={<Cashout />} />
           <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-            </Suspense>
-          </Shell>
-            </ProtectedRoute>
-        } />
-      </Routes>
-    </Router>
-      </TutorialProvider>
-    </AuthProvider>
+          </Routes>
+        </Suspense>
+        </StaggerIn>
+      </MotionDiv>
+    </AnimatePresence>
+    </div>
   );
 }
 

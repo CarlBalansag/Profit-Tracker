@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import AnimatedLogo from '../UI/AnimatedLogo';
 
 const WARMUP_WINDOW_MS = 75_000;
 
@@ -50,8 +51,8 @@ export default function ServerWakeUpScreen({ startedAt, attempt = 1, failed = fa
   return (
     <main className="min-h-screen bg-[#07070a] text-white flex items-center justify-center px-5">
       <section className="w-full max-w-md text-center rounded-2xl border border-white/10 bg-white/[0.03] p-8 shadow-2xl shadow-black/30">
-        <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-indigo-400/30 bg-indigo-500/15">
-          <div className={`h-7 w-7 rounded-full border-[3px] border-indigo-200/20 border-t-indigo-300 ${failed ? '' : 'animate-spin'}`} />
+        <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center">
+          <AnimatedLogo size={52} label={null} />
         </div>
 
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-indigo-300">Profit Tracker</p>
