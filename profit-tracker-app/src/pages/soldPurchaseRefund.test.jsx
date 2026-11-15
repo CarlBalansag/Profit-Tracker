@@ -63,13 +63,16 @@ describe('Transactions: yellow REFUND box', () => {
     expect(pills(buy)).toEqual(['BUY', 'REFUND']);
   });
 
-  it('a fully sold purchase with a store refund: only its SALE row, which stays SALE', () => {
+  it('a fully sold purchase with a store refund keeps its BUY row with REFUND; its SALE row stays SALE', () => {
     mocks.inventory = [purchase()];
     render(<MemoryRouter><Transactions /></MemoryRouter>);
     const rows = desktopRows();
-    expect(rows).toHaveLength(1);
-    expect(pills(rows[0])).toEqual(['SALE']);
-    expect(screen.queryByText('REFUND')).toBeNull();
+    expect(rows).toHaveLength(2);
+    const buy = rows.find((row) => pills(row).includes('BUY'));
+    const sale = rows.find((row) => pills(row).includes('SALE'));
+    expect(pills(buy)).toEqual(['BUY', 'REFUND']);
+    expect(within(buy).getByText('10')).toBeInTheDocument(); // every unit bought
+    expect(pills(sale)).toEqual(['SALE']);
   });
 
   it('a refund to the buyer: the SALE row says REFUND, the BUY row stays BUY', () => {

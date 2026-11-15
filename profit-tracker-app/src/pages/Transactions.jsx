@@ -398,20 +398,34 @@ const Transactions = () => {
           payout_date: editData.payout_date || null,
         });
       } else {
-        const soldUnits = editData.rawQtyPurchased - editData.rawQtyOnHand;
+        // The BUY row's quantity is every unit bought, so it's saved as is; the
+        // units already out of stock (sold, or sent back) must still fit in it.
+        const outOfStock = editData.rawQtyPurchased - editData.rawQtyOnHand;
+        if (quantity < outOfStock) {
+          toast.error(`Quantity can't be less than ${outOfStock}: that many are already sold or sent back.`);
+          setSaving(false);
+          return;
+        }
+        const onHandAfter = quantity - outOfStock;
         const parsedSale = parseFloat(editData.sale);
         const hasSalePrice = !isNaN(parsedSale) && parsedSale > 0;
+        if (hasSalePrice && onHandAfter < 1) {
+          toast.error('Nothing left on hand to sell from this purchase.');
+          setSaving(false);
+          return;
+        }
         // Auto-set status to SOLD if a sale price or platform was provided
         const resolvedStatus = (hasSalePrice || editData.platformId) ? 'SOLD' : editData.status;
         Object.assign(inventory, {
           product_name: editData.product,
           unit_purchase_cost: parseFloat(editData.cost) || 0,
-          qty_purchased: soldUnits + quantity,
+          qty_purchased: quantity,
           status: resolvedStatus,
         });
         if (hasSalePrice) {
+          // A sale price on the BUY row sells what's left on hand.
           body.newSale = {
-            quantity,
+            quantity: onHandAfter,
             unit_price: parsedSale,
             platform_id: editData.platformId || null,
             status: 'SOLD',
@@ -451,13 +465,12 @@ const Transactions = () => {
     const unitTax = keptUnits > 0 ? inv.sales_tax / keptUnits : 0;
     const unitInboundShipping = keptUnits > 0 ? inv.shipping_cost_inbound / keptUnits : 0;
 
-    // Always show a purchase row if there is unsold stock on hand, OR if the
-    // item has no sales at all (qty_on_hand may be 0 due to a data issue — we
-    // never want to silently hide a transaction the user recorded).
-    if (inv.qty_on_hand > 0 || !inv.sales?.length) {
-      // A purchase fully sent back to the store shows 0 units (and $0 cost).
-      const displayQty = inv.qty_on_hand > 0 ? inv.qty_on_hand : keptUnits;
-      const unsoldCost = allocatedCost(inv, displayQty);
+    // Every purchase keeps its BUY row, sold or not: it shows the purchase as
+    // it happened (every unit bought, and what it cost less store refunds).
+    // Each sale adds its own SALE row below it.
+    {
+      const displayQty = Number(inv.qty_purchased) || 0;
+      const unsoldCost = allocatedCost(inv, keptUnits);
       const effectiveRate = getEffectiveCashbackRate(inv);
       rows.push({
         id: inv.id + '_unsold',
@@ -479,12 +492,12 @@ const Transactions = () => {
         rawSale: null,
         sale: null,
         profit: null,
-        cashback: allocatedCashback(inv, displayQty, effectiveRate),
+        cashback: allocatedCashback(inv, keptUnits, effectiveRate),
         payment: inv.payment_method?.name || '',
         paymentMethodId: inv.payment_method_id || '',
         status: inv.status || 'PURCHASED',
-        tax: unitTax * displayQty,
-        shipping: unitInboundShipping * displayQty,
+        tax: Number(inv.sales_tax) || 0,
+        shipping: Number(inv.shipping_cost_inbound) || 0,
         category: inv.category || null,
         tracking_number: inv.tracking_number || null,
         refundedAmount: Number(inv.refunded_amount) || 0,
@@ -601,9 +614,13 @@ const Transactions = () => {
   const phoneRows = usePhoneList(filteredRows, { query: '(max-width: 767px)' });
 
   // ─── Summary stats derived from filteredRows (respond to all active filters) ────
-  const totalCostSum    = filteredRows.reduce((s, r) => s + (r.cost || 0), 0);
+  // A BUY row carries its whole purchase, so cost counts BUY rows only, never
+  // their SALE rows too. With only sales shown (Sale, Cashout or Marketplace),
+  // it's the cost of the units those sales took.
+  const buyRowsShown    = filteredRows.filter(r => !r.isSale);
+  const totalCostSum    = (buyRowsShown.length ? buyRowsShown : filteredRows).reduce((s, r) => s + (r.cost || 0), 0);
   const totalProfitSum  = filteredRows.filter(r => r.isSale).reduce((s, r) => s + (r.profit || 0), 0);
-  const unsoldCount     = filteredRows.filter(r => !r.isSale).reduce((s, r) => s + r.qty, 0);
+  const unsoldCount     = buyRowsShown.reduce((s, r) => s + Math.max(0, Number(r.rawQtyOnHand) || 0), 0);
   const soldCount       = filteredRows.reduce((s, r) => s + (r.soldUnits || 0), 0);
   // One purchase can show as several rows (units left on hand plus each sale).
   const purchaseCount   = new Set(filteredRows.map(r => r.rawId)).size;
