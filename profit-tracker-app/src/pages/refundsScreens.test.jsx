@@ -46,14 +46,14 @@ afterEach(cleanup);
 describe('Transactions: refunded rows', () => {
   it('marks the purchase and the sale as refunded and uses the net numbers', () => {
     render(<MemoryRouter><Transactions /></MemoryRouter>);
-    expect(screen.getAllByText('REFUNDED $120.00 · 1 sent back · 3 kept').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('REFUNDED $150.00 · 1 returned').length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle('Refunded by the store: $120.00 · 1 sent back').length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle('Refunded to the buyer: $150.00 · 1 returned').length).toBeGreaterThan(0);
   });
 
   it('shows no badge on a transaction without refunds', () => {
     mocks.inventory = [{ ...purchase(), refunded_amount: 0, refunded_qty: 0, sales: [{ ...purchase().sales[0], refunded_amount: 0, refunded_qty: 0 }] }];
     render(<MemoryRouter><Transactions /></MemoryRouter>);
-    expect(screen.queryByText(/REFUNDED/)).toBeNull();
+    expect(screen.queryByText('REFUND')).toBeNull();
   });
 });
 

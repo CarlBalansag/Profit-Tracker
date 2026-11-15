@@ -117,20 +117,33 @@ const DEFAULT_COLS = Object.fromEntries(ALL_COLUMNS.map(c => [c.key, !OPTIONAL_C
 const COLS_MIGRATED_KEY = 'txn_visible_cols_v2';
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-// Money back on this purchase (from the store) or sale (to the buyer).
-// The row's cost/profit already reflect it; the badge says why they changed.
-function RefundedBadge({ row }) {
-  const back = row.refundedUnits > 0 ? ` · ${row.refundedUnits} ${row.isSale ? 'returned' : 'sent back'}` : '';
-  const kept = !row.isSale && row.rawQtyOnHand > 0 ? ` · ${row.rawQtyOnHand} kept` : '';
-  const units = `${back}${kept}`;
-  return (
-    <span
-      title={row.isSale ? 'Refunded to the buyer' : 'Refunded by the store'}
-      className="shrink-0 px-1.5 py-0.5 rounded text-[11px] font-bold tracking-wider border bg-amber-500/10 text-amber-400 border-amber-500/25 whitespace-nowrap"
-    >
-      REFUNDED ${formatMoney(row.refundedAmount)}{units}
-    </span>
-  );
+// Money back on this row: to the buyer on a sale, or from the store on a
+// purchase. A fully sold purchase has no BUY row, so its store refund shows
+// on its SALE rows instead. The row's cost/profit already reflect it.
+const refundLines = (row) => {
+  const lines = [];
+  if (row.refundedAmount > 0 || row.refundedUnits > 0) {
+    const units = row.refundedUnits > 0 ? ` · ${row.refundedUnits} ${row.isSale ? 'returned' : 'sent back'}` : '';
+    lines.push(`${row.isSale ? 'Refunded to the buyer' : 'Refunded by the store'}: $${formatMoney(row.refundedAmount)}${units}`);
+  }
+  if (row.storeRefundAmount > 0 || row.storeRefundUnits > 0) {
+    const units = row.storeRefundUnits > 0 ? ` · ${row.storeRefundUnits} sent back` : '';
+    lines.push(`Refunded by the store on the purchase: $${formatMoney(row.storeRefundAmount)}${units}`);
+  }
+  return lines;
+};
+
+const PILL = 'shrink-0 px-1.5 py-0.5 rounded text-[11px] font-bold tracking-wider border';
+
+// SALE or BUY, or a yellow REFUND when money came back on this row.
+function TypePill({ row }) {
+  const refunds = refundLines(row);
+  if (refunds.length) {
+    return <span title={refunds.join('\n')} className={`${PILL} bg-amber-500/10 text-amber-400 border-amber-500/25`}>REFUND</span>;
+  }
+  return row.isSale
+    ? <span className={`${PILL} bg-green-500/10 text-green-400 border-green-500/20`}>SALE</span>
+    : <span className={`${PILL} bg-blue-500/10 text-blue-400 border-blue-500/20`}>BUY</span>;
 }
 
 // A cancelled, voided or returned sale whose units are in stock again. Their
@@ -446,16 +459,17 @@ const Transactions = () => {
     // Always show a purchase row if there is unsold stock on hand, OR if the
     // item has no sales at all (qty_on_hand may be 0 due to a data issue — we
     // never want to silently hide a transaction the user recorded).
-    // A store refund on a purchase belongs on its BUY row, so a fully sold
-    // purchase with one keeps a BUY row too. That row only carries the refund:
-    // 0 units and no cost, cashback, tax or shipping (those are on its SALE
-    // rows already), and it can't be edited or deleted from here.
-    const storeRefunded = Number(inv.refunded_amount) > 0 || Number(inv.refunded_qty) > 0;
-    const refundOnly = !(inv.qty_on_hand > 0) && inv.sales?.length > 0 && storeRefunded;
-    if (inv.qty_on_hand > 0 || !inv.sales?.length || refundOnly) {
+    const hasBuyRow = inv.qty_on_hand > 0 || !inv.sales?.length;
+    // With no BUY row (every unit sold), the purchase's store refund is shown
+    // on its SALE rows instead, so it never goes missing.
+    const storeRefundOnSales = hasBuyRow ? {} : {
+      storeRefundAmount: Number(inv.refunded_amount) || 0,
+      storeRefundUnits: Number(inv.refunded_qty) || 0,
+    };
+    if (hasBuyRow) {
       // A purchase fully sent back to the store shows 0 units (and $0 cost).
-      const displayQty = refundOnly ? 0 : inv.qty_on_hand > 0 ? inv.qty_on_hand : keptUnits;
-      const unsoldCost = refundOnly ? 0 : allocatedCost(inv, displayQty);
+      const displayQty = inv.qty_on_hand > 0 ? inv.qty_on_hand : keptUnits;
+      const unsoldCost = allocatedCost(inv, displayQty);
       const effectiveRate = getEffectiveCashbackRate(inv);
       rows.push({
         id: inv.id + '_unsold',
@@ -477,13 +491,12 @@ const Transactions = () => {
         rawSale: null,
         sale: null,
         profit: null,
-        cashback: refundOnly ? 0 : allocatedCashback(inv, displayQty, effectiveRate),
+        cashback: allocatedCashback(inv, displayQty, effectiveRate),
         payment: inv.payment_method?.name || '',
         paymentMethodId: inv.payment_method_id || '',
         status: inv.status || 'PURCHASED',
         tax: unitTax * displayQty,
         shipping: unitInboundShipping * displayQty,
-        refundOnly,
         category: inv.category || null,
         tracking_number: inv.tracking_number || null,
         refundedAmount: Number(inv.refunded_amount) || 0,
@@ -536,6 +549,7 @@ const Transactions = () => {
           rawCommission: sale.commission_fee,
           refundedAmount: Number(sale.refunded_amount) || 0,
           refundedUnits: Number(sale.refunded_qty) || 0,
+          ...storeRefundOnSales,
           rawSaleDate: sale.sale_date,
           rawPayoutDate: sale.payout_date,
         });
@@ -600,8 +614,6 @@ const Transactions = () => {
   const phoneRows = usePhoneList(filteredRows, { query: '(max-width: 767px)' });
 
   // ─── Summary stats derived from filteredRows (respond to all active filters) ────
-  // A BUY row that only shows a store refund can't be selected for bulk delete.
-  const selectableRows  = filteredRows.filter(r => !r.refundOnly);
   const totalCostSum    = filteredRows.reduce((s, r) => s + (r.cost || 0), 0);
   const totalProfitSum  = filteredRows.filter(r => r.isSale).reduce((s, r) => s + (r.profit || 0), 0);
   const unsoldCount     = filteredRows.filter(r => !r.isSale).reduce((s, r) => s + r.qty, 0);
@@ -961,12 +973,8 @@ const Transactions = () => {
             {/* Top row: type badge + product + expand */}
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
-                {row.isSale
-                  ? <span className="shrink-0 px-1.5 py-0.5 rounded text-[11px] font-bold tracking-wider border bg-green-500/10 text-green-400 border-green-500/20">SALE</span>
-                  : <span className="shrink-0 px-1.5 py-0.5 rounded text-[11px] font-bold tracking-wider border bg-blue-500/10 text-blue-400 border-blue-500/20">BUY</span>
-                }
+                <TypePill row={row} />
                 <p className="text-sm font-semibold text-gray-100 truncate">{row.product}</p>
-                {row.refundedAmount > 0 || row.refundedUnits > 0 ? <RefundedBadge row={row} /> : null}
                 {row.restoredUnits > 0 ? <BackInStockBadge units={row.restoredUnits} /> : null}
                 <ProductNoteButton productName={row.product} />
               </div>
@@ -1023,7 +1031,7 @@ const Transactions = () => {
             </div>
 
             {/* Actions */}
-            {!row.refundOnly && <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => startEdit(row)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/10 transition-colors"
@@ -1038,7 +1046,7 @@ const Transactions = () => {
                 <Trash2 className="w-3 h-3" />
                 Delete
               </button>
-            </div>}
+            </div>
           </div>
         ))}
         <ShowMoreButton hiddenCount={phoneRows.hiddenCount} onClick={phoneRows.showMore} />
@@ -1081,10 +1089,10 @@ const Transactions = () => {
                   type="checkbox"
                   aria-label="Select all rows"
                   className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 accent-indigo-500"
-                  checked={selectableRows.length > 0 && selectedIds.length === selectableRows.length}
+                  checked={filteredRows.length > 0 && selectedIds.length === filteredRows.length}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      setSelectedIds(selectableRows.map(r => r.id));
+                      setSelectedIds(filteredRows.map(r => r.id));
                     } else {
                       setSelectedIds([]);
                     }
@@ -1135,7 +1143,7 @@ const Transactions = () => {
                   }`}
                 >
                   <td className="px-4 py-3.5 sticky left-0 z-10 bg-[#0f1115]">
-                    {!row.refundOnly && <input
+                    <input
                       type="checkbox"
                       aria-label={`Select ${row.product}`}
                       className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 accent-indigo-500"
@@ -1147,7 +1155,7 @@ const Transactions = () => {
                           setSelectedIds(prev => prev.filter(id => id !== row.id));
                         }
                       }}
-                    />}
+                    />
                   </td>
                   <td className="px-2 py-3.5 text-gray-600">
                     <button
@@ -1160,10 +1168,7 @@ const Transactions = () => {
                     </button>
                   </td>
                   <td className="px-2 py-3.5">
-                    {row.isSale
-                      ? <span className="px-1.5 py-0.5 rounded text-[11px] font-bold tracking-wider border bg-green-500/10 text-green-400 border-green-500/20">SALE</span>
-                      : <span className="px-1.5 py-0.5 rounded text-[11px] font-bold tracking-wider border bg-blue-500/10 text-blue-400 border-blue-500/20">BUY</span>
-                    }
+                    <TypePill row={row} />
                   </td>
 
                   {/* Dynamic Columns */}
@@ -1186,7 +1191,6 @@ const Transactions = () => {
                           ) : (
                             <div className="flex items-center gap-1">
                               <p className="text-sm font-semibold text-gray-100 leading-tight truncate" title={row.product}>{row.product}</p>
-                              {row.refundedAmount > 0 || row.refundedUnits > 0 ? <RefundedBadge row={row} /> : null}
                               {row.restoredUnits > 0 ? <BackInStockBadge units={row.restoredUnits} /> : null}
                               <ProductNoteButton productName={row.product} />
                             </div>
@@ -1382,7 +1386,7 @@ const Transactions = () => {
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                    ) : row.refundOnly ? null : (
+                    ) : (
                       <div className="flex items-center justify-end gap-1.5 opacity-50 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                         <button
                           onClick={() => startEdit(row)}
