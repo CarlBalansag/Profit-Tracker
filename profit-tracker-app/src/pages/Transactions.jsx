@@ -446,10 +446,16 @@ const Transactions = () => {
     // Always show a purchase row if there is unsold stock on hand, OR if the
     // item has no sales at all (qty_on_hand may be 0 due to a data issue — we
     // never want to silently hide a transaction the user recorded).
-    if (inv.qty_on_hand > 0 || !inv.sales?.length) {
+    // A store refund on a purchase belongs on its BUY row, so a fully sold
+    // purchase with one keeps a BUY row too. That row only carries the refund:
+    // 0 units and no cost, cashback, tax or shipping (those are on its SALE
+    // rows already), and it can't be edited or deleted from here.
+    const storeRefunded = Number(inv.refunded_amount) > 0 || Number(inv.refunded_qty) > 0;
+    const refundOnly = !(inv.qty_on_hand > 0) && inv.sales?.length > 0 && storeRefunded;
+    if (inv.qty_on_hand > 0 || !inv.sales?.length || refundOnly) {
       // A purchase fully sent back to the store shows 0 units (and $0 cost).
-      const displayQty = inv.qty_on_hand > 0 ? inv.qty_on_hand : keptUnits;
-      const unsoldCost = allocatedCost(inv, displayQty);
+      const displayQty = refundOnly ? 0 : inv.qty_on_hand > 0 ? inv.qty_on_hand : keptUnits;
+      const unsoldCost = refundOnly ? 0 : allocatedCost(inv, displayQty);
       const effectiveRate = getEffectiveCashbackRate(inv);
       rows.push({
         id: inv.id + '_unsold',
@@ -471,12 +477,13 @@ const Transactions = () => {
         rawSale: null,
         sale: null,
         profit: null,
-        cashback: allocatedCashback(inv, displayQty, effectiveRate),
+        cashback: refundOnly ? 0 : allocatedCashback(inv, displayQty, effectiveRate),
         payment: inv.payment_method?.name || '',
         paymentMethodId: inv.payment_method_id || '',
         status: inv.status || 'PURCHASED',
         tax: unitTax * displayQty,
         shipping: unitInboundShipping * displayQty,
+        refundOnly,
         category: inv.category || null,
         tracking_number: inv.tracking_number || null,
         refundedAmount: Number(inv.refunded_amount) || 0,
@@ -593,6 +600,8 @@ const Transactions = () => {
   const phoneRows = usePhoneList(filteredRows, { query: '(max-width: 767px)' });
 
   // ─── Summary stats derived from filteredRows (respond to all active filters) ────
+  // A BUY row that only shows a store refund can't be selected for bulk delete.
+  const selectableRows  = filteredRows.filter(r => !r.refundOnly);
   const totalCostSum    = filteredRows.reduce((s, r) => s + (r.cost || 0), 0);
   const totalProfitSum  = filteredRows.filter(r => r.isSale).reduce((s, r) => s + (r.profit || 0), 0);
   const unsoldCount     = filteredRows.filter(r => !r.isSale).reduce((s, r) => s + r.qty, 0);
@@ -1014,7 +1023,7 @@ const Transactions = () => {
             </div>
 
             {/* Actions */}
-            <div className="flex items-center gap-2 pt-1">
+            {!row.refundOnly && <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => startEdit(row)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/10 transition-colors"
@@ -1029,7 +1038,7 @@ const Transactions = () => {
                 <Trash2 className="w-3 h-3" />
                 Delete
               </button>
-            </div>
+            </div>}
           </div>
         ))}
         <ShowMoreButton hiddenCount={phoneRows.hiddenCount} onClick={phoneRows.showMore} />
@@ -1072,10 +1081,10 @@ const Transactions = () => {
                   type="checkbox"
                   aria-label="Select all rows"
                   className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 accent-indigo-500"
-                  checked={filteredRows.length > 0 && selectedIds.length === filteredRows.length}
+                  checked={selectableRows.length > 0 && selectedIds.length === selectableRows.length}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      setSelectedIds(filteredRows.map(r => r.id));
+                      setSelectedIds(selectableRows.map(r => r.id));
                     } else {
                       setSelectedIds([]);
                     }
@@ -1126,7 +1135,7 @@ const Transactions = () => {
                   }`}
                 >
                   <td className="px-4 py-3.5 sticky left-0 z-10 bg-[#0f1115]">
-                    <input
+                    {!row.refundOnly && <input
                       type="checkbox"
                       aria-label={`Select ${row.product}`}
                       className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 accent-indigo-500"
@@ -1138,7 +1147,7 @@ const Transactions = () => {
                           setSelectedIds(prev => prev.filter(id => id !== row.id));
                         }
                       }}
-                    />
+                    />}
                   </td>
                   <td className="px-2 py-3.5 text-gray-600">
                     <button
@@ -1373,7 +1382,7 @@ const Transactions = () => {
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                    ) : (
+                    ) : row.refundOnly ? null : (
                       <div className="flex items-center justify-end gap-1.5 opacity-50 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                         <button
                           onClick={() => startEdit(row)}
