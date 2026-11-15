@@ -37,8 +37,9 @@ const required = (value, label) => {
  *
  * Cashouts we can't commit to yet (Points4Days) skip steps 1 and 2: this only
  * writes the purchase and sale, and the user commits and sends tracking on the
- * cashout's own website. A tracking number is optional then; when given, it's
- * saved on the sale. No commitment row is made, since nothing was committed here.
+ * cashout's own website. A tracking number is still required, as it is for EB:
+ * Log Purchase is only for items that have shipped. It's saved on the sale only,
+ * never sent anywhere. No commitment row is made, since nothing was committed here.
  *
  * The sale goes to the connection's linked cashout group, or to `platformId`
  * when the form picks one (a connection with no group linked yet).
@@ -69,7 +70,7 @@ async function logPurchase(userId, {
   const codes = Array.isArray(trackingCodes)
     ? trackingCodes.map((code) => String(code || '').trim()).filter(Boolean)
     : [];
-  if (!recordOnly && codes.length === 0) {
+  if (codes.length === 0) {
     throw Object.assign(new Error('At least one tracking number is required.'), { status: 400 });
   }
 

@@ -984,21 +984,28 @@ describe('Cashout Page', () => {
       fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-1' } });
     };
 
-    it('saves without a tracking number, says it does not commit, and sells to the matching group', async () => {
+    it('needs a tracking number, says it does not commit, and sells to the matching group', async () => {
       openForm();
       expect(screen.getByText(/doesn't commit or send tracking to Points4Days/)).toBeInTheDocument();
       expect(screen.getByLabelText('Sold to')).toHaveValue('group-p4d');
-      expect(screen.getByLabelText('Tracking number (optional)')).toBeInTheDocument();
       expect(screen.queryByLabelText(/Insured value/)).not.toBeInTheDocument();
 
+      // No tracking number: the form stops before saving anything.
       await act(async () => {
         fireEvent.click(screen.getAllByRole('button', { name: 'Log Purchase' }).at(-1)); // the form's own button
+      });
+      expect(screen.getByText(/A tracking number is required/)).toBeInTheDocument();
+      expect(mockMutations.logPurchase.mutateAsync).not.toHaveBeenCalled();
+
+      fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: ' 1Z999AA10123456784 ' } });
+      await act(async () => {
+        fireEvent.click(screen.getAllByRole('button', { name: 'Log Purchase' }).at(-1));
       });
 
       expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
         connectionId: 'conn-p4d',
         deal_id: 'p1',
-        tracking_codes: [],
+        tracking_codes: ['1Z999AA10123456784'],
         insured_value: undefined,
         unit_payout: 1222,
         platform_id: 'group-p4d',

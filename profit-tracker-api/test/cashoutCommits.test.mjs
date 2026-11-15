@@ -223,13 +223,26 @@ describe('cashout commits and tracking', () => {
         return conn;
       }
 
-      it('saves only the purchase and sale, with no tracking number and no call to Points4Days', async () => {
+      it('refuses to log a Points4Days purchase without a tracking number, saving nothing', async () => {
+        const conn = seedP4d();
+        await expect(logPurchase(harness.ids.user, {
+          ...basePurchaseFields(), connectionId: conn.id, trackingCodes: [], platformId: 'p4d-group',
+        })).rejects.toThrow('At least one tracking number is required');
+        await expect(logPurchase(harness.ids.user, {
+          ...basePurchaseFields(), connectionId: conn.id, trackingCodes: ['   '], platformId: 'p4d-group',
+        })).rejects.toThrow('At least one tracking number is required');
+        expect(harness.db.inventory).toHaveLength(1); // fixture only
+        expect(harness.db.sales).toHaveLength(1); // fixture only
+        expect(harness.db.cashoutCommitment).toHaveLength(0);
+      });
+
+      it('saves the purchase and sale with the tracking number, and never calls Points4Days', async () => {
         const conn = seedP4d();
         const fetchSpy = vi.fn();
         vi.stubGlobal('fetch', fetchSpy);
 
         const result = await logPurchase(harness.ids.user, {
-          ...basePurchaseFields(), connectionId: conn.id, trackingCodes: [], platformId: 'p4d-group', unitPayout: 1222,
+          ...basePurchaseFields(), connectionId: conn.id, trackingCodes: [' 1Z999AA10123456784 '], platformId: 'p4d-group', unitPayout: 1222,
         });
 
         expect(fetchSpy).not.toHaveBeenCalled();
@@ -238,25 +251,16 @@ describe('cashout commits and tracking', () => {
         expect(result.trackingSubmitted).toBe(false);
         expect(result.sale.platform_id).toBe('p4d-group');
         expect(result.sale.unit_price).toBe(1222);
-        expect(result.sale.tracking_number).toBeNull();
-        expect(result.sale.status).toBe('SOLD');
+        expect(result.sale.tracking_number).toBe('1Z999AA10123456784');
+        expect(result.sale.status).toBe('SHIPPED_OUT');
         expect(result.inventory.qty_purchased).toBe(2);
         expect(harness.db.cashoutCommitment).toHaveLength(0);
         vi.unstubAllGlobals();
       });
 
-      it('keeps a tracking number on the sale when one is given', async () => {
-        const conn = seedP4d();
-        const result = await logPurchase(harness.ids.user, {
-          ...basePurchaseFields(), connectionId: conn.id, trackingCodes: [' 1Z999AA10123456784 '], platformId: 'p4d-group',
-        });
-        expect(result.sale.tracking_number).toBe('1Z999AA10123456784');
-        expect(result.sale.status).toBe('SHIPPED_OUT');
-      });
-
       it('still needs a cashout group, store and payment method', async () => {
         const conn = seedP4d();
-        await expect(logPurchase(harness.ids.user, { ...basePurchaseFields(), connectionId: conn.id, trackingCodes: [] }))
+        await expect(logPurchase(harness.ids.user, { ...basePurchaseFields(), connectionId: conn.id, trackingCodes: ['1Z999AA10123456784'] }))
           .rejects.toThrow('Pick which cashout group');
         await expect(logPurchase(harness.ids.user, { ...basePurchaseFields(), connectionId: conn.id, platformId: 'p4d-group', vendorId: '' }))
           .rejects.toThrow('Store is required');

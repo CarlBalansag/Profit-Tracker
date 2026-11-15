@@ -1116,7 +1116,7 @@ function LogPurchaseModal({ product, onClose }) {
     if (!vendorId) return setError('Pick the store you bought it from.');
     if (!paymentMethodId) return setError('Pick the card or account you paid with.');
     if (needsSaleTo && !saleToId) return setError('Pick which cashout group you sold it to.');
-    if (!recordOnly && !trackingNumber.trim()) return setError('A tracking number is required -- this is for an item that has already shipped.');
+    if (!trackingNumber.trim()) return setError('A tracking number is required -- this is for an item that has already shipped.');
 
     try {
       const result = await logPurchase.mutateAsync({
@@ -1188,7 +1188,7 @@ function LogPurchaseModal({ product, onClose }) {
 
         {recordOnly ? (
           <p className="text-[11px] text-[var(--dp-text-secondary)] bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2">
-            This saves the purchase and its sale to {deal.connectionName} at ${formatMoney(deal.payout)} each, in Profit Tracker only. It doesn't commit or send tracking to {deal.connectionName} -- do that on their website.
+            This saves the purchase and its sale to {deal.connectionName} at ${formatMoney(deal.payout)} each, in Profit Tracker only, with your tracking number on the sale. It doesn't commit or send tracking to {deal.connectionName} -- do that on their website. Only use this once you've actually shipped the item.
           </p>
         ) : (
           <p className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
@@ -1264,7 +1264,7 @@ function LogPurchaseModal({ product, onClose }) {
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="lp-tracking" className="text-[11px] text-[var(--dp-text-label)]">Tracking number{recordOnly ? ' (optional)' : ''}</label>
+          <label htmlFor="lp-tracking" className="text-[11px] text-[var(--dp-text-label)]">Tracking number</label>
           <input id="lp-tracking" type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
             placeholder="1Z999AA10123456784"
             className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none" />
