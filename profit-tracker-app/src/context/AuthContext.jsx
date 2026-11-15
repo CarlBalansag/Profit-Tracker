@@ -23,14 +23,20 @@ const writeCacheOwner = (id) => {
 
 // Pages a signed-out visitor can use: the landing page and the sign-in page.
 const PUBLIC_PATHS = new Set(['/', '/login']);
+// The landing page's own address, which anyone (signed in or not) can open
+// without waiting on the server.
+const ALWAYS_PUBLIC_PATHS = new Set(['/welcome']);
 
 // A first-time or signed-out visitor (no saved owner: signing in saves one,
 // signing out or a 401 clears it) who opens a public page sees it right away
 // instead of waiting on the "Waking up the server" screen for the sign-in
 // check. That check keeps running in the background. Returning users still
 // get the wake-up screen, so they never see the landing page flash first.
-const startsAsVisitor = () =>
-  !readCacheOwner() && typeof window !== 'undefined' && PUBLIC_PATHS.has(window.location.pathname);
+const startsAsVisitor = () => {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.pathname;
+  return ALWAYS_PUBLIC_PATHS.has(path) || (!readCacheOwner() && PUBLIC_PATHS.has(path));
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, updateUser] = useState(null);

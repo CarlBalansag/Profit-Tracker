@@ -45,6 +45,7 @@ function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<><ThemeSwitch /><Suspense fallback={null}><Login /></Suspense></>} />
+          <Route path="/welcome" element={<Suspense fallback={null}><Landing /></Suspense>} />
           <Route path="*" element={
             <ProtectedRoute publicHome={<Suspense fallback={null}><Landing /></Suspense>}>
               <Shell>

@@ -69,6 +69,15 @@ describe('signed-out visitors skip the server wake-up screen', () => {
     expect(screen.queryByText(/User:/)).not.toBeInTheDocument();
   });
 
+  it('the /welcome landing page shows right away, even for a returning user', () => {
+    localStorage.setItem(CACHE_OWNER_KEY, '7');
+    window.history.pushState({}, '', '/welcome');
+    fetchMock.mockReturnValue(pending());
+    mount();
+    expect(screen.getByText('User: none')).toBeInTheDocument();
+    expect(screen.queryByText('Loading auth')).not.toBeInTheDocument();
+  });
+
   it('a visitor opening an app page still waits on the wake-up screen', () => {
     window.history.pushState({}, '', '/inventory');
     fetchMock.mockReturnValue(pending());
