@@ -172,10 +172,6 @@
 .lp-navlink:hover { color: var(--lp-text); }
 
 .lp-btn-lg { font-size: 15.5px; padding: 1rem 1.6rem; border-radius: 12px; }
-.lp-btn-light { background: var(--lp-text); color: #3e0d15; }
-.lp-btn-light:hover { background: #ffffff; }
-.lp-btn-onred { border: 1px solid rgba(255, 255, 255, 0.45); color: #fff; }
-.lp-btn-onred:hover { background: rgba(255, 255, 255, 0.1); }
 
 /* Hero: the app window, a soft accent light under it, and the cards that lift out. */
 .lp-window {
@@ -187,6 +183,64 @@
   -webkit-mask-image: linear-gradient(#020202 78%, transparent);
   mask-image: linear-gradient(#020202 78%, transparent);
 }
+/* The window's inside: dims and softens while cards lift out of it. */
+.lp-window-body {
+  display: flex;
+  height: calc(100% - 2.5rem);
+  background: var(--lp-bg);
+  transition: filter 0.7s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.7s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.lp-window-body.is-dimmed { filter: brightness(0.55) blur(1.5px); }
+.lp-hero-kpi {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  min-width: 0;
+}
+/* A row that has just arrived: typed in from the left with a garnet flash. */
+.lp-print { animation: lp-print 0.9s cubic-bezier(0.25, 1, 0.5, 1) both, lp-flash 1.8s ease-out 0.2s; }
+@keyframes lp-print {
+  from { clip-path: inset(0 100% 0 0); opacity: 0; transform: translateX(-3px); }
+  to { clip-path: inset(0 0 0 0); opacity: 1; transform: none; }
+}
+.lp-gain-flash { animation: lp-gain-flash 1.6s ease-out both; }
+@keyframes lp-gain-flash {
+  0% { background-color: rgba(143, 195, 158, 0.22); }
+  100% { background-color: rgba(143, 195, 158, 0.06); }
+}
+/* A light sweeping across a list while it is being sorted. */
+.lp-scan {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: 12px;
+  background: linear-gradient(100deg, transparent 30%, rgba(var(--accent-rgb), 0.22) 50%, transparent 70%);
+  background-size: 250% 100%;
+  animation: lp-scan 0.9s cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+@keyframes lp-scan { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+
+/* Slow-moving light behind the hero, like Copilot's halos. */
+.lp-halos { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.lp-halos::before,
+.lp-halos::after {
+  content: "";
+  position: absolute;
+  width: 46vw;
+  height: 46vw;
+  max-width: 720px;
+  max-height: 720px;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.32;
+}
+.lp-halos::before { left: -8%; top: 22%; background: rgba(var(--accent-rgb), 0.75); animation: lp-drift-a 26s ease-in-out infinite alternate; }
+.lp-halos::after { right: -10%; top: 4%; background: rgba(90, 92, 98, 0.9); animation: lp-drift-b 32s ease-in-out infinite alternate; }
+@keyframes lp-drift-a { to { transform: translate(14vw, -6vh) scale(1.15); } }
+@keyframes lp-drift-b { to { transform: translate(-12vw, 10vh) scale(0.9); } }
+
 .lp-window-haze {
   position: absolute;
   inset: 6% -8% 10%;
@@ -308,13 +362,6 @@
   border: 1px solid rgba(var(--accent-rgb), 0.5);
 }
 
-.lp-close {
-  border-radius: 36px;
-  padding: clamp(48px, 8vw, 110px) clamp(24px, 6vw, 80px);
-  background: var(--accent-gradient);
-  color: #fff;
-  box-shadow: 0 40px 90px -40px rgba(var(--accent-deep-rgb), 0.95);
-}
 
 @media (max-width: 767px) {
   .lp-pop-card { width: 168px; padding: 12px 14px; border-radius: 14px; }
@@ -336,6 +383,7 @@
 .lp-flash { animation: lp-flash 1400ms ease-out; }
 
 @media (prefers-reduced-motion: reduce) {
-  .lp-pop, .lp-flash { animation: none; }
+  .lp-pop, .lp-flash, .lp-print, .lp-gain-flash, .lp-scan, .lp-halos::before, .lp-halos::after { animation: none; }
+  .lp-window-body { transition: none; }
   .lp-btn { transition: none; }
 }

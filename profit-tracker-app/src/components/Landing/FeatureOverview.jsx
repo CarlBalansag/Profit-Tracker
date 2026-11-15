@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { ExpensesFragment, PayoutsFragment, PurchaseFragment, SaleFragment } from './Fragments';
-import { EASE_OUT } from './landingShared';
+import { EASE_OUT, EASE_QUART } from './landingShared';
 
 const MotionDiv = motion.div;
 
@@ -81,10 +81,9 @@ export default function FeatureOverview({ items, today }) {
           <AnimatePresence mode="wait" initial={false}>
             <MotionDiv
               key={PILLARS[active].id}
-              initial={reduce ? { opacity: 0 } : { opacity: 0, y: 18, rotate: -1.5, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, rotate: 0, scale: 1 }}
-              exit={reduce ? { opacity: 0 } : { opacity: 0, y: -12, rotate: 1, scale: 0.98 }}
-              transition={{ duration: 0.45, ease: EASE_OUT }}
+              initial={reduce ? { opacity: 0 } : { opacity: 0, y: 10, filter: 'blur(6px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)', transition: { opacity: { duration: 0.5, ease: EASE_QUART }, default: { duration: 0.8, ease: EASE_OUT } } }}
+              exit={reduce ? { opacity: 0 } : { opacity: 0, y: -10, filter: 'blur(6px)', transition: { duration: 0.32, ease: EASE_QUART } }}
               className="w-full"
             >
               <Current items={items} today={today} />

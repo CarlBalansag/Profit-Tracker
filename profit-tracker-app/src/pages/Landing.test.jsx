@@ -35,7 +35,7 @@ const kpi = (label) => within(demo()).getAllByText(label)
 describe('landing page', () => {
   it('leads with the demo and links to sign in', () => {
     mount();
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Know what every flip actually made/);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Your flips, finally in one place/);
     expect(screen.getAllByRole('button', { name: /Try the demo/i }).length).toBeGreaterThan(0);
     const links = screen.getAllByRole('link', { name: /^Sign in$/ });
     links.forEach((l) => expect(l).toHaveAttribute('href', '/login'));

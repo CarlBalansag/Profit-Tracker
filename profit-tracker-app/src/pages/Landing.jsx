@@ -8,7 +8,7 @@ import FeatureOverview from '../components/Landing/FeatureOverview';
 import {
   AnalyticsFragment, CalendarFragment, CardsFragment, InventoryFragment,
 } from '../components/Landing/Fragments';
-import { EASE_OUT, useSeed } from '../components/Landing/landingShared';
+import { EASE_OUT, EASE_QUART, useSeed } from '../components/Landing/landingShared';
 import { signupEnabled } from '../services/firebaseAuth';
 import '../components/Landing/landing.css';
 
@@ -59,10 +59,10 @@ function Reveal({ children, className = '', delay = 0 }) {
   return (
     <MotionDiv
       className={className}
-      initial={reduce ? false : { opacity: 0, y: 28 }}
-      whileInView={{ opacity: 1, y: 0 }}
+      initial={reduce ? false : { opacity: 0, y: 16, filter: 'blur(6px)' }}
+      whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
       viewport={{ once: true, margin: '-12% 0px' }}
-      transition={{ duration: 0.7, ease: EASE_OUT, delay }}
+      transition={{ opacity: { duration: 0.7, ease: EASE_QUART, delay }, default: { duration: 1, ease: EASE_OUT, delay } }}
     >
       {children}
     </MotionDiv>
@@ -81,9 +81,9 @@ export default function Landing() {
   }, [hash]);
 
   const intro = (delay) => (reduce ? {} : {
-    initial: { opacity: 0, y: 18 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.7, ease: EASE_OUT, delay },
+    initial: { opacity: 0, y: 12, filter: 'blur(8px)' },
+    animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
+    transition: { opacity: { duration: 0.7, ease: EASE_QUART, delay }, default: { duration: 1, ease: EASE_OUT, delay } },
   });
 
   return (
@@ -96,8 +96,8 @@ export default function Landing() {
           </Link>
           <nav className="flex items-center gap-1 sm:gap-2" aria-label="Main">
             <a href="#features" className="lp-focus lp-navlink hidden md:inline-block">What it does</a>
-            <a href="#demo" className="lp-focus lp-navlink hidden md:inline-block">Demo</a>
             <a href="#how" className="lp-focus lp-navlink hidden md:inline-block">How it works</a>
+            <a href="#demo" className="lp-focus lp-navlink hidden md:inline-block">Demo</a>
             <Link to="/login" className="lp-btn lp-btn-ghost lp-btn-sm ml-1">Sign in</Link>
           </nav>
         </div>
@@ -105,13 +105,14 @@ export default function Landing() {
 
       <main>
         {/* Hero */}
-        <section className="px-4 sm:px-8 pt-16 sm:pt-24 pb-8 sm:pb-10">
-          <div className="max-w-[860px] mx-auto text-center">
+        <section className="relative px-4 sm:px-8 pt-16 sm:pt-24 pb-8 sm:pb-10">
+          <div className="lp-halos" aria-hidden="true" />
+          <div className="relative max-w-[860px] mx-auto text-center">
             <motion.h1 {...intro(0)} className="lp-display text-[clamp(2.6rem,7vw,5.6rem)] leading-[0.98]">
-              Know what every flip actually made.
+              Your flips, finally in one place.
             </motion.h1>
             <motion.p {...intro(0.08)} className="text-[17px] sm:text-[19px] text-[var(--lp-text-2)] leading-relaxed max-w-[600px] mx-auto mt-6">
-              Inventory, sales, fees, card cashback and payouts in one app, so you stop guessing from a spreadsheet.
+              Inventory, sales, cards and cash flow in one app built for resellers.
             </motion.p>
             <motion.div {...intro(0.16)} className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 mt-9">
               <button type="button" onClick={scrollToDemo} className="lp-btn lp-btn-primary lp-btn-lg">Try the demo</button>
@@ -121,7 +122,7 @@ export default function Landing() {
               The demo needs no account and runs on sample data.
             </motion.p>
           </div>
-          <div className="mt-14 sm:mt-20">
+          <div className="relative mt-14 sm:mt-20">
             <HeroShowcase items={items} today={today} />
           </div>
         </section>
@@ -161,21 +162,8 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* Demo */}
-        <section id="demo" className="px-4 sm:px-8 py-24 sm:py-28 scroll-mt-16 lp-demo-band" aria-labelledby="demo-title">
-          <div className="max-w-[1200px] mx-auto">
-            <Reveal className="text-center max-w-[680px] mx-auto mb-10">
-              <h2 id="demo-title" className="lp-display text-[clamp(2rem,4.6vw,3.6rem)] leading-[1.02]">Now try it yourself.</h2>
-              <p className="text-[17px] text-[var(--lp-text-2)] leading-relaxed mt-4">
-                This is the app with sample data. Log a sale or a purchase and every page updates. Nothing is saved.
-              </p>
-            </Reveal>
-            <DemoApp />
-          </div>
-        </section>
-
         {/* How it works */}
-        <section id="how" className="px-4 sm:px-8 py-24 sm:py-32 scroll-mt-16" aria-labelledby="how-title">
+        <section id="how" className="px-4 sm:px-8 pt-8 pb-24 sm:pb-28 scroll-mt-16" aria-labelledby="how-title">
           <div className="max-w-[1200px] mx-auto">
             <Reveal className="max-w-[640px] mb-12">
               <h2 id="how-title" className="lp-display text-[clamp(2rem,4.6vw,3.6rem)] leading-[1.02]">Up and running in an afternoon.</h2>
@@ -185,10 +173,10 @@ export default function Landing() {
                 <MotionLi
                   key={s.title}
                   className="lp-step"
-                  initial={reduce ? false : { opacity: 0, y: 24 }}
-                  whileInView={{ opacity: 1, y: 0 }}
+                  initial={reduce ? false : { opacity: 0, y: 14, filter: 'blur(6px)' }}
+                  whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
                   viewport={{ once: true, margin: '-12% 0px' }}
-                  transition={{ duration: 0.6, ease: EASE_OUT, delay: i * 0.08 }}
+                  transition={{ opacity: { duration: 0.6, ease: EASE_QUART, delay: i * 0.1 }, default: { duration: 0.9, ease: EASE_OUT, delay: i * 0.1 } }}
                 >
                   <span className="lp-step-num lp-num">{i + 1}</span>
                   <h3 className="text-[18px] font-extrabold mt-4">{s.title}</h3>
@@ -199,15 +187,17 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* Close */}
-        <section className="px-4 sm:px-8 pb-28">
-          <Reveal className="lp-close max-w-[1200px] mx-auto text-center">
-            <h2 className="lp-display text-[clamp(2.2rem,5.4vw,4.4rem)] leading-[1]">Your next flip deserves real numbers.</h2>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center mt-9">
-              <button type="button" onClick={scrollToDemo} className="lp-btn lp-btn-light lp-btn-lg">Try the demo</button>
-              <Link to="/login" className="lp-btn lp-btn-onred lp-btn-lg">{accountLabel}</Link>
-            </div>
-          </Reveal>
+        {/* Demo */}
+        <section id="demo" className="px-4 sm:px-8 pt-24 sm:pt-28 pb-28 sm:pb-36 scroll-mt-16 lp-demo-band" aria-labelledby="demo-title">
+          <div className="max-w-[1200px] mx-auto">
+            <Reveal className="text-center max-w-[680px] mx-auto mb-10">
+              <h2 id="demo-title" className="lp-display text-[clamp(2rem,4.6vw,3.6rem)] leading-[1.02]">Now try it yourself.</h2>
+              <p className="text-[17px] text-[var(--lp-text-2)] leading-relaxed mt-4">
+                This is the app with sample data. Log a sale or a purchase and every page updates. Nothing is saved.
+              </p>
+            </Reveal>
+            <DemoApp />
+          </div>
         </section>
       </main>
 
@@ -217,7 +207,9 @@ export default function Landing() {
             <AnimatedLogo size={20} label={null} />
             <span className="text-[13px] font-bold text-[var(--lp-text-2)]">Profit Tracker</span>
           </div>
-          <p className="text-[13px] text-[var(--lp-text-3)]">Built for resellers. Your data stays yours.</p>
+          <p className="text-[13px] text-[var(--lp-text-3)]">
+            Already have an account? <Link to="/login" className="lp-focus font-bold text-[var(--lp-accent-text)] hover:underline rounded">Sign in</Link>
+          </p>
         </div>
       </footer>
     </div>
