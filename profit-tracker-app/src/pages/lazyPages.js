@@ -32,6 +32,7 @@ export const AddSale = lazyWithPreload(() => import('./AddSale'));
 export const TaxExempt = lazyWithPreload(() => import('./TaxExempt'));
 export const Guide = lazyWithPreload(() => import('./Guide'));
 export const Login = lazyWithPreload(() => import('./Login'));
+export const Landing = lazyWithPreload(() => import('./Landing'));
 export const Goals = lazyWithPreload(() => import('./Goals'));
 export const Calendar = lazyWithPreload(() => import('./Calendar'));
 export const Cashout = lazyWithPreload(() => import('./Cashout'));

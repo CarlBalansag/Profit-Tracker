@@ -1,9 +1,16 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-const ProtectedRoute = ({ children }) => {
+// publicHome: what a signed-out visitor sees at "/" (the landing page).
+// Every other app URL still sends them to /login.
+const ProtectedRoute = ({ children, publicHome = null }) => {
   const { user, loading } = useAuth();
+  const { pathname } = useLocation();
+
+  // Still checking the sign-in (only reached for a likely signed-out visitor,
+  // see AuthContext): the landing page shows meanwhile.
+  if (loading && publicHome && pathname === '/') return publicHome;
 
   if (loading) {
     return (
@@ -13,7 +20,10 @@ const ProtectedRoute = ({ children }) => {
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    if (publicHome && pathname === '/') return publicHome;
+    return <Navigate to="/login" replace />;
+  }
 
   return children;
 };

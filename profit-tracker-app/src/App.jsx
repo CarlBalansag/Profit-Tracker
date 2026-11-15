@@ -11,7 +11,7 @@ import Shell from './components/Layout/Shell';
 import {
   Dashboard, AddTransaction, Inventory, Expenses, Receipts, Invoices, Transactions, Analytics,
   CashFlow, CreditCard, Settings, AddSale, TaxExempt, Guide, Login, Goals, Calendar, Cashout,
-  Shipping, Statuses, ScheduleC,
+  Shipping, Statuses, ScheduleC, Landing,
 } from './pages/lazyPages';
 import { AuthProvider } from './context/AuthContext';
 import { TutorialProvider } from './context/TutorialContext';
@@ -45,8 +45,9 @@ function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<><ThemeSwitch /><Suspense fallback={null}><Login /></Suspense></>} />
+          <Route path="/welcome" element={<Suspense fallback={null}><Landing /></Suspense>} />
           <Route path="*" element={
-            <ProtectedRoute>
+            <ProtectedRoute publicHome={<Suspense fallback={null}><Landing /></Suspense>}>
               <Shell>
               <AppPages />
           </Shell>

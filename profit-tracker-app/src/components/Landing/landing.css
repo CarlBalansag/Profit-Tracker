@@ -1,0 +1,544 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,600..800&display=swap');
+
+/*
+ * Landing page + demo look. Same charcoal surfaces and garnet accent as the
+ * app's dark mode (index.css "App dark look", styles/colorPalette.css). The
+ * accent always comes from the --accent-* preset, so changing the preset
+ * recolors the landing page too. The page is dark in both app themes.
+ */
+.lp {
+  --lp-page: #111214;          /* landing page, one step under the app */
+  --lp-sidebar: #17181b;       /* = --dp-dash-sidebar */
+  --lp-bg: #1d1f22;            /* = --dp-bg */
+  --lp-card: #25272a;          /* = --dp-card-bg */
+  --lp-raised: #2c2e32;        /* = --dp-hover-bg */
+  --lp-well: rgba(255, 255, 255, 0.04);
+  --lp-border: rgba(255, 255, 255, 0.06);
+  --lp-border-strong: rgba(255, 255, 255, 0.12);
+  --lp-text: #f3f1ed;
+  --lp-text-2: #c2c1c4;
+  --lp-text-3: #8f8e93;
+  --lp-accent: var(--accent-500);
+  --lp-accent-text: var(--accent-300);
+  --lp-accent-tint: rgba(var(--accent-rgb), 0.16);
+  --lp-gain: #8fc39e;
+  --lp-loss: #e07b86;
+  --lp-warn: #d9b46a;
+
+  background: var(--lp-page);
+  color: var(--lp-text);
+  font-family: 'Nunito Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.lp ::selection { background: rgba(var(--accent-rgb), 0.45); color: #fff; }
+
+.lp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0.8rem 1.15rem;
+  transition: background-color 150ms, border-color 150ms, color 150ms, transform 150ms;
+  white-space: nowrap;
+}
+.lp-btn:active { transform: translateY(1px); }
+.lp-btn:focus-visible,
+.lp-focus:focus-visible {
+  outline: 2px solid var(--lp-accent-text);
+  outline-offset: 2px;
+}
+.lp-btn-primary {
+  background: var(--accent-gradient);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 6px 20px -8px rgba(var(--accent-deep-rgb), 0.9);
+}
+.lp-btn-primary:hover { background: var(--accent-600); }
+.lp-btn-ghost {
+  border: 1px solid var(--lp-border-strong);
+  color: var(--lp-text);
+  background: rgba(255, 255, 255, 0.02);
+}
+.lp-btn-ghost:hover { background: rgba(255, 255, 255, 0.06); }
+.lp-btn-sm { font-size: 12.5px; padding: 0.55rem 0.8rem; border-radius: 8px; }
+
+.lp-card {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-border);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 2px 6px -2px rgba(2, 2, 2, 0.35);
+}
+
+.lp-label {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--lp-text-2);
+  margin-bottom: 0.35rem;
+}
+.lp-input {
+  width: 100%;
+  background: var(--lp-sidebar);
+  border: 1px solid var(--lp-border-strong);
+  border-radius: 8px;
+  color: var(--lp-text);
+  font-size: 14px;
+  padding: 0.55rem 0.7rem;
+  color-scheme: dark;
+}
+.lp-input:focus { outline: none; border-color: rgba(255, 255, 255, 0.34); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.07); }
+.lp-input[aria-invalid="true"] { border-color: var(--lp-loss); }
+
+
+.lp-num { font-variant-numeric: tabular-nums; }
+
+.lp-scroll { scrollbar-width: thin; scrollbar-color: var(--accent-700) transparent; }
+
+/* Sign-in page backdrop: a soft garnet light at the top. */
+.lp-hero-glow {
+  background:
+    radial-gradient(60% 50% at 50% 0%, rgba(var(--accent-rgb), 0.22), transparent 70%),
+    radial-gradient(30% 30% at 85% 20%, rgba(var(--accent-rgb), 0.08), transparent 70%);
+}
+
+/* Sign-in page: restyles the shared FirebaseLoginForm without changing it. */
+.lp-login-form form { max-width: none; }
+.lp-login-form h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 0.4rem; }
+.lp-login-form label { display: block; font-size: 12.5px; font-weight: 700; color: var(--lp-text-2); margin-bottom: -0.35rem; }
+.lp-login-form p { font-size: 13px; color: var(--lp-text-2); line-height: 1.5; }
+.lp-login-form input {
+  background: var(--lp-sidebar);
+  border: 1px solid var(--lp-border-strong);
+  border-radius: 9px;
+  color: var(--lp-text);
+  padding: 0.65rem 0.8rem;
+  font-size: 14px;
+}
+.lp-login-form input:focus { outline: none; border-color: rgba(255, 255, 255, 0.34); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.07); }
+.lp-login-form button[type="submit"],
+.lp-login-form button.rounded {
+  width: 100%;
+  background: var(--accent-gradient);
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+.lp-login-form button[type="submit"]:hover:not(:disabled),
+.lp-login-form button.rounded:hover:not(:disabled) { background: var(--accent-600); }
+.lp-login-form button.underline {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--lp-text-2);
+  text-decoration-color: rgba(255, 255, 255, 0.25);
+  text-underline-offset: 3px;
+}
+.lp-login-form button.underline:hover { color: var(--lp-text); }
+.lp-login-form button:focus-visible { outline: 2px solid var(--lp-accent-text); outline-offset: 2px; }
+.lp-login-form code { font-size: 12px; color: var(--lp-text); word-break: break-all; }
+
+/* ─── Landing page ───────────────────────────────────────────────────── */
+
+.lp-display {
+  font-family: 'Archivo', 'Nunito Sans', ui-sans-serif, system-ui, sans-serif;
+  font-weight: 750;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.lp-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(17, 18, 20, 0.82);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  border-bottom: 1px solid var(--lp-border);
+}
+.lp-navlink {
+  padding: 0.5rem 0.8rem;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--lp-text-2);
+  border-radius: 8px;
+  transition: color 150ms;
+}
+.lp-navlink:hover { color: var(--lp-text); }
+
+.lp-btn-lg { font-size: 15.5px; padding: 1rem 1.6rem; border-radius: 12px; }
+
+/* Hero: the app window, a soft accent light under it, and the cards that lift out. */
+.lp-window {
+  height: clamp(420px, 52vw, 600px);
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--lp-border-strong);
+  box-shadow: 0 50px 120px -40px rgba(2, 2, 2, 0.95), 0 0 0 1px rgba(2, 2, 2, 0.5);
+  -webkit-mask-image: linear-gradient(#020202 78%, transparent);
+  mask-image: linear-gradient(#020202 78%, transparent);
+}
+/* The window's inside: dims and softens while cards lift out of it. */
+.lp-window-body {
+  display: flex;
+  height: calc(100% - 2.5rem);
+  background: var(--lp-bg);
+  transition: filter 0.7s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.7s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.lp-window-body.is-dimmed { filter: brightness(0.55) blur(1.5px); }
+.lp-hero-kpi {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  min-width: 0;
+}
+/* A row that has just arrived: typed in from the left with a garnet flash. */
+.lp-print { animation: lp-print 0.9s cubic-bezier(0.25, 1, 0.5, 1) both, lp-flash 1.8s ease-out 0.2s; }
+@keyframes lp-print {
+  from { clip-path: inset(0 100% 0 0); opacity: 0; transform: translateX(-3px); }
+  to { clip-path: inset(0 0 0 0); opacity: 1; transform: none; }
+}
+.lp-gain-flash { animation: lp-gain-flash 1.6s ease-out both; }
+@keyframes lp-gain-flash {
+  0% { background-color: rgba(143, 195, 158, 0.22); }
+  100% { background-color: rgba(143, 195, 158, 0.06); }
+}
+/* A light sweeping across a list while it is being sorted. */
+.lp-scan {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: 12px;
+  background: linear-gradient(100deg, transparent 30%, rgba(var(--accent-rgb), 0.22) 50%, transparent 70%);
+  background-size: 250% 100%;
+  animation: lp-scan 0.9s cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+@keyframes lp-scan { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+
+/* Slow-moving light behind the hero, like Copilot's halos. */
+.lp-halos { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.lp-halos::before,
+.lp-halos::after {
+  content: "";
+  position: absolute;
+  width: 46vw;
+  height: 46vw;
+  max-width: 720px;
+  max-height: 720px;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.32;
+}
+.lp-halos::before { left: -8%; top: 22%; background: rgba(var(--accent-rgb), 0.75); animation: lp-drift-a 26s ease-in-out infinite alternate; }
+.lp-halos::after { right: -10%; top: 4%; background: rgba(90, 92, 98, 0.9); animation: lp-drift-b 32s ease-in-out infinite alternate; }
+@keyframes lp-drift-a { to { transform: translate(14vw, -6vh) scale(1.15); } }
+@keyframes lp-drift-b { to { transform: translate(-12vw, 10vh) scale(0.9); } }
+
+.lp-window-haze {
+  position: absolute;
+  inset: 6% -8% 10%;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(var(--accent-rgb), 0.32), transparent 70%);
+  filter: blur(40px);
+  pointer-events: none;
+}
+.lp-pop-card {
+  position: absolute;
+  z-index: 2;
+  width: 220px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(44, 46, 50, 0.86);
+  border: 1px solid var(--lp-border-strong);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 24px 50px -18px rgba(2, 2, 2, 0.9);
+}
+
+/* Pieces of the app used as the illustrations. */
+.lp-frag {
+  width: 100%;
+  background: var(--lp-card);
+  border: 1px solid var(--lp-border-strong);
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 30px 60px -30px rgba(2, 2, 2, 0.9);
+}
+
+/* Overview: four things the app does around one switching piece of the app. */
+.lp-overview {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+.lp-overview-col { display: none; gap: 12px; align-content: center; }
+.lp-overview-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 28px;
+  padding: clamp(20px, 3vw, 40px);
+  background:
+    radial-gradient(80% 70% at 50% 100%, rgba(var(--accent-rgb), 0.28), transparent 70%),
+    var(--lp-bg);
+  border: 1px solid var(--lp-border);
+  min-height: 420px;
+}
+.lp-overview-stage > * { max-width: 420px; }
+.lp-pillar {
+  position: relative;
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 22px 24px;
+  border-radius: 20px;
+  color: var(--lp-text);
+  opacity: 0.55;
+  transition: opacity 250ms, background-color 250ms;
+}
+.lp-pillar:hover { opacity: 0.85; }
+.lp-pillar.is-on { opacity: 1; background: var(--lp-bg); }
+.lp-pillar-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--lp-accent-text);
+}
+.lp-pillar-timer {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 12px;
+  height: 2px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--lp-well);
+}
+@media (min-width: 1024px) {
+  .lp-overview { grid-template-columns: 1fr minmax(380px, 1.1fr) 1fr; gap: 28px; }
+  .lp-overview-col { display: grid; }
+}
+
+/* Feature panels: big rounded blocks, copy on one side, the app on the other. */
+.lp-panel {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 36px;
+  align-items: center;
+  border-radius: 32px;
+  padding: clamp(28px, 5vw, 72px);
+  border: 1px solid var(--lp-border);
+  overflow: hidden;
+}
+.lp-panel-a { background: radial-gradient(70% 90% at 100% 0%, rgba(var(--accent-rgb), 0.22), transparent 65%), var(--lp-bg); }
+.lp-panel-b { background: radial-gradient(70% 90% at 0% 100%, rgba(var(--accent-rgb), 0.16), transparent 65%), #1a1b1e; }
+.lp-panel > * { min-width: 0; }
+.lp-panel-media { display: flex; justify-content: center; }
+.lp-panel-media > * { max-width: 480px; }
+@media (min-width: 768px) {
+  .lp-panel { grid-template-columns: 1fr 1fr; gap: 56px; }
+}
+
+.lp-demo-band {
+  background: linear-gradient(var(--lp-page), #18191c 18%, #18191c 82%, var(--lp-page));
+}
+
+.lp-step { border-top: 1px solid var(--lp-border-strong); padding-top: 22px; }
+.lp-step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--lp-text);
+  background: var(--lp-accent-tint);
+  border: 1px solid rgba(var(--accent-rgb), 0.5);
+}
+
+
+@media (max-width: 767px) {
+  .lp-pop-card { width: 168px; padding: 12px 14px; border-radius: 14px; }
+  .lp-frag { padding: 16px; border-radius: 16px; }
+  .lp-panel { padding: 24px 18px; border-radius: 24px; }
+  .lp-overview-stage { padding: 14px; min-height: 0; border-radius: 22px; }
+}
+
+/* Headline words rise out of a mask. */
+.lp-word-mask { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: 0.06em; margin-bottom: -0.06em; }
+
+/* Store and marketplace names drifting by under the hero. */
+.lp-marquee-mask {
+  display: flex;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #020202 12%, #020202 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #020202 12%, #020202 88%, transparent);
+}
+.lp-marquee-track {
+  display: flex;
+  flex-shrink: 0;
+  gap: 12px;
+  padding-right: 12px;
+  animation: lp-marquee 48s linear infinite;
+}
+.lp-marquee-mask:hover .lp-marquee-track { animation-play-state: paused; }
+.lp-marquee-item {
+  white-space: nowrap;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--lp-border-strong);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--lp-text-2);
+  font-family: 'Archivo', 'Nunito Sans', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+@keyframes lp-marquee { to { transform: translateX(-100%); } }
+
+/* Hover tilt: perspective on the wrapper, a soft light that follows the mouse. */
+.lp-tilt { perspective: 1100px; }
+.lp-tilt-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.lp-tilt:hover .lp-tilt-glow { opacity: 1; }
+
+/* Buttons: a light sweeps across on hover. */
+.lp-btn { position: relative; overflow: hidden; isolation: isolate; }
+.lp-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.22) 50%, transparent 65%);
+  transform: translateX(-120%);
+  transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lp-btn:hover::after { transform: translateX(120%); }
+
+/* How it works: pinned steps and the window that plays each one. */
+.lp-howstep {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+  text-align: left;
+  padding: 16px 18px;
+  border-radius: 18px;
+  color: var(--lp-text);
+  opacity: 0.45;
+  transition: opacity 0.4s, background-color 0.4s;
+}
+.lp-howstep:hover { opacity: 0.75; }
+.lp-howstep.is-on { opacity: 1; background: var(--lp-bg); }
+.lp-howstep-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: var(--lp-well);
+  color: var(--lp-text-2);
+  transition: background-color 0.4s, color 0.4s;
+}
+.lp-howstep.is-on .lp-howstep-icon,
+.lp-howstep-icon.is-on { background: var(--lp-accent-tint); color: var(--lp-accent-text); }
+.lp-howstep-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--lp-text-2);
+  transition: grid-template-rows 0.5s cubic-bezier(0.16, 1, 0.3, 1), margin 0.5s;
+  overflow: hidden;
+}
+.lp-howstep-body > span { min-height: 0; overflow: hidden; }
+.lp-howstep.is-on .lp-howstep-body { grid-template-rows: 1fr; margin-top: 4px; }
+.lp-howprogress { height: 2px; border-radius: 2px; background: var(--lp-well); overflow: hidden; }
+.lp-story-window {
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--lp-bg);
+  border: 1px solid var(--lp-border-strong);
+  box-shadow: 0 40px 90px -40px rgba(2, 2, 2, 0.95), 0 0 0 1px rgba(2, 2, 2, 0.5);
+}
+.lp-field {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 9px;
+  background: var(--lp-sidebar);
+  border: 1px solid var(--lp-border-strong);
+  font-size: 14px;
+  font-weight: 600;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.lp-field.is-active { border-color: rgba(255, 255, 255, 0.34); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.18); }
+.lp-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--lp-accent-text);
+  animation: lp-blink 0.9s steps(1) infinite;
+}
+@keyframes lp-blink { 50% { opacity: 0; } }
+.lp-fake-btn {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--accent-gradient);
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+}
+.lp-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--lp-raised);
+  border: 1px solid var(--lp-border-strong);
+  font-size: 13px;
+  font-weight: 600;
+}
+.lp-receipt { min-height: 118px; }
+.lp-receipt li {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--lp-border);
+  font-size: 14px;
+  color: var(--lp-text-2);
+  font-variant-numeric: tabular-nums;
+}
+.lp-receipt li b { color: var(--lp-text); }
+
+@keyframes lp-pop {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.lp-pop { animation: lp-pop 220ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+@keyframes lp-flash {
+  0% { background-color: rgba(var(--accent-rgb), 0.28); }
+  100% { background-color: transparent; }
+}
+.lp-flash { animation: lp-flash 1400ms ease-out; }
+
+

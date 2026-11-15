@@ -5,11 +5,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AuthProvider, useAuth } from './AuthContext';
+import { CACHE_OWNER_KEY } from '../data/persistedCache';
 const fetchMock = vi.hoisted(() => vi.fn());
 vi.mock('../hooks/useApi', () => ({ apiFetch: fetchMock }));
 vi.mock('../components/Auth/ServerWakeUpScreen', () => ({ default: () => <div>Loading auth</div> }));
 beforeEach(() => { vi.clearAllMocks(); fetchMock.mockResolvedValue({ ok: false, status: 401 }); });
-afterEach(cleanup);
+afterEach(() => { cleanup(); localStorage.clear(); window.history.pushState({}, '', '/'); vi.useRealTimers(); });
 function Controls() {
   const { user, setUser, logout } = useAuth();
   return <><p>User: {user?.id || 'none'}</p><button onClick={() => setUser({ id: 'a' })}>Login A</button><button onClick={() => setUser({ id: 'b' })}>Login B</button><button onClick={logout}>Logout</button></>;
@@ -42,3 +43,69 @@ describe('auth state and query isolation', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2)); expect(screen.getByText('User: none')).toBeInTheDocument();
   });
 });
+
+describe('signed-out visitors skip the server wake-up screen', () => {
+  const pending = () => new Promise(() => {});
+
+  it('a visitor on the landing page sees it while the sign-in check is still running', () => {
+    fetchMock.mockReturnValue(pending());
+    mount();
+    expect(screen.getByText('User: none')).toBeInTheDocument();
+    expect(screen.queryByText('Loading auth')).not.toBeInTheDocument();
+  });
+
+  it('the sign-in page shows right away too', () => {
+    window.history.pushState({}, '', '/login');
+    fetchMock.mockReturnValue(pending());
+    mount();
+    expect(screen.getByText('User: none')).toBeInTheDocument();
+  });
+
+  it('a returning user (saved cache owner) still waits on the wake-up screen', () => {
+    localStorage.setItem(CACHE_OWNER_KEY, '7');
+    fetchMock.mockReturnValue(pending());
+    mount();
+    expect(screen.getByText('Loading auth')).toBeInTheDocument();
+    expect(screen.queryByText(/User:/)).not.toBeInTheDocument();
+  });
+
+  it('the /welcome landing page shows right away, even for a returning user', () => {
+    localStorage.setItem(CACHE_OWNER_KEY, '7');
+    window.history.pushState({}, '', '/welcome');
+    fetchMock.mockReturnValue(pending());
+    mount();
+    expect(screen.getByText('User: none')).toBeInTheDocument();
+    expect(screen.queryByText('Loading auth')).not.toBeInTheDocument();
+  });
+
+  it('a visitor opening an app page still waits on the wake-up screen', () => {
+    window.history.pushState({}, '', '/inventory');
+    fetchMock.mockReturnValue(pending());
+    mount();
+    expect(screen.getByText('Loading auth')).toBeInTheDocument();
+  });
+
+  it('signing in while the check is still running is not undone by its late answer', async () => {
+    let resolve;
+    fetchMock.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+    mount();
+    fireEvent.click(screen.getByText('Login A'));
+    expect(screen.getByText('User: a')).toBeInTheDocument();
+    resolve({ ok: false, status: 401 });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByText('User: a')).toBeInTheDocument();
+  });
+
+  it('a visitor stays on the page when the server never answers', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mount();
+    await vi.runAllTimersAsync();
+    expect(fetchMock).toHaveBeenCalledTimes(10);
+    expect(screen.getByText('User: none')).toBeInTheDocument();
+    expect(screen.queryByText('Loading auth')).not.toBeInTheDocument();
+    spy.mockRestore();
+  });
+});
+
