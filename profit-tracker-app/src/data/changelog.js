@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.29',
+    date: '2026-11-15',
+    notes: "Cashout now shows Points4Days deals next to ElectronicsBuyer -- sign in with your Points4Days login -- and lists each product once with every cashout's payout. Log Purchase asks for a tracking number, double-checks before committing to ElectronicsBuyer, and reminds you to commit on Points4Days after saving.",
+  },
+  {
     version: '1.28',
     date: '2026-11-15',
     notes: "Pages load faster and glide in smoothly, with an animated logo, a cleaner Status Pipeline and a fresh new Calendar look. Transactions now keeps every purchase's Buy row after it sells, and refunds show up as a yellow Refund tag.",
