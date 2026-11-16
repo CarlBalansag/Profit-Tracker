@@ -194,5 +194,13 @@ describe('CashoutIntegrations', () => {
       });
       expect(mutations.updateConnection.mutateAsync).toHaveBeenCalledWith({ id: 'conn-2', email: 'new@example.com', password: 'pw' });
     });
+
+    it('prefers settingsName over name when available (e.g. EarnFromBuying (LA))', () => {
+      providers = [{ id: 'la', name: 'LA', settingsName: 'EarnFromBuying (LA)', credentialType: 'login', supportsCommits: false }];
+      render(<CashoutIntegrations />);
+      expect(screen.getByText('EarnFromBuying (LA)')).toBeInTheDocument();
+      expect(screen.getByLabelText('EarnFromBuying (LA) email')).toBeInTheDocument();
+      expect(screen.getByLabelText('EarnFromBuying (LA) password')).toBeInTheDocument();
+    });
   });
 });

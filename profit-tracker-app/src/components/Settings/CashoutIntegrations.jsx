@@ -167,13 +167,14 @@ function LoginForm({ providerName, submitLabel, onSubmit, onCancel }) {
 
 function IntegrationCard({ provider, connection }) {
   const usesLogin = provider.credentialType === 'login';
+  const providerName = provider.settingsName || provider.name;
   const { addConnection, updateConnection, deleteConnection, testConnection } = useCashoutMutations();
   const [replacing, setReplacing] = useState(false);
   const [testing, setTesting] = useState(false);
 
   const connect = async (secret) => {
     await addConnection.mutateAsync({ provider: provider.id, ...(usesLogin ? secret : { api_key: secret }) });
-    toast.success(`${provider.name} connected.`);
+    toast.success(`${providerName} connected.`);
   };
 
   const replaceKey = async (secret) => {
@@ -197,10 +198,10 @@ function IntegrationCard({ provider, connection }) {
   };
 
   const remove = async () => {
-    if (!window.confirm(`Remove your ${provider.name} ${usesLogin ? 'login' : 'key'}? Its deals will leave the Cashout page, and its saved payout records will be deleted.`)) return;
+    if (!window.confirm(`Remove your ${providerName} ${usesLogin ? 'login' : 'key'}? Its deals will leave the Cashout page, and its saved payout records will be deleted.`)) return;
     try {
       await deleteConnection.mutateAsync(connection.id);
-      toast.success(`${provider.name} removed.`);
+      toast.success(`${providerName} removed.`);
     } catch (err) {
       toast.error(err.message);
     }
@@ -211,7 +212,7 @@ function IntegrationCard({ provider, connection }) {
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <Plug size={15} className="text-green-400 flex-shrink-0" />
-          <span className="text-sm font-semibold text-white truncate">{provider.name}</span>
+          <span className="text-sm font-semibold text-white truncate">{providerName}</span>
         </div>
         {connection && (
           <span
@@ -226,8 +227,8 @@ function IntegrationCard({ provider, connection }) {
 
       {!connection ? (
         usesLogin
-          ? <LoginForm providerName={provider.name} submitLabel="Sign In & Connect" onSubmit={connect} />
-          : <KeyForm label={`${provider.name} API key`} submitLabel="Verify & Connect" onSubmit={connect} />
+          ? <LoginForm providerName={providerName} submitLabel="Sign In & Connect" onSubmit={connect} />
+          : <KeyForm label={`${providerName} API key`} submitLabel="Verify & Connect" onSubmit={connect} />
       ) : (
         <>
           <div className="text-xs text-gray-400">
@@ -242,14 +243,14 @@ function IntegrationCard({ provider, connection }) {
 
           {replacing && usesLogin ? (
             <LoginForm
-              providerName={provider.name}
+              providerName={providerName}
               submitLabel="Sign In & Save"
               onSubmit={replaceKey}
               onCancel={() => setReplacing(false)}
             />
           ) : replacing ? (
             <KeyForm
-              label={`New ${provider.name} API key`}
+              label={`New ${providerName} API key`}
               submitLabel="Verify & Save"
               onSubmit={replaceKey}
               onCancel={() => setReplacing(false)}
@@ -274,7 +275,7 @@ function IntegrationCard({ provider, connection }) {
               <button
                 type="button"
                 onClick={remove}
-                aria-label={`Remove ${provider.name}`}
+                aria-label={`Remove ${providerName}`}
                 title="Remove"
                 className="ml-auto p-1.5 rounded text-rose-400 hover:bg-rose-500/10"
               >
