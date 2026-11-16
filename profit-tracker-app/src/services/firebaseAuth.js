@@ -52,14 +52,25 @@ export async function authRequest(path, body) {
     return data;
   }
 }
-export async function exchangeFirebase(user, purpose, currentPassword) {
-  const grant = await authRequest('intent', { purpose, ...(purpose === 'migration' ? { current_password: currentPassword } : {}) });
+export async function exchangeFirebase(user, purpose, currentPassword, inviteToken) {
+  const grant = await authRequest('intent', {
+    purpose,
+    ...(purpose === 'migration' ? { current_password: currentPassword } : {}),
+    ...(inviteToken ? { invite_token: inviteToken } : {}),
+  });
   const id_token = await user.getIdToken(true);
-  const result = await authRequest(purpose === 'migration' ? 'link' : 'session', { ...grant, id_token });
+  const result = await authRequest(purpose === 'migration' ? 'link' : 'session', {
+    ...grant,
+    id_token,
+    ...(inviteToken ? { invite_token: inviteToken } : {}),
+  });
   await signOut(user.auth).catch(() => {});
   return result;
 }
-export const emailActionSettings = () => ({ url: `${window.location.origin}/login`, handleCodeInApp: false });
+export const emailActionSettings = (inviteToken) => ({
+  url: inviteToken ? `${window.location.origin}/login?invite=${encodeURIComponent(inviteToken)}` : `${window.location.origin}/login`,
+  handleCodeInApp: false
+});
 export function friendlyAuthError(error) {
   if (!error?.code) return error?.message || 'Could not complete sign-in. Please retry.';
   if (error.code === 'auth/too-many-requests') return 'Too many attempts. Please try again later.';

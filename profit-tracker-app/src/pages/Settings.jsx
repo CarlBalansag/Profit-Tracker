@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-  User, Database, FileJson, Bell, Palette, ExternalLink, ArrowLeft, Bot
+  User, Database, FileJson, Bell, Palette, ExternalLink, ArrowLeft, Bot, UserPlus
 } from 'lucide-react';
 import { PaymentMethods } from '../components/Settings/PaymentMethods';
 import { ApiKeys } from '../components/Settings/ApiKeys';
+import { AdminInvites } from '../components/Settings/AdminInvites';
 import { DataReset } from '../components/Settings/DataReset';
 import { Vendors } from '../components/Settings/Vendors';
 import { Cashouts } from '../components/Settings/Cashouts';
@@ -29,6 +30,7 @@ function Settings() {
 
   const navItems = [
     { id: 'profile', label: 'Profile', icon: User },
+    ...(user?.is_admin ? [{ id: 'invites', label: 'Member Invites', icon: UserPlus }] : []),
     { id: 'datasetup', label: 'Data Setup', icon: Database },
     { id: 'data', label: 'Data', icon: FileJson },
     { id: 'ai-assistant', label: 'AI Assistant', icon: Bot },
@@ -133,6 +135,9 @@ function Settings() {
               <p className="text-xs text-gray-600 pt-2">Your records stay associated with this account ID when you change login methods.</p>
             </div>
           )}
+
+          {/* MEMBER INVITES TAB (ADMIN ONLY) */}
+          {activeTab === 'invites' && user?.is_admin && <AdminInvites />}
 
           {/* DATA SETUP TAB */}
           {activeTab === 'datasetup' && (

@@ -30,6 +30,7 @@ const buyersRouter = require('./routes/buyers');
 const apiKeysRouter = require('./routes/apiKeys');
 const cashoutsRouter = require('./routes/cashouts');
 const dataResetRouter = require('./routes/dataReset');
+const { router: invitesRouter } = require('./routes/invites');
 const { verifySyncSecret, runScheduledSync } = require('./services/cashouts/syncScheduler');
 const mcpRouter = require('./routes/mcp');
 const { apiKeyAuth } = require('./middleware/apiKeyAuth');
@@ -180,6 +181,7 @@ app.use('/api/buyers', buyersRouter);
 app.use('/api/api-keys', apiKeysRouter);
 app.use('/api/cashouts', cashoutsRouter);
 app.use('/api/data-reset', dataResetRouter);
+app.use('/api/invites', invitesRouter);
 
 // Health Check
 app.get('/health', (req, res) => {

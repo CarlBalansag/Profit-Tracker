@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.31',
+    date: '2026-11-15',
+    notes: "Admins can now create secure, single-use 3-day invite links from Settings to invite new members to register while keeping the app private.",
+  },
+  {
     version: '1.30',
     date: '2026-11-15',
     notes: "A brand-new home page for visitors, with a live preview of the app and a demo you can click around in without an account, plus a separate, cleaner sign-in page. The home page also opens right away instead of waiting for the server to wake up.",

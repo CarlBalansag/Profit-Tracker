@@ -5,10 +5,10 @@ import { useAuth } from '../../context/AuthContext';
 import { firebaseClient, signupEnabled, exchangeFirebase, emailActionSettings, friendlyAuthError } from '../../services/firebaseAuth';
 import { apiFetch } from '../../hooks/useApi';
 
-export default function FirebaseLoginForm({ migration = false }) {
+export default function FirebaseLoginForm({ migration = false, inviteToken = null }) {
   const { setUser } = useAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState('login');
+  const [mode, setMode] = useState(inviteToken && !migration ? 'signup' : 'login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
@@ -21,6 +21,7 @@ export default function FirebaseLoginForm({ migration = false }) {
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; firebaseClient().then(signOut).catch(() => {}); }; }, []);
   useEffect(() => { if (!cooldown) return; const timer = setTimeout(() => setCooldown(value => Math.max(0, value - 1)), 1000); return () => clearTimeout(timer); }, [cooldown]);
+  useEffect(() => { if (inviteToken && !migration) setMode('signup'); }, [inviteToken, migration]);
   // ideas.md #8: verifying by clicking the emailed link happens in a
   // different tab/session, so Firebase's client SDK never learns about it on
   // its own -- the user had to come back and click "Continue" manually. Poll
@@ -56,7 +57,9 @@ export default function FirebaseLoginForm({ migration = false }) {
     finally { busy.current = false; if (mounted.current) setPending(false); }
   }
   async function finish(user, purpose) {
-    const data = await exchangeFirebase(user, purpose, current);
+    const data = inviteToken
+      ? await exchangeFirebase(user, purpose, current, inviteToken)
+      : await exchangeFirebase(user, purpose, current);
     if (!mounted.current) return;
     setPassword(''); setCurrent(''); setConfirmation(''); setUser(data); navigate('/', { replace: true });
   }
@@ -79,7 +82,7 @@ export default function FirebaseLoginForm({ migration = false }) {
       if (!mounted.current) { await signOut(auth); return; }
       setPassword(''); setConfirmation(''); setProviderUser(result.user);
       if (!result.user.emailVerified) {
-        if (mode === 'signup') { await sendEmailVerification(result.user, emailActionSettings()); setCooldown(60); }
+        if (mode === 'signup') { await sendEmailVerification(result.user, inviteToken ? emailActionSettings(inviteToken) : emailActionSettings()); setCooldown(60); }
         setMessage('Verify your email, then continue. A refresh may require signing in again.');
         return;
       }
@@ -109,10 +112,10 @@ export default function FirebaseLoginForm({ migration = false }) {
           <button type="button" disabled={pending} onClick={() => run(async () => { await reload(providerUser); if (!providerUser.emailVerified) throw new Error('Your email is not verified yet.'); await finish(providerUser, mode === 'signup' ? 'signup' : 'login'); })} className="block underline text-sm">Already verified? Check now</button>
         </>
       }
-      <button type="button" disabled={pending || cooldown > 0} onClick={() => run(async () => { await sendEmailVerification(providerUser, emailActionSettings()); setCooldown(60); setMessage('Verification email sent.'); })} className="block underline">{cooldown ? `Resend in ${cooldown}s` : 'Resend verification'}</button>
-      {!migration && signupEnabled && mode !== 'signup' && <button type="button" disabled={pending} onClick={() => run(async () => { await reload(providerUser); if (!providerUser.emailVerified) throw new Error('Verify your email first.'); await finish(providerUser, 'signup'); })} className="block underline">Register this verified account</button>}
+      <button type="button" disabled={pending || cooldown > 0} onClick={() => run(async () => { await sendEmailVerification(providerUser, inviteToken ? emailActionSettings(inviteToken) : emailActionSettings()); setCooldown(60); setMessage('Verification email sent.'); })} className="block underline">{cooldown ? `Resend in ${cooldown}s` : 'Resend verification'}</button>
+      {!migration && (signupEnabled || Boolean(inviteToken)) && mode !== 'signup' && <button type="button" disabled={pending} onClick={() => run(async () => { await reload(providerUser); if (!providerUser.emailVerified) throw new Error('Verify your email first.'); await finish(providerUser, 'signup'); })} className="block underline">Register this verified account</button>}
       <button type="button" disabled={pending} onClick={() => run(async () => { await signOut(providerUser.auth); setProviderUser(null); setCurrent(''); })} className="block underline">Cancel and sign in again</button></>}
-    {!providerUser && <div className="flex gap-3">{(signupEnabled || migration) && <button type="button" disabled={pending} onClick={() => { setMode(mode === 'signup' ? 'login' : 'signup'); setPassword(''); setConfirmation(''); setMessage(''); }} className="underline">{mode === 'signup' ? 'Already have an account?' : 'Create account'}</button>}
+    {!providerUser && <div className="flex gap-3">{(signupEnabled || migration || Boolean(inviteToken)) && <button type="button" disabled={pending} onClick={() => { setMode(mode === 'signup' ? 'login' : 'signup'); setPassword(''); setConfirmation(''); setMessage(''); }} className="underline">{mode === 'signup' ? 'Already have an account?' : 'Create account'}</button>}
       <button type="button" disabled={pending} onClick={() => { setMode(mode === 'reset' ? 'login' : 'reset'); setPassword(''); setMessage(''); }} className="underline">{mode === 'reset' ? 'Back to sign in' : 'Forgot password?'}</button></div>}
     {message && <p role="status">{message}</p>}
     {!migration && <button type="button" disabled={pending} onClick={() => run(async () => { const response = await apiFetch('/auth/logout', { method: 'POST' }); if (!response.ok) throw new Error('Could not clear the session. Please retry.'); if (providerUser) await signOut(providerUser.auth); setProviderUser(null); setPassword(''); setCurrent(''); setUser(null); setMessage('Session cleared. Please sign in again.'); })} className="block underline text-sm">Clear session and try again</button>}

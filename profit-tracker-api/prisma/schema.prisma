@@ -48,6 +48,7 @@ model User {
   cashout_deal_snapshots CashoutDealSnapshot[]
   cashout_item_matches   CashoutItemMatch[]
   cashout_commitments    CashoutCommitment[]
+  invites                Invite[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -174,6 +175,21 @@ model AuthIntent {
   expires_at DateTime
   consumed Boolean @default(false)
   @@index([expires_at])
+}
+
+model Invite {
+  id         String    @id @default(uuid())
+  token_hash String    @unique
+  created_by String
+  user       User      @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  expires_at DateTime
+  consumed   Boolean   @default(false)
+  used_by    String?
+  created_at DateTime  @default(now())
+
+  @@index([token_hash])
+  @@index([expires_at])
+  @@index([created_by])
 }
 
 model MigrationApproval {

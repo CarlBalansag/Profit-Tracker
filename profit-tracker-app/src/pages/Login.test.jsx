@@ -9,7 +9,15 @@ const mocks = vi.hoisted(() => ({ user: null, loading: false }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: mocks.user, setUser: vi.fn(), loading: mocks.loading }) }));
 vi.mock('../services/firebaseAuth', () => ({ firebaseEnabled: true, signupEnabled: false }));
 vi.mock('../components/Auth/FirebaseLoginForm', () => ({
-  default: ({ migration } = {}) => <div data-testid="firebase-login-form" data-migration={String(!!migration)}>Firebase Login</div>
+  default: ({ migration, inviteToken } = {}) => (
+    <div
+      data-testid="firebase-login-form"
+      data-migration={String(!!migration)}
+      data-invite-token={inviteToken || ''}
+    >
+      Firebase Login
+    </div>
+  )
 }));
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); mocks.user = null; mocks.loading = false; });
@@ -59,5 +67,33 @@ describe('Firebase login page', () => {
 
     mount('/login?migrate=1');
     expect(screen.getByTestId('firebase-login-form').dataset.migration).toBe('true');
+  });
+
+  it('validates invite token and shows welcome banner when valid', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ valid: true, expires_at: new Date(Date.now() + 100000).toISOString() }),
+    });
+
+    mount('/login?invite=valid-test-token');
+
+    expect(await screen.findByText(/You've been invited!/i)).toBeInTheDocument();
+    expect(screen.getByTestId('firebase-login-form').dataset.inviteToken).toBe('valid-test-token');
+    expect(screen.getByText(/New here\? Use "Create account" above/i)).toBeInTheDocument();
+  });
+
+  it('shows error banner when invite token is invalid or expired', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      status: 410,
+      json: async () => ({ valid: false, reason: 'expired' }),
+    });
+
+    mount('/login?invite=expired-token');
+
+    expect(await screen.findByText(/Invite link unavailable/i)).toBeInTheDocument();
+    expect(screen.getByText(/This invite link has expired/i)).toBeInTheDocument();
+    expect(screen.getByTestId('firebase-login-form').dataset.inviteToken).toBe('');
   });
 });

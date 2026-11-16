@@ -2,15 +2,16 @@ const express = require('express');
 const { createHash, randomBytes } = require('node:crypto');
 const { z } = require('zod');
 const { verifyPassword } = require('../services/passwords');
+const { isAdmin } = require('./invites');
 const hash = value => createHash('sha256').update(value).digest('hex');
 const SESSION_MS = 5 * 24 * 60 * 60 * 1000;
-const TOKEN_SCHEMA = z.object({ id_token: z.string().min(1).max(12000), intent: z.string().uuid(), proof: z.string().length(64) }).strict();
-const INTENT_SCHEMA = z.object({ purpose: z.enum(['login', 'signup', 'migration']), current_password: z.string().min(1).max(128).optional() }).strict();
+const TOKEN_SCHEMA = z.object({ id_token: z.string().min(1).max(12000), intent: z.string().uuid(), proof: z.string().length(64), invite_token: z.string().min(1).max(128).optional() }).strict();
+const INTENT_SCHEMA = z.object({ purpose: z.enum(['login', 'signup', 'migration']), current_password: z.string().min(1).max(128).optional(), invite_token: z.string().min(1).max(128).optional() }).strict();
 const PUBLIC_ERROR = Symbol('publicAuthError');
 const fail = (status, message) => Object.assign(new Error(message), { status, [PUBLIC_ERROR]: true });
 const publicUser = user => ({ id: user.id, username: user.username, email: user.email,
   accounting_preferences: user.accounting_preferences, tutorial_seen: user.tutorial_seen,
-  auth_provider: 'firebase', password_change_required: false });
+  auth_provider: 'firebase', password_change_required: false, is_admin: isAdmin(user.email) });
 const save = session => new Promise((resolve, reject) => session.save(error => error ? reject(error) : resolve()));
 const INVALID = new Set(['auth/argument-error', 'auth/id-token-expired', 'auth/id-token-revoked', 'auth/invalid-id-token',
   'auth/session-cookie-expired', 'auth/session-cookie-revoked', 'auth/invalid-session-cookie', 'auth/user-disabled', 'auth/user-not-found']);
@@ -125,9 +126,20 @@ function createFirebaseAuth({ prisma, auth, config }) {
   router.post('/intent', safe(async (req, res) => {
     const parsed = INTENT_SCHEMA.safeParse(req.body);
     if (!parsed.success) throw fail(400, 'Invalid authentication request.');
-    const { purpose, current_password } = parsed.data;
+    const { purpose, current_password, invite_token } = parsed.data;
     if (purpose !== 'migration' && req.user) throw fail(409, 'Sign out before changing accounts.');
-    if (purpose === 'signup' && !config.signupEnabled) throw fail(403, 'Registration is not open yet.');
+    if (purpose === 'signup') {
+      if (invite_token) {
+        const inviteRecord = await prisma.invite.findUnique({
+          where: { token_hash: hash(invite_token) }
+        });
+        if (!inviteRecord || inviteRecord.consumed || inviteRecord.expires_at <= new Date()) {
+          throw fail(403, 'Invite link is invalid, expired, or has already been used.');
+        }
+      } else if (!config.signupEnabled) {
+        throw fail(403, 'Registration is not open yet.');
+      }
+    }
     if (purpose === 'migration') {
       if (!req.user || !req.localCredential || req.localCredential.must_change_password || req.user.login_disabled
         || !current_password || !await verifyPassword(current_password, req.localCredential.password_hash)) throw fail(401, 'Sign in with your private existing password first.');
@@ -145,7 +157,7 @@ function createFirebaseAuth({ prisma, auth, config }) {
   async function exchange(req, res, migration) {
     const parsed = TOKEN_SCHEMA.safeParse(req.body);
     if (!parsed.success) throw fail(400, 'Invalid authentication request.');
-    const { intent, proof, id_token } = parsed.data;
+    const { intent, proof, id_token, invite_token } = parsed.data;
     const claims = await verified(id_token);
     const value = await provider('createSessionCookie', id_token, { expiresIn: SESSION_MS });
     const fingerprint = hash(value);
@@ -168,7 +180,20 @@ function createFirebaseAuth({ prisma, auth, config }) {
       } else {
         if (req.user) throw fail(409, 'Sign out before changing accounts.');
         if (!identity) {
-          if (grant.purpose !== 'signup' || !config.signupEnabled) throw fail(403, 'Account not registered. Use signup or contact the owner.');
+          if (grant.purpose !== 'signup') throw fail(403, 'Account not registered. Use signup or contact the owner.');
+          if (!config.signupEnabled) {
+            if (!invite_token) throw fail(403, 'Account not registered. Registration is invite-only.');
+            const inviteUpdated = await tx.invite.updateMany({
+              where: { token_hash: hash(invite_token), consumed: false, expires_at: { gt: new Date() } },
+              data: { consumed: true, used_by: claims.email.toLowerCase() }
+            });
+            if (inviteUpdated.count !== 1) throw fail(403, 'Invite link has already been used or expired.');
+          } else if (invite_token) {
+            await tx.invite.updateMany({
+              where: { token_hash: hash(invite_token), consumed: false },
+              data: { consumed: true, used_by: claims.email.toLowerCase() }
+            });
+          }
           const email = claims.email.toLowerCase();
           if (await tx.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } })
             || await tx.localCredential.findUnique({ where: { email } })) throw fail(409, 'Account conflict. Contact the owner to preserve your records.');
