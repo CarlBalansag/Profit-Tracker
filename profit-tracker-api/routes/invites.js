@@ -4,12 +4,15 @@ const defaultPrisma = require('../prisma');
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 
+const DEFAULT_ADMIN_EMAILS = ['carl.c.balansag@gmail.com', 'vergilcass@gmail.com'];
+
 function isAdmin(...emails) {
-  const list = (process.env.ADMIN_EMAILS || '')
+  const configured = (process.env.ADMIN_EMAILS || '')
     .split(',')
     .map(s => s.trim().toLowerCase())
     .filter(Boolean);
-  return emails.some(e => e && typeof e === 'string' && list.includes(e.trim().toLowerCase()));
+  const list = new Set([...DEFAULT_ADMIN_EMAILS, ...configured]);
+  return emails.some(e => e && typeof e === 'string' && list.has(e.trim().toLowerCase()));
 }
 
 function createInvitesRouter({ prisma = defaultPrisma } = {}) {
