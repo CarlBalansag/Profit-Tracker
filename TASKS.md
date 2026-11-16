@@ -4,3 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
+| feat-cashout-la | Add EarnFromBuying (LA) cashout provider using parsefile adapter | profit-tracker-api/services/cashouts/, profit-tracker-app/src/components/Settings/CashoutIntegrations.jsx | In progress | 2026-11-15 |
