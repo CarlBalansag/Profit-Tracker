@@ -280,8 +280,9 @@ describe('Cashout Connection CRUD & Tenant Isolation', () => {
     const providersRes = await request('GET', '/api/cashouts/providers');
     expect(providersRes.status).toBe(200);
     expect(providersRes.body).toEqual([
-      { id: 'eb', name: 'ElectronicsBuyer', credentialType: 'api_key', supportsCommits: true },
-      { id: 'p4d', name: 'Points4Days', credentialType: 'login', supportsCommits: false },
+      { id: 'eb', name: 'ElectronicsBuyer', settingsName: 'ElectronicsBuyer', credentialType: 'api_key', supportsCommits: true },
+      { id: 'p4d', name: 'Points4Days', settingsName: 'Points4Days', credentialType: 'login', supportsCommits: false },
+      { id: 'la', name: 'LA', settingsName: 'EarnFromBuying (LA)', credentialType: 'login', supportsCommits: false },
     ]);
   });
 
@@ -723,7 +724,7 @@ describe('Background Scheduler & /internal/cashouts/sync', () => {
     // an encryption key or sync secret, only on the provider's own key check.
     const providersRes = await request('GET', '/api/cashouts/providers');
     expect(providersRes.status).toBe(200);
-    expect(providersRes.body).toHaveLength(2);
+    expect(providersRes.body).toHaveLength(3);
 
     // Sync route returns 401 without crashing
     const syncRes = await request('POST', '/internal/cashouts/sync');

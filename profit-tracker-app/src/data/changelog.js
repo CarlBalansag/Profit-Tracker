@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.32',
+    date: '2026-11-15',
+    notes: "Connect your EarnFromBuying (LA) account to view live deals from LA alongside ElectronicsBuyer and Points4Days on the Cashout page.",
+  },
+  {
     version: '1.31',
     date: '2026-11-15',
     notes: "Admins can now create secure, single-use 3-day invite links from Settings to invite new members to register while keeping the app private.",
