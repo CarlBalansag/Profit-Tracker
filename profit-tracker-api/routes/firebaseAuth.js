@@ -9,9 +9,9 @@ const TOKEN_SCHEMA = z.object({ id_token: z.string().min(1).max(12000), intent: 
 const INTENT_SCHEMA = z.object({ purpose: z.enum(['login', 'signup', 'migration']), current_password: z.string().min(1).max(128).optional(), invite_token: z.string().min(1).max(128).optional() }).strict();
 const PUBLIC_ERROR = Symbol('publicAuthError');
 const fail = (status, message) => Object.assign(new Error(message), { status, [PUBLIC_ERROR]: true });
-const publicUser = user => ({ id: user.id, username: user.username, email: user.email,
+const publicUser = (user, identity) => ({ id: user.id, username: user.username, email: identity?.email || user.email,
   accounting_preferences: user.accounting_preferences, tutorial_seen: user.tutorial_seen,
-  auth_provider: 'firebase', password_change_required: false, is_admin: isAdmin(user.email) });
+  auth_provider: 'firebase', password_change_required: false, is_admin: isAdmin(user.email, identity?.email) });
 const save = session => new Promise((resolve, reject) => session.save(error => error ? reject(error) : resolve()));
 const INVALID = new Set(['auth/argument-error', 'auth/id-token-expired', 'auth/id-token-revoked', 'auth/invalid-id-token',
   'auth/session-cookie-expired', 'auth/session-cookie-revoked', 'auth/invalid-session-cookie', 'auth/user-disabled', 'auth/user-not-found']);

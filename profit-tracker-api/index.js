@@ -193,7 +193,7 @@ app.get(['/auth/discord', '/auth/discord/callback'], (req, res) => res.redirect(
 
 // Current Session Route
 app.get('/auth/me', (req, res) => {
-  if (req.user) res.json(firebaseAuth.publicUser(req.user));
+  if (req.user) res.json(firebaseAuth.publicUser(req.user, req.firebaseIdentity));
   else res.status(401).json({ message: 'Unauthorized' });
 });
 

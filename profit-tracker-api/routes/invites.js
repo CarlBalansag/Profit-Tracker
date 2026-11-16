@@ -4,13 +4,12 @@ const defaultPrisma = require('../prisma');
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 
-function isAdmin(email) {
-  if (!email || typeof email !== 'string') return false;
+function isAdmin(...emails) {
   const list = (process.env.ADMIN_EMAILS || '')
     .split(',')
     .map(s => s.trim().toLowerCase())
     .filter(Boolean);
-  return list.includes(email.trim().toLowerCase());
+  return emails.some(e => e && typeof e === 'string' && list.includes(e.trim().toLowerCase()));
 }
 
 function createInvitesRouter({ prisma = defaultPrisma } = {}) {
@@ -22,7 +21,7 @@ function createInvitesRouter({ prisma = defaultPrisma } = {}) {
   };
 
   const requireAdmin = (req, res, next) => {
-    if (req.user && isAdmin(req.user.email)) return next();
+    if (req.user && isAdmin(req.user.email, req.firebaseIdentity?.email)) return next();
     res.status(403).json({ error: 'Admin access required.' });
   };
 
