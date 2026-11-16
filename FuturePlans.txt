@@ -1,0 +1,474 @@
+# PROFIT TRACKER — COMPREHENSIVE FUTURE PLANS & ROADMAP
+================================================================================
+Consolidated from all future plan documents, REA features, ideas, and roadmaps.
+Preserves full data models, calculation logic, workflow states, and implementation steps.
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+1. ACTIVE NEAR-TERM PLANS & MIGRATIONS
+   1.1 Mobile Responsiveness Overhaul (feature/mobile-responsive-ui)
+   1.2 Currency Decimal Precision Migration (Task 8 Completion)
+   1.3 Transactions & Shipping Table Layout Polish
+2. CORE WORKFLOW & STATUS AUTOMATION
+   2.1 Lean Status Architecture (Inventory vs. Sales separation)
+   2.2 Platform-Specific Workflows (Standard, Auth, Cash-Out, Local)
+   2.3 Tracking Event Milestones & Automations
+   2.4 User Action Registry, Confirmation & Undo Policies
+   2.5 Legacy Status Migration Mapping
+3. TAXES & COMPLIANCE
+   3.1 Full Schedule C Worksheet (Parts I–V & Form 8829)
+   3.2 Business Tax Profile & Income Accounting
+   3.3 Inventory Valuation & COGS (Specific Identification & Batch Cost)
+   3.4 Vehicle & Mileage Tracking (Stride Import & Records)
+   3.5 Equipment & Depreciation Asset Register
+   3.6 Home Office Deduction (Simplified & Actual Expense)
+   3.7 Reseller Tax-Exempt & Resale Certificate System
+4. BUYING GROUPS & DEAL SOURCING (REA FEATURES)
+   4.1 Buying-Group Live Deals Feed (parsefile Platform Integration)
+   4.2 Automatic Tracking Sync & Delivery Calendar
+   4.3 Additional Reseller Tool Ideas (Email Import, Price Drops, Alerts)
+5. FINANCIAL & OPERATIONAL MODULES
+   5.1 Invoices & Accounts Receivable (B2B / Cash Flow Link)
+   5.2 Receipts Management & Cloud Storage (Orphaned Receipts Inbox)
+   5.3 Forecast Planner, Simulation Engine & Goal Tracking
+6. CREDIT CARDS & PAYMENT METHODS ENHANCEMENTS
+   6.1 Rotating Quarterly Category Rates (Auto-Detect, Banners & Toasts)
+   6.2 Statement Balance Snapshots & Due Date Alerts
+   6.3 Signup Bonus (SUB) Spend Tracker
+   6.4 ROI Calculators & Multi-Card Optimization Tips
+7. BACKLOG: PLATFORM, INFRASTRUCTURE & CODE QUALITY
+   7.1 Data Portability (CSV/Excel Export & Bulk CSV Import)
+   7.2 AI Integrations (Claude Resale Pricing & Monthly P&L Summaries)
+   7.3 Third-Party APIs (Official eBay Browse API)
+   7.4 Backend Infrastructure (Rate Limiting, Morgan Logging, Cron Workers)
+   7.5 Frontend Refactoring (Component Splits & Gradual TypeScript Adoption)
+
+
+================================================================================
+1. ACTIVE NEAR-TERM PLANS & MIGRATIONS
+================================================================================
+
+--------------------------------------------------------------------------------
+1.1 Mobile Responsiveness Overhaul
+--------------------------------------------------------------------------------
+Context & Branch:
+- Branch: `feature/mobile-responsive-ui`
+- Worktree / Local setup: Vite frontend on mobile ports; tests run via Playwright.
+- Ground rules: CSS/layout/responsive-structure only. Preserve all desktop functionality
+  without removing features (use cards, accordions, horizontal scrollers where needed).
+- Target screen widths: 320px, 375px, 390px, 430px, 768px, 1024px, and 1440px desktop regression.
+
+Completed & Audited:
+- Shell / Header: Mobile header with hamburger menu button (`lg:hidden`), drawer overlay,
+  backdrop, and z-index verified across all resolutions.
+- Sidebar Drawer:
+  * Neon-dark theme: Added event-delegation auto-close onClick on `<aside>` so drawer
+    closes on link tap. Verified from 320px to 1440px.
+  * Glassmorphism-brown theme: Same close-on-nav fix applied and verified.
+- Shared Table (`src/components/UI/Table.jsx`):
+  * Horizontal scroll container pattern verified across Receipts, Dashboard Recent Sales,
+    Expenses, Tax Exempt, and Analytics.
+- Full sweep completed for all 18 authenticated routes plus `/login` with zero horizontal page overflow.
+
+Remaining Follow-ups:
+- Final verification of `/schedule-c` once the feature flag is enabled.
+- Verify unrouted components (`Forecast.jsx`) when integrated.
+- Write one What's New entry in `profit-tracker-app/src/data/changelog.js` upon final merge.
+
+--------------------------------------------------------------------------------
+1.2 Currency Decimal Precision Migration
+--------------------------------------------------------------------------------
+Context & Status:
+- Replaces floating-point math with PostgreSQL `NUMERIC` and Prisma `Decimal`.
+- Prevents precision drift and rounding issues across multi-item splits, fees, and taxes.
+
+Completed Stages (Tasks 1–7 + Reversible Task 8):
+1. Audit: 21 Float fields classified (15 money, 3 rate, 3 goal targets, 1 invoice). Zero legacy drift in stored DB values; drift was occurring in client/server JS floating math.
+2. Utilities: `profit-tracker-api/services/money.js` (Prisma Decimal based add, subtract, multiply, allocate with remainder distribution, moneyString, rateString).
+3. Schema: Additive migration `20260930000000_additive_currency_decimals` created 21 nullable Decimal columns with 9 PostgreSQL synchronization triggers.
+4. Inventory Writes: `createInventory`/`updateInventory` strictly parse input using `decimalAmount()`.
+5. Sales Writes: Strict Decimal validation applied to all sales money fields and inline sales.
+6. Supporting Writes: Strict Decimal validation applied to Expenses, Recurring Expenses, Payment Methods, Platforms, and Goals.
+7. Reports & Serialization: Backend aggregates in Decimal via `services/decimalFinance.js` and rounds to 2 decimal places at JSON response boundary.
+8. Reversible Read Cutover: All endpoints serve Decimal values via `services/decimalRead.js` under legacy field names.
+
+Pending Final Step (Task 8 Irreversible Cleanup):
+- Run production reconciliation query (confirm zero drift > $0.005 and zero unexpected nulls).
+- Create reversible migration to permanently drop legacy `Float` columns from PostgreSQL schema.
+- Update data dictionary and Prisma schema removing Float fields.
+
+--------------------------------------------------------------------------------
+1.3 Transactions & Shipping Table Layout Polish
+--------------------------------------------------------------------------------
+- Transactions Table: Horizontal scroll container (`overflow-x-auto` + `.table-scrollbar`), synced top-scrollbar mirror, sticky leftmost selection checkbox and sticky rightmost action buttons.
+- Outbound Shipping Table: Sticky actions and mobile card fallback.
+- Pending QA: Manual browser visual sanity check on hover tints and border overlaps on sticky cells during horizontal scroll.
+
+
+================================================================================
+2. CORE WORKFLOW & STATUS AUTOMATION
+================================================================================
+
+--------------------------------------------------------------------------------
+2.1 Lean Status Architecture
+--------------------------------------------------------------------------------
+Separates inventory receiving status from sales fulfillment status. Do not store every condition as a separate monolithic enum.
+
+[A] Inventory Receiving Pipeline:
+    PRE_ORDER -> PURCHASED -> INBOUND -> ON_HAND
+- `PRE_ORDER`: Vendor has not yet released or shipped the purchase.
+- `PURCHASED`: Order placed; no active tracking yet.
+- `INBOUND`: Inbound carrier tracking number attached; package in transit.
+- `ON_HAND`: Item received and physically held. Terminal receiving state.
+- Derived Availability:
+  * `qty_on_hand > 0` -> Available
+  * `qty_on_hand == 0` -> SOLD_OUT (calculated dynamically, not a stored receiving status)
+  * Listing status is an orthogonal boolean/state: `UNLISTED` vs. `LISTED`.
+
+[B] Sale Workflow Pipeline:
+    AWAITING_SHIPMENT -> OUTBOUND -> [Workflow Steps] -> WAITING_FOR_PAYMENT -> PAID
+- `AWAITING_SHIPMENT`: Shown as "Sold — Waiting to Ship".
+- `OUTBOUND`: Replaces legacy `SHIPPED_OUT`. Tracking attached.
+- `WAITING_FOR_PAYMENT`: Outbound delivery confirmed; waiting for platform payout.
+- `PAID`: Final successful state. Payout received and reconciled.
+- Exception states (outside normal progression):
+  `CANCELLED`, `RETURN_IN_PROGRESS`, `RETURNED`, `DISPUTED`, `AUTHENTICATION_FAILED`.
+
+Multi-Unit Integrity:
+- Purchase of 5 units: receiving status stays `ON_HAND`.
+- Selling 2 units decreases `qty_on_hand` from 5 to 3 and creates a Sale row with status `AWAITING_SHIPMENT`.
+- UI display: "3 available · 2 outbound".
+
+--------------------------------------------------------------------------------
+2.2 Platform-Specific Workflows
+--------------------------------------------------------------------------------
+When a sale is created, it inherits a workflow based on platform settings:
+
+1. Standard Marketplace (eBay, Mercari):
+   AWAITING_SHIPMENT -> OUTBOUND -> Carrier Delivered -> WAITING_FOR_PAYMENT -> PAID
+
+2. Authentication Marketplace (StockX, GOAT):
+   AWAITING_SHIPMENT -> OUTBOUND -> DELIVERED_TO_AUTHENTICATOR -> AUTHENTICATING -> WAITING_FOR_PAYMENT -> PAID
+   * Exception: AUTHENTICATING -> AUTHENTICATION_FAILED -> RETURN_IN_PROGRESS -> RETURNED.
+   * Note: Do not restore inventory when authentication fails; only restore after physical item is returned and accepted.
+
+3. Cash-Out / Buyback Provider (ElectronicsBuyer, Buying Groups):
+   AWAITING_SHIPMENT -> OUTBOUND -> DELIVERED_TO_PROVIDER -> WAITING_FOR_SCAN_IN -> SCANNED_IN -> [ACCEPTED] -> WAITING_FOR_PAYMENT -> PAID
+
+4. Direct or Local Sale (In-person, Cash):
+   AWAITING_HANDOFF -> HANDED_OVER -> WAITING_FOR_PAYMENT -> PAID (or direct to PAID if paid on handoff).
+
+--------------------------------------------------------------------------------
+2.3 Tracking Event Milestones & Automations
+--------------------------------------------------------------------------------
+- Milestone Timestamps: `received_at`, `delivered_at`, `paid_at`, `cancelled_at`.
+- Routine Tracking Updates:
+  * Inbound tracking added -> moves `PURCHASED` to `INBOUND`.
+  * Carrier reports inbound delivered -> records `delivered_at`, `received_at`, advances to `ON_HAND`.
+  * Outbound tracking added -> moves `AWAITING_SHIPMENT` to `OUTBOUND`.
+  * Carrier reports outbound delivered -> records `delivered_at`, advances sale to next workflow step (e.g. `WAITING_FOR_PAYMENT` or `AUTHENTICATING`).
+- Optimization: Shared tracking numbers across multiple items trigger only one carrier API lookup and batch update all related items.
+
+--------------------------------------------------------------------------------
+2.4 User Action Registry, Confirmation & Undo Policies
+--------------------------------------------------------------------------------
+Contextual Action Buttons (Replace unrestricted dropdowns):
+- Pre-Order: [Mark Purchased], [Cancel]
+- Purchased: [Add Tracking], [Mark On Hand]
+- Inbound: [Check Tracking], [Mark On Hand]
+- On Hand: [List Item], [Record Sale]
+- Listed: [Record Sale], [Unlist]
+- Sold — Waiting to Ship: [Add Outbound Tracking]
+- Outbound: [Check Tracking]
+- Authenticating: [Mark Passed], [Mark Failed]
+- Waiting for Scan-In: [Mark Scanned In]
+- Waiting for Payment: [Mark Paid]
+- Paid: Completed (Read-only)
+
+Confirmation Policy:
+- Routine Actions (No dialog, show temporary toast with "Undo"):
+  Add tracking, mark on hand, list/unlist, mark scanned in, submit sale form, mark paid.
+- Destructive Actions (Explicit confirmation modal required):
+  Void sale, cancel after shipment, reopen paid sale, report dispute, mark authentication failed, manual inventory quantity overrides.
+- Void vs Cancel vs Return:
+  * Void: Sale was entered in error. Restores inventory, completely excludes sale from P&L.
+  * Cancel: Valid sale was cancelled. Preserves historical record, restores inventory.
+  * Return: Preserves sale and payment; inventory is restored only after item return is inspected and accepted.
+
+--------------------------------------------------------------------------------
+2.5 Legacy Status Migration Mapping
+--------------------------------------------------------------------------------
+Normalize stored database values to uppercase canonical constants:
+- `Pre Order` -> `PRE_ORDER`
+- `PURCHASED` -> `PURCHASED`
+- `SHIPPED_IN` -> `INBOUND`
+- Inbound `DELIVERED` or `SCANNED_IN` -> `ON_HAND`
+- `LISTED` -> `is_listed = true` + `ON_HAND`
+- `SOLD` -> `AWAITING_SHIPMENT`
+- `SHIPPED_OUT` -> `OUTBOUND`
+- `AUTHENTICATION` -> `AUTHENTICATING`
+- `COMPLETED` -> `PAID` (where payout was confirmed)
+
+
+================================================================================
+3. TAXES & COMPLIANCE
+================================================================================
+
+--------------------------------------------------------------------------------
+3.1 Full Schedule C Worksheet (Parts I–V & Form 8829)
+--------------------------------------------------------------------------------
+Goal: Expand current partial Part II implementation into a full Part I–V worksheet.
+
+- Part I: Gross Income
+  * Gross receipts = sum of realized sales (`unit_price * quantity`).
+  * Returns and allowances = customer refunds and return adjustments.
+  * Other income = manual entries (promotions, settlements, shipping insurance payouts).
+- Part II: Expenses (Expanded ~24 Category Taxonomy)
+  * Line 9: Car and truck expenses
+  * Line 11: Contract labor
+  * Line 13: Depreciation and section 179
+  * Line 14: Employee benefit programs
+  * Line 15: Insurance (other than health)
+  * Line 16a/b: Mortgage interest / Other business interest
+  * Line 18: Office expense
+  * Line 19: Pension and profit-sharing plans
+  * Line 20a/b: Rent/lease (vehicles/equipment vs. other business property)
+  * Line 21: Repairs and maintenance
+  * Line 22: Supplies
+  * Line 23: Taxes and licenses
+  * Line 24a/b: Travel / Deductible meals (with 50% IRS limitation calculation)
+  * Line 25: Utilities
+  * Line 26: Wages
+  * Line 27a: Other expenses (itemized from Part V)
+- Part III: Cost of Goods Sold (COGS)
+  * Line 33: Inventory method selection (Default: Cost / Specific Identification).
+  * Line 35: Beginning inventory (manual entry / prior year ending inventory).
+  * Line 36: Purchases less personal withdrawals = derived from `batchCost(inventory)` for tax year.
+  * Line 37: Cost of labor.
+  * Line 38: Materials and supplies.
+  * Line 39: Other costs (inbound freight/shipping).
+  * Line 41: Ending inventory (manual entry / physical inventory valuation).
+- Part IV: Information on Your Vehicle
+  * Feeds into Line 9. Records placed-in-service date, business vs commuting vs personal mileage, evidence availability.
+- Part V: Other Expenses Detail
+  * Itemized breakdown of software subscriptions, platform listing fees, bank/merchant processing fees, packaging supplies.
+- Form 8829: Expenses for Business Use of Your Home
+  * Simplified method ($5/sq ft up to 300 sq ft = max $1,500) vs. actual expenses. Feeds Schedule C Line 30.
+
+New Tables Required:
+- `ScheduleCYearDetail` (`user_id`, `year`, `other_income_decimal`, `inventory_method`, `beginning_inventory_decimal`, `cost_of_labor_decimal`, `materials_supplies_decimal`, `other_costs_decimal`, `ending_inventory_override_decimal`).
+- `ScheduleCVehicle` (`user_id`, `year`, `description`, `placed_in_service_date`, `business_miles`, `commuting_miles`, `total_miles`, `method`, `actual_expenses_decimal`).
+- `ScheduleCHomeOffice` (`user_id`, `year`, `method`, `business_sqft`, `home_sqft`, `actual_expenses_decimal`).
+
+--------------------------------------------------------------------------------
+3.2 Business Tax Profile & Income Accounting
+--------------------------------------------------------------------------------
+Profile Data Model (Per user/business entity and tax year):
+- Entity type (Sole Proprietorship, Single-Member LLC).
+- Business name / DBA, EIN, Business address.
+- Principal business description and 6-digit NAICS code.
+- Accounting method: Cash vs. Accrual.
+- 1099 question: Were payments made requiring 1099 filing? Were they filed?
+
+Reseller Income Structure:
+  Gross Receipts (Customer charges + shipping charged)
+  - Returns and Allowances
+  = Net Receipts
+  - Cost of Goods Sold (COGS)
+  = Gross Profit
+  - Platform Fees & Outbound Shipping
+  - Operating Overhead & Other Business Expenses
+  = Net Profit
+
+--------------------------------------------------------------------------------
+3.3 Inventory Valuation & COGS
+--------------------------------------------------------------------------------
+- Specific Identification Method at actual purchase cost (purchase price + nonrefundable sales tax + inbound shipping).
+- Purchase Adjustments: Vendor credits, partial refunds, coupon corrections, and sales tax refunds link to the original purchase batch and reduce unit cost basis.
+- Personal Withdrawals: Flag items removed from inventory for personal use to exclude from COGS.
+
+--------------------------------------------------------------------------------
+3.4 Vehicle & Mileage Tracking
+--------------------------------------------------------------------------------
+- Recommended initial implementation: Stride CSV import parser with duplicate detection and manual review queue.
+- Trip attributes: Date, miles, origin/destination, business purpose, related purchase/shipment ID, deduction method (standard IRS mileage rate vs. actual expenses). Parking and tolls tracked separately as 100% deductible travel/transportation expenses.
+
+--------------------------------------------------------------------------------
+3.5 Equipment & Depreciation Asset Register
+--------------------------------------------------------------------------------
+- Differentiate:
+  * Inventory: Goods bought for resale.
+  * Supplies: Consumables (boxes, poly mailers, bubble wrap, thermal labels).
+  * Equipment/Assets: Long-term operational tools (computers, label printers, cameras, shelving, dollies).
+- Asset Fields: Name, serial number, vendor, receipt link, purchase date, placed-in-service date, cost basis, business-use %, proposed tax treatment (Section 179 expense vs. MACRS depreciation).
+
+--------------------------------------------------------------------------------
+3.6 Home Office Deduction
+--------------------------------------------------------------------------------
+- Reseller-specific rules: Support both dedicated exclusive office workspace and dedicated inventory storage areas (qualifies even if shared space if home is the only fixed business location).
+- Fields: Total home sq ft, business sq ft, storage sq ft, months active, method (simplified vs. actual expenses: rent, mortgage interest, property taxes, utilities, insurance, maintenance).
+
+--------------------------------------------------------------------------------
+3.7 Reseller Tax-Exempt & Resale Certificate System
+--------------------------------------------------------------------------------
+Separate into 3 distinct tax mechanisms:
+1. Reseller buying inventory tax-free for resale:
+   - Resale certificate profile: Purchaser name, address, state jurisdiction, resale certificate permit number, document PDF upload, expiration date.
+   - Per purchase: Flagged tax-exempt, certificate attached, vendor sales tax charged/refunded.
+2. Reseller selling tax-free to other businesses/cash-outs:
+   - Buyer resale certificate verification, permit number, destination jurisdiction.
+3. Marketplace Facilitator Collection:
+   - Clear identification when eBay/StockX collects and remits customer sales tax.
+   - Replaces vague `customer_tax_exempt` boolean with explicit tax collector assignment.
+
+
+================================================================================
+4. BUYING GROUPS & DEAL SOURCING (REA FEATURES)
+================================================================================
+
+--------------------------------------------------------------------------------
+4.1 Buying-Group Live Deals Feed (parsefile Platform Integration)
+--------------------------------------------------------------------------------
+Source & Architecture:
+- Supported groups: Points4Days, MVP Buying Group, MaxOut Deals, Big Deal Points, BuyersForPoints.
+- Unified Architecture: All 5 groups run on the identical `parsefile` web platform; one client implementation handles all five by swapping the base URL.
+- Authentication & Payload Encryption:
+  * `SESSID` cookie bootstrap and encrypted POST login requests.
+  * Encrypted payloads: AES-256-CBC, OpenSSL `EVP_BytesToKey` key derivation using MD5 and `SESSID` as password, 8-byte salt.
+  * Format: `{ "_encrypted": JSON.stringify({ ct, iv, s }) }`.
+- Deals Feed Reading:
+  * Reads `it@deals` / `it@deals-card` table data.
+  * Fields mapped: Deal ID (`t_f_id`), Title (`t_f_title`), Group payout price (`t_f_total`), Retail price (`t_f_retail`), Insurance coverage (`t_f_insurance`), Availability (`t_f_enabled && t_f_active && !t_f_full`), Order commitment requirement (`t_f_order_required`).
+- Integration into Cashouts Page:
+  * Plugs into existing `services/cashouts/` architecture (`registry.js`, `dealPresenter.js`).
+  * Encrypted credential storage in `CashoutConnection`.
+  * Bot/Captcha Guard: If Cloudflare Turnstile or 2FA challenge is detected, fail safely and alert user to reconnect.
+
+--------------------------------------------------------------------------------
+4.2 Automatic Tracking Sync & Delivery Calendar
+--------------------------------------------------------------------------------
+- Scheduled Background Sync:
+  * Background cron job running every 2–4 hours using PostgreSQL advisory locks.
+  * Syncs active in-transit shipments (oldest refreshed first, skips delivered/returned packages).
+- Expanded Carrier Coverage:
+  * DHL: Official DHL Unified Tracking API integration (`services/carriers/dhl.js`).
+  * Amazon (`TBA...`): Direct carrier tracking links (`https://track.amazon.com/tracking/<num>`).
+- Auto-Upload Tracking to Buying Groups:
+  * BuyingGroup.com API (`POST /v1/order/add_trackings`).
+  * `parsefile` groups: Upload tracking numbers via `uploadTrackings` on `it@orders`.
+- Shipping Delivery Calendar:
+  * Top of `Shipping.jsx` page: Summary stats (Arriving Today, This Week, No ETA, Not Moving, Delivered).
+  * Day strip: Cards per day showing incoming package count and total purchase value.
+  * Filter tabs: "Not Moving" tab for packages created but not yet in carrier transit after N days.
+
+--------------------------------------------------------------------------------
+4.3 Additional Reseller Tool Ideas
+--------------------------------------------------------------------------------
+- Email Order Import: IMAP/Gmail integration to parse retailer purchase confirmations and shipping notices automatically.
+- Best Payout Across Groups & Historical Trends: Compare live payouts between ElectronicsBuyer, Points4Days, MVP, etc., and display price trend charts.
+- Deal & Delivery Webhook Alerts: Discord webhook pings when target deals appear or shipments arrive.
+- Gift Card Tracker: Track individual gift card balances, cards used on purchases, and remaining balances.
+- Price-Drop / Price-Match Tracker: Monitor purchases inside retailer price-adjustment windows to claim refunds.
+- Amazon Order History CSV Import: Bulk purchase creation from downloaded Amazon B2B/consumer order history.
+
+
+================================================================================
+5. FINANCIAL & OPERATIONAL MODULES
+================================================================================
+
+--------------------------------------------------------------------------------
+5.1 Invoices & Accounts Receivable
+--------------------------------------------------------------------------------
+Purpose: Manage B2B / wholesale sales and bulk cash-out payouts where funds are owed but not yet received.
+- Data Schema:
+  * `invoices`: `id`, `user_id`, `buyer_id`, `amount_due`, `amount_paid`, `status` (`DRAFT`, `SENT`, `PARTIAL`, `PAID`, `OVERDUE`), `due_date`, `created_at`.
+  * `invoice_sales` (Pivot): `invoice_id`, `sale_id`.
+- Cash Flow Integration: Outstanding balance (`amount_due - amount_paid`) directly calculates into "Total Owed" on the Cash Flow dashboard.
+
+--------------------------------------------------------------------------------
+5.2 Receipts Management & Cloud Storage
+--------------------------------------------------------------------------------
+- Orphaned Receipts Inbox ("Action Needed"):
+  * Allow users to upload receipts (images/PDFs) before entering transactions.
+  * Receipts with `linked_record_id = null` stay in an unassigned inbox until attached to an inventory purchase or expense.
+- Storage Integration: Option to archive receipt files directly to Google Drive or AWS S3.
+
+--------------------------------------------------------------------------------
+5.3 Forecast Planner, Simulation Engine & Goal Tracking
+--------------------------------------------------------------------------------
+- Baseline Analytics (Past 90 days):
+  * Average Yield: Marketplace ROI vs. Churning cashback yield.
+  * Sales Velocity: Average days between purchase date and payout date.
+- Simulation Engine: Pure JS theoretical math simulation plotting projected revenue and profit curves for future spend budgets (e.g. "Next 30/60/90 Days").
+- Goals Model:
+  * Table `goals`: `id`, `user_id`, `goal_type` (`WEEKLY_PROFIT`, `MONTHLY_VOLUME`, `UNITS_SOLD`), `target_amount`, `start_date`, `end_date`.
+  * Dashboard visual progress rings comparing live realized metrics against target amounts.
+
+
+================================================================================
+6. CREDIT CARDS & PAYMENT METHODS ENHANCEMENTS
+================================================================================
+
+--------------------------------------------------------------------------------
+6.1 Rotating Quarterly Category Rates
+--------------------------------------------------------------------------------
+- Expiring Rates Alert Banner: Display warning banner in Payment Methods when cards with rotating 5% categories (Chase Freedom Flex, Discover it) have rates expiring within 14 days.
+- Toast Notifications: Fire UI toast notification when AddTransaction auto-switches to a matching vendor bonus rate (e.g. "Freedom Flex: Applied 5% Amazon bonus rate").
+- Automated Refresh options: Cron job checking quarterly categories or manual pre-filled update prompt.
+
+--------------------------------------------------------------------------------
+6.2 Statement Balance Snapshots & Due Date Alerts
+--------------------------------------------------------------------------------
+- Statement Snapshots: Record statement closing date balances to compare statement balance vs. live current balance.
+- Auto-Pay Reminders: Prominent warning banners 3 days before credit card payment due date (e.g. "Chase Sapphire due in 2 days — pay $432.10").
+
+--------------------------------------------------------------------------------
+6.3 Signup Bonus (SUB) Spend Tracker
+--------------------------------------------------------------------------------
+- Visual progress bar towards bonus spend requirements (e.g. "Spend $450 more by Dec 15 to unlock $200 bonus") based on `signupBonus` and `signupBonusReq` on payment methods.
+
+--------------------------------------------------------------------------------
+6.4 ROI Calculators & Multi-Card Optimization
+--------------------------------------------------------------------------------
+- Annual Fee ROI Calculator: Progress bar tracking cumulative cashback earned vs. card annual fee (e.g. "$95 annual fee covered after $95 cashback earned").
+- Monthly Utilization History: Line chart tracking credit utilization % per card over the past 6 months.
+- Card Optimization Tips: Vendor-level prompts suggesting the card with the highest cashback rate for a given store.
+
+
+================================================================================
+7. BACKLOG: PLATFORM, INFRASTRUCTURE & CODE QUALITY
+================================================================================
+
+--------------------------------------------------------------------------------
+7.1 Data Portability
+--------------------------------------------------------------------------------
+- CSV / Excel Export: `GET /api/export?format=csv&from=...&to=...` on Transactions and Analytics pages with cost, revenue, profit, platform fees, and cashback breakdown.
+- Bulk CSV Import: Multi-row spreadsheet upload for historical purchases with interactive column-mapping UI.
+
+--------------------------------------------------------------------------------
+7.2 AI Integrations (Claude API)
+--------------------------------------------------------------------------------
+- AI Resale Price Suggestions: Feed item title/brand to Claude API to return suggested resale price range and estimated velocity (augmenting/replacing web scraping).
+- AI Monthly Business Summary: Dashboard button feeding month's P&L into Claude to generate plain-English performance summaries.
+
+--------------------------------------------------------------------------------
+7.3 Third-Party APIs
+--------------------------------------------------------------------------------
+- Official eBay Browse API: Replace Cheerio web scraping with official OAuth eBay API integration.
+
+--------------------------------------------------------------------------------
+7.4 Backend Infrastructure & Security
+--------------------------------------------------------------------------------
+- API Rate Limiting: `express-rate-limit` on all `/api/*` routes with strict limits on auth.
+- Request Logging: Morgan logging middleware for response times, paths, and error codes.
+- Background Cron Jobs: Move recurring expense generation out of GET requests into dedicated Node/system cron workers.
+- Database Pagination: Add `page` and `limit` to `/api/inventory`, `/api/sales`, `/api/transactions` and push aggregation math into SQL queries.
+
+--------------------------------------------------------------------------------
+7.5 Frontend Refactoring & Code Quality
+--------------------------------------------------------------------------------
+- Split Monolithic Pages: Refactor 1200+ line components (`Transactions.jsx`, `AddTransaction.jsx`) into custom hooks and smaller sub-components.
+- TypeScript Migration: Gradual typing starting with `useApi.js`, API schemas, and financial calculation models.
+- Automated CI Pipeline: GitHub Actions workflow running Vitest and ESLint on every push/PR.
+================================================================================
