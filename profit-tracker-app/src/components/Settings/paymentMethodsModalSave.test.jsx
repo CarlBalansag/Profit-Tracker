@@ -327,6 +327,13 @@ describe('Credit and debit sections', () => {
     expect(screen.queryByText(/Analytics View/)).toBeNull();
   });
 
+  it("shows a linked card's issuer from the card list, not the first word of its name", async () => {
+    savedMethods = [{ id: 'g', name: 'Gold for inventory', type: 'Credit', reward_type: 'points', points_base_rate: 1, point_value_cents: 1, default_cashback_rate: 1, catalog_card_id: 'us-amex-gold', category_rates: [], total_spend: 0 }];
+    render(<PaymentMethods />);
+    expect(await screen.findByText('American Express')).toBeTruthy();
+    expect(screen.queryByText('Gold')).toBeNull();
+  });
+
   it('"Add debit card" opens the Custom form with Debit selected', async () => {
     render(<PaymentMethods />);
     fireEvent.click(await screen.findByRole('button', { name: 'Add debit card' }));

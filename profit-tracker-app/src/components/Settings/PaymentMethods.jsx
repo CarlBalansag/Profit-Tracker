@@ -237,6 +237,12 @@ export const PaymentMethods = () => {
 
   const reworkItems = cardsNeedingRework(savedMethods, catalogCards);
   const catalogById = new Map(catalogCards.map(c => [c.id, c]));
+  // Linked cards use the card list's issuer; others fall back to the first
+  // word of the name. "U.S. Bank" is spelled the way the logo map expects.
+  const issuerOf = (card) => {
+    const issuer = catalogById.get(card.catalogCardId)?.issuer;
+    return issuer ? issuer.replace(/^U\.S\. Bank$/, 'US Bank') : card.issuer;
+  };
   // Only perks that matter for reselling (purchase protection, shipping credits...).
   const perksFor = (card) => resellingPerks(catalogById.get(card.catalogCardId)?.benefits || []);
   const totalPerks = savedCards.reduce((sum, c) => sum + perksFor(c).length, 0);
@@ -320,7 +326,7 @@ export const PaymentMethods = () => {
               {/* Card Header */}
               <div className="flex justify-between items-start mb-6">
                 <div className="flex items-center gap-3">
-                   <IssuerLogo issuer={card.issuer} brand={card.brand} className="w-10 h-10" />
+                   <IssuerLogo issuer={issuerOf(card)} brand={card.brand} className="w-10 h-10" />
                    <div>
                       <div className="flex items-center gap-2">
                         <h3 className="text-sm font-bold text-white leading-tight">{card.name}</h3>
@@ -328,7 +334,7 @@ export const PaymentMethods = () => {
                           <span className="px-1.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wide bg-purple-500/10 text-purple-400 border border-purple-500/20">Personal</span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500 capitalize">{card.issuer}{card.type === 'debit' ? ' (Debit)' : ''}</p>
+                      <p className="text-xs text-gray-500 capitalize">{issuerOf(card)}{card.type === 'debit' ? ' (Debit)' : ''}</p>
                       {card.catalogSyncedAt && (
                         <p className="text-[11px] text-gray-600" title="Rates follow the card data automatically. Rates you change yourself are kept.">
                           Rates kept current · last updated {new Date(card.catalogSyncedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
