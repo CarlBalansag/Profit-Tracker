@@ -8,6 +8,7 @@ import {
   cashoutProvidersQuery,
   creditCardQuery,
   dashboardQuery,
+  cashFlowQuery,
   expensesPageQuery,
   goalsQuery,
   inventoryQuery,
@@ -54,7 +55,7 @@ const PAGES = {
   '/invoices': { code: Pages.Invoices.preload, data: () => [] },
   '/tax-exempt': { code: Pages.TaxExempt.preload, data: () => [inventoryQuery(), salesQuery()] },
   '/analytics': { code: Pages.Analytics.preload, data: () => [dashboardQuery('All', 'All Time')] },
-  '/cashflow': { code: Pages.CashFlow.preload, data: () => [dashboardQuery('All', 'All Time')] },
+  '/cashflow': { code: Pages.CashFlow.preload, data: () => [cashFlowQuery()] },
   '/creditcard': { code: Pages.CreditCard.preload, data: () => [creditCardQuery(utcMonthKey(new Date()))] },
   '/goals': {
     code: Pages.Goals.preload,

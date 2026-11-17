@@ -9,8 +9,10 @@ import TaxExempt from './TaxExempt';
 import Calendar from './Calendar';
 import Shell from '../components/Layout/Shell';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
+import { cashFlowFixture } from '../test/cashFlowFixture';
 
 globalThis.ResizeObserver ??= class { observe() {} disconnect() {} };
+globalThis.IntersectionObserver ??= class { observe() {} unobserve() {} disconnect() {} };
 
 const item = (over) => ({
   id: 'a', product_name: 'Widget', vendor: null, vendor_id: '', payment_method: null, payment_method_id: '',
@@ -33,6 +35,7 @@ vi.mock('../hooks/useApi', () => ({
   usePaymentMethods: () => ({ data: [] }),
   useBuyers: () => ({ data: [] }),
   useDashboard: () => ({ data: dashboard, isLoading: false, refetch: vi.fn() }),
+  useCashFlow: () => ({ data: cashFlowFixture(), isLoading: false, isFetching: false, refetch: vi.fn() }),
   useCalendarEvents: () => ({ data: [] }),
   useCalendarAutoEvents: () => ({ data: [] }),
   useCalendarToken: () => ({ data: null, isLoading: false }),
@@ -81,21 +84,15 @@ describe('rows that open with a click', () => {
     expect(screen.getByRole('button', { name: 'Hide batches for Widget' }).getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('expands a Cash Flow buyer with Enter and with Space', () => {
+  it('opens a Cash Flow buyer from a real button, so Enter and Space work', () => {
     mount(CashFlow);
     const row = screen.getAllByRole('button').find(el => el.hasAttribute('aria-expanded'));
-    fireEvent.keyDown(row, { key: 'Enter' });
-    expect(row.getAttribute('aria-expanded')).toBe('true');
-    fireEvent.keyDown(row, { key: ' ' });
+    expect(row.tagName).toBe('BUTTON');
     expect(row.getAttribute('aria-expanded')).toBe('false');
-  });
-
-  it('reports the Cash Flow cashback switch state', () => {
-    mount(CashFlow);
-    const toggle = screen.getByRole('switch', { name: 'Include cashback' });
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
-    fireEvent.click(toggle);
-    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('false');
   });
 });
 

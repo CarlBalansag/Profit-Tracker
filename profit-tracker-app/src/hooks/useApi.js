@@ -130,6 +130,15 @@ export const useDashboard = (mode, date) =>
     placeholderData: keepPreviousData,
   });
 
+// Cash Flow page. Keyed under 'dashboard' so every mutation that refreshes
+// the Dashboard numbers refreshes these too.
+export const cashFlowQuery = () => ({
+  queryKey: ['dashboard', 'cashflow'],
+  queryFn: () => fetcher('/api/analytics/cashflow'),
+  staleTime: 1000 * 60 * 10,
+});
+export const useCashFlow = () => useQuery(cashFlowQuery());
+
 // ─── Expenses ─────────────────────────────────────────────────────────────────
 export const useExpenses = () =>
   useQuery({
