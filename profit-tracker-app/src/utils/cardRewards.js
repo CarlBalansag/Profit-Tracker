@@ -69,7 +69,11 @@ export function catalogEarnSummary(card, max = 3) {
     .sort((a, b) => b.rate - a.rate)
     .slice(0, max)
     .map(c => `${formatEarnRate(c.rate, card.reward_type)} ${c.label}`);
-  parts.push(`${formatEarnRate(card.base_rate, card.reward_type)} everything else`);
+  const cap = card.base_cap;
+  const capNote = cap?.amount
+    ? ` (up to $${Number(cap.amount).toLocaleString('en-US')}${cap.period === 'calendar_year' ? ' a year' : ''}, then ${formatEarnRate(cap.then ?? 0, card.reward_type)})`
+    : '';
+  parts.push(`${formatEarnRate(card.base_rate, card.reward_type)} everything else${capNote}`);
   return parts.join(' · ');
 }
 

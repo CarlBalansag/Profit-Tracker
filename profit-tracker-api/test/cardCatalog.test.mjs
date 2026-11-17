@@ -46,6 +46,22 @@ describe('normalizeCard', () => {
     expect(catalog.normalizeCard(rawCard(3, { rewards: storeOnly })).reward_type).toBe('cashback');
   });
 
+  it('makes a catch-all "Eligible Purchases" rate the base rate, keeping its cap', () => {
+    const bbp = catalog.normalizeCard(rawCard(1, { rewards: { rate_type: 'points_multiplier', currency_label: 'Membership Rewards points', base_rate: { points_per_dollar: 1 }, categories: [{ label: 'Eligible Purchases', points_per_dollar: 2, cap: { amount: 50000, period: 'calendar_year' } }] } }));
+    expect(bbp).toMatchObject({ reward_type: 'points', base_rate: 2, base_cap: { amount: 50000, period: 'calendar_year', then: 1 }, categories: [] });
+    // A brand's purchases are a real category, not a catch-all.
+    const united = catalog.normalizeCard(rawCard(2, { rewards: { rate_type: 'miles_multiplier', base_rate: { points_per_dollar: 1 }, categories: [{ label: 'Eligible United purchases', points_per_dollar: 4 }] } }));
+    expect(united).toMatchObject({ base_rate: 1, base_cap: null });
+    expect(united.categories).toHaveLength(1);
+  });
+
+  it('treats a card paid as cash back as cashback even when recorded as a multiplier', () => {
+    const card = catalog.normalizeCard(rawCard(1, { rewards: { rate_type: 'points_multiplier', currency_label: 'Cash back (statement credit)', base_rate: { points_per_dollar: 2 } } }));
+    expect(card.reward_type).toBe('cashback');
+    const mr = catalog.normalizeCard(rawCard(2, { rewards: { rate_type: 'points_multiplier', currency_label: 'Membership Rewards points', base_rate: { points_per_dollar: 1 } } }));
+    expect(mr.reward_type).toBe('points');
+  });
+
   it('drops non-US, discontinued and nameless records, and bad category rows', () => {
     expect(catalog.normalizeCard(rawCard(1, { country: 'ca' }))).toBeNull();
     expect(catalog.normalizeCard(rawCard(1, { status: 'discontinued' }))).toBeNull();

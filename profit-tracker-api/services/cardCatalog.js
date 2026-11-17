@@ -30,6 +30,9 @@ const str = (v, max = 200) => (typeof v === 'string' && v.trim() ? v.trim().slic
 // share "points"; rewards_label keeps the word "miles" for display.
 function rewardTypeOf(rewards = {}) {
   if (rewards.rate_type === 'cashback_percent') return 'cashback';
+  // Some cash back cards are recorded as a multiplier ("Cash back (statement
+  // credit)" at 2 per $1); what they pay is still % back.
+  if (/cash ?back/i.test(rewards.currency_label || '') && !/membership rewards|points?\b.*redeem/i.test(rewards.currency_label || '')) return 'cashback';
   if (rewards.rate_type === 'points_multiplier' || rewards.rate_type === 'miles_multiplier') return 'points';
   return 'none';
 }
@@ -64,6 +67,21 @@ function normalizeCard(raw) {
       };
     })
     .filter(Boolean);
+  // "2x on Eligible Purchases (up to $50,000 a year), 1x after" is stored as
+  // a 1x base plus a catch-all category. A catch-all matches no store, so it
+  // would never apply: make it the base rate and keep the cap as a note.
+  let baseRate = base ?? 0;
+  let baseCap = null;
+  const CATCH_ALL = /^(?:on\s+)?(?:all\s+|every\s+|everyday\s+)?(?:eligible\s+)?(?:net\s+)?purchases?$/i;
+  const kept = [];
+  for (const cat of categories) {
+    if (CATCH_ALL.test(cat.label) && cat.rate > baseRate) {
+      baseCap = cat.cap ? { ...cat.cap, then: baseRate } : null;
+      baseRate = cat.rate;
+    } else {
+      kept.push(cat);
+    }
+  }
   const benefits = (Array.isArray(raw.benefits) ? raw.benefits : [])
     .map(b => (str(b?.title) ? { title: str(b.title), category: str(b.category, 40), description: str(b.description, 400) } : null))
     .filter(Boolean)
@@ -78,8 +96,10 @@ function normalizeCard(raw) {
     annual_fee: num(raw.annual_fee?.amount),
     reward_type,
     rewards_label: str(rewards.currency_label, 80),
-    base_rate: reward_type === 'none' ? 0 : (base ?? 0),
-    categories: reward_type === 'none' ? [] : categories,
+    base_rate: reward_type === 'none' ? 0 : baseRate,
+    // { amount, period, then }: the base rate drops to `then` after `amount`.
+    base_cap: reward_type === 'none' ? null : baseCap,
+    categories: reward_type === 'none' ? [] : kept,
     benefits,
     official_url: typeof raw.official_url === 'string' && /^https:\/\//.test(raw.official_url) ? raw.official_url.slice(0, 400) : null,
     last_verified: str(raw.last_verified, 40),
