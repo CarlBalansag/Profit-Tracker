@@ -36,6 +36,16 @@ describe('normalizeCard', () => {
     expect(catalog.normalizeCard(rawCard(4, { rewards: { currency: 'none', base_rate: { points_per_dollar: null } } }))).toMatchObject({ reward_type: 'none', base_rate: 0 });
   });
 
+  it('treats a "points" card that earns nothing as a no-rewards card', () => {
+    const empty = { rate_type: 'points_multiplier', currency_label: 'No rewards program', base_rate: { points_per_dollar: 0 }, categories: [] };
+    expect(catalog.normalizeCard(rawCard(1, { rewards: empty })).reward_type).toBe('none');
+    const zeroBase = { rate_type: 'points_multiplier', currency_label: 'Points', base_rate: { points_per_dollar: 0 }, categories: [] };
+    expect(catalog.normalizeCard(rawCard(2, { rewards: zeroBase })).reward_type).toBe('none');
+    // A store card with 0 base but a bonus category still earns.
+    const storeOnly = { rate_type: 'cashback_percent', currency_label: 'Cash back', base_rate: { points_per_dollar: 0 }, categories: [{ label: 'Best Buy purchases', points_per_dollar: 5 }] };
+    expect(catalog.normalizeCard(rawCard(3, { rewards: storeOnly })).reward_type).toBe('cashback');
+  });
+
   it('drops non-US, discontinued and nameless records, and bad category rows', () => {
     expect(catalog.normalizeCard(rawCard(1, { country: 'ca' }))).toBeNull();
     expect(catalog.normalizeCard(rawCard(1, { status: 'discontinued' }))).toBeNull();

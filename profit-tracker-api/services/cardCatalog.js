@@ -44,9 +44,14 @@ function normalizeCard(raw) {
   const name = str(raw.name);
   if (!id || !name) return null;
   const rewards = raw.rewards && typeof raw.rewards === 'object' ? raw.rewards : {};
-  const reward_type = rewardTypeOf(rewards);
   const base = num(rewards.base_rate?.points_per_dollar);
-  const categories = (Array.isArray(rewards.categories) ? rewards.categories : [])
+  const rawCategories = (Array.isArray(rewards.categories) ? rewards.categories : []);
+  // Some records carry a multiplier rate_type but earn nothing ("No rewards
+  // program", 0x base, no bonus categories): those are no-rewards cards.
+  const earnsNothing = /no rewards/i.test(rewards.currency_label || '')
+    || (!(base > 0) && !rawCategories.some(cat => num(cat?.points_per_dollar) > 0));
+  const reward_type = earnsNothing ? 'none' : rewardTypeOf(rewards);
+  const categories = rawCategories
     .map(cat => {
       const rate = num(cat?.points_per_dollar);
       const label = str(cat?.label);

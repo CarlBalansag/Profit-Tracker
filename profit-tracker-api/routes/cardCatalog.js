@@ -14,7 +14,10 @@ const isAuthenticated = (req, res, next) => {
 router.get('/', isAuthenticated, async (req, res, next) => {
   try {
     const catalog = await getCatalog(prisma);
-    res.set('Cache-Control', 'private, max-age=3600');
+    // Revalidate every time (Express's ETag turns an unchanged list into a
+    // 304), so a monthly refresh shows up right away instead of after a
+    // browser cache expires.
+    res.set('Cache-Control', 'private, no-cache');
     res.json({
       cards: catalog.cards,
       synced_at: catalog.synced_at,

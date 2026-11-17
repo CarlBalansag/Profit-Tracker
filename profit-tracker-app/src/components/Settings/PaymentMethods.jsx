@@ -7,7 +7,15 @@ import { toast } from 'sonner';
 import { QuickAddModal } from './QuickAddModal';
 import { CustomCardModal } from './CustomCardModal';
 import { IssuerLogo } from './IssuerLogo';
+import { CardReworkNotice } from './CardReworkNotice';
 import clsx from 'clsx';
+import {
+  loadCardCatalog, rewardFieldsFromCatalog, reworkSwitchBody, cardsNeedingRework,
+  formatEarnRate, pointsUnit,
+} from '../../utils/cardRewards';
+
+// "American Express® Gold Card" -> "American Express Gold Card"
+const cleanCardName = (name = '') => name.replace(/[®™℠]/g, '').replace(/\s+/g, ' ').trim();
 import { useAuth } from '../../context/AuthContext';
 
 export const PaymentMethods = () => {
@@ -19,6 +27,9 @@ export const PaymentMethods = () => {
   const [viewMode, setViewMode] = useState('Cards View'); // Cards View | Analytics View
   
   const [savedCards, setSavedCards] = useState([]);
+  // Raw API rows, for the rework notice (it needs the stored fields as-is).
+  const [savedMethods, setSavedMethods] = useState([]);
+  const [catalogCards, setCatalogCards] = useState([]);
   const [openRatesIds, setOpenRatesIds] = useState(new Set());
 
   const toggleRates = (uniqueKey) => {
@@ -32,6 +43,13 @@ export const PaymentMethods = () => {
 
   useEffect(() => {
     fetchCards();
+    // The catalog powers the rework notice and each card's perks; the page
+    // still works without it.
+    let cancelled = false;
+    loadCardCatalog()
+      .then(data => { if (!cancelled && Array.isArray(data?.cards)) setCatalogCards(data.cards); })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   const fetchCards = async () => {
@@ -48,7 +66,14 @@ export const PaymentMethods = () => {
               name: card.name || 'Unnamed',
               issuer: (card.name || '').split(' ')[0] || 'Unknown',
               type: (card.type || '').toLowerCase().includes('debit') ? 'debit' : 'credit',
+              rawType: card.type || '',
               baseRate: card.default_cashback_rate || 0,
+              rewardType: card.reward_type === 'points' ? 'points' : 'cashback',
+              pointsBaseRate: card.points_base_rate ?? null,
+              pointValueCents: card.point_value_cents ?? null,
+              rewardsLabel: card.rewards_label || null,
+              catalogCardId: card.catalog_card_id || null,
+              presetId: card.preset_card_id || null,
               categoryRates: Array.isArray(card.category_rates) ? card.category_rates : [],
               creditLimit,
               totalSpend,
@@ -62,6 +87,7 @@ export const PaymentMethods = () => {
             };
           });
           setSavedCards(mapped);
+          setSavedMethods(data);
         } else {
           console.error('API returned non-array:', data);
         }
@@ -73,22 +99,22 @@ export const PaymentMethods = () => {
     }
   };
 
-  const handleAddCards = async (newCards, includeStoreRates) => {
+  // Cards picked from the OpenCard DB catalog in Quick Add.
+  const handleAddCards = async (newCards, { includeStoreRates = true, pointValueCents } = {}) => {
     const results = await Promise.allSettled(newCards.map(card =>
       apiFetch(`/api/payment-methods`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: card.name,
+          name: cleanCardName(card.name),
           type: 'Credit',
-          default_cashback_rate: card.baseRate,
-          preset_card_id: card.id,
-          category_rates: includeStoreRates ? (card.categoryRates || []) : []
+          ...rewardFieldsFromCatalog(card, { includeStoreRates, pointValueCents }),
         })
       }).then(res => requireSuccessfulResponse(res, `Could not add ${card.name}`))
     ));
 
     invalidate.paymentMethods();
+    fetchCards();
 
     const failedCount = results.filter(r => r.status === 'rejected').length;
     if (failedCount > 0) {
@@ -114,6 +140,12 @@ export const PaymentMethods = () => {
           name: processedCard.name,
           type: processedCard.type,
           default_cashback_rate: processedCard.baseRate,
+          reward_type: processedCard.rewardType === 'points' ? 'points' : 'cashback',
+          ...(processedCard.rewardType === 'points' ? {
+            points_base_rate: processedCard.pointsBaseRate,
+            point_value_cents: processedCard.pointValueCents,
+            rewards_label: processedCard.rewardsLabel,
+          } : {}),
           last4: processedCard.last4 || null,
           statement_close_day: processedCard.statement_close_day ?? null,
           due_day: processedCard.due_day ?? null,
@@ -124,6 +156,7 @@ export const PaymentMethods = () => {
       });
       await requireSuccessfulResponse(res, isEditing ? 'Could not update card' : 'Could not add card');
       invalidate.paymentMethods();
+      fetchCards();
       toast.success(isEditing ? 'Card updated.' : 'Card added.');
     } catch (err) {
       toast.error(err.message);
@@ -144,11 +177,47 @@ export const PaymentMethods = () => {
       });
       await requireSuccessfulResponse(res, 'Could not remove payment method');
       invalidate.paymentMethods();
+      fetchCards();
       toast.success('Payment method removed.');
     } catch (err) {
       toast.error(`Could not remove payment method: ${err.message}`);
     }
   };
+
+  // Rework notice answers. Errors keep the card in the notice so it can be retried.
+  const handleReworkSwitch = async (method, catalogCard) => {
+    try {
+      const res = await apiFetch(`/api/payment-methods/${method.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reworkSwitchBody(method, catalogCard)),
+      });
+      await requireSuccessfulResponse(res, `Could not update ${method.name}`);
+      invalidate.paymentMethods();
+      await fetchCards();
+      toast.success(`${method.name} updated.`);
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+  const handleReworkKeep = async (method) => {
+    try {
+      const res = await apiFetch(`/api/payment-methods/${method.id}/rework-prompt`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: 'kept' }),
+      });
+      await requireSuccessfulResponse(res, `Could not save your choice for ${method.name}`);
+      await fetchCards();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const reworkItems = cardsNeedingRework(savedMethods, catalogCards);
+  const catalogById = new Map(catalogCards.map(c => [c.id, c]));
+  const perksFor = (card) => catalogById.get(card.catalogCardId)?.benefits || [];
+  const totalPerks = savedCards.reduce((sum, c) => sum + perksFor(c).length, 0);
 
   const totalCreditLimit = savedCards.reduce((sum, c) => sum + (Number(c.creditLimit) || 0), 0);
   const totalTrackedSpend = savedCards.reduce((sum, c) => sum + (Number(c.totalSpend) || 0), 0);
@@ -195,10 +264,12 @@ export const PaymentMethods = () => {
             </div>
             <div className="bg-[#0A0A0F] border border-gray-800 rounded-lg p-3 min-w-30 flex-shrink-0">
                <div className="text-xs text-gray-500 font-medium">Perks · Active</div>
-               <div className="text-sm font-bold text-yellow-500 mt-1">0 perks · {savedCards.length} cards</div>
+               <div className="text-sm font-bold text-yellow-500 mt-1">{totalPerks} perks · {savedCards.length} cards</div>
             </div>
          </div>
       </div>
+
+      <CardReworkNotice items={reworkItems} onSwitch={handleReworkSwitch} onKeep={handleReworkKeep} />
 
       {/* View Toggles */}
       <div className="flex gap-1 border-b border-gray-800/50 pb-4">
@@ -254,8 +325,15 @@ export const PaymentMethods = () => {
               {/* Stats */}
               <div className="grid grid-cols-2 gap-4 mb-4">
                  <div>
-                    <div className="text-[11px] uppercase font-bold text-gray-500 tracking-wider">Default Rate</div>
-                    <div className="text-base font-bold text-[#6DDBA9] mt-0.5">{card.baseRate.toFixed(2)}%</div>
+                    <div className="text-[11px] uppercase font-bold text-gray-500 tracking-wider">{card.rewardType === 'points' ? 'Earns' : 'Default Rate'}</div>
+                    {card.rewardType === 'points' ? (
+                      <>
+                        <div className="text-base font-bold text-amber-300 mt-0.5">{formatEarnRate(card.pointsBaseRate ?? 0, 'points')} {pointsUnit(card.rewardsLabel)}</div>
+                        <div className="text-[11px] text-gray-500" title={card.rewardsLabel || undefined}>at {card.pointValueCents ?? 1}¢ each ≈ {Number(card.baseRate).toFixed(2)}%</div>
+                      </>
+                    ) : (
+                      <div className="text-base font-bold text-[#6DDBA9] mt-0.5">{Number(card.baseRate).toFixed(2)}%</div>
+                    )}
                  </div>
                  <div>
                     <div className="text-[11px] uppercase font-bold text-gray-500 tracking-wider">Credit Limit</div>
@@ -319,7 +397,7 @@ export const PaymentMethods = () => {
                                   </span>
                                 )}
                               </div>
-                              <span className="text-xs font-bold text-emerald-400">{r.rate}%</span>
+                              <span className="text-xs font-bold text-emerald-400">{card.rewardType === 'points' && r.points != null ? `${formatEarnRate(r.points, 'points')} · ≈${r.rate}%` : `${r.rate}%`}</span>
                             </div>
                           ))}
                           {expired.length > 0 && (
@@ -328,7 +406,7 @@ export const PaymentMethods = () => {
                               {expired.map((r, i) => (
                                 <div key={i} className="flex items-center justify-between px-2 py-1 rounded-lg bg-white/2 opacity-50">
                                   <span className="text-xs text-gray-500 line-through">{r.store}</span>
-                                  <span className="text-xs font-bold text-gray-600">{r.rate}%</span>
+                                  <span className="text-xs font-bold text-gray-600">{card.rewardType === 'points' && r.points != null ? formatEarnRate(r.points, 'points') : `${r.rate}%`}</span>
                                 </div>
                               ))}
                             </div>
@@ -338,6 +416,24 @@ export const PaymentMethods = () => {
                     })()
                   )}
                 </div>
+              )}
+
+              {/* Perks from the card catalog */}
+              {perksFor(card).length > 0 && (
+                <details className="mt-2 border-t border-gray-800/50 pt-2 group/perks">
+                  <summary className="cursor-pointer text-xs font-bold text-gray-400 hover:text-gray-200 flex items-center gap-1.5 list-none">
+                    <Crown size={12} className="text-yellow-500" /> PERKS
+                    <span className="ml-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-yellow-500/15 text-yellow-400">{perksFor(card).length}</span>
+                  </summary>
+                  <ul className="mt-2 space-y-1.5">
+                    {perksFor(card).map((perk, i) => (
+                      <li key={i} className="px-2 py-1 rounded-lg bg-white/3">
+                        <p className="text-xs text-gray-200">{perk.title}</p>
+                        {perk.description && <p className="text-[11px] text-gray-500 mt-0.5">{perk.description}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
               )}
 
               {/* Signup Bonus Render if exists */}
@@ -379,7 +475,7 @@ export const PaymentMethods = () => {
         isOpen={isQuickAddOpen} 
         onClose={() => setIsQuickAddOpen(false)}
         onAddCards={handleAddCards}
-        existingCardIds={savedCards.map(c => c.presetId || null).filter(Boolean)}
+        existingCardIds={savedCards.map(c => c.catalogCardId).filter(Boolean)}
       />
 
       <CustomCardModal
