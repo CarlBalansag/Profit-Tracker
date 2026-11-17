@@ -1,6 +1,7 @@
 import { formatMoney } from '../utils/money';
 import React, { useId, useState } from 'react';
 import { Info, Trash2, Undo2 } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import { useRefunds, useRefundMutations } from '../hooks/useApi';
 import { localToday, toDateOnly } from '../utils/returnWindow';
@@ -43,6 +44,8 @@ const COPY = {
 };
 const DATE_TIP = 'The day the refund happened.';
 const NOTE_TIP = 'Optional. Anything you want to remember, like where you returned it.';
+const MotionDiv = motion.div;
+const EASE = [0.16, 1, 0.3, 1];
 const CHECK = 'mt-0.5 w-4 h-4 shrink-0 accent-[var(--dp-accent)] cursor-pointer';
 
 // A small (i) next to a field label. Hover or keyboard focus shows the
@@ -110,6 +113,7 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
   const modal = variant === 'modal';
   const [full, setFull] = useState(false);
   const [keep, setKeep] = useState(false);
+  const reduceMotion = useReducedMotion();
   const copy = COPY[kind];
   const { data: refunds = [], isLoading } = useRefunds(kind, id);
   const { add, remove } = useRefundMutations(kind, id);
@@ -244,25 +248,30 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
                   </span>
                 </span>
               </label>
-              {/* Always rendered so it can grow open instead of popping in and
-                  making the popup jump. The 0fr -> 1fr grid row animates to the
-                  row's real height; while collapsed it is hidden from screen
-                  readers and its checkbox can't be tabbed to. */}
-              <div
-                aria-hidden={!full}
-                data-open={full ? 'true' : 'false'}
-                className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none ${full ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
-              >
-                <div className="overflow-hidden min-h-0">
-                  <label className="flex items-start gap-2.5 pl-6 pt-2.5 cursor-pointer">
-                    <input type="checkbox" checked={keep} disabled={!full} onChange={(e) => applyFull(true, e.target.checked)} className={CHECK} />
-                    <span className="min-w-0">
-                      <span className="block text-sm text-[var(--dp-text-primary)]">{copy.keep}</span>
-                      <span className="block text-xs text-[var(--dp-text-muted)]">{copy.keepHint}</span>
-                    </span>
-                  </label>
-                </div>
-              </div>
+              {/* Grows open instead of popping in and making the popup jump.
+                  Same motion pattern as the Dashboard pipeline's item list:
+                  like the rest of the app it still animates under reduced
+                  motion, just shorter. */}
+              <AnimatePresence initial={false}>
+                {full && (
+                  <MotionDiv
+                    key="keep"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: reduceMotion ? 0.15 : 0.3, ease: EASE }}
+                    className="overflow-hidden"
+                  >
+                    <label className="flex items-start gap-2.5 pl-6 pt-2.5 cursor-pointer">
+                      <input type="checkbox" checked={keep} onChange={(e) => applyFull(true, e.target.checked)} className={CHECK} />
+                      <span className="min-w-0">
+                        <span className="block text-sm text-[var(--dp-text-primary)]">{copy.keep}</span>
+                        <span className="block text-xs text-[var(--dp-text-muted)]">{copy.keepHint}</span>
+                      </span>
+                    </label>
+                  </MotionDiv>
+                )}
+              </AnimatePresence>
             </div>
           )}
           {/* Two columns at most: the labels are full phrases now, and four

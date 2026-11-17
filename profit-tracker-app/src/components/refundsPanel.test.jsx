@@ -141,14 +141,15 @@ describe('RefundsPanel', () => {
     expect(screen.getByLabelText('Units returned to store').value).toBe('2');
   });
 
-  it('clears the prefill when "Returning everything" is unticked', () => {
+  it('clears the prefill when "Returning everything" is unticked', async () => {
     render(<RefundsPanel kind="purchase" id="inv-1" maxUnits={2} record={purchaseRecord} />);
     fireEvent.click(fullBox());
     fireEvent.click(screen.getByRole('checkbox', { name: /I kept the item/ }));
     fireEvent.click(fullBox());
     expect(screen.getByLabelText('Money back ($)').value).toBe('');
     expect(screen.getByLabelText('Units returned to store').value).toBe('');
-    expect(screen.queryByRole('checkbox', { name: /I kept the item/ })).toBeNull();
+    // The kept-item row slides closed, then leaves.
+    await waitFor(() => expect(screen.queryByRole('checkbox', { name: /I kept the item/ })).toBeNull());
   });
 
   it('offers the same prefill on a sale, with "The buyer kept the item"', () => {
