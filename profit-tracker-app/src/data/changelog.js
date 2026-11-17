@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.34',
+    date: '2026-11-17',
+    notes: "Credit cards got a rework: pick from about 390 real cards that stay up to date on their own, and points cards like Amex Membership Rewards or Chase Ultimate Rewards are now tracked as points at a value you set, instead of a cashback %. Payment Methods splits credit and debit cards, shows only the perks that matter for reselling, and lets you switch a saved card to the right one from the list.",
+  },
+  {
     version: '1.33',
     date: '2026-11-17',
     notes: "New Activity page (in your profile menu) lists what you've added, edited, deleted, refunded or moved between statuses, and lets you undo any of it from the last 30 days -- an Undo button also appears right after each change. Refunds and returns are quicker too: record one straight from the three-dot menu on Statuses, with a one-click full refund.",
