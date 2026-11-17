@@ -1,9 +1,10 @@
 import { formatMoney } from '../utils/money';
-import React, { useState } from 'react';
-import { Trash2, Undo2 } from 'lucide-react';
+import React, { useId, useState } from 'react';
+import { Info, Trash2, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRefunds, useRefundMutations } from '../hooks/useApi';
 import { localToday, toDateOnly } from '../utils/returnWindow';
+import { fullRefundPrefill, refundUnitPrice } from '../utils/refundPrefill';
 
 const LABEL = 'block text-[11px] font-semibold uppercase tracking-wider text-[var(--dp-text-label,var(--dp-text-secondary))] mb-1';
 const INPUT = 'w-full bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2 text-sm text-[var(--dp-text-primary)] placeholder-[color:var(--dp-text-muted)] focus:outline-none focus:border-[var(--dp-accent)] transition-colors';
@@ -13,15 +14,83 @@ const ICON_BTN = 'p-1 rounded-md text-[var(--dp-text-muted)] hover:text-[var(--d
 const COPY = {
   purchase: {
     title: 'Refunds from the store',
-    hint: 'Money back on this purchase: a return, a price adjustment, a damaged-box credit. Leave Units sent back empty for anything you kept; those units stay available to sell.',
-    units: 'Units sent back',
+    hint: 'Record money the store gave back, and any units you sent back.',
+    amount: 'Money back ($)',
+    amountName: 'money back',
+    amountTip: 'How much money the store gave back to you. It lowers what this purchase cost, so your profit on what you sell goes up.',
+    units: 'Units returned to store',
+    unitsTip: 'How many units you physically sent back. They leave your stock. Leave it at 0 if you kept the item, e.g. a price adjustment.',
+    full: 'Returning everything — full refund',
+    fullBasis: 'item price + tax',
+    keep: "I kept the item and I'm still selling it",
+    keepHint: 'Units stay in stock to sell, and the refund comes off their cost.',
+    price: (each) => `Paid $${each} each (item + tax)`,
   },
   sale: {
     title: 'Refunds to the buyer',
-    hint: 'Money you gave back on this sale. Enter what you are actually out (after any fee credit). Units the buyer sent back return to your stock.',
-    units: 'Units returned by buyer',
+    hint: 'Record money you gave back to the buyer, and any units they sent back.',
+    amount: 'Money refunded ($)',
+    amountName: 'money refunded',
+    amountTip: 'How much money you gave back to the buyer. Enter what you are actually out, after any fee credit. It lowers what you made on this sale.',
+    units: 'Units buyer sent back',
+    unitsTip: 'How many units the buyer sent back to you. They go back into your stock so you can sell them again.',
+    full: 'Returning everything — full refund',
+    fullBasis: 'what the buyer paid',
+    keep: 'The buyer kept the item',
+    keepHint: 'Nothing comes back into your stock.',
+    price: (each) => `Sold for $${each} each`,
   },
 };
+const DATE_TIP = 'The day the refund happened.';
+const NOTE_TIP = 'Optional. Anything you want to remember, like where you returned it.';
+const CHECK = 'mt-0.5 w-4 h-4 shrink-0 accent-[var(--dp-accent)] cursor-pointer';
+
+// A small (i) next to a field label. Hover or keyboard focus shows the
+// explanation; a tap opens it on touch screens. `align` keeps the bubble
+// inside the panel for fields in the right-hand column.
+function InfoTip({ name, text, align = 'left' }) {
+  const [open, setOpen] = useState(false);
+  const tipId = useId();
+  return (
+    <span className="relative inline-flex shrink-0">
+      <button
+        type="button"
+        aria-label={`What is ${name}?`}
+        aria-describedby={open ? tipId : undefined}
+        // A tap fires hover and focus before the click, so a toggle here would
+        // open and instantly close it on touch screens. Click only ever opens;
+        // tapping elsewhere (blur), moving the mouse away or Escape closes it.
+        onClick={() => setOpen(true)}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={(e) => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); } }}
+        className="flex items-center justify-center w-4 h-4 rounded-full text-[var(--dp-text-muted)] hover:text-[var(--dp-text-primary)] focus:outline-none focus-visible:text-[var(--dp-text-primary)] transition-colors"
+      >
+        <Info className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <span
+          id={tipId}
+          role="tooltip"
+          className={`absolute bottom-full mb-1.5 ${align === 'right' ? 'right-0' : 'left-0'} z-50 w-56 rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal leading-snug text-[var(--dp-text-primary)] bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] shadow-xl`}
+        >
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function FieldLabel({ htmlFor, label, name, tip, align }) {
+  return (
+    <div className="flex items-center gap-1 mb-1 min-w-0">
+      <label className={`${LABEL.replace(' mb-1', '')} truncate`} htmlFor={htmlFor}>{label}</label>
+      <InfoTip name={name} text={tip} align={align} />
+    </div>
+  );
+}
 
 const emptyDraft = () => ({ amount: '', quantity: '', date: localToday(), note: '' });
 
@@ -33,8 +102,14 @@ const emptyDraft = () => ({ amount: '', quantity: '', date: localToday(), note: 
 // popup's own header already names it, so the panel drops its title row, and
 // the narrower popup gets a two-column form with the save button on its own
 // footer row instead of four cramped columns.
-export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = '', onChanged, variant = 'inline' }) {
+//
+// `record` is the purchase or sale itself. With it the panel can show what was
+// paid per unit and offer the "Returning everything" prefill; without it both
+// are simply left out.
+export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = '', onChanged, variant = 'inline', record = null }) {
   const modal = variant === 'modal';
+  const [full, setFull] = useState(false);
+  const [keep, setKeep] = useState(false);
   const copy = COPY[kind];
   const { data: refunds = [], isLoading } = useRefunds(kind, id);
   const { add, remove } = useRefundMutations(kind, id);
@@ -56,6 +131,8 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
     try {
       await add.mutateAsync({ amount, quantity, date: draft.date || localToday(), note: draft.note.trim() || null });
       setDraft(emptyDraft());
+      setFull(false);
+      setKeep(false);
       toast.success('Refund recorded.');
       onChanged?.();
     } catch (err) {
@@ -74,6 +151,20 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
       toast.error(err.message || 'Could not remove the refund.');
     }
   };
+
+  // Only a prefill: the fields stay editable after it runs.
+  const applyFull = (nextFull, nextKeep) => {
+    setFull(nextFull);
+    setKeep(nextFull && nextKeep);
+    setDraft((prev) => (nextFull
+      ? { ...prev, ...fullRefundPrefill(kind, record, maxUnits, { keep: nextKeep }) }
+      : { ...prev, amount: '', quantity: '' }));
+  };
+  const canPrefill = !!record && maxUnits > 0;
+  const unitPrice = record ? formatMoney(refundUnitPrice(kind, record)) : null;
+  const preview = canPrefill ? fullRefundPrefill(kind, record, maxUnits) : null;
+  const unitWord = (n) => `${n} unit${n === 1 ? '' : 's'}`;
+  const footerText = `${unitPrice ? `${copy.price(unitPrice)} · ` : ''}Up to ${unitWord(maxUnits)} can come back. Saved right away.`;
 
   const total = refunds.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
   const units = refunds.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
@@ -142,28 +233,52 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
       ) : (
         <div className={modal ? 'space-y-3' : 'space-y-2'}>
           <p className={modal ? 'text-xs leading-relaxed text-[var(--dp-text-secondary)]' : 'text-[11px] text-[var(--dp-text-muted)]'}>{copy.hint}</p>
-          <div className={modal ? 'grid grid-cols-2 gap-x-3 gap-y-3' : 'grid grid-cols-2 sm:grid-cols-4 gap-2'}>
-            <div>
-              <label className={`${LABEL} truncate`} htmlFor={`refund-amount-${id}`}>Amount</label>
+          {canPrefill && (
+            <div className="rounded-lg border border-[color:var(--dp-border)] px-3 py-2.5 space-y-2.5">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input type="checkbox" checked={full} onChange={(e) => applyFull(e.target.checked, keep)} className={CHECK} />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-[var(--dp-text-primary)]">{copy.full}</span>
+                  <span className="block text-xs text-[var(--dp-text-muted)]">
+                    Fills in {unitWord(maxUnits)} and ${formatMoney(Number(preview.amount))} ({copy.fullBasis}). You can still change anything.
+                  </span>
+                </span>
+              </label>
+              {full && (
+                <label className="flex items-start gap-2.5 pl-6 cursor-pointer">
+                  <input type="checkbox" checked={keep} onChange={(e) => applyFull(true, e.target.checked)} className={CHECK} />
+                  <span className="min-w-0">
+                    <span className="block text-sm text-[var(--dp-text-primary)]">{copy.keep}</span>
+                    <span className="block text-xs text-[var(--dp-text-muted)]">{copy.keepHint}</span>
+                  </span>
+                </label>
+              )}
+            </div>
+          )}
+          {/* Two columns at most: the labels are full phrases now, and four
+              columns in the 640px detail window cut them off. */}
+          <div className={modal ? 'grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-3' : 'grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2'}>
+            <div className="min-w-0">
+              <FieldLabel htmlFor={`refund-amount-${id}`} label={copy.amount} name={copy.amountName} tip={copy.amountTip} />
               <input id={`refund-amount-${id}`} type="number" min="0" step="0.01" placeholder="0.00" value={draft.amount} onChange={e => set('amount', e.target.value)} className={INPUT} />
             </div>
-            <div>
-              <label className={`${LABEL} truncate`} htmlFor={`refund-units-${id}`}>{copy.units}</label>
+            <div className="min-w-0">
+              <FieldLabel htmlFor={`refund-units-${id}`} label={copy.units} name={copy.units.toLowerCase()} tip={copy.unitsTip} align="right" />
               <input id={`refund-units-${id}`} type="number" min="0" max={maxUnits} step="1" placeholder="0" value={draft.quantity} onChange={e => set('quantity', e.target.value)} className={INPUT} />
             </div>
-            <div>
-              <label className={`${LABEL} truncate`} htmlFor={`refund-date-${id}`}>Date</label>
+            <div className="min-w-0">
+              <FieldLabel htmlFor={`refund-date-${id}`} label="Date" name="the date" tip={DATE_TIP} />
               <input id={`refund-date-${id}`} type="date" value={draft.date} onChange={e => set('date', e.target.value)} className={INPUT} />
             </div>
-            <div>
-              <label className={`${LABEL} truncate`} htmlFor={`refund-note-${id}`}>Note</label>
+            <div className="min-w-0">
+              <FieldLabel htmlFor={`refund-note-${id}`} label="Note" name="the note" tip={NOTE_TIP} align="right" />
               <input id={`refund-note-${id}`} type="text" placeholder="e.g. price match" value={draft.note} onChange={e => set('note', e.target.value)} className={INPUT} />
             </div>
           </div>
           {error && <p role="alert" className="text-xs text-[var(--dp-red-text,#f87171)]">{error}</p>}
           {modal ? (
             <div className="flex items-center justify-between gap-3 pt-3 border-t border-[color:var(--dp-border)]">
-              <span className="text-xs text-[var(--dp-text-muted)]">Up to {maxUnits} unit{maxUnits === 1 ? '' : 's'} can come back. Saved right away.</span>
+              <span className="text-xs text-[var(--dp-text-muted)]">{footerText}</span>
               <button type="button" disabled={busy} onClick={submit} className="shrink-0 px-4 h-9 rounded-lg text-sm font-semibold bg-[var(--dp-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50">
                 {add.isPending ? 'Saving…' : 'Add refund'}
               </button>
@@ -173,7 +288,7 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
               <button type="button" disabled={busy} onClick={submit} className={`${SMALL_BTN} bg-[var(--dp-accent)] text-white hover:opacity-90`}>
                 {add.isPending ? 'Saving…' : 'Add refund'}
               </button>
-              <span className="text-[11px] text-[var(--dp-text-muted)]">Up to {maxUnits} unit{maxUnits === 1 ? '' : 's'} can come back. Saved right away.</span>
+              <span className="text-[11px] text-[var(--dp-text-muted)]">{footerText}</span>
             </div>
           )}
         </div>

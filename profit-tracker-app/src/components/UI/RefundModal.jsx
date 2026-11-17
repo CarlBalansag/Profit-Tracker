@@ -44,7 +44,7 @@ const RefundModal = ({ open, kind, record, title, onClose }) => {
           </button>
         </div>
         <div className="px-5 py-5">
-          <RefundsPanel kind={REFUND_KIND[kind]} id={record.id} maxUnits={refundableUnits(kind, record)} variant="modal" />
+          <RefundsPanel kind={REFUND_KIND[kind]} id={record.id} maxUnits={refundableUnits(kind, record)} variant="modal" record={record} />
         </div>
       </div>
     </div>

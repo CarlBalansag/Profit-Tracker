@@ -218,7 +218,7 @@ describe('MoreActionsMenu', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Refund' });
     expect(within(dialog).getByRole('region', { name: 'Refunds to the buyer' })).toBeTruthy();
     expect(dialog.textContent).toContain('Widget');
-    expect(screen.getByLabelText('Units returned by buyer').getAttribute('max')).toBe('1');
+    expect(screen.getByLabelText('Units buyer sent back').getAttribute('max')).toBe('1');
     expect(mocks.useRefunds).toHaveBeenCalledWith('sale', 'sale1');
   });
 
@@ -230,10 +230,10 @@ describe('MoreActionsMenu', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Return / Refund' });
     expect(within(dialog).getByRole('region', { name: 'Refunds from the store' })).toBeTruthy();
-    expect(screen.getByLabelText('Units sent back').getAttribute('max')).toBe('3');
+    expect(screen.getByLabelText('Units returned to store').getAttribute('max')).toBe('3');
 
-    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '40' } });
-    fireEvent.change(screen.getByLabelText('Units sent back'), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText('Money back ($)'), { target: { value: '40' } });
+    fireEvent.change(screen.getByLabelText('Units returned to store'), { target: { value: '2' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add refund' }));
 
     await waitFor(() => expect(mocks.addRefund).toHaveBeenCalledOnce());
@@ -250,7 +250,7 @@ describe('MoreActionsMenu', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Return / Refund…' }));
     await screen.findByRole('dialog', { name: 'Return / Refund' });
 
-    fireEvent.change(screen.getByLabelText('Units sent back'), { target: { value: '4' } });
+    fireEvent.change(screen.getByLabelText('Units returned to store'), { target: { value: '4' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add refund' }));
     expect((await screen.findByRole('alert')).textContent).toContain('Only 3 units');
     expect(mocks.addRefund).not.toHaveBeenCalled();

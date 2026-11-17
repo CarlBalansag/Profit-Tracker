@@ -866,6 +866,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                                 maxUnits={Math.max(0, Number(sale._savedQuantity) - (sale.refunded_qty || 0))}
                                 disabledReason={isRealizedSale(sale) ? '' : "This sale is cancelled, returned or disputed, so it no longer counts toward your totals and its refunds can't be changed."}
                                 onChanged={refreshRefundTotals}
+                                record={{ unit_price: sale.unit_price, quantity: sale._savedQuantity, refunded_amount: sale.refunded_amount }}
                               />
                             </div>
                           )}
@@ -1010,6 +1011,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                 id={row.rawId}
                 maxUnits={Math.max(0, Number(form.qty_on_hand) || 0)}
                 onChanged={refreshRefundTotals}
+                record={form}
               />
             </div>
 
