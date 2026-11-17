@@ -9,7 +9,8 @@ import { toast } from 'sonner';
 // someone setting up their assistant rather than a developer reading the code.
 const READ_TOOLS = [
   { name: 'list_sales', args: 'start_date?, end_date?, buyer?, payout_status?, limit?', description: 'Look up sales by date range, buyer, or payout status.' },
-  { name: 'list_inventory', args: 'status?', description: 'Look up purchases, optionally filtered by status.' },
+  { name: 'list_inventory', args: 'status?, return_closing_within_days?', description: 'Look up purchases, optionally filtered by status — or the ones whose store return window closes soon.' },
+  { name: 'list_activity', args: 'limit?, before?', description: "Your Activity log — what you or the assistant added, edited, refunded or moved, and whether it can still be undone." },
   { name: 'list_expenses', args: 'start_date?, end_date?, category?', description: 'Look up business expenses by date or category.' },
   { name: 'get_cashflow_summary', args: '', description: "What's owed to you, what you've spent, and what's sitting in inventory." },
   { name: 'get_unpaid_by_buyer', args: '', description: 'Who still owes you money, grouped by marketplace or cashout.' },
@@ -28,6 +29,8 @@ const WRITE_TOOLS = [
   { name: 'update_sale', args: 'sale_id, …', description: 'Edit an existing sale — price, fees, tracking, and more.' },
   { name: 'update_shipment', args: 'item_id, tracking_number?, carrier?, status?', description: 'Update the tracking number, carrier, or shipping status on a purchase or sale.' },
   { name: 'mark_sale_paid', args: 'sale_ids[], payout_date, payout_amount, …', description: 'Mark one or more sales as paid from a single deposit.' },
+  { name: 'add_refund', args: 'purchase_id | sale_id, amount | full_refund, date, …', description: 'Record a refund or return — or a full refund worked out for you, like the website\'s "Returning everything".' },
+  { name: 'undo_activity', args: 'activity_id, confirm', description: 'Undo one change from the Activity log. Everything the assistant adds or edits shows up there too.' },
   { name: 'add_payment_method', args: 'type, card_id? | name + cashback_rate or points, …', description: 'Add a card — from the card list (rates stay current) or by hand, as cash back or points.' },
   { name: 'update_payment_method', args: 'payment_method, point_value_cents?, card_id?, new_name?, …', description: "Change a card's point value, name, last 4 or rates, or switch it to the right card from the list." },
 ];

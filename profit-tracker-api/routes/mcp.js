@@ -11,7 +11,7 @@ const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const prisma = require('../prisma');
 const { decimal } = require('../services/money');
-const { listRefunds, recordRefund, removeRefund } = require('../services/refunds');
+const { listRefunds, recordRefund, removeRefund, fullRefund } = require('../services/refunds');
 const activityLog = require('../services/activityLog');
 const { saleEconomics, allocatedCost, batchCost, isRealizedSale, keptQuantity, keptSaleQuantity } = require('../services/decimalFinance');
 const { payoutStatus } = require('../services/payoutStatus');
@@ -373,15 +373,29 @@ function buildServer(userId, apiKeyId) {
     }));
   });
 
+  // Days until a purchase's store return window closes (negative once closed),
+  // or null when it has none or nothing left in stock to send back -- the same
+  // rule as the website's badge (profit-tracker-app/src/utils/returnWindow.js),
+  // counted in calendar days from today.
+  const returnDaysLeft = (inv) => {
+    if (!inv.return_by_date) return null;
+    if (Number(inv.qty_on_hand) <= 0) return null;
+    const day = (d) => Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 86400000);
+    const today = new Date();
+    const todayNum = Math.floor(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) / 86400000);
+    return day(new Date(inv.return_by_date)) - todayNum;
+  };
+
   server.registerTool('list_inventory', {
-    description: 'List inventory purchases, newest first, paged. status = receiving status (did it arrive); availability = Available/Sold Out from qty_on_hand.',
+    description: 'List inventory purchases, newest first, paged. status = receiving status (did it arrive); availability = Available/Sold Out from qty_on_hand. return_by_date / return_days_left show the store return window; pass return_closing_within_days to find what has to go back soon.',
     inputSchema: {
       status: z.string().optional(),
       availability: z.enum(['Available', 'Sold Out']).optional(),
+      return_closing_within_days: z.number().int().min(0).max(365).optional().describe('Only purchases whose store return window is still open and closes within this many days (0 = last day is today), soonest first. Items with nothing left in stock are left out -- a sold item can\'t go back to the store.'),
       limit: z.number().int().min(1).max(100).optional().describe('Default 20.'),
       offset: z.number().int().min(0).optional().describe('Default 0.'),
     },
-  }, async ({ status, availability, limit, offset }) => {
+  }, async ({ status, availability, return_closing_within_days, limit, offset }) => {
     const inventories = await prisma.inventory.findMany({
       where: { user_id: userId },
       include: { vendor: true },
@@ -390,7 +404,13 @@ function buildServer(userId, apiKeyId) {
     const now = Date.now();
     const filtered = inventories
       .filter((inv) => !status || String(inv.receiving_status || inv.status || '').toUpperCase() === status.toUpperCase())
-      .filter((inv) => !availability || statusTransitions.availabilityLabel(inv) === availability);
+      .filter((inv) => !availability || statusTransitions.availabilityLabel(inv) === availability)
+      .filter((inv) => {
+        if (return_closing_within_days === undefined) return true;
+        const left = returnDaysLeft(inv);
+        return left !== null && left >= 0 && left <= return_closing_within_days;
+      });
+    if (return_closing_within_days !== undefined) filtered.sort((a, b) => returnDaysLeft(a) - returnDaysLeft(b));
     const start = offset ?? 0;
     const page = filtered.slice(start, start + (limit ?? 20));
     const items = page.map((inv) => ({
@@ -411,6 +431,8 @@ function buildServer(userId, apiKeyId) {
       tax_exempt: inv.tax_exempt,
       notes: inv.notes || null,
       market_value: inv.market_value === null || inv.market_value === undefined ? null : toNum(decimal(inv.market_value)),
+      return_by_date: toDateOnly(inv.return_by_date),
+      return_days_left: returnDaysLeft(inv),
     }));
     return jsonResult({ items, total: filtered.length, truncated: start + page.length < filtered.length });
   });
@@ -519,6 +541,21 @@ function buildServer(userId, apiKeyId) {
 
   // ----------------------------------------------------------------- writes
 
+  // Activity log: every add/edit the assistant makes is logged in the same
+  // transaction, exactly like the website's routes, so it shows on the
+  // Activity page (marked "AI assistant") and can be undone there or with
+  // undo_activity. mark_sale_paid and log_cashout_purchase are not logged,
+  // same as their website counterparts.
+  const track = (tx, meta, work) => activityLog.trackChange(tx, userId, { source: 'assistant', ...meta }, work);
+  const saleRefs = async (t, saleId) => {
+    const sale = await t.sales.findUnique({ where: { id: saleId }, select: { inventory_id: true } });
+    return sale ? { inventory: [sale.inventory_id], sales: [saleId] } : { sales: [saleId] };
+  };
+  const purchaseRefs = async (t, purchaseId) => ({
+    inventory: [purchaseId],
+    sales: (await t.sales.findMany({ where: { inventory_id: purchaseId }, select: { id: true } })).map((x) => x.id),
+  });
+
   server.registerTool('mark_sale_paid', {
     description: 'Mark one or more sales as paid from a single deposit. If payout_amount is less than the combined expected revenue of the given sales, the shortfall is split across them proportionally and recorded, rather than silently absorbed.',
     inputSchema: {
@@ -571,7 +608,11 @@ function buildServer(userId, apiKeyId) {
     try {
       const vendor = await findOrCreateVendor(userId, store);
       const paymentMethod = await findPaymentMethod(userId, card_used);
-      const created = await prisma.inventory.create({
+      const { result: created, activity } = await prisma.$transaction((tx) => track(tx, {
+        action: 'create', recordType: 'purchase',
+        refs: async (t, made) => (made ? { inventory: [made.id] } : {}),
+        recordId: (made) => made.id,
+      }, () => tx.inventory.create({
         data: {
           user_id: userId,
           product_name: item.trim(),
@@ -586,10 +627,11 @@ function buildServer(userId, apiKeyId) {
           tracking_number: tracking_number || null,
           carrier: carrier || null,
         },
-      });
+      })));
       await logWrite(userId, apiKeyId, 'add_purchase', { item, qty, unit_cost, store, card_used, purchase_date, tax_exempt, order_number, tracking_number, carrier });
       return jsonResult({
         id: created.id,
+        activity_id: activity?.id ?? null,
         item: created.product_name,
         qty: created.qty_purchased,
         unit_cost: toNum(decimal(created.unit_purchase_cost)),
@@ -618,7 +660,11 @@ function buildServer(userId, apiKeyId) {
   }, async ({ description, amount, date, category, paid_from_account }) => {
     try {
       const paymentMethod = await findPaymentMethod(userId, paid_from_account);
-      const created = await prisma.expense.create({
+      const { result: created, activity } = await prisma.$transaction((tx) => track(tx, {
+        action: 'create', recordType: 'expense',
+        refs: async (t, made) => ({ expense: made ? [made.id] : [] }),
+        recordId: (made) => made.id,
+      }, () => tx.expense.create({
         data: {
           user_id: userId,
           name: description.trim(),
@@ -627,10 +673,11 @@ function buildServer(userId, apiKeyId) {
           date: localNoon(date),
           payment_method_id: paymentMethod.id,
         },
-      });
+      })));
       await logWrite(userId, apiKeyId, 'add_expense', { description, amount, date, category, paid_from_account });
       return jsonResult({
         id: created.id,
+        activity_id: activity?.id ?? null,
         description: created.name,
         amount: toNum(decimal(created.amount)),
         date: toDateOnly(created.date),
@@ -659,7 +706,10 @@ function buildServer(userId, apiKeyId) {
     }).strict(),
   }, async ({ sale_id, price, fees, shipping, label_paid_with, qty, sale_date, platform, tracking_number, carrier, notes }) => {
     try {
-      const result = await prisma.$transaction(async (tx) => {
+      const { result, activity } = await prisma.$transaction(async (tx) => track(tx, {
+        action: 'edit', recordType: 'sale', recordId: sale_id,
+        refs: (t) => saleRefs(t, sale_id),
+      }, async () => {
         const existing = await tx.sales.findUnique({ where: { id: sale_id }, include: { inventory: true } });
         if (!existing || existing.inventory.user_id !== userId) {
           throw Object.assign(new Error('Sale not found or access denied'), { toolError: true });
@@ -731,10 +781,11 @@ function buildServer(userId, apiKeyId) {
 
         await recordChanges(tx, userId, 'Sales', sale_id, changes);
         return tx.sales.findUnique({ where: { id: sale_id } });
-      });
+      }));
       await logWrite(userId, apiKeyId, 'update_sale', { sale_id, price, fees, shipping, label_paid_with, qty, sale_date, platform, tracking_number, carrier, notes });
       return jsonResult({
         id: result.id,
+        activity_id: activity?.id ?? null,
         qty: result.quantity,
         price: toNum(result.unit_price),
         fees: toNum(result.commission_fee),
@@ -768,7 +819,10 @@ function buildServer(userId, apiKeyId) {
     }).strict(),
   }, async ({ purchase_id, qty, unit_cost, purchase_date, store, order_number, tracking_number, carrier, tax_exempt, notes }) => {
     try {
-      const result = await prisma.$transaction(async (tx) => {
+      const { result, activity } = await prisma.$transaction(async (tx) => track(tx, {
+        action: 'edit', recordType: 'purchase', recordId: purchase_id,
+        refs: (t) => purchaseRefs(t, purchase_id),
+      }, async () => {
         const existing = await tx.inventory.findUnique({ where: { id: purchase_id } });
         if (!existing || existing.user_id !== userId) {
           throw Object.assign(new Error('Purchase not found or access denied'), { toolError: true });
@@ -831,10 +885,11 @@ function buildServer(userId, apiKeyId) {
 
         await recordChanges(tx, userId, 'Inventory', purchase_id, changes);
         return tx.inventory.findUnique({ where: { id: purchase_id } });
-      });
+      }));
       await logWrite(userId, apiKeyId, 'update_purchase', { purchase_id, qty, unit_cost, purchase_date, store, order_number, tracking_number, carrier, tax_exempt, notes });
       return jsonResult({
         id: result.id,
+        activity_id: activity?.id ?? null,
         item: result.product_name,
         qty: result.qty_purchased,
         qty_on_hand: result.qty_on_hand,
@@ -869,7 +924,11 @@ function buildServer(userId, apiKeyId) {
     }).strict(),
   }, async ({ inventory_id, qty, sale_price, fees, shipping, label_paid_with, sale_date, platform, tracking_number, carrier, notes }) => {
     try {
-      const result = await prisma.$transaction(async (tx) => {
+      const { result, activity } = await prisma.$transaction(async (tx) => track(tx, {
+        action: 'create', recordType: 'sale',
+        refs: async (t, created) => ({ inventory: [inventory_id], sales: created ? [created.id] : [] }),
+        recordId: (created) => created.id,
+      }, async () => {
         const inv = await tx.inventory.findUnique({ where: { id: inventory_id } });
         if (!inv || inv.user_id !== userId) {
           throw Object.assign(new Error('Purchase not found or access denied'), { toolError: true });
@@ -902,10 +961,11 @@ function buildServer(userId, apiKeyId) {
             notes: notes || null,
           },
         });
-      });
+      }));
       await logWrite(userId, apiKeyId, 'add_sale', { inventory_id, qty, sale_price, fees, shipping, label_paid_with, sale_date, platform, tracking_number, carrier, notes });
       return jsonResult({
         id: result.id,
+        activity_id: activity?.id ?? null,
         inventory_id: result.inventory_id,
         qty: result.quantity,
         sale_price: toNum(result.unit_price),
@@ -997,11 +1057,19 @@ function buildServer(userId, apiKeyId) {
       const result = await prisma.$transaction(async (tx) => {
         const inv = await tx.inventory.findUnique({ where: { id: item_id } });
         if (inv && inv.user_id === userId) {
-          return updateInventoryShipment(tx, userId, inv, { tracking_number, carrier, status });
+          const { result: shipped, activity } = await track(tx, {
+            action: 'edit', recordType: 'purchase', recordId: inv.id,
+            refs: async () => ({ inventory: [inv.id] }),
+          }, () => updateInventoryShipment(tx, userId, inv, { tracking_number, carrier, status }));
+          return { ...shipped, activity_id: activity?.id ?? null };
         }
         const sale = await tx.sales.findUnique({ where: { id: item_id }, include: { inventory: true } });
         if (sale && sale.inventory.user_id === userId) {
-          return updateSaleShipment(tx, userId, sale, { tracking_number, carrier, status });
+          const { result: shipped, activity } = await track(tx, {
+            action: 'edit', recordType: 'sale', recordId: sale.id,
+            refs: async () => ({ inventory: [sale.inventory_id], sales: [sale.id] }),
+          }, () => updateSaleShipment(tx, userId, sale, { tracking_number, carrier, status }));
+          return { ...shipped, activity_id: activity?.id ?? null };
         }
         throw Object.assign(new Error('Shipment item not found or access denied'), { toolError: true });
       });
@@ -1429,6 +1497,25 @@ function buildServer(userId, apiKeyId) {
   });
   const noteProduct = async (note) => (await transactionNotes.findOwnedEntity(prisma, userId, note.entity_type, note.entity_id))?.product_name ?? null;
 
+  // One Activity log entry, trimmed to what the assistant needs to read it
+  // back to the user and to undo it.
+  const activityJson = (e) => ({
+    id: e.id,
+    when: e.created_at ? new Date(e.created_at).toISOString() : null,
+    kind: e.kind,
+    record_type: e.record_type,
+    record_id: e.record_id,
+    item: e.detail?.product_name ?? null,
+    action: e.detail?.action ?? null,
+    ...(e.kind === 'status' ? { from: e.detail?.from ?? null, to: e.detail?.to ?? null } : {}),
+    ...(e.kind && e.kind.startsWith('refund') && e.detail?.refund
+      ? { refund_amount: toNum(e.detail.refund.amount), units_returned: e.detail.refund.quantity ?? 0 } : {}),
+    is_undo: Boolean(e.detail?.undo),
+    source: e.source,
+    // available = can be undone now; undone / expired (older than 30 days) cannot.
+    undo: e.undo_state,
+    undo_until: e.undo_until ? new Date(e.undo_until).toISOString() : null,
+  });
   const refundJson = (refund) => ({
     id: refund.id,
     purchase_id: refund.inventory_id ?? null,
@@ -1459,15 +1546,29 @@ function buildServer(userId, apiKeyId) {
     description: 'Record a refund instead of deleting a transaction. On a purchase: money back from the store, lowering its cost. On a sale: money back to the buyer, lowering its revenue while fees and the label stay as costs. units_returned is how many units physically came back (0 for a price adjustment or when the item stays put): on a purchase they leave stock, on a sale they go back into stock.',
     inputSchema: z.object({
       ...refundTarget,
-      amount: z.number().nonnegative().describe('Refunded amount in dollars. For a sale, what you are actually out after any fee credit.'),
+      amount: z.number().nonnegative().optional().describe('Refunded amount in dollars. For a sale, what you are actually out after any fee credit. Required unless full_refund is true.'),
       units_returned: z.number().int().min(0).optional().describe('Defaults to 0.'),
+      full_refund: z.boolean().optional().describe('true to refund everything still refundable, worked out the same way as the website\'s "Returning everything" option: on a purchase, every unit still in stock at its price plus its share of the sales tax; on a sale, every unit the buyer still has at the price they paid. Leave out amount and units_returned.'),
+      keep_items: z.boolean().optional().describe('With full_refund: the units stay where they are (you keep them, or the buyer does), so no stock moves.'),
       date: strictDate.describe('Day the refund happened (YYYY-MM-DD). On the Credit Card page a store refund is a credit in this month.'),
       note: z.string().max(2000).optional(),
     }).strict(),
-  }, async ({ purchase_id, sale_id, amount, units_returned, date, note }) => {
+  }, async ({ purchase_id, sale_id, amount, units_returned, full_refund, keep_items, date, note }) => {
     try {
-      const refund = await recordRefund(userId, { inventory_id: purchase_id, sale_id, amount, quantity: units_returned, date, note }, { source: 'assistant' });
-      await logWrite(userId, apiKeyId, 'add_refund', { purchase_id, sale_id, amount, units_returned, date, note });
+      let refundAmount = amount;
+      let quantity = units_returned;
+      if (full_refund) {
+        if (amount !== undefined || units_returned !== undefined) throw toolError('full_refund works out the amount and units itself -- leave out amount and units_returned');
+        if (!purchase_id === !sale_id) throw toolError('Give purchase_id or sale_id, not both');
+        const full = await fullRefund(userId, { inventory_id: purchase_id, sale_id }, { keep: Boolean(keep_items) });
+        refundAmount = full.amount;
+        quantity = full.quantity;
+      } else {
+        if (keep_items !== undefined) throw toolError('keep_items only goes with full_refund -- otherwise set units_returned (0 keeps them)');
+        if (amount === undefined) throw toolError('amount is required unless full_refund is true');
+      }
+      const refund = await recordRefund(userId, { inventory_id: purchase_id, sale_id, amount: refundAmount, quantity, date, note }, { source: 'assistant' });
+      await logWrite(userId, apiKeyId, 'add_refund', { purchase_id, sale_id, amount, units_returned, full_refund, keep_items, date, note });
       return jsonResult(refundJson(refund));
     } catch (err) {
       return errorResult(err.message || 'Failed to add refund');
@@ -1487,6 +1588,37 @@ function buildServer(userId, apiKeyId) {
       return jsonResult({ deleted: true, ...refundJson(refund) });
     } catch (err) {
       return errorResult(err.message || 'Failed to delete refund');
+    }
+  });
+
+  server.registerTool('list_activity', {
+    description: 'The Activity log, newest first: purchases, sales and expenses added, edited or deleted, refunds added or removed, and status moves -- made on the website or by you (source "assistant"). Each entry says whether it can still be undone (the last 30 days, if nothing changed since).',
+    inputSchema: {
+      limit: z.number().int().min(1).max(100).optional().describe('Default 20.'),
+      before: z.string().optional().describe('Paging: the next_before value from the previous call.'),
+    },
+  }, async ({ limit, before }) => {
+    try {
+      const { entries, next_before } = await activityLog.listActivity(userId, { limit: limit ?? 20, before });
+      return jsonResult({ entries: entries.map(activityJson), next_before: next_before ? new Date(next_before).toISOString() : null });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to list activity');
+    }
+  });
+
+  server.registerTool('undo_activity', {
+    description: 'Undo one Activity log entry (from list_activity, or the activity_id a write tool returned): puts back exactly what that change did. Refused, with the reason, if it is older than 30 days, was already undone, or the record changed since -- nothing is guessed. The undo is itself logged, so it can be undone too.',
+    inputSchema: z.object({
+      activity_id: z.string().uuid(),
+      confirm: z.literal(true).describe('Must be true to confirm the undo.'),
+    }).strict(),
+  }, async ({ activity_id, confirm }) => {
+    try {
+      const { undone, entry } = await activityLog.undoActivity(userId, activity_id, { source: 'assistant' });
+      await logWrite(userId, apiKeyId, 'undo_activity', { activity_id, confirm });
+      return jsonResult({ undone: activityJson(undone), undo_entry: activityJson(entry) });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to undo');
     }
   });
 

@@ -146,4 +146,43 @@ async function removeRefund(userId, refundId, options = {}) {
   return { ...toJson(refund), activity_id: activity.id };
 }
 
-module.exports = { listRefunds, recordRefund, removeRefund };
+// A full refund of everything still refundable on one purchase or sale -- the
+// same numbers as the website's "Returning everything" prefill
+// (profit-tracker-app/src/utils/refundPrefill.js; keep the two in step):
+//   purchase -> each unit still in stock, at its price plus its share of the
+//               sales tax (what a store gives back; shipping and fees stay a cost)
+//   sale     -> each unit the buyer still holds, at the price they paid
+// capped at what is left to refund. keep: the units stay where they are (you
+// keep them, or the buyer does), so the refund moves no stock.
+// Returns { amount, quantity, units } or throws when nothing can be refunded.
+async function fullRefund(userId, { inventory_id, sale_id }, { keep = false } = {}) {
+  const round2 = (v) => Math.round(v * 100) / 100;
+  const num = (v) => Number(v) || 0;
+  let unitPrice;
+  let units;
+  let ceiling;
+  if (inventory_id) {
+    const raw = await prisma.inventory.findUnique({ where: { id: inventory_id } });
+    if (!raw || raw.user_id !== userId) throw requestError(404, 'Purchase not found or access denied');
+    const inv = withExactFields(raw, MAPPINGS.inventory);
+    unitPrice = round2(num(inv.unit_purchase_cost) + num(inv.sales_tax) / (num(inv.qty_purchased) || 1));
+    units = Math.max(0, num(inv.qty_on_hand));
+    ceiling = num(grossBatchCost(inv)) - num(raw.refunded_amount);
+  } else {
+    const raw = await prisma.sales.findUnique({ where: { id: sale_id }, include: { inventory: true } });
+    if (!raw || raw.inventory?.user_id !== userId) throw requestError(404, 'Sale not found or access denied');
+    const sale = withExactFields(raw, MAPPINGS.sales);
+    unitPrice = round2(num(sale.unit_price));
+    units = Math.max(0, unitsHeld(sale));
+    ceiling = num(sale.unit_price) * num(sale.quantity) - num(raw.refunded_amount);
+  }
+  if (units < 1) {
+    throw requestError(400, inventory_id
+      ? 'No units of this purchase are still in stock to send back -- give an amount instead'
+      : 'No units of this sale can still be returned -- give an amount instead');
+  }
+  const amount = Math.min(round2(unitPrice * units), Math.max(0, round2(ceiling)));
+  return { amount, quantity: keep ? 0 : units, units };
+}
+
+module.exports = { listRefunds, recordRefund, removeRefund, fullRefund };
