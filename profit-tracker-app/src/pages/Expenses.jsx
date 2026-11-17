@@ -10,6 +10,7 @@ import ShowMoreButton from '../components/UI/ShowMoreButton';
 import { useNavigate } from 'react-router-dom';
 import { localToday } from '../utils/returnWindow';
 import { toast } from 'sonner';
+import { toastWithUndo } from '../utils/undoToast';
 import LoadError from '../components/UI/LoadError';
 import {
   Receipt, Download, Plus, DollarSign,
@@ -407,7 +408,11 @@ const Expenses = () => {
     const method = editingItem && !editingIsRec ? 'PUT' : 'POST';
     const res = await apiFetch(url, { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(data) });
     if (!res.ok) throw new Error(await safeErrMsg(res, 'Save failed'));
+    const saved = await res.json().catch(() => ({}));
     await fetchAll();
+    if (saved?.activity_id) {
+      toastWithUndo(method === 'POST' ? 'Expense added.' : 'Expense saved.', saved.activity_id, () => { fetchAll(); });
+    }
   };
 
   const handleSaveRecurring = async (data) => {

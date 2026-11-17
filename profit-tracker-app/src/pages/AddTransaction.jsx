@@ -9,6 +9,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { addDays, localToday } from '../utils/returnWindow';
 import { usePaymentMethods, usePlatforms, useBuyers, useInvalidate, apiFetch, useProductNote, useProductNoteMutations, useProductNames, useRecentTransaction } from '../hooks/useApi';
+import { toastWithUndo } from '../utils/undoToast';
 import { MAX_RECEIPT_BYTES, RECEIPT_ACCEPT, saveInventoryWithReceipt, validateReceiptFile } from '../hooks/receiptUpload';
 
 // ── Stable module-level components (MUST be outside the component to avoid focus loss) ──
@@ -285,9 +286,10 @@ const AddTransaction = () => {
       }
     })();
 
-    toast.promise(submitPromise, {
-      loading: pendingReceiptInventoryId ? 'Attaching receipt...' : 'Saving transaction...',
-      success: ({ attachedReceipt }) => {
+    // A loading toast that turns into the success toast, which carries Undo
+    // (removes the purchase you just added).
+    const toastId = toast.loading(pendingReceiptInventoryId ? 'Attaching receipt...' : 'Saving transaction...');
+    submitPromise.then(({ attachedReceipt, activityId }) => {
         localStorage.removeItem(DRAFT_KEY);
         setPendingReceiptInventoryId(null);
         setAttachedFiles([]);
@@ -303,10 +305,11 @@ const AddTransaction = () => {
         }
         invalidate.all();
         setTimeout(() => navigate('/transactions'), 800);
-        return attachedReceipt ? 'Transaction and receipt added successfully!' : 'Transaction added successfully!';
-      },
-      error: (err) => `Failed: ${err.message}`,
-    });
+        toastWithUndo(
+          attachedReceipt ? 'Transaction and receipt added successfully!' : 'Transaction added successfully!',
+          activityId, invalidate.all, { id: toastId },
+        );
+    }, (err) => toast.error(`Failed: ${err.message}`, { id: toastId }));
   };
 
   const subtotal = (parseFloat(formData.unit_purchase_cost) || 0) * (parseInt(formData.qty_purchased) || 0);

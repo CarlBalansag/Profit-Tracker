@@ -175,7 +175,16 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
     await requireOwned('buyer', buyer_id, req.user.id, 'Buyer');
     await requireOwned('paymentMethod', sale_shipping_payment_method_id, req.user.id, 'Shipping label card');
 
-    const inventory = await prisma.$transaction(async (tx) => {
+    // Logged as one change (the purchase + any sale recorded with it) so the
+    // whole add can be undone.
+    const { result: inventory, activity } = await prisma.$transaction(async (tx) => activityLog.trackChange(tx, req.user.id, {
+      action: 'create',
+      recordType: 'purchase',
+      refs: async (t, made) => (made
+        ? { inventory: [made.id], sales: (await t.sales.findMany({ where: { inventory_id: made.id }, select: { id: true } })).map((s) => s.id) }
+        : {}),
+      recordId: (made) => made.id,
+    }, async () => {
       const created = await tx.inventory.create({
         data: {
         user_id: req.user.id,
@@ -233,10 +242,10 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
         });
       }
       return created;
-    });
+    }));
 
     await publishCalendarFeed(req.user.id);
-    res.json(exactInventory(inventory));
+    res.json({ ...exactInventory(inventory), activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -311,9 +320,26 @@ const transactionEditBody = z.object({
 });
 router.put('/:id/transaction', isAuthenticated, validateBody(transactionEditBody), async (req, res, next) => {
   try {
-    const result = await editTransaction(prisma, req.params.id, req.user.id, req.body);
+    // The purchase and every one of its sales, before and after: the detail
+    // window saves them together, so they undo together.
+    let activity = null;
+    const result = await editTransaction(prisma, req.params.id, req.user.id, req.body, {
+      track: async (tx, work) => {
+        const tracked = await activityLog.trackChange(tx, req.user.id, {
+          action: 'edit',
+          recordType: 'purchase',
+          refs: async (t) => ({
+            inventory: [req.params.id],
+            sales: (await t.sales.findMany({ where: { inventory_id: req.params.id }, select: { id: true } })).map((s) => s.id),
+          }),
+          recordId: req.params.id,
+        }, work);
+        activity = tracked.activity;
+        return tracked.result;
+      },
+    });
     await publishCalendarFeed(req.user.id);
-    res.json(exactInventory(result));
+    res.json({ ...exactInventory(result), activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -419,8 +445,14 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
     // Quantity fields double as the basis for every sale's stock math, so a
     // concurrent sale changing qty_on_hand between the read above and this
     // write must not be silently overwritten.
-    const updated = (qty_purchased !== undefined || qty_on_hand !== undefined)
-      ? await prisma.$transaction(async (tx) => {
+    const track = (work) => prisma.$transaction((tx) => activityLog.trackChange(tx, req.user.id, {
+      action: 'edit',
+      recordType: 'purchase',
+      refs: async () => ({ inventory: [req.params.id] }),
+      recordId: req.params.id,
+    }, () => work(tx)));
+    const { result: updated, activity } = (qty_purchased !== undefined || qty_on_hand !== undefined)
+      ? await track(async (tx) => {
         const claim = await tx.inventory.updateMany({
           where: {
             id: req.params.id, user_id: req.user.id,
@@ -431,13 +463,13 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
         if (claim.count !== 1) throw Object.assign(new Error('Inventory changed while saving. Reload and retry.'), { status: 409 });
         return tx.inventory.findUnique({ where: { id: req.params.id }, include: { vendor: true, payment_method: true } });
       })
-      : await prisma.inventory.update({
+      : await track((tx) => tx.inventory.update({
         where: { id: req.params.id },
         data,
         include: { vendor: true, payment_method: true }
-      });
+      }));
     await publishCalendarFeed(req.user.id);
-    res.json(exactInventory(updated));
+    res.json({ ...exactInventory(updated), activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }

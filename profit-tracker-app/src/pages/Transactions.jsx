@@ -4,6 +4,7 @@ import { useInventory, usePlatforms, usePaymentMethods, useBuyers, useInvalidate
 import { PageLoader } from '../components/PageLoader';
 import StatCard from '../components/UI/StatCard';
 import { toast } from 'sonner';
+import { toastWithUndo } from '../utils/undoToast';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Search, SlidersHorizontal, Download, Columns,
@@ -443,8 +444,9 @@ const Transactions = () => {
         handleSaveError('Transaction update', response.status, resJson);
         return;
       }
+      const saved = await response.json().catch(() => ({}));
       await invalidate.all();
-      toast.success('Transaction saved.');
+      toastWithUndo('Transaction saved.', saved?.activity_id, invalidate.all);
       setEditingId(null);
     } catch (err) {
       console.error('[saveEdit] unexpected error:', err);

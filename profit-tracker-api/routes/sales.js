@@ -111,7 +111,14 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
     // action. A legacy status with no new-column equivalent resolves
     // workflow_status to null, and such a sale gets no stamp either.
     if (workflowData.workflow_status) workflowData.workflow_status_changed_at = new Date();
-    const sale = await prisma.$transaction(async (tx) => {
+    // Logged as one change (the new sale + the stock it took) so it can be
+    // undone from the toast or the Activity page.
+    const { result: sale, activity } = await prisma.$transaction(async (tx) => activityLog.trackChange(tx, req.user.id, {
+      action: 'create',
+      recordType: 'sale',
+      refs: async (t, created) => ({ inventory: [inventory_id], sales: created ? [created.id] : [] }),
+      recordId: (created) => created.id,
+    }, async () => {
       const stockClaim = await tx.inventory.updateMany({
         where: {
           id: inventory_id,
@@ -145,10 +152,10 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
           tracking_number: tracking_number || null,
         }
       });
-    });
+    }));
 
     await publishCalendarFeed(req.user.id);
-    res.json(exactSale(sale));
+    res.json({ ...exactSale(sale), activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -209,7 +216,12 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
       // same "last status updated" stamp an action endpoint would write.
       if (advanced.data.workflow_status) workflowData.workflow_status_changed_at = new Date();
     }
-    const updated = await prisma.$transaction(async (tx) => {
+    const { result: updated, activity } = await prisma.$transaction(async (tx) => activityLog.trackChange(tx, req.user.id, {
+      action: 'edit',
+      recordType: 'sale',
+      refs: async () => ({ inventory: [existing.inventory_id], sales: [req.params.id] }),
+      recordId: req.params.id,
+    }, async () => {
       // Claim the inventory row first, using the same lock order as the
       // combined transaction-edit route, so the two can't deadlock when they
       // run concurrently against the same purchase.
@@ -262,10 +274,10 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
       });
       if (claim.count !== 1) throw requestError(409, 'Sale changed while saving. Reload and retry.');
       return tx.sales.findUnique({ where: { id: req.params.id } });
-    });
+    }));
 
     await publishCalendarFeed(req.user.id);
-    res.json(exactSale(updated));
+    res.json({ ...exactSale(updated), activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }

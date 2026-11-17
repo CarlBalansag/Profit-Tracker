@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Bot, Undo2, History } from 'lucide-react';
+import { Bot, Undo2, History, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useActivity, useInvalidate } from '../hooks/useApi';
 import { undoActivity } from '../utils/undoToast';
 import { describeActivity } from '../utils/activityText';
@@ -39,7 +39,17 @@ function groupByDay(entries) {
   return groups;
 }
 
+const CHANGE_ICON = { create: Plus, edit: Pencil, delete: Trash2 };
+
 function EntryIcon({ entry }) {
+  if (entry.kind === 'change') {
+    const Icon = CHANGE_ICON[entry.detail?.action] || Pencil;
+    return (
+      <span className="flex items-center justify-center w-8 h-8 rounded-full shrink-0 bg-sky-500/10 text-sky-400">
+        <Icon className="w-4 h-4" />
+      </span>
+    );
+  }
   if (entry.kind !== 'status') {
     return (
       <span className="flex items-center justify-center w-8 h-8 rounded-full shrink-0 bg-emerald-500/10 text-emerald-400">
@@ -119,7 +129,7 @@ export default function Activity() {
       <div>
         <h1 className="text-2xl font-bold text-white">Activity</h1>
         <p className="text-sm text-gray-400 mt-1">
-          Refunds and status changes you made, newest first. Anything from the last 30 days can be undone, as long as nothing changed it since.
+          Purchases, sales and expenses you added or edited, refunds, and status changes, newest first. Anything from the last 30 days can be undone, as long as nothing changed it since.
         </p>
       </div>
 
@@ -129,7 +139,7 @@ export default function Activity() {
         <div className="mx-auto mt-12 max-w-sm text-center">
           <History className="mx-auto mb-3 h-8 w-8 text-gray-600" aria-hidden="true" />
           <p className="font-semibold text-gray-200">Nothing here yet</p>
-          <p className="mt-1 text-sm text-gray-400">When you record a refund or press a status button, it shows up here so you can undo it.</p>
+          <p className="mt-1 text-sm text-gray-400">When you add or edit a purchase, sale or expense, record a refund, or press a status button, it shows up here so you can undo it.</p>
         </div>
       ) : (
         <div className="max-w-3xl space-y-5">

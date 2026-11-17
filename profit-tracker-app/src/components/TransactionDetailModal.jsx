@@ -6,6 +6,7 @@ import { useInvalidate, apiFetch} from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { toast } from 'sonner';
+import { toastWithUndo } from '../utils/undoToast';
 import ReturnWindowBadge from './ReturnWindowBadge';
 import { addDays, daysBetween } from '../utils/returnWindow';
 import TransactionNotesPanel from './TransactionNotesPanel';
@@ -398,8 +399,12 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
         }),
       });
       await requireSuccessfulResponse(invRes, 'Transaction update failed. No changes were saved.');
+      const saved = await invRes.json().catch(() => ({}));
 
       invalidate.all();
+      // Only when the save actually changed something (the server logs nothing
+      // otherwise); Undo puts the purchase and its sales back as they were.
+      if (saved?.activity_id) toastWithUndo('Changes saved.', saved.activity_id, invalidate.all);
       onSaved();
       onClose();
     } catch (err) {

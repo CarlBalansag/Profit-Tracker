@@ -210,5 +210,138 @@ describe('activity log: rules', () => {
     expect(sameValue(null, undefined)).toBe(true);
     expect(sameValue(null, 0)).toBe(false);
     expect(sameValue('PAID', 'CANCELLED')).toBe(false);
+    expect(sameValue({ a: 1 }, { a: 1 })).toBe(true);
+    expect(sameValue({ a: 1 }, { a: 2 })).toBe(false);
+  });
+});
+
+describe('activity log: edits and adds (part 2)', () => {
+  const put = (path, body) => request('PUT', path, body);
+  const sale2 = () => harness.db.sales.find((s) => s.id !== harness.ids.sale);
+
+  it('undoes a recorded sale: the sale goes and its units come back', async () => {
+    const res = await request('POST', '/api/sales', { inventory_id: harness.ids.inventory, quantity: 2, unit_price: 120, sale_date: '2026-10-05' });
+    expect(res.status).toBe(200);
+    expect(inv().qty_on_hand).toBe(1);
+    const [entry] = await entries();
+    expect(entry).toMatchObject({ id: res.body.activity_id, kind: 'change', record_type: 'sale', record_id: res.body.id });
+    expect(entry.detail).toMatchObject({ action: 'create', product_name: 'QA Multi-unit Sneaker' });
+
+    expect((await undo(entry.id)).status).toBe(200);
+    expect(harness.db.sales).toHaveLength(1);
+    expect(inv().qty_on_hand).toBe(3);
+
+    // Redo puts the very same sale back.
+    const [redoEntry] = await entries();
+    expect((await undo(redoEntry.id)).status).toBe(200);
+    expect(sale2()).toMatchObject({ id: res.body.id, quantity: 2, unit_price: 120 });
+    expect(inv().qty_on_hand).toBe(1);
+  });
+
+  it('undoes a sale edit, including the stock it moved', async () => {
+    const res = await put(`/api/sales/${harness.ids.sale}`, { quantity: 3, unit_price: 175 });
+    expect(res.status).toBe(200);
+    expect(inv().qty_on_hand).toBe(2);
+    const [entry] = await entries();
+    expect(entry.detail.rows.map((r) => `${r.model}:${r.op}`)).toEqual(['inventory:update', 'sales:update']);
+    expect(entry.detail.rows[1].fields.unit_price).toEqual({ before: 150, after: 175 });
+
+    expect((await undo(res.body.activity_id)).status).toBe(200);
+    expect(sale()).toMatchObject({ quantity: 2, unit_price: 150 });
+    expect(inv().qty_on_hand).toBe(3);
+  });
+
+  it('refuses to undo an edit that was edited again since, and changes nothing', async () => {
+    const first = await put(`/api/sales/${harness.ids.sale}`, { unit_price: 175 });
+    await put(`/api/sales/${harness.ids.sale}`, { unit_price: 180 });
+    const res = await undo(first.body.activity_id);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("This sale changed after this, so it can't be undone safely.");
+    expect(sale().unit_price).toBe(180);
+  });
+
+  it('logs nothing when a save changes nothing', async () => {
+    const res = await put(`/api/sales/${harness.ids.sale}`, { unit_price: 150 });
+    expect(res.status).toBe(200);
+    expect(res.body.activity_id).toBeNull();
+    expect(await entries()).toEqual([]);
+  });
+
+  it('undoes an added purchase together with the sale recorded with it', async () => {
+    const res = await request('POST', '/api/inventory', { product_name: 'Drill Kit', unit_purchase_cost: 99, qty_purchased: 2, sale_price: 150, qty_sold: 1 });
+    expect(res.status).toBe(200);
+    const [entry] = await entries();
+    expect(entry).toMatchObject({ record_type: 'purchase', record_id: res.body.id });
+    expect(entry.detail.product_name).toBe('Drill Kit');
+    expect(entry.detail.rows.map((r) => `${r.model}:${r.op}`)).toEqual(['inventory:create', 'sales:create']);
+
+    expect((await undo(entry.id)).status).toBe(200);
+    expect(harness.db.inventory.find((i) => i.id === res.body.id)).toBeUndefined();
+    expect(harness.db.sales.filter((s) => s.inventory_id === res.body.id)).toHaveLength(0);
+  });
+
+  it('will not remove an added purchase that has sales recorded since', async () => {
+    const res = await request('POST', '/api/inventory', { product_name: 'Drill Kit', unit_purchase_cost: 99, qty_purchased: 2 });
+    await request('POST', '/api/sales', { inventory_id: res.body.id, quantity: 1, unit_price: 150 });
+    const undone = await undo(res.body.activity_id);
+    expect(undone.status).toBe(409);
+    // Its stock changed with that sale, which is caught first.
+    expect(harness.db.inventory.find((i) => i.id === res.body.id)).toBeTruthy();
+  });
+
+  it('will not remove an added sale that has a refund recorded since', async () => {
+    const res = await request('POST', '/api/sales', { inventory_id: harness.ids.inventory, quantity: 1, unit_price: 120 });
+    harness.db.refund.push({ id: 'r-x', user_id: harness.ids.user, sale_id: res.body.id, amount: 5, quantity: 0, date: new Date(), created_at: new Date() });
+    const undone = await undo(res.body.activity_id);
+    expect(undone.status).toBe(409);
+    expect(undone.body.error).toBe("This sale has refunds recorded since, so it can't be removed. Remove those first.");
+  });
+
+  it('undoes a detail-window save of the purchase and its sales in one go', async () => {
+    const res = await put(`/api/inventory/${harness.ids.inventory}/transaction`, {
+      inventory: { product_name: 'Renamed Sneaker', unit_purchase_cost: 110 },
+      sales: [{ id: harness.ids.sale, unit_price: 160 }],
+      newSale: { quantity: 1, unit_price: 140 },
+    });
+    expect(res.status).toBe(200);
+    expect(harness.db.sales).toHaveLength(2);
+    const [entry] = await entries();
+    expect(entry.detail.rows.map((r) => `${r.model}:${r.op}`).sort()).toEqual(['inventory:update', 'sales:create', 'sales:update']);
+
+    expect((await undo(res.body.activity_id)).status).toBe(200);
+    expect(inv()).toMatchObject({ product_name: 'QA Multi-unit Sneaker', unit_purchase_cost: 100, qty_on_hand: 3 });
+    expect(harness.db.sales).toHaveLength(1);
+    expect(sale().unit_price).toBe(150);
+  });
+
+  it('undoes a purchase edit from the inline editor', async () => {
+    const res = await put(`/api/inventory/${harness.ids.inventory}`, { product_name: 'New Name', qty_purchased: 6 });
+    expect(res.status).toBe(200);
+    expect(inv()).toMatchObject({ product_name: 'New Name', qty_purchased: 6, qty_on_hand: 4 });
+    expect((await undo(res.body.activity_id)).status).toBe(200);
+    expect(inv()).toMatchObject({ product_name: 'QA Multi-unit Sneaker', qty_purchased: 5, qty_on_hand: 3 });
+  });
+
+  it('undoes an added expense and an expense edit (bumping its tax version)', async () => {
+    const added = await request('POST', '/api/expenses', { name: 'Tape', amount: 12, date: '2026-10-01' });
+    expect(added.status).toBe(200);
+    expect((await entries())[0]).toMatchObject({ record_type: 'expense', detail: { action: 'create', product_name: 'Tape' } });
+    expect((await undo(added.body.activity_id)).status).toBe(200);
+    expect(harness.db.expense.find((e) => e.id === added.body.id)).toBeUndefined();
+
+    const expense = harness.db.expense[0];
+    const edited = await put(`/api/expenses/${expense.id}`, { amount: 30 });
+    expect(edited.status).toBe(200);
+    const version = expense.tax_version;
+    expect((await undo(edited.body.activity_id)).status).toBe(200);
+    expect(harness.db.expense[0].amount).toBe(25);
+    expect(harness.db.expense[0].tax_version).toBe(version + 1);
+  });
+
+  it('rolls the whole save back if its activity entry cannot be written', async () => {
+    harness.faults['activityLog.create'] = true;
+    expect((await request('POST', '/api/sales', { inventory_id: harness.ids.inventory, quantity: 1, unit_price: 120 })).status).toBe(500);
+    expect(harness.db.sales).toHaveLength(1);
+    expect(inv().qty_on_hand).toBe(3);
   });
 });

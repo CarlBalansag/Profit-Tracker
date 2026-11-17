@@ -14,12 +14,18 @@ export async function undoActivity(activityId) {
 
 // A success toast with an Undo button when the action was logged.
 // `onUndone` runs after a successful undo (refresh whatever the caller shows).
-export function toastWithUndo(message, activityId, onUndone) {
+// `options` go to sonner, e.g. { id } to replace a "Saving…" loading toast.
+export function toastWithUndo(message, activityId, onUndone, options = {}) {
   if (!activityId) {
-    toast.success(message);
+    if (Object.keys(options).length) toast.success(message, options);
+    else toast.success(message);
     return;
   }
   toast.success(message, {
+    // Long enough to notice a mistake and reach the button (sonner's own
+    // default is 4 s). The Activity page keeps the undo for 30 days anyway.
+    duration: 10000,
+    ...options,
     action: {
       label: 'Undo',
       onClick: async () => {
