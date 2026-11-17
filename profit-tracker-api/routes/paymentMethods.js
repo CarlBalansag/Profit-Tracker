@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
-const { paymentMethod } = require('../validation/schemas');
+const { paymentMethod, reworkPrompt } = require('../validation/schemas');
+const { resolveRewardFields } = require('../services/cardRewards');
 const { publishCalendarFeed } = require('../services/calendarFeed');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 const { Decimal, batchCost, isRealizedSale } = require('../services/decimalFinance');
@@ -64,20 +65,32 @@ router.get('/', isAuthenticated, async (req, res, next) => {
   }
 });
 
+// Label / catalog link fields, shared by POST and PUT. undefined = keep.
+const optionalText = (value, existingValue) => (value !== undefined ? (value || null) : existingValue);
+
 // POST new payment method
 router.post('/', isAuthenticated, validateBody(paymentMethod), async (req, res, next) => {
   try {
-    const { name, type, default_cashback_rate, preset_card_id, last4, category_rates,
-            statement_close_day, due_day, credit_limit, min_payment_pct, is_personal } = req.body;
+    const { name, type, preset_card_id, last4,
+            statement_close_day, due_day, credit_limit, min_payment_pct, is_personal,
+            rewards_label, catalog_card_id, rework_prompt_state } = req.body;
+    const rewards = resolveRewardFields(req.body, null);
     const method = await prisma.paymentMethod.create({
       data: {
         user_id: req.user.id,
         name,
         type,
-        default_cashback_rate: parseFloat(default_cashback_rate) || 0,
+        reward_type: rewards.reward_type,
+        points_base_rate: rewards.points_base_rate,
+        point_value_cents: rewards.point_value_cents,
+        default_cashback_rate: rewards.default_cashback_rate,
+        rewards_label: optionalText(rewards_label, null),
+        catalog_card_id: optionalText(catalog_card_id, null),
+        // A card added from the new catalog never needs the rework notice.
+        rework_prompt_state: rework_prompt_state ?? (catalog_card_id ? 'switched' : null),
         preset_card_id: preset_card_id || null,
         last4: last4 || null,
-        category_rates: category_rates ? JSON.stringify(category_rates) : null,
+        category_rates: rewards.category_rates.length ? JSON.stringify(rewards.category_rates) : null,
         statement_close_day: statement_close_day ? parseInt(statement_close_day) : null,
         due_day: due_day ? parseInt(due_day) : null,
         credit_limit: credit_limit ? parseFloat(credit_limit) : null,
@@ -96,24 +109,37 @@ router.post('/', isAuthenticated, validateBody(paymentMethod), async (req, res, 
 router.put('/:id', isAuthenticated, validateBody(paymentMethod), async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, type, default_cashback_rate, preset_card_id, last4, category_rates,
-            statement_close_day, due_day, credit_limit, min_payment_pct, is_personal } = req.body;
+    const { name, type, preset_card_id, last4, category_rates,
+            statement_close_day, due_day, credit_limit, min_payment_pct, is_personal,
+            rewards_label, catalog_card_id, rework_prompt_state } = req.body;
 
     const existing = await prisma.paymentMethod.findUnique({ where: { id } });
     if (!existing || existing.user_id !== req.user.id) {
       return res.status(404).json({ error: 'Not found' });
     }
 
+    // For a cashback card the sent default_cashback_rate is used as before
+    // (the schema fills 0 when it's left out). For a points card it's ignored
+    // and re-derived from the multiplier and point value.
+    const rewards = resolveRewardFields(req.body, existing);
+    const ratesTouched = category_rates !== undefined || rewards.reward_type === 'points' || existing.reward_type !== rewards.reward_type;
+
     const updated = await prisma.paymentMethod.update({
       where: { id },
       data: {
         name,
         type,
-        default_cashback_rate: parseFloat(default_cashback_rate) || 0,
+        reward_type: rewards.reward_type,
+        points_base_rate: rewards.points_base_rate,
+        point_value_cents: rewards.point_value_cents,
+        default_cashback_rate: rewards.default_cashback_rate,
+        rewards_label: optionalText(rewards_label, existing.rewards_label ?? null),
+        catalog_card_id: optionalText(catalog_card_id, existing.catalog_card_id ?? null),
+        rework_prompt_state: rework_prompt_state !== undefined ? rework_prompt_state : (existing.rework_prompt_state ?? null),
         preset_card_id: preset_card_id ?? existing.preset_card_id,
         last4: last4 !== undefined ? (last4 || null) : existing.last4,
-        category_rates: category_rates !== undefined
-          ? JSON.stringify(category_rates)
+        category_rates: ratesTouched
+          ? JSON.stringify(rewards.category_rates)
           : existing.category_rates,
         statement_close_day: statement_close_day !== undefined ? (statement_close_day ? parseInt(statement_close_day) : null) : existing.statement_close_day,
         due_day: due_day !== undefined ? (due_day ? parseInt(due_day) : null) : existing.due_day,
@@ -123,6 +149,26 @@ router.put('/:id', isAuthenticated, validateBody(paymentMethod), async (req, res
       }
     });
     await publishCalendarFeed(req.user.id);
+    res.json(parseRates(updated));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Answer the one-time "cards were reworked" notice without editing the card
+// ("kept" = leave it as-is). Switching goes through PUT, which sends the new
+// catalog values along with rework_prompt_state: 'switched'.
+router.patch('/:id/rework-prompt', isAuthenticated, validateBody(reworkPrompt), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const existing = await prisma.paymentMethod.findUnique({ where: { id } });
+    if (!existing || existing.user_id !== req.user.id) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    const updated = await prisma.paymentMethod.update({
+      where: { id },
+      data: { rework_prompt_state: req.body.state },
+    });
     res.json(parseRates(updated));
   } catch (err) {
     next(err);

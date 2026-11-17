@@ -177,6 +177,18 @@ model AuthIntent {
   @@index([expires_at])
 }
 
+// Cached copy of the free OpenCard DB card catalog (CC BY 4.0), refreshed
+// about once a month from its public JSON export. One row per source; `data`
+// is the normalized card list as JSON. Global, not per user.
+model CardCatalog {
+  id           String   @id            // "opencard-us"
+  data         String                  // JSON array of normalized cards
+  card_count   Int
+  source_url   String
+  synced_at    DateTime
+  last_verified String?                // newest last_verified date in the data
+}
+
 model Invite {
   id         String    @id @default(uuid())
   token_hash String    @unique
@@ -455,6 +467,20 @@ model PaymentMethod {
   // personal account" calculation: unreimbursed spend on personal-flagged
   // methods, minus Expenses with category "Owner Reimbursement".
   is_personal           Boolean     @default(false)
+  // How the card earns: "cashback" (rates are % back) or "points" (points or
+  // miles per $1). For a points card, points_base_rate and each
+  // category_rates[].points hold the multipliers, and the server derives the
+  // dollar % stored in default_cashback_rate / category_rates[].rate as
+  // multiplier x point_value_cents -- so every profit total keeps reading a
+  // plain dollar rate.
+  reward_type           String      @default("cashback")
+  points_base_rate      Float?      // e.g. 1 for 1x on everything else
+  point_value_cents     Float?      // what one point is worth to the user, in cents (default 1)
+  rewards_label         String?     // e.g. "Membership Rewards points", "SkyMiles"
+  catalog_card_id       String?     // matches CardCatalog card ids (OpenCard DB), e.g. "us-amex-gold"
+  // One-time "cards were reworked" notice for cards saved before the catalog:
+  // null = not asked yet, "switched" = updated from the catalog, "kept" = left as-is.
+  rework_prompt_state   String?
   inventories           Inventory[]
   expenses              Expense[]
   recurring_expenses    RecurringExpense[]
