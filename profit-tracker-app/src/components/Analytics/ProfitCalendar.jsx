@@ -147,7 +147,6 @@ export default function ProfitCalendar({ calendar, dateRange }) {
   };
 
   const cellProps = (cell, i) => ({
-    key: cell.key,
     onMouseEnter: (e) => show(e, cell),
     onClick: (e) => show(e, cell),
     'data-day': cell.inRange ? cell.key : undefined,
@@ -184,7 +183,7 @@ export default function ProfitCalendar({ calendar, dateRange }) {
             </div>
             <div className="grid grid-cols-7 gap-1.5">
               {cells.map((cell, i) => (
-                <MotionDiv {...cellProps(cell, i)} className="relative h-9 cursor-default rounded-md">
+                <MotionDiv key={cell.key} {...cellProps(cell, i)} className="relative h-9 cursor-default rounded-md">
                   {cell.inRange && <span className="absolute left-1.5 top-1 text-[9px] text-[var(--dp-text-label)]">{cell.dayOfMonth}</span>}
                 </MotionDiv>
               ))}
@@ -210,7 +209,7 @@ export default function ProfitCalendar({ calendar, dateRange }) {
                   <React.Fragment key={w}>
                     <span className="h-4 overflow-visible whitespace-nowrap text-[10px] text-[var(--dp-text-label)]">{label?.text ?? ''}</span>
                     {cells.slice(w * 7, w * 7 + 7).map((cell, d) => (
-                      <MotionDiv {...cellProps(cell, w * 7 + d)} className="aspect-square w-full cursor-default rounded-[3px]" />
+                      <MotionDiv key={cell.key} {...cellProps(cell, w * 7 + d)} className="aspect-square w-full cursor-default rounded-[3px]" />
                     ))}
                   </React.Fragment>
                 );

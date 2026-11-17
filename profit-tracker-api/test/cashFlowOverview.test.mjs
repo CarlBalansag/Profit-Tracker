@@ -162,6 +162,30 @@ describe('GET /api/analytics/dashboard overhaul fields', () => {
     expect(Array.isArray(d30.body.priorTrend)).toBe(true);
   });
 
+  it('counts today and the 6 days before it as 7 Days, the same days as the calendar', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-09T12:00:00Z'));
+    try {
+      const week = async () => (await get('/api/analytics/dashboard?mode=All&date=7%20Days')).body;
+      // Sep 3 is the first of the 7 days (Sep 3 - Sep 9).
+      harness.db.sales[0].sale_date = new Date('2026-09-03T00:00:00Z');
+      let res = await week();
+      expect(res.stats.salesCount).toBe(1);
+      expect(res.trendMeta).toEqual({ windowStart: '2026-09-03', windowEnd: '2026-09-09' });
+      expect(res.profitCalendar.from).toBe('2026-09-03');
+      // Sep 2 is the 8th day back: outside this week, inside the prior one.
+      harness.db.sales[0].sale_date = new Date('2026-09-02T23:59:00Z');
+      res = await week();
+      expect(res.stats.salesCount).toBe(0);
+      expect(res.priorStats).toMatchObject({ from: '2026-08-27', to: '2026-09-02', salesCount: 1 });
+      const month = (await get('/api/analytics/dashboard?mode=All&date=30%20Days')).body;
+      expect(month.trendMeta.windowStart).toBe('2026-08-11');
+      expect(month.profitCalendar.from).toBe('2026-08-11');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('sends the profit calendar for exactly the days the filter covers', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-09-05T12:00:00Z'));

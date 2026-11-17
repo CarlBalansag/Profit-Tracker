@@ -46,14 +46,17 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     // boundary date are always included regardless of the server's local timezone.
     const now = new Date();
     const todayUTC = now.toISOString().slice(0, 10); // "YYYY-MM-DD"
+    // "7 Days" is today and the 6 days before it, "30 Days" today and the 29
+    // before it -- the same days the profit calendar draws. (It used to reach
+    // back 7 / 30 whole days, which counted 8 / 31 days.)
     let dateFrom = null;
     if (dateParam === '7 Days') {
       const d = new Date(todayUTC + 'T00:00:00.000Z');
-      d.setUTCDate(d.getUTCDate() - 7);
+      d.setUTCDate(d.getUTCDate() - 6);
       dateFrom = d;
     } else if (dateParam === '30 Days') {
       const d = new Date(todayUTC + 'T00:00:00.000Z');
-      d.setUTCDate(d.getUTCDate() - 30);
+      d.setUTCDate(d.getUTCDate() - 29);
       dateFrom = d;
     } else if (dateParam === 'YTD') {
       dateFrom = new Date(`${now.getUTCFullYear()}-01-01T00:00:00.000Z`);
