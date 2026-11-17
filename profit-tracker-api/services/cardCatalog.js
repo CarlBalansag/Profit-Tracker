@@ -200,7 +200,54 @@ async function getCatalog(prisma, opts = {}) {
   const age = now.getTime() - new Date(catalog.synced_at).getTime();
   const syncDisabled = process.env.CARD_CATALOG_SYNC === 'off';
   if (!(age < REFRESH_AFTER_MS) && opts.refresh !== false && !syncDisabled) refreshInBackground(prisma, opts);
-  return catalog;
+  return { ...catalog, cards: applyCorrections(catalog.cards, opts.corrections) };
+}
+
+// ─── Our own corrections ──────────────────────────────────────────────────────
+// data/card-corrections.json patches cards the community list hasn't caught
+// up with (e.g. an issuer added a category). Applied to whichever copy is
+// served, so they reach the picker and -- through the auto-update -- saved
+// cards. Additions are skipped when the card already has them, so an entry
+// becomes a no-op once OpenCard DB catches up and can then be deleted.
+const CORRECTIONS_PATH = path.join(__dirname, '..', 'data', 'card-corrections.json');
+const SETTABLE = ['reward_type', 'rewards_label', 'base_rate', 'base_cap', 'annual_fee'];
+let correctionsCache = null;
+function loadCorrections() {
+  if (!correctionsCache) {
+    try {
+      correctionsCache = JSON.parse(fs.readFileSync(CORRECTIONS_PATH, 'utf8')).corrections || [];
+    } catch (err) {
+      console.warn('[cardCatalog] corrections not loaded:', err.message);
+      correctionsCache = [];
+    }
+  }
+  return correctionsCache;
+}
+
+const sameText = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+
+// Returns a new list; cards without a correction are passed through as-is.
+function applyCorrections(cards, corrections = loadCorrections()) {
+  if (!corrections.length) return cards;
+  const byId = new Map(corrections.map(c => [c.id, c]));
+  return cards.map(card => {
+    const fix = byId.get(card.id);
+    if (!fix) return card;
+    const out = { ...card, categories: [...(card.categories || [])], benefits: [...(card.benefits || [])] };
+    for (const key of SETTABLE) if (fix.set && key in fix.set) out[key] = fix.set[key];
+    for (const cat of fix.add_categories || []) {
+      if (cat?.label && Number.isFinite(Number(cat.rate)) && !out.categories.some(c => sameText(c.label, cat.label))) {
+        out.categories.push({ label: cat.label, rate: Number(cat.rate), cap: cat.cap ?? null });
+      }
+    }
+    for (const benefit of fix.add_benefits || []) {
+      if (benefit?.title && !out.benefits.some(b => sameText(b.title, benefit.title))) {
+        out.benefits.push({ title: benefit.title, category: benefit.category ?? null, description: benefit.description ?? null });
+      }
+    }
+    out.corrected = { source: fix.source || null, checked: fix.checked || null };
+    return out;
+  });
 }
 
 // id -> card lookup for the catalog currently being served, for linking and
@@ -226,6 +273,6 @@ const _resetForTests = () => { inFlight = null; lastFailureAt = 0; bundledCache 
 
 module.exports = {
   SOURCE_ID, SOURCE_URL, REFRESH_AFTER_MS, MIN_CARDS,
-  normalizeCard, normalizeCatalog, downloadCatalog, syncCatalog, getCatalog, getCatalogIndex, refreshInBackground, loadBundled,
+  normalizeCard, normalizeCatalog, downloadCatalog, syncCatalog, getCatalog, getCatalogIndex, refreshInBackground, loadBundled, applyCorrections,
   _resetForTests,
 };

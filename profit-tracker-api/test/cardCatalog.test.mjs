@@ -134,6 +134,36 @@ describe('getCatalog', () => {
   });
 });
 
+describe('applyCorrections', () => {
+  const card = () => ({ id: 'us-x', name: 'X', reward_type: 'points', base_rate: 1, categories: [{ label: 'Dining', rate: 3, cap: null }], benefits: [{ title: 'Lounge access' }] });
+  const fix = { id: 'us-x', source: 'https://issuer.example/x', checked: '2026-11-17', add_categories: [{ label: 'Gas stations', rate: 3 }, { label: 'dining', rate: 9 }], add_benefits: [{ title: 'Purchase Protection', category: 'insurance' }], set: { base_rate: 2, name: 'ignored' } };
+
+  it('adds missing categories and perks, sets allowed fields, and notes the source', () => {
+    const [out] = catalog.applyCorrections([card()], [fix]);
+    expect(out.base_rate).toBe(2);
+    expect(out.name).toBe('X'); // not a settable field
+    expect(out.categories).toEqual([{ label: 'Dining', rate: 3, cap: null }, { label: 'Gas stations', rate: 3, cap: null }]);
+    expect(out.benefits.map(b => b.title)).toEqual(['Lounge access', 'Purchase Protection']);
+    expect(out.corrected).toEqual({ source: 'https://issuer.example/x', checked: '2026-11-17' });
+  });
+
+  it("doesn't change the input list or cards without a correction", () => {
+    const original = card();
+    const other = { ...card(), id: 'us-y' };
+    const out = catalog.applyCorrections([original, other], [fix]);
+    expect(original.categories).toHaveLength(1);
+    expect(out[1]).toBe(other);
+  });
+
+  it('applies the shipped corrections file to the Sapphire Preferred', async () => {
+    const served = await catalog.getCatalog(harness.prisma, { refresh: false });
+    const csp = served.cards.find(c => c.id === 'us-chase-sapphire-preferred');
+    expect(csp.categories).toContainEqual({ label: 'Gas stations and EV charging', rate: 3, cap: null });
+    expect(csp.benefits.map(b => b.title)).toEqual(expect.arrayContaining(['Purchase Protection', 'Extended Warranty Protection']));
+    expect(csp.corrected.checked).toBe('2026-11-17');
+  });
+});
+
 describe('GET /api/card-catalog', () => {
   it('returns the catalog with attribution', async () => {
     const res = await fetch(`${baseUrl}/api/card-catalog`);
