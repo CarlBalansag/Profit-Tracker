@@ -42,7 +42,7 @@ export function SlidingTabs({ options, value, onChange, ariaLabel, size = 'md', 
             role="tab"
             aria-selected={active}
             onClick={() => onChange(key)}
-            className={`relative flex-1 whitespace-nowrap rounded-lg font-medium transition-colors ${pad} ${active ? 'text-[var(--accent)]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
+            className={`relative flex-1 whitespace-nowrap rounded-lg font-medium transition-colors ${pad} ${active ? 'text-[var(--dp-text-primary)]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
           >
             {active && (
               <MotionSpan

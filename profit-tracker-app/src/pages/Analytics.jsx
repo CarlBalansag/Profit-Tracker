@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useDashboard } from '../hooks/useApi';
 import LoadError from '../components/UI/LoadError';
 import {
-  DollarSign, TrendingUp, Percent, Gift, CreditCard, Package, BarChart2, RotateCcw,
+  DollarSign, ShoppingCart, TrendingUp, Percent, Gift, CreditCard, Package, BarChart2, RotateCcw,
   LayoutGrid, Users, Store, Truck, Receipt, Boxes,
 } from 'lucide-react';
 import {
@@ -136,7 +136,7 @@ function ProfitTrend({ data, dateRange }) {
       sub={`${METRICS.find((m) => m.key === metric).label} per ${daily ? 'day' : 'month'}${hasPrior ? `, dashed line is the ${PRIOR_LABEL[dateRange]}` : ''}`}
       right={<SlidingTabs size="sm" ariaLabel="Trend metric" value={metric} onChange={setMetric} options={METRICS} />}
     >
-      <div className="h-[260px] w-full">
+      <div className="w-full" style={{ height: 260 }}>
         {points.length ? (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={points} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
@@ -262,7 +262,7 @@ function Analytics() {
 
         {/* Metrics */}
         <Rise key={`${mode}`} className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <Metric label="Revenue" icon={DollarSign} tone="accent" value={money(s.totalRevenue)} number={s.totalRevenue} pending={pending}
+          <Metric label="Revenue" icon={DollarSign} value={money(s.totalRevenue)} number={s.totalRevenue} pending={pending}
             sub={p ? <Delta now={s.totalRevenue} before={p.totalRevenue} label={priorLabel} /> : `${s.salesCount ?? 0} sale${s.salesCount !== 1 ? 's' : ''}, after fees`} />
           <Metric label="Profit" icon={TrendingUp} tone="green" value={money(s.profit)} number={s.profit} pending={pending}
             sub={p ? <Delta now={s.profit} before={p.profit} label={priorLabel} /> : `incl. ${usd(soldCashback)} cashback on sold items`} />
@@ -275,11 +275,11 @@ function Analytics() {
             <Metric label="Units sold" icon={Package} value={loading ? '…' : String(s.unitsSold ?? 0)} number={s.unitsSold} pending={pending}
               sub={p ? `${p.unitsSold} in the ${priorLabel}` : `${s.salesCount ?? 0} sales`} />
           )}
-          <Metric label="Cashback" icon={Gift} tone="accent" value={money(s.totalCashback)} number={s.totalCashback} pending={pending}
+          <Metric label="Cashback" icon={Gift} value={money(s.totalCashback)} number={s.totalCashback} pending={pending}
             sub={`Avg ${fmtPct(s.avgCashbackRate)} on purchases`} />
           <Metric label="Platform fees" icon={CreditCard} tone="amber" value={money(s.commissionFees)} number={s.commissionFees} pending={pending}
             sub={s.totalRevenue > 0 ? `${fmtPct((s.commissionFees / (s.totalRevenue + s.commissionFees)) * 100)} of sale prices` : 'Taken out of payouts'} />
-          <Metric label="Item cost" icon={DollarSign} value={money(s.soldCost)} number={s.soldCost} pending={pending}
+          <Metric label="Item cost" icon={ShoppingCart} value={money(s.soldCost)} number={s.soldCost} pending={pending}
             sub="What the sold items cost you, incl. tax & shipping" />
           <Metric label="In stock" icon={Package} value={loading ? '…' : String(s.inventoryQty ?? 0)} number={s.inventoryQty} pending={pending}
             sub={`${usd(s.inventoryValue)} at cost · ${s.listedQty ?? 0} listed`} />
@@ -344,7 +344,7 @@ function Analytics() {
               <Panel title="Category profitability" sub="Which product categories are actually worth buying.">
                 {categoryBreakdown.length > 0 ? (
                   <>
-                    <div className="h-[220px] w-full mb-4">
+                    <div className="w-full mb-4" style={{ height: 220 }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={categoryBreakdown} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }} barSize={16}>
                           <CartesianGrid strokeDasharray="3 3" stroke="var(--border-hover)" horizontal={false} />
@@ -378,7 +378,7 @@ function Analytics() {
               <Panel title="Platform payouts" sub="How much each Cashout or Marketplace channel has actually paid you, after its commission.">
                 {platformBreakdown.length > 0 ? (
                   <>
-                    <div className="h-[200px] w-full mb-6">
+                    <div className="w-full mb-6" style={{ height: 200 }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={platformBreakdown} margin={{ top: 5, right: 20, left: 0, bottom: 5 }} barSize={36}>
                           <CartesianGrid strokeDasharray="3 3" stroke="var(--border-hover)" vertical={false} />
@@ -436,7 +436,7 @@ function Analytics() {
                           <div className="flex justify-between gap-2 text-xs mb-1.5">
                             <span className="truncate font-medium text-[var(--dp-text-primary)]">{card.name}</span>
                             <span className="shrink-0 tabular-nums text-[var(--dp-text-muted)]">
-                              <b className="text-[var(--accent)]">{usd(card.cashback)}</b> cashback · {fmtPct(card.cashbackRate)}
+                              <b className="text-[var(--dp-green-text)]">{usd(card.cashback)}</b> cashback · {fmtPct(card.cashbackRate)}
                             </span>
                           </div>
                           <GrowBar pct={(card.amount / maxAmt) * 100} color="var(--accent)" delay={i * 0.05} />
@@ -450,7 +450,7 @@ function Analytics() {
             </RiseItem>
             <RiseItem>
               <Panel title="Cashback rate" sub="Cashback earned as a share of purchase spend, by month.">
-                <div className="h-[220px] w-full">
+                <div className="w-full" style={{ height: 220 }}>
                   {cashbackRateTrend.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={cashbackRateTrend} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>

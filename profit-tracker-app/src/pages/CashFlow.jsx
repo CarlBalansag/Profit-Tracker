@@ -57,7 +57,7 @@ function OwedRow({ group }) {
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold text-[var(--dp-text-primary)]">{group.name}</span>
           <span className="block text-[11px] text-[var(--dp-text-muted)]">
-            {plural(group.count, 'sale')} · oldest {group.oldestDays}d · usually pays in {group.expectedDays}d
+            {plural(group.count, 'sale')} · oldest {group.oldestDays}d<span className="hidden sm:inline"> · usually pays in {group.expectedDays}d</span>
           </span>
         </span>
         <Pill cls={pill.cls}>{pill.label(group)}</Pill>
@@ -160,8 +160,8 @@ function CashFlow() {
           <Kpi label="Owed to you" icon={ArrowDownLeft} value={usd(s.owedTotal)} number={s.owedTotal} pending={refreshing}
             tone="text-[var(--dp-green-text)]"
             sub={s.owedCount ? `${plural(s.owedCount, 'sale')} unpaid${s.lateCount ? ` · ${s.lateCount} late` : ''}` : 'Nothing waiting'} />
-          <Kpi label="Card bills, 30 days" icon={CreditCard} value={usd(s.billsDue30)} number={s.billsDue30} pending={refreshing}
-            tone="text-[var(--dp-red-text)]" sub="Estimated from charges" />
+          <Kpi label="Bills due, 30d" icon={CreditCard} value={usd(s.billsDue30)} number={s.billsDue30} pending={refreshing}
+            tone={s.billsDue30 > 0 ? 'text-[var(--dp-red-text)]' : undefined} sub="Estimated from charges" />
           <Kpi label="Net this month" icon={ArrowUpRight} value={signed(s.netThisMonth)} number={s.netThisMonth} pending={refreshing}
             tone={s.netThisMonth >= 0 ? 'text-[var(--dp-green-text)]' : 'text-[var(--dp-red-text)]'}
             sub={`${netDelta >= 0 ? '▲' : '▼'} ${usd(Math.abs(netDelta))} vs last month`} />
@@ -206,7 +206,7 @@ function CashFlow() {
           sub="In: payouts received and store refunds. Out: purchases, business expenses and refunds to buyers. The line is the net."
           right={<SlidingTabs size="sm" ariaLabel="Months shown" value={months} onChange={setMonths} options={[{ key: '6', label: '6 months' }, { key: '12', label: '12 months' }]} />}
         >
-          <div className="h-[260px] w-full">
+          <div className="w-full" style={{ height: 260 }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={monthly} stackOffset="sign" margin={{ top: 5, right: 10, left: 0, bottom: 0 }} barSize={22}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-hover)" vertical={false} />
@@ -217,7 +217,7 @@ function CashFlow() {
                   formatter={(v, name) => [usd(name === 'Out' ? -v : v), name]} />
                 <Bar dataKey="in" name="In" stackId="cash" fill="var(--green)" radius={[4, 4, 0, 0]} isAnimationActive animationDuration={900} />
                 <Bar dataKey="outNeg" name="Out" stackId="cash" fill="var(--red)" radius={[4, 4, 0, 0]} isAnimationActive animationDuration={900} />
-                <Line dataKey="net" name="Net" type="monotone" stroke="var(--text-primary)" strokeWidth={2} dot={{ r: 3 }} isAnimationActive animationDuration={1200} animationBegin={300} />
+                <Line dataKey="net" name="Net" type="linear" stroke="var(--text-primary)" strokeWidth={2} dot={{ r: 3 }} isAnimationActive animationDuration={1200} animationBegin={300} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -239,15 +239,15 @@ function CashFlow() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Cash tied up */}
           <Panel title="Cash tied up" sub="Unsold stock at cost plus sold-but-unpaid sales, week by week. Rising means cash is getting stuck.">
-            <div className="h-[220px] w-full">
+            <div className="w-full" style={{ height: 220 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={tiedUp} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border-hover)" vertical={false} />
                   <XAxis dataKey="name" {...AXIS} dy={8} interval="preserveStartEnd" minTickGap={24} />
                   <YAxis {...AXIS} tickFormatter={axisMoney} width={56} />
                   <Tooltip {...TOOLTIP} formatter={(v, name) => [usd(v), name]} />
-                  <Area dataKey="inventory" name="In stock" stackId="t" type="monotone" stroke="var(--yellow)" fill="var(--yellow)" fillOpacity={0.25} isAnimationActive animationDuration={1200} />
-                  <Area dataKey="unpaid" name="Sold, unpaid" stackId="t" type="monotone" stroke="var(--dp-info-text)" fill="var(--dp-info-text)" fillOpacity={0.25} isAnimationActive animationDuration={1200} animationBegin={200} />
+                  <Area dataKey="inventory" name="In stock" stackId="t" type="linear" stroke="var(--yellow)" fill="var(--yellow)" fillOpacity={0.25} isAnimationActive animationDuration={1200} />
+                  <Area dataKey="unpaid" name="Sold, unpaid" stackId="t" type="linear" stroke="var(--dp-info-text)" fill="var(--dp-info-text)" fillOpacity={0.25} isAnimationActive animationDuration={1200} animationBegin={200} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
