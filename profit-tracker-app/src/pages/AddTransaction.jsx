@@ -10,10 +10,11 @@ import { useNavigate } from 'react-router-dom';
 import { addDays, localToday } from '../utils/returnWindow';
 import { usePaymentMethods, usePlatforms, useBuyers, useInvalidate, apiFetch, useProductNote, useProductNoteMutations, useProductNames, useRecentTransaction } from '../hooks/useApi';
 import { toastWithUndo } from '../utils/undoToast';
+import InfoTip from '../components/UI/InfoTip';
 import { MAX_RECEIPT_BYTES, RECEIPT_ACCEPT, saveInventoryWithReceipt, validateReceiptFile } from '../hooks/receiptUpload';
 
 // ── Stable module-level components (MUST be outside the component to avoid focus loss) ──
-const Field = ({ label, children, className }) => {
+const Field = ({ label, children, className, tip }) => {
   const generatedId = useId();
   const wrapperRef = useRef(null);
   const labelRef = useRef(null);
@@ -30,7 +31,14 @@ const Field = ({ label, children, className }) => {
   });
   return (
     <div ref={wrapperRef} className={className}>
-      <label ref={labelRef} className="block text-xs font-medium text-gray-400 mb-1.5">{label}</label>
+      {tip ? (
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <label ref={labelRef} className="block text-xs font-medium text-gray-400">{label}</label>
+          <InfoTip name={label} text={tip} width="w-72" />
+        </div>
+      ) : (
+        <label ref={labelRef} className="block text-xs font-medium text-gray-400 mb-1.5">{label}</label>
+      )}
       {children}
     </div>
   );
@@ -1008,7 +1016,10 @@ const AddTransaction = () => {
                 </Field>
 
                 {/* Buyer / who actually paid — separate from the platform above */}
-                <Field label="Buyer (who paid)">
+                <Field
+                  label="Buyer (who paid)"
+                  tip="Optional. The person or business that actually pays you for this sale, like a friend or local buyer. Pick one when you sell directly to someone, so Invoices can track what they still owe you. Leave it blank if the platform pays you itself (for example, P4D)."
+                >
                   {!addingBuyer ? (
                     <select
                       value={formData.buyer_id}

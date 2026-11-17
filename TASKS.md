@@ -4,3 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
+| feat-buyer-info-tip | Info (i) tip explaining "Buyer (who paid)" on Add Transaction; share InfoTip from RefundsPanel | `profit-tracker-app/src/pages/AddTransaction.jsx`, `profit-tracker-app/src/components/RefundsPanel.jsx`, `profit-tracker-app/src/components/UI/InfoTip.jsx` | In progress | 2026-11-17 |

@@ -1,10 +1,11 @@
 import { formatMoney } from '../utils/money';
-import React, { useId, useState } from 'react';
-import { Info, Trash2, Undo2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Trash2, Undo2 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import { useInvalidate, useRefunds, useRefundMutations } from '../hooks/useApi';
 import { toastWithUndo } from '../utils/undoToast';
+import InfoTip from './UI/InfoTip';
 import { localToday, toDateOnly } from '../utils/returnWindow';
 import { fullRefundPrefill, refundUnitPrice } from '../utils/refundPrefill';
 
@@ -48,44 +49,6 @@ const NOTE_TIP = 'Optional. Anything you want to remember, like where you return
 const MotionDiv = motion.div;
 const EASE = [0.16, 1, 0.3, 1];
 const CHECK = 'mt-0.5 w-4 h-4 shrink-0 accent-[var(--dp-accent)] cursor-pointer';
-
-// A small (i) next to a field label. Hover or keyboard focus shows the
-// explanation; a tap opens it on touch screens. `align` keeps the bubble
-// inside the panel for fields in the right-hand column.
-function InfoTip({ name, text, align = 'left' }) {
-  const [open, setOpen] = useState(false);
-  const tipId = useId();
-  return (
-    <span className="relative inline-flex shrink-0">
-      <button
-        type="button"
-        aria-label={`What is ${name}?`}
-        aria-describedby={open ? tipId : undefined}
-        // A tap fires hover and focus before the click, so a toggle here would
-        // open and instantly close it on touch screens. Click only ever opens;
-        // tapping elsewhere (blur), moving the mouse away or Escape closes it.
-        onClick={() => setOpen(true)}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        onKeyDown={(e) => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); } }}
-        className="flex items-center justify-center w-4 h-4 rounded-full text-[var(--dp-text-muted)] hover:text-[var(--dp-text-primary)] focus:outline-none focus-visible:text-[var(--dp-text-primary)] transition-colors"
-      >
-        <Info className="w-3.5 h-3.5" />
-      </button>
-      {open && (
-        <span
-          id={tipId}
-          role="tooltip"
-          className={`absolute bottom-full mb-1.5 ${align === 'right' ? 'right-0' : 'left-0'} z-50 w-56 rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal leading-snug text-[var(--dp-text-primary)] bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] shadow-xl`}
-        >
-          {text}
-        </span>
-      )}
-    </span>
-  );
-}
 
 function FieldLabel({ htmlFor, label, name, tip, align }) {
   return (
