@@ -189,3 +189,23 @@ export function renameForRelink(currentName, oldCardName, newCardName) {
   const looksLikeOld = current && old && (old.includes(current) || current.includes(old));
   return looksLikeOld ? cleanCardName(newCardName) : currentName;
 }
+
+// ─── Perks that matter for reselling ──────────────────────────────────────────
+// The card list carries every perk (lounges, trip insurance, DashPass...).
+// Payment Methods only shows the ones that help a reseller: protection on
+// inventory, credits on shipping / supplies / stores you buy from, employee
+// cards, and ways to finance or boost purchases.
+const TRAVEL_PERK = /trip|travel|baggage|luggage|lounge|club access|airline|flight|boarding|hotel|rental car|auto rental|car rental|roadside|global entry|tsa|precheck|inflight|companion|status|concierge|dining|resy|doordash|dashpass|uber|lyft|rideshare|streaming|entertainment|ticket|splurge|cell(ular)? (tele)?phone|wireless|balance transfer|annual fee/i;
+// Matched against the perk's title.
+const RESELLING_TITLE = /purchase (protection|security|assurance)|damage (&|and) theft|extended warranty|warranty (protection|extension)|return protection|price protection|employee cards?|intro apr|cash ?back match|payment terms|fedex|\bups\b|usps|shipping|office supply|amazon|walmart|costco|best buy|target|home depot|lowe'?s|staples/i;
+// A statement credit counts when its description names where it applies.
+const RESELLING_CREDIT = /fedex|\bups\b|usps|shipping|office supply|amazon|walmart|costco|best buy|home depot|lowe'?s|staples/i;
+
+export function isResellingPerk(perk) {
+  const title = perk?.title || '';
+  if (TRAVEL_PERK.test(title)) return false;
+  if (RESELLING_TITLE.test(title)) return true;
+  return /credit/i.test(title) && RESELLING_CREDIT.test(perk?.description || '');
+}
+
+export const resellingPerks = (benefits = []) => benefits.filter(isResellingPerk);

@@ -23,7 +23,11 @@ const CATALOG = {
       id: 'us-amex-gold', name: 'American Express® Gold Card', issuer: 'American Express', reward_type: 'points',
       rewards_label: 'Membership Rewards points', base_rate: 1, annual_fee: 325,
       categories: [{ label: 'Restaurants worldwide', rate: 4, cap: null }, { label: 'U.S. supermarkets', rate: 4, cap: null }],
-      benefits: [{ title: 'Dunkin\' statement credit', category: 'credit', description: 'Monthly credit.' }],
+      benefits: [
+        { title: 'Dunkin\' statement credit', category: 'credit', description: 'Monthly credit.' },
+        { title: 'Purchase Protection', category: 'insurance', description: 'Covers new purchases against damage or theft.' },
+        { title: 'Baggage Delay Insurance', category: 'insurance', description: 'Reimburses essentials.' },
+      ],
     },
     {
       id: 'us-citi-double-cash', name: 'Citi Double Cash® Card', issuer: 'Citi', reward_type: 'cashback',
@@ -214,7 +218,12 @@ describe('Card catalog: points vs cashback', () => {
     render(<PaymentMethods />);
     expect(await screen.findByText('1x pts')).toBeTruthy();
     expect(screen.getByText(/at 2¢ each ≈ 2.00%/)).toBeTruthy();
+    // Only reselling perks count: Purchase Protection, not Dunkin' or baggage.
     expect(await screen.findByText('1 perks · 1 cards')).toBeTruthy();
+    fireEvent.click(screen.getByText('PERKS'));
+    expect(screen.getByText('Purchase Protection')).toBeTruthy();
+    expect(screen.queryByText("Dunkin' statement credit")).toBeNull();
+    expect(screen.queryByText('Baggage Delay Insurance')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Show or hide rates' }));
     expect(screen.getByText('4x · ≈8%')).toBeTruthy();
   });

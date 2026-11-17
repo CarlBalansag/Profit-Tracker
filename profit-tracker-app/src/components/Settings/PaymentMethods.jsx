@@ -11,7 +11,7 @@ import { CardReworkNotice } from './CardReworkNotice';
 import clsx from 'clsx';
 import {
   loadCardCatalog, rewardFieldsFromCatalog, reworkSwitchBody, cardsNeedingRework,
-  formatEarnRate, pointsUnit, cleanCardName,
+  formatEarnRate, pointsUnit, cleanCardName, resellingPerks,
 } from '../../utils/cardRewards';
 
 import { useAuth } from '../../context/AuthContext';
@@ -236,7 +236,8 @@ export const PaymentMethods = () => {
 
   const reworkItems = cardsNeedingRework(savedMethods, catalogCards);
   const catalogById = new Map(catalogCards.map(c => [c.id, c]));
-  const perksFor = (card) => catalogById.get(card.catalogCardId)?.benefits || [];
+  // Only perks that matter for reselling (purchase protection, shipping credits...).
+  const perksFor = (card) => resellingPerks(catalogById.get(card.catalogCardId)?.benefits || []);
   const totalPerks = savedCards.reduce((sum, c) => sum + perksFor(c).length, 0);
 
   const totalCreditLimit = savedCards.reduce((sum, c) => sum + (Number(c.creditLimit) || 0), 0);
