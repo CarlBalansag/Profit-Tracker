@@ -36,7 +36,7 @@ const INITIAL_STATE = {
   is_personal: false,
 };
 
-export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
+export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit, defaultType = null }) => {
   const [formData, setFormData] = useState(INITIAL_STATE);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
@@ -61,11 +61,11 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
         min_payment_pct: cardToEdit.min_payment_pct?.toString() || '',
       });
     } else if (isOpen) {
-      setFormData(INITIAL_STATE);
+      setFormData({ ...INITIAL_STATE, type: defaultType ? normalizeType(defaultType) : INITIAL_STATE.type });
     }
     setRelinkTo(null);
     setErrors({});
-  }, [cardToEdit, isOpen]);
+  }, [cardToEdit, isOpen, defaultType]);
 
   if (!isOpen) return null;
 

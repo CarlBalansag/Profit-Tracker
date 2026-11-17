@@ -22,7 +22,8 @@ export const PaymentMethods = () => {
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [editingCard, setEditingCard] = useState(null);
-  const [viewMode, setViewMode] = useState('Cards View'); // Cards View | Analytics View
+  // Type pre-selected when Custom is opened from the Debit section's add tile.
+  const [newCardType, setNewCardType] = useState(null);
   
   const [savedCards, setSavedCards] = useState([]);
   // Raw API rows, for the rework notice (it needs the stored fields as-is).
@@ -63,7 +64,7 @@ export const PaymentMethods = () => {
               id: card.id,
               name: card.name || 'Unnamed',
               issuer: (card.name || '').split(' ')[0] || 'Unknown',
-              type: (card.type || '').toLowerCase().includes('debit') ? 'debit' : 'credit',
+              type: /debit|prepaid/i.test(card.type || '') ? 'debit' : 'credit',
               rawType: card.type || '',
               baseRate: card.default_cashback_rate || 0,
               rewardType: card.reward_type === 'points' ? 'points' : 'cashback',
@@ -292,28 +293,26 @@ export const PaymentMethods = () => {
 
       <CardReworkNotice items={reworkItems} onSwitch={handleReworkSwitch} onKeep={handleReworkKeep} />
 
-      {/* View Toggles */}
-      <div className="flex gap-1 border-b border-gray-800/50 pb-4">
-        {['Cards View', 'Analytics View'].map(mode => (
-          <button
-            key={mode}
-            onClick={() => setViewMode(mode)}
-            className={clsx(
-              "px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2",
-              viewMode === mode 
-                ? "bg-gray-800 text-white" 
-                : "text-gray-500 hover:text-gray-300"
-            )}
-          >
-            <PenSquare size={14} /> {mode}
-          </button>
-        ))}
-      </div>
-
-      {/* Cards Grid */}
-      {viewMode === 'Cards View' && (
+      {/* Cards, split into credit and debit/prepaid */}
+      {[
+        {
+          id: 'credit', title: 'Credit cards', addLabel: 'Add credit card',
+          cards: savedCards.filter(c => c.type !== 'debit'),
+          onAdd: () => setIsQuickAddOpen(true),
+        },
+        {
+          id: 'debit', title: 'Debit & prepaid', addLabel: 'Add debit card',
+          cards: savedCards.filter(c => c.type === 'debit'),
+          onAdd: () => { setNewCardType('Debit'); setIsCustomModalOpen(true); },
+        },
+      ].map(section => (
+      <section key={section.id} aria-labelledby={`pm-section-${section.id}`} className="space-y-3">
+        <h2 id={`pm-section-${section.id}`} className="flex items-center gap-2 text-sm font-bold text-gray-300 border-b border-gray-800/50 pb-2">
+          {section.title}
+          <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-white/5 text-gray-400">{section.cards.length}</span>
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {savedCards.map((card, cardIdx) => {
+          {section.cards.map((card, cardIdx) => {
             const rateKey = `rate-${card.id || cardIdx}-${cardIdx}`;
             const isOpen = openRatesIds.has(rateKey);
             return (
@@ -479,22 +478,20 @@ export const PaymentMethods = () => {
           })}
 
           <button
-             onClick={() => setIsQuickAddOpen(true)}
-             className="bg-[#12121A]/50 border-2 border-dashed border-gray-800 rounded-xl p-5 hover:border-gray-600 transition-colors flex flex-col items-center justify-center text-gray-500 hover:text-gray-300 min-h-75"
+             onClick={section.onAdd}
+             className={clsx(
+               "bg-[#12121A]/50 border-2 border-dashed border-gray-800 rounded-xl p-5 hover:border-gray-600 transition-colors flex flex-col items-center justify-center text-gray-500 hover:text-gray-300",
+               section.cards.length ? "min-h-75" : "min-h-32"
+             )}
           >
              <div className="w-12 h-12 rounded-full border border-gray-700 flex items-center justify-center mb-4 bg-[#1a1a24]">
                 <Plus size={24} />
              </div>
-             <p className="font-medium text-sm">Add New Card</p>
+             <p className="font-medium text-sm">{section.addLabel}</p>
           </button>
         </div>
-      )}
-
-      {viewMode === 'Analytics View' && (
-         <div className="py-20 text-center text-gray-600 font-medium">
-           Analytics View is under construction.
-         </div>
-      )}
+      </section>
+      ))}
 
       {/* Modal */}
       <QuickAddModal 
@@ -509,9 +506,11 @@ export const PaymentMethods = () => {
         onClose={() => {
           setIsCustomModalOpen(false);
           setEditingCard(null);
+          setNewCardType(null);
         }}
         onAddCard={handleCustomAdd}
         cardToEdit={editingCard}
+        defaultType={newCardType}
       />
     </div>
   );

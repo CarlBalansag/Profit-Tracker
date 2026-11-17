@@ -303,6 +303,49 @@ describe('Edit card: re-link to a different card from the list', () => {
   });
 });
 
+describe('Credit and debit sections', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    _resetCatalogCacheForTests();
+    onWrite = (path, options) => Promise.resolve(json({ id: 'new', ...JSON.parse(options.body) }));
+    mocks.apiFetch.mockImplementation(route);
+    savedMethods = [
+      { id: 'c1', name: 'Freedom', type: 'Credit', default_cashback_rate: 1.5, category_rates: [], total_spend: 0 },
+      { id: 'c2', name: 'Old custom', type: 'Credit Card', default_cashback_rate: 1, category_rates: [], total_spend: 0 },
+      { id: 'd1', name: 'Checking', type: 'Debit', default_cashback_rate: 0, category_rates: [], total_spend: 0 },
+      { id: 'p1', name: 'Gift Visa', type: 'Prepaid', default_cashback_rate: 0, category_rates: [], total_spend: 0 },
+    ];
+  });
+
+  it('lists credit cards and debit/prepaid cards in their own sections, with no Analytics View', async () => {
+    render(<PaymentMethods />);
+    const credit = await screen.findByRole('region', { name: /Credit cards/ });
+    const debit = screen.getByRole('region', { name: /Debit & prepaid/ });
+    const names = (region) => within(region).getAllByRole('heading', { level: 3 }).map(h => h.textContent);
+    expect(names(credit)).toEqual(['Freedom', 'Old custom']);
+    expect(names(debit)).toEqual(['Checking', 'Gift Visa']);
+    expect(screen.queryByText(/Analytics View/)).toBeNull();
+  });
+
+  it('"Add debit card" opens the Custom form with Debit selected', async () => {
+    render(<PaymentMethods />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add debit card' }));
+    expect(await screen.findByText('Add Card')).toBeTruthy();
+    expect(screen.getByRole('combobox').value).toBe('Debit');
+  });
+
+  it('"Add credit card" opens Quick Add, and Custom from the header still starts as Credit', async () => {
+    render(<PaymentMethods />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add credit card' }));
+    expect(await screen.findByText('Quick Add Cards')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add debit card' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: /Custom/ }));
+    expect(screen.getByRole('combobox').value).toBe('Credit');
+  });
+});
+
 describe('"Credit cards were reworked" notice', () => {
   const legacyGold = {
     id: 'gold', name: 'My Gold', type: 'Credit', reward_type: 'cashback', default_cashback_rate: 1,
