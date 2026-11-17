@@ -14,7 +14,9 @@ const READ_TOOLS = [
   { name: 'get_cashflow_summary', args: '', description: "What's owed to you, what you've spent, and what's sitting in inventory." },
   { name: 'get_unpaid_by_buyer', args: '', description: 'Who still owes you money, grouped by marketplace or cashout.' },
   { name: 'list_shipments', args: 'direction?, status?, missing_tracking?', description: "What's still in transit — inbound purchases or outbound sales." },
-  { name: 'get_card_net_to_pay', args: 'month?', description: 'What you still owe on each credit card, plus the next due date.' },
+  { name: 'get_card_net_to_pay', args: 'month?', description: 'What you still owe on each credit card, the next due date, and the rewards (cash back or points) earned that month.' },
+  { name: 'list_payment_methods', args: 'type?', description: 'Your cards and how each earns — cash back % or points at your point value — plus store rates and reselling perks.' },
+  { name: 'search_card_list', args: 'query, reward_type?, limit?', description: 'Look up a card in the built-in card list to add it or switch a saved card to it.' },
   { name: 'list_changes', args: 'limit?, record_id?', description: 'History of edits the assistant has made, so you can review or correct one.' },
 ];
 
@@ -26,6 +28,8 @@ const WRITE_TOOLS = [
   { name: 'update_sale', args: 'sale_id, …', description: 'Edit an existing sale — price, fees, tracking, and more.' },
   { name: 'update_shipment', args: 'item_id, tracking_number?, carrier?, status?', description: 'Update the tracking number, carrier, or shipping status on a purchase or sale.' },
   { name: 'mark_sale_paid', args: 'sale_ids[], payout_date, payout_amount, …', description: 'Mark one or more sales as paid from a single deposit.' },
+  { name: 'add_payment_method', args: 'type, card_id? | name + cashback_rate or points, …', description: 'Add a card — from the card list (rates stay current) or by hand, as cash back or points.' },
+  { name: 'update_payment_method', args: 'payment_method, point_value_cents?, card_id?, new_name?, …', description: "Change a card's point value, name, last 4 or rates, or switch it to the right card from the list." },
 ];
 
 function ToolRow({ tool }) {

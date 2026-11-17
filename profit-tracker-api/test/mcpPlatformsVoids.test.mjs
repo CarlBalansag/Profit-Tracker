@@ -113,7 +113,8 @@ describe('add_payment_method', () => {
   it('creates a card, records a change row, and logs the write', async () => {
     const res = await callTool('add_payment_method', { name: 'Amex Gold', type: 'Credit', last4: '1005', cashback_rate: 4 });
     expect(res.isError).toBe(false);
-    expect(res.data).toEqual({ id: expect.any(String), name: 'Amex Gold', type: 'Credit', last4: '1005', cashback_rate: 4 });
+    expect(res.data).toMatchObject({ id: expect.any(String), name: 'Amex Gold', type: 'Credit', last4: '1005', cashback_rate: 4 });
+    expect(res.data.rewards).toEqual({ type: 'cashback', earns: '4% cash back', effective_rate_pct: 4 });
     expect(harness.db.paymentMethod.find((m) => m.id === res.data.id))
       .toMatchObject({ user_id: ids.user, default_cashback_rate: 4, last4: '1005' });
     expect(harness.db.changeLog).toEqual([expect.objectContaining({

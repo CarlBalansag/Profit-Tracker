@@ -216,7 +216,8 @@ describe('get_card_net_to_pay', () => {
     expect(row.card).toBe('QA Credit Card');
     expect(row.last4).toBe('1234');
     expect(typeof row.net_to_pay).toBe('number');
-    expect(Object.keys(row).sort()).toEqual(['card', 'due_date', 'last4', 'net_to_pay']);
+    expect(Object.keys(row).sort()).toEqual(['card', 'due_date', 'last4', 'net_to_pay', 'rewards_earned', 'rewards_type']);
+    expect(row.rewards_type).toBe('cashback');
 
     const dashboardRes = await fetch(`${baseUrl}/api/creditcard/dashboard?month=2026-09`, {
       headers: { Accept: 'application/json' },

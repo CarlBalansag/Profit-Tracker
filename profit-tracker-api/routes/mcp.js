@@ -20,6 +20,10 @@ const statusTransitions = require('../services/statusTransitions');
 const { detectCarrier } = require('../services/tracking');
 const { computeCardDashboard, nextDueDate } = require('../services/cardNetToPay');
 const { recordChanges } = require('../services/changeLog');
+const { resolveRewardFields } = require('../services/cardRewards');
+const { autoUpdateFromCatalog, withCatalogFields } = require('../services/linkedCards');
+const { getCatalog, getCatalogIndex } = require('../services/cardCatalog');
+const { earnsText, storeRates, catalogSummary, resellingPerks } = require('../services/cardDescriptions');
 const transactionNotes = require('../services/transactionNotes');
 const cashoutService = require('../services/cashouts/service');
 const { presentDeal } = require('../services/cashouts/dealPresenter');
@@ -1009,7 +1013,7 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('get_card_net_to_pay', {
-    description: 'Per-card reselling snapshot: the same numbers as the Credit Card page -- card name, last 4 digits, "Net to Pay" (reselling spend still owed after cashback earned is applied to losses), and the next payment due date if the card has one configured. One short row per card.',
+    description: 'Per-card reselling snapshot: the same numbers as the Credit Card page -- card name, last 4 digits, "Net to Pay" (reselling spend still owed after rewards earned are applied to losses), the next payment due date if the card has one configured, and the rewards earned that month (in dollars, plus points for a points card). One short row per card.',
     inputSchema: {
       month: z.string().regex(/^\d{4}-\d{2}$/, 'month must be YYYY-MM').optional().describe('Defaults to the current month. Only changes which purchases count toward Net to Pay -- due dates are always the next real one from today.'),
     },
@@ -1021,6 +1025,10 @@ function buildServer(userId, apiKeyId) {
       last4: card.last4,
       net_to_pay: card.amountToPay,
       due_date: toDateOnly(nextDueDate(card.due_day, now)),
+      // Rewards earned this month in dollars; for a points card, also the points.
+      rewards_type: card.rewardType,
+      rewards_earned: card.cashbackEarned,
+      ...(card.rewardType === 'points' ? { points_earned: Math.round((card.cashbackEarned * 100) / (card.pointValueCents || 1)) } : {}),
     })));
   });
 
@@ -1061,41 +1069,231 @@ function buildServer(userId, apiKeyId) {
     }
   });
 
+  // Payment methods. A card earns cash back (%) or points/miles (x per $1,
+  // valued at the card's point_value_cents); either way profit totals use the
+  // dollar rate. Cards picked from the card list (search_card_list) take their
+  // rates from it and stay current on their own -- the same code the website
+  // uses (services/linkedCards.js, services/cardRewards.js).
+  const cleanCardName = (name = '') => name.replace(/[®™℠]/g, '').replace(/\s+/g, ' ').trim();
+
+  const describeMethod = (m, byId) => {
+    const linked = m.catalog_card_id && byId ? byId.get(m.catalog_card_id) : null;
+    const points = m.reward_type === 'points';
+    return {
+      id: m.id,
+      name: m.name,
+      type: m.type,
+      last4: m.last4 || null,
+      rewards: {
+        type: points ? 'points' : 'cashback',
+        earns: earnsText(m),
+        effective_rate_pct: toNum(m.default_cashback_rate),
+        ...(points ? {
+          points_per_dollar: m.points_base_rate ?? 0,
+          point_value_cents: m.point_value_cents ?? 1,
+          program: m.rewards_label || null,
+        } : {}),
+      },
+      store_rates: storeRates(m),
+      card_list_match: linked ? linked.name : null,
+      rates_kept_current: Boolean(m.catalog_card_id),
+      perks: linked ? resellingPerks(linked.benefits) : [],
+    };
+  };
+  const catalogIndexOrEmpty = () => getCatalogIndex(prisma).catch(() => new Map());
+
+  // The reward fields an add/update call sends, checked for combinations that
+  // don't make sense. card_id takes the rewards from the card list, so only a
+  // point value may be given with it.
+  function rewardBody({ card_id, reward_type, cashback_rate, points_per_dollar, point_value_cents, program }) {
+    if (card_id) {
+      if (reward_type || cashback_rate !== undefined || points_per_dollar !== undefined || program !== undefined) {
+        throw toolError('card_id takes the rewards from the card list -- leave out reward_type, cashback_rate, points_per_dollar and program (point_value_cents is allowed)');
+      }
+      return { apply_catalog: true, catalog_card_id: card_id, point_value_cents };
+    }
+    const points = reward_type === 'points' || (reward_type === undefined && points_per_dollar !== undefined);
+    if (points && cashback_rate !== undefined) throw toolError('A points card earns points_per_dollar, not cashback_rate');
+    if (reward_type === 'cashback' && (points_per_dollar !== undefined || point_value_cents !== undefined || program !== undefined)) {
+      throw toolError('points_per_dollar, point_value_cents and program are for points cards');
+    }
+    const body = {};
+    if (reward_type || points) body.reward_type = points ? 'points' : 'cashback';
+    if (cashback_rate !== undefined) body.default_cashback_rate = cashback_rate;
+    if (points_per_dollar !== undefined) body.points_base_rate = points_per_dollar;
+    if (point_value_cents !== undefined) body.point_value_cents = point_value_cents;
+    if (program !== undefined) body.rewards_label = program;
+    return body;
+  }
+  const catalogInput = (body) => withCatalogFields(prisma, body).catch((err) => {
+    throw toolError(err.status === 400 ? `No card "${body.catalog_card_id}" in the card list -- use search_card_list to find its card_id` : err.message);
+  });
+  const rewardColumns = (input, rewards, existing = null) => ({
+    reward_type: rewards.reward_type,
+    points_base_rate: rewards.points_base_rate,
+    point_value_cents: rewards.point_value_cents,
+    default_cashback_rate: rewards.default_cashback_rate,
+    rewards_label: input.rewards_label !== undefined ? (input.rewards_label || null) : (existing?.rewards_label ?? null),
+    catalog_card_id: input.catalog_card_id !== undefined ? (input.catalog_card_id || null) : (existing?.catalog_card_id ?? null),
+    catalog_applied: input.catalog_applied !== undefined ? input.catalog_applied : (existing?.catalog_applied ?? null),
+    catalog_synced_at: input.catalog_synced_at !== undefined ? input.catalog_synced_at : (existing?.catalog_synced_at ?? null),
+    category_rates: rewards.category_rates.length ? JSON.stringify(rewards.category_rates) : null,
+  });
+
+  const rewardArgs = {
+    card_id: z.string().trim().min(1).max(120).optional().describe('A card_id from search_card_list: take this card\'s rewards from the card list and keep them current automatically.'),
+    reward_type: z.enum(['cashback', 'points']).optional().describe('Without card_id: how the card earns. Points cards earn points/miles per $1.'),
+    cashback_rate: z.number().min(0).max(100).optional().describe('Cash back percent, e.g. 2 for 2%.'),
+    points_per_dollar: z.number().min(0).max(100).optional().describe('Points card: points earned per $1 on everything, e.g. 2 for 2x.'),
+    point_value_cents: z.number().gt(0).max(100).optional().describe('Points card: what one point is worth to the user in cents (default 1). Profit totals count points at this value.'),
+    program: z.string().trim().max(80).optional().describe('Points card: program name, e.g. "Membership Rewards points".'),
+  };
+
+  server.registerTool('list_payment_methods', {
+    description: 'Every saved card/account and how it earns: cash back % or points (points per $1, point value in cents, program) with the dollar-equivalent rate profit totals use, store-specific rates, whether its rates follow the card list automatically, and its perks that matter for reselling (purchase protection, shipping credits...).',
+    inputSchema: {
+      type: z.enum(['Credit', 'Debit']).optional().describe('Only credit cards, or only debit/prepaid.'),
+    },
+  }, async ({ type }) => {
+    try {
+      const stored = await prisma.paymentMethod.findMany({ where: { user_id: userId } });
+      const methods = await autoUpdateFromCatalog(prisma, stored, userId);
+      const byId = await catalogIndexOrEmpty();
+      const isDebit = (m) => /debit|prepaid/i.test(m.type || '');
+      return jsonResult(methods
+        .filter((m) => !type || (type === 'Debit') === isDebit(m))
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((m) => describeMethod(m, byId)));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to list payment methods');
+    }
+  });
+
+  server.registerTool('search_card_list', {
+    description: 'Search the built-in list of about 390 US credit cards (OpenCard DB, refreshed monthly) by name or issuer. Returns the card_id to pass to add_payment_method or update_payment_method, whether it earns points or cash back, its earn rates, annual fee and reselling perks.',
+    inputSchema: {
+      query: z.string().trim().min(2).max(80).describe('Card name and/or issuer, e.g. "sapphire preferred" or "amex gold".'),
+      reward_type: z.enum(['points', 'cashback']).optional(),
+      limit: z.number().int().min(1).max(25).optional().describe('Defaults to 10.'),
+    },
+  }, async ({ query, reward_type, limit }) => {
+    try {
+      const { cards } = await getCatalog(prisma);
+      const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+      const haystack = (c) => cleanCardName(`${c.name} ${c.issuer}${c.issuer === 'American Express' ? ' amex' : ''}`).toLowerCase();
+      const hits = cards
+        .filter((c) => words.every((w) => haystack(c).includes(w)) && (!reward_type || c.reward_type === reward_type))
+        .slice(0, limit ?? 10);
+      return jsonResult(hits.map((c) => ({
+        card_id: c.id,
+        name: c.name,
+        issuer: c.issuer,
+        rewards: c.reward_type,
+        program: c.reward_type === 'points' ? (c.rewards_label || null) : null,
+        earns: catalogSummary(c),
+        annual_fee: c.annual_fee,
+        perks: resellingPerks(c.benefits),
+      })));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to search the card list');
+    }
+  });
+
   server.registerTool('add_payment_method', {
-    description: 'Create a credit or debit card/account for logging purchases and expenses.',
+    description: 'Create a credit or debit card/account for logging purchases and expenses. Best: find the card with search_card_list and pass its card_id, so its rewards (points or cash back, store rates) come from the card list and stay current. Otherwise give cashback_rate, or reward_type "points" with points_per_dollar, point_value_cents and program. Debit cards usually earn nothing.',
     inputSchema: z.object({
-      name: z.string().trim().min(1).max(100),
+      name: z.string().trim().min(1).max(100).optional().describe('Required unless card_id is given (then defaults to the card\'s name).'),
       type: z.enum(['Credit', 'Debit']),
       last4: z.string().regex(/^\d{4}$/, 'last4 must be exactly 4 digits').optional(),
-      cashback_rate: z.number().min(0).max(100).optional().describe('Default cashback percent, e.g. 2 for 2%. Defaults to 0.'),
+      ...rewardArgs,
+      include_store_rates: z.boolean().optional().describe('With card_id: add store rates from the card\'s bonus categories (default true).'),
     }).strict(),
-  }, async ({ name, type, last4, cashback_rate }) => {
+  }, async (args) => {
+    const { name, type, last4, include_store_rates } = args;
     try {
+      const body = rewardBody(args);
+      const input = body.apply_catalog
+        ? await catalogInput({ ...body, include_store_rates, category_rates: [] })
+        : body;
+      const byId = await catalogIndexOrEmpty();
+      const finalName = name || (args.card_id ? cleanCardName(byId.get(args.card_id)?.name || '') : '');
+      if (!finalName) throw toolError('name is required');
+      const rewards = resolveRewardFields(input, null);
       const created = await prisma.$transaction(async (tx) => {
         const existing = await tx.paymentMethod.findFirst({
-          where: { user_id: userId, name: { equals: name, mode: 'insensitive' } },
+          where: { user_id: userId, name: { equals: finalName, mode: 'insensitive' } },
         });
         if (existing) throw toolError(`A payment method named "${existing.name}" (${existing.type}) already exists`);
-        // Same defaults as POST /api/payment-methods; default_cashback_rate is
-        // the percent itself, and its _decimal twin is filled by the trigger.
+        // Same fields as POST /api/payment-methods; the _decimal twins are
+        // filled by the database trigger.
         const method = await tx.paymentMethod.create({
-          data: { user_id: userId, name, type, default_cashback_rate: cashback_rate ?? 0, last4: last4 || null },
+          data: {
+            user_id: userId, name: finalName, type, last4: last4 || null,
+            ...rewardColumns(input, rewards),
+            // A card added from the card list never needs the rework notice.
+            rework_prompt_state: input.catalog_card_id ? 'switched' : null,
+          },
         });
         await recordChanges(tx, userId, 'PaymentMethod', method.id, [
           { field: 'created', oldValue: null, newValue: `${method.name} (${method.type})` },
         ]);
         return method;
       });
-      await logWrite(userId, apiKeyId, 'add_payment_method', { name, type, last4, cashback_rate });
-      return jsonResult({
-        id: created.id,
-        name: created.name,
-        type: created.type,
-        last4: created.last4 || null,
-        cashback_rate: toNum(created.default_cashback_rate),
-      });
+      await logWrite(userId, apiKeyId, 'add_payment_method', args);
+      return jsonResult({ ...describeMethod(created, byId), cashback_rate: toNum(created.default_cashback_rate) });
     } catch (err) {
       return errorResult(err.message || 'Failed to add payment method');
+    }
+  });
+
+  server.registerTool('update_payment_method', {
+    description: 'Change a saved card: rename it, set last4, set what a point is worth (point_value_cents), switch it to a different card from search_card_list (card_id -- keeps its purchases, billing details and the user\'s own store rates), or set its rewards by hand (cashback_rate, or points_per_dollar/program). Changing the base rate by hand stops automatic rate updates for a card that follows the card list; changing only the point value does not.',
+    inputSchema: z.object({
+      payment_method: z.string().trim().min(1).max(100).describe('The saved card to change, by its current name.'),
+      new_name: z.string().trim().min(1).max(100).optional(),
+      last4: z.string().regex(/^\d{4}$/, 'last4 must be exactly 4 digits').optional(),
+      ...rewardArgs,
+    }).strict(),
+  }, async (args) => {
+    const { payment_method, new_name, last4 } = args;
+    try {
+      const existing = await findPaymentMethod(userId, payment_method);
+      const body = rewardBody(args);
+      if (!new_name && !last4 && !Object.keys(body).length) throw toolError('Nothing to change -- give new_name, last4, card_id, point_value_cents or a rate');
+      let input = body;
+      if (body.apply_catalog) {
+        // The user's own store rates carry over; the old card's catalog rates
+        // are replaced by the new card's.
+        const ownRates = (JSON.parse(existing.category_rates || '[]') || []).filter((r) => r && r.source !== 'catalog');
+        input = await catalogInput({ ...body, category_rates: ownRates });
+      }
+      const rewards = resolveRewardFields(input, existing);
+      const updated = await prisma.$transaction(async (tx) => {
+        if (new_name && new_name.toLowerCase() !== existing.name.toLowerCase()) {
+          const clash = await tx.paymentMethod.findFirst({
+            where: { user_id: userId, name: { equals: new_name, mode: 'insensitive' } },
+          });
+          if (clash) throw toolError(`A payment method named "${clash.name}" (${clash.type}) already exists`);
+        }
+        const data = {
+          ...(new_name ? { name: new_name } : {}),
+          ...(last4 ? { last4 } : {}),
+          ...rewardColumns(input, rewards, existing),
+          ...(input.catalog_card_id ? { rework_prompt_state: 'switched' } : {}),
+        };
+        const { count } = await tx.paymentMethod.updateMany({ where: { id: existing.id, user_id: userId }, data });
+        if (!count) throw toolError('That payment method no longer exists');
+        const fields = ['name', 'last4', 'reward_type', 'points_base_rate', 'point_value_cents', 'default_cashback_rate', 'rewards_label', 'catalog_card_id'];
+        const changes = fields
+          .filter((f) => f in data && String(data[f] ?? '') !== String(existing[f] ?? ''))
+          .map((f) => ({ field: f, oldValue: existing[f] ?? null, newValue: data[f] ?? null }));
+        if (changes.length) await recordChanges(tx, userId, 'PaymentMethod', existing.id, changes);
+        return tx.paymentMethod.findFirst({ where: { id: existing.id, user_id: userId } });
+      });
+      await logWrite(userId, apiKeyId, 'update_payment_method', args);
+      return jsonResult(describeMethod(updated, await catalogIndexOrEmpty()));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to update payment method');
     }
   });
 
