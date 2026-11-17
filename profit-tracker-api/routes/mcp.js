@@ -12,6 +12,7 @@ const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/ser
 const prisma = require('../prisma');
 const { decimal } = require('../services/money');
 const { listRefunds, recordRefund, removeRefund } = require('../services/refunds');
+const activityLog = require('../services/activityLog');
 const { saleEconomics, allocatedCost, batchCost, isRealizedSale, keptQuantity, keptSaleQuantity } = require('../services/decimalFinance');
 const { payoutStatus } = require('../services/payoutStatus');
 const { markSalesPaid } = require('../services/markSalesPaid');
@@ -1127,6 +1128,10 @@ function buildServer(userId, apiKeyId) {
 
         const transition = await statusTransitions.applyTransition(tx, 'sale', existing, 'void_sale', { user_id: userId });
         const updated = await tx.sales.update({ where: { id: sale_id }, data: { void_reason: reason } });
+        // Shows in the user's Activity log, undoable like a void from the app.
+        await activityLog.logStatus(tx, userId, 'sale', existing,
+          { ...transition, data: { ...transition.data, void_reason: reason }, record: updated },
+          { source: 'assistant' });
         await recordChanges(tx, userId, 'Sales', sale_id, [
           { field: 'voided', oldValue: null, newValue: new Date(updated.voided_at).toISOString() },
           { field: 'void_reason', oldValue: existing.void_reason ?? null, newValue: reason },
@@ -1191,6 +1196,9 @@ function buildServer(userId, apiKeyId) {
         }
 
         const transition = await statusTransitions.applyTransition(tx, 'inventory', existing, 'cancel', { user_id: userId });
+        await activityLog.logStatus(tx, userId, 'inventory', existing,
+          { ...transition, data: { ...transition.data, void_reason: reason } },
+          { source: 'assistant' });
         await recordChanges(tx, userId, 'Inventory', purchase_id, [
           { field: 'voided', oldValue: null, newValue: new Date(transition.record.cancelled_at).toISOString() },
           { field: 'void_reason', oldValue: existing.void_reason ?? null, newValue: reason },
@@ -1260,7 +1268,7 @@ function buildServer(userId, apiKeyId) {
     }).strict(),
   }, async ({ purchase_id, sale_id, amount, units_returned, date, note }) => {
     try {
-      const refund = await recordRefund(userId, { inventory_id: purchase_id, sale_id, amount, quantity: units_returned, date, note });
+      const refund = await recordRefund(userId, { inventory_id: purchase_id, sale_id, amount, quantity: units_returned, date, note }, { source: 'assistant' });
       await logWrite(userId, apiKeyId, 'add_refund', { purchase_id, sale_id, amount, units_returned, date, note });
       return jsonResult(refundJson(refund));
     } catch (err) {
@@ -1276,7 +1284,7 @@ function buildServer(userId, apiKeyId) {
     }).strict(),
   }, async ({ refund_id, confirm }) => {
     try {
-      const refund = await removeRefund(userId, refund_id);
+      const refund = await removeRefund(userId, refund_id, { source: 'assistant' });
       await logWrite(userId, apiKeyId, 'delete_refund', { refund_id, confirm });
       return jsonResult({ deleted: true, ...refundJson(refund) });
     } catch (err) {

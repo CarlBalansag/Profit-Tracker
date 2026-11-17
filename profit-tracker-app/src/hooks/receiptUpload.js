@@ -43,6 +43,7 @@ export async function attachInventoryReceipt(apiFetch, inventoryId, fileData, fi
 export async function saveInventoryWithReceipt({ apiFetch, formData, existingInventoryId = null, receipt = null }) {
   const fileData = receipt ? await readReceiptFile(receipt) : null;
   let inventoryId = existingInventoryId;
+  let activityId = null;
 
   if (!inventoryId) {
     const response = await apiFetch('/api/inventory', {
@@ -54,12 +55,13 @@ export async function saveInventoryWithReceipt({ apiFetch, formData, existingInv
     await requireSuccessfulResponse(response, 'Could not save transaction');
     const inventory = await response.json();
     inventoryId = inventory.id;
+    activityId = inventory.activity_id ?? null;
     if (!inventoryId) throw new Error('Transaction was saved without an inventory ID.');
   }
 
   if (!receipt) {
     if (existingInventoryId) throw new Error('Select a receipt to finish attaching it to the saved transaction.');
-    return { inventoryId, attachedReceipt: false };
+    return { inventoryId, activityId, attachedReceipt: false };
   }
 
   try {
@@ -70,5 +72,5 @@ export async function saveInventoryWithReceipt({ apiFetch, formData, existingInv
     throw error;
   }
 
-  return { inventoryId, attachedReceipt: true };
+  return { inventoryId, activityId, attachedReceipt: true };
 }

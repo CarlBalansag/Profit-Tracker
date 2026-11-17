@@ -182,6 +182,7 @@ app.use('/api/api-keys', apiKeysRouter);
 app.use('/api/cashouts', cashoutsRouter);
 app.use('/api/data-reset', dataResetRouter);
 app.use('/api/invites', invitesRouter);
+app.use('/api/activity', require('./routes/activity'));
 
 // Health Check
 app.get('/health', (req, res) => {

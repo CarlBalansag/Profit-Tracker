@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { EXPENSES_PAGE_KEY, RECEIPTS_PAGE_KEY } from './usePageCache';
 
 // Leave VITE_API_URL empty in production when Netlify redirects proxy /api and /auth (see netlify.toml).
@@ -323,6 +323,17 @@ export const useRefundMutations = (kind, id) => {
 
   return { add, remove };
 };
+
+// ─── Activity (log + Undo) ───────────────────────────────────────────────────
+// Newest first, 50 at a time. Undo itself lives in utils/undoToast.js; every
+// undo invalidates all queries, which refreshes this list too.
+export const useActivity = () =>
+  useInfiniteQuery({
+    queryKey: ['activity'],
+    queryFn: ({ pageParam }) => fetcher(`/api/activity?limit=50${pageParam ? `&before=${encodeURIComponent(pageParam)}` : ''}`),
+    initialPageParam: null,
+    getNextPageParam: (last) => last.next_before ?? undefined,
+  });
 
 // ─── Calendar Events ──────────────────────────────────────────────────────────
 export const calendarEventsQuery = (month) => ({

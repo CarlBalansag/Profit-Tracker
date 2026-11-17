@@ -5,7 +5,10 @@ import useRecordActions from '../../hooks/useRecordActions';
 import ConfirmDialog from './ConfirmDialog';
 import MarkPaidModal from './MarkPaidModal';
 import ActionFormModal from './ActionFormModal';
-import { actionNeedsFormFields, consequenceFor, NAVIGATE_ACTIONS, actionButtonLabel } from '../../data/statusActions';
+import RefundModal from './RefundModal';
+import {
+  actionNeedsFormFields, consequenceFor, NAVIGATE_ACTIONS, actionButtonLabel, refundOffered, refundMenuLabel,
+} from '../../data/statusActions';
 
 const MENU_ITEM_BASE = 'w-full text-left px-3 py-2 text-xs font-medium disabled:opacity-50 transition-colors';
 // Each variant declares its own full background + text color (not just a text
@@ -23,13 +26,20 @@ const MENU_ITEM_DESTRUCTIVE = `${MENU_ITEM_BASE} text-white bg-red-600 hover:bg-
  * status dropdown rather than crammed into the primary button row.
  *
  * Props mirror ContextualActions: record, kind, actions (override), onSuccess.
- * Renders nothing when the record has no secondary actions.
+ * Renders nothing when the record has no secondary actions and no refund can
+ * be recorded on it.
+ *
+ * The first entry is a quick Refund (sales) / Return / Refund (purchases) that
+ * opens the same Refunds panel as the detail window. It is not one of the
+ * API's status actions, so it is added here rather than read from
+ * allowed_actions -- see refundOffered in data/statusActions.js.
  */
 const MoreActionsMenu = ({ record, kind, actions, onSuccess, className = '' }) => {
   const descriptors = (actions || record?.allowed_actions || []).filter((entry) => entry.secondary);
+  const showRefund = refundOffered(kind, record);
   const { runAction, pendingAction } = useRecordActions({ kind, record, onSuccess });
   const [open, setOpen] = useState(false);
-  const [dialog, setDialog] = useState(null); // { mode: 'confirm'|'form'|'paid', descriptor }
+  const [dialog, setDialog] = useState(null); // { mode: 'confirm'|'form'|'paid'|'refund', descriptor }
   const rootRef = useRef(null);
 
   useEffect(() => {
@@ -48,7 +58,7 @@ const MoreActionsMenu = ({ record, kind, actions, onSuccess, className = '' }) =
     };
   }, [open]);
 
-  if (descriptors.length === 0) return null;
+  if (descriptors.length === 0 && !showRefund) return null;
 
   const busy = (descriptor) => pendingAction === descriptor.action;
 
@@ -96,6 +106,17 @@ const MoreActionsMenu = ({ record, kind, actions, onSuccess, className = '' }) =
           // browser/OS uses, which need not be the default blue).
           className="absolute right-0 top-full mt-1 w-56 z-40 rounded-lg bg-[#16181d] border border-white/10 shadow-xl py-1 overflow-hidden select-none"
         >
+          {showRefund && (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={pendingAction !== null}
+              onClick={() => { setOpen(false); setDialog({ mode: 'refund' }); }}
+              className={MENU_ITEM}
+            >
+              {refundMenuLabel(kind)}
+            </button>
+          )}
           {descriptors.map((descriptor) => {
             const to = NAVIGATE_ACTIONS[descriptor.action];
             if (to) {
@@ -150,6 +171,16 @@ const MoreActionsMenu = ({ record, kind, actions, onSuccess, className = '' }) =
           consequence={dialog.descriptor.destructive ? consequenceFor(dialog.descriptor.action, kind, record) : null}
           busy={busy(dialog.descriptor)}
           onSubmit={submitDialog}
+          onClose={() => setDialog(null)}
+        />
+      )}
+
+      {dialog?.mode === 'refund' && (
+        <RefundModal
+          open
+          kind={kind}
+          record={record}
+          title={refundMenuLabel(kind).replace('…', '')}
           onClose={() => setDialog(null)}
         />
       )}

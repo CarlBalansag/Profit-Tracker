@@ -6,6 +6,7 @@ import { useInvalidate, apiFetch} from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { toast } from 'sonner';
+import { toastWithUndo } from '../utils/undoToast';
 import ReturnWindowBadge from './ReturnWindowBadge';
 import { addDays, daysBetween } from '../utils/returnWindow';
 import TransactionNotesPanel from './TransactionNotesPanel';
@@ -398,8 +399,12 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
         }),
       });
       await requireSuccessfulResponse(invRes, 'Transaction update failed. No changes were saved.');
+      const saved = await invRes.json().catch(() => ({}));
 
       invalidate.all();
+      // Only when the save actually changed something (the server logs nothing
+      // otherwise); Undo puts the purchase and its sales back as they were.
+      if (saved?.activity_id) toastWithUndo('Changes saved.', saved.activity_id, invalidate.all);
       onSaved();
       onClose();
     } catch (err) {
@@ -866,6 +871,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                                 maxUnits={Math.max(0, Number(sale._savedQuantity) - (sale.refunded_qty || 0))}
                                 disabledReason={isRealizedSale(sale) ? '' : "This sale is cancelled, returned or disputed, so it no longer counts toward your totals and its refunds can't be changed."}
                                 onChanged={refreshRefundTotals}
+                                record={{ unit_price: sale.unit_price, quantity: sale._savedQuantity, refunded_amount: sale.refunded_amount }}
                               />
                             </div>
                           )}
@@ -1010,6 +1016,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                 id={row.rawId}
                 maxUnits={Math.max(0, Number(form.qty_on_hand) || 0)}
                 onChanged={refreshRefundTotals}
+                record={form}
               />
             </div>
 

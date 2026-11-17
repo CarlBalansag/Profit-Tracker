@@ -1,4 +1,5 @@
 const express = require('express');
+const activityLog = require('../services/activityLog');
 const router = express.Router();
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
@@ -67,7 +68,12 @@ router.post('/', isAuthenticated, validateBody(createExpense), async (req, res, 
       return res.status(400).json({ error: 'name, amount, and date are required' });
     }
     await requireOwned('paymentMethod', payment_method_id, req.user.id, 'Payment method');
-    const expense = await prisma.expense.create({
+    const { result: expense, activity } = await prisma.$transaction((tx) => activityLog.trackChange(tx, req.user.id, {
+      action: 'create',
+      recordType: 'expense',
+      refs: async (t, created) => ({ expense: created ? [created.id] : [] }),
+      recordId: (created) => created.id,
+    }, () => tx.expense.create({
       data: {
         user_id: req.user.id,
         name,
@@ -80,8 +86,8 @@ router.post('/', isAuthenticated, validateBody(createExpense), async (req, res, 
         ...(tax_details !== undefined ? { tax_details } : {}),
       },
       include: { payment_method: { select: { id: true, name: true, type: true } } },
-    });
-    res.json(exactExpense(expense));
+    })));
+    res.json({ ...exactExpense(expense), activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -108,15 +114,20 @@ router.put('/:id', isAuthenticated, validateBody(updateExpense), async (req, res
     if (receipt_url !== undefined) data.receipt_url = receipt_url || null;
     if (payment_method_id !== undefined) data.payment_method_id = payment_method_id || null;
 
-    const updated = await prisma.$transaction(async tx => {
+    const { result: updated, activity } = await prisma.$transaction(async tx => activityLog.trackChange(tx, req.user.id, {
+      action: 'edit',
+      recordType: 'expense',
+      refs: async () => ({ expense: [req.params.id] }),
+      recordId: req.params.id,
+    }, async () => {
       const claimed = await tx.expense.updateMany({
         where: { id: req.params.id, user_id: req.user.id, tax_version: req.body.expected_tax_version ?? existing.tax_version ?? 0 },
         data: { ...data, tax_version: { increment: 1 } },
       });
       if (!claimed.count) throw Object.assign(new Error('Expense changed since it was opened. Reload the worksheet before reviewing again.'), { status: 409 });
       return tx.expense.findUnique({ where: { id: req.params.id }, include: { payment_method: { select: { id: true, name: true, type: true } } } });
-    });
-    res.json(exactExpense(updated));
+    }));
+    res.json({ ...exactExpense(updated), activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -129,8 +140,14 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
     if (!existing || existing.user_id !== req.user.id) {
       return res.status(404).json({ error: 'Not found' });
     }
-    await prisma.expense.delete({ where: { id: req.params.id } });
-    res.json({ success: true });
+    const { activity } = await prisma.$transaction((tx) => activityLog.trackChange(tx, req.user.id, {
+      action: 'delete',
+      recordType: 'expense',
+      recordId: req.params.id,
+      productName: existing.name,
+      refs: async () => ({ expense: [req.params.id] }),
+    }, () => tx.expense.delete({ where: { id: req.params.id } })));
+    res.json({ success: true, activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }

@@ -37,7 +37,7 @@ describe('receipt upload helpers', () => {
     await expect(saveInventoryWithReceipt({ apiFetch, formData: { product_name: 'Test item' }, receipt }))
       .rejects.toMatchObject({ inventoryId: 'new-inventory', transactionSaved: true });
     await expect(saveInventoryWithReceipt({ apiFetch, formData: { product_name: 'Test item' }, existingInventoryId: 'new-inventory', receipt }))
-      .resolves.toEqual({ inventoryId: 'new-inventory', attachedReceipt: true });
+      .resolves.toEqual({ inventoryId: 'new-inventory', activityId: null, attachedReceipt: true });
 
     expect(apiFetch).toHaveBeenCalledTimes(3);
     expect(apiFetch.mock.calls.filter(([path]) => path === '/api/inventory')).toHaveLength(1);

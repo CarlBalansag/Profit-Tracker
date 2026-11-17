@@ -4,6 +4,7 @@ import { useInventory, usePlatforms, usePaymentMethods, useBuyers, useInvalidate
 import { PageLoader } from '../components/PageLoader';
 import StatCard from '../components/UI/StatCard';
 import { toast } from 'sonner';
+import { toastWithUndo } from '../utils/undoToast';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Search, SlidersHorizontal, Download, Columns,
@@ -316,8 +317,9 @@ const Transactions = () => {
         credentials: 'include'
       });
       if (res.ok) {
+        const removed = await res.json().catch(() => ({}));
         setConfirmDeleteId(null);
-        toast.success('Transaction deleted.');
+        toastWithUndo('Transaction deleted.', removed?.activity_id, invalidate.all);
         await invalidate.all();
       } else {
         const err = await res.json();
@@ -443,8 +445,9 @@ const Transactions = () => {
         handleSaveError('Transaction update', response.status, resJson);
         return;
       }
+      const saved = await response.json().catch(() => ({}));
       await invalidate.all();
-      toast.success('Transaction saved.');
+      toastWithUndo('Transaction saved.', saved?.activity_id, invalidate.all);
       setEditingId(null);
     } catch (err) {
       console.error('[saveEdit] unexpected error:', err);
@@ -934,6 +937,7 @@ const Transactions = () => {
                 if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} items?`)) return;
                 setSaving(true);
                 let errors = 0;
+                const activityIds = [];
                 for (const id of selectedIds) {
                   const row = filteredRows.find(r => r.id === id);
                   if (!row) continue;
@@ -944,13 +948,14 @@ const Transactions = () => {
                       credentials: 'include'
                     });
                     if (!res.ok) errors++;
+                    else activityIds.push((await res.json().catch(() => ({}))).activity_id);
                   } catch (e) {
                     errors++;
                   }
                 }
                 setSaving(false);
                 if (errors > 0) toast.error(`Failed to delete ${errors} items.`);
-                else toast.success(`Successfully deleted ${selectedIds.length} items.`);
+                else toastWithUndo(`Successfully deleted ${selectedIds.length} items.`, activityIds, invalidate.all);
                 setSelectedIds([]);
                 await invalidate.all();
               }}

@@ -620,7 +620,12 @@ describe('Statuses board', () => {
     const leftover = screen.getByRole('region', { name: 'Not in the workflow yet' });
     expect(within(leftover).getByRole('button', { name: 'Set Receiving Status…' })).toBeTruthy();
     expect(within(leftover).getByRole('button', { name: 'Set Sale Status…' })).toBeTruthy();
-    expect(within(leftover).queryByRole('button', { name: 'More actions' })).toBeNull();
+    // Set Status stays a visible button. The only thing in the More menu is the
+    // quick refund, which needs no status.
+    const menus = within(leftover).getAllByRole('button', { name: 'More actions' });
+    expect(menus).toHaveLength(2);
+    fireEvent.click(menus[0]);
+    expect(screen.getAllByRole('menuitem').map((n) => n.textContent)).toEqual(['Return / Refund…']);
     expect(within(leftover).queryByText('No action needed')).toBeNull();
     expect(within(leftover).getAllByText('No status yet')).toHaveLength(2);
   });

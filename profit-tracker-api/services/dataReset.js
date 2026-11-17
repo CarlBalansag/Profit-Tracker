@@ -99,6 +99,10 @@ async function deleteTransactions(tx, userId) {
   const changeLogs = await tx.changeLog.deleteMany({
     where: { user_id: userId, table_name: { in: ['Inventory', 'Sales'] } },
   });
+  // Activity entries point at the purchases and sales deleted below and could
+  // never be undone afterwards, so they go with them. Not reported in the
+  // counts: they are history, not data the user entered.
+  await tx.activityLog.deleteMany({ where: { user_id: userId, record_type: { in: ['purchase', 'sale'] } } });
   const refunds = await tx.refund.deleteMany({ where: { user_id: userId } });
   const sales = await tx.sales.deleteMany({ where: { inventory: { user_id: userId } } });
   const purchases = await tx.inventory.deleteMany({ where: { user_id: userId } });
