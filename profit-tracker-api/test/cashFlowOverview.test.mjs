@@ -162,6 +162,25 @@ describe('GET /api/analytics/dashboard overhaul fields', () => {
     expect(Array.isArray(d30.body.priorTrend)).toBe(true);
   });
 
+  it('sends the profit calendar for exactly the days the filter covers', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-05T12:00:00Z'));
+    try {
+      const range = async (date) => (await get(`/api/analytics/dashboard?mode=All&date=${encodeURIComponent(date)}`)).body.profitCalendar;
+      expect(await range('7 Days')).toMatchObject({ from: '2026-08-30', to: '2026-09-05' });
+      expect(await range('30 Days')).toMatchObject({ from: '2026-08-07', to: '2026-09-05' });
+      expect(await range('YTD')).toMatchObject({ from: '2026-01-01', to: '2026-09-05' });
+      const all = await range('All Time');
+      expect(all.from).toBe('2025-09-06'); // 365 days counting today
+      // The Sep 3 sale: 2 units at $150, less $15 commission and $12 shipping.
+      expect(all.days).toEqual([{ date: '2026-09-03', profit: 69.16, revenue: 273, cost: 208, sales: 1, units: 2 }]);
+      harness.db.sales[0].sale_date = new Date('2026-08-20T12:00:00Z');
+      expect((await range('7 Days')).days).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('moves a sale from the prior 30 days onto the matching day of this window', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-09-20T12:00:00Z'));

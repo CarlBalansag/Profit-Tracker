@@ -8,10 +8,9 @@ import {
 import {
   LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { motion } from 'motion/react';
 import { Rise, RiseItem, SlidingTabs, GrowBar, FlashNumber, Panel, Empty } from '../components/Analytics/Motion';
+import ProfitCalendar from '../components/Analytics/ProfitCalendar';
 
-const MotionDiv = motion.div;
 
 const DATE_OPTIONS = ['7 Days', '30 Days', 'YTD', 'All Time'].map((k) => ({ key: k, label: k }));
 const MODE_OPTIONS = [
@@ -34,6 +33,9 @@ const PRIOR_LABEL = { '7 Days': 'prior 7 days', '30 Days': 'prior 30 days', YTD:
 
 const fmt = (n) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const usd = (n) => `${n < 0 ? '−' : ''}$${fmt(Math.abs(n ?? 0))}`;
+// A line subtracted or added on a receipt; nothing gets no sign.
+const less = (n) => (n ? `−${usd(n)}` : usd(0));
+const more = (n) => (n ? `+${usd(n)}` : usd(0));
 const fmtPct = (n) => `${(n ?? 0).toFixed(2)}%`;
 const axisMoney = (v) => `${v < 0 ? '−' : ''}$${Math.abs(v) >= 1000 ? (Math.abs(v) / 1000).toFixed(1) + 'k' : Math.round(Math.abs(v))}`;
 
@@ -157,54 +159,6 @@ function ProfitTrend({ data, dateRange }) {
   );
 }
 
-function ProfitCalendar({ days }) {
-  // 13 weeks ending this week, Sunday-first columns like a wall calendar.
-  const cells = useMemo(() => {
-    const byDay = new Map((days ?? []).map((d) => [d.date, d]));
-    const today = new Date();
-    const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    const start = new Date(end);
-    start.setUTCDate(start.getUTCDate() - 90 - start.getUTCDay());
-    const out = [];
-    for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
-      const key = d.toISOString().slice(0, 10);
-      out.push({ key, ...(byDay.get(key) || { profit: 0, sales: 0 }) });
-    }
-    return out;
-  }, [days]);
-  const max = Math.max(1, ...cells.map((c) => Math.abs(c.profit)));
-  const best = cells.reduce((b, c) => (c.profit > (b?.profit ?? 0) ? c : b), null);
-  const weeks = Math.ceil(cells.length / 7);
-  return (
-    <Panel title="Profit calendar" sub="Last 13 weeks, one square per day. Darker green is more profit; red is a loss.">
-      <div className="grid grid-flow-col gap-[3px]" style={{ gridTemplateRows: 'repeat(7, minmax(0, 1fr))', gridTemplateColumns: `repeat(${weeks}, minmax(0, 1fr))` }}>
-        {cells.map((c, i) => {
-          const strength = Math.abs(c.profit) / max;
-          const bg = c.sales === 0
-            ? 'var(--dp-hover-bg)'
-            : c.profit >= 0
-              ? `color-mix(in srgb, var(--dp-green-text) ${Math.round(20 + strength * 80)}%, transparent)`
-              : `color-mix(in srgb, var(--dp-red-text) ${Math.round(30 + strength * 70)}%, transparent)`;
-          return (
-            <MotionDiv
-              key={c.key}
-              title={`${keyLabel(c.key)}: ${c.sales ? `${usd(c.profit)} from ${c.sales} sale${c.sales === 1 ? '' : 's'}` : 'no sales'}`}
-              className="aspect-square rounded-[3px]"
-              style={{ backgroundColor: bg }}
-              initial={{ opacity: 0, scale: 0.4 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1], delay: Math.floor(i / 7) * 0.03 }}
-            />
-          );
-        })}
-      </div>
-      <p className="mt-3 text-[11px] text-[var(--dp-text-muted)]">
-        {best ? <>Best day {keyLabel(best.key)}: <b className="text-[var(--dp-green-text)]">{usd(best.profit)}</b></> : 'No sales in the last 13 weeks'}
-      </p>
-    </Panel>
-  );
-}
-
 function Analytics() {
   const [activeTab, setActiveTab] = useState('overview');
   const [mode, setMode] = useState('All');
@@ -289,17 +243,17 @@ function Analytics() {
 
         {activeTab === 'overview' && (
           <Rise key={`overview-${mode}-${dateRange}`} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <RiseItem className="lg:col-span-3"><ProfitTrend data={data} dateRange={dateRange} /></RiseItem>
+            <RiseItem className="lg:col-span-2"><ProfitTrend data={data} dateRange={dateRange} /></RiseItem>
             <RiseItem className="lg:col-span-1">
               <Panel title="Profit" sub="How profit is worked out for this period.">
                 <div className="space-y-2 text-sm tabular-nums">
                   <div className="flex justify-between"><span className="text-[var(--dp-text-secondary)]">Revenue, after fees</span><b>{usd(s.totalRevenue)}</b></div>
-                  <div className="flex justify-between"><span className="text-[var(--dp-text-secondary)]">Item cost</span><b className="text-[var(--dp-red-text)]">−{usd(s.soldCost)}</b></div>
-                  <div className="flex justify-between"><span className="text-[var(--dp-text-secondary)]">Cashback on sold items</span><b className="text-[var(--dp-green-text)]">+{usd(soldCashback)}</b></div>
+                  <div className="flex justify-between"><span className="text-[var(--dp-text-secondary)]">Item cost</span><b className="text-[var(--dp-red-text)]">{less(s.soldCost)}</b></div>
+                  <div className="flex justify-between"><span className="text-[var(--dp-text-secondary)]">Cashback on sold items</span><b className="text-[var(--dp-green-text)]">{more(soldCashback)}</b></div>
                   <div className="flex justify-between border-t border-[color:var(--dp-border)] pt-2"><span>Profit on sales</span><b className="text-[var(--dp-green-text)]">{usd(s.profit)}</b></div>
                   {showExpenses && (
                     <>
-                      <div className="flex justify-between"><span className="text-[var(--dp-text-secondary)]">Business expenses</span><b className="text-[var(--dp-red-text)]">−{usd(s.businessExpenses)}</b></div>
+                      <div className="flex justify-between"><span className="text-[var(--dp-text-secondary)]">Business expenses</span><b className="text-[var(--dp-red-text)]">{less(s.businessExpenses)}</b></div>
                       <div className="flex justify-between border-t border-[color:var(--dp-border)] pt-2"><span>After expenses</span><b className={(s.profitAfterExpenses ?? 0) >= 0 ? 'text-[var(--dp-green-text)]' : 'text-[var(--dp-red-text)]'}>{usd(s.profitAfterExpenses)}</b></div>
                     </>
                   )}
@@ -310,7 +264,7 @@ function Analytics() {
                 </p>
               </Panel>
             </RiseItem>
-            <RiseItem className="lg:col-span-2"><ProfitCalendar days={data?.profitCalendar} /></RiseItem>
+            <RiseItem className="lg:col-span-3"><ProfitCalendar calendar={data?.profitCalendar} dateRange={dateRange} /></RiseItem>
           </Rise>
         )}
 

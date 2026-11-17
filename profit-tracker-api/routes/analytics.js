@@ -88,10 +88,12 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     const priorSalesWhere = priorFrom ? { ...salesWhere, sale_date: { gte: priorFrom, lt: priorTo } } : null;
     const expenseWhere = { user_id: userId };
     if (dateFrom) expenseWhere.date = { gte: dateFrom };
-    // Daily profit for the last 13 weeks (the profit calendar), whatever the
-    // date filter, so the calendar always has a full grid.
+    // Daily profit for the profit calendar. It covers exactly the days the
+    // filter names: the last 7 or 30 days counting today, this year so far,
+    // or for All Time the last 365 days (one GitHub-style year).
     const calendarFrom = new Date(todayUTC + 'T00:00:00.000Z');
-    calendarFrom.setUTCDate(calendarFrom.getUTCDate() - 90);
+    if (dateParam === 'YTD') calendarFrom.setUTCMonth(0, 1);
+    else calendarFrom.setUTCDate(calendarFrom.getUTCDate() - (dateParam === '7 Days' ? 6 : dateParam === '30 Days' ? 29 : 364));
     const calendarSalesWhere = { ...salesWhere, sale_date: { gte: calendarFrom } };
 
     const [rawInventories, rawSales, allInventoriesFetched, rawPriorSales, rawExpenses, rawCalendarSales] = await Promise.all([
@@ -622,15 +624,20 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
 
     const calendarByDay = new Map();
     rawCalendarSales.map(exactSale).filter(isRealizedSale).forEach(sale => {
-      const { netProfit } = saleEconomics(sale.inventory, sale, effectiveCashbackRate(sale.inventory));
+      const { netProfit, revenue, cost } = saleEconomics(sale.inventory, sale, effectiveCashbackRate(sale.inventory));
       const key = dateKey(sale.sale_date);
-      const d = calendarByDay.get(key) || { date: key, profit: zero(), sales: 0 };
-      d.profit = d.profit.plus(netProfit); d.sales += 1;
+      const d = calendarByDay.get(key) || { date: key, profit: zero(), revenue: zero(), cost: zero(), sales: 0, units: 0 };
+      d.profit = d.profit.plus(netProfit); d.revenue = d.revenue.plus(revenue); d.cost = d.cost.plus(cost);
+      d.sales += 1; d.units += keptSaleQuantity(sale);
       calendarByDay.set(key, d);
     });
-    const profitCalendar = Array.from(calendarByDay.values())
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map(d => ({ date: d.date, profit: money(d.profit), sales: d.sales }));
+    const profitCalendar = {
+      from: dateKey(calendarFrom),
+      to: todayUTC,
+      days: Array.from(calendarByDay.values())
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map(d => ({ date: d.date, profit: money(d.profit), revenue: money(d.revenue), cost: money(d.cost), sales: d.sales, units: d.units })),
+    };
 
     res.json({
       stats: {
