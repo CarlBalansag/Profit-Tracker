@@ -216,7 +216,7 @@ describe('MoreActionsMenu', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Refund…' }));
 
     const dialog = await screen.findByRole('dialog', { name: 'Refund' });
-    expect(dialog.textContent).toContain('Refunds to the buyer');
+    expect(within(dialog).getByRole('region', { name: 'Refunds to the buyer' })).toBeTruthy();
     expect(dialog.textContent).toContain('Widget');
     expect(screen.getByLabelText('Units returned by buyer').getAttribute('max')).toBe('1');
     expect(mocks.useRefunds).toHaveBeenCalledWith('sale', 'sale1');
@@ -229,7 +229,7 @@ describe('MoreActionsMenu', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Return / Refund…' }));
 
     const dialog = await screen.findByRole('dialog', { name: 'Return / Refund' });
-    expect(dialog.textContent).toContain('Refunds from the store');
+    expect(within(dialog).getByRole('region', { name: 'Refunds from the store' })).toBeTruthy();
     expect(screen.getByLabelText('Units sent back').getAttribute('max')).toBe('3');
 
     fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '40' } });

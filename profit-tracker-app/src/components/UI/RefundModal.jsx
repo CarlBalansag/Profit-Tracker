@@ -43,8 +43,8 @@ const RefundModal = ({ open, kind, record, title, onClose }) => {
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="px-5 py-4">
-          <RefundsPanel kind={REFUND_KIND[kind]} id={record.id} maxUnits={refundableUnits(kind, record)} />
+        <div className="px-5 py-5">
+          <RefundsPanel kind={REFUND_KIND[kind]} id={record.id} maxUnits={refundableUnits(kind, record)} variant="modal" />
         </div>
       </div>
     </div>

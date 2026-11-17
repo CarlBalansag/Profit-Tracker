@@ -28,7 +28,13 @@ const emptyDraft = () => ({ amount: '', quantity: '', date: localToday(), note: 
 // Records refunds on one purchase or one sale. Each add/delete saves
 // immediately (independently of the edit window's Update button) and then
 // calls onChanged so the window can pick up the new totals and stock.
-export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = '', onChanged }) {
+//
+// variant="modal" is the Statuses quick-refund popup (UI/RefundModal): the
+// popup's own header already names it, so the panel drops its title row, and
+// the narrower popup gets a two-column form with the save button on its own
+// footer row instead of four cramped columns.
+export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = '', onChanged, variant = 'inline' }) {
+  const modal = variant === 'modal';
   const copy = COPY[kind];
   const { data: refunds = [], isLoading } = useRefunds(kind, id);
   const { add, remove } = useRefundMutations(kind, id);
@@ -73,16 +79,27 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
   const units = refunds.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
 
   return (
-    <section className="space-y-3" aria-label={copy.title}>
-      <div className="flex items-center gap-2">
-        <Undo2 className="w-3.5 h-3.5 text-[var(--dp-text-secondary)]" />
-        <h4 className="text-xs font-semibold text-[var(--dp-text-primary)]">{copy.title}</h4>
-        {refunds.length > 0 && (
-          <span className="ml-auto text-xs text-emerald-400">
-            −${formatMoney(total)}{units > 0 ? ` · ${units} unit${units === 1 ? '' : 's'} back` : ''}
-          </span>
-        )}
-      </div>
+    <section className={modal ? 'space-y-4' : 'space-y-3'} aria-label={copy.title}>
+      {modal ? (
+        refunds.length > 0 && (
+          <div className="flex items-center gap-2">
+            <h4 className={LABEL.replace(' mb-1', '')}>Recorded</h4>
+            <span className="ml-auto text-xs text-emerald-400">
+              −${formatMoney(total)}{units > 0 ? ` · ${units} unit${units === 1 ? '' : 's'} back` : ''}
+            </span>
+          </div>
+        )
+      ) : (
+        <div className="flex items-center gap-2">
+          <Undo2 className="w-3.5 h-3.5 text-[var(--dp-text-secondary)]" />
+          <h4 className="text-xs font-semibold text-[var(--dp-text-primary)]">{copy.title}</h4>
+          {refunds.length > 0 && (
+            <span className="ml-auto text-xs text-emerald-400">
+              −${formatMoney(total)}{units > 0 ? ` · ${units} unit${units === 1 ? '' : 's'} back` : ''}
+            </span>
+          )}
+        </div>
+      )}
 
       {isLoading ? (
         <p className="text-xs text-[var(--dp-text-muted)]">Loading refunds…</p>
@@ -123,33 +140,42 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
       {disabledReason ? (
         <p className="text-xs text-[var(--dp-text-muted)]">{disabledReason}</p>
       ) : (
-        <div className="space-y-2">
-          <p className="text-[11px] text-[var(--dp-text-muted)]">{copy.hint}</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className={modal ? 'space-y-3' : 'space-y-2'}>
+          <p className={modal ? 'text-xs leading-relaxed text-[var(--dp-text-secondary)]' : 'text-[11px] text-[var(--dp-text-muted)]'}>{copy.hint}</p>
+          <div className={modal ? 'grid grid-cols-2 gap-x-3 gap-y-3' : 'grid grid-cols-2 sm:grid-cols-4 gap-2'}>
             <div>
-              <label className={LABEL} htmlFor={`refund-amount-${id}`}>Amount</label>
+              <label className={`${LABEL} truncate`} htmlFor={`refund-amount-${id}`}>Amount</label>
               <input id={`refund-amount-${id}`} type="number" min="0" step="0.01" placeholder="0.00" value={draft.amount} onChange={e => set('amount', e.target.value)} className={INPUT} />
             </div>
             <div>
-              <label className={LABEL} htmlFor={`refund-units-${id}`}>{copy.units}</label>
+              <label className={`${LABEL} truncate`} htmlFor={`refund-units-${id}`}>{copy.units}</label>
               <input id={`refund-units-${id}`} type="number" min="0" max={maxUnits} step="1" placeholder="0" value={draft.quantity} onChange={e => set('quantity', e.target.value)} className={INPUT} />
             </div>
             <div>
-              <label className={LABEL} htmlFor={`refund-date-${id}`}>Date</label>
+              <label className={`${LABEL} truncate`} htmlFor={`refund-date-${id}`}>Date</label>
               <input id={`refund-date-${id}`} type="date" value={draft.date} onChange={e => set('date', e.target.value)} className={INPUT} />
             </div>
             <div>
-              <label className={LABEL} htmlFor={`refund-note-${id}`}>Note</label>
+              <label className={`${LABEL} truncate`} htmlFor={`refund-note-${id}`}>Note</label>
               <input id={`refund-note-${id}`} type="text" placeholder="e.g. price match" value={draft.note} onChange={e => set('note', e.target.value)} className={INPUT} />
             </div>
           </div>
           {error && <p role="alert" className="text-xs text-[var(--dp-red-text,#f87171)]">{error}</p>}
-          <div className="flex items-center gap-2">
-            <button type="button" disabled={busy} onClick={submit} className={`${SMALL_BTN} bg-[var(--dp-accent)] text-white hover:opacity-90`}>
-              {add.isPending ? 'Saving…' : 'Add refund'}
-            </button>
-            <span className="text-[11px] text-[var(--dp-text-muted)]">Up to {maxUnits} unit{maxUnits === 1 ? '' : 's'} can come back. Saved right away.</span>
-          </div>
+          {modal ? (
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-[color:var(--dp-border)]">
+              <span className="text-xs text-[var(--dp-text-muted)]">Up to {maxUnits} unit{maxUnits === 1 ? '' : 's'} can come back. Saved right away.</span>
+              <button type="button" disabled={busy} onClick={submit} className="shrink-0 px-4 h-9 rounded-lg text-sm font-semibold bg-[var(--dp-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50">
+                {add.isPending ? 'Saving…' : 'Add refund'}
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button type="button" disabled={busy} onClick={submit} className={`${SMALL_BTN} bg-[var(--dp-accent)] text-white hover:opacity-90`}>
+                {add.isPending ? 'Saving…' : 'Add refund'}
+              </button>
+              <span className="text-[11px] text-[var(--dp-text-muted)]">Up to {maxUnits} unit{maxUnits === 1 ? '' : 's'} can come back. Saved right away.</span>
+            </div>
+          )}
         </div>
       )}
     </section>
