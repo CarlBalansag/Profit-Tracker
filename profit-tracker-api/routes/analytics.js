@@ -91,15 +91,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     const priorSalesWhere = priorFrom ? { ...salesWhere, sale_date: { gte: priorFrom, lt: priorTo } } : null;
     const expenseWhere = { user_id: userId };
     if (dateFrom) expenseWhere.date = { gte: dateFrom };
-    // Daily profit for the profit calendar. It covers exactly the days the
-    // filter names: the last 7 or 30 days counting today, this year so far,
-    // or for All Time the last 365 days (one GitHub-style year).
-    const calendarFrom = new Date(todayUTC + 'T00:00:00.000Z');
-    if (dateParam === 'YTD') calendarFrom.setUTCMonth(0, 1);
-    else calendarFrom.setUTCDate(calendarFrom.getUTCDate() - (dateParam === '7 Days' ? 6 : dateParam === '30 Days' ? 29 : 364));
-    const calendarSalesWhere = { ...salesWhere, sale_date: { gte: calendarFrom } };
-
-    const [rawInventories, rawSales, allInventoriesFetched, rawPriorSales, rawExpenses, rawCalendarSales] = await Promise.all([
+    const [rawInventories, rawSales, allInventoriesFetched, rawPriorSales, rawExpenses] = await Promise.all([
       prisma.inventory.findMany({
         where: inventoryWhere,
         include: { payment_method: true, vendor: true },
@@ -122,7 +114,6 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       // Business expenses are not tied to a sales channel, so they only
       // count in the All view.
       mode === 'All' ? prisma.expense.findMany({ where: expenseWhere }) : Promise.resolve(null),
-      prisma.sales.findMany({ where: calendarSalesWhere, include: { inventory: { include: { payment_method: true } } } }),
     ]);
 
     const inventories = rawInventories.map(exactInventory);
@@ -625,21 +616,41 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       ? rawExpenses.map(e => withExactFields(e, MAPPINGS.expense)).reduce((sum, e) => sum.plus(decimal(e.amount || 0)), zero())
       : null;
 
+    // Profit calendar: one entry per day with sales in this window, with the
+    // sales themselves so a day can be opened. 7 / 30 Days and YTD cover
+    // exactly the filter's days (the same sales as every stat above); All
+    // Time runs from the first sale to today, however long that is.
     const calendarByDay = new Map();
-    rawCalendarSales.map(exactSale).filter(isRealizedSale).forEach(sale => {
-      const { netProfit, revenue, cost } = saleEconomics(sale.inventory, sale, effectiveCashbackRate(sale.inventory));
+    saleAlloc.forEach(({ sale, inv, saleCost, saleRevenue, saleCashback }) => {
       const key = dateKey(sale.sale_date);
-      const d = calendarByDay.get(key) || { date: key, profit: zero(), revenue: zero(), cost: zero(), sales: 0, units: 0 };
-      d.profit = d.profit.plus(netProfit); d.revenue = d.revenue.plus(revenue); d.cost = d.cost.plus(cost);
+      const profitHere = saleRevenue.minus(saleCost).plus(saleCashback);
+      const d = calendarByDay.get(key) || { date: key, profit: zero(), revenue: zero(), cost: zero(), sales: 0, units: 0, items: [] };
+      d.profit = d.profit.plus(profitHere); d.revenue = d.revenue.plus(saleRevenue); d.cost = d.cost.plus(saleCost);
       d.sales += 1; d.units += keptSaleQuantity(sale);
+      d.items.push({
+        id: sale.id,
+        product: inv.product_name,
+        platform: sale.platform?.name || null,
+        units: keptSaleQuantity(sale),
+        revenue: money(saleRevenue),
+        cost: money(saleCost),
+        profit: money(profitHere),
+      });
       calendarByDay.set(key, d);
     });
+    const calendarDays = Array.from(calendarByDay.values()).sort((a, b) => a.date.localeCompare(b.date));
     const profitCalendar = {
-      from: dateKey(calendarFrom),
+      from: dateFrom ? dateKey(dateFrom) : (calendarDays[0]?.date ?? todayUTC),
       to: todayUTC,
-      days: Array.from(calendarByDay.values())
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .map(d => ({ date: d.date, profit: money(d.profit), revenue: money(d.revenue), cost: money(d.cost), sales: d.sales, units: d.units })),
+      days: calendarDays.map(d => ({
+        date: d.date,
+        profit: money(d.profit),
+        revenue: money(d.revenue),
+        cost: money(d.cost),
+        sales: d.sales,
+        units: d.units,
+        items: d.items.sort((a, b) => b.profit - a.profit),
+      })),
     };
 
     res.json({

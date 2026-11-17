@@ -195,9 +195,16 @@ describe('GET /api/analytics/dashboard overhaul fields', () => {
       expect(await range('30 Days')).toMatchObject({ from: '2026-08-07', to: '2026-09-05' });
       expect(await range('YTD')).toMatchObject({ from: '2026-01-01', to: '2026-09-05' });
       const all = await range('All Time');
-      expect(all.from).toBe('2025-09-06'); // 365 days counting today
+      expect(all.from).toBe('2026-09-03'); // All Time starts at the first sale
       // The Sep 3 sale: 2 units at $150, less $15 commission and $12 shipping.
-      expect(all.days).toEqual([{ date: '2026-09-03', profit: 69.16, revenue: 273, cost: 208, sales: 1, units: 2 }]);
+      expect(all.days).toEqual([{
+        date: '2026-09-03', profit: 69.16, revenue: 273, cost: 208, sales: 1, units: 2,
+        items: [{ id: harness.ids.sale, product: 'QA Multi-unit Sneaker', platform: 'QA Marketplace', units: 2, revenue: 273, cost: 208, profit: 69.16 }],
+      }]);
+      // An older sale moves the start back with it.
+      harness.db.sales.push({ ...harness.db.sales[0], id: 'sale-old', sale_date: new Date('2024-02-10T12:00:00Z') });
+      expect((await range('All Time')).from).toBe('2024-02-10');
+      harness.db.sales.pop();
       harness.db.sales[0].sale_date = new Date('2026-08-20T12:00:00Z');
       expect((await range('7 Days')).days).toEqual([]);
     } finally {
