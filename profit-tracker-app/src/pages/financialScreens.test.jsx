@@ -74,6 +74,21 @@ describe('financial screen regression', () => {
     expect(Number(rateInput.value)).toBe(7);
   });
 
+  it('describes a points card in points while saving the same dollar value', () => {
+    localStorage.clear();
+    // 2x at 1.5 cents = 3% in dollars.
+    mocks.cards = [{ id: 'card', name: 'Blue Business Plus', reward_type: 'points', points_base_rate: 2, point_value_cents: 1.5, default_cashback_rate: 3, rewards_label: 'Membership Rewards points' }];
+    render(<MemoryRouter><AddTransaction /></MemoryRouter>);
+    fireEvent.change(document.querySelector('input[name="unit_purchase_cost"]'), { target: { value: '100' } });
+    fireEvent.change(document.querySelector('select[name="payment_method_id"]'), { target: { name: 'payment_method_id', value: 'card' } });
+
+    expect(screen.queryByLabelText('Cashback Rate %')).toBeNull();
+    expect(Number(screen.getByLabelText('Points Value %').value)).toBe(3);
+    expect(Number(screen.getByLabelText('Points Value').value)).toBe(3);
+    expect(screen.getByText('2x Membership Rewards points × 1.5¢ ≈ 3%')).toBeTruthy();
+    expect(screen.getByText('≈ 200 pts')).toBeTruthy();
+  });
+
   it('shows allocated remaining purchase value on Inventory', () => {
     render(<MemoryRouter><Inventory /></MemoryRouter>);
     expect(screen.getAllByText('$100.00').length).toBe(2);

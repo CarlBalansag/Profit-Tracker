@@ -10,6 +10,18 @@ import { useNavigate } from 'react-router-dom';
 import { addDays, localToday } from '../utils/returnWindow';
 import { usePaymentMethods, usePlatforms, useBuyers, useInvalidate, apiFetch, useProductNote, useProductNoteMutations, useProductNames, useRecentTransaction } from '../hooks/useApi';
 import { toastWithUndo } from '../utils/undoToast';
+import { pointsFromDollars, pointsUnit, formatEarnRate } from '../utils/cardRewards';
+
+// Points cards: the rate and amount on this form stay in dollars (what every
+// total uses); these describe them as points. A store rate's multiplier is
+// saved with it; otherwise it's the dollar rate divided by the point value.
+const isPointsCard = (card) => card?.reward_type === 'points';
+const pointValueOf = (card) => Number(card?.point_value_cents) || 1;
+const multiplierFor = (card, dollarRate, storeRate) => {
+  if (storeRate && storeRate.points != null && Number.isFinite(Number(storeRate.points))) return Number(storeRate.points);
+  return Math.round(((Number(dollarRate) || 0) / pointValueOf(card)) * 100) / 100;
+};
+const programOf = (card) => card?.rewards_label || 'points';
 import { MAX_RECEIPT_BYTES, RECEIPT_ACCEPT, saveInventoryWithReceipt, validateReceiptFile } from '../hooks/receiptUpload';
 
 // ── Stable module-level components (MUST be outside the component to avoid focus loss) ──
@@ -414,9 +426,13 @@ const AddTransaction = () => {
     if (match) {
       const base = card.default_cashback_rate || 0;
       const boosted = match.rate > base;
+      const earns = isPointsCard(card)
+        ? `${formatEarnRate(multiplierFor(card, match.rate, match), 'points')} ${programOf(card)} (≈${match.rate}%)`
+        : `${match.rate}%`;
+      const from = isPointsCard(card) ? formatEarnRate(multiplierFor(card, base), 'points') : `${base}%`;
       toast.info(
-        `${card.name} earns ${match.rate}% at ${vendor.name}${
-          boosted ? ` — boosted from ${base}% base` : ''
+        `${card.name} earns ${earns} at ${vendor.name}${
+          boosted ? ` — boosted from ${from} base` : ''
         }`,
         {
           duration: 5000,
@@ -428,7 +444,9 @@ const AddTransaction = () => {
       );
     } else if (card.default_cashback_rate > 0) {
       toast.info(
-        `${card.name} earns ${card.default_cashback_rate}% base cashback at ${vendor.name}`,
+        isPointsCard(card)
+          ? `${card.name} earns ${formatEarnRate(multiplierFor(card, card.default_cashback_rate), 'points')} ${programOf(card)} at ${vendor.name} (≈${card.default_cashback_rate}%)`
+          : `${card.name} earns ${card.default_cashback_rate}% base cashback at ${vendor.name}`,
         { duration: 3500, id: 'cashback-rate-change', description: 'No elevated category rate for this store' }
       );
     }
@@ -859,11 +877,11 @@ const AddTransaction = () => {
                   </select>
                 </Field>
 
-                <Field label="Cashback Rate %" className="phone-extra">
+                <Field label={isPointsCard(selectedCard) ? 'Points Value %' : 'Cashback Rate %'} className="phone-extra">
                   <div className="relative">
                     <input
                       type="number" min="0" step="0.000001"
-                      aria-label="Cashback Rate %"
+                      aria-label={isPointsCard(selectedCard) ? 'Points Value %' : 'Cashback Rate %'}
                       value={cashbackRate}
                       onChange={e => handleCashbackRateChange(e.target.value)}
                       className={`w-full bg-white/[0.02] border rounded-lg px-3 pr-8 py-2 text-sm text-white focus:outline-none focus:border-pink-500/50 ${categoryRateMatch && cashbackOverrideMode === 'default' ? 'border-emerald-500/40' : 'border-white/10'}`}
@@ -876,19 +894,29 @@ const AddTransaction = () => {
                       {categoryRateMatch.expires ? ` · expires ${new Date(categoryRateMatch.expires).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
                     </p>
                   )}
+                  {isPointsCard(selectedCard) && (
+                    <p className="text-[11px] text-amber-300/80 mt-1">
+                      {formatEarnRate(multiplierFor(selectedCard, cashbackRate, cashbackOverrideMode === 'default' ? categoryRateMatch : null), 'points')} {programOf(selectedCard)} × {pointValueOf(selectedCard)}¢ ≈ {Number(cashbackRate) || 0}%
+                    </p>
+                  )}
                 </Field>
 
-                <Field className="phone-extra" label={<span>Cashback Amount <span className="text-gray-600 normal-case font-normal">(editable)</span></span>}>
+                <Field className="phone-extra" label={<span>{isPointsCard(selectedCard) ? 'Points Value' : 'Cashback Amount'} <span className="text-gray-600 normal-case font-normal">(editable)</span></span>}>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                     <input
                       type="number" min="0" step="0.01"
-                      aria-label="Cashback Amount"
+                      aria-label={isPointsCard(selectedCard) ? 'Points Value' : 'Cashback Amount'}
                       value={cashbackOverrideMode === 'amount' ? formData.cashback_earned : cashbackAmount.toFixed(2)}
                       onChange={e => handleCashbackAmountChange(e.target.value)}
                       className="w-full bg-white/[0.02] border border-white/10 rounded-lg pl-7 pr-3 py-2 text-sm text-emerald-400 focus:outline-none focus:border-pink-500/50"
                     />
                   </div>
+                  {isPointsCard(selectedCard) && (
+                    <p className="text-[11px] text-amber-300/80 mt-1">
+                      ≈ {pointsFromDollars(cashbackAmount, pointValueOf(selectedCard)).toLocaleString('en-US')} {pointsUnit(selectedCard.rewards_label)}
+                    </p>
+                  )}
                 </Field>
               </div>
 
@@ -1305,7 +1333,13 @@ const AddTransaction = () => {
                       </div>
 
                       {cashbackAmount > 0 && (
-                        <Row label="Cashback earned" value={`+$${formatMoney(cashbackAmount)}`} color="text-emerald-400" />
+                        <Row
+                          label={isPointsCard(selectedCard) ? 'Points earned' : 'Cashback earned'}
+                          value={isPointsCard(selectedCard)
+                            ? `+$${formatMoney(cashbackAmount)} (${pointsFromDollars(cashbackAmount, pointValueOf(selectedCard)).toLocaleString('en-US')} ${pointsUnit(selectedCard.rewards_label)})`
+                            : `+$${formatMoney(cashbackAmount)}`}
+                          color="text-emerald-400"
+                        />
                       )}
 
                       {itemSold && salePrice > 0 && (
