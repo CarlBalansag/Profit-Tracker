@@ -145,6 +145,37 @@ describe('undo on real Postgres', () => {
     expect((await db.inventory.findUnique({ where: { id: invId } })).qty_on_hand).toBe(3);
   });
 
+  it('puts a deleted purchase back after the real cascade: sales, refunds and the cashout link', async () => {
+    const conn = await db.cashoutConnection.create({ data: { user_id: ME, provider: 'eb', encrypted_key: 'x', key_last4: '1234' } });
+    const commitment = await db.cashoutCommitment.create({
+      data: { user_id: ME, connection_id: conn.id, external_deal_id: 'd', external_item_id: 'i', external_commitment_id: 'c-1', quantity: 2, sale_id: saleId },
+    });
+    await refunds.recordRefund(ME, { inventory_id: invId, amount: 10, quantity: 1, date: '2026-10-10' });
+    await refunds.recordRefund(ME, { sale_id: saleId, amount: 7.5, date: '2026-10-11' });
+    const refundIds = (await db.refund.findMany({ orderBy: { amount: 'asc' } })).map((r) => r.id);
+
+    // The same snapshot the DELETE route takes, then the real cascading delete.
+    const { activity } = await db.$transaction((tx) => activityLog.trackChange(tx, ME, {
+      action: 'delete', recordType: 'purchase', recordId: invId, productName: 'Real DB Drill',
+      refs: async (t) => ({
+        inventory: [invId], sales: [saleId],
+        refund: (await t.refund.findMany({ select: { id: true } })).map((r) => r.id),
+        cashoutCommitment: [commitment.id],
+      }),
+    }, () => tx.inventory.delete({ where: { id: invId } })));
+    expect(await db.sales.count()).toBe(0);
+    expect(await db.refund.count()).toBe(0);
+    expect((await db.cashoutCommitment.findUnique({ where: { id: commitment.id } })).sale_id).toBeNull();
+    expect(activity.detail.rows.map((r) => `${r.model}:${r.op}`))
+      .toEqual(['inventory:delete', 'sales:delete', 'refund:delete', 'refund:delete', 'cashoutCommitment:update']);
+
+    await activityLog.undoActivity(ME, activity.id);
+    expect(await db.inventory.findUnique({ where: { id: invId } })).toMatchObject({ product_name: 'Real DB Drill', qty_on_hand: 2, refunded_qty: 1 });
+    expect(await db.sales.findUnique({ where: { id: saleId } })).toMatchObject({ quantity: 2, workflow_status: 'PAID' });
+    expect((await db.refund.findMany({ orderBy: { amount: 'asc' } })).map((r) => r.id)).toEqual(refundIds);
+    expect((await db.cashoutCommitment.findUnique({ where: { id: commitment.id } })).sale_id).toBe(saleId);
+  });
+
   it('undoes a refund and brings it back', async () => {
     const added = await refunds.recordRefund(ME, { inventory_id: invId, amount: 40, quantity: 1, date: '2026-10-10', note: 'one back' });
     expect((await db.inventory.findUnique({ where: { id: invId } })).qty_on_hand).toBe(2);

@@ -475,6 +475,24 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
   }
 });
 
+// Everything a purchase delete takes with it.
+async function deletedPurchaseRefs(tx, inventoryId) {
+  const sales = (await tx.sales.findMany({ where: { inventory_id: inventoryId }, select: { id: true } })).map((s) => s.id);
+  const refunds = await tx.refund.findMany({
+    where: { OR: [{ inventory_id: inventoryId }, ...(sales.length ? [{ sale_id: { in: sales } }] : [])] },
+    select: { id: true },
+  });
+  const commitments = sales.length
+    ? await tx.cashoutCommitment.findMany({ where: { sale_id: { in: sales } }, select: { id: true } })
+    : [];
+  return {
+    inventory: [inventoryId],
+    sales,
+    refund: refunds.map((r) => r.id),
+    cashoutCommitment: commitments.map((c) => c.id),
+  };
+}
+
 // DELETE an inventory item (and cascade-delete any linked sales)
 router.delete('/:id', isAuthenticated, async (req, res, next) => {
   try {
@@ -487,10 +505,18 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
     // in one statement. A failed purchase delete must preserve its entire
     // sale history — a separate manual deleteMany here could otherwise
     // succeed while the inventory delete that follows it fails.
-    await prisma.inventory.delete({ where: { id: req.params.id } });
+    // Snapshotted first (purchase, sales, their refunds, any cashout
+    // commitment linked to a sale) so the Activity log can put it all back.
+    const { activity } = await prisma.$transaction((tx) => activityLog.trackChange(tx, req.user.id, {
+      action: 'delete',
+      recordType: 'purchase',
+      recordId: req.params.id,
+      productName: existing.product_name,
+      refs: (t) => deletedPurchaseRefs(t, req.params.id),
+    }, () => tx.inventory.delete({ where: { id: req.params.id } })));
 
     await publishCalendarFeed(req.user.id);
-    res.json({ success: true });
+    res.json({ success: true, activity_id: activity?.id ?? null });
   } catch (err) {
     console.error('DELETE inventory error:', err);
     next(err);

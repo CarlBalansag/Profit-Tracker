@@ -163,15 +163,18 @@ async function logStatus(tx, userId, kind, before, result, { source, revertsId, 
 //   delete  the whole removed row -> undo puts it back with the same id
 // Undo reverses every row of the set or none of them.
 
-const MODELS = ['inventory', 'sales', 'expense'];
+// refund and cashoutCommitment ride along with a deleted purchase or sale:
+// its refunds are cascaded away and a cashout commitment loses its sale link
+// (ON DELETE SET NULL), so both have to come back with it.
+const MODELS = ['inventory', 'sales', 'refund', 'cashoutCommitment', 'expense'];
 // Lock / write order: parents before children, the order routes/sales.js uses.
-const PARENT_FIRST = { inventory: 0, sales: 1, expense: 2 };
+const PARENT_FIRST = { inventory: 0, sales: 1, refund: 2, cashoutCommitment: 3, expense: 4 };
 // Background refreshes (carrier tracking, market price checks) rewrite these on
 // their own. They are never part of a change set and never block an undo.
 // receipt_url is here too: Add Transaction attaches the receipt in a second
 // request right after saving, which must not make the add impossible to undo.
-const VOLATILE = new Set(['tracking_info', 'carrier', 'market_value', 'market_source', 'market_checked_at', 'tax_version', 'receipt_url']);
-const TABLE = { inventory: 'Inventory', sales: 'Sales', expense: 'Expense' };
+const VOLATILE = new Set(['tracking_info', 'carrier', 'market_value', 'market_source', 'market_checked_at', 'tax_version', 'receipt_url', 'updated_at']);
+const TABLE = { inventory: 'Inventory', sales: 'Sales', refund: 'Refund', cashoutCommitment: 'CashoutCommitment', expense: 'Expense' };
 // Prisma refuses a bare null for a Json column: it has to be DbNull.
 const JSON_FIELDS = Object.fromEntries(Object.entries(TABLE).map(([model, name]) => [
   model,
@@ -292,9 +295,12 @@ async function undoChange(tx, userId, entry) {
 
   // Lock every row involved first, parents before children.
   for (const change of rows) {
-    if (change.model === 'inventory') await tx.$queryRaw`SELECT id FROM "Inventory" WHERE id = ${change.id} FOR UPDATE`;
-    else if (change.model === 'sales') await tx.$queryRaw`SELECT id FROM "Sales" WHERE id = ${change.id} FOR UPDATE`;
-    else await tx.$queryRaw`SELECT id FROM "Expense" WHERE id = ${change.id} FOR UPDATE`;
+    const id = change.id;
+    if (change.model === 'inventory') await tx.$queryRaw`SELECT id FROM "Inventory" WHERE id = ${id} FOR UPDATE`;
+    else if (change.model === 'sales') await tx.$queryRaw`SELECT id FROM "Sales" WHERE id = ${id} FOR UPDATE`;
+    else if (change.model === 'refund') await tx.$queryRaw`SELECT id FROM "Refund" WHERE id = ${id} FOR UPDATE`;
+    else if (change.model === 'cashoutCommitment') await tx.$queryRaw`SELECT id FROM "CashoutCommitment" WHERE id = ${id} FOR UPDATE`;
+    else await tx.$queryRaw`SELECT id FROM "Expense" WHERE id = ${id} FOR UPDATE`;
   }
 
   // Check everything before writing anything.
@@ -326,7 +332,8 @@ async function undoChange(tx, userId, entry) {
       if (sales.some((s) => !removing.has(`sales:${s.id}`))) throw requestError(409, 'This purchase has sales recorded since, so it can\'t be removed. Delete those first.');
     }
     if (change.model === 'inventory' || change.model === 'sales') {
-      const refunds = await tx.refund.count({ where: change.model === 'inventory' ? { inventory_id: change.id } : { sale_id: change.id } });
+      const refunds = (await tx.refund.findMany({ where: change.model === 'inventory' ? { inventory_id: change.id } : { sale_id: change.id }, select: { id: true } }))
+        .filter((r) => !removing.has(`refund:${r.id}`)).length;
       if (refunds) throw requestError(409, `This ${change.model === 'sales' ? 'sale' : 'purchase'} has refunds recorded since, so it can't be removed. Remove those first.`);
     }
   }

@@ -290,7 +290,20 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
     if (!existing || existing.inventory.user_id !== req.user.id) {
       return res.status(404).json({ error: 'Sale not found or access denied' });
     }
-    await prisma.$transaction(async (tx) => {
+    // Snapshotted first (the sale, its refunds, the stock it gives back, any
+    // cashout commitment linked to it) so the Activity log can put it back.
+    const { activity } = await prisma.$transaction(async (tx) => activityLog.trackChange(tx, req.user.id, {
+      action: 'delete',
+      recordType: 'sale',
+      recordId: existing.id,
+      productName: existing.inventory.product_name,
+      refs: async (t) => ({
+        inventory: [existing.inventory_id],
+        sales: [existing.id],
+        refund: (await t.refund.findMany({ where: { sale_id: existing.id }, select: { id: true } })).map((r) => r.id),
+        cashoutCommitment: (await t.cashoutCommitment.findMany({ where: { sale_id: existing.id }, select: { id: true } })).map((c) => c.id),
+      }),
+    }, async () => {
       const inventory = await tx.inventory.updateMany({
         where: { id: existing.inventory_id, user_id: req.user.id },
         data: { qty_on_hand: { increment: 0 } },
@@ -314,9 +327,9 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
           data: { qty_on_hand: { increment: held } },
         });
       }
-    });
+    }));
     await publishCalendarFeed(req.user.id);
-    res.json({ success: true });
+    res.json({ success: true, activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }

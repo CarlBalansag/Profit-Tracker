@@ -427,9 +427,10 @@ const Expenses = () => {
     try {
       const res = await apiFetch(`/api/expenses/${id}`, { method: 'DELETE', credentials: 'include' });
       await requireSuccessfulResponse(res, 'Could not delete expense');
+      const removed = await res.json().catch(() => ({}));
       setExpenses(p => p.filter(e => e.id !== id));
       setDeleteExpId(null);
-      toast.success('Expense deleted.');
+      toastWithUndo('Expense deleted.', removed?.activity_id, () => { fetchAll(); });
     } catch (err) {
       toast.error(`Could not delete expense: ${err.message}`);
     }

@@ -340,8 +340,80 @@ describe('activity log: edits and adds (part 2)', () => {
 
   it('rolls the whole save back if its activity entry cannot be written', async () => {
     harness.faults['activityLog.create'] = true;
+    expect((await request('DELETE', `/api/sales/${harness.ids.sale}`)).status).toBe(500);
+    expect(harness.db.sales).toHaveLength(1);
+    harness.faults['activityLog.create'] = false;
+  });
+
+  it('rolls an add back too if its activity entry cannot be written', async () => {
+    harness.faults['activityLog.create'] = true;
     expect((await request('POST', '/api/sales', { inventory_id: harness.ids.inventory, quantity: 1, unit_price: 120 })).status).toBe(500);
     expect(harness.db.sales).toHaveLength(1);
     expect(inv().qty_on_hand).toBe(3);
+  });
+});
+
+describe('activity log: deletes (part 3)', () => {
+  const del = (path) => request('DELETE', path);
+
+  it('puts a deleted purchase back with its sales and refunds, same ids', async () => {
+    await request('POST', '/api/refunds', { inventory_id: harness.ids.inventory, amount: 20, quantity: 1, date: '2026-10-01' });
+    await request('POST', '/api/refunds', { sale_id: harness.ids.sale, amount: 15, date: '2026-10-02' });
+    const before = structuredClone({ inventory: harness.db.inventory, sales: harness.db.sales, refund: harness.db.refund });
+
+    const res = await del(`/api/inventory/${harness.ids.inventory}`);
+    expect(res.body).toMatchObject({ success: true });
+    expect(harness.db.inventory).toHaveLength(0);
+    expect(harness.db.sales).toHaveLength(0);
+    expect(harness.db.refund).toHaveLength(0);
+    const [entry] = await entries();
+    expect(entry).toMatchObject({ id: res.body.activity_id, kind: 'change', record_type: 'purchase', detail: { action: 'delete', product_name: 'QA Multi-unit Sneaker' } });
+    expect(entry.detail.rows.map((r) => `${r.model}:${r.op}`)).toEqual(['inventory:delete', 'sales:delete', 'refund:delete', 'refund:delete']);
+
+    expect((await undo(entry.id)).status).toBe(200);
+    expect(harness.db.inventory.map((r) => r.id)).toEqual(before.inventory.map((r) => r.id));
+    expect(harness.db.sales.map((r) => r.id)).toEqual(before.sales.map((r) => r.id));
+    expect(harness.db.refund.map((r) => r.id).sort()).toEqual(before.refund.map((r) => r.id).sort());
+    expect(inv()).toMatchObject({ product_name: 'QA Multi-unit Sneaker', qty_on_hand: 2, refunded_qty: 1, refunded_amount: 20 });
+    expect(sale()).toMatchObject({ quantity: 2, unit_price: 150, refunded_amount: 15 });
+
+    // Deleting it again from the Activity page works too.
+    const [redo] = await entries();
+    expect((await undo(redo.id)).status).toBe(200);
+    expect(harness.db.inventory).toHaveLength(0);
+    expect(harness.db.refund).toHaveLength(0);
+  });
+
+  it('puts a deleted sale back and takes its units out of stock again', async () => {
+    const res = await del(`/api/sales/${harness.ids.sale}`);
+    expect(inv().qty_on_hand).toBe(5);
+    expect((await undo(res.body.activity_id)).status).toBe(200);
+    expect(sale()).toMatchObject({ id: harness.ids.sale, quantity: 2 });
+    expect(inv().qty_on_hand).toBe(3);
+  });
+
+  it('refuses to restore a deleted sale once its units were sold again', async () => {
+    const res = await del(`/api/sales/${harness.ids.sale}`);
+    await request('POST', '/api/sales', { inventory_id: harness.ids.inventory, quantity: 4, unit_price: 100 });
+    const undone = await undo(res.body.activity_id);
+    expect(undone.status).toBe(409);
+    expect(undone.body.error).toBe("This sale changed after this, so it can't be undone safely.");
+    expect(harness.db.sales.find((s) => s.id === harness.ids.sale)).toBeUndefined();
+  });
+
+  it('refuses to restore a deleted sale whose purchase is gone', async () => {
+    const res = await del(`/api/sales/${harness.ids.sale}`);
+    await del(`/api/inventory/${harness.ids.inventory}`);
+    const undone = await undo(res.body.activity_id);
+    expect(undone.status).toBe(409);
+  });
+
+  it('puts a deleted expense back', async () => {
+    const expense = harness.db.expense[0];
+    const res = await del(`/api/expenses/${expense.id}`);
+    expect(harness.db.expense).toHaveLength(0);
+    expect((await entries())[0].detail).toMatchObject({ action: 'delete', product_name: 'QA Storage' });
+    expect((await undo(res.body.activity_id)).status).toBe(200);
+    expect(harness.db.expense[0]).toMatchObject({ id: expense.id, name: 'QA Storage', amount: 25 });
   });
 });

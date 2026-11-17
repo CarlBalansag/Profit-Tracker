@@ -13,10 +13,14 @@ export async function undoActivity(activityId) {
 }
 
 // A success toast with an Undo button when the action was logged.
-// `onUndone` runs after a successful undo (refresh whatever the caller shows).
-// `options` go to sonner, e.g. { id } to replace a "Saving…" loading toast.
+// `activityId` is one entry id, or a list of them for a batch (e.g. several
+// rows deleted at once): Undo reverses them newest first and stops at the
+// first one the server refuses, saying how far it got.
+// `onUndone` runs after an undo that changed anything (refresh what the caller
+// shows). `options` go to sonner, e.g. { id } to replace a "Saving…" toast.
 export function toastWithUndo(message, activityId, onUndone, options = {}) {
-  if (!activityId) {
+  const ids = (Array.isArray(activityId) ? activityId : [activityId]).filter(Boolean);
+  if (!ids.length) {
     if (Object.keys(options).length) toast.success(message, options);
     else toast.success(message);
     return;
@@ -29,12 +33,18 @@ export function toastWithUndo(message, activityId, onUndone, options = {}) {
     action: {
       label: 'Undo',
       onClick: async () => {
+        let done = 0;
         try {
-          await undoActivity(activityId);
+          for (const id of [...ids].reverse()) {
+            await undoActivity(id);
+            done += 1;
+          }
           onUndone?.();
           toast.success('Undone.');
         } catch (err) {
-          toast.error(`Could not undo: ${err.message}`);
+          if (done) onUndone?.();
+          const progress = ids.length > 1 ? ` (${done} of ${ids.length} undone)` : '';
+          toast.error(`Could not undo${progress}: ${err.message}`);
         }
       },
     },

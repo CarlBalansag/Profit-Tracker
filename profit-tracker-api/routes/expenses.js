@@ -140,8 +140,14 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
     if (!existing || existing.user_id !== req.user.id) {
       return res.status(404).json({ error: 'Not found' });
     }
-    await prisma.expense.delete({ where: { id: req.params.id } });
-    res.json({ success: true });
+    const { activity } = await prisma.$transaction((tx) => activityLog.trackChange(tx, req.user.id, {
+      action: 'delete',
+      recordType: 'expense',
+      recordId: req.params.id,
+      productName: existing.name,
+      refs: async () => ({ expense: [req.params.id] }),
+    }, () => tx.expense.delete({ where: { id: req.params.id } })));
+    res.json({ success: true, activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
