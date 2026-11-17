@@ -9,6 +9,7 @@ const prisma = require('../prisma');
 const { decimal, grossBatchCost, isRealizedSale } = require('./decimalFinance');
 const { withExactFields, MAPPINGS } = require('./decimalRead');
 const { unitsHeld } = require('./statusTransitions');
+const activityLog = require('./activityLog');
 
 const requestError = (status, message) => Object.assign(new Error(message), { status });
 const parseLocalDate = (str) => {
@@ -29,20 +30,24 @@ async function listRefunds(userId, { inventory_id, sale_id }) {
   return refunds.map(toJson);
 }
 
-async function recordRefund(userId, { inventory_id, sale_id, amount: rawAmount, quantity: rawQuantity, date: rawDate, note }) {
+// `options` -- { source, revertsId }: where the write came from ('web' /
+// 'assistant') and, for an Undo, the activity entry it reverses. Every write
+// logs one activity entry in its own transaction; its id comes back as
+// `activity_id` so the app can offer Undo right away.
+async function recordRefund(userId, { inventory_id, sale_id, amount: rawAmount, quantity: rawQuantity, date: rawDate, note }, options = {}) {
   if (!inventory_id === !sale_id) throw requestError(400, 'A refund belongs to exactly one purchase or one sale');
   const amount = decimal(rawAmount || 0);
   const quantity = Number(rawQuantity || 0);
   if (amount.isZero() && quantity === 0) throw requestError(400, 'Enter a refund amount or the number of units returned');
   const date = parseLocalDate(rawDate) || new Date();
   const refundData = { user_id: userId, amount: amount.toFixed(2), quantity, date, note: note || null };
-  const created = inventory_id
-    ? await refundPurchase(userId, inventory_id, amount, quantity, refundData)
-    : await refundSale(userId, sale_id, amount, quantity, refundData);
-  return toJson(created);
+  const { refund: created, activity } = inventory_id
+    ? await refundPurchase(userId, inventory_id, amount, quantity, refundData, options)
+    : await refundSale(userId, sale_id, amount, quantity, refundData, options);
+  return { ...toJson(created), activity_id: activity.id };
 }
 
-async function refundPurchase(userId, inventoryId, amount, quantity, refundData) {
+async function refundPurchase(userId, inventoryId, amount, quantity, refundData, options) {
   const raw = await prisma.inventory.findUnique({ where: { id: inventoryId } });
   if (!raw || raw.user_id !== userId) throw requestError(404, 'Purchase not found or access denied');
   const inv = withExactFields(raw, MAPPINGS.inventory);
@@ -60,11 +65,13 @@ async function refundPurchase(userId, inventoryId, amount, quantity, refundData)
       data: { qty_on_hand: { decrement: quantity }, refunded_qty: { increment: quantity }, refunded_amount: { increment: amount.toFixed(2) } },
     });
     if (claim.count !== 1) throw requestError(409, 'Purchase changed while saving. Reload and retry.');
-    return tx.refund.create({ data: { ...refundData, inventory_id: inventoryId } });
+    const refund = await tx.refund.create({ data: { ...refundData, inventory_id: inventoryId } });
+    const activity = await activityLog.logRefund(tx, userId, 'refund.add', refund, { ...options, productName: inv.product_name });
+    return { refund, activity };
   });
 }
 
-async function refundSale(userId, saleId, amount, quantity, refundData) {
+async function refundSale(userId, saleId, amount, quantity, refundData, options) {
   const raw = await prisma.sales.findUnique({ where: { id: saleId }, include: { inventory: true } });
   if (!raw || raw.inventory?.user_id !== userId) throw requestError(404, 'Sale not found or access denied');
   if (!isRealizedSale(raw)) throw requestError(409, EXCLUDED_SALE_MESSAGE);
@@ -95,18 +102,21 @@ async function refundSale(userId, saleId, amount, quantity, refundData) {
       data: { refunded_qty: { increment: quantity }, refunded_amount: { increment: amount.toFixed(2) } },
     });
     if (claim.count !== 1) throw requestError(409, 'Sale changed while saving. Reload and retry.');
-    return tx.refund.create({ data: { ...refundData, sale_id: saleId } });
+    const refund = await tx.refund.create({ data: { ...refundData, sale_id: saleId } });
+    const activity = await activityLog.logRefund(tx, userId, 'refund.add', refund, { ...options, productName: raw.inventory?.product_name ?? null });
+    return { refund, activity };
   });
 }
 
-// Undoes a refund exactly: totals and stock go back.
-async function removeRefund(userId, refundId) {
-  const refund = await prisma.refund.findUnique({ where: { id: refundId }, include: { sale: true } });
+// Undoes a refund exactly: totals and stock go back. Returns the removed
+// refund with the `activity_id` of the entry that logged it.
+async function removeRefund(userId, refundId, options = {}) {
+  const refund = await prisma.refund.findUnique({ where: { id: refundId }, include: { sale: { include: { inventory: true } }, inventory: true } });
   if (!refund || refund.user_id !== userId) throw requestError(404, 'Refund not found');
   const amount = decimal(refund.amount || 0).toFixed(2);
   const quantity = refund.quantity || 0;
 
-  await prisma.$transaction(async (tx) => {
+  const activity = await prisma.$transaction(async (tx) => {
     if (refund.inventory_id) {
       const claim = await tx.inventory.updateMany({
         where: { id: refund.inventory_id, user_id: userId, refunded_qty: { gte: quantity }, refunded_amount: { gte: amount } },
@@ -130,8 +140,10 @@ async function removeRefund(userId, refundId) {
     }
     const removed = await tx.refund.deleteMany({ where: { id: refund.id, user_id: userId } });
     if (removed.count !== 1) throw requestError(409, 'Refund was already removed.');
+    const productName = refund.inventory?.product_name ?? refund.sale?.inventory?.product_name ?? null;
+    return activityLog.logRefund(tx, userId, 'refund.remove', refund, { ...options, productName });
   });
-  return toJson(refund);
+  return { ...toJson(refund), activity_id: activity.id };
 }
 
 module.exports = { listRefunds, recordRefund, removeRefund };

@@ -3,7 +3,8 @@ import React, { useId, useState } from 'react';
 import { Info, Trash2, Undo2 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
-import { useRefunds, useRefundMutations } from '../hooks/useApi';
+import { useInvalidate, useRefunds, useRefundMutations } from '../hooks/useApi';
+import { toastWithUndo } from '../utils/undoToast';
 import { localToday, toDateOnly } from '../utils/returnWindow';
 import { fullRefundPrefill, refundUnitPrice } from '../utils/refundPrefill';
 
@@ -117,6 +118,10 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
   const copy = COPY[kind];
   const { data: refunds = [], isLoading } = useRefunds(kind, id);
   const { add, remove } = useRefundMutations(kind, id);
+  const invalidate = useInvalidate();
+  // After an Undo from the toast: refresh everything (stock, totals, this list)
+  // and let the window holding this panel pick up the new totals too.
+  const afterUndo = () => { invalidate.all(); onChanged?.(); };
   const [draft, setDraft] = useState(emptyDraft);
   const [error, setError] = useState('');
   const [confirmId, setConfirmId] = useState(null);
@@ -133,11 +138,11 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
     if (quantity > maxUnits) return setError(`Only ${maxUnits} unit${maxUnits === 1 ? '' : 's'} can be returned here.`);
     setError('');
     try {
-      await add.mutateAsync({ amount, quantity, date: draft.date || localToday(), note: draft.note.trim() || null });
+      const saved = await add.mutateAsync({ amount, quantity, date: draft.date || localToday(), note: draft.note.trim() || null });
       setDraft(emptyDraft());
       setFull(false);
       setKeep(false);
-      toast.success('Refund recorded.');
+      toastWithUndo('Refund recorded.', saved?.activity_id, afterUndo);
       onChanged?.();
     } catch (err) {
       setError(err.message || 'Could not record the refund.');
@@ -146,9 +151,9 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
 
   const confirmDelete = async (refundId) => {
     try {
-      await remove.mutateAsync(refundId);
+      const removed = await remove.mutateAsync(refundId);
       setConfirmId(null);
-      toast.success('Refund removed.');
+      toastWithUndo('Refund removed.', removed?.activity_id, afterUndo);
       onChanged?.();
     } catch (err) {
       setConfirmId(null);

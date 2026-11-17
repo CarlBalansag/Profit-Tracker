@@ -7,6 +7,7 @@ const { publishCalendarFeed } = require('../services/calendarFeed');
 const { requireOwned } = require('../services/ownership');
 const { checkTrackingRateLimit, refreshSharedTracking } = require('../services/tracking');
 const statusTransitions = require('../services/statusTransitions');
+const activityLog = require('../services/activityLog');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 const { markPaidBatch } = require('../validation/schemas');
 const { markSalesPaid } = require('../services/markSalesPaid');
@@ -349,13 +350,18 @@ router.post('/:id/actions/:action', isAuthenticated, validateBody(statusActionBo
     }
 
     const payload = { ...statusTransitions.actionPayload(action, req.body), user_id: req.user.id };
-    const result = await prisma.$transaction((tx) =>
-      statusTransitions.applyTransition(tx, 'sale', existing, action, payload));
+    const result = await prisma.$transaction(async (tx) => {
+      const transition = await statusTransitions.applyTransition(tx, 'sale', existing, action, payload);
+      // Logged in the same transaction, so every action shows in Activity and
+      // can be undone from there or from the toast (activity_id below).
+      const activity = await activityLog.logStatus(tx, req.user.id, 'sale', existing, transition);
+      return { ...transition, activity };
+    });
 
     await publishCalendarFeed(req.user.id);
     // The recomputed actions travel with the record so the client can redraw
     // its buttons without a second request.
-    res.json(withActions(exactSale(result.record)));
+    res.json({ ...withActions(exactSale(result.record)), activity_id: result.activity.id });
   } catch (err) {
     next(err);
   }

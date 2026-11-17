@@ -31,8 +31,8 @@ router.post('/', isAuthenticated, validateBody(createRefund), async (req, res, n
 // DELETE /api/refunds/:id
 router.delete('/:id', isAuthenticated, async (req, res, next) => {
   try {
-    await removeRefund(req.user.id, req.params.id);
-    res.json({ success: true });
+    const removed = await removeRefund(req.user.id, req.params.id);
+    res.json({ success: true, activity_id: removed.activity_id });
   } catch (err) {
     next(err);
   }

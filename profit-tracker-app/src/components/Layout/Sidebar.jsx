@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, ArrowLeftRight, Boxes,
   ReceiptText, FileText, ChartLine, Wallet, CreditCard as CreditCardIcon,
-  Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins
+  Settings, History, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
@@ -210,6 +210,9 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <div className="absolute bottom-full left-2 right-2 mb-2 bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated-hover rounded-lg py-2 z-50 overflow-hidden">
                <NavLink to="/settings" className="flex items-center gap-3 px-4 py-2.5 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
                  <Settings size={14} className="text-[var(--dp-text-secondary)]" /> Settings
+               </NavLink>
+               <NavLink to="/activity" className="flex items-center gap-3 px-4 py-2.5 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
+                 <History size={14} className="text-[var(--dp-text-secondary)]" /> Activity
                </NavLink>
                <div className="h-px w-full bg-[var(--dp-border)] my-1"></div>
                <button className="flex items-center gap-3 px-4 py-2.5 text-[12px] font-medium text-[var(--dp-red-text)] hover:bg-[var(--dp-red-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); logout(); }}>

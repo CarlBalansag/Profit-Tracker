@@ -85,6 +85,7 @@ const PAGES = {
     ],
   },
   '/settings': { code: Pages.Settings.preload, data: () => [] },
+  '/activity': { code: Pages.Activity.preload, data: () => [] },
   '/guide': { code: Pages.Guide.preload, data: () => [] },
 };
 

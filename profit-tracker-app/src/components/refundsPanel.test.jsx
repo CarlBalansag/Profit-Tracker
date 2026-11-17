@@ -1,13 +1,16 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { toast } from 'sonner';
 import RefundsPanel from './RefundsPanel';
 import { localToday } from '../utils/returnWindow';
 
-const mocks = vi.hoisted(() => ({ refunds: [], add: vi.fn(), remove: vi.fn(), isPending: false }));
+const mocks = vi.hoisted(() => ({ refunds: [], add: vi.fn(), remove: vi.fn(), isPending: false, invalidateAll: vi.fn(), apiFetch: vi.fn() }));
 vi.mock('../hooks/useApi', () => ({
   useRefunds: () => ({ data: mocks.refunds, isLoading: false }),
   useRefundMutations: () => ({ add: { mutateAsync: mocks.add, isPending: false }, remove: { mutateAsync: mocks.remove, isPending: false } }),
+  useInvalidate: () => ({ all: mocks.invalidateAll }),
+  apiFetch: mocks.apiFetch,
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -167,5 +170,30 @@ describe('RefundsPanel', () => {
     expect(screen.queryByRole('checkbox')).toBeNull();
     rerender(<RefundsPanel kind="purchase" id="inv-1" maxUnits={2} />);
     expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+
+  // ─── Undo toast ─────────────────────────────────────────────────────────────
+  it('offers Undo on the saved toast and reverses that exact refund', async () => {
+    mocks.add.mockResolvedValue({ id: 'r9', activity_id: 'act-9' });
+    mocks.apiFetch.mockResolvedValue(new Response(JSON.stringify({ undone: {}, entry: {} })));
+    const onChanged = vi.fn();
+    render(<RefundsPanel kind="purchase" id="inv-1" maxUnits={3} onChanged={onChanged} />);
+    fill('Money back ($)', '10');
+    fireEvent.click(screen.getByRole('button', { name: 'Add refund' }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Refund recorded.', expect.objectContaining({ action: expect.objectContaining({ label: 'Undo' }) })));
+
+    await toast.success.mock.calls[0][1].action.onClick();
+    expect(mocks.apiFetch).toHaveBeenCalledWith('/api/activity/act-9/undo', { method: 'POST' });
+    expect(mocks.invalidateAll).toHaveBeenCalledOnce();
+    expect(onChanged).toHaveBeenCalledTimes(2); // once for the save, once for the undo
+  });
+
+  it('offers Undo after removing a refund too', async () => {
+    mocks.refunds = [{ id: 'r1', amount: 20, quantity: 0, date: '2026-10-05T12:00:00.000Z' }];
+    mocks.remove.mockResolvedValue({ success: true, activity_id: 'act-2' });
+    render(<RefundsPanel kind="purchase" id="inv-1" maxUnits={3} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove refund of $20.00' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Refund removed.', expect.objectContaining({ action: expect.objectContaining({ label: 'Undo' }) })));
   });
 });

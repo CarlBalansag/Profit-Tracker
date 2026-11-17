@@ -11,7 +11,7 @@ import Shell from './components/Layout/Shell';
 import {
   Dashboard, AddTransaction, Inventory, Expenses, Receipts, Invoices, Transactions, Analytics,
   CashFlow, CreditCard, Settings, AddSale, TaxExempt, Guide, Login, Goals, Calendar, Cashout,
-  Shipping, Statuses, ScheduleC, Landing,
+  Shipping, Statuses, ScheduleC, Landing, Activity,
 } from './pages/lazyPages';
 import { AuthProvider } from './context/AuthContext';
 import { TutorialProvider } from './context/TutorialContext';
@@ -125,6 +125,7 @@ function AppPages() {
           <Route path="/cashflow" element={<CashFlow />} />
           <Route path="/creditcard" element={<CreditCard />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/activity" element={<Activity />} />
           <Route path="/tax-exempt" element={<TaxExempt />} />
           <Route path="/guide" element={<Guide />} />
           <Route path="/goals" element={<Goals />} />

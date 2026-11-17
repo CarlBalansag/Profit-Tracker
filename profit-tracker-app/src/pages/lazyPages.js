@@ -28,6 +28,7 @@ export const Analytics = lazyWithPreload(() => import('./Analytics'));
 export const CashFlow = lazyWithPreload(() => import('./CashFlow'));
 export const CreditCard = lazyWithPreload(() => import('./CreditCard'));
 export const Settings = lazyWithPreload(() => import('./Settings'));
+export const Activity = lazyWithPreload(() => import('./Activity'));
 export const AddSale = lazyWithPreload(() => import('./AddSale'));
 export const TaxExempt = lazyWithPreload(() => import('./TaxExempt'));
 export const Guide = lazyWithPreload(() => import('./Guide'));
