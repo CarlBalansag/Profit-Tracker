@@ -28,70 +28,19 @@ export function loadCardCatalog() {
 }
 export const _resetCatalogCacheForTests = () => { catalogPromise = null; };
 
-// ─── Category label -> store names ────────────────────────────────────────────
-// OpenCard DB names categories the way issuers do ("U.S. supermarkets",
-// "Restaurants worldwide"), while the app matches a purchase's store name
-// against category_rates[].store. These keyword rules turn a category into
-// the store names a reseller is likely to have; anything that doesn't match
-// stays on the card's info list but doesn't become a store rule.
-const CATEGORY_STORES = [
-  [/amazon/i, ['Amazon']],
-  [/whole foods/i, ['Whole Foods']],
-  [/walmart/i, ['Walmart']],
-  [/target/i, ['Target']],
-  [/costco/i, ['Costco']],
-  [/best buy/i, ['Best Buy']],
-  [/home depot/i, ['Home Depot']],
-  [/lowe'?s/i, ["Lowe's"]],
-  [/supermarket|grocer/i, ['Grocery', 'Supermarket']],
-  [/restaurant|dining/i, ['Dining', 'Restaurant']],
-  [/gas station|\bgas\b|fuel/i, ['Gas']],
-  [/drugstore|pharmac/i, ['Drugstore', 'Walgreens', 'CVS']],
-  [/streaming/i, ['Streaming']],
-  [/office supply/i, ['Office Supply', 'Staples', 'Office Depot']],
-  [/shipping/i, ['Shipping', 'USPS', 'UPS', 'FedEx']],
-  [/online retail|online shopping/i, ['Online Shopping']],
-];
-
-export function storesForCategory(label = '') {
-  const stores = [];
-  for (const [pattern, names] of CATEGORY_STORES) {
-    if (pattern.test(label)) for (const name of names) if (!stores.includes(name)) stores.push(name);
-  }
-  return stores;
-}
-
-// The category_rates a catalog card saves with. If two categories map to the
-// same store, the better rate wins.
-export function categoryRatesFromCatalog(card) {
-  const byStore = new Map();
-  for (const category of card?.categories || []) {
-    for (const store of storesForCategory(category.label)) {
-      const prior = byStore.get(store);
-      if (!prior || category.rate > prior) byStore.set(store, category.rate);
-    }
-  }
-  const isPoints = card?.reward_type === 'points';
-  return [...byStore.entries()].map(([store, rate]) => (isPoints ? { store, rate: 0, points: rate } : { store, rate }));
-}
-
-// POST/PUT body for a card picked from the catalog. Only the reward fields --
-// the caller adds name/type and keeps the user's own billing fields on edit.
-export function rewardFieldsFromCatalog(card, { includeStoreRates = true, pointValueCents } = {}) {
-  const isPoints = card.reward_type === 'points';
-  const fields = {
+// ─── Saving a catalog card ────────────────────────────────────────────────────
+// The server fills the reward fields and store rates from the catalog card
+// (profit-tracker-api/services/catalogCardFields.js) and keeps the saved card
+// current when the catalog changes. `userRates` are store rates the user is
+// keeping; they win over the catalog's for the same store.
+export function rewardFieldsFromCatalog(card, { includeStoreRates = true, pointValueCents, userRates = [] } = {}) {
+  return {
     catalog_card_id: card.id,
-    rewards_label: card.rewards_label || null,
-    reward_type: isPoints ? 'points' : 'cashback',
-    category_rates: includeStoreRates ? categoryRatesFromCatalog(card) : [],
+    apply_catalog: true,
+    include_store_rates: includeStoreRates,
+    category_rates: userRates,
+    ...(card.reward_type === 'points' ? { point_value_cents: pointValueCents ?? DEFAULT_POINT_VALUE_CENTS } : {}),
   };
-  if (isPoints) {
-    fields.points_base_rate = card.base_rate ?? 0;
-    fields.point_value_cents = pointValueCents ?? DEFAULT_POINT_VALUE_CENTS;
-  } else {
-    fields.default_cashback_rate = card.base_rate ?? 0;
-  }
-  return fields;
 }
 
 // ─── Display ──────────────────────────────────────────────────────────────────
@@ -203,20 +152,16 @@ export function userAddedStoreRates(savedRates = [], presetId) {
 }
 
 // The PUT body that switches an old preset card to its catalog card, keeping
-// the user's name, billing fields and own store rates.
+// the user's name, billing fields, point value and own store rates.
 export function reworkSwitchBody(method, catalogCard) {
-  const fields = rewardFieldsFromCatalog(catalogCard, { pointValueCents: method.point_value_cents ?? DEFAULT_POINT_VALUE_CENTS });
-  const catalogStores = new Set(fields.category_rates.map(r => r.store.toLowerCase()));
   const kept = userAddedStoreRates(method.category_rates || [], method.preset_card_id)
-    .filter(r => !catalogStores.has(r.store.trim().toLowerCase()))
     // A kept rule is a dollar %; drop any stale multiplier so the server
     // re-expresses it as points at the card's value.
     .map(rate => { const rest = { ...rate }; delete rest.points; return rest; });
   return {
     name: method.name,
     type: method.type,
-    ...fields,
-    category_rates: [...fields.category_rates, ...kept],
+    ...rewardFieldsFromCatalog(catalogCard, { pointValueCents: method.point_value_cents ?? DEFAULT_POINT_VALUE_CENTS, userRates: kept }),
     rework_prompt_state: 'switched',
   };
 }

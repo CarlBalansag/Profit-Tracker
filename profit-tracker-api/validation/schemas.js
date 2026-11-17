@@ -309,6 +309,9 @@ const paymentMethod = z.object({
   rewards_label: z.string().trim().max(80).optional().nullable(),
   catalog_card_id: z.string().trim().max(120).optional().nullable(),
   rework_prompt_state: z.enum(['switched', 'kept']).optional().nullable(),
+  // Take this card's rewards from the catalog card in catalog_card_id.
+  apply_catalog: z.boolean().optional(),
+  include_store_rates: z.boolean().optional(),
 }).passthrough();
 
 const reworkPrompt = z.object({

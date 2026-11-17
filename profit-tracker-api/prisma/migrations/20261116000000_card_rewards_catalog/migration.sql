@@ -7,6 +7,8 @@ ALTER TABLE "PaymentMethod" ADD COLUMN "point_value_cents" DOUBLE PRECISION;
 ALTER TABLE "PaymentMethod" ADD COLUMN "rewards_label" TEXT;
 ALTER TABLE "PaymentMethod" ADD COLUMN "catalog_card_id" TEXT;
 ALTER TABLE "PaymentMethod" ADD COLUMN "rework_prompt_state" TEXT;
+ALTER TABLE "PaymentMethod" ADD COLUMN "catalog_applied" TEXT;
+ALTER TABLE "PaymentMethod" ADD COLUMN "catalog_synced_at" TIMESTAMP(3);
 
 CREATE TABLE "CardCatalog" (
     "id" TEXT NOT NULL,

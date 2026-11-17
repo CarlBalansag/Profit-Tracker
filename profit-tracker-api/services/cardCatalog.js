@@ -183,10 +183,29 @@ async function getCatalog(prisma, opts = {}) {
   return catalog;
 }
 
-const _resetForTests = () => { inFlight = null; lastFailureAt = 0; bundledCache = null; };
+// id -> card lookup for the catalog currently being served, for linking and
+// auto-updating saved cards. The parsed list is cached per synced_at, so a
+// request only reads the small timestamp column unless the catalog changed.
+let indexCache = null; // { key, byId }
+async function getCatalogIndex(prisma, opts = {}) {
+  let key = 'bundled';
+  try {
+    const row = await prisma.cardCatalog.findUnique({ where: { id: SOURCE_ID }, select: { synced_at: true } });
+    if (row) key = `synced:${new Date(row.synced_at).toISOString()}`;
+  } catch {
+    // fall through to whatever getCatalog serves
+  }
+  if (indexCache && indexCache.key === key) return indexCache.byId;
+  const catalog = await getCatalog(prisma, opts);
+  const byId = new Map(catalog.cards.map(card => [card.id, card]));
+  indexCache = { key: catalog.source === 'synced' ? `synced:${catalog.synced_at}` : 'bundled', byId };
+  return byId;
+}
+
+const _resetForTests = () => { inFlight = null; lastFailureAt = 0; bundledCache = null; indexCache = null; };
 
 module.exports = {
   SOURCE_ID, SOURCE_URL, REFRESH_AFTER_MS, MIN_CARDS,
-  normalizeCard, normalizeCatalog, downloadCatalog, syncCatalog, getCatalog, refreshInBackground, loadBundled,
+  normalizeCard, normalizeCatalog, downloadCatalog, syncCatalog, getCatalog, getCatalogIndex, refreshInBackground, loadBundled,
   _resetForTests,
 };

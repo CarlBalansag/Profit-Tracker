@@ -478,6 +478,10 @@ model PaymentMethod {
   point_value_cents     Float?      // what one point is worth to the user, in cents (default 1)
   rewards_label         String?     // e.g. "Membership Rewards points", "SkyMiles"
   catalog_card_id       String?     // matches CardCatalog card ids (OpenCard DB), e.g. "us-amex-gold"
+  // JSON of what was last copied from the catalog (services/catalogCardFields.js),
+  // so catalog changes auto-update the card without overwriting the user's edits.
+  catalog_applied       String?
+  catalog_synced_at     DateTime?   // when the card last took rates from the catalog
   // One-time "cards were reworked" notice for cards saved before the catalog:
   // null = not asked yet, "switched" = updated from the catalog, "kept" = left as-is.
   rework_prompt_state   String?

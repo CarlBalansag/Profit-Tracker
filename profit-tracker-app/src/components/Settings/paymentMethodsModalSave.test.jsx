@@ -161,7 +161,7 @@ describe('Card catalog: points vs cashback', () => {
     expect(screen.getByRole('button', { name: /American Express® Gold Card/ })).toBeTruthy();
   });
 
-  it('adds a points card with multipliers, the chosen point value and mapped store rates', async () => {
+  it('asks the server to fill a points card from the catalog, with the chosen point value', async () => {
     render(<PaymentMethods />);
     fireEvent.click(screen.getByRole('button', { name: /Quick Add/ }));
     fireEvent.click(await screen.findByRole('button', { name: /American Express® Gold Card/ }));
@@ -170,16 +170,10 @@ describe('Card catalog: points vs cashback', () => {
 
     await waitFor(() => expect(writes()).toHaveLength(1));
     const body = JSON.parse(writes()[0][1].body);
-    expect(body).toMatchObject({
-      name: 'American Express Gold Card', type: 'Credit', reward_type: 'points', points_base_rate: 1,
-      point_value_cents: 1.5, catalog_card_id: 'us-amex-gold', rewards_label: 'Membership Rewards points',
+    expect(body).toEqual({
+      name: 'American Express Gold Card', type: 'Credit', catalog_card_id: 'us-amex-gold',
+      apply_catalog: true, include_store_rates: true, category_rates: [], point_value_cents: 1.5,
     });
-    expect(body.default_cashback_rate).toBeUndefined();
-    expect(body.category_rates).toEqual(expect.arrayContaining([
-      { store: 'Dining', rate: 0, points: 4 },
-      { store: 'Grocery', rate: 0, points: 4 },
-      { store: 'Supermarket', rate: 0, points: 4 },
-    ]));
   });
 
   it('blocks adding a points card with an invalid point value', async () => {
@@ -224,6 +218,16 @@ describe('Card catalog: points vs cashback', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show or hide rates' }));
     expect(screen.getByText('4x · ≈8%')).toBeTruthy();
   });
+
+  it('shows when a catalog card last took its rates from the card data', async () => {
+    savedMethods = [{
+      id: 'gold', name: 'Amex Gold', type: 'Credit', reward_type: 'points', points_base_rate: 1, point_value_cents: 1,
+      default_cashback_rate: 1, catalog_card_id: 'us-amex-gold', catalog_synced_at: '2026-11-16T12:00:00Z',
+      category_rates: [], total_spend: 0,
+    }];
+    render(<PaymentMethods />);
+    expect(await screen.findByText(/Rates kept current · last updated Nov 16, 2026/)).toBeTruthy();
+  });
 });
 
 describe('"Credit cards were reworked" notice', () => {
@@ -256,10 +260,13 @@ describe('"Credit cards were reworked" notice', () => {
     expect(path).toBe('/api/payment-methods/gold');
     expect(options.method).toBe('PUT');
     const body = JSON.parse(options.body);
-    expect(body).toMatchObject({ name: 'My Gold', type: 'Credit', reward_type: 'points', points_base_rate: 1, point_value_cents: 1, catalog_card_id: 'us-amex-gold', rework_prompt_state: 'switched' });
-    expect(body.category_rates).toContainEqual({ store: 'eBay', rate: 2 });
-    expect(body.category_rates).toContainEqual({ store: 'Dining', rate: 0, points: 4 });
-    expect(body.category_rates.filter(r => r.store === 'Dining')).toHaveLength(1);
+    // The server fills the catalog's rates; the client sends only the
+    // user's own store rate (Dining 4 was the old built-in one).
+    expect(body).toEqual({
+      name: 'My Gold', type: 'Credit', catalog_card_id: 'us-amex-gold', apply_catalog: true,
+      include_store_rates: true, point_value_cents: 1, category_rates: [{ store: 'eBay', rate: 2 }],
+      rework_prompt_state: 'switched',
+    });
   });
 
   it('"Keep as is" only records the answer', async () => {

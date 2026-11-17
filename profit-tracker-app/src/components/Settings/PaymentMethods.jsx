@@ -73,6 +73,7 @@ export const PaymentMethods = () => {
               pointValueCents: card.point_value_cents ?? null,
               rewardsLabel: card.rewards_label || null,
               catalogCardId: card.catalog_card_id || null,
+              catalogSyncedAt: card.catalog_synced_at || null,
               presetId: card.preset_card_id || null,
               categoryRates: Array.isArray(card.category_rates) ? card.category_rates : [],
               creditLimit,
@@ -309,6 +310,11 @@ export const PaymentMethods = () => {
                         )}
                       </div>
                       <p className="text-xs text-gray-500 capitalize">{card.issuer}{card.type === 'debit' ? ' (Debit)' : ''}</p>
+                      {card.catalogSyncedAt && (
+                        <p className="text-[11px] text-gray-600" title="Rates follow the card data automatically. Rates you change yourself are kept.">
+                          Rates kept current · last updated {new Date(card.catalogSyncedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                      )}
                    </div>
                 </div>
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
