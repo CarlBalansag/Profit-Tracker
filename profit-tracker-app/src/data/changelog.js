@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.35',
+    date: '2026-11-17',
+    notes: "Your AI assistant now understands points cards and the card list, and everything it adds or edits shows up on the Activity page so you can undo it. It can also undo changes for you, record a full refund in one step, and tell you which return windows close soon.",
+  },
+  {
     version: '1.34',
     date: '2026-11-17',
     notes: "Credit cards got a rework: pick from about 390 real cards that stay up to date on their own, and points cards like Amex Membership Rewards or Chase Ultimate Rewards are now tracked as points at a value you set, instead of a cashback %. Payment Methods splits credit and debit cards, shows only the perks that matter for reselling, and lets you switch a saved card to the right one from the list.",

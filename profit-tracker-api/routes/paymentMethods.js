@@ -4,8 +4,7 @@ const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { paymentMethod, reworkPrompt } = require('../validation/schemas');
 const { resolveRewardFields } = require('../services/cardRewards');
-const { fieldsFromCatalog, refreshFromCatalog } = require('../services/catalogCardFields');
-const { getCatalogIndex } = require('../services/cardCatalog');
+const linkedCards = require('../services/linkedCards');
 const { publishCalendarFeed } = require('../services/calendarFeed');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 const { Decimal, batchCost, isRealizedSale } = require('../services/decimalFinance');
@@ -26,59 +25,9 @@ const parseRates = (method) => {
   }, MAPPINGS.paymentMethod);
 };
 
-// Keeps cards added from the card catalog current: when the catalog's data
-// for a card changed since it was last copied, update the saved card (the
-// user's own edits are kept -- see services/catalogCardFields.js). Runs on
-// every card list load, so a monthly catalog refresh or a newer bundled copy
-// reaches users the next time their cards load. A failure here never blocks
-// loading cards.
-async function autoUpdateFromCatalog(methods, userId) {
-  const linked = methods.filter(m => m.catalog_card_id);
-  if (!linked.length) return methods;
-  try {
-    const byId = await getCatalogIndex(prisma);
-    const updatedById = new Map();
-    for (const method of linked) {
-      const data = refreshFromCatalog(method, byId.get(method.catalog_card_id));
-      if (!data) continue;
-      // Scoped to the user's own row; count 0 means it was deleted meanwhile.
-      const { count } = await prisma.paymentMethod.updateMany({ where: { id: method.id, user_id: userId }, data });
-      // Re-read rather than merging: the database trigger recomputes the
-      // exact Decimal columns that the response prefers over the Floats.
-      if (count) {
-        const fresh = await prisma.paymentMethod.findFirst({ where: { id: method.id, user_id: userId } });
-        if (fresh) updatedById.set(method.id, fresh);
-      }
-    }
-    return methods.map(m => updatedById.get(m.id) || m);
-  } catch (err) {
-    console.warn('[paymentMethods] catalog auto-update failed:', err.message);
-    return methods;
-  }
-}
-
-// When the request asks to take a card's rewards from the catalog
-// (apply_catalog), fill the reward fields from the catalog card. Store rates
-// sent along are the user's own and win over the catalog's for that store.
-async function withCatalogFields(rawBody) {
-  // Only the server writes the catalog bookkeeping fields.
-  const { catalog_applied: _a, catalog_synced_at: _s, ...body } = rawBody;
-  if (!body.apply_catalog) return body;
-  const byId = await getCatalogIndex(prisma);
-  const card = byId.get(body.catalog_card_id);
-  if (!card) {
-    const err = new Error('That card is not in the card list');
-    err.status = 400;
-    throw err;
-  }
-  return {
-    ...body,
-    ...fieldsFromCatalog(card, {
-      includeStoreRates: body.include_store_rates !== false,
-      userRates: body.category_rates || [],
-    }),
-  };
-}
+// Shared with the AI assistant's tools (services/linkedCards.js).
+const autoUpdateFromCatalog = (methods, userId) => linkedCards.autoUpdateFromCatalog(prisma, methods, userId);
+const withCatalogFields = (rawBody) => linkedCards.withCatalogFields(prisma, rawBody);
 
 // GET all payment methods for the authenticated user, with lifetime spend
 // (ISSUES #7 "Payment Methods always shows zero spend"). Spend reuses the
