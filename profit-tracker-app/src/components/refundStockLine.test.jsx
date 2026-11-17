@@ -7,6 +7,7 @@ let refunds = [];
 vi.mock('../hooks/useApi', () => ({
   useRefunds: () => ({ data: refunds, isLoading: false }),
   useRefundMutations: () => ({ add: {}, remove: {} }),
+  useInvalidate: () => ({ all: () => {} }),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 

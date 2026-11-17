@@ -6,13 +6,14 @@ const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
   invalidate: { all: vi.fn() },
   error: vi.fn(),
+  success: vi.fn(),
 }));
 vi.mock('../hooks/useApi', () => ({
   apiFetch: mocks.fetch, useInvalidate: () => mocks.invalidate,
   useRefunds: () => ({ data: [], isLoading: false }),
   useRefundMutations: () => ({ add: { mutateAsync: vi.fn(), isPending: false }, remove: { mutateAsync: vi.fn(), isPending: false } }),
 }));
-vi.mock('sonner', () => ({ toast: { error: mocks.error } }));
+vi.mock('sonner', () => ({ toast: { error: mocks.error, success: mocks.success } }));
 vi.mock('./TransactionNotesPanel', () => ({ default: () => null }));
 
 const purchase = {
@@ -27,6 +28,28 @@ const response = (data, status = 200) => new Response(JSON.stringify(data), { st
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe('expanded editor atomic save', () => {
+  it('offers Undo for a save that changed something, and nothing extra for one that did not', async () => {
+    mocks.fetch
+      .mockResolvedValueOnce(response(purchase))
+      .mockResolvedValueOnce(response({ ...purchase, activity_id: 'act-7' }));
+    const { unmount } = render(<TransactionDetailModal row={{ rawId: purchase.id }} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await waitFor(() => expect(screen.getByDisplayValue('Saved purchase')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Update Transaction' }));
+    await waitFor(() => expect(mocks.success).toHaveBeenCalledWith('Changes saved.', expect.objectContaining({ action: expect.objectContaining({ label: 'Undo' }) })));
+    unmount();
+
+    mocks.success.mockClear();
+    mocks.fetch
+      .mockResolvedValueOnce(response(purchase))
+      .mockResolvedValueOnce(response({ ...purchase, activity_id: null }));
+    const saved = vi.fn();
+    render(<TransactionDetailModal row={{ rawId: purchase.id }} onClose={vi.fn()} onSaved={saved} />);
+    await waitFor(() => expect(screen.getByDisplayValue('Saved purchase')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Update Transaction' }));
+    await waitFor(() => expect(saved).toHaveBeenCalledOnce());
+    expect(mocks.success).not.toHaveBeenCalled();
+  });
+
   it('uses one combined request and retains the draft on failure for retry', async () => {
     mocks.fetch
       .mockResolvedValueOnce(response(purchase))

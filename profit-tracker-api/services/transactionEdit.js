@@ -22,7 +22,10 @@ function writable(data, schema) {
 // Saves a purchase and its sales (plus, optionally, one new sale) in a single
 // atomic write so a partial save can never leave quantities inconsistent
 // across the batch.
-async function editTransaction(prisma, inventoryId, userId, payload) {
+// `options.track(tx, work)`: runs `work` inside this function's transaction,
+// so the caller can record what it changed (routes/inventory.js logs it to the
+// Activity log). Without it, `work` simply runs.
+async function editTransaction(prisma, inventoryId, userId, payload, options = {}) {
   const existing = await prisma.inventory.findUnique({ where: { id: inventoryId } });
   if (!existing || existing.user_id !== userId) throw fail(404, 'Inventory not found or access denied');
   const ids = payload.sales.map(sale => sale.id);
@@ -36,7 +39,7 @@ async function editTransaction(prisma, inventoryId, userId, payload) {
     await requireOwned('buyer', sale.buyer_id, userId, 'Buyer');
     await requireOwned('paymentMethod', sale.sale_shipping_payment_method_id, userId, 'Shipping label card');
   }
-  return prisma.$transaction(async tx => {
+  return prisma.$transaction(async tx => (options.track || ((t, work) => work()))(tx, async () => {
     // Claim the inventory row before touching anything else, using the same
     // lock order as the standalone sale PUT/POST/DELETE routes, so a
     // concurrent edit elsewhere can't interleave with this batch.
@@ -127,7 +130,7 @@ async function editTransaction(prisma, inventoryId, userId, payload) {
       });
     }
     return tx.inventory.findUnique({ where: { id: inventoryId }, include: { sales: true, vendor: true, payment_method: true } });
-  });
+  }));
 }
 
 module.exports = { editTransaction };

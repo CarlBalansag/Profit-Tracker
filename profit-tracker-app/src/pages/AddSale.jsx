@@ -2,6 +2,7 @@ import { formatMoney } from '../utils/money';
 import { allocatedCost, saleEconomics } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
+import { toastWithUndo } from '../utils/undoToast';
 import {
   Package, DollarSign, Search, Check, Store, Globe, Calendar, CreditCard, StickyNote
 } from 'lucide-react';
@@ -137,12 +138,13 @@ const AddSale = () => {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `HTTP ${res.status}`);
       }
-      return res;
+      return res.json().catch(() => ({}));
     });
 
-    toast.promise(submitPromise, {
-      loading: 'Recording sale...',
-      success: () => {
+    // A loading toast that turns into the success toast, which carries Undo
+    // (removes the sale and puts its units back in stock).
+    const toastId = toast.loading('Recording sale...');
+    submitPromise.then((saved) => {
         // Save or clear the product note independently (fire-and-forget)
         const noteText = formData.note?.trim();
         if (noteText) {
@@ -152,10 +154,8 @@ const AddSale = () => {
         }
         invalidate.all();
         setTimeout(() => navigate('/transactions'), 800);
-        return `Sale recorded for ${selectedItem.product_name}!`;
-      },
-      error: (err) => `Failed: ${err.message}`,
-    });
+        toastWithUndo(`Sale recorded for ${selectedItem.product_name}!`, saved?.activity_id, invalidate.all, { id: toastId });
+    }, (err) => toast.error(`Failed: ${err.message}`, { id: toastId }));
   };
 
   if (inventoryFailed || platformsFailed) {

@@ -42,6 +42,7 @@ model User {
   api_keys               ApiKey[]
   mcp_write_logs         McpWriteLog[]
   change_logs            ChangeLog[]
+  activity_logs          ActivityLog[]
   transaction_notes      TransactionNote[]
   attachments            Attachment[]
   cashout_connections    CashoutConnection[]
@@ -187,6 +188,28 @@ model CardCatalog {
   source_url   String
   synced_at    DateTime
   last_verified String?                // newest last_verified date in the data
+}
+
+// One row per user-visible action (a refund added or removed, a status button
+// pressed) with enough before/after detail to undo it. Undoing an entry writes
+// its own entry (reverts_id -> the entry it reversed) and stamps undone_at on
+// the original, so an undo can itself be undone. See services/activityLog.js.
+model ActivityLog {
+  id          String    @id @default(uuid())
+  user_id     String
+  user        User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  kind        String
+  record_type String
+  record_id   String
+  detail      Json
+  source      String    @default("web")
+  reverts_id  String?
+  undone_at   DateTime?
+  undone_by   String?
+  created_at  DateTime  @default(now())
+
+  @@index([user_id, created_at])
+  @@index([user_id, record_id])
 }
 
 model Invite {

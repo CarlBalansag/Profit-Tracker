@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import useRecordActions, { inverseFor } from './useRecordActions';
+import useRecordActions from './useRecordActions';
 
 const mocks = vi.hoisted(() => ({
   apiFetch: vi.fn(),
@@ -9,11 +9,12 @@ const mocks = vi.hoisted(() => ({
   dashboard: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
+  all: vi.fn(),
 }));
 
 vi.mock('./useApi', () => ({
   apiFetch: mocks.apiFetch,
-  useInvalidate: () => ({ inventory: mocks.inventory, sales: mocks.sales, dashboard: mocks.dashboard }),
+  useInvalidate: () => ({ inventory: mocks.inventory, sales: mocks.sales, dashboard: mocks.dashboard, all: mocks.all }),
 }));
 vi.mock('sonner', () => ({ toast: { success: mocks.success, error: mocks.error } }));
 
@@ -106,80 +107,41 @@ describe('useRecordActions', () => {
   });
 
   // ─── Undo ───────────────────────────────────────────────────────────────────
-  it('offers Undo and sends the paired inverse action when one exists', async () => {
-    mocks.apiFetch.mockResolvedValue(ok({ allowed_actions: [{ action: 'unlist', label: 'Unlist' }] }));
-    const { result } = renderHook(() => useRecordActions({ kind: 'inventory', record: { id: 'inv1', receiving_status: 'ON_HAND' } }));
+  // Undo is the server's: the response's activity_id is what gets reversed, so
+  // it is offered for every logged action, Cancel and Mark Paid included.
+  it('offers Undo for a logged action and asks the server to reverse that entry', async () => {
+    mocks.apiFetch.mockResolvedValue(ok({ activity_id: 'act-1' }));
+    const record = { id: 'sale1', workflow_status: 'PAID', quantity: 2 };
+    const { result } = renderHook(() => useRecordActions({ kind: 'sale', record }));
 
-    await act(() => result.current.runAction('list_item', {}, { label: 'List Item' }));
-
-    const [, options] = mocks.success.mock.calls[0];
+    await act(() => result.current.runAction('cancel_sale', {}, { label: 'Cancel Sale', destructive: true }));
+    const [message, options] = mocks.success.mock.calls[0];
+    expect(message).toBe('Cancel Sale — done.');
     expect(options.action.label).toBe('Undo');
 
     mocks.apiFetch.mockClear();
+    mocks.apiFetch.mockResolvedValue(new Response(JSON.stringify({ undone: {}, entry: {} })));
     await act(() => options.action.onClick());
-    expect(mocks.apiFetch.mock.calls[0][0]).toBe('/api/inventory/inv1/actions/unlist');
+    expect(mocks.apiFetch).toHaveBeenCalledWith('/api/activity/act-1/undo', { method: 'POST' });
+    // An undo can move stock and money, so everything is refreshed.
+    expect(mocks.all).toHaveBeenCalledOnce();
+    expect(mocks.success).toHaveBeenLastCalledWith('Undone.');
   });
 
-  it('undoes a pure status step by correcting back to the previous status', async () => {
-    mocks.apiFetch.mockResolvedValue(ok({ allowed_actions: [{ action: 'correct_status', label: 'Correct Receiving Step' }] }));
-    const record = { id: 'inv1', receiving_status: 'PRE_ORDER', correction_note: 'vendor delay' };
-    const { result } = renderHook(() => useRecordActions({ kind: 'inventory', record }));
+  it("shows the server's reason when an undo is refused", async () => {
+    mocks.apiFetch.mockResolvedValue(ok({ activity_id: 'act-1' }));
+    const { result } = renderHook(() => useRecordActions({ kind: 'sale', record: { id: 'sale1' } }));
+    await act(() => result.current.runAction('cancel_sale', {}, { label: 'Cancel Sale' }));
 
-    await act(() => result.current.runAction('mark_purchased', {}, { label: 'Mark Purchased' }));
-    mocks.apiFetch.mockClear();
+    mocks.apiFetch.mockResolvedValue(new Response(JSON.stringify({ error: "The 2 units this put back in stock have since been sold or used, so it can't be undone." }), { status: 409 }));
     await act(() => mocks.success.mock.calls[0][1].action.onClick());
-
-    const [path, options] = mocks.apiFetch.mock.calls[0];
-    expect(path).toBe('/api/inventory/inv1/actions/correct_status');
-    // The note is carried back, because inventory's correct_status rewrites it.
-    expect(JSON.parse(options.body)).toEqual({ receiving_status: 'PRE_ORDER', correction_note: 'vendor delay' });
+    expect(mocks.error).toHaveBeenCalledWith("Could not undo: The 2 units this put back in stock have since been sold or used, so it can't be undone.");
+    expect(mocks.all).not.toHaveBeenCalled();
   });
 
-  // No fake Undo button: it is only attached when the record's own recomputed
-  // allowed_actions confirm the inverse is actually available.
-  it('shows a plain toast when the inverse action is not allowed on the new state', async () => {
-    mocks.apiFetch.mockResolvedValue(ok({ allowed_actions: [{ action: 'mark_on_hand', label: 'Mark On Hand' }] }));
-    const { result } = renderHook(() => useRecordActions({ kind: 'inventory', record: { id: 'inv1', receiving_status: 'PRE_ORDER' } }));
-
-    await act(() => result.current.runAction('mark_purchased', {}, { label: 'Mark Purchased' }));
-    expect(mocks.success).toHaveBeenCalledWith('Mark Purchased — done.');
-  });
-
-  it('never offers Undo for destructive or milestone-writing actions', async () => {
-    mocks.apiFetch.mockResolvedValue(ok({ allowed_actions: [{ action: 'correct_status', label: 'Correct Workflow Step' }] }));
-    const record = { id: 'sale1', workflow_status: 'WAITING_FOR_PAYMENT', quantity: 2 };
-    const { result } = renderHook(() => useRecordActions({ kind: 'sale', record }));
-
-    await act(() => result.current.runAction('mark_paid', { paid_date: '2026-10-02', amount: '5.00' }, { label: 'Mark Paid' }));
-    expect(mocks.success).toHaveBeenCalledWith('Mark Paid — done.');
-
-    mocks.success.mockClear();
-    await act(() => result.current.runAction('cancel_sale', {}, { label: 'Cancel Sale', destructive: true }));
-    expect(mocks.success).toHaveBeenCalledWith('Cancel Sale — done.');
-  });
-});
-
-describe('inverseFor', () => {
-  it('pairs listing and unlisting', () => {
-    expect(inverseFor('inventory', { is_listed: false }, 'list_item')).toEqual({ action: 'unlist', payload: {} });
-    expect(inverseFor('inventory', { is_listed: true }, 'unlist')).toEqual({ action: 'list_item', payload: {} });
-  });
-
-  it('corrects a sale back to its previous workflow status', () => {
-    expect(inverseFor('sale', { workflow_status: 'SCANNED_IN' }, 'mark_accepted'))
-      .toEqual({ action: 'correct_status', payload: { workflow_status: 'SCANNED_IN' } });
-  });
-
-  it('refuses an inverse for quantity-moving, date-writing and destructive actions', () => {
-    const sale = { workflow_status: 'WAITING_FOR_PAYMENT', quantity: 2 };
-    expect(inverseFor('sale', sale, 'mark_paid')).toBeNull();
-    expect(inverseFor('sale', sale, 'cancel_sale', { destructive: true })).toBeNull();
-    expect(inverseFor('sale', sale, 'void_sale', { destructive: true })).toBeNull();
-    expect(inverseFor('inventory', { receiving_status: 'INBOUND' }, 'mark_on_hand')).toBeNull();
-    expect(inverseFor('inventory', { receiving_status: 'PURCHASED' }, 'add_tracking')).toBeNull();
-  });
-
-  it('refuses an inverse when the previous status is unknown', () => {
-    expect(inverseFor('inventory', { receiving_status: null }, 'mark_purchased')).toBeNull();
+  it('shows a plain toast when the response carries no activity entry (e.g. Check Tracking)', async () => {
+    const { result } = renderHook(() => useRecordActions({ kind: 'inventory', record: { id: 'inv1', receiving_status: 'INBOUND' } }));
+    await act(() => result.current.runAction('check_tracking', {}, { label: 'Check Tracking' }));
+    expect(mocks.success).toHaveBeenCalledWith('Check Tracking — done.');
   });
 });

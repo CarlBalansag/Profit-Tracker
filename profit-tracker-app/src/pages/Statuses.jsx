@@ -21,6 +21,7 @@ import {
   isFullyCompleted,
   statusVisual,
 } from '../data/statusWorkflow';
+import { refundOffered } from '../data/statusActions';
 
 // ─── Board columns ───────────────────────────────────────────────────────────
 // A column is purely a filter over the record's *current* stored status. There
@@ -367,7 +368,10 @@ function RecordCard({ record, quickStatus = false }) {
   const visual = statusVisual(statusKey);
   const exception = exceptionTagOf(record);
   const changedAt = formatStatusChangedAt(statusChangedAtOf(record));
-  const hasSecondaryActions = (record.allowed_actions || []).some((entry) => entry.secondary);
+  // The More menu also carries the quick Refund entry, so it shows for any
+  // record a refund can be recorded on even without secondary status actions.
+  const hasSecondaryActions = (record.allowed_actions || []).some((entry) => entry.secondary)
+    || refundOffered(record.__kind, record);
   // The stored workflow_status never becomes anything but PAID -- Completed is
   // a displayed label over it (same principle as Sold Out over ON_HAND), so
   // the card's own label has to be computed the same way the board's column

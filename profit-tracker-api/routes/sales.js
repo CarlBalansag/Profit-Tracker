@@ -7,6 +7,7 @@ const { publishCalendarFeed } = require('../services/calendarFeed');
 const { requireOwned } = require('../services/ownership');
 const { checkTrackingRateLimit, refreshSharedTracking } = require('../services/tracking');
 const statusTransitions = require('../services/statusTransitions');
+const activityLog = require('../services/activityLog');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 const { markPaidBatch } = require('../validation/schemas');
 const { markSalesPaid } = require('../services/markSalesPaid');
@@ -110,7 +111,14 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
     // action. A legacy status with no new-column equivalent resolves
     // workflow_status to null, and such a sale gets no stamp either.
     if (workflowData.workflow_status) workflowData.workflow_status_changed_at = new Date();
-    const sale = await prisma.$transaction(async (tx) => {
+    // Logged as one change (the new sale + the stock it took) so it can be
+    // undone from the toast or the Activity page.
+    const { result: sale, activity } = await prisma.$transaction(async (tx) => activityLog.trackChange(tx, req.user.id, {
+      action: 'create',
+      recordType: 'sale',
+      refs: async (t, created) => ({ inventory: [inventory_id], sales: created ? [created.id] : [] }),
+      recordId: (created) => created.id,
+    }, async () => {
       const stockClaim = await tx.inventory.updateMany({
         where: {
           id: inventory_id,
@@ -144,10 +152,10 @@ router.post('/', isAuthenticated, validateBody(createSale), async (req, res, nex
           tracking_number: tracking_number || null,
         }
       });
-    });
+    }));
 
     await publishCalendarFeed(req.user.id);
-    res.json(exactSale(sale));
+    res.json({ ...exactSale(sale), activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -208,7 +216,12 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
       // same "last status updated" stamp an action endpoint would write.
       if (advanced.data.workflow_status) workflowData.workflow_status_changed_at = new Date();
     }
-    const updated = await prisma.$transaction(async (tx) => {
+    const { result: updated, activity } = await prisma.$transaction(async (tx) => activityLog.trackChange(tx, req.user.id, {
+      action: 'edit',
+      recordType: 'sale',
+      refs: async () => ({ inventory: [existing.inventory_id], sales: [req.params.id] }),
+      recordId: req.params.id,
+    }, async () => {
       // Claim the inventory row first, using the same lock order as the
       // combined transaction-edit route, so the two can't deadlock when they
       // run concurrently against the same purchase.
@@ -261,10 +274,10 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
       });
       if (claim.count !== 1) throw requestError(409, 'Sale changed while saving. Reload and retry.');
       return tx.sales.findUnique({ where: { id: req.params.id } });
-    });
+    }));
 
     await publishCalendarFeed(req.user.id);
-    res.json(exactSale(updated));
+    res.json({ ...exactSale(updated), activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -277,7 +290,20 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
     if (!existing || existing.inventory.user_id !== req.user.id) {
       return res.status(404).json({ error: 'Sale not found or access denied' });
     }
-    await prisma.$transaction(async (tx) => {
+    // Snapshotted first (the sale, its refunds, the stock it gives back, any
+    // cashout commitment linked to it) so the Activity log can put it back.
+    const { activity } = await prisma.$transaction(async (tx) => activityLog.trackChange(tx, req.user.id, {
+      action: 'delete',
+      recordType: 'sale',
+      recordId: existing.id,
+      productName: existing.inventory.product_name,
+      refs: async (t) => ({
+        inventory: [existing.inventory_id],
+        sales: [existing.id],
+        refund: (await t.refund.findMany({ where: { sale_id: existing.id }, select: { id: true } })).map((r) => r.id),
+        cashoutCommitment: (await t.cashoutCommitment.findMany({ where: { sale_id: existing.id }, select: { id: true } })).map((c) => c.id),
+      }),
+    }, async () => {
       const inventory = await tx.inventory.updateMany({
         where: { id: existing.inventory_id, user_id: req.user.id },
         data: { qty_on_hand: { increment: 0 } },
@@ -301,9 +327,9 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
           data: { qty_on_hand: { increment: held } },
         });
       }
-    });
+    }));
     await publishCalendarFeed(req.user.id);
-    res.json({ success: true });
+    res.json({ success: true, activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -349,13 +375,18 @@ router.post('/:id/actions/:action', isAuthenticated, validateBody(statusActionBo
     }
 
     const payload = { ...statusTransitions.actionPayload(action, req.body), user_id: req.user.id };
-    const result = await prisma.$transaction((tx) =>
-      statusTransitions.applyTransition(tx, 'sale', existing, action, payload));
+    const result = await prisma.$transaction(async (tx) => {
+      const transition = await statusTransitions.applyTransition(tx, 'sale', existing, action, payload);
+      // Logged in the same transaction, so every action shows in Activity and
+      // can be undone from there or from the toast (activity_id below).
+      const activity = await activityLog.logStatus(tx, req.user.id, 'sale', existing, transition);
+      return { ...transition, activity };
+    });
 
     await publishCalendarFeed(req.user.id);
     // The recomputed actions travel with the record so the client can redraw
     // its buttons without a second request.
-    res.json(withActions(exactSale(result.record)));
+    res.json({ ...withActions(exactSale(result.record)), activity_id: result.activity.id });
   } catch (err) {
     next(err);
   }

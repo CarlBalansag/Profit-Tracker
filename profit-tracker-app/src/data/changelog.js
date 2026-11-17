@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.33',
+    date: '2026-11-17',
+    notes: "New Activity page (in your profile menu) lists what you've added, edited, deleted, refunded or moved between statuses, and lets you undo any of it from the last 30 days -- an Undo button also appears right after each change. Refunds and returns are quicker too: record one straight from the three-dot menu on Statuses, with a one-click full refund.",
+  },
+  {
     version: '1.32',
     date: '2026-11-15',
     notes: "Connect your EarnFromBuying (LA) account to view live deals from LA alongside ElectronicsBuyer and Points4Days on the Cashout page.",

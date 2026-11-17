@@ -12,7 +12,7 @@ import {
   correctableSaleStatuses,
   workflowLabel,
 } from './statusWorkflow';
-import { isExcludedFromFinancials } from '../../../shared/finance.mjs';
+import { isExcludedFromFinancials, isRealizedSale } from '../../../shared/finance.mjs';
 
 // Mirrors statusTransitions.reopensRestoredSale: once a cancel/void/return put
 // a sale's units back in stock (restored_qty), the server refuses any status
@@ -191,6 +191,32 @@ export function consequenceFor(action, kind, record = {}) {
       return 'This changes the record and the totals built on it.';
   }
 }
+
+// ─── Quick refund from the More menu ─────────────────────────────────────────
+// Not a status action: a refund is its own record (routes/refunds.js), so the
+// menu adds this entry itself rather than the API listing it in allowed_actions.
+// The rules mirror services/refunds.js so the menu never offers a refund the
+// server would refuse:
+//   purchase -> always (amount-only refunds are fine at any receiving step);
+//               units sent back are capped at what is still on hand.
+//   sale     -> only while it still counts as a sale (not cancelled, returned or
+//               disputed); units the buyer sends back are capped at what the sale
+//               still holds out of stock (unitsHeld on the server).
+export const REFUND_KIND = { inventory: 'purchase', sale: 'sale' };
+
+export const refundOffered = (kind, record = {}) => {
+  if (kind === 'inventory') return true;
+  if (kind === 'sale') return isRealizedSale(record);
+  return false;
+};
+
+export const refundMenuLabel = (kind) => (kind === 'inventory' ? 'Return / Refund…' : 'Refund…');
+
+export const refundableUnits = (kind, record = {}) => {
+  if (kind === 'inventory') return Math.max(0, Number(record.qty_on_hand) || 0);
+  const held = (Number(record.quantity) || 0) - (Number(record.refunded_qty) || 0) - (Number(record.restored_qty) || 0);
+  return Math.max(0, held);
+};
 
 // Shared between ContextualActions (primary buttons) and MoreActionsMenu (the
 // secondary dropdown) -- see the file header for why this lives here instead
