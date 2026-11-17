@@ -206,6 +206,44 @@ describe('auto-update when the catalog changes', () => {
   });
 });
 
+describe('storesForCategory', () => {
+  const { storesForCategory } = require('../services/catalogCardFields.js');
+  it("doesn't treat an issuer's exclusions as stores", () => {
+    expect(storesForCategory('Grocery stores (excluding superstores like Walmart and Target)')).toEqual(['Grocery', 'Supermarket']);
+    expect(storesForCategory('Gas stations and drug stores (excludes Target and Walmart)')).toEqual(['Gas', 'Drugstore', 'Walgreens', 'CVS']);
+    expect(storesForCategory('Earn 3 points on dining and grocery store purchases (excluding Target and Walmart), as well as gas')).toEqual(['Grocery', 'Supermarket', 'Dining', 'Restaurant', 'Gas']);
+  });
+
+  it('keeps online-only grocery off in-store grocery', () => {
+    expect(storesForCategory('Online grocery purchases (excluding Target, Walmart, wholesale clubs)')).toEqual([]);
+    expect(storesForCategory('Grocery stores, online or in-store')).toEqual(['Grocery', 'Supermarket']);
+  });
+
+  it('skips pick-your-own and top-spend categories', () => {
+    expect(storesForCategory('Choice category (gas and EV charging, online shopping, dining, travel)')).toEqual([]);
+    expect(storesForCategory('Top two categories where you spend the most each month (automatic)')).toEqual([]);
+    expect(storesForCategory('Top three spend categories each month (excluding Amazon)')).toEqual([]);
+  });
+
+  it('a saved card loses rates that came from the old matching on its next load', async () => {
+    const preferred = goldCard({ id: 'us-test-pref', categories: [
+      { label: 'Dining including eligible delivery services', rate: 3, cap: null },
+      { label: 'Online grocery purchases (excluding Target, Walmart, wholesale clubs)', rate: 3, cap: null },
+    ] });
+    setCatalog([preferred]);
+    // Saved under the old matching: Walmart/Target/Grocery came from the exclusion text.
+    const oldApplied = { reward_type: 'points', base: 1, rewards_label: 'Test Rewards points', include_store_rates: true,
+      rates: ['Dining', 'Restaurant', 'Walmart', 'Target', 'Grocery', 'Supermarket'].map(store => ({ store, value: 3 })) };
+    harness.db.paymentMethod.push({
+      id: 'pref', user_id: harness.ids.user, name: 'Preferred', type: 'Credit', reward_type: 'points', points_base_rate: 1,
+      point_value_cents: 1, default_cashback_rate: 1, catalog_card_id: 'us-test-pref', catalog_applied: JSON.stringify(oldApplied),
+      category_rates: JSON.stringify(oldApplied.rates.map(r => ({ store: r.store, rate: 3, points: 3, source: 'catalog' }))),
+    });
+    await send('GET', '/api/payment-methods');
+    expect(storedRates('pref').map(r => r.store).sort()).toEqual(['Dining', 'Restaurant']);
+  });
+});
+
 describe('refreshFromCatalog', () => {
   it('starts tracking a linked card that has no record of what was applied, without changing it', () => {
     const out = refreshFromCatalog({ catalog_card_id: 'us-test-gold', reward_type: 'points', points_base_rate: 9 }, goldCard());

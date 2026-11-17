@@ -27,17 +27,36 @@ const CATEGORY_STORES = [
   [/supermarket|grocer/i, ['Grocery', 'Supermarket']],
   [/restaurant|dining/i, ['Dining', 'Restaurant']],
   [/gas station|\bgas\b|fuel/i, ['Gas']],
-  [/drugstore|pharmac/i, ['Drugstore', 'Walgreens', 'CVS']],
+  [/drug ?stores?|pharmac/i, ['Drugstore', 'Walgreens', 'CVS']],
   [/streaming/i, ['Streaming']],
   [/office supply/i, ['Office Supply', 'Staples', 'Office Depot']],
   [/shipping/i, ['Shipping', 'USPS', 'UPS', 'FedEx']],
   [/online retail|online shopping/i, ['Online Shopping']],
 ];
 
+// Categories whose stores depend on the user's choice or monthly spend
+// ("Choice category (gas, dining, ...)", "Top two categories each month") --
+// not a fixed rate at any one store, so they don't become store rates.
+const PICK_YOUR_OWN = /choice category|top (?:two|three|\d+)\b|where you spend the most|categor(?:y|ies) (?:you|of your) choos/i;
+
+// The part of a label that says where the rate applies, without the issuer's
+// exclusions: "Grocery stores (excluding Walmart and Target)" must not match
+// Walmart or Target.
+function applicableText(label = '') {
+  if (PICK_YOUR_OWN.test(label)) return '';
+  return label
+    .replace(/\([^)]*\bexclud(?:e|es|ing)\b[^)]*\)/gi, ' ')
+    .replace(/\bexclud(?:e|es|ing)\b[^;)]*/gi, ' ');
+}
+
 function storesForCategory(label = '') {
+  const text = applicableText(label);
+  // "Online grocery purchases" earns only online, not at grocery stores.
+  const onlineGroceryOnly = /online grocer/i.test(text) && !/in-store|in store/i.test(text);
   const stores = [];
   for (const [pattern, names] of CATEGORY_STORES) {
-    if (pattern.test(label)) for (const name of names) if (!stores.includes(name)) stores.push(name);
+    if (onlineGroceryOnly && names.includes('Grocery')) continue;
+    if (pattern.test(text)) for (const name of names) if (!stores.includes(name)) stores.push(name);
   }
   return stores;
 }
