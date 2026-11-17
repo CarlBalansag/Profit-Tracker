@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
+import { CatalogLinkPicker } from './CatalogLinkPicker';
+import { renameForRelink } from '../../utils/cardRewards';
 
 // Stored type values: the Credit Card page and calendar only count 'Credit'.
 const TYPE_OPTIONS = [
@@ -38,6 +40,8 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
   const [formData, setFormData] = useState(INITIAL_STATE);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  // A catalog card picked in "Card from the list", applied on save.
+  const [relinkTo, setRelinkTo] = useState(null);
   const modalRef = useModalKeyboard(isOpen, () => { if (!saving) onClose(); });
 
   useEffect(() => {
@@ -59,6 +63,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
     } else if (isOpen) {
       setFormData(INITIAL_STATE);
     }
+    setRelinkTo(null);
     setErrors({});
   }, [cardToEdit, isOpen]);
 
@@ -74,7 +79,13 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
     const newErrors = {};
     if (!formData.name.trim()) newErrors.name = 'Card name is required';
     if (!formData.type.trim()) newErrors.type = 'Card type is required';
-    if (formData.rewardType === 'points') {
+    if (relinkTo) {
+      // Rewards come from the picked card; only a points card's value is ours.
+      const cents = Number(formData.pointValueCents);
+      if (relinkTo.reward_type === 'points' && (formData.pointValueCents === '' || !Number.isFinite(cents) || cents <= 0 || cents > 100)) {
+        newErrors.pointValueCents = 'Enter a value above 0 and up to 100';
+      }
+    } else if (formData.rewardType === 'points') {
       const pts = Number(formData.pointsBaseRate);
       if (formData.pointsBaseRate === '' || !Number.isFinite(pts) || pts < 0) newErrors.pointsBaseRate = 'Enter points per $1 of 0 or greater';
       const cents = Number(formData.pointValueCents);
@@ -110,6 +121,8 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
       credit_limit: formData.credit_limit ? parseFloat(formData.credit_limit) : null,
       min_payment_pct: formData.min_payment_pct ? parseFloat(formData.min_payment_pct) : null,
       is_personal: Boolean(formData.is_personal),
+      relinkTo,
+      relinkPointValueCents: relinkTo?.reward_type === 'points' ? Number(formData.pointValueCents) : null,
     };
 
     setSaving(true);
@@ -205,7 +218,43 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
             />
           </div>
 
-          {/* Rewards: cashback % or points per $1 */}
+          {/* Which catalog card this card follows (editing a credit card only) */}
+          {isEditing && formData.type === 'Credit' && (
+            <CatalogLinkPicker
+              linkedId={cardToEdit.catalogCardId}
+              pending={relinkTo}
+              onPick={(card, oldCard) => {
+                const same = card.id === cardToEdit.catalogCardId;
+                setRelinkTo(same ? null : card);
+                // Follow the new card's name unless the user named it themselves.
+                setFormData(prev => ({ ...prev, name: same ? cardToEdit.name : renameForRelink(prev.name, oldCard?.name, card.name) }));
+                setErrors({});
+              }}
+              onClear={() => { setRelinkTo(null); setFormData(prev => ({ ...prev, name: cardToEdit.name })); }}
+            />
+          )}
+
+          {relinkTo ? (
+            relinkTo.reward_type === 'points' && (
+              <div className="space-y-2">
+                <label htmlFor="card-point-value" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Point value (¢)</label>
+                <input
+                  id="card-point-value"
+                  type="number"
+                  name="pointValueCents"
+                  step="0.05"
+                  min="0.01"
+                  max="100"
+                  value={formData.pointValueCents}
+                  onChange={handleChange}
+                  className={inputClass('pointValueCents')}
+                />
+                {errors.pointValueCents && <p className="text-[11px] text-red-500 font-medium mt-1">{errors.pointValueCents}</p>}
+                <p className="text-[11px] text-gray-600">What one {relinkTo.rewards_label || 'point'} is worth to you.</p>
+              </div>
+            )
+          ) : (
+          /* Rewards: cashback % or points per $1 */
           <div className="space-y-3">
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Rewards{formData.type !== 'Credit' ? ' (optional)' : ''}</p>
@@ -261,6 +310,9 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
                     className={inputClass('pointsBaseRate')}
                   />
                   {errors.pointsBaseRate && <p className="text-[11px] text-red-500 font-medium mt-1">{errors.pointsBaseRate}</p>}
+                  {isEditing && cardToEdit.catalogCardId && (
+                    <p className="text-[11px] text-amber-300/80">Changing this stops automatic rate updates for this card.</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label htmlFor="card-point-value" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Point value (¢)</label>
@@ -300,6 +352,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
               </div>
             )}
           </div>
+          )}
 
           {/* Billing & Limits */}
           <div className="space-y-3">

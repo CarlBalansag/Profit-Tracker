@@ -11,11 +11,9 @@ import { CardReworkNotice } from './CardReworkNotice';
 import clsx from 'clsx';
 import {
   loadCardCatalog, rewardFieldsFromCatalog, reworkSwitchBody, cardsNeedingRework,
-  formatEarnRate, pointsUnit,
+  formatEarnRate, pointsUnit, cleanCardName,
 } from '../../utils/cardRewards';
 
-// "American Express® Gold Card" -> "American Express Gold Card"
-const cleanCardName = (name = '') => name.replace(/[®™℠]/g, '').replace(/\s+/g, ' ').trim();
 import { useAuth } from '../../context/AuthContext';
 
 export const PaymentMethods = () => {
@@ -75,6 +73,8 @@ export const PaymentMethods = () => {
               catalogCardId: card.catalog_card_id || null,
               catalogSyncedAt: card.catalog_synced_at || null,
               presetId: card.preset_card_id || null,
+              // Needed by the Edit form; without it, saving an edit cleared the card's last 4.
+              last4: card.last4 || '',
               categoryRates: Array.isArray(card.category_rates) ? card.category_rates : [],
               creditLimit,
               totalSpend,
@@ -133,11 +133,30 @@ export const PaymentMethods = () => {
 
     const method = isEditing ? 'PUT' : 'POST';
 
+    // Re-linked to a different card from the list: the server takes the new
+    // card's rewards; the user's own store rates and point value carry over.
+    const relinkFields = isEditing && processedCard.relinkTo
+      ? rewardFieldsFromCatalog(processedCard.relinkTo, {
+        pointValueCents: processedCard.relinkPointValueCents ?? undefined,
+        userRates: (editingCard.categoryRates || []).filter(r => r.source !== 'catalog'),
+      })
+      : null;
+
     try {
       const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify(relinkFields ? {
+          name: processedCard.name,
+          type: processedCard.type,
+          ...relinkFields,
+          last4: processedCard.last4 || null,
+          statement_close_day: processedCard.statement_close_day ?? null,
+          due_day: processedCard.due_day ?? null,
+          credit_limit: processedCard.credit_limit ?? null,
+          min_payment_pct: processedCard.min_payment_pct ?? null,
+          is_personal: processedCard.is_personal ?? false,
+        } : {
           name: processedCard.name,
           type: processedCard.type,
           default_cashback_rate: processedCard.baseRate,

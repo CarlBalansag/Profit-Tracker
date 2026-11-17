@@ -175,3 +175,17 @@ export function cardsNeedingRework(savedMethods = [], catalogCards = []) {
     .map(m => ({ method: m, catalogCard: byId.get(LEGACY_PRESET_TO_CATALOG[m.preset_card_id]) }))
     .filter(x => x.catalogCard && x.catalogCard.reward_type !== 'none');
 }
+
+// "American Express® Gold Card" -> "American Express Gold Card"
+export const cleanCardName = (name = '') => name.replace(/[®™℠]/g, '').replace(/\s+/g, ' ').trim();
+
+// Re-linking a card in the Edit form: rename it to the new card too, unless
+// the user gave it a name of their own. "Chase Sapphire Reserve" counts as the
+// old card's name for "Chase Sapphire Reserve® Credit Card".
+export function renameForRelink(currentName, oldCardName, newCardName) {
+  const norm = (s) => cleanCardName(s).toLowerCase().replace(/\b(credit )?card\b/g, '').replace(/\s+/g, ' ').trim();
+  const current = norm(currentName);
+  const old = norm(oldCardName || '');
+  const looksLikeOld = current && old && (old.includes(current) || current.includes(old));
+  return looksLikeOld ? cleanCardName(newCardName) : currentName;
+}

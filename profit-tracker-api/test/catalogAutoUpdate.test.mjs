@@ -94,6 +94,26 @@ describe('adding a card from the catalog (apply_catalog)', () => {
   });
 });
 
+describe('re-linking a saved card to a different catalog card', () => {
+  it('swaps the rewards to the new card and keeps point value, own rates and billing', async () => {
+    const card = await addGold({ category_rates: [{ store: 'eBay', rate: 2 }] });
+    await send('PUT', `/api/payment-methods/${card.id}`, { name: 'Gold', type: 'Credit', last4: '4242', due_day: 9 });
+    const res = await send('PUT', `/api/payment-methods/${card.id}`, {
+      name: 'Cash', type: 'Credit', catalog_card_id: 'us-test-cash', apply_catalog: true,
+      category_rates: storedRates(card.id).filter(r => r.source !== 'catalog'),
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ name: 'Cash', catalog_card_id: 'us-test-cash', reward_type: 'cashback', default_cashback_rate: 1.5, points_base_rate: null, last4: '4242', due_day: 9 });
+    expect(res.body.category_rates).toContainEqual({ store: 'Amazon', rate: 5, source: 'catalog' });
+    expect(res.body.category_rates).toContainEqual(expect.objectContaining({ store: 'eBay', rate: 2 }));
+    expect(res.body.category_rates.find(r => r.store === 'Dining')).toBeUndefined();
+    // Now follows the new card.
+    setCatalog([goldCard(), cashCard({ base_rate: 3 })]);
+    const list = await send('GET', '/api/payment-methods');
+    expect(list.body.find(m => m.id === card.id).default_cashback_rate).toBe(3);
+  });
+});
+
 describe('auto-update when the catalog changes', () => {
   it('updates base and store rates on the next card load, keeping the point value', async () => {
     const card = await addGold();

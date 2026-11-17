@@ -230,6 +230,70 @@ describe('Card catalog: points vs cashback', () => {
   });
 });
 
+describe('Edit card: re-link to a different card from the list', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    _resetCatalogCacheForTests();
+    onWrite = (path, options) => Promise.resolve(json({ id: 'gold', ...JSON.parse(options.body) }));
+    mocks.apiFetch.mockImplementation(route);
+    // Saved as the Gold, plus one store rate the user added.
+    savedMethods = [{
+      id: 'gold', name: 'American Express Gold Card', type: 'Credit', reward_type: 'points', points_base_rate: 1,
+      point_value_cents: 1.5, default_cashback_rate: 1.5, catalog_card_id: 'us-amex-gold', last4: '1001',
+      category_rates: [{ store: 'Dining', points: 4, rate: 6, source: 'catalog' }, { store: 'eBay', rate: 2, points: 1.333333 }],
+      total_spend: 0,
+    }];
+  });
+
+  const openEdit = async () => {
+    render(<PaymentMethods />);
+    await screen.findAllByText('American Express Gold Card');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit card' }));
+    expect(await screen.findByText('Card from the list')).toBeTruthy();
+  };
+
+  it('shows the linked card and warns that editing points per $1 stops updates', async () => {
+    await openEdit();
+    expect(await screen.findByText('American Express® Gold Card')).toBeTruthy();
+    expect(screen.getByText('Changing this stops automatic rate updates for this card.')).toBeTruthy();
+  });
+
+  it('re-links to the picked card, renames it and keeps the user\'s own store rate', async () => {
+    await openEdit();
+    fireEvent.click(await screen.findByRole('button', { name: 'Change' }));
+    fireEvent.change(screen.getByLabelText('Search the card list'), { target: { value: 'double cash' } });
+    fireEvent.click(screen.getByRole('button', { name: /Citi Double Cash® Card/ }));
+    expect(screen.getByText(/Saving switches this card's rates to Citi Double Cash® Card/)).toBeTruthy();
+    expect(screen.getByDisplayValue('Citi Double Cash Card')).toBeTruthy(); // followed the new card's name
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    const [path, options] = writes()[0];
+    expect(path).toBe('/api/payment-methods/gold');
+    expect(JSON.parse(options.body)).toMatchObject({
+      name: 'Citi Double Cash Card', type: 'Credit', catalog_card_id: 'us-citi-double-cash', apply_catalog: true,
+      include_store_rates: true, last4: '1001', category_rates: [{ store: 'eBay', rate: 2, points: 1.333333 }],
+    });
+  });
+
+  it('keeps the card\'s last 4 digits when an edit is saved', async () => {
+    await openEdit();
+    expect(screen.getByDisplayValue('1001')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(JSON.parse(writes()[0][1].body).last4).toBe('1001');
+  });
+
+  it('Undo puts the original link and name back', async () => {
+    await openEdit();
+    fireEvent.click(await screen.findByRole('button', { name: 'Change' }));
+    fireEvent.change(screen.getByLabelText('Search the card list'), { target: { value: 'double cash' } });
+    fireEvent.click(screen.getByRole('button', { name: /Citi Double Cash® Card/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(screen.getByDisplayValue('American Express Gold Card')).toBeTruthy();
+    expect(screen.queryByText(/Saving switches this card's rates/)).toBeNull();
+  });
+});
+
 describe('"Credit cards were reworked" notice', () => {
   const legacyGold = {
     id: 'gold', name: 'My Gold', type: 'Credit', reward_type: 'cashback', default_cashback_rate: 1,
