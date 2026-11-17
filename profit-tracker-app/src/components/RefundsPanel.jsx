@@ -234,7 +234,7 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
         <div className={modal ? 'space-y-3' : 'space-y-2'}>
           <p className={modal ? 'text-xs leading-relaxed text-[var(--dp-text-secondary)]' : 'text-[11px] text-[var(--dp-text-muted)]'}>{copy.hint}</p>
           {canPrefill && (
-            <div className="rounded-lg border border-[color:var(--dp-border)] px-3 py-2.5 space-y-2.5">
+            <div className="rounded-lg border border-[color:var(--dp-border)] px-3 py-2.5">
               <label className="flex items-start gap-2.5 cursor-pointer">
                 <input type="checkbox" checked={full} onChange={(e) => applyFull(e.target.checked, keep)} className={CHECK} />
                 <span className="min-w-0">
@@ -244,15 +244,25 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
                   </span>
                 </span>
               </label>
-              {full && (
-                <label className="flex items-start gap-2.5 pl-6 cursor-pointer">
-                  <input type="checkbox" checked={keep} onChange={(e) => applyFull(true, e.target.checked)} className={CHECK} />
-                  <span className="min-w-0">
-                    <span className="block text-sm text-[var(--dp-text-primary)]">{copy.keep}</span>
-                    <span className="block text-xs text-[var(--dp-text-muted)]">{copy.keepHint}</span>
-                  </span>
-                </label>
-              )}
+              {/* Always rendered so it can grow open instead of popping in and
+                  making the popup jump. The 0fr -> 1fr grid row animates to the
+                  row's real height; while collapsed it is hidden from screen
+                  readers and its checkbox can't be tabbed to. */}
+              <div
+                aria-hidden={!full}
+                data-open={full ? 'true' : 'false'}
+                className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none ${full ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
+              >
+                <div className="overflow-hidden min-h-0">
+                  <label className="flex items-start gap-2.5 pl-6 pt-2.5 cursor-pointer">
+                    <input type="checkbox" checked={keep} disabled={!full} onChange={(e) => applyFull(true, e.target.checked)} className={CHECK} />
+                    <span className="min-w-0">
+                      <span className="block text-sm text-[var(--dp-text-primary)]">{copy.keep}</span>
+                      <span className="block text-xs text-[var(--dp-text-muted)]">{copy.keepHint}</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
             </div>
           )}
           {/* Two columns at most: the labels are full phrases now, and four
