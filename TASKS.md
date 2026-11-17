@@ -4,3 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
+| feat-statuses-refund-menu | Quick Refund / Return item in the Statuses 3-dot menu | `profit-tracker-app/src/components/UI/MoreActionsMenu.jsx`, `profit-tracker-app/src/components/UI/MoreActionsMenu.test.jsx`, `profit-tracker-app/src/components/UI/RefundModal.jsx`, `profit-tracker-app/src/pages/Statuses.jsx` | In progress | 2026-11-16 |
