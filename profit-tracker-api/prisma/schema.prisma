@@ -726,6 +726,11 @@ model CashoutCommitment {
   sale                    Sales?            @relation(fields: [sale_id], references: [id], onDelete: SetNull)
   external_deal_id        String
   external_item_id        String
+  // external_item_id while this commitment is open, null once it's withdrawn.
+  // The one-commitment-per-item rule is on this column, so a withdrawn row
+  // (kept for the sale's history) doesn't block committing that item again.
+  // Postgres lets a unique index hold any number of nulls.
+  open_item_id            String?
   // Null while status is "pending": logged from Log Purchase with no tracking
   // number yet, so nothing has been committed with the provider. Filled in
   // when the tracking number is added and the user confirms the commit.
@@ -743,7 +748,7 @@ model CashoutCommitment {
   created_at              DateTime          @default(now())
   updated_at              DateTime          @updatedAt
 
-  @@unique([connection_id, external_item_id])
+  @@unique([connection_id, open_item_id])
   @@index([user_id])
   @@index([connection_id])
 }

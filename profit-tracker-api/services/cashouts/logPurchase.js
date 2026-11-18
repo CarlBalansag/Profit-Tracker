@@ -96,11 +96,13 @@ async function logPurchase(userId, {
   await requireOwned('platform', vendorId, userId, 'Store');
   await requireOwned('paymentMethod', paymentMethodId, userId, 'Payment method');
 
-  if (deferCommit) {
-    // EB takes one commitment per item, and so does our table: say so now
-    // rather than failing on the unique index mid-write.
+  if (!recordOnly) {
+    // EB takes one open commitment per item, and so does our table. Checked
+    // before EB is called: a commit EB accepted that we then failed to save
+    // would leave a real pledge with no record of it here. A withdrawn
+    // commitment doesn't count -- its open_item_id is null.
     const existing = await prisma.cashoutCommitment.findFirst({
-      where: { connection_id: conn.id, external_item_id: String(itemId) },
+      where: { connection_id: conn.id, open_item_id: String(itemId) },
     });
     if (existing) {
       throw Object.assign(
@@ -202,6 +204,7 @@ async function logPurchase(userId, {
           sale_id: createdSale.id,
           external_deal_id: String(dealId),
           external_item_id: String(itemId),
+          open_item_id: String(itemId),
           external_commitment_id: null,
           quantity: Number(qty),
           status: 'pending',
