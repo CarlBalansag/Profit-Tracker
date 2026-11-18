@@ -405,11 +405,16 @@ router.post('/:id/actions/:action', isAuthenticated, validateBody(statusActionBo
     const cashoutCommitPending = action === 'add_outbound_tracking' ? await pendingCommit.pendingForSale(id) : null;
     const cashoutTrackingChanged = action === 'add_outbound_tracking' && !cashoutCommitPending
       ? await cashoutCommits.trackingChangedForSale(id, result.record.tracking_number) : null;
+    // Units that won't ship any more but are still committed: the client
+    // asks whether to take them off the cashout commitment.
+    const cashoutCommitLower = ['cancel_sale', 'void_sale', 'mark_returned'].includes(action)
+      ? await cashoutCommits.lowerOfferForSale(id) : null;
     res.json({
       ...withActions(exactSale(result.record)),
       activity_id: result.activity.id,
       ...(cashoutCommitPending ? { cashout_commit_pending: cashoutCommitPending } : {}),
       ...(cashoutTrackingChanged ? { cashout_tracking_changed: cashoutTrackingChanged } : {}),
+      ...(cashoutCommitLower ? { cashout_commit_lower: cashoutCommitLower } : {}),
     });
   } catch (err) {
     next(err);

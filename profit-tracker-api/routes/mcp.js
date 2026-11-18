@@ -137,8 +137,26 @@ function presentCommitment(record) {
     tracking_codes: record.tracking_codes || [],
     tracking_submitted_at: record.tracking_submitted_at ? new Date(record.tracking_submitted_at).toISOString() : null,
     tracking_error: record.tracking_error,
+    // Why this purchase isn't committed (the provider refused, e.g. limit
+    // reached) -- contact the cashout about these units.
+    commit_error: record.commit_error || null,
     created_at: new Date(record.created_at).toISOString(),
   };
+}
+
+// Rows that share one provider commitment (several purchases of one item):
+// each row also says the commitment's total across all of them.
+function withSharedTotals(records) {
+  const totals = new Map();
+  for (const r of records) {
+    if (r.status === 'active' && r.external_commitment_id) {
+      totals.set(r.external_commitment_id, (totals.get(r.external_commitment_id) || 0) + (Number(r.quantity) || 0));
+    }
+  }
+  return records.map((r) => ({
+    ...presentCommitment(r),
+    commitment_total: r.status === 'active' && r.external_commitment_id ? totals.get(r.external_commitment_id) : null,
+  }));
 }
 
 function jsonResult(data) {
@@ -2422,24 +2440,24 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('list_cashout_commitments', {
-    description: 'List this account\'s cashout commitments -- pledges already made to send units for a deal line item, at a price locked in regardless of later price changes. Read from our own records (which also carry tracking info the provider itself can\'t give back), not a live provider call.',
+    description: 'List this account\'s cashout commitments -- pledges already made to send units for a deal line item, at a price locked in regardless of later price changes. One row per purchase: buying more of an item already committed adds a row whose units are added to the same provider commitment when its tracking is added (quantity = that purchase\'s units, commitment_total = the provider commitment\'s total). "pending" rows are logged but not committed yet; commit_error says why one couldn\'t be (e.g. limit reached -- contact the cashout). Read from our own records (which also carry tracking info the provider itself can\'t give back), not a live provider call.',
     inputSchema: {
       cashout: z.string().optional().describe('Filter to one connected cashout by display name or provider (case-insensitive, partial match).'),
-      status: z.enum(['active', 'withdrawn']).optional().describe('Omit for all.'),
+      status: z.enum(['active', 'pending', 'withdrawn']).optional().describe('Omit for all.'),
     },
   }, async ({ cashout, status }) => {
     try {
       let connectionId;
       if (cashout) connectionId = (await resolveConnection(userId, cashout)).id;
       const records = await cashoutCommits.listLocalCommitments(userId, { connectionId, status });
-      return jsonResult(records.map(presentCommitment));
+      return jsonResult(withSharedTotals(records));
     } catch (err) {
       return errorResult(err.message || 'Failed to list cashout commitments');
     }
   });
 
   server.registerTool('commit_cashout_deal', {
-    description: 'Pledge units to a cashout deal line item -- a real, binding commitment: the cashout will pay the price locked in now even if it drops later, and expects you to send that many units. One commitment per item; committing to an item you\'re already committed to fails rather than creating a second one. This does not submit tracking or record a purchase -- see log_cashout_purchase for the combined action used when you already have a tracking number in hand.',
+    description: 'Pledge units to a cashout deal line item -- a real, binding commitment: the cashout will pay the price locked in now even if it drops later, and expects you to send that many units. One commitment per item; committing to an item you\'re already committed to fails rather than creating a second one (to buy more of it, use log_cashout_purchase, which adds to it). This does not submit tracking or record a purchase -- see log_cashout_purchase for the combined action used when you already have a tracking number in hand.',
     inputSchema: {
       cashout: z.string().optional().describe('Which connected cashout, by display name or provider. Omit when only one is connected.'),
       deal_id: z.string().describe('The deal id from list_cashout_deals.'),
@@ -2459,7 +2477,7 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('update_cashout_commitment', {
-    description: 'Change the quantity on an existing cashout commitment. Must stay at least 1 -- use delete_cashout_commitment to withdraw entirely.',
+    description: 'Change the quantity of one purchase on a cashout commitment. When several purchases share the provider\'s commitment for an item, the provider\'s total moves by the difference. Must stay at least 1 -- use delete_cashout_commitment to take a purchase off.',
     inputSchema: {
       commitment_id: z.string().describe('The id from list_cashout_commitments / commit_cashout_deal (our own record id, not the provider\'s).'),
       quantity: z.number().int().min(1),
@@ -2476,13 +2494,16 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('delete_cashout_commitment', {
-    description: 'Withdraw a cashout commitment. The pledged quantity is freed back to the deal on the provider\'s side immediately -- you can re-commit while the deal is still active. The local record is kept, marked withdrawn, not deleted, so any purchase already logged against it keeps its history.',
-    inputSchema: { commitment_id: z.string().describe('The id from list_cashout_commitments / commit_cashout_deal.') },
-  }, async ({ commitment_id }) => {
+    description: 'Take a purchase off its cashout commitment. When other purchases share the provider\'s commitment for that item, it is lowered by this purchase\'s units; otherwise (or with all: true) the whole commitment is withdrawn and freed back to the deal immediately -- you can re-commit while the deal is still active. Local records are kept, marked withdrawn, not deleted, so purchases already logged keep their history.',
+    inputSchema: {
+      commitment_id: z.string().describe('The id from list_cashout_commitments / commit_cashout_deal.'),
+      all: z.boolean().optional().describe('Withdraw the whole provider commitment, every purchase on it. Default false.'),
+    },
+  }, async ({ commitment_id, all }) => {
     try {
       await requireCashoutWrites(apiKeyId);
-      const record = await cashoutCommits.deleteCommitment(userId, commitment_id);
-      await logWrite(userId, apiKeyId, 'delete_cashout_commitment', { commitment_id });
+      const record = await cashoutCommits.deleteCommitment(userId, commitment_id, { all: Boolean(all) });
+      await logWrite(userId, apiKeyId, 'delete_cashout_commitment', { commitment_id, all: Boolean(all) });
       return jsonResult(presentCommitment(record));
     } catch (err) {
       return errorResult(err.message || 'Failed to withdraw this commitment');
@@ -2527,7 +2548,7 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('log_cashout_purchase', {
-    description: 'The full action for a cashout item you have already bought and shipped: commits to the deal line item with the provider, submits the tracking number, then records the purchase and its sale in this app together (the same combined write Add Transaction does). Only call this once you actually have a tracking number -- it is required, since by the time this is used the item has shipped. If the commit itself is refused (deal closed, already committed, over the limit), nothing is written at all. If only the tracking submission fails, the purchase/sale/commitment are still saved, with the tracking failure reported back for a retry later via submit_cashout_tracking.',
+    description: 'The full action for a cashout item you have already bought and shipped: commits to the deal line item with the provider, submits the tracking number, then records the purchase and its sale in this app together (the same combined write Add Transaction does). Only call this once you actually have a tracking number -- it is required, since by the time this is used the item has shipped. If the commit itself is refused (deal closed, over the limit), nothing is written at all. Buying more of an item already committed is allowed: the purchase and sale are saved as their own records and the existing commitment is raised by this quantity; if the provider refuses that raise, they stay saved and not_committed says why (contact the cashout). If only the tracking submission fails, the purchase/sale/commitment are still saved, with the tracking failure reported back for a retry later via submit_cashout_tracking.',
     inputSchema: {
       cashout: z.string().optional().describe('Which connected cashout. Omit when only one is connected.'),
       deal_id: z.string().describe('The deal id from list_cashout_deals.'),
@@ -2574,6 +2595,10 @@ function buildServer(userId, apiKeyId) {
         commitment: presentCommitment({ ...result.commitment, connection: conn }),
         purchase_id: result.inventory.id,
         account: storeAccount ? storeAccount.name : null,
+        // Bought more of an item already committed: the commitment's new total.
+        added_to_commitment: result.addedTo ?? null,
+        // Saved, but the provider refused to commit it (e.g. limit reached).
+        not_committed: result.commitError || null,
         sale_id: result.sale.id,
       });
     } catch (err) {

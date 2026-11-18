@@ -25,3 +25,14 @@ export const offerTrackingSend = (detail) => {
   if (!detail?.commitment_id) return;
   window.dispatchEvent(new CustomEvent(TRACKING_SEND_EVENT, { detail }));
 };
+
+// A committed purchase's sale was cancelled, voided or returned. The app shell
+// asks whether to take its units off the cashout commitment (lower it, or
+// withdraw it when nothing else is on it). Nothing is sent unless confirmed.
+// detail: { commitment_id, cashout, quantity, total, remaining }
+export const COMMIT_LOWER_EVENT = 'cashout-commit-lower';
+
+export const offerCommitLower = (detail) => {
+  if (!detail?.commitment_id) return;
+  window.dispatchEvent(new CustomEvent(COMMIT_LOWER_EVENT, { detail }));
+};

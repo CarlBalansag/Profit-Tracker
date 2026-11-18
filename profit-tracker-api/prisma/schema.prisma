@@ -758,16 +758,22 @@ model CashoutCommitment {
   sale                    Sales?            @relation(fields: [sale_id], references: [id], onDelete: SetNull)
   external_deal_id        String
   external_item_id        String
-  // external_item_id while this commitment is open, null once it's withdrawn.
-  // The one-commitment-per-item rule is on this column, so a withdrawn row
-  // (kept for the sale's history) doesn't block committing that item again.
-  // Postgres lets a unique index hold any number of nulls.
+  // One row per purchase (sale) committed to an item. Buying more of an item
+  // already committed adds another row: when its tracking is added, the
+  // provider's single commitment for the item is raised by its quantity, so
+  // rows with the same external_commitment_id share one provider commitment
+  // and `quantity` is this purchase's share of it.
+  // external_item_id while this row is open, null once it's withdrawn.
   open_item_id            String?
   // Null while status is "pending": logged from Log Purchase with no tracking
   // number yet, so nothing has been committed with the provider. Filled in
   // when the tracking number is added and the user confirms the commit.
-  external_commitment_id  String?           @unique
+  external_commitment_id  String?
   quantity                Int
+  // Why this purchase couldn't be committed (e.g. the provider refused to
+  // raise the commitment: deal limit reached or closed). The row stays
+  // "pending" so it can be tried again. Null once committed.
+  commit_error            String?
   // Mirrors the provider deal's own status at commit time (active/expired/
   // closed) plus "withdrawn" for our own DELETE, "pending" for a purchase
   // logged before it shipped (not committed yet), and "committing" while that
@@ -780,7 +786,8 @@ model CashoutCommitment {
   created_at              DateTime          @default(now())
   updated_at              DateTime          @updatedAt
 
-  @@unique([connection_id, open_item_id])
+  @@index([connection_id, open_item_id])
+  @@index([external_commitment_id])
   @@index([user_id])
   @@index([connection_id])
 }

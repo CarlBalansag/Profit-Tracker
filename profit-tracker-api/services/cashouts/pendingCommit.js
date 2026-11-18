@@ -9,10 +9,17 @@
 // The commit uses the provider's payout at that moment, not the one from when
 // the purchase was logged, and the sale's price follows it. If the deal has
 // closed, nothing is committed and the row stays pending.
+//
+// Buying more of an item already committed: the provider keeps one commitment
+// per item, so the first purchase to be committed creates it and each later
+// one raises it by its own quantity. If the provider refuses (limit reached,
+// deal closed), the purchase stays logged and pending, with a note saying so
+// (commit_error) -- it can be tried again later.
 const prisma = require('../../prisma');
 const {
   connectionAndAdapter, commitWithProvider, recoverStuck, sendNewTracking,
   cleanTrackingCode, cleanInsuredValue, cleanQuantity,
+  activeGroupFor, withItemLock, setProviderQuantity, refusedNote, isRefusal,
 } = require('./commits');
 const { fetchConnectionDeals } = require('./service');
 
@@ -52,8 +59,12 @@ async function previewPending(userId, commitmentId) {
   }
   if (record.status !== 'pending') throw fail(409, 'This purchase has already been committed.');
   const offer = await currentOffer(userId, record);
+  const group = await activeGroupFor(record.connection_id, record.external_item_id, { exceptId: record.id });
   return {
     id: record.id,
+    // Already committed for this item: this purchase raises that commitment.
+    adds_to: group ? { committed: group.total, new_total: group.total + record.quantity } : null,
+    commit_error: record.commit_error || null,
     cashout: record.connection?.display_name || record.connection?.provider || 'the cashout',
     deal_name: offer.deal?.name || null,
     // EB's own name for the item it will commit to (it names the color), not
@@ -82,87 +93,119 @@ async function commitPending(userId, commitmentId, { insuredValue } = {}) {
   const tracking = cleanTrackingCode(record.sale.tracking_number);
   const insured = cleanInsuredValue(insuredValue);
   const quantity = cleanQuantity(record.quantity);
+  const cashout = record.connection?.display_name || record.connection?.provider || 'The cashout';
 
   const offer = await currentOffer(userId, record);
-  if (!offer.available) throw fail(409, `${offer.reason} Nothing was committed; the sale stays marked not committed.`);
+  if (!offer.available) {
+    // A closed or delisted deal is kept on the purchase as its reason; a
+    // failed lookup isn't (it may just be a blip).
+    if (offer.deal || /no longer listed/.test(offer.reason)) {
+      await prisma.cashoutCommitment.update({
+        where: { id: record.id },
+        data: { commit_error: `${offer.reason} This purchase is logged but not committed. Contact ${cashout} about these units, or move the sale to another cashout.` },
+      });
+    }
+    throw fail(409, `${offer.reason} Nothing was committed; the sale stays marked not committed.`);
+  }
 
   const ctx = await connectionAndAdapter(userId, record.connection_id);
 
-  // Claim the row first, so a double click or a second tab can't commit twice.
-  // updated_at is set so a crash mid-way can be told apart from a slow commit.
-  const claim = await prisma.cashoutCommitment.updateMany({
-    where: { id: record.id, user_id: userId, status: 'pending' },
-    data: { status: 'committing', updated_at: new Date() },
-  });
-  if (claim.count !== 1) throw fail(409, 'This purchase is already being committed.');
+  return withItemLock(record.connection_id, record.external_item_id, async () => {
+    // Claim the row first, so a double click or a second tab can't commit twice.
+    // updated_at is set so a crash mid-way can be told apart from a slow commit.
+    const claim = await prisma.cashoutCommitment.updateMany({
+      where: { id: record.id, user_id: userId, status: 'pending' },
+      data: { status: 'committing', updated_at: new Date() },
+    });
+    if (claim.count !== 1) throw fail(409, 'This purchase is already being committed.');
 
-  let preview;
-  try {
-    ({ preview } = await commitWithProvider(userId, ctx, {
-      dealId: record.external_deal_id, itemId: record.external_item_id, quantity, commitmentId: record.id,
-    }));
-  } catch (err) {
-    // No answer from the provider: the row stays "committing" (so nothing can
-    // send it twice) until the provider is asked again and the row follows it.
-    if (!err.ambiguous) {
-      await prisma.cashoutCommitment.update({ where: { id: record.id }, data: { status: 'pending' } });
+    const group = await activeGroupFor(record.connection_id, record.external_item_id, { exceptId: record.id });
+    let externalId;
+    let ownQuantity = quantity;
+    try {
+      if (group) {
+        // Raise the item's commitment by this purchase's units.
+        await setProviderQuantity(userId, ctx, {
+          externalId: group.externalId, total: group.total + quantity, commitmentId: record.id, action: 'raise',
+        });
+        externalId = group.externalId;
+      } else {
+        const { preview } = await commitWithProvider(userId, ctx, {
+          dealId: record.external_deal_id, itemId: record.external_item_id, quantity, commitmentId: record.id,
+        });
+        externalId = preview.id;
+        ownQuantity = preview.quantity ?? quantity;
+      }
+    } catch (err) {
+      // No answer from the provider: the row stays "committing" (so nothing can
+      // send it twice) until the provider is asked again and the row follows it.
+      if (err.ambiguous) throw err;
+      // The provider said no: kept as a pending purchase with the reason.
+      const refused = err.refused || isRefusal(err);
+      const note = refused ? refusedNote(cashout, quantity, err.message, { raise: Boolean(group) }) : null;
+      await prisma.cashoutCommitment.update({
+        where: { id: record.id },
+        data: { status: 'pending', ...(note ? { commit_error: note } : {}) },
+      });
+      throw note ? Object.assign(fail(err.status || 409, note), { refused: true }) : err;
     }
-    throw err;
-  }
-  // The commitment is real on the provider's side from here, so it's saved
-  // before anything else can fail. If this save fails, the row stays
-  // "committing" and is settled from the provider's own record later.
-  try {
-    await prisma.cashoutCommitment.update({
-      where: { id: record.id },
-      data: { status: 'active', external_commitment_id: preview.id, quantity: preview.quantity ?? quantity },
-    });
-  } catch (err) {
-    throw fail(500, `${ctx.conn.display_name || 'The cashout'} accepted the commit, but saving it here failed (${err.message}). It will show as committed once the app checks with ${ctx.conn.display_name || 'the cashout'} again; don't commit it a second time.`);
-  }
+    // The commitment is real on the provider's side from here, so it's saved
+    // before anything else can fail. If this save fails, the row stays
+    // "committing" and is settled from the provider's own record later.
+    try {
+      await prisma.cashoutCommitment.update({
+        where: { id: record.id },
+        data: { status: 'active', external_commitment_id: externalId, quantity: ownQuantity, commit_error: null },
+      });
+    } catch (err) {
+      throw fail(500, `${ctx.conn.display_name || 'The cashout'} accepted the commit, but saving it here failed (${err.message}). It will show as committed once the app checks with ${ctx.conn.display_name || 'the cashout'} again; don't commit it a second time.`);
+    }
 
-  let trackingSubmitted = false;
-  let trackingShared = false;
-  let trackingError = null;
-  try {
-    // Same box as an item already committed: its tracking is already with the
-    // cashout, so it isn't sent a second time.
-    const sent = await sendNewTracking(userId, ctx, {
-      codes: [tracking],
-      description: `${offer.deal.name || 'Cashout deal'} x${quantity}`,
-      insuredValue: insured,
-      commitmentId: record.id,
-    });
-    trackingShared = sent.shared.length > 0;
-    trackingSubmitted = true;
-  } catch (err) {
-    trackingError = err.message;
-  }
+    let trackingSubmitted = false;
+    let trackingShared = false;
+    let trackingError = null;
+    try {
+      // Same box as an item already committed: its tracking is already with the
+      // cashout, so it isn't sent a second time.
+      const sent = await sendNewTracking(userId, ctx, {
+        codes: [tracking],
+        description: `${offer.deal.name || 'Cashout deal'} x${quantity}`,
+        insuredValue: insured,
+        commitmentId: record.id,
+      });
+      trackingShared = sent.shared.length > 0;
+      trackingSubmitted = true;
+    } catch (err) {
+      trackingError = err.message;
+    }
 
-  const payoutChanged = Boolean(offer.payout) && Number(record.sale.unit_price) !== offer.payout;
-  const { commitment, sale } = await prisma.$transaction(async (tx) => ({
-    commitment: await tx.cashoutCommitment.update({
-      where: { id: record.id },
-      data: {
-        tracking_codes: trackingSubmitted ? [tracking] : [],
-        tracking_submitted_at: trackingSubmitted ? new Date() : null,
-        tracking_error: trackingError,
-      },
-    }),
-    sale: payoutChanged
-      ? await tx.sales.update({ where: { id: record.sale.id }, data: { unit_price: offer.payout } })
-      : await tx.sales.findUnique({ where: { id: record.sale.id } }),
-  }));
+    const payoutChanged = Boolean(offer.payout) && Number(record.sale.unit_price) !== offer.payout;
+    const { commitment, sale } = await prisma.$transaction(async (tx) => ({
+      commitment: await tx.cashoutCommitment.update({
+        where: { id: record.id },
+        data: {
+          tracking_codes: trackingSubmitted ? [tracking] : [],
+          tracking_submitted_at: trackingSubmitted ? new Date() : null,
+          tracking_error: trackingError,
+        },
+      }),
+      sale: payoutChanged
+        ? await tx.sales.update({ where: { id: record.sale.id }, data: { unit_price: offer.payout } })
+        : await tx.sales.findUnique({ where: { id: record.sale.id } }),
+    }));
 
-  return {
-    commitment,
-    sale,
-    trackingSubmitted,
-    trackingShared,
-    trackingError,
-    payout: offer.payout,
-    previousPayout: payoutChanged ? Number(record.sale.unit_price) : null,
-  };
+    return {
+      commitment,
+      sale,
+      trackingSubmitted,
+      trackingShared,
+      trackingError,
+      payout: offer.payout,
+      previousPayout: payoutChanged ? Number(record.sale.unit_price) : null,
+      // Added to a commitment the item already had: its new total.
+      raisedTo: group ? group.total + quantity : null,
+    };
+  });
 }
 
 // For the sale routes: the pending commitment to offer, when a sale has just

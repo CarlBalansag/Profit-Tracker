@@ -12,6 +12,7 @@ import {
   Layers,
   X,
   Package,
+  ChevronDown,
   Star,
   Table,
   LayoutGrid,
@@ -931,8 +932,36 @@ const needsTrackingSend = (c) => {
   return !(c.tracking_codes || []).some((code) => String(code).toUpperCase() === number);
 };
 
+// Purchases of one item that share the cashout's single commitment for it
+// (bought more after committing) are one group: open rows of the same item on
+// the same connection. Withdrawn rows stay on their own, as history.
+function groupCommitments(commitments) {
+  const groups = [];
+  const byKey = new Map();
+  for (const c of commitments) {
+    const open = c.open_item_id && ['active', 'pending', 'committing'].includes(c.status);
+    const key = open ? `${c.connection_id}:${c.open_item_id}` : `row:${c.id}`;
+    if (!byKey.has(key)) {
+      const group = { key, rows: [] };
+      byKey.set(key, group);
+      groups.push(group);
+    }
+    byKey.get(key).rows.push(c);
+  }
+  for (const g of groups) {
+    g.committed = g.rows.filter((r) => r.status === 'active').reduce((n, r) => n + (Number(r.quantity) || 0), 0);
+    g.waiting = g.rows.filter((r) => r.status !== 'active' && r.status !== 'withdrawn').reduce((n, r) => n + (Number(r.quantity) || 0), 0);
+  }
+  return groups;
+}
+
+const ACTION_BTN = 'px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap';
+const PRIMARY_BTN = `${ACTION_BTN} bg-[var(--dp-accent)] text-white hover:opacity-90 transition-opacity`;
+const QUIET_BTN = `${ACTION_BTN} border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)] transition-colors`;
+
 function CommitmentsPanel({ commitments, allDeals }) {
   const { deleteCommitment } = useCashoutMutations();
+  const [openGroups, setOpenGroups] = useState(() => new Set());
 
   if (commitments.length === 0) {
     return (
@@ -942,17 +971,236 @@ function CommitmentsPanel({ commitments, allDeals }) {
     );
   }
 
-  const withdraw = async (commitment) => {
+  const groups = groupCommitments(commitments);
+  const toggle = (key) => setOpenGroups((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+
+  // One purchase off its commitment. When others share it, the commitment is
+  // lowered by this purchase's units instead of withdrawn.
+  const withdraw = async (commitment, group) => {
     const pending = commitment.status === 'pending';
+    const shared = !pending && group && group.committed > commitment.quantity;
     if (!confirm(pending
       ? 'Remove this from Commitments? Nothing was committed to the cashout, so nothing is sent there. The purchase and sale stay.'
-      : 'Withdraw this commitment? The cashout frees the quantity back to the deal immediately.')) return;
+      : shared
+        ? `Take these ${commitment.quantity} off your commitment? It goes from ${group.committed} to ${group.committed - commitment.quantity} with the cashout. The purchase and sale stay.`
+        : 'Withdraw this commitment? The cashout frees the quantity back to the deal immediately.')) return;
     try {
-      await deleteCommitment.mutateAsync(commitment.id);
-      toast.success(pending ? 'Removed. The purchase and sale are still there.' : 'Commitment withdrawn.');
+      await deleteCommitment.mutateAsync({ id: commitment.id });
+      toast.success(pending ? 'Removed. The purchase and sale are still there.' : shared ? `Commitment lowered to ${group.committed - commitment.quantity}.` : 'Commitment withdrawn.');
     } catch (err) {
       toast.error(err.message);
     }
+  };
+
+  const withdrawAll = async (group) => {
+    const first = group.rows.find((r) => r.status === 'active');
+    if (!first) return;
+    if (!confirm(`Withdraw the whole commitment (${group.committed})? The cashout frees it back to the deal immediately. The purchases and sales stay.`)) return;
+    try {
+      await deleteCommitment.mutateAsync({ id: first.id, all: true });
+      toast.success('Commitment withdrawn.');
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const itemInfo = (c) => {
+    const deal = allDeals.find((d) => String(d.id) === c.external_deal_id);
+    return {
+      deal,
+      itemName: c.sale?.inventory?.product_name || deal?.name || `Deal #${c.external_deal_id}`,
+      upc: deal?.items?.[0]?.upcs?.[0],
+    };
+  };
+
+  const statusCell = (c) => (
+    <>
+      {c.status === 'withdrawn' ? (
+        <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[var(--dp-hover-bg)] text-[var(--dp-text-label)]">
+          Withdrawn
+        </span>
+      ) : c.status === 'pending' || c.status === 'committing' ? (
+        <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-500/15 text-sky-300"
+          title={c.sale?.tracking_number ? 'Has tracking, not committed to the cashout yet' : 'Logged before it shipped. Add its tracking number to commit.'}>
+          {c.status === 'committing' ? 'Committing…' : 'Not committed'}
+        </span>
+      ) : c.sale?.workflow_status ? (
+        <StatusChip status={c.sale.workflow_status} />
+      ) : (
+        <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-500/15 text-amber-400">
+          Committed
+        </span>
+      )}
+      {c.status === 'pending' && c.commit_error && (
+        <div className="mt-1 text-[11px] leading-snug text-rose-400 whitespace-normal" role="note">{c.commit_error}</div>
+      )}
+    </>
+  );
+
+  const trackingCell = (c) => (
+    <>
+      {c.tracking_codes?.length > 0 && (
+        <div className="text-[11px] text-[var(--dp-text-secondary)] font-mono truncate" title={c.tracking_codes.join(', ')}>
+          {c.tracking_codes.join(', ')}
+        </div>
+      )}
+      {c.tracking_error && (
+        <div className="text-[11px] text-rose-400 mt-0.5" title={c.tracking_error}>Tracking failed</div>
+      )}
+      {c.status === 'pending' && c.sale?.tracking_number && (
+        <div className="text-[11px] text-[var(--dp-text-secondary)] font-mono truncate" title={c.sale.tracking_number}>{c.sale.tracking_number}</div>
+      )}
+      {!c.tracking_codes?.length && !c.tracking_error && !(c.status === 'pending' && c.sale?.tracking_number) && <span className="text-[var(--dp-text-label)]">—</span>}
+    </>
+  );
+
+  const actionsCell = (c, group) => (
+    <>
+      {c.status === 'pending' && (
+        <div className="inline-flex gap-1.5">
+          {c.sale?.tracking_number && (
+            <button type="button" onClick={() => offerPendingCommit(c.id)} className={PRIMARY_BTN}>
+              {c.commit_error ? 'Try again' : 'Commit'}
+            </button>
+          )}
+          <button type="button" onClick={() => withdraw(c, group)} className={QUIET_BTN}>Remove</button>
+        </div>
+      )}
+      {c.status === 'active' && (
+        <div className="inline-flex gap-1.5">
+          {needsTrackingSend(c) && (
+            <button
+              type="button"
+              onClick={() => offerTrackingSend({ commitment_id: c.id, tracking_number: c.sale.tracking_number, cashout: c.connection?.display_name })}
+              className={PRIMARY_BTN}
+            >
+              Send tracking
+            </button>
+          )}
+          <button type="button" onClick={() => withdraw(c, group)} className={QUIET_BTN}>
+            {group && group.rows.length > 1 && group.committed > c.quantity ? 'Take off' : 'Withdraw'}
+          </button>
+        </div>
+      )}
+    </>
+  );
+
+  // One purchase's row: on its own, or nested under its item's group.
+  const purchaseRow = (c, group, nested = false) => {
+    const { deal, itemName, upc } = itemInfo(c);
+    const unitCost = c.sale?.inventory?.unit_purchase_cost;
+    const unitPayout = c.sale?.unit_price;
+    const account = c.sale?.inventory?.account?.name;
+    return (
+      <tr key={c.id} className={`hover:bg-[var(--dp-hover-bg)] transition-colors ${c.status === 'withdrawn' ? 'opacity-60' : ''} ${nested ? 'bg-[var(--dp-hover-bg)]/40' : ''}`}>
+        <td className={`py-3 ${nested ? 'pl-12 pr-4' : 'px-4'}`}>
+          <div className="flex items-start gap-3">
+            {!nested && (deal?.imageUrl ? (
+              <img
+                src={deal.imageUrl}
+                alt={itemName}
+                className="w-10 h-10 rounded-lg object-contain bg-white/5 border border-[color:var(--dp-border)] flex-shrink-0"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-lg bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] flex items-center justify-center text-[var(--dp-text-label)] flex-shrink-0">
+                <Package size={16} />
+              </div>
+            ))}
+            <div className="min-w-0">
+              {!nested && <div className="font-semibold text-[var(--dp-text-primary)] truncate" title={itemName}>{itemName}</div>}
+              {!nested && upc && <div className="text-[12px] text-[var(--dp-text-label)] font-mono truncate">UPC: {upc}</div>}
+              <div className={`text-[12px] ${nested ? 'text-[var(--dp-text-secondary)]' : 'text-[var(--dp-text-label)] mt-0.5'}`}>
+                Qty {c.quantity} · {new Date(c.created_at).toLocaleDateString()}{account ? ` · ${account}` : ''}
+              </div>
+            </div>
+          </div>
+        </td>
+        <td className="py-3 px-3">
+          {!nested && <CashoutName name={c.connection?.display_name || c.connection?.provider} />}
+        </td>
+        <td className="py-3 px-3 tabular-nums text-[var(--dp-text-secondary)]">
+          {unitCost != null ? `$${formatMoney(unitCost)}` : '—'}
+        </td>
+        <td className="py-3 px-3">
+          <div className="font-semibold tabular-nums text-[var(--dp-text-primary)]">
+            {unitPayout != null ? `$${formatMoney(unitPayout)}` : '—'}
+          </div>
+        </td>
+        {/* Status -- the sale's real workflow status when one exists
+            (the same vocabulary the Statuses page uses), since that
+            already implies "logged" without a separate badge. */}
+        <td className="py-3 px-3">{statusCell(c)}</td>
+        <td className="py-3 px-3">{trackingCell(c)}</td>
+        <td className="py-3 pl-3 pr-6 whitespace-nowrap text-right">{actionsCell(c, group)}</td>
+      </tr>
+    );
+  };
+
+  // Several purchases on one commitment: a summary row that opens to them.
+  const groupRows = (group) => {
+    const first = group.rows[0];
+    const { deal, itemName, upc } = itemInfo(first);
+    const expanded = openGroups.has(group.key);
+    const flagged = group.rows.some((r) => r.status === 'pending' && r.commit_error);
+    return [
+      <tr key={group.key} className="hover:bg-[var(--dp-hover-bg)] transition-colors">
+        <td className="py-3 px-4">
+          <div className="flex items-start gap-3">
+            {deal?.imageUrl ? (
+              <img src={deal.imageUrl} alt={itemName} className="w-10 h-10 rounded-lg object-contain bg-white/5 border border-[color:var(--dp-border)] flex-shrink-0" />
+            ) : (
+              <div className="w-10 h-10 rounded-lg bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] flex items-center justify-center text-[var(--dp-text-label)] flex-shrink-0">
+                <Package size={16} />
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="font-semibold text-[var(--dp-text-primary)] truncate" title={itemName}>{itemName}</div>
+              {upc && <div className="text-[12px] text-[var(--dp-text-label)] font-mono truncate">UPC: {upc}</div>}
+              <button
+                type="button"
+                onClick={() => toggle(group.key)}
+                aria-expanded={expanded}
+                className="mt-0.5 inline-flex items-center gap-1 text-[12px] font-medium text-[var(--dp-accent)] hover:underline"
+              >
+                <ChevronDown size={12} className={`transition-transform ${expanded ? '' : '-rotate-90'}`} aria-hidden="true" />
+                {group.rows.length} purchases
+              </button>
+            </div>
+          </div>
+        </td>
+        <td className="py-3 px-3">
+          <CashoutName name={first.connection?.display_name || first.connection?.provider} />
+        </td>
+        <td className="py-3 px-3 text-[var(--dp-text-label)]">—</td>
+        <td className="py-3 px-3">
+          <div className="font-semibold tabular-nums text-[var(--dp-text-primary)]">
+            {first.sale?.unit_price != null ? `$${formatMoney(first.sale.unit_price)}` : '—'}
+          </div>
+        </td>
+        <td className="py-3 px-3">
+          <div className="text-[12px] font-semibold text-[var(--dp-text-primary)] tabular-nums">
+            {group.committed > 0 ? `${group.committed} committed` : 'Not committed'}
+          </div>
+          {group.waiting > 0 && (
+            <div className="text-[11px] text-sky-300 tabular-nums">{group.waiting} waiting to ship</div>
+          )}
+          {flagged && <div className="text-[11px] text-rose-400">Needs attention</div>}
+        </td>
+        <td className="py-3 px-3 text-[11px] text-[var(--dp-text-secondary)]">
+          {group.rows.filter((r) => r.tracking_codes?.length).length} of {group.rows.length} sent
+        </td>
+        <td className="py-3 pl-3 pr-6 whitespace-nowrap text-right">
+          {group.committed > 0 && (
+            <button type="button" onClick={() => withdrawAll(group)} className={QUIET_BTN}>Withdraw all</button>
+          )}
+        </td>
+      </tr>,
+      ...(expanded ? group.rows.map((c) => purchaseRow(c, group, true)) : []),
+    ];
   };
 
   return (
@@ -980,139 +1228,7 @@ function CommitmentsPanel({ commitments, allDeals }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-[color:var(--dp-border)]">
-            {commitments.map((c) => {
-              const deal = allDeals.find((d) => String(d.id) === c.external_deal_id);
-              const itemName = c.sale?.inventory?.product_name || deal?.name || `Deal #${c.external_deal_id}`;
-              const upc = deal?.items?.[0]?.upcs?.[0];
-              const unitCost = c.sale?.inventory?.unit_purchase_cost;
-              const unitPayout = c.sale?.unit_price;
-              return (
-                <tr key={c.id} className={`hover:bg-[var(--dp-hover-bg)] transition-colors ${c.status === 'withdrawn' ? 'opacity-60' : ''}`}>
-                  {/* Item */}
-                  <td className="py-3 px-4">
-                    <div className="flex items-start gap-3">
-                      {deal?.imageUrl ? (
-                        <img
-                          src={deal.imageUrl}
-                          alt={itemName}
-                          className="w-10 h-10 rounded-lg object-contain bg-white/5 border border-[color:var(--dp-border)] flex-shrink-0"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-lg bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] flex items-center justify-center text-[var(--dp-text-label)] flex-shrink-0">
-                          <Package size={16} />
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <div className="font-semibold text-[var(--dp-text-primary)] truncate" title={itemName}>{itemName}</div>
-                        {upc && <div className="text-[12px] text-[var(--dp-text-label)] font-mono truncate">UPC: {upc}</div>}
-                        <div className="text-[12px] text-[var(--dp-text-label)] mt-0.5">
-                          Qty {c.quantity} · {new Date(c.created_at).toLocaleDateString()}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-
-                  {/* Cashout */}
-                  <td className="py-3 px-3">
-                    <CashoutName name={c.connection?.display_name || c.connection?.provider} />
-                  </td>
-
-                  {/* Bought At */}
-                  <td className="py-3 px-3 tabular-nums text-[var(--dp-text-secondary)]">
-                    {unitCost != null ? `$${formatMoney(unitCost)}` : '—'}
-                  </td>
-
-                  {/* Committed At */}
-                  <td className="py-3 px-3">
-                    <div className="font-semibold tabular-nums text-[var(--dp-text-primary)]">
-                      {unitPayout != null ? `$${formatMoney(unitPayout)}` : '—'}
-                    </div>
-                  </td>
-
-                  {/* Status -- the sale's real workflow status when one exists
-                      (the same vocabulary the Statuses page uses), since that
-                      already implies "logged" without a separate badge. */}
-                  <td className="py-3 px-3">
-                    {c.status === 'withdrawn' ? (
-                      <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[var(--dp-hover-bg)] text-[var(--dp-text-label)]">
-                        Withdrawn
-                      </span>
-                    ) : c.status === 'pending' || c.status === 'committing' ? (
-                      <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-500/15 text-sky-300"
-                        title={c.sale?.tracking_number ? 'Has tracking, not committed to the cashout yet' : 'Logged before it shipped. Add its tracking number to commit.'}>
-                        {c.status === 'committing' ? 'Committing…' : 'Not committed'}
-                      </span>
-                    ) : c.sale?.workflow_status ? (
-                      <StatusChip status={c.sale.workflow_status} />
-                    ) : (
-                      <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-500/15 text-amber-400">
-                        Committed
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Tracking */}
-                  <td className="py-3 px-3">
-                    {c.tracking_codes?.length > 0 && (
-                      <div className="text-[11px] text-[var(--dp-text-secondary)] font-mono truncate" title={c.tracking_codes.join(', ')}>
-                        {c.tracking_codes.join(', ')}
-                      </div>
-                    )}
-                    {c.tracking_error && (
-                      <div className="text-[11px] text-rose-400 mt-0.5" title={c.tracking_error}>Tracking failed</div>
-                    )}
-                    {c.status === 'pending' && c.sale?.tracking_number && (
-                      <div className="text-[11px] text-[var(--dp-text-secondary)] font-mono truncate" title={c.sale.tracking_number}>{c.sale.tracking_number}</div>
-                    )}
-                    {!c.tracking_codes?.length && !c.tracking_error && !(c.status === 'pending' && c.sale?.tracking_number) && <span className="text-[var(--dp-text-label)]">—</span>}
-                  </td>
-
-                  {/* Actions */}
-                  <td className="py-3 pl-3 pr-6 whitespace-nowrap text-right">
-                    {c.status === 'pending' && (
-                      <div className="inline-flex gap-1.5">
-                        {c.sale?.tracking_number && (
-                          <button
-                            type="button"
-                            onClick={() => offerPendingCommit(c.id)}
-                            className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap bg-[var(--dp-accent)] text-white hover:opacity-90 transition-opacity"
-                          >
-                            Commit
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => withdraw(c)}
-                          className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    )}
-                    {c.status === 'active' && (
-                      <div className="inline-flex gap-1.5">
-                        {needsTrackingSend(c) && (
-                          <button
-                            type="button"
-                            onClick={() => offerTrackingSend({ commitment_id: c.id, tracking_number: c.sale.tracking_number, cashout: c.connection?.display_name })}
-                            className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap bg-[var(--dp-accent)] text-white hover:opacity-90 transition-opacity"
-                          >
-                            Send tracking
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => withdraw(c)}
-                          className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
-                        >
-                          Withdraw
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
+            {groups.flatMap((group) => (group.rows.length > 1 ? groupRows(group) : [purchaseRow(group.rows[0], group)]))}
           </tbody>
         </table>
       </div>
@@ -1252,6 +1368,7 @@ function LogPurchaseModal({ product, onClose }) {
   const { data: platforms = [] } = usePlatforms();
   const { data: paymentMethods = [] } = usePaymentMethods();
   const { logPurchase } = useCashoutMutations();
+  const { data: allCommitments = [] } = useCashoutCommitments();
   const vendors = useMemo(() => platforms.filter((p) => p.type === 'Vendor'), [platforms]);
   const cashoutGroups = useMemo(() => platforms.filter((p) => p.type === 'Cashout'), [platforms]);
   // Points4Days can't take a commitment from here yet, so this only saves the
@@ -1315,6 +1432,20 @@ function LogPurchaseModal({ product, onClose }) {
   });
   const cashbackEarned = Math.round(cashbackBase * (cashbackRate / 100) * 100) / 100;
   const selectedItem = items.find((i) => i.id === itemId);
+  // Buying more of an item already committed (or logged and waiting to ship):
+  // this purchase is its own record, and its units are added to the item's
+  // one commitment with the cashout when it ships.
+  const already = useMemo(() => {
+    const open = itemId ? allCommitments.filter((c) => c.connection_id === deal.connectionId
+      && String(c.external_item_id) === String(itemId) && c.open_item_id
+      && ['active', 'pending', 'committing'].includes(c.status)) : [];
+    const sum = (list) => list.reduce((n, c) => n + (Number(c.quantity) || 0), 0);
+    return {
+      committed: sum(open.filter((c) => c.status === 'active')),
+      waiting: sum(open.filter((c) => c.status !== 'active')),
+    };
+  }, [allCommitments, deal.connectionId, itemId]);
+  const addsToExisting = !recordOnly && (already.committed > 0 || already.waiting > 0);
 
   const modalRef = useModalKeyboard(true, () => !logPurchase.isPending && onClose());
 
@@ -1368,6 +1499,27 @@ function LogPurchaseModal({ product, onClose }) {
         setStage('saved');
         return;
       }
+      if (result.commitError) {
+        toast.warning(`Logged, but not committed to ${deal.connectionName}.`, { description: result.commitError, duration: 15000 });
+        onClose();
+        return;
+      }
+      if ((result.commitPending ?? result.commit_pending) && result.addsToCommitment) {
+        toast.success(`Logged as its own purchase. Not committed to ${deal.connectionName} yet.`, {
+          description: `When it ships, add the tracking number and these ${quantity} will be added to your commitment for this item.`,
+        });
+        onClose();
+        return;
+      }
+      if (result.addedTo) {
+        toast.success(`Logged and added to your commitment: now ${result.addedTo} with ${deal.connectionName}.`, {
+          description: (result.trackingSubmitted ?? result.tracking_submitted)
+            ? (result.trackingShared ? "That tracking number was already sent with another item, so it wasn't sent again." : 'Tracking sent to the cashout.')
+            : (result.trackingError || 'Tracking failed to send. Send it again from the Commitments section.'),
+        });
+        onClose();
+        return;
+      }
       if (result.commitPending ?? result.commit_pending) {
         toast.success(`Logged. Not committed to ${deal.connectionName} yet.`, {
           description: "Add the tracking number when it ships, and you'll be asked to commit then, at that day's payout.",
@@ -1416,9 +1568,11 @@ function LogPurchaseModal({ product, onClose }) {
 
   if (stage === 'confirm') {
     return (
-      <ModalShell modalRef={modalRef} title="Commit to this deal?" subtitle={product.name} onClose={onClose} busy={logPurchase.isPending}>
+      <ModalShell modalRef={modalRef} title={already.committed ? 'Add to your commitment?' : 'Commit to this deal?'} subtitle={product.name} onClose={onClose} busy={logPurchase.isPending}>
         <p className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
-          This is a real, binding pledge to {deal.connectionName}. It's sent as soon as you press Commit, along with your tracking number.
+          {already.committed
+            ? `This raises your binding commitment with ${deal.connectionName} for this item from ${already.committed} to ${already.committed + Number(quantity)}. It's sent as soon as you press Commit, along with your tracking number.`
+            : `This is a real, binding pledge to ${deal.connectionName}. It's sent as soon as you press Commit, along with your tracking number.`}
         </p>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
           <dt className="text-[var(--dp-text-label)]">Item</dt>
@@ -1614,6 +1768,13 @@ function LogPurchaseModal({ product, onClose }) {
             </div>
           </LpSection>
 
+          {addsToExisting && (
+            <p className="text-[11px] text-sky-300 bg-sky-500/10 border border-sky-500/30 rounded-lg px-3 py-2" data-testid="adds-to-commitment">
+              {already.committed > 0
+                ? `You already have ${already.committed} committed for this item${already.waiting ? ` and ${already.waiting} waiting to ship` : ''}. This is logged as its own purchase, and its ${quantity} ${tracking ? 'are added to that commitment now' : 'are added to that commitment when it ships'}.`
+                : `You already have ${already.waiting} of this item logged and waiting to ship. This is logged as its own purchase; each one is committed when its tracking number is added.`}
+            </p>
+          )}
           {error && <p role="alert" className="text-xs text-rose-400">{error}</p>}
         </div>
 

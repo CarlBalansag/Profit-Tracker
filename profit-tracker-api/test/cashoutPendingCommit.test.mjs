@@ -93,11 +93,13 @@ describe('Log Purchase without a tracking number', () => {
     expect(result.commitment).toMatchObject({ status: 'pending', external_commitment_id: null, sale_id: result.sale.id, quantity: 2 });
   });
 
-  it('refuses to log the same item twice while one is waiting', async () => {
+  it('logs the same item again while one is waiting, as its own purchase and its own pending row', async () => {
     const conn = seed();
-    await logWithoutTracking(conn);
-    await expect(logWithoutTracking(conn)).rejects.toThrow('already logged and waiting');
-    expect(harness.db.inventory).toHaveLength(2); // fixture + the first
+    const first = await logWithoutTracking(conn);
+    const second = await logWithoutTracking(conn);
+    expect(second).toMatchObject({ commitPending: true, addsToCommitment: true });
+    expect(harness.db.inventory).toHaveLength(3); // fixture + both
+    expect(harness.db.cashoutCommitment.map((c) => [c.sale_id, c.status])).toEqual([[first.sale.id, 'pending'], [second.sale.id, 'pending']]);
   });
 
   it('still requires a tracking number for a cashout that can only be recorded', async () => {
@@ -263,9 +265,9 @@ describe('committing a pending purchase', () => {
     const res = await call('POST', `/api/cashouts/commitments/${commitment.id}/commit`, {});
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Over the commit limit.');
+    expect(res.body.error).toMatch(/wouldn't commit these \d+ \(Over the commit limit\.\)\. This purchase is logged but not committed\. Contact /);
     expect(trackSpy).not.toHaveBeenCalled();
-    expect(harness.db.cashoutCommitment[0]).toMatchObject({ status: 'pending', external_commitment_id: null });
+    expect(harness.db.cashoutCommitment[0]).toMatchObject({ status: 'pending', external_commitment_id: null, commit_error: res.body.error });
   });
 
   it("won't commit before the sale has a tracking number", async () => {

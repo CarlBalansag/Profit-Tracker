@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { apiFetch, useInvalidate } from '../hooks/useApi';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { formatMoney } from '../utils/money';
-import { PENDING_COMMIT_EVENT, TRACKING_SEND_EVENT } from '../utils/pendingCashoutCommit';
+import { PENDING_COMMIT_EVENT, TRACKING_SEND_EVENT, COMMIT_LOWER_EVENT } from '../utils/pendingCashoutCommit';
 
 const readError = async (response) => {
   const body = await response.json().catch(() => ({}));
@@ -17,6 +17,7 @@ export default function PendingCashoutCommit() {
   // so the first question is whether that package is going to the cashout.
   const [pending, setPending] = useState(null);
   const [trackingSend, setTrackingSend] = useState(null);
+  const [lower, setLower] = useState(null);
 
   useEffect(() => {
     const onPending = (event) => {
@@ -26,13 +27,22 @@ export default function PendingCashoutCommit() {
     const onTrackingSend = (event) => {
       if (event.detail?.commitment_id) setTrackingSend(event.detail);
     };
+    const onLower = (event) => {
+      if (event.detail?.commitment_id) setLower(event.detail);
+    };
     window.addEventListener(PENDING_COMMIT_EVENT, onPending);
     window.addEventListener(TRACKING_SEND_EVENT, onTrackingSend);
+    window.addEventListener(COMMIT_LOWER_EVENT, onLower);
     return () => {
       window.removeEventListener(PENDING_COMMIT_EVENT, onPending);
       window.removeEventListener(TRACKING_SEND_EVENT, onTrackingSend);
+      window.removeEventListener(COMMIT_LOWER_EVENT, onLower);
     };
   }, []);
+
+  if (lower && !pending && !trackingSend) {
+    return <LowerCommitDialog key={lower.commitment_id} detail={lower} onClose={() => setLower(null)} />;
+  }
 
   if (trackingSend && !pending) {
     return <SendTrackingDialog key={trackingSend.commitment_id} detail={trackingSend} onClose={() => setTrackingSend(null)} />;
@@ -98,6 +108,66 @@ function SendTrackingDialog({ detail, onClose }) {
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90 disabled:opacity-50">
             {busy && <RefreshCw size={12} className="animate-spin" />}
             {busy ? 'Sending…' : 'Send'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// A committed purchase's sale won't ship any more (cancelled, voided,
+// returned). Asks before taking its units off the cashout commitment: lowered
+// when other purchases are still on it, withdrawn when it's the last one.
+function LowerCommitDialog({ detail, onClose }) {
+  const invalidate = useInvalidate();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const keepRef = useRef(null);
+  const modalRef = useModalKeyboard(true, () => !busy && onClose(), keepRef);
+  const cashout = detail.cashout || 'the cashout';
+  const withdrawAll = !detail.remaining;
+  const title = withdrawAll ? `Withdraw your commitment with ${cashout}?` : `Lower your commitment with ${cashout}?`;
+
+  const confirmLower = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await apiFetch(`/api/cashouts/commitments/${detail.commitment_id}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(await readError(response));
+      invalidate.cashouts();
+      toast.success(withdrawAll ? `Commitment with ${cashout} withdrawn.` : `Commitment with ${cashout} lowered to ${detail.remaining}.`);
+      onClose();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div ref={modalRef} role="dialog" aria-modal="true" aria-label={title}
+        className="w-full max-w-md rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
+          <h3 className="font-bold text-base text-[var(--dp-text-primary)]">{title}</h3>
+          <button type="button" aria-label="Close" onClick={onClose} disabled={busy} className="text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]">
+            <X size={18} />
+          </button>
+        </div>
+        <p className="text-xs text-[var(--dp-text-secondary)]">
+          {withdrawAll
+            ? `These ${detail.quantity} were committed to ${cashout} and won't be sent now. Withdrawing frees them back to the deal.`
+            : `These ${detail.quantity} were committed to ${cashout} and won't be sent now. Your commitment goes from ${detail.total} to ${detail.remaining}; the other purchases on it stay committed.`}
+        </p>
+        {error && <p role="alert" className="text-xs text-rose-400">{error}</p>}
+        <div className="flex items-center justify-end gap-2 border-t border-[color:var(--dp-border)] pt-3">
+          <button type="button" ref={keepRef} onClick={onClose} disabled={busy}
+            className="px-3.5 py-2 text-xs font-medium rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)]">
+            Keep it
+          </button>
+          <button type="button" onClick={confirmLower} disabled={busy}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90 disabled:opacity-50">
+            {busy && <RefreshCw size={12} className="animate-spin" />}
+            {withdrawAll ? 'Withdraw' : `Lower to ${detail.remaining}`}
           </button>
         </div>
       </div>
@@ -213,7 +283,12 @@ function CommitDialog({ commitmentId, onClose }) {
       const priceNote = result.previousPayout != null
         ? ` The sale's payout changed from $${formatMoney(result.previousPayout)} to $${formatMoney(result.payout)} each.`
         : '';
-      if (result.trackingShared && result.trackingSubmitted) {
+      const raised = result.raisedTo ? ` Your commitment is now ${result.raisedTo}.` : '';
+      if (result.raisedTo && result.trackingSubmitted) {
+        toast.success(`Added to your commitment with ${preview.cashout}: now ${result.raisedTo}.`, {
+          description: `${result.trackingShared ? "That tracking number was already sent with another item, so it wasn't sent again." : 'Tracking sent.'}${priceNote}`,
+        });
+      } else if (result.trackingShared && result.trackingSubmitted) {
         toast.success(`Committed to ${preview.cashout}.`, {
           description: `That tracking number was already sent with another item, so it wasn't sent again.${priceNote}`,
         });
@@ -221,7 +296,7 @@ function CommitDialog({ commitmentId, onClose }) {
         toast.success(`Committed to ${preview.cashout}, and tracking sent.`, priceNote ? { description: priceNote.trim() } : undefined);
       } else {
         toast.success(`Committed to ${preview.cashout}, but tracking failed to send.`, {
-          description: `${result.trackingError || 'Send it again with Send tracking in Cashout > Commitments.'}${priceNote}`,
+          description: `${result.trackingError || 'Send it again with Send tracking in Cashout > Commitments.'}${raised}${priceNote}`,
         });
       }
       onClose();
@@ -269,8 +344,15 @@ function CommitDialog({ commitmentId, onClose }) {
 
         {preview?.available && (
           <>
+            {preview.commit_error && (
+              <p className="text-[11px] text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2">
+                Last try: {preview.commit_error}
+              </p>
+            )}
             <p className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
-              You added a tracking number to a purchase you logged before it shipped. Committing is a real, binding pledge to {preview.cashout}, sent with this tracking number.
+              {preview.adds_to
+                ? `You already have ${preview.adds_to.committed} of this item committed to ${preview.cashout}. Committing adds these ${qty}, raising your binding commitment to ${preview.adds_to.new_total}, and sends this tracking number.`
+                : `You added a tracking number to a purchase you logged before it shipped. Committing is a real, binding pledge to ${preview.cashout}, sent with this tracking number.`}
             </p>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
               <dt className="text-[var(--dp-text-label)]">Quantity</dt>

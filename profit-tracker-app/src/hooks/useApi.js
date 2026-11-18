@@ -1,7 +1,7 @@
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { EXPENSES_PAGE_KEY, RECEIPTS_PAGE_KEY } from './usePageCache';
 import { toast } from 'sonner';
-import { offerPendingCommit, offerTrackingSend } from '../utils/pendingCashoutCommit';
+import { offerPendingCommit, offerTrackingSend, offerCommitLower } from '../utils/pendingCashoutCommit';
 
 // Leave VITE_API_URL empty in production when Netlify redirects proxy /api and /auth (see netlify.toml).
 // Set it locally to the API dev server, e.g. http://localhost:3000.
@@ -20,6 +20,9 @@ export const apiFetch = (path, options = {}) => {
     }
     if (response.ok && RECORD_DELETE.test(path) && options.method === 'DELETE') {
       warnIfCommitmentStillActive(response);
+    }
+    if (response.ok && SALE_UNSHIPPED.test(path)) {
+      offerCommitLowerIfCommitted(response);
     }
     return response;
   });
@@ -41,6 +44,16 @@ const offerCashoutCommitIfPending = (response) => {
       // Already committed, and the cashout doesn't have this number yet.
       offerTrackingSend(body?.cashout_tracking_changed);
     })
+    .catch(() => {});
+};
+
+// A committed sale that was cancelled, voided or returned: the response says
+// so, and the app shell asks whether to take it off the cashout commitment.
+const SALE_UNSHIPPED = /^\/api\/sales\/[^/?]+\/actions\/(cancel_sale|void_sale|mark_returned)$/;
+const offerCommitLowerIfCommitted = (response) => {
+  if (typeof response.clone !== 'function') return;
+  response.clone().json()
+    .then((body) => offerCommitLower(body?.cashout_commit_lower))
     .catch(() => {});
 };
 
@@ -586,15 +599,19 @@ export const useCashoutMutations = () => {
     },
   });
 
+  // { id, all }: all withdraws the whole commitment, every purchase on it;
+  // otherwise only this purchase comes off it. A bare id works too.
   const deleteCommitment = useMutation({
-    mutationFn: (id) =>
-      apiFetch(`/api/cashouts/commitments/${id}`, { method: 'DELETE' }).then(async (r) => {
+    mutationFn: (arg) => {
+      const { id, all } = typeof arg === 'object' ? arg : { id: arg };
+      return apiFetch(`/api/cashouts/commitments/${id}${all ? '?all=true' : ''}`, { method: 'DELETE' }).then(async (r) => {
         if (!r.ok) {
           const e = await r.json().catch(() => ({}));
           throw new Error(e.error || 'Failed to withdraw this commitment');
         }
         return r.json();
-      }),
+      });
+    },
     onSuccess: invalidate,
   });
 

@@ -294,7 +294,9 @@ router.post('/commitments/:id/tracking', isAuthenticated, async (req, res) => {
 // DELETE /api/cashouts/commitments/:id — withdraw a commitment
 router.delete('/commitments/:id', isAuthenticated, async (req, res, next) => {
   try {
-    const commitment = await commitsService.deleteCommitment(req.user.id, req.params.id);
+    // ?all=true withdraws the whole provider commitment (every purchase on
+    // it); otherwise only this purchase's units come off it.
+    const commitment = await commitsService.deleteCommitment(req.user.id, req.params.id, { all: req.query.all === 'true' });
     res.json(commitment);
   } catch (err) {
     sendCashoutError(res, err);

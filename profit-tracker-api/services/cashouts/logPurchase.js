@@ -6,6 +6,7 @@ const { requireOwned, requireStoreAccount } = require('../ownership');
 const statusTransitions = require('../statusTransitions');
 const { getConnection } = require('./service');
 const commitsService = require('./commits');
+const pendingCommit = require('./pendingCommit');
 const { getAdapter } = require('./registry');
 
 const parseLocalDate = (str) => {
@@ -114,24 +115,28 @@ async function logPurchase(userId, {
   // through MCP, or an earlier Log Purchase whose save failed after the commit
   // went through) is used as is: nothing is committed a second time.
   let attachTo = null;
+  // Buying more of an item that already has purchases logged or committed:
+  // this purchase is saved first as its own pending row, then committed the
+  // same way adding a tracking number later does (it raises the provider's
+  // one commitment for the item, or creates it if none is committed yet).
+  let topUp = false;
   if (!recordOnly) {
-    // EB takes one open commitment per item, and so does our table. Checked
-    // before EB is called: a commit EB accepted that we then failed to save
-    // would leave a real pledge with no record of it here. A withdrawn
-    // commitment doesn't count -- its open_item_id is null.
-    let existing = await commitsService.openRowFor(conn.id, itemId);
-    if (existing) existing = await commitsService.recoverStuck(userId, existing);
-    if (existing && existing.status === 'active' && !existing.sale_id && existing.quantity === Number(qty)) {
-      attachTo = existing;
-    } else if (existing && existing.status === 'active' && !existing.sale_id) {
-      throw Object.assign(new Error(`You already have a commitment for this item for ${existing.quantity}, with no purchase logged. Log Purchase with quantity ${existing.quantity} to record it, or change the commitment's quantity first.`), { status: 409 });
-    } else if (existing) {
-      throw Object.assign(
-        new Error(existing.status === 'pending' || existing.status === 'committing'
-          ? 'This item is already logged and waiting to be committed. Add its tracking number to commit it.'
-          : 'You already have a commitment for this item. Change its quantity from Commitments instead.'),
-        { status: 409 },
-      );
+    // A withdrawn commitment doesn't count -- its open_item_id is null.
+    const open = await prisma.cashoutCommitment.findMany({ where: { connection_id: conn.id, open_item_id: String(itemId) } });
+    for (const row of open.filter((r) => r.status === 'committing')) await commitsService.recoverStuck(userId, row);
+    const settled = open.length
+      ? await prisma.cashoutCommitment.findMany({ where: { connection_id: conn.id, open_item_id: String(itemId) } })
+      : [];
+    // A commitment made without a purchase (through MCP, or an earlier Log
+    // Purchase whose save failed after the commit went through) is used as is:
+    // nothing is committed a second time.
+    const unattached = settled.find((r) => r.status === 'active' && !r.sale_id);
+    if (unattached && unattached.quantity === Number(qty)) {
+      attachTo = unattached;
+    } else if (unattached) {
+      throw Object.assign(new Error(`You already have a commitment for this item for ${unattached.quantity}, with no purchase logged. Log Purchase with quantity ${unattached.quantity} to record it, or change the commitment's quantity first.`), { status: 409 });
+    } else if (settled.length) {
+      topUp = true;
     }
     // The item has to be part of this deal, and the deal still open.
     if (!attachTo) await commitsService.requireLiveItem(userId, conn.id, dealId, itemId);
@@ -141,7 +146,7 @@ async function logPurchase(userId, {
   let trackingSubmitted = false;
   let trackingShared = false;
   let trackingError = null;
-  if (!recordOnly && (!deferCommit || attachTo)) {
+  if (!recordOnly && !topUp && (!deferCommit || attachTo)) {
     // Step 1: commit with EB. Left to throw straight through -- a failure here
     // (deal closed, already committed, over the limit) means nothing below runs.
     if (!attachTo) {
@@ -229,7 +234,7 @@ async function logPurchase(userId, {
       },
     });
 
-    if (deferCommit && !attachTo) {
+    if ((deferCommit || topUp) && !attachTo) {
       const pending = await tx.cashoutCommitment.create({
         data: {
           user_id: userId,
@@ -277,6 +282,50 @@ async function logPurchase(userId, {
   }
   const { inventory, sale, commitment: updatedCommitment } = books;
 
+  // More of an item already committed (or logged), with tracking in hand:
+  // commit it now through the same path as adding tracking later. The
+  // purchase is already saved, so a refusal leaves it logged and flagged.
+  if (topUp && !deferCommit) {
+    try {
+      const done = await pendingCommit.commitPending(userId, updatedCommitment.id, { insuredValue });
+      // The sale holds one tracking number; any others for this purchase go too.
+      if (codes.length > 1 && done.trackingSubmitted) {
+        try {
+          const ctx = await commitsService.connectionAndAdapter(userId, connectionId);
+          await commitsService.sendNewTracking(userId, ctx, {
+            codes: codes.slice(1), description: `${dealName || 'Cashout deal'} x${qty}`, insuredValue: insured, commitmentId: done.commitment.id,
+          });
+        } catch (err) {
+          done.trackingError = err.message;
+        }
+      }
+      return {
+        inventory,
+        sale: done.sale,
+        commitment: done.commitment,
+        trackingSubmitted: done.trackingSubmitted,
+        trackingShared: done.trackingShared,
+        trackingError: done.trackingError,
+        recordedOnly: false,
+        commitPending: false,
+        addedTo: done.raisedTo,
+      };
+    } catch (err) {
+      const kept = await prisma.cashoutCommitment.findFirst({ where: { id: updatedCommitment.id } });
+      return {
+        inventory,
+        sale,
+        commitment: kept,
+        trackingSubmitted: false,
+        trackingShared: false,
+        trackingError: null,
+        recordedOnly: false,
+        commitPending: kept?.status !== 'active',
+        commitError: err.message,
+      };
+    }
+  }
+
   return {
     inventory,
     sale,
@@ -285,7 +334,8 @@ async function logPurchase(userId, {
     trackingShared,
     trackingError,
     recordedOnly: recordOnly,
-    commitPending: deferCommit,
+    commitPending: deferCommit || topUp,
+    addsToCommitment: topUp,
   };
 }
 

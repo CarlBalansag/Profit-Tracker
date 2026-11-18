@@ -246,6 +246,88 @@ async function commitWithProvider(userId, { conn, adapter, rawKey }, { dealId, i
   }
 }
 
+// ------------------------------------------------------- shared commitments
+
+// The provider keeps one commitment per item. Each purchase committed to that
+// item is its own row here, and all of them carry the provider's commitment
+// id: their quantities add up to what the provider holds. Buying more of an
+// item already committed adds a row that raises that commitment once its
+// tracking number is added.
+//   { externalId, rows, total }  or null when nothing is committed yet
+async function activeGroupFor(connectionId, itemId, { exceptId = null } = {}) {
+  const rows = await prisma.cashoutCommitment.findMany({
+    where: { connection_id: connectionId, open_item_id: String(itemId), status: 'active' },
+    orderBy: { created_at: 'asc' },
+  });
+  const committed = rows.filter((r) => r.external_commitment_id && r.id !== exceptId);
+  if (!committed.length) return null;
+  const externalId = committed[0].external_commitment_id;
+  const members = committed.filter((r) => r.external_commitment_id === externalId);
+  return { externalId, rows: members, total: members.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0) };
+}
+
+// One commit, raise, lower or withdraw per item at a time, so two purchases of
+// the same item shipping at once can't both create a commitment, or raise it
+// from the same starting total.
+const itemLocks = new Map();
+function withItemLock(connectionId, itemId, fn) {
+  const key = `${connectionId}:${itemId}`;
+  const previous = itemLocks.get(key) || Promise.resolve();
+  const run = previous.catch(() => {}).then(fn);
+  const tail = run.catch(() => {});
+  itemLocks.set(key, tail);
+  tail.then(() => { if (itemLocks.get(key) === tail) itemLocks.delete(key); });
+  return run;
+}
+
+// What the provider holds for this commitment now, or null if it can't tell.
+async function providerQuantity({ adapter, rawKey }, externalId) {
+  try {
+    const commit = await adapter.getCommit(rawKey, externalId);
+    const q = Number(commit?.quantity ?? commit?.data?.quantity);
+    return Number.isFinite(q) ? q : null;
+  } catch {
+    return null;
+  }
+}
+
+// The provider said no to this request (limit reached, deal closed, bad
+// quantity...), as opposed to our own rate limit, a rejected key, or no answer.
+function isRefusal(err) {
+  if (!err || err.ambiguous || err.keyRejected || err.permissionDenied || err.rateLimited) return false;
+  return err.status >= 400 && err.status < 500 && ![401, 403, 404, 409, 429].includes(err.status);
+}
+
+// The note kept on a purchase the provider wouldn't commit (limit reached,
+// deal closed, ...): it stays logged, marked not committed.
+function refusedNote(cashout, quantity, reason, { raise }) {
+  return `${cashout} wouldn't ${raise ? `add these ${quantity} to your commitment` : `commit these ${quantity}`} (${reason}). `
+    + `This purchase is logged but not committed. Contact ${cashout} about these units, or move the sale to another cashout.`;
+}
+
+// Sets the provider commitment to `total`. A timeout is checked against the
+// provider before it's taken as a failure.
+//   returns the quantity the provider now holds
+//   throws { refused: true } when the provider said no, { ambiguous: true }
+//   when it can't tell
+async function setProviderQuantity(userId, ctx, { externalId, total, commitmentId, action }) {
+  try {
+    const preview = await ebWrite(userId, {
+      connectionId: ctx.conn.id, commitmentId, action, request: { commitment: externalId, quantity: total },
+    }, () => ctx.adapter.updateCommit(ctx.rawKey, externalId, { quantity: total }));
+    return Number(preview?.quantity) || total;
+  } catch (err) {
+    if (!isAmbiguous(err)) throw Object.assign(err, { refused: isRefusal(err) });
+    const now = await providerQuantity(ctx, externalId);
+    if (now === total) {
+      await recordWrite(userId, { connectionId: ctx.conn.id, commitmentId, action, request: { commitment: externalId, quantity: total }, outcome: 'adopted', externalId });
+      return total;
+    }
+    if (now !== null) throw fail(502, `${ctx.conn.display_name || 'The cashout'} didn't answer, and the commitment is still at ${now}. Nothing changed; try again.`);
+    throw fail(502, `${ctx.conn.display_name || 'The cashout'} didn't answer (${err.message}), so we can't tell whether the commitment changed. Check Commitments in a few minutes before trying again.`, { ambiguous: true });
+  }
+}
+
 // ------------------------------------------------------- stuck commits
 
 // A pending commit is claimed as "committing" while it's with the provider.
@@ -265,6 +347,19 @@ async function recoverStuck(userId, record) {
   }
   const found = await findProviderCommit(ctx.adapter, ctx.rawKey, { dealId: record.external_deal_id, itemId: record.external_item_id });
   if (!found.known) return record;
+  // A purchase being added to a commitment the item already had: the provider
+  // has it if its quantity now covers this purchase too.
+  const group = await activeGroupFor(record.connection_id, record.external_item_id, { exceptId: record.id });
+  if (group) {
+    const held = found.commit && found.commit.id === group.externalId ? found.commit.quantity : null;
+    if (held === null || held === undefined) return record;
+    if (held >= group.total + record.quantity) {
+      await recordWrite(userId, { connectionId: record.connection_id, commitmentId: record.id, action: 'recover', request: {}, outcome: 'adopted', externalId: group.externalId });
+      return prisma.cashoutCommitment.update({ where: { id: record.id }, data: { status: 'active', external_commitment_id: group.externalId, commit_error: null } });
+    }
+    if (held === group.total) return prisma.cashoutCommitment.update({ where: { id: record.id }, data: { status: 'pending' } });
+    return record;
+  }
   if (found.commit) {
     await recordWrite(userId, { connectionId: record.connection_id, commitmentId: record.id, action: 'recover', request: {}, outcome: 'adopted', externalId: found.commit.id });
     return prisma.cashoutCommitment.update({
@@ -305,7 +400,7 @@ async function createCommitment(userId, connectionId, { dealId, itemId, quantity
   const existing = await openRowFor(ctx.conn.id, item);
   if (existing) {
     throw fail(409, existing.status === 'active'
-      ? 'You already have a commitment for this item. Change its quantity from Commitments instead.'
+      ? 'You already have a commitment for this item. Log Purchase adds more to it, or change a purchase\'s quantity from Commitments.'
       : 'This item is already logged and waiting to be committed. Add its tracking number to commit it.');
   }
   await requireLiveItem(userId, ctx.conn.id, deal, item);
@@ -346,18 +441,23 @@ async function updateCommitment(userId, commitmentRecordId, { quantity }) {
   }
   if (record.quantity === qty) return record;
 
+  // This row is one purchase's share of the provider's commitment: the
+  // provider is set to the new total of every purchase on it.
   const ctx = await connectionAndAdapter(userId, record.connection_id);
-  const preview = await ebWrite(userId, {
-    connectionId: record.connection_id, commitmentId: record.id, action: 'update', request: { commitment: record.external_commitment_id, quantity: qty },
-  }, () => ctx.adapter.updateCommit(ctx.rawKey, record.external_commitment_id, { quantity: qty }));
-
-  return prisma.cashoutCommitment.update({ where: { id: record.id }, data: { quantity: preview?.quantity ?? qty } });
+  return withItemLock(record.connection_id, record.external_item_id, async () => {
+    const group = await activeGroupFor(record.connection_id, record.external_item_id, { exceptId: record.id });
+    const others = group && group.externalId === record.external_commitment_id ? group.total : 0;
+    const held = await setProviderQuantity(userId, ctx, {
+      externalId: record.external_commitment_id, total: others + qty, commitmentId: record.id, action: 'update',
+    });
+    return prisma.cashoutCommitment.update({ where: { id: record.id }, data: { quantity: others ? qty : held } });
+  });
 }
 
 // Withdraws with the provider -- which frees the quantity back to the deal
 // immediately on their side -- then marks the local row withdrawn rather
 // than deleting it, so the purchase/sale it may be linked to keeps its history.
-async function deleteCommitment(userId, commitmentRecordId) {
+async function deleteCommitment(userId, commitmentRecordId, { all = false } = {}) {
   let record = await prisma.cashoutCommitment.findFirst({ where: { id: commitmentRecordId, user_id: userId } });
   if (!record) throw notFound('Commitment');
   record = await recoverStuck(userId, record);
@@ -374,17 +474,33 @@ async function deleteCommitment(userId, commitmentRecordId) {
   }
 
   const ctx = await connectionAndAdapter(userId, record.connection_id);
-  try {
-    await ebWrite(userId, {
-      connectionId: record.connection_id, commitmentId: record.id, action: 'withdraw', request: { commitment: record.external_commitment_id },
-    }, () => ctx.adapter.deleteCommit(ctx.rawKey, record.external_commitment_id));
-  } catch (err) {
-    // The provider no longer has it: it's withdrawn either way.
-    if (err.status !== 404) throw err;
-  }
+  return withItemLock(record.connection_id, record.external_item_id, async () => {
+    const group = await activeGroupFor(record.connection_id, record.external_item_id, { exceptId: record.id });
+    const others = group && group.externalId === record.external_commitment_id ? group : null;
 
-  // open_item_id clears so this item can be committed again later.
-  return prisma.cashoutCommitment.update({ where: { id: record.id }, data: { status: 'withdrawn', open_item_id: null } });
+    // Other purchases still share this commitment: lower it by this
+    // purchase's units instead of withdrawing theirs too.
+    if (others && !all) {
+      await setProviderQuantity(userId, ctx, {
+        externalId: record.external_commitment_id, total: others.total, commitmentId: record.id, action: 'lower',
+      });
+      return prisma.cashoutCommitment.update({ where: { id: record.id }, data: { status: 'withdrawn', open_item_id: null } });
+    }
+
+    try {
+      await ebWrite(userId, {
+        connectionId: record.connection_id, commitmentId: record.id, action: 'withdraw', request: { commitment: record.external_commitment_id },
+      }, () => ctx.adapter.deleteCommit(ctx.rawKey, record.external_commitment_id));
+    } catch (err) {
+      // The provider no longer has it: it's withdrawn either way.
+      if (err.status !== 404) throw err;
+    }
+
+    // open_item_id clears so this item can be committed again later.
+    const ids = [record.id, ...(others ? others.rows.map((r) => r.id) : [])];
+    await prisma.cashoutCommitment.updateMany({ where: { id: { in: ids }, user_id: userId }, data: { status: 'withdrawn', open_item_id: null } });
+    return prisma.cashoutCommitment.findFirst({ where: { id: record.id } });
+  });
 }
 
 async function listLocalCommitments(userId, { connectionId, saleId, status } = {}) {
@@ -399,7 +515,8 @@ async function listLocalCommitments(userId, { connectionId, saleId, status } = {
   for (const row of stuck) await recoverStuck(userId, row).catch(() => null);
   return prisma.cashoutCommitment.findMany({
     where,
-    include: { connection: true, sale: { include: { inventory: true } } },
+    // The purchase's store account names which login each purchase was on.
+    include: { connection: true, sale: { include: { inventory: { include: { account: { select: { name: true } } } } } } },
     orderBy: { created_at: 'desc' },
   });
 }
@@ -528,7 +645,35 @@ async function trackingChangedForSale(saleId, trackingNumber) {
   };
 }
 
+// For the sale routes: a sale that was just cancelled, voided or returned
+// while its units are committed. The client asks whether to take them off the
+// commitment (lower it, or withdraw it when nothing else is on it). Nothing
+// changes with the provider unless the user confirms.
+async function lowerOfferForSale(saleId) {
+  const record = await prisma.cashoutCommitment.findFirst({
+    where: { sale_id: saleId, status: 'active' },
+    include: { connection: true },
+  });
+  if (!record || !record.external_commitment_id) return null;
+  const group = await activeGroupFor(record.connection_id, record.external_item_id);
+  const total = group && group.externalId === record.external_commitment_id ? group.total : record.quantity;
+  return {
+    commitment_id: record.id,
+    cashout: record.connection?.display_name || record.connection?.provider || 'the cashout',
+    quantity: record.quantity,
+    total,
+    remaining: Math.max(0, total - record.quantity),
+  };
+}
+
 module.exports = {
+  lowerOfferForSale,
+  activeGroupFor,
+  withItemLock,
+  setProviderQuantity,
+  providerQuantity,
+  refusedNote,
+  isRefusal,
   connectionAndAdapter,
   requireLiveItem,
   commitWithProvider,

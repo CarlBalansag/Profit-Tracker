@@ -104,7 +104,7 @@ vi.mock('../hooks/useApi', () => ({
 }));
 
 vi.mock('sonner', () => ({
-  toast: { loading: vi.fn(), success: vi.fn(), error: vi.fn(), info: vi.fn() },
+  toast: { loading: vi.fn(), success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));
 
 afterEach(cleanup);
@@ -903,6 +903,64 @@ describe('Cashout Page', () => {
       };
     });
 
+    describe('buying more of an item already committed', () => {
+      const committed = (status, quantity) => ({
+        id: `c-${status}`, status, quantity, connection_id: 'conn-1', external_deal_id: '5213', external_item_id: '10001', open_item_id: '10001',
+        tracking_codes: [], created_at: new Date().toISOString(), connection: { display_name: 'EB Primary' },
+      });
+      const openForm = () => {
+        render(<MemoryRouter><Cashout /></MemoryRouter>);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Log Purchase' })[0]);
+        fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+        fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-1' } });
+      };
+      const submit = () => act(async () => {
+        fireEvent.click(screen.getAllByRole('button', { name: /Log Purchase/ }).find((b) => b.type === 'submit'));
+      });
+
+      it('says the purchase is added to the existing commitment when it ships', async () => {
+        currentCommitments = [committed('active', 2), committed('pending', 1)];
+        openForm();
+        fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '2' } });
+        expect(screen.getByTestId('adds-to-commitment')).toHaveTextContent(
+          'You already have 2 committed for this item and 1 waiting to ship. This is logged as its own purchase, and its 2 are added to that commitment when it ships.',
+        );
+        mockMutations.logPurchase.mutateAsync.mockResolvedValueOnce({ commitPending: true, addsToCommitment: true });
+        await submit();
+        expect(toast.success).toHaveBeenCalledWith('Logged as its own purchase. Not committed to EB Primary yet.', expect.objectContaining({
+          description: expect.stringMatching(/added to your commitment/),
+        }));
+      });
+
+      it('says nothing extra for an item with no commitment', () => {
+        currentCommitments = [];
+        openForm();
+        expect(screen.queryByTestId('adds-to-commitment')).not.toBeInTheDocument();
+      });
+
+      it('confirms the new total before raising, and reports it', async () => {
+        currentCommitments = [committed('active', 2)];
+        openForm();
+        fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: '1Z999AA10123456784' } });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' })); });
+        expect(screen.getByRole('heading', { name: 'Add to your commitment?' })).toBeInTheDocument();
+        expect(screen.getByText(/raises your binding commitment with EB Primary for this item from 2 to 3/)).toBeInTheDocument();
+        mockMutations.logPurchase.mutateAsync.mockResolvedValueOnce({ addedTo: 3, trackingSubmitted: true });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Commit' })); });
+        expect(toast.success).toHaveBeenCalledWith('Logged and added to your commitment: now 3 with EB Primary.', expect.anything());
+      });
+
+      it('warns when it was saved but the cashout refused to commit it', async () => {
+        currentCommitments = [committed('active', 2)];
+        openForm();
+        fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: '1Z999AA10123456784' } });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' })); });
+        mockMutations.logPurchase.mutateAsync.mockResolvedValueOnce({ commitError: 'EB Primary would not add these 1. Contact EB Primary.', commitPending: true });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Commit' })); });
+        expect(toast.warning).toHaveBeenCalledWith('Logged, but not committed to EB Primary.', expect.objectContaining({ description: 'EB Primary would not add these 1. Contact EB Primary.' }));
+      });
+    });
+
     describe('store account', () => {
       beforeEach(() => {
         currentPlatforms = [
@@ -1305,6 +1363,59 @@ describe('Cashout Page', () => {
       fireEvent.click(buttons[0]);
       expect(seen.mock.calls[0][0].detail).toEqual({ commitment_id: 'changed', tracking_number: '1ZNEW', cashout: 'EB Primary' });
       window.removeEventListener('cashout-tracking-send', seen);
+    });
+
+    describe('several purchases of one item', () => {
+      const row = (id, status, quantity, extra = {}) => ({
+        id, status, quantity, connection_id: 'conn-1', external_deal_id: '5232', external_item_id: '1', open_item_id: '1',
+        external_commitment_id: status === 'active' ? 'eb-1' : null, tracking_codes: status === 'active' ? [`1Z${id}`] : [],
+        created_at: new Date().toISOString(), connection: { display_name: 'EB Primary' },
+        sale: { tracking_number: status === 'active' ? `1Z${id}` : null, unit_price: 119, inventory: { product_name: 'Airpod 5 ANC', unit_purchase_cost: 99, account: { name: `Acct ${id}` } } },
+        ...extra,
+      });
+      const openPanel = () => {
+        render(<MemoryRouter><Cashout /></MemoryRouter>);
+        fireEvent.click(screen.getByRole('tab', { name: /Commitments/i }));
+      };
+
+      it('shows one row with the total, opening to each purchase', () => {
+        currentCommitments = [row('a', 'active', 2), row('b', 'active', 2), row('c', 'pending', 1)];
+        openPanel();
+        expect(screen.getByText('4 committed')).toBeInTheDocument();
+        expect(screen.getByText('1 waiting to ship')).toBeInTheDocument();
+        expect(screen.queryByText(/Acct a/)).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: '3 purchases' }));
+        expect(screen.getByText(/Qty 2 · .* · Acct a/)).toBeInTheDocument();
+        expect(screen.getByText(/Qty 1 · .* · Acct c/)).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: 'Take off' })).toHaveLength(2);
+        expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
+      });
+
+      it('takes one purchase off (lowering the total) or withdraws everything', async () => {
+        currentCommitments = [row('a', 'active', 2), row('b', 'active', 3)];
+        const ask = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        mockMutations.deleteCommitment.mutateAsync.mockResolvedValue({});
+        openPanel();
+        fireEvent.click(screen.getByRole('button', { name: '2 purchases' }));
+        await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'Take off' })[1]); });
+        expect(ask.mock.calls[0][0]).toMatch(/Take these 3 off your commitment\? It goes from 5 to 2/);
+        expect(mockMutations.deleteCommitment.mutateAsync).toHaveBeenLastCalledWith({ id: 'b' });
+
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Withdraw all' })); });
+        expect(ask.mock.calls[1][0]).toMatch(/Withdraw the whole commitment \(5\)/);
+        expect(mockMutations.deleteCommitment.mutateAsync).toHaveBeenLastCalledWith({ id: 'a', all: true });
+        ask.mockRestore();
+      });
+
+      it('shows why a purchase could not be committed, with Try again', () => {
+        const note = "EB Primary wouldn't add these 1 to your commitment (Over the vendor limit.). This purchase is logged but not committed. Contact EB Primary about these units, or move the sale to another cashout.";
+        currentCommitments = [row('a', 'active', 2), row('c', 'pending', 1, { commit_error: note, sale: { tracking_number: '1ZC', unit_price: 119, inventory: { product_name: 'Airpod 5 ANC' } } })];
+        openPanel();
+        expect(screen.getByText('Needs attention')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: '2 purchases' }));
+        expect(screen.getByRole('note')).toHaveTextContent(note);
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+      });
     });
   });
 

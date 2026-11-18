@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
 import PendingCashoutCommit from './PendingCashoutCommit';
-import { offerPendingCommit, offerTrackingSend, PENDING_COMMIT_EVENT, TRACKING_SEND_EVENT } from '../utils/pendingCashoutCommit';
+import { offerPendingCommit, offerTrackingSend, offerCommitLower, PENDING_COMMIT_EVENT, TRACKING_SEND_EVENT } from '../utils/pendingCashoutCommit';
 import { apiFetch } from '../hooks/useApi';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn(), warning: vi.fn() } }));
@@ -270,5 +270,51 @@ describe('sending a changed tracking number', () => {
     fetchMock.mockResolvedValueOnce(json({ success: true, cashout_warning: 'Your commitment with EB Primary is still active.' }));
     await apiFetch('/api/inventory/i1', { method: 'DELETE' });
     await waitFor(() => expect(toast.warning).toHaveBeenCalledWith('Your commitment with EB Primary is still active.', expect.anything()));
+  });
+});
+
+describe('buying more of an item already committed', () => {
+  it('says committing adds to the existing commitment, and shows a refused last try', async () => {
+    fetchMock.mockResolvedValueOnce(json(preview({ quantity: 1, adds_to: { committed: 2, new_total: 3 }, commit_error: 'EB Primary wouldn\'t add these 1 to your commitment (Over the vendor limit.).' })));
+    renderPrompt();
+    act(() => offerPendingCommit('pc-1'));
+    expect(await screen.findByText(/You already have 2 of this item committed to EB Primary\. Committing adds these 1, raising your binding commitment to 3/)).toBeInTheDocument();
+    expect(screen.getByText(/Last try: EB Primary wouldn't add these 1/)).toBeInTheDocument();
+  });
+
+  it('reports the new total after a raise', async () => {
+    fetchMock
+      .mockResolvedValueOnce(json(preview({ adds_to: { committed: 2, new_total: 4 } })))
+      .mockResolvedValueOnce(json({ raisedTo: 4, trackingSubmitted: true, payout: 495, previousPayout: null }));
+    renderPrompt();
+    act(() => offerPendingCommit('pc-1'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Commit' }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Added to your commitment with EB Primary: now 4.', expect.anything()));
+  });
+});
+
+describe('a committed sale that was cancelled or returned', () => {
+  it('asks before lowering, and only sends when confirmed', async () => {
+    fetchMock.mockResolvedValueOnce(json({ status: 'withdrawn' }));
+    renderPrompt();
+    act(() => offerCommitLower({ commitment_id: 'c-2', cashout: 'EB Primary', quantity: 2, total: 4, remaining: 2 }));
+    expect(screen.getByRole('heading', { name: 'Lower your commitment with EB Primary?' })).toBeInTheDocument();
+    expect(screen.getByText(/goes from 4 to 2; the other purchases on it stay committed/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Keep it' })).toHaveFocus());
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lower to 2' }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Commitment with EB Primary lowered to 2.'));
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/cashouts/commitments/c-2');
+    expect(fetchMock.mock.calls[0][1].method).toBe('DELETE');
+  });
+
+  it('offers to withdraw when it was the only purchase, and Keep it sends nothing', () => {
+    renderPrompt();
+    act(() => offerCommitLower({ commitment_id: 'c-1', cashout: 'EB Primary', quantity: 2, total: 2, remaining: 0 }));
+    expect(screen.getByRole('heading', { name: 'Withdraw your commitment with EB Primary?' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
