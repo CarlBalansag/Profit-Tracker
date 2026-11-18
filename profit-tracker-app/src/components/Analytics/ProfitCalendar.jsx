@@ -7,6 +7,7 @@
 // Hovering a day shows its totals; clicking it opens the sales behind them
 // in a panel at the side (below, on a phone).
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { X } from 'lucide-react';
 import { Panel } from './Motion';
@@ -62,11 +63,16 @@ function cellColor(day, max) {
     : `color-mix(in srgb, var(--dp-red-text) ${Math.round(30 + strength * 70)}%, transparent)`;
 }
 
+// The tooltip floats over the page (fixed to the screen, in a layer of its
+// own) so it can never make the page longer. A tooltip inside the page that
+// opened below a day near the bottom grew the page, which moved the day out
+// from under the mouse, closed the tooltip, shrank the page and so on: a
+// jitter.
 function Tip({ tip }) {
   const d = tip.day;
   return (
     <div
-      className="pointer-events-none absolute z-20"
+      className="pointer-events-none fixed z-[60]"
       style={{ left: tip.x, top: tip.y, transform: `translate(-50%, ${tip.below ? '0' : '-100%'})` }}
     >
       <MotionDiv
@@ -272,16 +278,25 @@ export default function ProfitCalendar({ calendar, dateRange }) {
   }, [selected]);
 
   const showTip = (e, cell) => {
-    if (!cell.inRange || !wrapRef.current) return;
-    const box = wrapRef.current.getBoundingClientRect();
+    if (!cell.inRange) return;
+    // Screen coordinates: the tooltip is fixed, not part of the page.
     const r = e.currentTarget.getBoundingClientRect();
-    const half = 110;
-    const x = Math.min(Math.max(r.left + r.width / 2 - box.left, half), Math.max(half, box.width - half));
-    // Above the day, or below it when there isn't room above.
-    const below = r.top - box.top < 110;
-    const y = below ? r.bottom - box.top + 8 : r.top - box.top - 8;
+    const half = 120;
+    const x = Math.min(Math.max(r.left + r.width / 2, half), Math.max(half, window.innerWidth - half));
+    // Above the day, or below it when it is too close to the top of the screen.
+    const below = r.top < 130;
+    const y = below ? r.bottom + 8 : r.top - 8;
     setTip({ key: cell.key, day: view.byDay.get(cell.key), x, y, below });
   };
+
+  // A fixed tooltip would be left behind by scrolling, so scrolling closes it.
+  useEffect(() => {
+    if (!tip) return undefined;
+    const close = () => setTip(null);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); };
+  }, [tip]);
   const choose = (cell) => {
     if (!cell.inRange) return;
     setTip(null);
@@ -326,7 +341,11 @@ export default function ProfitCalendar({ calendar, dateRange }) {
     <Panel title="Profit calendar" sub={`${subtitle} Darker green is more profit; red is a loss. Click a day to see what sold.`}>
       <div className={`grid gap-4 ${selected ? 'lg:grid-cols-[minmax(0,1fr)_320px]' : ''}`}>
         <div ref={wrapRef} className="relative min-w-0" onMouseLeave={() => setTip(null)}>
-          <AnimatePresence>{tip && <Tip key="tip" tip={tip} />}</AnimatePresence>
+          {typeof document !== 'undefined' && createPortal(
+            // Inside the app's workspace so the theme's colors still apply.
+            <AnimatePresence>{tip && <Tip key="tip" tip={tip} />}</AnimatePresence>,
+            document.querySelector('.glass-workspace, .carbon-workspace') || document.body,
+          )}
 
           {view.layout === 'row' && (
             <div className="grid max-w-2xl grid-cols-7 gap-1.5" role="grid" aria-label="Profit per day">
