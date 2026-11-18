@@ -49,7 +49,9 @@ async function previewPending(userId, commitmentId) {
     id: record.id,
     cashout: record.connection?.display_name || record.connection?.provider || 'the cashout',
     deal_name: offer.deal?.name || null,
-    item_name: record.sale?.inventory?.product_name || offer.item?.name || null,
+    // EB's own name for the item it will commit to (it names the color), not
+    // the purchase's product name, which can be edited.
+    item_name: offer.item?.name || record.sale?.inventory?.product_name || null,
     quantity: record.quantity,
     tracking_number: record.sale?.tracking_number || null,
     logged_payout: record.sale ? Number(record.sale.unit_price) : null,

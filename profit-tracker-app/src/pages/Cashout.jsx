@@ -1205,6 +1205,25 @@ function ModalShell({ modalRef, title, subtitle, onClose, busy = false, children
 
 const nameKey = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
+// One line per item in the picker: its name plus the UPC, which tells two
+// colors apart when EB's names are close.
+const itemOptionLabel = (item) => {
+  const upc = item.upcs?.[0];
+  return upc ? `${item.name} · UPC ${upc}` : item.name;
+};
+
+// Under the picker: what EB says about the chosen item.
+function ItemFacts({ item }) {
+  const facts = [
+    item.condition && item.condition !== 'new' ? item.condition.replace(/_/g, ' ') : null,
+    item.upcs?.length ? `UPC ${item.upcs.join(', ')}` : null,
+    item.remainingPercentage != null ? `${Math.round(item.remainingPercentage)}% of the limit left` : null,
+    item.vendorLimit ? `store limit ${item.vendorLimit}` : null,
+  ].filter(Boolean);
+  if (!facts.length) return null;
+  return <p className="mt-1.5 text-[11px] text-[var(--dp-text-secondary)]">{facts.join(' · ')}</p>;
+}
+
 function LogPurchaseModal({ product, onClose }) {
   const offers = product.offers || [product];
   const [offerIndex, setOfferIndex] = useState(0);
@@ -1234,11 +1253,15 @@ function LogPurchaseModal({ product, onClose }) {
   const items = deal.items || [];
   const dealStores = useMemo(() => dealStoreNames(deal), [deal]);
 
-  const [itemId, setItemId] = useState(items[0]?.id || '');
+  // A deal with several items (one per color, size or model) starts with none
+  // picked: each is its own commitment with EB, so the right one has to be a
+  // choice, not whatever EB happens to list first.
+  const onlyItemId = (list) => (list?.length === 1 ? list[0].id : '');
+  const [itemId, setItemId] = useState(() => onlyItemId(items));
   // Another cashout's deal has its own items and its own group to sell to.
   const pickCashout = (index) => {
     setOfferIndex(index);
-    setItemId(offers[index].items?.[0]?.id || '');
+    setItemId(onlyItemId(offers[index].items));
     setSaleToId(null);
     setError(null);
   };
@@ -1283,7 +1306,7 @@ function LogPurchaseModal({ product, onClose }) {
   const totalPayout = Math.round(Number(deal.payout) * quantity * 100) / 100;
 
   const validate = () => {
-    if (!itemId) return 'Pick which item you bought.';
+    if (!itemId) return 'Pick the exact item you bought (color, size or model).';
     if (!vendorId) return 'Pick the store you bought it from.';
     if (!paymentMethodId) return 'Pick the card or account you paid with.';
     if (needsSaleTo && !saleToId) return 'Pick which cashout group you sold it to.';
@@ -1368,7 +1391,14 @@ function LogPurchaseModal({ product, onClose }) {
         </p>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
           <dt className="text-[var(--dp-text-label)]">Item</dt>
-          <dd className="text-[var(--dp-text-primary)]">{selectedItem?.name || deal.name}</dd>
+          <dd className="text-[var(--dp-text-primary)] font-semibold">
+            {selectedItem?.name || deal.name}
+            {items.length > 1 && (
+              <span className="block font-normal text-[11px] text-[var(--dp-text-secondary)]">
+                One of {items.length} items in this deal. Make sure it's the exact one you bought.
+              </span>
+            )}
+          </dd>
           <dt className="text-[var(--dp-text-label)]">Quantity</dt>
           <dd className="text-[var(--dp-text-primary)] tabular-nums">{quantity}</dd>
           <dt className="text-[var(--dp-text-label)]">Payout</dt>
@@ -1467,10 +1497,13 @@ function LogPurchaseModal({ product, onClose }) {
                   </LpField>
                 )}
                 {items.length > 1 && (
-                  <LpField id="lp-item" label="Which item" className="sm:col-span-2">
-                    <select id="lp-item" value={itemId} onChange={(e) => setItemId(e.target.value)} className={LP_INPUT}>
-                      {items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  <LpField id="lp-item" label="Which item (color, size or model)" className="sm:col-span-2">
+                    <select id="lp-item" value={itemId} onChange={(e) => { setItemId(e.target.value); setError(null); }}
+                      className={`${LP_INPUT} ${itemId ? '' : 'text-[var(--dp-text-label)]'}`}>
+                      <option value="" disabled>Select the exact item you bought…</option>
+                      {items.map((item) => <option key={item.id} value={item.id}>{itemOptionLabel(item)}</option>)}
                     </select>
+                    {selectedItem && <ItemFacts item={selectedItem} />}
                   </LpField>
                 )}
               </div>
