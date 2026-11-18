@@ -4,3 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
+| feat-cashout-eb-link-best-card | Cashout: EB deals-page link button + Best Card column (best saved card and profit per deal) | `profit-tracker-app/src/pages/Cashout.jsx`, `profit-tracker-app/src/utils/cashoutDeals.js` (+ test), `profit-tracker-api/services/cashouts/eb.js` (+ test) | In progress | 2026-11-17 |
