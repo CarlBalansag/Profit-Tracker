@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Check,
   Coins,
@@ -15,6 +16,10 @@ import {
   Table,
   LayoutGrid,
   ExternalLink,
+  DollarSign,
+  ShoppingCart,
+  CreditCard,
+  Truck,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -1082,10 +1087,57 @@ function LogPurchaseButton({ deal }) {
   );
 }
 
+// The Log Purchase window is opened from inside a deal's table cell, which is
+// right-aligned and doesn't wrap -- a window placed there inherits both. So
+// it's rendered into the page's workspace instead, which still carries the
+// theme's form styles (document.body wouldn't).
+function ModalLayer({ children }) {
+  const host = document.querySelector('.carbon-workspace, .glass-workspace') || document.body;
+  return createPortal(
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 text-left whitespace-normal">
+      {children}
+    </div>,
+    host,
+  );
+}
+
+// The same field look as Add Transaction: label above, full-width control.
+const LP_INPUT = 'w-full px-3 py-2 text-sm rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none focus:border-[var(--dp-accent)] transition-colors';
+
+function LpField({ id, label, className = '', children }) {
+  return (
+    <div className={className}>
+      <label htmlFor={id} className="block text-xs font-medium text-[var(--dp-text-secondary)] mb-1.5">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function LpSection({ icon, title, tone, children }) {
+  return (
+    <section className="card p-4 space-y-4">
+      <div className="flex items-center gap-2">
+        {React.createElement(icon, { className: `w-4 h-4 ${tone}`, 'aria-hidden': 'true' })}
+        <h3 className={`text-xs font-semibold uppercase tracking-wider ${tone}`}>{title}</h3>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function DollarInput({ id, value, onChange }) {
+  return (
+    <div className="relative">
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--dp-text-label)]" aria-hidden="true">$</span>
+      <input id={id} type="number" step="0.01" min="0" value={value} onChange={onChange} className={`${LP_INPUT} pl-7`} />
+    </div>
+  );
+}
+
 // The Log Purchase window's frame for its confirm and saved screens.
 function ModalShell({ modalRef, title, subtitle, onClose, busy = false, children }) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <ModalLayer>
       <div ref={modalRef} role="dialog" aria-modal="true" aria-label={title}
         className="w-full max-w-xl rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
@@ -1099,7 +1151,7 @@ function ModalShell({ modalRef, title, subtitle, onClose, busy = false, children
         </div>
         {children}
       </div>
-    </div>
+    </ModalLayer>
   );
 }
 
@@ -1319,155 +1371,148 @@ function LogPurchaseModal({ product, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <ModalLayer>
       <form
         ref={modalRef}
         onSubmit={submit}
-        className="w-full max-w-xl rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4 max-h-[85vh] overflow-y-auto"
+        aria-label="Log Purchase"
+        className="w-full max-w-2xl rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl max-h-[90vh] flex flex-col"
       >
-        <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
-          <div>
+        <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-4 border-b border-[color:var(--dp-border)]">
+          <div className="min-w-0">
             <h3 className="font-bold text-base text-[var(--dp-text-primary)]">Log Purchase</h3>
-            <p className="text-[11px] text-[var(--dp-text-secondary)] mt-0.5 truncate max-w-xs" title={product.name}>{product.name}</p>
+            <p className="text-xs text-[var(--dp-text-secondary)] mt-0.5 truncate" title={product.name}>{product.name}</p>
           </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]">
+          <button type="button" aria-label="Close" onClick={onClose} className="shrink-0 text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]">
             <X size={18} />
           </button>
         </div>
 
-        {offers.length > 1 && (
-          <div className="space-y-1.5">
-            <label htmlFor="lp-cashout" className="block text-[11px] text-[var(--dp-text-label)]">Cashout</label>
-            <select id="lp-cashout" value={offerIndex} onChange={(e) => pickCashout(Number(e.target.value))} className={SELECT_CLASS + ' w-full'}>
-              {offers.map((offer, index) => (
-                <option key={`${offer.connectionId}-${offer.id}`} value={index}>
-                  {offer.connectionName} -- ${formatMoney(offer.payout)}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {recordOnly ? (
-          <p className="text-[11px] text-[var(--dp-text-secondary)] bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2">
-            This saves the purchase and its sale to {deal.connectionName} at ${formatMoney(deal.payout)} each, in Profit Tracker only, with your tracking number on the sale. It doesn't commit or send tracking to {deal.connectionName} -- do that on their website. Only use this once you've actually shipped the item.
-          </p>
-        ) : (
-          tracking ? (
-            <p className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
-              This commits to the cashout at today's payout price -- a real, binding pledge -- and submits your tracking number.
-            </p>
-          ) : (
-            <p className="text-[11px] text-[var(--dp-text-secondary)] bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2">
-              No tracking number yet? This saves the purchase and its sale without committing to {deal.connectionName}. When you add the tracking number to the sale later, you'll be asked to commit then, at that day's payout.
-            </p>
-          )
-        )}
-
-        {needsSaleTo && (
-          <div className="space-y-1.5">
-            <label htmlFor="lp-saleto" className="block text-[11px] text-[var(--dp-text-label)]">Sold to</label>
-            <select id="lp-saleto" value={saleToId} onChange={(e) => setSaleToId(e.target.value)} className={SELECT_CLASS + ' w-full'}>
-              <option value="">Select a cashout group…</option>
-              {cashoutGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-            </select>
-          </div>
-        )}
-
-        {items.length > 1 && (
-          <div className="space-y-1.5">
-            <label htmlFor="lp-item" className="block text-[11px] text-[var(--dp-text-label)]">Which item</label>
-            <select id="lp-item" value={itemId} onChange={(e) => setItemId(e.target.value)} className={SELECT_CLASS + ' w-full'}>
-              {items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <label htmlFor="lp-qty" className="block text-[11px] text-[var(--dp-text-label)]">Quantity</label>
-            <input id="lp-qty" type="number" min="1" value={quantity} onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
-              className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none" />
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="lp-cost" className="block text-[11px] text-[var(--dp-text-label)]">Unit cost (what you paid)</label>
-            <input id="lp-cost" type="number" step="0.01" min="0" value={unitCost} onChange={(e) => setUnitCost(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none" />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <label htmlFor="lp-store" className="block text-[11px] text-[var(--dp-text-label)]">Store</label>
-            <select id="lp-store" value={vendorId} onChange={(e) => setVendorId(e.target.value)} className={SELECT_CLASS + ' w-full'}>
-              <option value="">Select a store…</option>
-              {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="lp-pay" className="block text-[11px] text-[var(--dp-text-label)]">Payment method</label>
-            <select id="lp-pay" value={paymentMethodId} onChange={(e) => setPaymentMethodId(e.target.value)} className={SELECT_CLASS + ' w-full'}>
-              <option value="">Select a card/account…</option>
-              {paymentMethods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <label htmlFor="lp-tax" className="block text-[11px] text-[var(--dp-text-label)]">Sales tax</label>
-            {taxExempt ? (
-              <p className="text-xs text-[var(--dp-text-secondary)] px-3 py-2">$0.00 (tax-exempt store)</p>
-            ) : (
-              <input id="lp-tax" type="number" step="0.01" min="0" value={salesTax} onChange={(e) => setSalesTax(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none" />
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          <LpSection icon={DollarSign} title="Cashout" tone="text-green-400">
+            {(offers.length > 1 || needsSaleTo || items.length > 1) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {offers.length > 1 && (
+                  <LpField id="lp-cashout" label="Cashout">
+                    <select id="lp-cashout" value={offerIndex} onChange={(e) => pickCashout(Number(e.target.value))} className={LP_INPUT}>
+                      {offers.map((offer, index) => (
+                        <option key={`${offer.connectionId}-${offer.id}`} value={index}>
+                          {offer.connectionName} -- ${formatMoney(offer.payout)}
+                        </option>
+                      ))}
+                    </select>
+                  </LpField>
+                )}
+                {needsSaleTo && (
+                  <LpField id="lp-saleto" label="Sold to">
+                    <select id="lp-saleto" value={saleToId} onChange={(e) => setSaleToId(e.target.value)} className={LP_INPUT}>
+                      <option value="">Select a cashout group…</option>
+                      {cashoutGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </select>
+                  </LpField>
+                )}
+                {items.length > 1 && (
+                  <LpField id="lp-item" label="Which item" className="sm:col-span-2">
+                    <select id="lp-item" value={itemId} onChange={(e) => setItemId(e.target.value)} className={LP_INPUT}>
+                      {items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                    </select>
+                  </LpField>
+                )}
+              </div>
             )}
-          </div>
-          <div className="space-y-1.5">
-            <span className="text-[11px] text-[var(--dp-text-label)] block">Cashback</span>
-            <p className="text-xs text-[var(--dp-text-secondary)] px-3 py-2">
-              {cashbackRate ? `$${cashbackEarned.toFixed(2)} (${cashbackRate}%)` : '—'}
+            <p className="text-sm text-[var(--dp-text-secondary)]">
+              {deal.connectionName} pays <span className="font-semibold tabular-nums text-[var(--dp-text-primary)]">${formatMoney(deal.payout)}</span> each
+              {quantity > 1 && <> · <span className="tabular-nums">${formatMoney(totalPayout)}</span> total</>}
             </p>
+          </LpSection>
+
+          <LpSection icon={ShoppingCart} title="Purchase Details" tone="text-blue-400">
+            <div className="grid grid-cols-2 gap-4">
+              <LpField id="lp-cost" label="Unit cost (what you paid)">
+                <DollarInput id="lp-cost" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />
+              </LpField>
+              <LpField id="lp-qty" label="Quantity">
+                <input id="lp-qty" type="number" min="1" value={quantity} onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))} className={LP_INPUT} />
+              </LpField>
+              <LpField id="lp-tax" label="Sales tax">
+                {taxExempt ? (
+                  <p className={`${LP_INPUT} text-[var(--dp-text-secondary)]`}>$0.00 (tax-exempt store)</p>
+                ) : (
+                  <DollarInput id="lp-tax" value={salesTax} onChange={(e) => setSalesTax(e.target.value)} />
+                )}
+              </LpField>
+              <LpField id="lp-date" label="Purchase date">
+                <input id="lp-date" type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className={LP_INPUT} />
+              </LpField>
+            </div>
+          </LpSection>
+
+          <LpSection icon={CreditCard} title="Store & Payment" tone="text-pink-400">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <LpField id="lp-store" label="Store">
+                <select id="lp-store" value={vendorId} onChange={(e) => setVendorId(e.target.value)} className={LP_INPUT}>
+                  <option value="">Select a store…</option>
+                  {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </select>
+              </LpField>
+              <LpField id="lp-pay" label="Payment method">
+                <select id="lp-pay" value={paymentMethodId} onChange={(e) => setPaymentMethodId(e.target.value)} className={LP_INPUT}>
+                  <option value="">Select a card…</option>
+                  {paymentMethods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </LpField>
+              <div>
+                <span className="block text-xs font-medium text-[var(--dp-text-secondary)] mb-1.5">Cashback</span>
+                <p className={`${LP_INPUT} tabular-nums text-[var(--dp-text-secondary)]`}>
+                  {cashbackRate ? `$${cashbackEarned.toFixed(2)} (${cashbackRate}%)` : '—'}
+                </p>
+              </div>
+            </div>
+          </LpSection>
+
+          <LpSection icon={Truck} title="Shipping" tone="text-amber-400">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <LpField id="lp-tracking" label="Tracking number" className={!recordOnly && tracking ? '' : 'sm:col-span-2'}>
+                <input id="lp-tracking" type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
+                  placeholder={recordOnly ? '1Z999AA10123456784' : 'Blank if it hasn’t shipped yet'}
+                  className={`${LP_INPUT} font-mono`} />
+              </LpField>
+              {!recordOnly && tracking && (
+                <LpField id="lp-insured" label="Insured value (optional)">
+                  <input id="lp-insured" type="number" min="200" max="1500" step="0.01" value={insuredValue} onChange={(e) => setInsuredValue(e.target.value)}
+                    placeholder="$200–$1,500" className={LP_INPUT} />
+                </LpField>
+              )}
+            </div>
+          </LpSection>
+
+          {error && <p role="alert" className="text-xs text-rose-400">{error}</p>}
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-4 border-t border-[color:var(--dp-border)]">
+          <p className={`flex-1 text-xs ${!recordOnly && tracking ? 'text-amber-400' : 'text-[var(--dp-text-secondary)]'}`}>
+            {recordOnly
+              ? `Saved here only. It doesn't commit or send tracking to ${deal.connectionName}; do that on their site.`
+              : tracking
+                ? `Commits to ${deal.connectionName} now, a real, binding pledge.`
+                : `No tracking yet: saves without committing to ${deal.connectionName}. You'll be asked to commit when you add it.`}
+          </p>
+          <div className="flex items-center justify-end gap-2 shrink-0">
+            <button type="button" onClick={onClose} disabled={logPurchase.isPending}
+              className="px-3.5 py-2 text-xs font-medium rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)]">
+              Cancel
+            </button>
+            <button type="submit" disabled={logPurchase.isPending}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90 disabled:opacity-50">
+              {logPurchase.isPending && <RefreshCw size={12} className="animate-spin" />}
+              {recordOnly || !tracking
+                ? (logPurchase.isPending ? 'Saving…' : 'Log Purchase')
+                : 'Commit & Log Purchase'}
+            </button>
           </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <label htmlFor="lp-tracking" className="block text-[11px] text-[var(--dp-text-label)]">Tracking number</label>
-          <input id="lp-tracking" type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
-            placeholder={recordOnly ? '1Z999AA10123456784' : "Leave blank if it hasn't shipped yet"}
-            className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none" />
-        </div>
-
-        {!recordOnly && tracking && <div className="space-y-1.5">
-          <label htmlFor="lp-insured" className="block text-[11px] text-[var(--dp-text-label)]">Insured value (optional, $200–$1,500)</label>
-          <input id="lp-insured" type="number" min="200" max="1500" step="0.01" value={insuredValue} onChange={(e) => setInsuredValue(e.target.value)}
-            placeholder="Leave blank to skip insurance"
-            className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none" />
-        </div>}
-
-        <div className="space-y-1.5">
-          <label htmlFor="lp-date" className="block text-[11px] text-[var(--dp-text-label)]">Purchase date</label>
-          <input id="lp-date" type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)}
-            className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none" />
-        </div>
-
-        {error && <p role="alert" className="text-xs text-rose-400">{error}</p>}
-
-        <div className="flex items-center justify-end gap-2 border-t border-[color:var(--dp-border)] pt-3">
-          <button type="button" onClick={onClose} disabled={logPurchase.isPending}
-            className="px-3.5 py-2 text-xs font-medium rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)]">
-            Cancel
-          </button>
-          <button type="submit" disabled={logPurchase.isPending}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90 disabled:opacity-50">
-            {logPurchase.isPending && <RefreshCw size={12} className="animate-spin" />}
-            {recordOnly || !tracking
-              ? (logPurchase.isPending ? 'Saving…' : 'Log Purchase')
-              : 'Commit & Log Purchase'}
-          </button>
         </div>
       </form>
-    </div>
+    </ModalLayer>
   );
 }
 

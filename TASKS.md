@@ -4,3 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
+| fix-log-purchase-design | Log Purchase modal redesigned like Add Transaction; short note at the bottom | profit-tracker-app/src/pages/Cashout.jsx (Log Purchase modal) | Done, awaiting batch push | 2026-11-18 |
