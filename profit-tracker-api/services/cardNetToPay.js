@@ -70,6 +70,12 @@ async function computeCardDashboard(prisma, userId, monthParam) {
       name: pm.name,
       last4: pm.last4 ?? null,
       cashbackRate: 0,
+      // Points cards: every dollar figure below is already the dollar value
+      // of the points (multiplier x point value); these let the page also
+      // show the points themselves.
+      rewardType: pm.reward_type === 'points' ? 'points' : 'cashback',
+      pointValueCents: pm.reward_type === 'points' ? (pm.point_value_cents ?? 1) : null,
+      rewardsLabel: pm.rewards_label ?? null,
       totalSpend: zero(),
       cashbackEarned: zero(),
       totalLosses: zero(),

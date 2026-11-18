@@ -160,6 +160,7 @@ app.use('/auth/firebase', (err, req, res, next) => {
 
 // --- ROUTES ---
 app.use('/api/payment-methods', paymentMethodsRouter);
+app.use('/api/card-catalog', require('./routes/cardCatalog'));
 app.use('/api/inventory', inventoryRouter);
 app.use('/api/sales', salesRouter);
 app.use('/api/platforms', platformsRouter);

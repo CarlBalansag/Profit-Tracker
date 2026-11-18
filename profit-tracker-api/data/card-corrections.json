@@ -1,0 +1,19 @@
+{
+  "about": "Fixes applied on top of the OpenCard DB card list (services/cardCatalog.js applyCorrections). Use for changes an issuer made that the list hasn't caught up with yet. Each entry cites the issuer's own page and the date it was checked. Remove an entry once OpenCard DB has the same data. Allowed: add_categories [{label, rate, cap}], add_benefits [{title, category, description}], set {reward_type, rewards_label, base_rate, base_cap, annual_fee}.",
+  "corrections": [
+    {
+      "id": "us-chase-sapphire-preferred",
+      "source": "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+      "checked": "2026-11-17",
+      "note": "Chase added 3x on gas and EV charging and 3x on vacation homes; the list (verified 2026-07-24) also has no purchase protection or extended warranty.",
+      "add_categories": [
+        { "label": "Gas stations and EV charging", "rate": 3, "cap": null },
+        { "label": "Vacation homes at top brands like Airbnb and Vrbo", "rate": 3, "cap": null }
+      ],
+      "add_benefits": [
+        { "title": "Purchase Protection", "category": "insurance", "description": "Covers eligible new purchases against damage or theft for 120 days, up to $500 per claim." },
+        { "title": "Extended Warranty Protection", "category": "insurance", "description": "Adds one year to an eligible U.S. manufacturer's warranty of three years or less." }
+      ]
+    }
+  ]
+}

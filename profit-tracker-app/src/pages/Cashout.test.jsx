@@ -92,7 +92,15 @@ vi.mock('../hooks/useApi', () => ({
     isLoading: false,
     error: null,
   }),
-  usePaymentMethods: () => ({ data: [{ id: 'card-1', name: 'QA Card', default_cashback_rate: 2 }], isLoading: false, error: null }),
+  usePaymentMethods: () => ({
+    data: [
+      { id: 'card-1', name: 'QA Card', default_cashback_rate: 2 },
+      // 1% everywhere, 5% at Amazon (store rates arrive as a JSON string too).
+      { id: 'card-amazon', name: 'Amazon Card', default_cashback_rate: 1, category_rates: JSON.stringify([{ store: 'Amazon', rate: 5 }]) },
+    ],
+    isLoading: false,
+    error: null,
+  }),
 }));
 
 vi.mock('sonner', () => ({
@@ -893,7 +901,47 @@ describe('Cashout Page', () => {
       };
     });
 
-    it('requires a tracking number before committing', async () => {
+    it("uses the card's store rate for cashback, like Add Transaction", async () => {
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Log Purchase' }));
+      fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+      fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-amazon' } });
+      fireEvent.change(screen.getByLabelText('Unit cost (what you paid)'), { target: { value: '15.99' } });
+      fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '2' } });
+      fireEvent.change(screen.getByLabelText('Sales tax'), { target: { value: '2.02' } });
+
+      // 5% of (15.99 x 2 + 2.02) = 5% of 34.00
+      expect(screen.getByText('$1.70 (5%)')).toBeInTheDocument();
+
+      const dialogSubmit = screen.getAllByRole('button', { name: 'Log Purchase' }).find((b) => b.type === 'submit');
+      await act(async () => {
+        fireEvent.click(dialogSubmit);
+      });
+      expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+        payment_method_id: 'card-amazon', cashback_rate: 5, cashback_earned: 1.7,
+      }));
+    });
+
+    it('falls back to the card default away from its bonus store', async () => {
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Log Purchase' }));
+      fireEvent.change(screen.getByLabelText('Store'), { target: { value: '' } });
+      fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-amazon' } });
+      expect(screen.getByText(/\(1%\)/)).toBeInTheDocument();
+    });
+
+    it('logs without committing when there is no tracking number yet', async () => {
+      mockMutations.logPurchase.mutateAsync.mockResolvedValueOnce({ commitPending: true });
       render(
         <MemoryRouter>
           <Cashout />
@@ -904,13 +952,25 @@ describe('Cashout Page', () => {
       expect(screen.getByRole('heading', { name: 'Log Purchase' })).toBeInTheDocument();
       fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
       fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-1' } });
+      expect(screen.getByText(/without committing to EB Primary/)).toBeInTheDocument();
+      expect(screen.queryByText(/real, binding pledge/)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/Insured value/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Commit & Log Purchase' })).not.toBeInTheDocument();
 
+      // The dialog's own button (the deal row's Log Purchase opened it).
+      const dialogSubmit = screen.getAllByRole('button', { name: 'Log Purchase' }).find((b) => b.type === 'submit');
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' }));
+        fireEvent.click(dialogSubmit);
       });
 
-      expect(screen.getByRole('alert')).toHaveTextContent(/tracking number/i);
-      expect(mockMutations.logPurchase.mutateAsync).not.toHaveBeenCalled();
+      // No confirm screen: nothing binding is sent.
+      expect(screen.queryByRole('heading', { name: 'Commit to this deal?' })).not.toBeInTheDocument();
+      expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+        tracking_codes: [], vendor_id: 'vendor-1', payment_method_id: 'card-1',
+      }));
+      expect(mockMutations.logPurchase.mutateAsync.mock.calls[0][0].insured_value).toBeUndefined();
+      expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Not committed to EB Primary yet'), expect.anything());
+      expect(screen.queryByRole('heading', { name: 'Log Purchase' })).not.toBeInTheDocument();
     });
 
     it('asks to confirm, then commits, logs the purchase, and reports a successful tracking submission', async () => {
@@ -948,8 +1008,8 @@ describe('Cashout Page', () => {
         item_id: '10001',
         quantity: 1,
         tracking_codes: ['1Z999AA10123456784'],
-        store: 'Amazon',
-        payment_method: 'QA Card',
+        vendor_id: 'vendor-1',
+        payment_method_id: 'card-1',
         unit_payout: 1140,
         platform_id: 'group-eb', // no group linked: picked by name in the form
       }));
@@ -1180,13 +1240,14 @@ describe('Cashout Page', () => {
 
       fireEvent.change(cashout, { target: { value: '1' } });
       expect(screen.queryByText(/doesn't commit or send tracking/)).not.toBeInTheDocument();
-      expect(screen.getByText(/real, binding pledge/)).toBeInTheDocument();
+      expect(screen.getByText(/without committing to EB Primary/)).toBeInTheDocument();
       expect(screen.getByLabelText('Sold to')).toHaveValue('group-eb');
-      expect(screen.getByLabelText(/Insured value/)).toBeInTheDocument();
 
       fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
       fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-1' } });
       fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: '1Z999AA10123456784' } });
+      expect(screen.getByText(/real, binding pledge/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Insured value/)).toBeInTheDocument();
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' }));
       });

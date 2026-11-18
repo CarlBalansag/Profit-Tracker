@@ -35,6 +35,12 @@ const required = (value, label) => {
  * failure recorded on the commitment row so the UI can show it and let the
  * item be resubmitted later.
  *
+ * With no tracking number yet, an EB purchase skips steps 1 and 2 too: the
+ * purchase and sale are written, plus a "pending" commitment row holding the
+ * deal, item and quantity. Nothing is sent to EB. Adding a tracking number to
+ * that sale later offers to commit then (see pendingCommit.js), at EB's payout
+ * at that moment.
+ *
  * Cashouts we can't commit to yet (Points4Days) skip steps 1 and 2: this only
  * writes the purchase and sale, and the user commits and sends tracking on the
  * cashout's own website. A tracking number is still required, as it is for EB:
@@ -70,9 +76,11 @@ async function logPurchase(userId, {
   const codes = Array.isArray(trackingCodes)
     ? trackingCodes.map((code) => String(code || '').trim()).filter(Boolean)
     : [];
-  if (codes.length === 0) {
+  if (codes.length === 0 && recordOnly) {
     throw Object.assign(new Error('At least one tracking number is required.'), { status: 400 });
   }
+  // EB with no tracking number: record now, commit once it ships.
+  const deferCommit = !recordOnly && codes.length === 0;
 
   const saleTo = platformId || conn.platform_id;
   if (!saleTo) {
@@ -88,10 +96,28 @@ async function logPurchase(userId, {
   await requireOwned('platform', vendorId, userId, 'Store');
   await requireOwned('paymentMethod', paymentMethodId, userId, 'Payment method');
 
+  if (!recordOnly) {
+    // EB takes one open commitment per item, and so does our table. Checked
+    // before EB is called: a commit EB accepted that we then failed to save
+    // would leave a real pledge with no record of it here. A withdrawn
+    // commitment doesn't count -- its open_item_id is null.
+    const existing = await prisma.cashoutCommitment.findFirst({
+      where: { connection_id: conn.id, open_item_id: String(itemId) },
+    });
+    if (existing) {
+      throw Object.assign(
+        new Error(existing.status === 'pending'
+          ? 'This item is already logged and waiting to be committed. Add its tracking number to commit it.'
+          : 'You already have a commitment for this item. Change its quantity from Commitments instead.'),
+        { status: 409 },
+      );
+    }
+  }
+
   let commitment = null;
   let trackingSubmitted = false;
   let trackingError = null;
-  if (!recordOnly) {
+  if (!recordOnly && !deferCommit) {
     // Step 1: commit with EB. Left to throw straight through -- a failure here
     // (deal closed, already committed, over the limit) means nothing below runs.
     commitment = await commitsService.createCommitment(userId, connectionId, {
@@ -170,6 +196,23 @@ async function logPurchase(userId, {
       },
     });
 
+    if (deferCommit) {
+      const pending = await tx.cashoutCommitment.create({
+        data: {
+          user_id: userId,
+          connection_id: conn.id,
+          sale_id: createdSale.id,
+          external_deal_id: String(dealId),
+          external_item_id: String(itemId),
+          open_item_id: String(itemId),
+          external_commitment_id: null,
+          quantity: Number(qty),
+          status: 'pending',
+        },
+      });
+      return { inventory: createdInventory, sale: createdSale, commitment: pending };
+    }
+
     const updatedCommitment = commitment && await tx.cashoutCommitment.update({
       where: { id: commitment.id },
       data: {
@@ -190,6 +233,7 @@ async function logPurchase(userId, {
     trackingSubmitted,
     trackingError,
     recordedOnly: recordOnly,
+    commitPending: deferCommit,
   };
 }
 

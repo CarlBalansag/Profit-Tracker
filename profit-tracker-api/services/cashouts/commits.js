@@ -44,6 +44,7 @@ async function createCommitment(userId, connectionId, { dealId, itemId, quantity
       sale_id: saleId,
       external_deal_id: String(dealId),
       external_item_id: String(itemId),
+      open_item_id: String(itemId),
       external_commitment_id: preview.id,
       quantity: preview.quantity,
       status: 'active',
@@ -55,6 +56,10 @@ async function updateCommitment(userId, commitmentRecordId, { quantity }) {
   if (!(Number(quantity) > 0)) throw Object.assign(new Error('quantity must be a positive number.'), { status: 400 });
   const record = await prisma.cashoutCommitment.findFirst({ where: { id: commitmentRecordId, user_id: userId } });
   if (!record) throw notFound('Commitment');
+  // Not committed with the provider yet: only our own row changes.
+  if (record.status === 'pending') {
+    return prisma.cashoutCommitment.update({ where: { id: record.id }, data: { quantity: Number(quantity) } });
+  }
 
   const { adapter, rawKey } = await connectionAndAdapter(userId, record.connection_id);
   const preview = await adapter.updateCommit(rawKey, record.external_commitment_id, { quantity: Number(quantity) });
@@ -68,11 +73,22 @@ async function updateCommitment(userId, commitmentRecordId, { quantity }) {
 async function deleteCommitment(userId, commitmentRecordId) {
   const record = await prisma.cashoutCommitment.findFirst({ where: { id: commitmentRecordId, user_id: userId } });
   if (!record) throw notFound('Commitment');
+  if (record.status === 'committing') {
+    throw Object.assign(new Error('This commitment is being sent to the cashout right now. Try again in a moment.'), { status: 409 });
+  }
+  // Never committed with the provider, so there's nothing to withdraw there.
+  // The row goes, so the item can be committed again later; the purchase and
+  // sale stay.
+  if (record.status === 'pending') {
+    await prisma.cashoutCommitment.delete({ where: { id: record.id } });
+    return { ...record, status: 'removed' };
+  }
 
   const { adapter, rawKey } = await connectionAndAdapter(userId, record.connection_id);
   await adapter.deleteCommit(rawKey, record.external_commitment_id);
 
-  return prisma.cashoutCommitment.update({ where: { id: record.id }, data: { status: 'withdrawn' } });
+  // open_item_id clears so this item can be committed again later.
+  return prisma.cashoutCommitment.update({ where: { id: record.id }, data: { status: 'withdrawn', open_item_id: null } });
 }
 
 async function listLocalCommitments(userId, { connectionId, saleId, status } = {}) {
@@ -102,6 +118,7 @@ async function listTrackingSubmissions(userId, connectionId, pagination) {
 }
 
 module.exports = {
+  connectionAndAdapter,
   listCommits,
   getCommit,
   createCommitment,

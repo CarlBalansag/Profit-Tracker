@@ -1,5 +1,19 @@
 import React, { useState } from 'react';
 import { useCreditCard } from '../hooks/useApi';
+import { pointsFromDollars, pointsUnit } from '../utils/cardRewards';
+
+// Points cards: the dollar figures are the points' dollar value
+// (multiplier x point value); these show the points themselves.
+const isPointsCard = (card) => card?.rewardType === 'points';
+const pointsText = (card, dollars) => {
+  const pts = pointsFromDollars(dollars, card.pointValueCents);
+  return `${pts < 0 ? '-' : ''}${Math.abs(pts).toLocaleString('en-US')} ${pointsUnit(card.rewardsLabel)}`;
+};
+const multiplierText = (card, dollarRate) => {
+  const cents = Number(card.pointValueCents) || 1;
+  const x = Math.round(((Number(dollarRate) || 0) / cents) * 100) / 100;
+  return `${x}x (≈${dollarRate ?? 0}% at ${cents}¢)`;
+};
 import { recordStatusLabel } from '../data/statusWorkflow';
 import { PageLoader } from '../components/PageLoader';
 import LoadError from '../components/UI/LoadError';
@@ -93,7 +107,8 @@ function StatusBadge({ status }) {
   );
 }
 
-function ItemRow({ item }) {
+function ItemRow({ item, card }) {
+  const points = isPointsCard(card);
   const [expanded, setExpanded] = useState(false);
   const isLoss = item.netPnl !== null && item.netPnl < 0;
   const isProfit = item.netPnl !== null && item.netPnl >= 0;
@@ -129,6 +144,7 @@ function ItemRow({ item }) {
         </td>
         <td data-label="Cashback" style={{ padding: '12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: 'var(--green)' }}>
           <span style={item.cashback < 0 ? { color: 'var(--red)' } : undefined}>{money(item.cashback, { plus: true })}</span>
+          {points && <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)' }}>{pointsText(card, item.cashback)}</span>}
         </td>
         <td data-label="Redeem" style={{ padding: '12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>
           {item.lossToRedeem > 0
@@ -172,8 +188,12 @@ function ItemRow({ item }) {
                 { label: item.kind === 'refund' ? 'Refund credit' : 'Cost Basis', value: money(item.cost), color: item.cost < 0 ? 'var(--green)' : 'var(--text-primary)' },
                 { label: 'Sale Revenue', value: isPending ? '—' : `$${fmt(item.revenue)}`, color: 'var(--text-primary)' },
                 { label: 'Net P&L', value: isPending ? '—' : isLoss ? `-$${fmt(Math.abs(item.netPnl))}` : `+$${fmt(item.netPnl)}`, color: isPending ? 'var(--text-muted)' : isLoss ? 'var(--red)' : 'var(--green)' },
-                { label: 'Cashback Rate', value: `${item.cashbackRate ?? 0}%`, color: 'var(--text-secondary)' },
-                { label: item.kind === 'refund' ? 'Cashback taken back' : 'Cashback Earned', value: money(item.cashback, { plus: true }), color: item.cashback < 0 ? 'var(--red)' : 'var(--green)' },
+                points
+                  ? { label: 'Points Rate', value: multiplierText(card, item.cashbackRate), color: 'var(--text-secondary)' }
+                  : { label: 'Cashback Rate', value: `${item.cashbackRate ?? 0}%`, color: 'var(--text-secondary)' },
+                points
+                  ? { label: item.kind === 'refund' ? 'Points taken back' : 'Points Earned', value: `${pointsText(card, item.cashback)} ≈ ${money(item.cashback)}`, color: item.cashback < 0 ? 'var(--red)' : 'var(--green)' }
+                  : { label: item.kind === 'refund' ? 'Cashback taken back' : 'Cashback Earned', value: money(item.cashback, { plus: true }), color: item.cashback < 0 ? 'var(--red)' : 'var(--green)' },
                 { label: 'Cashback Redeemed', value: item.lossToRedeem > 0 ? `$${fmt(item.lossToRedeem)}` : '—', color: item.lossToRedeem > 0 ? 'var(--red)' : 'var(--text-muted)' },
               ].map(({ label, value, color }) => (
                 <div key={label}>
@@ -186,7 +206,10 @@ function ItemRow({ item }) {
                 </div>
               ))}
               <div style={{ gridColumn: '1 / -1', marginTop: 6, paddingTop: 10, borderTop: '1px solid var(--border-default)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                <strong style={{ color: 'var(--text-secondary)' }}>How the math works:</strong> Cost × cashback rate = earned. When sold at a loss, cashback covers the minimum needed. Remaining cashback stays as points.
+                <strong style={{ color: 'var(--text-secondary)' }}>How the math works:</strong>{' '}
+                {points
+                  ? `Cost × points per $1 = points earned, valued at ${card.pointValueCents ?? 1}¢ each (change it in Settings → Payment Methods). When sold at a loss, that value covers the minimum needed. The rest stays as points.`
+                  : 'Cost × cashback rate = earned. When sold at a loss, cashback covers the minimum needed. Remaining cashback stays as points.'}
               </div>
             </div>
           </td>
@@ -333,16 +356,20 @@ function CreditCard() {
               tone="accent"
             />
             <StatCard
-              label="Cashback Earned"
+              label={isPointsCard(activeCard) ? 'Points Earned' : 'Cashback Earned'}
               value={money(cashbackEarned)}
-              sub={cashbackToRedeem > 0 ? `$${fmt(cashbackToRedeem)} redeemed for losses` : 'none needed for losses'}
+              sub={isPointsCard(activeCard)
+                ? `${pointsText(activeCard, cashbackEarned)}${cashbackToRedeem > 0 ? ` · $${fmt(cashbackToRedeem)} redeemed for losses` : ''}`
+                : (cashbackToRedeem > 0 ? `$${fmt(cashbackToRedeem)} redeemed for losses` : 'none needed for losses')}
               icon={Sparkles}
               tone="green"
             />
             <StatCard
               label="Keep as Points"
               value={money(cashbackToKeep)}
-              sub={uncoveredLoss > 0 ? `$${fmt(uncoveredLoss)} loss not covered` : 'stays in your rewards balance'}
+              sub={uncoveredLoss > 0
+                ? `$${fmt(uncoveredLoss)} loss not covered`
+                : isPointsCard(activeCard) ? `${pointsText(activeCard, cashbackToKeep)} stay in your balance` : 'stays in your rewards balance'}
               icon={PiggyBank}
               tone={uncoveredLoss > 0 ? 'red' : 'green'}
             />
@@ -461,7 +488,7 @@ function CreditCard() {
                   </thead>
                   <tbody>
                     {activeItems.map((item, i) => (
-                      <ItemRow key={`${item.kind ?? 'item'}-${item.id}-${item.saleId ?? i}`} item={item} />
+                      <ItemRow key={`${item.kind ?? 'item'}-${item.id}-${item.saleId ?? i}`} item={item} card={activeCard} />
                     ))}
                   </tbody>
                   <tfoot>

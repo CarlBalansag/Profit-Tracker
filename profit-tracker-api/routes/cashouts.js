@@ -19,6 +19,7 @@ const {
 } = require('../services/cashouts/service');
 const commitsService = require('../services/cashouts/commits');
 const { logPurchase } = require('../services/cashouts/logPurchase');
+const pendingCommit = require('../services/cashouts/pendingCommit');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -235,6 +236,27 @@ router.patch('/commitments/:id', isAuthenticated, async (req, res, next) => {
   try {
     const commitment = await commitsService.updateCommitment(req.user.id, req.params.id, { quantity: req.body.quantity });
     res.json(commitment);
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code || null });
+  }
+});
+
+// GET /api/cashouts/commitments/:id/pending -- what committing a purchase that
+// was logged before it shipped would send, at the cashout's payout right now.
+router.get('/commitments/:id/pending', isAuthenticated, async (req, res) => {
+  try {
+    res.json(await pendingCommit.previewPending(req.user.id, req.params.id));
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code || null });
+  }
+});
+
+// POST /api/cashouts/commitments/:id/commit -- commit that purchase with the
+// cashout and send the sale's tracking number. Only ever called from the
+// user's confirm; adding tracking alone never commits.
+router.post('/commitments/:id/commit', isAuthenticated, async (req, res) => {
+  try {
+    res.json(await pendingCommit.commitPending(req.user.id, req.params.id, { insuredValue: req.body?.insured_value }));
   } catch (err) {
     res.status(err.status || 400).json({ error: err.message, code: err.code || null });
   }

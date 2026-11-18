@@ -136,6 +136,8 @@ const nullableOptionalDateString = z.preprocess(
 const categoryRate = z.object({
   store: requiredString('store'),
   rate: z.coerce.number().finite().min(0),
+  // Points per $1 at this store, for a points card (the server derives `rate`).
+  points: z.coerce.number().finite().min(0).optional(),
   expires: optionalDateString,
 }).passthrough();
 
@@ -301,7 +303,20 @@ const paymentMethod = z.object({
   credit_limit: decimalAmount({ optional: true }).nullable(),
   min_payment_pct: decimalAmount({ scale: 6, optional: true }).nullable(),
   is_personal: optionalBoolish,
+  reward_type: z.enum(['cashback', 'points']).optional(),
+  points_base_rate: z.coerce.number().finite().min(0).max(1000).optional().nullable(),
+  point_value_cents: z.coerce.number().finite().gt(0).max(100).optional().nullable(),
+  rewards_label: z.string().trim().max(80).optional().nullable(),
+  catalog_card_id: z.string().trim().max(120).optional().nullable(),
+  rework_prompt_state: z.enum(['switched', 'kept']).optional().nullable(),
+  // Take this card's rewards from the catalog card in catalog_card_id.
+  apply_catalog: z.boolean().optional(),
+  include_store_rates: z.boolean().optional(),
 }).passthrough();
+
+const reworkPrompt = z.object({
+  state: z.enum(['switched', 'kept']),
+});
 
 const defaultReturnDays = z.preprocess(
   emptyToNull,
@@ -511,6 +526,7 @@ module.exports = {
   createExpense,
   updateExpense,
   paymentMethod,
+  reworkPrompt,
   platform,
   updatePlatform,
   platformBatch,

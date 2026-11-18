@@ -289,7 +289,7 @@ const CHANGE_REFUSED = {
   expense: 'This expense changed after this, so it can\'t be undone safely.',
 };
 
-async function undoChange(tx, userId, entry) {
+async function undoChange(tx, userId, entry, source) {
   const rows = entry.detail.rows || [];
   const refused = CHANGE_REFUSED[entry.record_type] || CHANGE_REFUSED.purchase;
 
@@ -373,6 +373,7 @@ async function undoChange(tx, userId, entry) {
     recordId: entry.record_id,
     detail: { ...entry.detail, undo: !entry.detail.undo, rows: inverse },
     revertsId: entry.id,
+    source,
   });
 }
 
@@ -427,7 +428,7 @@ const CHANGED_MESSAGE = {
   purchase: 'This purchase changed after this action, so it can\'t be undone safely.',
 };
 
-async function undoStatus(tx, userId, entry) {
+async function undoStatus(tx, userId, entry, source) {
   const { detail } = entry;
   const kind = entry.record_type === 'sale' ? 'sale' : 'inventory';
   // Lock the rows before checking them, so nothing can change between the
@@ -502,10 +503,12 @@ async function undoStatus(tx, userId, entry) {
         : null,
     },
     revertsId: entry.id,
+    source,
   });
 }
 
-async function undoActivity(userId, entryId) {
+// `source` marks who undid it ('web' by default, 'assistant' from routes/mcp.js).
+async function undoActivity(userId, entryId, { source = 'web' } = {}) {
   const entry = await prisma.activityLog.findUnique({ where: { id: entryId } });
   if (!entry || entry.user_id !== userId) throw requestError(404, 'Activity not found');
   const state = undoState(entry);
@@ -514,14 +517,14 @@ async function undoActivity(userId, entryId) {
 
   let created;
   if (entry.kind === 'status') {
-    created = await prisma.$transaction((tx) => undoStatus(tx, userId, entry));
+    created = await prisma.$transaction((tx) => undoStatus(tx, userId, entry, source));
   } else if (entry.kind === 'change') {
-    created = await prisma.$transaction((tx) => undoChange(tx, userId, entry));
+    created = await prisma.$transaction((tx) => undoChange(tx, userId, entry, source));
   } else if (entry.kind === 'refund.add' || entry.kind === 'refund.remove') {
     // Lazy: services/refunds.js requires this module to log its writes.
     const refunds = require('./refunds');
     const { refund } = entry.detail;
-    const options = { revertsId: entry.id };
+    const options = { revertsId: entry.id, source };
     if (entry.kind === 'refund.add') {
       try {
         const removed = await refunds.removeRefund(userId, refund.id, options);
