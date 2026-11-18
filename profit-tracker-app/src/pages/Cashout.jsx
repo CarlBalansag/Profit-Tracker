@@ -33,6 +33,7 @@ import {
   usePaymentMethods,
 } from '../hooks/useApi';
 import { formatMoney } from '../utils/money';
+import { batchCost, effectiveCashbackRate } from '../../../shared/finance.mjs';
 import { displayLabel, statusVisual } from '../data/statusWorkflow';
 import { useMatchMedia } from '../hooks/useMatchMedia';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
@@ -1208,8 +1209,15 @@ function LogPurchaseModal({ product, onClose }) {
   const selectedVendor = vendors.find((v) => v.id === vendorId);
   const selectedPaymentMethod = paymentMethods.find((m) => m.id === paymentMethodId);
   const taxExempt = Boolean(selectedVendor?.tax_exempt_place);
-  const cashbackRate = selectedPaymentMethod?.default_cashback_rate || 0;
-  const cashbackEarned = Math.round(Number(unitCost) * quantity * (cashbackRate / 100) * 100) / 100;
+  // Same rule as Add Transaction: the card's rate for this store when it has
+  // one (e.g. 5% at Amazon), else its default, on the whole charge with tax.
+  const cashbackRate = effectiveCashbackRate({ payment_method: selectedPaymentMethod, vendor: selectedVendor });
+  const cashbackBase = batchCost({
+    unit_purchase_cost: Number(unitCost) || 0,
+    qty_purchased: quantity,
+    sales_tax: taxExempt ? 0 : Number(salesTax) || 0,
+  });
+  const cashbackEarned = Math.round(cashbackBase * (cashbackRate / 100) * 100) / 100;
   const selectedItem = items.find((i) => i.id === itemId);
 
   const modalRef = useModalKeyboard(true, () => !logPurchase.isPending && onClose());
