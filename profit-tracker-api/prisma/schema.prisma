@@ -696,10 +696,15 @@ model CashoutCommitment {
   sale                    Sales?            @relation(fields: [sale_id], references: [id], onDelete: SetNull)
   external_deal_id        String
   external_item_id        String
-  external_commitment_id  String            @unique
+  // Null while status is "pending": logged from Log Purchase with no tracking
+  // number yet, so nothing has been committed with the provider. Filled in
+  // when the tracking number is added and the user confirms the commit.
+  external_commitment_id  String?           @unique
   quantity                Int
   // Mirrors the provider deal's own status at commit time (active/expired/
-  // closed) plus "withdrawn" for our own DELETE. Not kept live in sync after
+  // closed) plus "withdrawn" for our own DELETE, "pending" for a purchase
+  // logged before it shipped (not committed yet), and "committing" while that
+  // pending commit is in flight with the provider. Not kept live in sync after
   // that -- re-synced the next time this commitment is read from the provider.
   status                  String            @default("active")
   tracking_codes          String[]          @default([])

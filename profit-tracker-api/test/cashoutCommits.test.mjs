@@ -180,11 +180,15 @@ describe('cashout commits and tracking', () => {
       expect(spy).not.toHaveBeenCalled();
     });
 
-    it('rejects with no tracking number before ever calling the provider', async () => {
+    // No tracking number no longer refuses: it logs without committing. The
+    // full commit-later flow is in cashoutPendingCommit.test.mjs.
+    it('never calls the provider without a tracking number', async () => {
       const conn = seed();
       const spy = vi.spyOn(ebAdapter, 'createCommit');
-      await expect(logPurchase(harness.ids.user, { ...basePurchaseFields(), connectionId: conn.id, trackingCodes: [] })).rejects.toThrow('tracking number');
+      const result = await logPurchase(harness.ids.user, { ...basePurchaseFields(), connectionId: conn.id, trackingCodes: [] });
       expect(spy).not.toHaveBeenCalled();
+      expect(result.commitPending).toBe(true);
+      expect(result.commitment.status).toBe('pending');
     });
 
     it('sells to the cashout group the form picked when the connection has none linked', async () => {

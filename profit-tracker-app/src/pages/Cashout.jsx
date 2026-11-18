@@ -31,6 +31,7 @@ import { formatMoney } from '../utils/money';
 import { displayLabel, statusVisual } from '../data/statusWorkflow';
 import { useMatchMedia } from '../hooks/useMatchMedia';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
+import { offerPendingCommit } from '../utils/pendingCashoutCommit';
 import {
   dealConditionLabels,
   dealLimitLabel,
@@ -879,10 +880,13 @@ function CommitmentsPanel({ commitments, allDeals }) {
   }
 
   const withdraw = async (commitment) => {
-    if (!confirm('Withdraw this commitment? The cashout frees the quantity back to the deal immediately.')) return;
+    const pending = commitment.status === 'pending';
+    if (!confirm(pending
+      ? 'Remove this from Commitments? Nothing was committed to the cashout, so nothing is sent there. The purchase and sale stay.'
+      : 'Withdraw this commitment? The cashout frees the quantity back to the deal immediately.')) return;
     try {
       await deleteCommitment.mutateAsync(commitment.id);
-      toast.success('Commitment withdrawn.');
+      toast.success(pending ? 'Removed. The purchase and sale are still there.' : 'Commitment withdrawn.');
     } catch (err) {
       toast.error(err.message);
     }
@@ -920,7 +924,7 @@ function CommitmentsPanel({ commitments, allDeals }) {
               const unitCost = c.sale?.inventory?.unit_purchase_cost;
               const unitPayout = c.sale?.unit_price;
               return (
-                <tr key={c.id} className={`hover:bg-[var(--dp-hover-bg)] transition-colors ${c.status !== 'active' ? 'opacity-60' : ''}`}>
+                <tr key={c.id} className={`hover:bg-[var(--dp-hover-bg)] transition-colors ${c.status === 'withdrawn' ? 'opacity-60' : ''}`}>
                   {/* Item */}
                   <td className="py-3 px-4">
                     <div className="flex items-start gap-3">
@@ -970,6 +974,11 @@ function CommitmentsPanel({ commitments, allDeals }) {
                       <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[var(--dp-hover-bg)] text-[var(--dp-text-label)]">
                         Withdrawn
                       </span>
+                    ) : c.status === 'pending' || c.status === 'committing' ? (
+                      <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-500/15 text-sky-300"
+                        title={c.sale?.tracking_number ? 'Has tracking, not committed to the cashout yet' : 'Logged before it shipped. Add its tracking number to commit.'}>
+                        {c.status === 'committing' ? 'Committing…' : 'Not committed'}
+                      </span>
                     ) : c.sale?.workflow_status ? (
                       <StatusChip status={c.sale.workflow_status} />
                     ) : (
@@ -989,11 +998,34 @@ function CommitmentsPanel({ commitments, allDeals }) {
                     {c.tracking_error && (
                       <div className="text-[11px] text-rose-400 mt-0.5" title={c.tracking_error}>Tracking failed</div>
                     )}
-                    {!c.tracking_codes?.length && !c.tracking_error && <span className="text-[var(--dp-text-label)]">—</span>}
+                    {c.status === 'pending' && c.sale?.tracking_number && (
+                      <div className="text-[11px] text-[var(--dp-text-secondary)] font-mono truncate" title={c.sale.tracking_number}>{c.sale.tracking_number}</div>
+                    )}
+                    {!c.tracking_codes?.length && !c.tracking_error && !(c.status === 'pending' && c.sale?.tracking_number) && <span className="text-[var(--dp-text-label)]">—</span>}
                   </td>
 
                   {/* Actions */}
                   <td className="py-3 pl-3 pr-6 whitespace-nowrap text-right">
+                    {c.status === 'pending' && (
+                      <div className="inline-flex gap-1.5">
+                        {c.sale?.tracking_number && (
+                          <button
+                            type="button"
+                            onClick={() => offerPendingCommit(c.id)}
+                            className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap bg-[var(--dp-accent)] text-white hover:opacity-90 transition-opacity"
+                          >
+                            Commit
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => withdraw(c)}
+                          className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )}
                     {c.status === 'active' && (
                       <button
                         type="button"
@@ -1148,7 +1180,7 @@ function LogPurchaseModal({ product, onClose }) {
     if (!vendorId) return 'Pick the store you bought it from.';
     if (!paymentMethodId) return 'Pick the card or account you paid with.';
     if (needsSaleTo && !saleToId) return 'Pick which cashout group you sold it to.';
-    if (!tracking) return 'A tracking number is required -- this is for an item that has already shipped.';
+    if (!tracking && recordOnly) return 'A tracking number is required -- this is for an item that has already shipped.';
     return null;
   };
 
@@ -1162,8 +1194,8 @@ function LogPurchaseModal({ product, onClose }) {
         deal_name: deal.name,
         item_name: selectedItem?.name,
         quantity,
-        tracking_codes: [tracking],
-        insured_value: !recordOnly && insuredValue ? Number(insuredValue) : undefined,
+        tracking_codes: tracking ? [tracking] : [],
+        insured_value: !recordOnly && tracking && insuredValue ? Number(insuredValue) : undefined,
         platform_id: needsSaleTo ? saleToId : undefined,
         vendor_id: vendorId,
         payment_method_id: paymentMethodId,
@@ -1177,6 +1209,13 @@ function LogPurchaseModal({ product, onClose }) {
       });
       if (recordOnly) {
         setStage('saved');
+        return;
+      }
+      if (result.commitPending ?? result.commit_pending) {
+        toast.success(`Logged. Not committed to ${deal.connectionName} yet.`, {
+          description: "Add the tracking number to the sale when it ships, and you'll be asked to commit then, at that day's payout.",
+        });
+        onClose();
         return;
       }
       if (result.trackingSubmitted ?? result.tracking_submitted) {
@@ -1200,7 +1239,8 @@ function LogPurchaseModal({ product, onClose }) {
     const problem = validate();
     if (problem) return setError(problem);
     // EB's commit is binding, so it gets one more look before it's sent.
-    if (!recordOnly) return setStage('confirm');
+    // With no tracking number nothing is committed yet, so there's nothing to confirm.
+    if (!recordOnly && tracking) return setStage('confirm');
     await save();
   };
 
@@ -1313,9 +1353,15 @@ function LogPurchaseModal({ product, onClose }) {
             This saves the purchase and its sale to {deal.connectionName} at ${formatMoney(deal.payout)} each, in Profit Tracker only, with your tracking number on the sale. It doesn't commit or send tracking to {deal.connectionName} -- do that on their website. Only use this once you've actually shipped the item.
           </p>
         ) : (
-          <p className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
-            This commits to the cashout at today's payout price -- a real, binding pledge -- and submits your tracking number. Only use this once you've actually shipped the item.
-          </p>
+          tracking ? (
+            <p className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+              This commits to the cashout at today's payout price -- a real, binding pledge -- and submits your tracking number.
+            </p>
+          ) : (
+            <p className="text-[11px] text-[var(--dp-text-secondary)] bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2">
+              No tracking number yet? This saves the purchase and its sale without committing to {deal.connectionName}. When you add the tracking number to the sale later, you'll be asked to commit then, at that day's payout.
+            </p>
+          )
         )}
 
         {needsSaleTo && (
@@ -1388,11 +1434,11 @@ function LogPurchaseModal({ product, onClose }) {
         <div className="space-y-1.5">
           <label htmlFor="lp-tracking" className="text-[11px] text-[var(--dp-text-label)]">Tracking number</label>
           <input id="lp-tracking" type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
-            placeholder="1Z999AA10123456784"
+            placeholder={recordOnly ? '1Z999AA10123456784' : "Leave blank if it hasn't shipped yet"}
             className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none" />
         </div>
 
-        {!recordOnly && <div className="space-y-1.5">
+        {!recordOnly && tracking && <div className="space-y-1.5">
           <label htmlFor="lp-insured" className="text-[11px] text-[var(--dp-text-label)]">Insured value (optional, $200–$1,500)</label>
           <input id="lp-insured" type="number" min="200" max="1500" step="0.01" value={insuredValue} onChange={(e) => setInsuredValue(e.target.value)}
             placeholder="Leave blank to skip insurance"
@@ -1415,7 +1461,7 @@ function LogPurchaseModal({ product, onClose }) {
           <button type="submit" disabled={logPurchase.isPending}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90 disabled:opacity-50">
             {logPurchase.isPending && <RefreshCw size={12} className="animate-spin" />}
-            {recordOnly
+            {recordOnly || !tracking
               ? (logPurchase.isPending ? 'Saving…' : 'Log Purchase')
               : 'Commit & Log Purchase'}
           </button>

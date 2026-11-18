@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTutorial } from '../../context/TutorialContext';
 import { SpotlightOverlay } from '../Tutorial/SpotlightOverlay';
 import AnimatedLogo from '../UI/AnimatedLogo';
+import PendingCashoutCommit from '../PendingCashoutCommit';
 
 const Header = ({ onMenuClick, isGlass }) => {
   return (
@@ -106,6 +107,7 @@ const Shell = ({ children }) => {
         <BottomNav onMoreClick={() => setIsSidebarOpen(true)} isGlass={isGlass} />
       </main>
       <SpotlightOverlay />
+      <PendingCashoutCommit />
     </div>
   );
 };
