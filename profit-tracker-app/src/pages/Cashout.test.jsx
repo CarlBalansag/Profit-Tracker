@@ -900,6 +900,72 @@ describe('Cashout Page', () => {
       };
     });
 
+    describe('a deal with one item per color', () => {
+      beforeEach(() => {
+        currentDeals.results[0].deals[0] = {
+          id: '6000', name: 'iPad Air 11', retail: 599, payout: 640,
+          items: [
+            { id: '201', name: 'iPad Air 11 128GB - Blue', upcs: ['195949000001'], remainingPercentage: 72, vendorLimit: 2 },
+            { id: '202', name: 'iPad Air 11 128GB - Purple', upcs: ['195949000002'], remainingPercentage: 40 },
+          ],
+        };
+      });
+
+      const openForm = () => {
+        render(<MemoryRouter><Cashout /></MemoryRouter>);
+        fireEvent.click(screen.getByRole('button', { name: 'Log Purchase' }));
+        fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+        fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-1' } });
+      };
+      const submitForm = () => act(async () => {
+        fireEvent.click(screen.getAllByRole('button', { name: /Log Purchase/ }).find((b) => b.type === 'submit'));
+      });
+
+      it('starts with no color picked and will not save until one is', async () => {
+        openForm();
+        const picker = screen.getByLabelText('Which item (color, size or model)');
+        expect(picker).toHaveValue('');
+        expect(screen.getByRole('option', { name: 'iPad Air 11 128GB - Blue · UPC 195949000001' })).toBeInTheDocument();
+
+        await submitForm();
+
+        expect(mockMutations.logPurchase.mutateAsync).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert')).toHaveTextContent('Pick the exact item you bought (color, size or model).');
+      });
+
+      it('sends the picked color and shows what EB says about it', async () => {
+        mockMutations.logPurchase.mutateAsync.mockResolvedValueOnce({ commitPending: true });
+        openForm();
+        fireEvent.change(screen.getByLabelText('Which item (color, size or model)'), { target: { value: '202' } });
+
+        expect(screen.getByText('UPC 195949000002 · 40% of the limit left')).toBeInTheDocument();
+        await submitForm();
+
+        expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+          item_id: '202', item_name: 'iPad Air 11 128GB - Purple',
+        }));
+      });
+
+      it('names the color on the confirm screen before committing', async () => {
+        openForm();
+        fireEvent.change(screen.getByLabelText('Which item (color, size or model)'), { target: { value: '201' } });
+        fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: '1Z999AA10123456784' } });
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' }));
+        });
+
+        expect(screen.getByText('iPad Air 11 128GB - Blue')).toBeInTheDocument();
+        expect(screen.getByText(/One of 2 items in this deal/)).toBeInTheDocument();
+        expect(mockMutations.logPurchase.mutateAsync).not.toHaveBeenCalled();
+      });
+    });
+
+    it('picks the only item of a single-item deal for you', () => {
+      render(<MemoryRouter><Cashout /></MemoryRouter>);
+      fireEvent.click(screen.getByRole('button', { name: 'Log Purchase' }));
+      expect(screen.queryByLabelText('Which item (color, size or model)')).not.toBeInTheDocument();
+    });
+
     it("uses the card's store rate for cashback, like Add Transaction", async () => {
       render(
         <MemoryRouter>
