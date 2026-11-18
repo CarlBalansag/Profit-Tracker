@@ -4,3 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
+| feat-mcp-purchase-account | MCP: store account on add_purchase/update_purchase/log_cashout_purchase, list_inventory shows it, new list_store_accounts tool | `profit-tracker-api/routes/mcp.js`, `profit-tracker-api/test/mcpPurchaseAccount.test.mjs` (new) | In progress | 2026-11-18 |
