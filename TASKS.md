@@ -4,4 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| fix-transactions-sale-above-buy | Transactions list: on the same day, a purchase's SALE row sits above its BUY row (sort tie-break only) | `profit-tracker-app/src/pages/Transactions.jsx` (the `rows.sort` line only), `profit-tracker-app/src/pages/transactionsRowOrder.test.jsx` (new) | In progress | 2026-11-18 |
+| fix-transactions-sale-above-buy | Transactions list: on the same day, a purchase's SALE row sits above its BUY row (sort tie-break only) | `profit-tracker-app/src/pages/Transactions.jsx` (the `rows.sort` line + one import), `profit-tracker-app/src/utils/transactionRowOrder.js` + `.test.js` (new) | In progress | 2026-11-18 |

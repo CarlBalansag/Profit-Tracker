@@ -19,6 +19,7 @@ import TransactionDetailModal from '../components/TransactionDetailModal';
 import ConfirmDialog from '../components/UI/ConfirmDialog';
 import ProductNoteButton from '../components/ProductNoteButton';
 import { detectCarrier } from '../utils/carrier';
+import { orderTransactionRows } from '../utils/transactionRowOrder';
 import { recordStatusLabel } from '../data/statusWorkflow';
 import { formatMoney } from '../utils/money';
 import LoadError from '../components/UI/LoadError';
@@ -560,7 +561,10 @@ const Transactions = () => {
     }
   });
 
-  rows.sort((a, b) => new Date(b.date) - new Date(a.date));
+  // Newest day first; on the same day a sale sits above the buy it came from.
+  const orderedRows = orderTransactionRows(rows);
+  rows.length = 0;
+  rows.push(...orderedRows);
 
   // ─── Dashboard date cutoff ───────────────────────────────────────────────────
   const dashDateFrom = (() => {
