@@ -2,9 +2,10 @@
 //   ProfitShare   each store's share of total profit, as one split bar
 //   PriceBands    margin by what one unit cost
 //   StoreRoutes   profit per unit for each store → place-sold route
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { GrowBar, Panel, Empty } from './Motion';
+import { X } from 'lucide-react';
+import { GrowBar, Panel, Empty, Expand } from './Motion';
 
 const MotionDiv = motion.div;
 const EASE = [0.16, 1, 0.3, 1];
@@ -18,6 +19,8 @@ const fmt = (n) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, 
 const usd = (n) => `${n < 0 ? '−' : ''}$${fmt(Math.abs(n ?? 0))}`;
 const signedShort = (n) => `${n > 0 ? '+' : n < 0 ? '−' : ''}$${Math.round(Math.abs(n ?? 0)).toLocaleString('en-US')}`;
 const tone = (n) => (n >= 0 ? 'text-[var(--dp-green-text)]' : 'text-[var(--dp-red-text)]');
+const signed = (n) => `${n > 0 ? '+' : n < 0 ? '−' : ''}$${fmt(Math.abs(n ?? 0))}`;
+const shortDate = (key) => new Date(`${key}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 
 export function ProfitShare({ stores, loading }) {
   const earners = stores.filter((s) => s.profit > 0).sort((a, b) => b.profit - a.profit);
@@ -105,7 +108,77 @@ export function PriceBands({ bands, loading }) {
   );
 }
 
+// What sits behind one square: the math, then every sale on that route.
+function RouteDetail({ route, onClose }) {
+  const items = route.items;
+  return (
+    <div
+      role="region"
+      aria-label={`${route.store} to ${route.channel}`}
+      className="mt-4 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-hover-bg)] p-4"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-[var(--dp-text-primary)]">
+            {route.store} <span className="text-[var(--dp-text-label)]">→</span> {route.channel}
+          </div>
+          <div className="mt-1 text-xs tabular-nums text-[var(--dp-text-secondary)]">
+            <span className={tone(route.profit)}>{usd(route.profit)}</span> profit ÷ {route.unitsSold} unit{route.unitsSold === 1 ? '' : 's'} ={' '}
+            <b className={tone(route.profitPerUnit)}>{signed(route.profitPerUnit)} per unit</b>
+          </div>
+          {route.revenue != null && (
+            <div className="mt-0.5 text-[11px] tabular-nums text-[var(--dp-text-muted)]">
+              Profit = {usd(route.revenue)} paid to you (after fees) − {usd(route.cost)} item cost + {usd(route.cashback)} card cashback
+            </div>
+          )}
+          <div className="mt-0.5 text-[11px] text-[var(--dp-text-muted)]">
+            Units are the items bought at {route.store} that sold on {route.channel} this period, less any returned.
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close route details"
+          className="shrink-0 rounded-md p-1 text-[var(--dp-text-label)] transition-colors hover:bg-[var(--dp-card-bg)] hover:text-[var(--dp-text-primary)]"
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      {items?.length ? (
+        <table className="mt-3 w-full table-fixed text-xs tabular-nums">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wider text-[var(--dp-text-label)]">
+              <th className="w-[92px] pb-1.5 text-left font-semibold">Sold</th>
+              <th className="pb-1.5 text-left font-semibold">Item</th>
+              <th className="w-[44px] pb-1.5 text-right font-semibold">Units</th>
+              <th className="hidden w-[90px] pb-1.5 text-right font-semibold sm:table-cell">Paid</th>
+              <th className="hidden w-[90px] pb-1.5 text-right font-semibold sm:table-cell">Cost</th>
+              <th className="hidden w-[80px] pb-1.5 text-right font-semibold md:table-cell">Cashback</th>
+              <th className="w-[84px] pb-1.5 text-right font-semibold">Profit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.id} className="border-t border-[color:var(--dp-border)]">
+                <td className="py-1.5 text-[var(--dp-text-muted)]">{shortDate(item.date)}</td>
+                <td className="truncate py-1.5 pr-2 text-[var(--dp-text-primary)]" title={item.product}>{item.product}</td>
+                <td className="py-1.5 text-right">{item.units}</td>
+                <td className="hidden py-1.5 text-right sm:table-cell">{usd(item.revenue)}</td>
+                <td className="hidden py-1.5 text-right text-[var(--dp-text-secondary)] sm:table-cell">{usd(item.cost)}</td>
+                <td className="hidden py-1.5 text-right text-[var(--dp-text-secondary)] md:table-cell">{usd(item.cashback)}</td>
+                <td className={`py-1.5 text-right font-semibold ${tone(item.profit)}`}>{signed(item.profit)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : <p className="mt-3 text-[11px] text-[var(--dp-text-muted)]">Refresh the page to see the sales behind this number.</p>}
+    </div>
+  );
+}
+
 export function StoreRoutes({ routes, loading }) {
+  const [openKey, setOpenKey] = useState(null);
   const byStore = new Map();
   const byChannel = new Map();
   routes.forEach((r) => {
@@ -116,7 +189,9 @@ export function StoreRoutes({ routes, loading }) {
   const channels = Array.from(byChannel.entries()).sort((a, b) => b[1] - a[1]).map(([name]) => name);
   const shownStores = stores.slice(0, MAX_ROUTE_STORES);
   const shownChannels = channels.slice(0, MAX_ROUTE_CHANNELS);
-  const cell = new Map(routes.map((r) => [`${r.store}|${r.channel}`, r]));
+  const keyOf = (r) => `${r.store}|${r.channel}`;
+  const cell = new Map(routes.map((r) => [keyOf(r), r]));
+  const open = openKey ? cell.get(openKey) : null;
   const max = Math.max(1, ...routes.map((r) => Math.abs(r.profitPerUnit)));
   const shade = (ppu) => (ppu >= 0
     ? `color-mix(in srgb, var(--dp-green-text) ${Math.round(12 + (Math.abs(ppu) / max) * 50)}%, transparent)`
@@ -128,9 +203,24 @@ export function StoreRoutes({ routes, loading }) {
     return list.reduce((top, r) => (r.profitPerUnit > top.profitPerUnit ? r : top));
   };
   const titleOf = (r) => `${r.store} → ${r.channel}: ${usd(r.profitPerUnit)} per unit · ${r.unitsSold} unit${r.unitsSold === 1 ? '' : 's'} · ${usd(r.profit)} total`;
+  const toggle = (r) => setOpenKey((cur) => (cur === keyOf(r) ? null : keyOf(r)));
+  // The best route gets an outline; the open one also gets an accent ring.
+  const markStyle = (r, best) => ({
+    backgroundColor: shade(r.profitPerUnit),
+    outline: best === r ? '1.5px solid var(--dp-text-primary)' : 'none',
+    outlineOffset: -1.5,
+    boxShadow: openKey === keyOf(r) ? '0 0 0 2px var(--accent)' : 'none',
+  });
+  const pressProps = (r) => ({
+    role: 'button',
+    tabIndex: 0,
+    'aria-pressed': openKey === keyOf(r),
+    onClick: () => toggle(r),
+    onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(r); } },
+  });
 
   return (
-    <Panel title="Where each store's items sell best" sub="Average profit per unit, by the store you bought from and where it sold. The best route for each store is outlined.">
+    <Panel title="Where each store's items sell best" sub="Average profit per unit, by the store you bought from and where it sold. The best route for each store is outlined. Click a square to see how it adds up.">
       {routes.length ? (
         <>
           {/* Wider screens: a grid that always fits the card, no scrolling. */}
@@ -157,10 +247,10 @@ export function StoreRoutes({ routes, loading }) {
                     return (
                       <MotionDiv
                         key={c}
-                        role="cell"
+                        {...pressProps(r)}
                         title={titleOf(r)}
-                        className="min-w-0 rounded-md py-1.5 text-center"
-                        style={{ backgroundColor: shade(r.profitPerUnit), outline: best === r ? '1.5px solid var(--dp-text-primary)' : 'none', outlineOffset: -1.5 }}
+                        className="min-w-0 cursor-pointer rounded-md py-1.5 text-center transition-[filter] hover:brightness-125"
+                        style={markStyle(r, best)}
                         initial={{ opacity: 0, scale: 0.85 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ duration: 0.35, ease: EASE, delay: Math.min((si * shownChannels.length + ci) * 0.03, 0.6) }}
@@ -187,9 +277,10 @@ export function StoreRoutes({ routes, loading }) {
                     {list.map((r) => (
                       <span
                         key={r.channel}
+                        {...pressProps(r)}
                         title={titleOf(r)}
-                        className="rounded-md px-2 py-1 text-[11px] tabular-nums text-[var(--dp-text-primary)]"
-                        style={{ backgroundColor: shade(r.profitPerUnit), outline: best === r ? '1.5px solid var(--dp-text-primary)' : 'none', outlineOffset: -1.5 }}
+                        className="cursor-pointer rounded-md px-2 py-1 text-[11px] tabular-nums text-[var(--dp-text-primary)]"
+                        style={markStyle(r, best)}
                       >
                         {r.channel} <b>{signedShort(r.profitPerUnit)}</b> <span className="text-[var(--dp-text-secondary)]">· {r.unitsSold}u</span>
                       </span>
@@ -199,6 +290,10 @@ export function StoreRoutes({ routes, loading }) {
               );
             })}
           </ul>
+
+          <Expand open={Boolean(open)}>
+            {open && <RouteDetail key={openKey} route={open} onClose={() => setOpenKey(null)} />}
+          </Expand>
 
           {(stores.length > shownStores.length || channels.length > shownChannels.length) && (
             <p className="mt-3 text-[11px] text-[var(--dp-text-muted)]">

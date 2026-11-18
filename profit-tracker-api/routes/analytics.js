@@ -407,11 +407,25 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
         channelId: sale.platform_id || null,
         channel: sale.platform?.name || 'Direct',
         channelType: sale.platform?.type || 'Direct',
-        profit: zero(), unitsSold: 0, salesCount: 0,
+        profit: zero(), revenue: zero(), cost: zero(), cashback: zero(), unitsSold: 0, salesCount: 0, items: [],
       };
       r.profit = r.profit.plus(profitHere);
+      r.revenue = r.revenue.plus(saleRevenue);
+      r.cost = r.cost.plus(saleCost);
+      r.cashback = r.cashback.plus(saleCashback);
       r.unitsSold += units;
       r.salesCount += 1;
+      // The sales behind the number, so a route can be opened on the page.
+      r.items.push({
+        id: sale.id,
+        product: inv.product_name,
+        date: dateKey(sale.sale_date),
+        units,
+        revenue: money(saleRevenue),
+        cost: money(saleCost),
+        cashback: money(saleCashback),
+        profit: money(profitHere),
+      });
       routeMap.set(key, r);
     });
     const priceBands = bandTotals.map(b => ({
@@ -429,6 +443,10 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       .map(r => ({
         ...r,
         profit: money(r.profit),
+        revenue: money(r.revenue),
+        cost: money(r.cost),
+        cashback: money(r.cashback),
+        items: r.items.sort((a, b) => b.date.localeCompare(a.date)),
         profitPerUnit: r.unitsSold > 0 ? money(r.profit.div(r.unitsSold)) : 0,
       }))
       .sort((a, b) => b.profit - a.profit);

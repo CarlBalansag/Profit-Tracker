@@ -154,7 +154,11 @@ describe('GET /api/analytics/dashboard overhaul fields', () => {
     harness.db.sales.push({ ...harness.db.sales[0], id: 'sale-direct', platform_id: null, quantity: 1, unit_price: 90, commission_fee: 0, sale_shipping: 0 });
     const res = await get('/api/analytics/dashboard?mode=All&date=All%20Time');
     const route = (channel) => res.body.storeChannels.find((r) => r.store === 'QA Store' && r.channel === channel);
-    expect(route('QA Marketplace')).toMatchObject({ unitsSold: 2, profit: 69.16, profitPerUnit: 34.58, channelType: 'Marketplace' });
+    expect(route('QA Marketplace')).toMatchObject({ unitsSold: 2, profit: 69.16, profitPerUnit: 34.58, channelType: 'Marketplace', revenue: 273, cost: 208, cashback: 4.16 });
+    // The sale behind it, so the page can show how the number was reached.
+    expect(route('QA Marketplace').items).toEqual([{
+      id: harness.ids.sale, product: 'QA Multi-unit Sneaker', date: '2026-09-03', units: 2, revenue: 273, cost: 208, cashback: 4.16, profit: 69.16,
+    }]);
     expect(route('Direct')).toMatchObject({ unitsSold: 1, channelType: 'Direct' });
   });
 

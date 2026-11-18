@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ProfitShare, PriceBands, StoreRoutes } from './ProductPanels';
 
@@ -47,13 +47,42 @@ describe('StoreRoutes', () => {
     expect(screen.getByRole('columnheader', { name: 'StockX' })).toBeInTheDocument();
     // The wide grid and the phone list are both in the page; CSS shows one.
     const [gridCell, chip] = screen.getAllByTitle('Nike → StockX: $38.00 per unit · 10 units · $380.00 total');
-    expect(gridCell).toHaveAttribute('role', 'cell');
+    expect(gridCell).toHaveAttribute('role', 'button');
     expect(gridCell).toHaveTextContent('+$38');
     expect(chip).toHaveTextContent('StockX +$38 · 10u');
     expect(screen.getAllByText('—')).toHaveLength(1); // Amazon → StockX, grid only
     // Each store's best route is outlined in both, and only when it has a choice.
     expect(gridCell.style.outline).toContain('solid');
     expect(screen.getAllByTitle(/^Amazon → eBay/)[0].style.outline).toBe('none');
+  });
+
+  it('opens a route below the grid with the math and the sales behind it, and closes again', async () => {
+    const withSales = {
+      ...route('Best Buy', 'Windy City', 28, 12),
+      profit: 336, revenue: 3060, cost: 2760, cashback: 36,
+      items: [
+        { id: 's1', product: 'iPad Air 11"', date: '2026-10-02', units: 10, revenue: 2550, cost: 2300, cashback: 30, profit: 280 },
+        { id: 's2', product: 'Switch OLED', date: '2026-09-15', units: 2, revenue: 510, cost: 460, cashback: 6, profit: 56 },
+      ],
+    };
+    render(<StoreRoutes routes={[withSales]} />);
+    const [square] = screen.getAllByTitle(/^Best Buy → Windy City/);
+    fireEvent.click(square);
+    const panel = screen.getByRole('region', { name: 'Best Buy to Windy City' });
+    expect(panel).toHaveTextContent('$336.00 profit ÷ 12 units = +$28.00 per unit');
+    expect(panel).toHaveTextContent('Profit = $3,060.00 paid to you (after fees) − $2,760.00 item cost + $36.00 card cashback');
+    expect(panel).toHaveTextContent('Units are the items bought at Best Buy that sold on Windy City this period, less any returned.');
+    expect(within(panel).getByText('iPad Air 11"')).toBeInTheDocument();
+    expect(within(panel).getByText('+$56.00')).toBeInTheDocument();
+    expect(square).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(within(panel).getByRole('button', { name: 'Close route details' }));
+    await waitFor(() => expect(screen.queryByRole('region')).toBeNull());
+  });
+
+  it('opens a route with the keyboard', () => {
+    render(<StoreRoutes routes={[route('Nike', 'StockX', 38, 10)]} />);
+    fireEvent.keyDown(screen.getAllByTitle(/^Nike → StockX/)[0], { key: 'Enter' });
+    expect(screen.getByRole('region', { name: 'Nike to StockX' })).toBeInTheDocument();
   });
 
   it('says so when nothing sold', () => {
