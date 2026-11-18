@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.39',
+    date: '2026-11-18',
+    notes: "When you log a purchase, you can now pick which of your accounts at that store you used (for example, which Amazon account). The choice appears under Store only when you've saved accounts for that store in Data Setup. Add Transaction also explains what the Buyer field means.",
+  },
+  {
     version: '1.38',
     date: '2026-11-18',
     notes: "Committing to ElectronicsBuyer is safer: deals with several colors or models make you pick the exact one, a tracking number added to the purchase can be used to commit when the store ships straight to the cashout, and a box holding two items sends its tracking number once. If a commit hangs or a save fails, the app now checks with ElectronicsBuyer instead of committing twice, and your AI assistant can only commit or send tracking once you allow it in Settings.",
