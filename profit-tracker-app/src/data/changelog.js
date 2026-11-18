@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.40',
+    date: '2026-11-18',
+    notes: "You can now log more of a cashout item you've already committed to, even on a different store account: each purchase is added to your commitment when its tracking number goes in. If the cashout won't take more, the purchase stays saved with a note to contact them, and cancelling a committed sale asks before lowering your commitment. Commitments groups purchases of the same item together.",
+  },
+  {
     version: '1.39',
     date: '2026-11-18',
     notes: "When you log a purchase, you can now pick which of your accounts at that store you used (for example, which Amazon account). The choice appears under Store only when you've saved accounts for that store in Data Setup. Add Transaction also explains what the Buyer field means.",
