@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.37',
+    date: '2026-11-17',
+    notes: "Cash Flow is rebuilt around money in vs out: who still owes you, which card bills are coming up and whether payouts land in time, and where your money is tied up. Analytics has new tabs with store ROI, cashback by card, a profit calendar you can click to see what sold, and a breakdown of which stores' items sell best where. On Cashout, ElectronicsBuyer deals get a link to the deal, and a new Best Card column shows which of your cards earns the most on each deal.",
+  },
+  {
     version: '1.36',
     date: '2026-11-17',
     notes: "Log Purchase on ElectronicsBuyer works again, and you can now log an item before it ships: leave the tracking number blank and nothing is committed yet. When you add the tracking number later, you'll be asked whether to commit to EB then, at that day's payout.",
