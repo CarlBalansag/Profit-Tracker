@@ -11,6 +11,7 @@ const activityLog = require('../services/activityLog');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 const { markPaidBatch } = require('../validation/schemas');
 const { markSalesPaid } = require('../services/markSalesPaid');
+const pendingCommit = require('../services/cashouts/pendingCommit');
 
 // Task 8 read cutover: substitute each Decimal column's exact value into its
 // paired Float field, for a sale and its nested inventory/platform (if included).
@@ -277,7 +278,15 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
     }));
 
     await publishCalendarFeed(req.user.id);
-    res.json({ ...exactSale(updated), activity_id: activity?.id ?? null });
+    // A new tracking number on a cashout sale logged before it shipped: the
+    // client asks whether to commit it now (nothing is committed here).
+    const trackingAdded = Boolean(tracking_number) && tracking_number !== existing.tracking_number;
+    const cashoutCommitPending = trackingAdded ? await pendingCommit.pendingForSale(updated.id) : null;
+    res.json({
+      ...exactSale(updated),
+      activity_id: activity?.id ?? null,
+      ...(cashoutCommitPending ? { cashout_commit_pending: cashoutCommitPending } : {}),
+    });
   } catch (err) {
     next(err);
   }
@@ -386,7 +395,12 @@ router.post('/:id/actions/:action', isAuthenticated, validateBody(statusActionBo
     await publishCalendarFeed(req.user.id);
     // The recomputed actions travel with the record so the client can redraw
     // its buttons without a second request.
-    res.json({ ...withActions(exactSale(result.record)), activity_id: result.activity.id });
+    const cashoutCommitPending = action === 'add_outbound_tracking' ? await pendingCommit.pendingForSale(id) : null;
+    res.json({
+      ...withActions(exactSale(result.record)),
+      activity_id: result.activity.id,
+      ...(cashoutCommitPending ? { cashout_commit_pending: cashoutCommitPending } : {}),
+    });
   } catch (err) {
     next(err);
   }

@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.36',
+    date: '2026-11-17',
+    notes: "Log Purchase on ElectronicsBuyer works again, and you can now log an item before it ships: leave the tracking number blank and nothing is committed yet. When you add the tracking number later, you'll be asked whether to commit to EB then, at that day's payout.",
+  },
+  {
     version: '1.35',
     date: '2026-11-17',
     notes: "Your AI assistant now understands points cards and the card list, and everything it adds or edits shows up on the Activity page so you can undo it. It can also undo changes for you, record a full refund in one step, and tell you which return windows close soon.",
