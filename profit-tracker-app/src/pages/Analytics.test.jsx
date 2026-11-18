@@ -84,7 +84,7 @@ describe('Analytics Products & Stores tab', () => {
     openTab(/Products/);
     expect(screen.queryByText(/Category profitability/i)).toBeNull();
 
-    expect(screen.getByText('QA Store')).toBeTruthy();
+    expect(screen.getAllByText('QA Store').length).toBeGreaterThan(0);
     expect(screen.getByText(/33\.3% ROI/)).toBeTruthy();
     expect(screen.queryByText('Unsold Store')).toBeNull();
     expect(screen.queryByText('Shoes')).toBeNull();
@@ -94,7 +94,8 @@ describe('Analytics Products & Stores tab', () => {
     setData();
     render(<Analytics />);
     openTab(/Products/);
-    expect(screen.getAllByText('No sold items in this period')).toHaveLength(1);
+    expect(screen.getAllByText('No sold items in this period')).toHaveLength(3);
+    expect(screen.getByText('No profit from sales in this period')).toBeTruthy();
   });
 });
 

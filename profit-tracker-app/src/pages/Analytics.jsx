@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { Rise, RiseItem, SlidingTabs, GrowBar, FlashNumber, Panel, Empty } from '../components/Analytics/Motion';
 import ProfitCalendar from '../components/Analytics/ProfitCalendar';
+import { ProfitShare, PriceBands, StoreRoutes } from '../components/Analytics/ProductPanels';
 
 
 const DATE_OPTIONS = ['7 Days', '30 Days', 'YTD', 'All Time'].map((k) => ({ key: k, label: k }));
@@ -268,7 +269,7 @@ function Analytics() {
         )}
 
         {activeTab === 'products' && (
-          <Rise key={`products-${mode}-${dateRange}`} className="grid grid-cols-1 gap-6">
+          <Rise key={`products-${mode}-${dateRange}`} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <RiseItem>
               <Panel title="Store ROI" sub="Profit on items sold this period, by the store you bought them from.">
                 {storesWithSales.length ? (
@@ -293,6 +294,9 @@ function Analytics() {
                 ) : <Empty>{loading ? 'Loading…' : 'No sold items in this period'}</Empty>}
               </Panel>
             </RiseItem>
+            <RiseItem><ProfitShare stores={storesWithSales} loading={loading} /></RiseItem>
+            <RiseItem><PriceBands bands={data?.priceBands ?? []} loading={loading} /></RiseItem>
+            <RiseItem><StoreRoutes routes={data?.storeChannels ?? []} loading={loading} /></RiseItem>
           </Rise>
         )}
 

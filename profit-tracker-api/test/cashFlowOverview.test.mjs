@@ -139,6 +139,25 @@ describe('GET /api/analytics/dashboard overhaul fields', () => {
     expect(store.unitsSold).toBe(2);
   });
 
+  it('groups sales by what one unit cost, with margin and ROI', async () => {
+    const res = await get('/api/analytics/dashboard?mode=All&date=All%20Time');
+    const bands = Object.fromEntries(res.body.priceBands.map((b) => [b.key, b]));
+    expect(res.body.priceBands.map((b) => b.label)).toEqual(['Under $50', '$50–150', '$150–300', '$300+']);
+    // 2 units costing $208 together = $104 each.
+    expect(bands['50to150']).toMatchObject({ unitsSold: 2, salesCount: 1, revenue: 273, cost: 208, profit: 69.16 });
+    expect(bands['50to150'].margin).toBeCloseTo(69.16 / 273 * 100, 1);
+    expect(bands['50to150'].roi).toBeCloseTo(69.16 / 208 * 100, 1);
+    expect(bands.under50).toMatchObject({ unitsSold: 0, margin: null, roi: null });
+  });
+
+  it('gives profit per unit for each store-to-channel route', async () => {
+    harness.db.sales.push({ ...harness.db.sales[0], id: 'sale-direct', platform_id: null, quantity: 1, unit_price: 90, commission_fee: 0, sale_shipping: 0 });
+    const res = await get('/api/analytics/dashboard?mode=All&date=All%20Time');
+    const route = (channel) => res.body.storeChannels.find((r) => r.store === 'QA Store' && r.channel === channel);
+    expect(route('QA Marketplace')).toMatchObject({ unitsSold: 2, profit: 69.16, profitPerUnit: 34.58, channelType: 'Marketplace' });
+    expect(route('Direct')).toMatchObject({ unitsSold: 1, channelType: 'Direct' });
+  });
+
   it('adds cashback and its rate per card', async () => {
     const res = await get('/api/analytics/dashboard?mode=All&date=All%20Time');
     const card = res.body.topCards[0];

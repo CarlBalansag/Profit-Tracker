@@ -375,6 +375,64 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       }))
       .sort((a, b) => b.spend - a.spend);
 
+    // ── Margin by price range: sales grouped by what one unit cost you.
+    // Margin is profit over what the buyer paid (after fees), like the old
+    // category breakdown; ROI is profit over cost.
+    const PRICE_BANDS = [
+      { key: 'under50', label: 'Under $50', max: 50 },
+      { key: '50to150', label: '$50–150', max: 150 },
+      { key: '150to300', label: '$150–300', max: 300 },
+      { key: 'over300', label: '$300+', max: Infinity },
+    ];
+    const bandTotals = PRICE_BANDS.map(b => ({ ...b, revenue: zero(), cost: zero(), profit: zero(), unitsSold: 0, salesCount: 0 }));
+    // Same store × channel scope: average profit per unit for every route an
+    // item took, from the store it was bought at to where it sold.
+    const routeMap = new Map();
+    saleAlloc.forEach(({ sale, inv, saleCost, saleRevenue, saleCashback }) => {
+      const units = keptSaleQuantity(sale);
+      const profitHere = saleRevenue.minus(saleCost).plus(saleCashback);
+      if (units > 0) {
+        const unitCost = saleCost.div(units).toNumber();
+        const band = bandTotals.find(b => unitCost < b.max);
+        band.revenue = band.revenue.plus(saleRevenue);
+        band.cost = band.cost.plus(saleCost);
+        band.profit = band.profit.plus(profitHere);
+        band.unitsSold += units;
+        band.salesCount += 1;
+      }
+      const key = `${inv.vendor_id || 'none'}|${sale.platform_id || 'direct'}`;
+      const r = routeMap.get(key) || {
+        storeId: inv.vendor_id || null,
+        store: inv.vendor?.name || 'No Vendor',
+        channelId: sale.platform_id || null,
+        channel: sale.platform?.name || 'Direct',
+        channelType: sale.platform?.type || 'Direct',
+        profit: zero(), unitsSold: 0, salesCount: 0,
+      };
+      r.profit = r.profit.plus(profitHere);
+      r.unitsSold += units;
+      r.salesCount += 1;
+      routeMap.set(key, r);
+    });
+    const priceBands = bandTotals.map(b => ({
+      key: b.key,
+      label: b.label,
+      revenue: money(b.revenue),
+      cost: money(b.cost),
+      profit: money(b.profit),
+      unitsSold: b.unitsSold,
+      salesCount: b.salesCount,
+      margin: b.revenue.greaterThan(0) ? money(b.profit.div(b.revenue).times(100)) : null,
+      roi: b.cost.greaterThan(0) ? money(b.profit.div(b.cost).times(100)) : null,
+    }));
+    const storeChannels = Array.from(routeMap.values())
+      .map(r => ({
+        ...r,
+        profit: money(r.profit),
+        profitPerUnit: r.unitsSold > 0 ? money(r.profit.div(r.unitsSold)) : 0,
+      }))
+      .sort((a, b) => b.profit - a.profit);
+
     // ── Category breakdown: profitability by product category. Sold-side
     // only (same scope as Gross/Net Profit above) -- a category's margin is
     // only meaningful once units in it have actually sold.
@@ -686,6 +744,8 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       topCards,
       platformBreakdown,
       vendorBreakdown,
+      priceBands,
+      storeChannels,
       categoryBreakdown,
       pipelineCounts,
       // As steps (all / Cash-out / Marketplace): units, money and items in
