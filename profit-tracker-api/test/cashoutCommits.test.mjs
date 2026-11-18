@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -266,6 +266,86 @@ describe('cashout commits and tracking', () => {
           .rejects.toThrow('Store is required');
         expect(harness.db.inventory).toHaveLength(1); // fixture only
       });
+    });
+  });
+
+  // The form and the route have to agree on field names: the service tests
+  // above call logPurchase directly, so they can't catch a body the route
+  // doesn't read. This sends exactly what the Log Purchase form sends.
+  describe('POST /connections/:id/log-purchase', () => {
+    let server;
+    let baseUrl;
+    beforeAll(async () => {
+      server = harness.app().listen(0, '127.0.0.1');
+      await new Promise((resolve) => server.once('listening', resolve));
+      baseUrl = `http://127.0.0.1:${server.address().port}`;
+    });
+    afterAll(() => server.close());
+
+    const post = async (connId, body) => {
+      const res = await fetch(`${baseUrl}/api/cashouts/connections/${connId}/log-purchase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return { status: res.status, body: await res.json() };
+    };
+
+    const formBody = () => ({
+      deal_id: '2000', item_id: '101', deal_name: 'PS5 Pro', item_name: 'PS5 Pro',
+      quantity: 2, tracking_codes: ['1Z999AA10123456784'], insured_value: 500,
+      vendor_id: harness.ids.vendor, payment_method_id: harness.ids.card,
+      unit_cost: 400, tax_exempt: false, sales_tax: 10,
+      cashback_rate: 2, cashback_earned: 16, unit_payout: 480, purchase_date: '2026-11-08',
+    });
+
+    it('commits, sends tracking and saves the purchase and sale from the form body', async () => {
+      const conn = seed();
+      const commitSpy = vi.spyOn(ebAdapter, 'createCommit').mockResolvedValue({ id: 'commit-uuid-1', item_id: 101, quantity: 2, created_at: 1732924800 });
+      vi.spyOn(ebAdapter, 'submitTracking').mockResolvedValue({ received_tracking_codes: [] });
+
+      const res = await post(conn.id, formBody());
+
+      expect(res.status).toBe(201);
+      expect(commitSpy).toHaveBeenCalledTimes(1);
+      expect(res.body.trackingSubmitted).toBe(true);
+      expect(res.body.inventory.vendor_id).toBe(harness.ids.vendor);
+      expect(res.body.inventory.payment_method_id).toBe(harness.ids.card);
+      expect(res.body.inventory.qty_purchased).toBe(2);
+      expect(res.body.inventory.cashback_earned).toBe(16);
+      expect(res.body.sale.platform_id).toBe(CASHOUT_PLATFORM_ID);
+      expect(res.body.sale.unit_price).toBe(480);
+      expect(res.body.commitment.sale_id).toBe(res.body.sale.id);
+    });
+
+    it('rejects a missing store or card before calling EB, saving nothing', async () => {
+      const conn = seed();
+      const commitSpy = vi.spyOn(ebAdapter, 'createCommit');
+
+      const noStore = await post(conn.id, { ...formBody(), vendor_id: undefined });
+      expect(noStore.status).toBe(400);
+      expect(noStore.body.error).toBe('Store is required.');
+      const noCard = await post(conn.id, { ...formBody(), payment_method_id: undefined });
+      expect(noCard.status).toBe(400);
+      expect(noCard.body.error).toBe('Payment method is required.');
+
+      expect(commitSpy).not.toHaveBeenCalled();
+      expect(harness.db.inventory).toHaveLength(1); // fixture only
+      expect(harness.db.cashoutCommitment).toHaveLength(0);
+    });
+
+    it("won't use another user's store or card", async () => {
+      const conn = seed();
+      harness.db.paymentMethod.push({ id: 'foreign-card', user_id: harness.ids.other, name: 'Not mine', type: 'Credit' });
+      const commitSpy = vi.spyOn(ebAdapter, 'createCommit');
+
+      const foreignStore = await post(conn.id, { ...formBody(), vendor_id: harness.ids.foreign });
+      expect(foreignStore.status).toBeGreaterThanOrEqual(400);
+      const foreignCard = await post(conn.id, { ...formBody(), payment_method_id: 'foreign-card' });
+      expect(foreignCard.status).toBeGreaterThanOrEqual(400);
+
+      expect(commitSpy).not.toHaveBeenCalled();
+      expect(harness.db.inventory).toHaveLength(1);
     });
   });
 });

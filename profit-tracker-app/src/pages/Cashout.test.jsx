@@ -948,8 +948,8 @@ describe('Cashout Page', () => {
         item_id: '10001',
         quantity: 1,
         tracking_codes: ['1Z999AA10123456784'],
-        store: 'Amazon',
-        payment_method: 'QA Card',
+        vendor_id: 'vendor-1',
+        payment_method_id: 'card-1',
         unit_payout: 1140,
         platform_id: 'group-eb', // no group linked: picked by name in the form
       }));
