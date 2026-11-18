@@ -9,12 +9,15 @@ import { toast } from 'sonner';
 // someone setting up their assistant rather than a developer reading the code.
 const READ_TOOLS = [
   { name: 'list_sales', args: 'start_date?, end_date?, buyer?, payout_status?, limit?', description: 'Look up sales by date range, buyer, or payout status.' },
-  { name: 'list_inventory', args: 'status?', description: 'Look up purchases, optionally filtered by status.' },
+  { name: 'list_inventory', args: 'status?, return_closing_within_days?', description: 'Look up purchases, optionally filtered by status — or the ones whose store return window closes soon.' },
+  { name: 'list_activity', args: 'limit?, before?', description: "Your Activity log — what you or the assistant added, edited, refunded or moved, and whether it can still be undone." },
   { name: 'list_expenses', args: 'start_date?, end_date?, category?', description: 'Look up business expenses by date or category.' },
   { name: 'get_cashflow_summary', args: '', description: "What's owed to you, what you've spent, and what's sitting in inventory." },
   { name: 'get_unpaid_by_buyer', args: '', description: 'Who still owes you money, grouped by marketplace or cashout.' },
   { name: 'list_shipments', args: 'direction?, status?, missing_tracking?', description: "What's still in transit — inbound purchases or outbound sales." },
-  { name: 'get_card_net_to_pay', args: 'month?', description: 'What you still owe on each credit card, plus the next due date.' },
+  { name: 'get_card_net_to_pay', args: 'month?', description: 'What you still owe on each credit card, the next due date, and the rewards (cash back or points) earned that month.' },
+  { name: 'list_payment_methods', args: 'type?', description: 'Your cards and how each earns — cash back % or points at your point value — plus store rates and reselling perks.' },
+  { name: 'search_card_list', args: 'query, reward_type?, limit?', description: 'Look up a card in the built-in card list to add it or switch a saved card to it.' },
   { name: 'list_changes', args: 'limit?, record_id?', description: 'History of edits the assistant has made, so you can review or correct one.' },
 ];
 
@@ -26,6 +29,10 @@ const WRITE_TOOLS = [
   { name: 'update_sale', args: 'sale_id, …', description: 'Edit an existing sale — price, fees, tracking, and more.' },
   { name: 'update_shipment', args: 'item_id, tracking_number?, carrier?, status?', description: 'Update the tracking number, carrier, or shipping status on a purchase or sale.' },
   { name: 'mark_sale_paid', args: 'sale_ids[], payout_date, payout_amount, …', description: 'Mark one or more sales as paid from a single deposit.' },
+  { name: 'add_refund', args: 'purchase_id | sale_id, amount | full_refund, date, …', description: 'Record a refund or return — or a full refund worked out for you, like the website\'s "Returning everything".' },
+  { name: 'undo_activity', args: 'activity_id, confirm', description: 'Undo one change from the Activity log. Everything the assistant adds or edits shows up there too.' },
+  { name: 'add_payment_method', args: 'type, card_id? | name + cashback_rate or points, …', description: 'Add a card — from the card list (rates stay current) or by hand, as cash back or points.' },
+  { name: 'update_payment_method', args: 'payment_method, point_value_cents?, card_id?, new_name?, …', description: "Change a card's point value, name, last 4 or rates, or switch it to the right card from the list." },
 ];
 
 function ToolRow({ tool }) {
@@ -178,6 +185,26 @@ export const ApiKeys = () => {
     }
   };
 
+  // Binding cashout writes through MCP (commit, change, withdraw, send
+  // tracking) are off for every key until turned on here.
+  const setCashoutWrites = async (id, allow) => {
+    setBusyId(id);
+    try {
+      const res = await apiFetch(`/api/api-keys/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allow_cashout_writes: allow }),
+      });
+      await requireSuccessfulResponse(res, 'Could not change this key');
+      await load();
+      toast.success(allow ? 'This key can now make cashout commitments and send tracking.' : 'Cashout writes turned off for this key.');
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const revoke = async (id) => {
     setBusyId(id);
     try {
@@ -231,6 +258,21 @@ export const ApiKeys = () => {
                   </div>
                   <p className="text-[11px] text-gray-600 font-mono">{key.key_prefix}…</p>
                   <p className="text-[11px] text-gray-600">Created {fmtDate(key.created_at)} · Last used {fmtDate(key.last_used_at)}</p>
+                  {!key.revoked_at && (
+                    <label className="mt-2 flex items-start gap-2 text-[11px] text-gray-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(key.allow_cashout_writes)}
+                        disabled={busyId === key.id}
+                        onChange={(e) => setCashoutWrites(key.id, e.target.checked)}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        Allow cashout writes
+                        <span className="block text-gray-600">Lets this key commit to cashout deals, change or withdraw commitments, and send tracking. These are binding with the cashout.</span>
+                      </span>
+                    </label>
+                  )}
                 </div>
                 {!key.revoked_at && (
                   <div className="flex gap-2 flex-shrink-0">

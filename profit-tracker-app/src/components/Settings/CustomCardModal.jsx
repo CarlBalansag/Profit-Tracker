@@ -2,13 +2,33 @@ import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
+import { CatalogLinkPicker } from './CatalogLinkPicker';
+import { renameForRelink } from '../../utils/cardRewards';
+
+// Stored type values: the Credit Card page and calendar only count 'Credit'.
+const TYPE_OPTIONS = [
+  { value: 'Credit', label: 'Credit Card' },
+  { value: 'Debit', label: 'Debit Card' },
+  { value: 'Prepaid', label: 'Prepaid' },
+];
+// Older cards were saved as "Credit Card", "Business Credit", "Debit Card"...
+const normalizeType = (type = '') => {
+  const t = String(type).toLowerCase();
+  if (t.includes('debit')) return 'Debit';
+  if (t.includes('prepaid')) return 'Prepaid';
+  return 'Credit';
+};
 
 const INITIAL_STATE = {
   name: '',
-  type: 'Credit Card',
+  type: 'Credit',
   issuer: '',
   last4: '',
   baseRate: '0',
+  rewardType: 'cashback',
+  pointsBaseRate: '1',
+  pointValueCents: '1',
+  rewardsLabel: '',
   statement_close_day: '',
   due_day: '',
   credit_limit: '',
@@ -16,10 +36,12 @@ const INITIAL_STATE = {
   is_personal: false,
 };
 
-export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
+export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit, defaultType = null }) => {
   const [formData, setFormData] = useState(INITIAL_STATE);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  // A catalog card picked in "Card from the list", applied on save.
+  const [relinkTo, setRelinkTo] = useState(null);
   const modalRef = useModalKeyboard(isOpen, () => { if (!saving) onClose(); });
 
   useEffect(() => {
@@ -27,17 +49,23 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
       setFormData({
         ...INITIAL_STATE,
         ...cardToEdit,
+        type: normalizeType(cardToEdit.rawType ?? cardToEdit.type),
         baseRate: cardToEdit.baseRate?.toString() || '0',
+        rewardType: cardToEdit.rewardType === 'points' ? 'points' : 'cashback',
+        pointsBaseRate: (cardToEdit.pointsBaseRate ?? 1).toString(),
+        pointValueCents: (cardToEdit.pointValueCents ?? 1).toString(),
+        rewardsLabel: cardToEdit.rewardsLabel || '',
         statement_close_day: cardToEdit.statement_close_day?.toString() || '',
         due_day: cardToEdit.due_day?.toString() || '',
         credit_limit: (cardToEdit.credit_limit ?? cardToEdit.creditLimit)?.toString() || '',
         min_payment_pct: cardToEdit.min_payment_pct?.toString() || '',
       });
     } else if (isOpen) {
-      setFormData(INITIAL_STATE);
+      setFormData({ ...INITIAL_STATE, type: defaultType ? normalizeType(defaultType) : INITIAL_STATE.type });
     }
+    setRelinkTo(null);
     setErrors({});
-  }, [cardToEdit, isOpen]);
+  }, [cardToEdit, isOpen, defaultType]);
 
   if (!isOpen) return null;
 
@@ -51,8 +79,21 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
     const newErrors = {};
     if (!formData.name.trim()) newErrors.name = 'Card name is required';
     if (!formData.type.trim()) newErrors.type = 'Card type is required';
-    const baseRate = Number(formData.baseRate);
-    if (!Number.isFinite(baseRate) || baseRate < 0) newErrors.baseRate = 'Enter a cashback rate of 0 or greater';
+    if (relinkTo) {
+      // Rewards come from the picked card; only a points card's value is ours.
+      const cents = Number(formData.pointValueCents);
+      if (relinkTo.reward_type === 'points' && (formData.pointValueCents === '' || !Number.isFinite(cents) || cents <= 0 || cents > 100)) {
+        newErrors.pointValueCents = 'Enter a value above 0 and up to 100';
+      }
+    } else if (formData.rewardType === 'points') {
+      const pts = Number(formData.pointsBaseRate);
+      if (formData.pointsBaseRate === '' || !Number.isFinite(pts) || pts < 0) newErrors.pointsBaseRate = 'Enter points per $1 of 0 or greater';
+      const cents = Number(formData.pointValueCents);
+      if (formData.pointValueCents === '' || !Number.isFinite(cents) || cents <= 0 || cents > 100) newErrors.pointValueCents = 'Enter a value above 0 and up to 100';
+    } else {
+      const baseRate = Number(formData.baseRate);
+      if (!Number.isFinite(baseRate) || baseRate < 0) newErrors.baseRate = 'Enter a cashback rate of 0 or greater';
+    }
     const closeDay = parseInt(formData.statement_close_day);
     const dueDay = parseInt(formData.due_day);
     if (formData.statement_close_day && (isNaN(closeDay) || closeDay < 1 || closeDay > 28))
@@ -71,11 +112,17 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
       ...formData,
       id: cardToEdit?.id || `custom-${Date.now()}`,
       baseRate: parseFloat(formData.baseRate) || 0,
+      rewardType: formData.rewardType,
+      pointsBaseRate: formData.rewardType === 'points' ? Number(formData.pointsBaseRate) : null,
+      pointValueCents: formData.rewardType === 'points' ? Number(formData.pointValueCents) : null,
+      rewardsLabel: formData.rewardType === 'points' ? (formData.rewardsLabel.trim() || null) : null,
       statement_close_day: formData.statement_close_day ? parseInt(formData.statement_close_day) : null,
       due_day: formData.due_day ? parseInt(formData.due_day) : null,
       credit_limit: formData.credit_limit ? parseFloat(formData.credit_limit) : null,
       min_payment_pct: formData.min_payment_pct ? parseFloat(formData.min_payment_pct) : null,
       is_personal: Boolean(formData.is_personal),
+      relinkTo,
+      relinkPointValueCents: relinkTo?.reward_type === 'points' ? Number(formData.pointValueCents) : null,
     };
 
     setSaving(true);
@@ -140,10 +187,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
                 onChange={handleChange}
                 className="w-full bg-[#0A0A0F] border border-gray-800 rounded-lg px-4 py-3 text-sm text-gray-200 focus:outline-none focus:border-gray-500 transition-colors"
               >
-                <option value="Credit Card">Credit Card</option>
-                <option value="Debit Card">Debit Card</option>
-                <option value="Business Credit">Business Credit</option>
-                <option value="Prepaid">Prepaid</option>
+                {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
             <div className="space-y-2">
@@ -159,34 +203,156 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit }) => {
             </div>
           </div>
 
-          {/* Last 4 & Default Cashback */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Last 4 Digits</label>
-              <input
-                type="text"
-                name="last4"
-                maxLength="4"
-                placeholder="0000"
-                value={formData.last4}
-                onChange={handleChange}
-                className={inputClass('last4')}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Default Cashback %</label>
-              <input
-                type="number"
-                name="baseRate"
-                step="0.01"
-                min="0"
-                value={formData.baseRate}
-                onChange={handleChange}
-                className={inputClass('baseRate')}
-              />
-              {errors.baseRate && <p className="text-[11px] text-red-500 font-medium mt-1">{errors.baseRate}</p>}
-            </div>
+          {/* Last 4 */}
+          <div className="space-y-2">
+            <label htmlFor="card-last4" className="text-xs font-bold text-gray-400 uppercase tracking-wider">Last 4 Digits</label>
+            <input
+              id="card-last4"
+              type="text"
+              name="last4"
+              maxLength="4"
+              placeholder="0000"
+              value={formData.last4}
+              onChange={handleChange}
+              className={inputClass('last4')}
+            />
           </div>
+
+          {/* Which catalog card this card follows (editing a credit card only) */}
+          {isEditing && formData.type === 'Credit' && (
+            <CatalogLinkPicker
+              linkedId={cardToEdit.catalogCardId}
+              pending={relinkTo}
+              onPick={(card, oldCard) => {
+                const same = card.id === cardToEdit.catalogCardId;
+                setRelinkTo(same ? null : card);
+                // Follow the new card's name unless the user named it themselves.
+                setFormData(prev => ({ ...prev, name: same ? cardToEdit.name : renameForRelink(prev.name, oldCard?.name, card.name) }));
+                setErrors({});
+              }}
+              onClear={() => { setRelinkTo(null); setFormData(prev => ({ ...prev, name: cardToEdit.name })); }}
+            />
+          )}
+
+          {relinkTo ? (
+            relinkTo.reward_type === 'points' && (
+              <div className="space-y-2">
+                <label htmlFor="card-point-value" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Point value (¢)</label>
+                <input
+                  id="card-point-value"
+                  type="number"
+                  name="pointValueCents"
+                  step="0.05"
+                  min="0.01"
+                  max="100"
+                  value={formData.pointValueCents}
+                  onChange={handleChange}
+                  className={inputClass('pointValueCents')}
+                />
+                {errors.pointValueCents && <p className="text-[11px] text-red-500 font-medium mt-1">{errors.pointValueCents}</p>}
+                <p className="text-[11px] text-gray-600">What one {relinkTo.rewards_label || 'point'} is worth to you.</p>
+              </div>
+            )
+          ) : (
+          /* Rewards: cashback % or points per $1 */
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Rewards{formData.type !== 'Credit' ? ' (optional)' : ''}</p>
+              <p className="text-[11px] text-gray-600 mt-0.5">
+                {formData.type === 'Credit'
+                  ? 'Does this card pay cash back, or points/miles (like Amex Membership Rewards)?'
+                  : "Most debit cards earn nothing. Leave cashback at 0 if yours doesn't."}
+              </p>
+            </div>
+            <div className="flex gap-1" role="group" aria-label="Reward type">
+              {[{ id: 'cashback', label: 'Cashback %' }, { id: 'points', label: 'Points / miles' }].map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  aria-pressed={formData.rewardType === opt.id}
+                  onClick={() => { setFormData(prev => ({ ...prev, rewardType: opt.id })); setErrors({}); }}
+                  className={clsx(
+                    'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border',
+                    formData.rewardType === opt.id ? 'bg-gray-800 text-white border-gray-600' : 'text-gray-500 hover:text-gray-300 border-transparent'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {formData.rewardType === 'cashback' ? (
+              <div className="space-y-2">
+                <label htmlFor="card-base-rate" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Default Cashback %</label>
+                <input
+                  id="card-base-rate"
+                  type="number"
+                  name="baseRate"
+                  step="0.01"
+                  min="0"
+                  value={formData.baseRate}
+                  onChange={handleChange}
+                  className={inputClass('baseRate')}
+                />
+                {errors.baseRate && <p className="text-[11px] text-red-500 font-medium mt-1">{errors.baseRate}</p>}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label htmlFor="card-points-rate" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Points per $1</label>
+                  <input
+                    id="card-points-rate"
+                    type="number"
+                    name="pointsBaseRate"
+                    step="0.25"
+                    min="0"
+                    value={formData.pointsBaseRate}
+                    onChange={handleChange}
+                    className={inputClass('pointsBaseRate')}
+                  />
+                  {errors.pointsBaseRate && <p className="text-[11px] text-red-500 font-medium mt-1">{errors.pointsBaseRate}</p>}
+                  {isEditing && cardToEdit.catalogCardId && (
+                    <p className="text-[11px] text-amber-300/80">Changing this stops automatic rate updates for this card.</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="card-point-value" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Point value (¢)</label>
+                  <input
+                    id="card-point-value"
+                    type="number"
+                    name="pointValueCents"
+                    step="0.05"
+                    min="0.01"
+                    max="100"
+                    value={formData.pointValueCents}
+                    onChange={handleChange}
+                    className={inputClass('pointValueCents')}
+                  />
+                  {errors.pointValueCents && <p className="text-[11px] text-red-500 font-medium mt-1">{errors.pointValueCents}</p>}
+                </div>
+                <div className="space-y-2" style={{ gridColumn: '1 / -1' }}>
+                  <label htmlFor="card-rewards-label" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Program name</label>
+                  <input
+                    id="card-rewards-label"
+                    type="text"
+                    name="rewardsLabel"
+                    maxLength="80"
+                    placeholder="e.g., Membership Rewards points"
+                    value={formData.rewardsLabel}
+                    onChange={handleChange}
+                    className={inputClass('rewardsLabel')}
+                  />
+                  <p className="text-[11px] text-gray-600">
+                    {(() => {
+                      const pts = Number(formData.pointsBaseRate) || 0;
+                      const cents = Number(formData.pointValueCents) || 0;
+                      return `Counts as ${Math.round(pts * cents * 100) / 100}% back in your totals (${pts}x × ${cents}¢). Store rates on this card are re-priced when you change the point value.`;
+                    })()}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+          )}
 
           {/* Billing & Limits */}
           <div className="space-y-3">

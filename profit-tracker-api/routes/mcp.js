@@ -11,7 +11,7 @@ const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const prisma = require('../prisma');
 const { decimal } = require('../services/money');
-const { listRefunds, recordRefund, removeRefund } = require('../services/refunds');
+const { listRefunds, recordRefund, removeRefund, fullRefund } = require('../services/refunds');
 const activityLog = require('../services/activityLog');
 const { saleEconomics, allocatedCost, batchCost, isRealizedSale, keptQuantity, keptSaleQuantity } = require('../services/decimalFinance');
 const { payoutStatus } = require('../services/payoutStatus');
@@ -20,6 +20,10 @@ const statusTransitions = require('../services/statusTransitions');
 const { detectCarrier } = require('../services/tracking');
 const { computeCardDashboard, nextDueDate } = require('../services/cardNetToPay');
 const { recordChanges } = require('../services/changeLog');
+const { resolveRewardFields } = require('../services/cardRewards');
+const { autoUpdateFromCatalog, withCatalogFields } = require('../services/linkedCards');
+const { getCatalog, getCatalogIndex } = require('../services/cardCatalog');
+const { earnsText, storeRates, catalogSummary, resellingPerks } = require('../services/cardDescriptions');
 const transactionNotes = require('../services/transactionNotes');
 const cashoutService = require('../services/cashouts/service');
 const { presentDeal } = require('../services/cashouts/dealPresenter');
@@ -145,6 +149,15 @@ function jsonResult(data) {
 // of the call just failing outright.
 function errorResult(message) {
   return { content: [{ type: 'text', text: message }], isError: true };
+}
+
+// Binding cashout writes (commit, change, withdraw, send tracking) only go
+// through a key its owner has allowed to make them (Settings > API Keys).
+async function requireCashoutWrites(apiKeyId) {
+  const key = apiKeyId ? await prisma.apiKey.findUnique({ where: { id: apiKeyId } }) : null;
+  if (!key?.allow_cashout_writes) {
+    throw new Error("This API key isn't allowed to make cashout commitments or send tracking. Nothing was sent. Turn on \"Allow cashout writes\" for this key in Settings > API Keys.");
+  }
 }
 
 async function logWrite(userId, apiKeyId, tool, payload) {
@@ -369,15 +382,29 @@ function buildServer(userId, apiKeyId) {
     }));
   });
 
+  // Days until a purchase's store return window closes (negative once closed),
+  // or null when it has none or nothing left in stock to send back -- the same
+  // rule as the website's badge (profit-tracker-app/src/utils/returnWindow.js),
+  // counted in calendar days from today.
+  const returnDaysLeft = (inv) => {
+    if (!inv.return_by_date) return null;
+    if (Number(inv.qty_on_hand) <= 0) return null;
+    const day = (d) => Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 86400000);
+    const today = new Date();
+    const todayNum = Math.floor(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) / 86400000);
+    return day(new Date(inv.return_by_date)) - todayNum;
+  };
+
   server.registerTool('list_inventory', {
-    description: 'List inventory purchases, newest first, paged. status = receiving status (did it arrive); availability = Available/Sold Out from qty_on_hand.',
+    description: 'List inventory purchases, newest first, paged. status = receiving status (did it arrive); availability = Available/Sold Out from qty_on_hand. return_by_date / return_days_left show the store return window; pass return_closing_within_days to find what has to go back soon.',
     inputSchema: {
       status: z.string().optional(),
       availability: z.enum(['Available', 'Sold Out']).optional(),
+      return_closing_within_days: z.number().int().min(0).max(365).optional().describe('Only purchases whose store return window is still open and closes within this many days (0 = last day is today), soonest first. Items with nothing left in stock are left out -- a sold item can\'t go back to the store.'),
       limit: z.number().int().min(1).max(100).optional().describe('Default 20.'),
       offset: z.number().int().min(0).optional().describe('Default 0.'),
     },
-  }, async ({ status, availability, limit, offset }) => {
+  }, async ({ status, availability, return_closing_within_days, limit, offset }) => {
     const inventories = await prisma.inventory.findMany({
       where: { user_id: userId },
       include: { vendor: true },
@@ -386,7 +413,13 @@ function buildServer(userId, apiKeyId) {
     const now = Date.now();
     const filtered = inventories
       .filter((inv) => !status || String(inv.receiving_status || inv.status || '').toUpperCase() === status.toUpperCase())
-      .filter((inv) => !availability || statusTransitions.availabilityLabel(inv) === availability);
+      .filter((inv) => !availability || statusTransitions.availabilityLabel(inv) === availability)
+      .filter((inv) => {
+        if (return_closing_within_days === undefined) return true;
+        const left = returnDaysLeft(inv);
+        return left !== null && left >= 0 && left <= return_closing_within_days;
+      });
+    if (return_closing_within_days !== undefined) filtered.sort((a, b) => returnDaysLeft(a) - returnDaysLeft(b));
     const start = offset ?? 0;
     const page = filtered.slice(start, start + (limit ?? 20));
     const items = page.map((inv) => ({
@@ -407,6 +440,8 @@ function buildServer(userId, apiKeyId) {
       tax_exempt: inv.tax_exempt,
       notes: inv.notes || null,
       market_value: inv.market_value === null || inv.market_value === undefined ? null : toNum(decimal(inv.market_value)),
+      return_by_date: toDateOnly(inv.return_by_date),
+      return_days_left: returnDaysLeft(inv),
     }));
     return jsonResult({ items, total: filtered.length, truncated: start + page.length < filtered.length });
   });
@@ -515,6 +550,21 @@ function buildServer(userId, apiKeyId) {
 
   // ----------------------------------------------------------------- writes
 
+  // Activity log: every add/edit the assistant makes is logged in the same
+  // transaction, exactly like the website's routes, so it shows on the
+  // Activity page (marked "AI assistant") and can be undone there or with
+  // undo_activity. mark_sale_paid and log_cashout_purchase are not logged,
+  // same as their website counterparts.
+  const track = (tx, meta, work) => activityLog.trackChange(tx, userId, { source: 'assistant', ...meta }, work);
+  const saleRefs = async (t, saleId) => {
+    const sale = await t.sales.findUnique({ where: { id: saleId }, select: { inventory_id: true } });
+    return sale ? { inventory: [sale.inventory_id], sales: [saleId] } : { sales: [saleId] };
+  };
+  const purchaseRefs = async (t, purchaseId) => ({
+    inventory: [purchaseId],
+    sales: (await t.sales.findMany({ where: { inventory_id: purchaseId }, select: { id: true } })).map((x) => x.id),
+  });
+
   server.registerTool('mark_sale_paid', {
     description: 'Mark one or more sales as paid from a single deposit. If payout_amount is less than the combined expected revenue of the given sales, the shortfall is split across them proportionally and recorded, rather than silently absorbed.',
     inputSchema: {
@@ -567,7 +617,11 @@ function buildServer(userId, apiKeyId) {
     try {
       const vendor = await findOrCreateVendor(userId, store);
       const paymentMethod = await findPaymentMethod(userId, card_used);
-      const created = await prisma.inventory.create({
+      const { result: created, activity } = await prisma.$transaction((tx) => track(tx, {
+        action: 'create', recordType: 'purchase',
+        refs: async (t, made) => (made ? { inventory: [made.id] } : {}),
+        recordId: (made) => made.id,
+      }, () => tx.inventory.create({
         data: {
           user_id: userId,
           product_name: item.trim(),
@@ -582,10 +636,11 @@ function buildServer(userId, apiKeyId) {
           tracking_number: tracking_number || null,
           carrier: carrier || null,
         },
-      });
+      })));
       await logWrite(userId, apiKeyId, 'add_purchase', { item, qty, unit_cost, store, card_used, purchase_date, tax_exempt, order_number, tracking_number, carrier });
       return jsonResult({
         id: created.id,
+        activity_id: activity?.id ?? null,
         item: created.product_name,
         qty: created.qty_purchased,
         unit_cost: toNum(decimal(created.unit_purchase_cost)),
@@ -614,7 +669,11 @@ function buildServer(userId, apiKeyId) {
   }, async ({ description, amount, date, category, paid_from_account }) => {
     try {
       const paymentMethod = await findPaymentMethod(userId, paid_from_account);
-      const created = await prisma.expense.create({
+      const { result: created, activity } = await prisma.$transaction((tx) => track(tx, {
+        action: 'create', recordType: 'expense',
+        refs: async (t, made) => ({ expense: made ? [made.id] : [] }),
+        recordId: (made) => made.id,
+      }, () => tx.expense.create({
         data: {
           user_id: userId,
           name: description.trim(),
@@ -623,10 +682,11 @@ function buildServer(userId, apiKeyId) {
           date: localNoon(date),
           payment_method_id: paymentMethod.id,
         },
-      });
+      })));
       await logWrite(userId, apiKeyId, 'add_expense', { description, amount, date, category, paid_from_account });
       return jsonResult({
         id: created.id,
+        activity_id: activity?.id ?? null,
         description: created.name,
         amount: toNum(decimal(created.amount)),
         date: toDateOnly(created.date),
@@ -655,7 +715,10 @@ function buildServer(userId, apiKeyId) {
     }).strict(),
   }, async ({ sale_id, price, fees, shipping, label_paid_with, qty, sale_date, platform, tracking_number, carrier, notes }) => {
     try {
-      const result = await prisma.$transaction(async (tx) => {
+      const { result, activity } = await prisma.$transaction(async (tx) => track(tx, {
+        action: 'edit', recordType: 'sale', recordId: sale_id,
+        refs: (t) => saleRefs(t, sale_id),
+      }, async () => {
         const existing = await tx.sales.findUnique({ where: { id: sale_id }, include: { inventory: true } });
         if (!existing || existing.inventory.user_id !== userId) {
           throw Object.assign(new Error('Sale not found or access denied'), { toolError: true });
@@ -727,10 +790,11 @@ function buildServer(userId, apiKeyId) {
 
         await recordChanges(tx, userId, 'Sales', sale_id, changes);
         return tx.sales.findUnique({ where: { id: sale_id } });
-      });
+      }));
       await logWrite(userId, apiKeyId, 'update_sale', { sale_id, price, fees, shipping, label_paid_with, qty, sale_date, platform, tracking_number, carrier, notes });
       return jsonResult({
         id: result.id,
+        activity_id: activity?.id ?? null,
         qty: result.quantity,
         price: toNum(result.unit_price),
         fees: toNum(result.commission_fee),
@@ -764,7 +828,10 @@ function buildServer(userId, apiKeyId) {
     }).strict(),
   }, async ({ purchase_id, qty, unit_cost, purchase_date, store, order_number, tracking_number, carrier, tax_exempt, notes }) => {
     try {
-      const result = await prisma.$transaction(async (tx) => {
+      const { result, activity } = await prisma.$transaction(async (tx) => track(tx, {
+        action: 'edit', recordType: 'purchase', recordId: purchase_id,
+        refs: (t) => purchaseRefs(t, purchase_id),
+      }, async () => {
         const existing = await tx.inventory.findUnique({ where: { id: purchase_id } });
         if (!existing || existing.user_id !== userId) {
           throw Object.assign(new Error('Purchase not found or access denied'), { toolError: true });
@@ -827,10 +894,11 @@ function buildServer(userId, apiKeyId) {
 
         await recordChanges(tx, userId, 'Inventory', purchase_id, changes);
         return tx.inventory.findUnique({ where: { id: purchase_id } });
-      });
+      }));
       await logWrite(userId, apiKeyId, 'update_purchase', { purchase_id, qty, unit_cost, purchase_date, store, order_number, tracking_number, carrier, tax_exempt, notes });
       return jsonResult({
         id: result.id,
+        activity_id: activity?.id ?? null,
         item: result.product_name,
         qty: result.qty_purchased,
         qty_on_hand: result.qty_on_hand,
@@ -865,7 +933,11 @@ function buildServer(userId, apiKeyId) {
     }).strict(),
   }, async ({ inventory_id, qty, sale_price, fees, shipping, label_paid_with, sale_date, platform, tracking_number, carrier, notes }) => {
     try {
-      const result = await prisma.$transaction(async (tx) => {
+      const { result, activity } = await prisma.$transaction(async (tx) => track(tx, {
+        action: 'create', recordType: 'sale',
+        refs: async (t, created) => ({ inventory: [inventory_id], sales: created ? [created.id] : [] }),
+        recordId: (created) => created.id,
+      }, async () => {
         const inv = await tx.inventory.findUnique({ where: { id: inventory_id } });
         if (!inv || inv.user_id !== userId) {
           throw Object.assign(new Error('Purchase not found or access denied'), { toolError: true });
@@ -898,10 +970,11 @@ function buildServer(userId, apiKeyId) {
             notes: notes || null,
           },
         });
-      });
+      }));
       await logWrite(userId, apiKeyId, 'add_sale', { inventory_id, qty, sale_price, fees, shipping, label_paid_with, sale_date, platform, tracking_number, carrier, notes });
       return jsonResult({
         id: result.id,
+        activity_id: activity?.id ?? null,
         inventory_id: result.inventory_id,
         qty: result.quantity,
         sale_price: toNum(result.unit_price),
@@ -993,11 +1066,19 @@ function buildServer(userId, apiKeyId) {
       const result = await prisma.$transaction(async (tx) => {
         const inv = await tx.inventory.findUnique({ where: { id: item_id } });
         if (inv && inv.user_id === userId) {
-          return updateInventoryShipment(tx, userId, inv, { tracking_number, carrier, status });
+          const { result: shipped, activity } = await track(tx, {
+            action: 'edit', recordType: 'purchase', recordId: inv.id,
+            refs: async () => ({ inventory: [inv.id] }),
+          }, () => updateInventoryShipment(tx, userId, inv, { tracking_number, carrier, status }));
+          return { ...shipped, activity_id: activity?.id ?? null };
         }
         const sale = await tx.sales.findUnique({ where: { id: item_id }, include: { inventory: true } });
         if (sale && sale.inventory.user_id === userId) {
-          return updateSaleShipment(tx, userId, sale, { tracking_number, carrier, status });
+          const { result: shipped, activity } = await track(tx, {
+            action: 'edit', recordType: 'sale', recordId: sale.id,
+            refs: async () => ({ inventory: [sale.inventory_id], sales: [sale.id] }),
+          }, () => updateSaleShipment(tx, userId, sale, { tracking_number, carrier, status }));
+          return { ...shipped, activity_id: activity?.id ?? null };
         }
         throw Object.assign(new Error('Shipment item not found or access denied'), { toolError: true });
       });
@@ -1009,7 +1090,7 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('get_card_net_to_pay', {
-    description: 'Per-card reselling snapshot: the same numbers as the Credit Card page -- card name, last 4 digits, "Net to Pay" (reselling spend still owed after cashback earned is applied to losses), and the next payment due date if the card has one configured. One short row per card.',
+    description: 'Per-card reselling snapshot: the same numbers as the Credit Card page -- card name, last 4 digits, "Net to Pay" (reselling spend still owed after rewards earned are applied to losses), the next payment due date if the card has one configured, and the rewards earned that month (in dollars, plus points for a points card). One short row per card.',
     inputSchema: {
       month: z.string().regex(/^\d{4}-\d{2}$/, 'month must be YYYY-MM').optional().describe('Defaults to the current month. Only changes which purchases count toward Net to Pay -- due dates are always the next real one from today.'),
     },
@@ -1021,6 +1102,10 @@ function buildServer(userId, apiKeyId) {
       last4: card.last4,
       net_to_pay: card.amountToPay,
       due_date: toDateOnly(nextDueDate(card.due_day, now)),
+      // Rewards earned this month in dollars; for a points card, also the points.
+      rewards_type: card.rewardType,
+      rewards_earned: card.cashbackEarned,
+      ...(card.rewardType === 'points' ? { points_earned: Math.round((card.cashbackEarned * 100) / (card.pointValueCents || 1)) } : {}),
     })));
   });
 
@@ -1061,41 +1146,231 @@ function buildServer(userId, apiKeyId) {
     }
   });
 
+  // Payment methods. A card earns cash back (%) or points/miles (x per $1,
+  // valued at the card's point_value_cents); either way profit totals use the
+  // dollar rate. Cards picked from the card list (search_card_list) take their
+  // rates from it and stay current on their own -- the same code the website
+  // uses (services/linkedCards.js, services/cardRewards.js).
+  const cleanCardName = (name = '') => name.replace(/[®™℠]/g, '').replace(/\s+/g, ' ').trim();
+
+  const describeMethod = (m, byId) => {
+    const linked = m.catalog_card_id && byId ? byId.get(m.catalog_card_id) : null;
+    const points = m.reward_type === 'points';
+    return {
+      id: m.id,
+      name: m.name,
+      type: m.type,
+      last4: m.last4 || null,
+      rewards: {
+        type: points ? 'points' : 'cashback',
+        earns: earnsText(m),
+        effective_rate_pct: toNum(m.default_cashback_rate),
+        ...(points ? {
+          points_per_dollar: m.points_base_rate ?? 0,
+          point_value_cents: m.point_value_cents ?? 1,
+          program: m.rewards_label || null,
+        } : {}),
+      },
+      store_rates: storeRates(m),
+      card_list_match: linked ? linked.name : null,
+      rates_kept_current: Boolean(m.catalog_card_id),
+      perks: linked ? resellingPerks(linked.benefits) : [],
+    };
+  };
+  const catalogIndexOrEmpty = () => getCatalogIndex(prisma).catch(() => new Map());
+
+  // The reward fields an add/update call sends, checked for combinations that
+  // don't make sense. card_id takes the rewards from the card list, so only a
+  // point value may be given with it.
+  function rewardBody({ card_id, reward_type, cashback_rate, points_per_dollar, point_value_cents, program }) {
+    if (card_id) {
+      if (reward_type || cashback_rate !== undefined || points_per_dollar !== undefined || program !== undefined) {
+        throw toolError('card_id takes the rewards from the card list -- leave out reward_type, cashback_rate, points_per_dollar and program (point_value_cents is allowed)');
+      }
+      return { apply_catalog: true, catalog_card_id: card_id, point_value_cents };
+    }
+    const points = reward_type === 'points' || (reward_type === undefined && points_per_dollar !== undefined);
+    if (points && cashback_rate !== undefined) throw toolError('A points card earns points_per_dollar, not cashback_rate');
+    if (reward_type === 'cashback' && (points_per_dollar !== undefined || point_value_cents !== undefined || program !== undefined)) {
+      throw toolError('points_per_dollar, point_value_cents and program are for points cards');
+    }
+    const body = {};
+    if (reward_type || points) body.reward_type = points ? 'points' : 'cashback';
+    if (cashback_rate !== undefined) body.default_cashback_rate = cashback_rate;
+    if (points_per_dollar !== undefined) body.points_base_rate = points_per_dollar;
+    if (point_value_cents !== undefined) body.point_value_cents = point_value_cents;
+    if (program !== undefined) body.rewards_label = program;
+    return body;
+  }
+  const catalogInput = (body) => withCatalogFields(prisma, body).catch((err) => {
+    throw toolError(err.status === 400 ? `No card "${body.catalog_card_id}" in the card list -- use search_card_list to find its card_id` : err.message);
+  });
+  const rewardColumns = (input, rewards, existing = null) => ({
+    reward_type: rewards.reward_type,
+    points_base_rate: rewards.points_base_rate,
+    point_value_cents: rewards.point_value_cents,
+    default_cashback_rate: rewards.default_cashback_rate,
+    rewards_label: input.rewards_label !== undefined ? (input.rewards_label || null) : (existing?.rewards_label ?? null),
+    catalog_card_id: input.catalog_card_id !== undefined ? (input.catalog_card_id || null) : (existing?.catalog_card_id ?? null),
+    catalog_applied: input.catalog_applied !== undefined ? input.catalog_applied : (existing?.catalog_applied ?? null),
+    catalog_synced_at: input.catalog_synced_at !== undefined ? input.catalog_synced_at : (existing?.catalog_synced_at ?? null),
+    category_rates: rewards.category_rates.length ? JSON.stringify(rewards.category_rates) : null,
+  });
+
+  const rewardArgs = {
+    card_id: z.string().trim().min(1).max(120).optional().describe('A card_id from search_card_list: take this card\'s rewards from the card list and keep them current automatically.'),
+    reward_type: z.enum(['cashback', 'points']).optional().describe('Without card_id: how the card earns. Points cards earn points/miles per $1.'),
+    cashback_rate: z.number().min(0).max(100).optional().describe('Cash back percent, e.g. 2 for 2%.'),
+    points_per_dollar: z.number().min(0).max(100).optional().describe('Points card: points earned per $1 on everything, e.g. 2 for 2x.'),
+    point_value_cents: z.number().gt(0).max(100).optional().describe('Points card: what one point is worth to the user in cents (default 1). Profit totals count points at this value.'),
+    program: z.string().trim().max(80).optional().describe('Points card: program name, e.g. "Membership Rewards points".'),
+  };
+
+  server.registerTool('list_payment_methods', {
+    description: 'Every saved card/account and how it earns: cash back % or points (points per $1, point value in cents, program) with the dollar-equivalent rate profit totals use, store-specific rates, whether its rates follow the card list automatically, and its perks that matter for reselling (purchase protection, shipping credits...).',
+    inputSchema: {
+      type: z.enum(['Credit', 'Debit']).optional().describe('Only credit cards, or only debit/prepaid.'),
+    },
+  }, async ({ type }) => {
+    try {
+      const stored = await prisma.paymentMethod.findMany({ where: { user_id: userId } });
+      const methods = await autoUpdateFromCatalog(prisma, stored, userId);
+      const byId = await catalogIndexOrEmpty();
+      const isDebit = (m) => /debit|prepaid/i.test(m.type || '');
+      return jsonResult(methods
+        .filter((m) => !type || (type === 'Debit') === isDebit(m))
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((m) => describeMethod(m, byId)));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to list payment methods');
+    }
+  });
+
+  server.registerTool('search_card_list', {
+    description: 'Search the built-in list of about 390 US credit cards (OpenCard DB, refreshed monthly) by name or issuer. Returns the card_id to pass to add_payment_method or update_payment_method, whether it earns points or cash back, its earn rates, annual fee and reselling perks.',
+    inputSchema: {
+      query: z.string().trim().min(2).max(80).describe('Card name and/or issuer, e.g. "sapphire preferred" or "amex gold".'),
+      reward_type: z.enum(['points', 'cashback']).optional(),
+      limit: z.number().int().min(1).max(25).optional().describe('Defaults to 10.'),
+    },
+  }, async ({ query, reward_type, limit }) => {
+    try {
+      const { cards } = await getCatalog(prisma);
+      const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+      const haystack = (c) => cleanCardName(`${c.name} ${c.issuer}${c.issuer === 'American Express' ? ' amex' : ''}`).toLowerCase();
+      const hits = cards
+        .filter((c) => words.every((w) => haystack(c).includes(w)) && (!reward_type || c.reward_type === reward_type))
+        .slice(0, limit ?? 10);
+      return jsonResult(hits.map((c) => ({
+        card_id: c.id,
+        name: c.name,
+        issuer: c.issuer,
+        rewards: c.reward_type,
+        program: c.reward_type === 'points' ? (c.rewards_label || null) : null,
+        earns: catalogSummary(c),
+        annual_fee: c.annual_fee,
+        perks: resellingPerks(c.benefits),
+      })));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to search the card list');
+    }
+  });
+
   server.registerTool('add_payment_method', {
-    description: 'Create a credit or debit card/account for logging purchases and expenses.',
+    description: 'Create a credit or debit card/account for logging purchases and expenses. Best: find the card with search_card_list and pass its card_id, so its rewards (points or cash back, store rates) come from the card list and stay current. Otherwise give cashback_rate, or reward_type "points" with points_per_dollar, point_value_cents and program. Debit cards usually earn nothing.',
     inputSchema: z.object({
-      name: z.string().trim().min(1).max(100),
+      name: z.string().trim().min(1).max(100).optional().describe('Required unless card_id is given (then defaults to the card\'s name).'),
       type: z.enum(['Credit', 'Debit']),
       last4: z.string().regex(/^\d{4}$/, 'last4 must be exactly 4 digits').optional(),
-      cashback_rate: z.number().min(0).max(100).optional().describe('Default cashback percent, e.g. 2 for 2%. Defaults to 0.'),
+      ...rewardArgs,
+      include_store_rates: z.boolean().optional().describe('With card_id: add store rates from the card\'s bonus categories (default true).'),
     }).strict(),
-  }, async ({ name, type, last4, cashback_rate }) => {
+  }, async (args) => {
+    const { name, type, last4, include_store_rates } = args;
     try {
+      const body = rewardBody(args);
+      const input = body.apply_catalog
+        ? await catalogInput({ ...body, include_store_rates, category_rates: [] })
+        : body;
+      const byId = await catalogIndexOrEmpty();
+      const finalName = name || (args.card_id ? cleanCardName(byId.get(args.card_id)?.name || '') : '');
+      if (!finalName) throw toolError('name is required');
+      const rewards = resolveRewardFields(input, null);
       const created = await prisma.$transaction(async (tx) => {
         const existing = await tx.paymentMethod.findFirst({
-          where: { user_id: userId, name: { equals: name, mode: 'insensitive' } },
+          where: { user_id: userId, name: { equals: finalName, mode: 'insensitive' } },
         });
         if (existing) throw toolError(`A payment method named "${existing.name}" (${existing.type}) already exists`);
-        // Same defaults as POST /api/payment-methods; default_cashback_rate is
-        // the percent itself, and its _decimal twin is filled by the trigger.
+        // Same fields as POST /api/payment-methods; the _decimal twins are
+        // filled by the database trigger.
         const method = await tx.paymentMethod.create({
-          data: { user_id: userId, name, type, default_cashback_rate: cashback_rate ?? 0, last4: last4 || null },
+          data: {
+            user_id: userId, name: finalName, type, last4: last4 || null,
+            ...rewardColumns(input, rewards),
+            // A card added from the card list never needs the rework notice.
+            rework_prompt_state: input.catalog_card_id ? 'switched' : null,
+          },
         });
         await recordChanges(tx, userId, 'PaymentMethod', method.id, [
           { field: 'created', oldValue: null, newValue: `${method.name} (${method.type})` },
         ]);
         return method;
       });
-      await logWrite(userId, apiKeyId, 'add_payment_method', { name, type, last4, cashback_rate });
-      return jsonResult({
-        id: created.id,
-        name: created.name,
-        type: created.type,
-        last4: created.last4 || null,
-        cashback_rate: toNum(created.default_cashback_rate),
-      });
+      await logWrite(userId, apiKeyId, 'add_payment_method', args);
+      return jsonResult({ ...describeMethod(created, byId), cashback_rate: toNum(created.default_cashback_rate) });
     } catch (err) {
       return errorResult(err.message || 'Failed to add payment method');
+    }
+  });
+
+  server.registerTool('update_payment_method', {
+    description: 'Change a saved card: rename it, set last4, set what a point is worth (point_value_cents), switch it to a different card from search_card_list (card_id -- keeps its purchases, billing details and the user\'s own store rates), or set its rewards by hand (cashback_rate, or points_per_dollar/program). Changing the base rate by hand stops automatic rate updates for a card that follows the card list; changing only the point value does not.',
+    inputSchema: z.object({
+      payment_method: z.string().trim().min(1).max(100).describe('The saved card to change, by its current name.'),
+      new_name: z.string().trim().min(1).max(100).optional(),
+      last4: z.string().regex(/^\d{4}$/, 'last4 must be exactly 4 digits').optional(),
+      ...rewardArgs,
+    }).strict(),
+  }, async (args) => {
+    const { payment_method, new_name, last4 } = args;
+    try {
+      const existing = await findPaymentMethod(userId, payment_method);
+      const body = rewardBody(args);
+      if (!new_name && !last4 && !Object.keys(body).length) throw toolError('Nothing to change -- give new_name, last4, card_id, point_value_cents or a rate');
+      let input = body;
+      if (body.apply_catalog) {
+        // The user's own store rates carry over; the old card's catalog rates
+        // are replaced by the new card's.
+        const ownRates = (JSON.parse(existing.category_rates || '[]') || []).filter((r) => r && r.source !== 'catalog');
+        input = await catalogInput({ ...body, category_rates: ownRates });
+      }
+      const rewards = resolveRewardFields(input, existing);
+      const updated = await prisma.$transaction(async (tx) => {
+        if (new_name && new_name.toLowerCase() !== existing.name.toLowerCase()) {
+          const clash = await tx.paymentMethod.findFirst({
+            where: { user_id: userId, name: { equals: new_name, mode: 'insensitive' } },
+          });
+          if (clash) throw toolError(`A payment method named "${clash.name}" (${clash.type}) already exists`);
+        }
+        const data = {
+          ...(new_name ? { name: new_name } : {}),
+          ...(last4 ? { last4 } : {}),
+          ...rewardColumns(input, rewards, existing),
+          ...(input.catalog_card_id ? { rework_prompt_state: 'switched' } : {}),
+        };
+        const { count } = await tx.paymentMethod.updateMany({ where: { id: existing.id, user_id: userId }, data });
+        if (!count) throw toolError('That payment method no longer exists');
+        const fields = ['name', 'last4', 'reward_type', 'points_base_rate', 'point_value_cents', 'default_cashback_rate', 'rewards_label', 'catalog_card_id'];
+        const changes = fields
+          .filter((f) => f in data && String(data[f] ?? '') !== String(existing[f] ?? ''))
+          .map((f) => ({ field: f, oldValue: existing[f] ?? null, newValue: data[f] ?? null }));
+        if (changes.length) await recordChanges(tx, userId, 'PaymentMethod', existing.id, changes);
+        return tx.paymentMethod.findFirst({ where: { id: existing.id, user_id: userId } });
+      });
+      await logWrite(userId, apiKeyId, 'update_payment_method', args);
+      return jsonResult(describeMethod(updated, await catalogIndexOrEmpty()));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to update payment method');
     }
   });
 
@@ -1231,6 +1506,25 @@ function buildServer(userId, apiKeyId) {
   });
   const noteProduct = async (note) => (await transactionNotes.findOwnedEntity(prisma, userId, note.entity_type, note.entity_id))?.product_name ?? null;
 
+  // One Activity log entry, trimmed to what the assistant needs to read it
+  // back to the user and to undo it.
+  const activityJson = (e) => ({
+    id: e.id,
+    when: e.created_at ? new Date(e.created_at).toISOString() : null,
+    kind: e.kind,
+    record_type: e.record_type,
+    record_id: e.record_id,
+    item: e.detail?.product_name ?? null,
+    action: e.detail?.action ?? null,
+    ...(e.kind === 'status' ? { from: e.detail?.from ?? null, to: e.detail?.to ?? null } : {}),
+    ...(e.kind && e.kind.startsWith('refund') && e.detail?.refund
+      ? { refund_amount: toNum(e.detail.refund.amount), units_returned: e.detail.refund.quantity ?? 0 } : {}),
+    is_undo: Boolean(e.detail?.undo),
+    source: e.source,
+    // available = can be undone now; undone / expired (older than 30 days) cannot.
+    undo: e.undo_state,
+    undo_until: e.undo_until ? new Date(e.undo_until).toISOString() : null,
+  });
   const refundJson = (refund) => ({
     id: refund.id,
     purchase_id: refund.inventory_id ?? null,
@@ -1261,15 +1555,29 @@ function buildServer(userId, apiKeyId) {
     description: 'Record a refund instead of deleting a transaction. On a purchase: money back from the store, lowering its cost. On a sale: money back to the buyer, lowering its revenue while fees and the label stay as costs. units_returned is how many units physically came back (0 for a price adjustment or when the item stays put): on a purchase they leave stock, on a sale they go back into stock.',
     inputSchema: z.object({
       ...refundTarget,
-      amount: z.number().nonnegative().describe('Refunded amount in dollars. For a sale, what you are actually out after any fee credit.'),
+      amount: z.number().nonnegative().optional().describe('Refunded amount in dollars. For a sale, what you are actually out after any fee credit. Required unless full_refund is true.'),
       units_returned: z.number().int().min(0).optional().describe('Defaults to 0.'),
+      full_refund: z.boolean().optional().describe('true to refund everything still refundable, worked out the same way as the website\'s "Returning everything" option: on a purchase, every unit still in stock at its price plus its share of the sales tax; on a sale, every unit the buyer still has at the price they paid. Leave out amount and units_returned.'),
+      keep_items: z.boolean().optional().describe('With full_refund: the units stay where they are (you keep them, or the buyer does), so no stock moves.'),
       date: strictDate.describe('Day the refund happened (YYYY-MM-DD). On the Credit Card page a store refund is a credit in this month.'),
       note: z.string().max(2000).optional(),
     }).strict(),
-  }, async ({ purchase_id, sale_id, amount, units_returned, date, note }) => {
+  }, async ({ purchase_id, sale_id, amount, units_returned, full_refund, keep_items, date, note }) => {
     try {
-      const refund = await recordRefund(userId, { inventory_id: purchase_id, sale_id, amount, quantity: units_returned, date, note }, { source: 'assistant' });
-      await logWrite(userId, apiKeyId, 'add_refund', { purchase_id, sale_id, amount, units_returned, date, note });
+      let refundAmount = amount;
+      let quantity = units_returned;
+      if (full_refund) {
+        if (amount !== undefined || units_returned !== undefined) throw toolError('full_refund works out the amount and units itself -- leave out amount and units_returned');
+        if (!purchase_id === !sale_id) throw toolError('Give purchase_id or sale_id, not both');
+        const full = await fullRefund(userId, { inventory_id: purchase_id, sale_id }, { keep: Boolean(keep_items) });
+        refundAmount = full.amount;
+        quantity = full.quantity;
+      } else {
+        if (keep_items !== undefined) throw toolError('keep_items only goes with full_refund -- otherwise set units_returned (0 keeps them)');
+        if (amount === undefined) throw toolError('amount is required unless full_refund is true');
+      }
+      const refund = await recordRefund(userId, { inventory_id: purchase_id, sale_id, amount: refundAmount, quantity, date, note }, { source: 'assistant' });
+      await logWrite(userId, apiKeyId, 'add_refund', { purchase_id, sale_id, amount, units_returned, full_refund, keep_items, date, note });
       return jsonResult(refundJson(refund));
     } catch (err) {
       return errorResult(err.message || 'Failed to add refund');
@@ -1289,6 +1597,37 @@ function buildServer(userId, apiKeyId) {
       return jsonResult({ deleted: true, ...refundJson(refund) });
     } catch (err) {
       return errorResult(err.message || 'Failed to delete refund');
+    }
+  });
+
+  server.registerTool('list_activity', {
+    description: 'The Activity log, newest first: purchases, sales and expenses added, edited or deleted, refunds added or removed, and status moves -- made on the website or by you (source "assistant"). Each entry says whether it can still be undone (the last 30 days, if nothing changed since).',
+    inputSchema: {
+      limit: z.number().int().min(1).max(100).optional().describe('Default 20.'),
+      before: z.string().optional().describe('Paging: the next_before value from the previous call.'),
+    },
+  }, async ({ limit, before }) => {
+    try {
+      const { entries, next_before } = await activityLog.listActivity(userId, { limit: limit ?? 20, before });
+      return jsonResult({ entries: entries.map(activityJson), next_before: next_before ? new Date(next_before).toISOString() : null });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to list activity');
+    }
+  });
+
+  server.registerTool('undo_activity', {
+    description: 'Undo one Activity log entry (from list_activity, or the activity_id a write tool returned): puts back exactly what that change did. Refused, with the reason, if it is older than 30 days, was already undone, or the record changed since -- nothing is guessed. The undo is itself logged, so it can be undone too.',
+    inputSchema: z.object({
+      activity_id: z.string().uuid(),
+      confirm: z.literal(true).describe('Must be true to confirm the undo.'),
+    }).strict(),
+  }, async ({ activity_id, confirm }) => {
+    try {
+      const { undone, entry } = await activityLog.undoActivity(userId, activity_id, { source: 'assistant' });
+      await logWrite(userId, apiKeyId, 'undo_activity', { activity_id, confirm });
+      return jsonResult({ undone: activityJson(undone), undo_entry: activityJson(entry) });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to undo');
     }
   });
 
@@ -2034,6 +2373,7 @@ function buildServer(userId, apiKeyId) {
   }, async ({ cashout, deal_id, item_id, quantity }) => {
     try {
       const conn = await resolveConnection(userId, cashout);
+      await requireCashoutWrites(apiKeyId);
       const record = await cashoutCommits.createCommitment(userId, conn.id, { dealId: deal_id, itemId: item_id, quantity });
       await logWrite(userId, apiKeyId, 'commit_cashout_deal', { cashout: conn.displayName || conn.provider, deal_id, item_id, quantity });
       return jsonResult(presentCommitment({ ...record, connection: conn }));
@@ -2050,6 +2390,7 @@ function buildServer(userId, apiKeyId) {
     },
   }, async ({ commitment_id, quantity }) => {
     try {
+      await requireCashoutWrites(apiKeyId);
       const record = await cashoutCommits.updateCommitment(userId, commitment_id, { quantity });
       await logWrite(userId, apiKeyId, 'update_cashout_commitment', { commitment_id, quantity });
       return jsonResult(presentCommitment(record));
@@ -2063,6 +2404,7 @@ function buildServer(userId, apiKeyId) {
     inputSchema: { commitment_id: z.string().describe('The id from list_cashout_commitments / commit_cashout_deal.') },
   }, async ({ commitment_id }) => {
     try {
+      await requireCashoutWrites(apiKeyId);
       const record = await cashoutCommits.deleteCommitment(userId, commitment_id);
       await logWrite(userId, apiKeyId, 'delete_cashout_commitment', { commitment_id });
       return jsonResult(presentCommitment(record));
@@ -2082,6 +2424,7 @@ function buildServer(userId, apiKeyId) {
   }, async ({ cashout, tracking_codes: trackingCodes, description, insured_value: insuredValue }) => {
     try {
       const conn = await resolveConnection(userId, cashout);
+      await requireCashoutWrites(apiKeyId);
       const result = await cashoutCommits.submitTracking(userId, conn.id, { trackingCodes, description, insuredValue });
       await logWrite(userId, apiKeyId, 'submit_cashout_tracking', { cashout: conn.displayName || conn.provider, tracking_codes: trackingCodes });
       return jsonResult({ received_tracking_codes: result?.received_tracking_codes || [] });
@@ -2138,6 +2481,7 @@ function buildServer(userId, apiKeyId) {
       const conn = await resolveConnection(userId, cashout);
       const vendor = await findOrCreateVendor(userId, store);
       const paymentMethod = await findPaymentMethod(userId, payment_method);
+      await requireCashoutWrites(apiKeyId);
       const result = await logPurchase(userId, {
         connectionId: conn.id, dealId: deal_id, itemId: item_id, dealName: deal_name, itemName: item_name,
         quantity, trackingCodes, insuredValue,

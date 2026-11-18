@@ -1,5 +1,7 @@
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { EXPENSES_PAGE_KEY, RECEIPTS_PAGE_KEY } from './usePageCache';
+import { toast } from 'sonner';
+import { offerPendingCommit, offerTrackingSend } from '../utils/pendingCashoutCommit';
 
 // Leave VITE_API_URL empty in production when Netlify redirects proxy /api and /auth (see netlify.toml).
 // Set it locally to the API dev server, e.g. http://localhost:3000.
@@ -13,8 +15,43 @@ export const apiFetch = (path, options = {}) => {
   };
   return fetch(`${API}${path}`, { credentials: 'include', ...options, headers }).then(response => {
     if (response.status === 401 && path.startsWith('/api/')) window.dispatchEvent(new Event('auth-expired'));
+    if (response.ok && TRACKING_WRITE.test(path) && (options.method === 'PUT' || options.method === 'POST')) {
+      offerCashoutCommitIfPending(response);
+    }
+    if (response.ok && RECORD_DELETE.test(path) && options.method === 'DELETE') {
+      warnIfCommitmentStillActive(response);
+    }
     return response;
   });
+};
+
+// Every screen that adds a tracking number to a sale or a purchase (Statuses,
+// Shipping, the transaction editor, status actions) goes through here. When it
+// belongs to a cashout purchase logged before it shipped, the response says
+// so, and the app shell asks whether to commit it now
+// (components/PendingCashoutCommit). For a purchase's tracking it first asks
+// whether that package is going straight to the cashout.
+const TRACKING_WRITE = /^\/api\/(sales\/[^/?]+(\/actions\/add_outbound_tracking)?|inventory\/[^/?]+(\/transaction|\/actions\/add_tracking)?)$/;
+const offerCashoutCommitIfPending = (response) => {
+  // Cloned before the caller reads the body; never allowed to break the save.
+  if (typeof response.clone !== 'function') return;
+  response.clone().json()
+    .then((body) => {
+      offerPendingCommit(body?.cashout_commit_pending?.commitment_id, body?.cashout_commit_pending?.ask_direct);
+      // Already committed, and the cashout doesn't have this number yet.
+      offerTrackingSend(body?.cashout_tracking_changed);
+    })
+    .catch(() => {});
+};
+
+// Deleting a purchase or sale doesn't withdraw its cashout commitment; the
+// response says so when one is still active.
+const RECORD_DELETE = /^\/api\/(sales|inventory)\/[^/?]+$/;
+const warnIfCommitmentStillActive = (response) => {
+  if (typeof response.clone !== 'function') return;
+  response.clone().json()
+    .then((body) => { if (body?.cashout_warning) toast.warning(body.cashout_warning, { duration: 10000 }); })
+    .catch(() => {});
 };
 
 const fetcher = (path) =>
@@ -129,6 +166,15 @@ export const useDashboard = (mode, date) =>
     // blanking the whole page.
     placeholderData: keepPreviousData,
   });
+
+// Cash Flow page. Keyed under 'dashboard' so every mutation that refreshes
+// the Dashboard numbers refreshes these too.
+export const cashFlowQuery = () => ({
+  queryKey: ['dashboard', 'cashflow'],
+  queryFn: () => fetcher('/api/analytics/cashflow'),
+  staleTime: 1000 * 60 * 10,
+});
+export const useCashFlow = () => useQuery(cashFlowQuery());
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────
 export const useExpenses = () =>

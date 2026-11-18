@@ -8,6 +8,7 @@ const { pipelineBucketOf } = require('../services/statusTransitions');
 const { buildWorkflowPipelines } = require('../services/workflowPipeline');
 const { payoutStatus } = require('../services/payoutStatus');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
+const { computeCashFlow } = require('../services/cashFlow');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -45,14 +46,17 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     // boundary date are always included regardless of the server's local timezone.
     const now = new Date();
     const todayUTC = now.toISOString().slice(0, 10); // "YYYY-MM-DD"
+    // "7 Days" is today and the 6 days before it, "30 Days" today and the 29
+    // before it -- the same days the profit calendar draws. (It used to reach
+    // back 7 / 30 whole days, which counted 8 / 31 days.)
     let dateFrom = null;
     if (dateParam === '7 Days') {
       const d = new Date(todayUTC + 'T00:00:00.000Z');
-      d.setUTCDate(d.getUTCDate() - 7);
+      d.setUTCDate(d.getUTCDate() - 6);
       dateFrom = d;
     } else if (dateParam === '30 Days') {
       const d = new Date(todayUTC + 'T00:00:00.000Z');
-      d.setUTCDate(d.getUTCDate() - 30);
+      d.setUTCDate(d.getUTCDate() - 29);
       dateFrom = d;
     } else if (dateParam === 'YTD') {
       dateFrom = new Date(`${now.getUTCFullYear()}-01-01T00:00:00.000Z`);
@@ -72,7 +76,22 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     // Only fetch allInventories separately when we know we'll need it (date filter or non-All mode)
     const needsAllInventories = mode !== 'All' || dateFrom;
 
-    const [rawInventories, rawSales, allInventoriesFetched] = await Promise.all([
+    // The window just before this one, the same length, for "vs last period".
+    // YTD compares with the same stretch of last year; All Time has none.
+    let priorFrom = null;
+    let priorTo = null;
+    if (dateParam === '7 Days' || dateParam === '30 Days') {
+      const len = dateParam === '7 Days' ? 7 : 30;
+      priorTo = dateFrom;
+      priorFrom = new Date(dateFrom.getTime() - len * 24 * 60 * 60 * 1000);
+    } else if (dateParam === 'YTD') {
+      priorFrom = new Date(Date.UTC(now.getUTCFullYear() - 1, 0, 1));
+      priorTo = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), now.getUTCDate() + 1));
+    }
+    const priorSalesWhere = priorFrom ? { ...salesWhere, sale_date: { gte: priorFrom, lt: priorTo } } : null;
+    const expenseWhere = { user_id: userId };
+    if (dateFrom) expenseWhere.date = { gte: dateFrom };
+    const [rawInventories, rawSales, allInventoriesFetched, rawPriorSales, rawExpenses] = await Promise.all([
       prisma.inventory.findMany({
         where: inventoryWhere,
         include: { payment_method: true, vendor: true },
@@ -89,6 +108,12 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       needsAllInventories
         ? prisma.inventory.findMany({ where: { user_id: userId } })
         : Promise.resolve(null),
+      priorSalesWhere
+        ? prisma.sales.findMany({ where: priorSalesWhere, include: { inventory: { include: { payment_method: true } } } })
+        : Promise.resolve([]),
+      // Business expenses are not tied to a sales channel, so they only
+      // count in the All view.
+      mode === 'All' ? prisma.expense.findMany({ where: expenseWhere }) : Promise.resolve(null),
     ]);
 
     const inventories = rawInventories.map(exactInventory);
@@ -197,24 +222,31 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       inventories.forEach(inv => {
         if (inv.payment_method) {
           const id = inv.payment_method.id;
-          if (!cardMap[id]) cardMap[id] = { name: inv.payment_method.name, txns: 0, amount: zero() };
+          if (!cardMap[id]) cardMap[id] = { name: inv.payment_method.name, txns: 0, amount: zero(), cashback: zero() };
           cardMap[id].txns += 1;
           cardMap[id].amount = cardMap[id].amount.plus(batchCost(inv));
+          cardMap[id].cashback = cardMap[id].cashback.plus(inventoryCashback(inv, effectiveCashbackRate(inv)));
         }
       });
     } else {
       // Filtered mode: accumulate proportional spend per payment card from filtered sales only
-      saleAlloc.forEach(({ sale, inv, saleCost }) => {
+      saleAlloc.forEach(({ inv, saleCost, saleCashback }) => {
         if (inv.payment_method) {
           const id = inv.payment_method.id;
-          if (!cardMap[id]) cardMap[id] = { name: inv.payment_method.name, txns: 0, amount: zero() };
+          if (!cardMap[id]) cardMap[id] = { name: inv.payment_method.name, txns: 0, amount: zero(), cashback: zero() };
           cardMap[id].txns += 1;
           cardMap[id].amount = cardMap[id].amount.plus(saleCost);
+          cardMap[id].cashback = cardMap[id].cashback.plus(saleCashback);
         }
       });
     }
     const topCards = Object.values(cardMap)
-      .map(card => ({ ...card, amount: money(card.amount) }))
+      .map(card => ({
+        ...card,
+        amount: money(card.amount),
+        cashback: money(card.cashback),
+        cashbackRate: card.amount.greaterThan(0) ? money(card.cashback.div(card.amount).times(100)) : 0,
+      }))
       .sort((a, b) => b.amount - a.amount);
 
     // ── Platform breakdown: how much each sales channel (Cashout or
@@ -298,6 +330,7 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
           id: inv.vendor_id || null,
           name: inv.vendor?.name || 'No Vendor',
           spend: zero(), units: 0, purchases: 0,
+          soldCost: zero(), soldRevenue: zero(), soldProfit: zero(), unitsSold: 0,
         });
       }
       return vendorMap.get(key);
@@ -317,6 +350,15 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
         v.purchases += 1;
       });
     }
+    // Store ROI: what the units bought at each store went on to make, from the
+    // sales in this window (the same sold-side scope as Profit above).
+    saleAlloc.forEach(({ inv, saleCost, saleRevenue, saleCashback, sale }) => {
+      const v = ensureVendor(inv);
+      v.soldCost = v.soldCost.plus(saleCost);
+      v.soldRevenue = v.soldRevenue.plus(saleRevenue);
+      v.soldProfit = v.soldProfit.plus(saleRevenue.minus(saleCost).plus(saleCashback));
+      v.unitsSold += keptSaleQuantity(sale);
+    });
     const vendorBreakdown = Array.from(vendorMap.values())
       .map(v => ({
         id: v.id,
@@ -325,8 +367,89 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
         units: v.units,
         purchases: v.purchases,
         avgCostPerUnit: v.units > 0 ? money(v.spend.div(v.units)) : 0,
+        soldCost: money(v.soldCost),
+        soldRevenue: money(v.soldRevenue),
+        profit: money(v.soldProfit),
+        unitsSold: v.unitsSold,
+        roi: v.soldCost.greaterThan(0) ? money(v.soldProfit.div(v.soldCost).times(100)) : null,
       }))
       .sort((a, b) => b.spend - a.spend);
+
+    // ── Margin by price range: sales grouped by what one unit cost you.
+    // Margin is profit over what the buyer paid (after fees), like the old
+    // category breakdown; ROI is profit over cost.
+    const PRICE_BANDS = [
+      { key: 'under50', label: 'Under $50', max: 50 },
+      { key: '50to150', label: '$50–150', max: 150 },
+      { key: '150to300', label: '$150–300', max: 300 },
+      { key: 'over300', label: '$300+', max: Infinity },
+    ];
+    const bandTotals = PRICE_BANDS.map(b => ({ ...b, revenue: zero(), cost: zero(), profit: zero(), unitsSold: 0, salesCount: 0 }));
+    // Same store × channel scope: average profit per unit for every route an
+    // item took, from the store it was bought at to where it sold.
+    const routeMap = new Map();
+    saleAlloc.forEach(({ sale, inv, saleCost, saleRevenue, saleCashback }) => {
+      const units = keptSaleQuantity(sale);
+      const profitHere = saleRevenue.minus(saleCost).plus(saleCashback);
+      if (units > 0) {
+        const unitCost = saleCost.div(units).toNumber();
+        const band = bandTotals.find(b => unitCost < b.max);
+        band.revenue = band.revenue.plus(saleRevenue);
+        band.cost = band.cost.plus(saleCost);
+        band.profit = band.profit.plus(profitHere);
+        band.unitsSold += units;
+        band.salesCount += 1;
+      }
+      const key = `${inv.vendor_id || 'none'}|${sale.platform_id || 'direct'}`;
+      const r = routeMap.get(key) || {
+        storeId: inv.vendor_id || null,
+        store: inv.vendor?.name || 'No Vendor',
+        channelId: sale.platform_id || null,
+        channel: sale.platform?.name || 'Direct',
+        channelType: sale.platform?.type || 'Direct',
+        profit: zero(), revenue: zero(), cost: zero(), cashback: zero(), unitsSold: 0, salesCount: 0, items: [],
+      };
+      r.profit = r.profit.plus(profitHere);
+      r.revenue = r.revenue.plus(saleRevenue);
+      r.cost = r.cost.plus(saleCost);
+      r.cashback = r.cashback.plus(saleCashback);
+      r.unitsSold += units;
+      r.salesCount += 1;
+      // The sales behind the number, so a route can be opened on the page.
+      r.items.push({
+        id: sale.id,
+        product: inv.product_name,
+        date: dateKey(sale.sale_date),
+        units,
+        revenue: money(saleRevenue),
+        cost: money(saleCost),
+        cashback: money(saleCashback),
+        profit: money(profitHere),
+      });
+      routeMap.set(key, r);
+    });
+    const priceBands = bandTotals.map(b => ({
+      key: b.key,
+      label: b.label,
+      revenue: money(b.revenue),
+      cost: money(b.cost),
+      profit: money(b.profit),
+      unitsSold: b.unitsSold,
+      salesCount: b.salesCount,
+      margin: b.revenue.greaterThan(0) ? money(b.profit.div(b.revenue).times(100)) : null,
+      roi: b.cost.greaterThan(0) ? money(b.profit.div(b.cost).times(100)) : null,
+    }));
+    const storeChannels = Array.from(routeMap.values())
+      .map(r => ({
+        ...r,
+        profit: money(r.profit),
+        revenue: money(r.revenue),
+        cost: money(r.cost),
+        cashback: money(r.cashback),
+        items: r.items.sort((a, b) => b.date.localeCompare(a.date)),
+        profitPerUnit: r.unitsSold > 0 ? money(r.profit.div(r.unitsSold)) : 0,
+      }))
+      .sort((a, b) => b.profit - a.profit);
 
     // ── Category breakdown: profitability by product category. Sold-side
     // only (same scope as Gross/Net Profit above) -- a category's margin is
@@ -523,6 +646,89 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       date: s.sale_date,
     }));
 
+    // Last period, for the change on each stat and the dashed trend line.
+    // Each prior point is moved forward onto the matching date of this
+    // window (one window-length later), so the two lines share an x-axis.
+    let priorStats = null;
+    let priorTrend = [];
+    if (priorFrom) {
+      const priorAlloc = rawPriorSales.map(exactSale).filter(isRealizedSale)
+        .map(sale => ({ sale, ...saleEconomics(sale.inventory, sale, effectiveCashbackRate(sale.inventory)) }));
+      let pRevenue = zero(); let pCost = zero(); let pProfit = zero(); let pUnits = 0;
+      const pBuckets = new Map();
+      const shift = (d) => {
+        const date = new Date(d);
+        if (dateParam === 'YTD') date.setUTCFullYear(date.getUTCFullYear() + 1);
+        else date.setUTCDate(date.getUTCDate() + (dateParam === '7 Days' ? 7 : 30));
+        return bucketKey(dateKey(date));
+      };
+      priorAlloc.forEach(({ sale, cost, revenue, netProfit }) => {
+        pRevenue = pRevenue.plus(revenue); pCost = pCost.plus(cost); pProfit = pProfit.plus(netProfit);
+        pUnits += keptSaleQuantity(sale);
+        const key = shift(sale.sale_date);
+        const b = pBuckets.get(key) || { date: key, totalRevenue: zero(), netProfit: zero(), soldCost: zero() };
+        b.totalRevenue = b.totalRevenue.plus(revenue); b.netProfit = b.netProfit.plus(netProfit); b.soldCost = b.soldCost.plus(cost);
+        pBuckets.set(key, b);
+      });
+      priorStats = {
+        from: dateKey(priorFrom),
+        to: dateKey(new Date(priorTo.getTime() - 1)),
+        totalRevenue: money(pRevenue),
+        soldCost: money(pCost),
+        profit: money(pProfit),
+        roi: pCost.greaterThan(0) ? money(pProfit.div(pCost).times(100)) : 0,
+        salesCount: priorAlloc.length,
+        unitsSold: pUnits,
+      };
+      priorTrend = Array.from(pBuckets.values())
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map(b => ({ date: b.date, totalRevenue: money(b.totalRevenue), netProfit: money(b.netProfit), soldCost: money(b.soldCost) }));
+    }
+
+    // Business expenses from the Expenses page (software, supplies, storage)
+    // dated in this window. Purchase tax, shipping and fees are not in here:
+    // they are already part of item cost and sale revenue.
+    const businessExpenses = rawExpenses
+      ? rawExpenses.map(e => withExactFields(e, MAPPINGS.expense)).reduce((sum, e) => sum.plus(decimal(e.amount || 0)), zero())
+      : null;
+
+    // Profit calendar: one entry per day with sales in this window, with the
+    // sales themselves so a day can be opened. 7 / 30 Days and YTD cover
+    // exactly the filter's days (the same sales as every stat above); All
+    // Time runs from the first sale to today, however long that is.
+    const calendarByDay = new Map();
+    saleAlloc.forEach(({ sale, inv, saleCost, saleRevenue, saleCashback }) => {
+      const key = dateKey(sale.sale_date);
+      const profitHere = saleRevenue.minus(saleCost).plus(saleCashback);
+      const d = calendarByDay.get(key) || { date: key, profit: zero(), revenue: zero(), cost: zero(), sales: 0, units: 0, items: [] };
+      d.profit = d.profit.plus(profitHere); d.revenue = d.revenue.plus(saleRevenue); d.cost = d.cost.plus(saleCost);
+      d.sales += 1; d.units += keptSaleQuantity(sale);
+      d.items.push({
+        id: sale.id,
+        product: inv.product_name,
+        platform: sale.platform?.name || null,
+        units: keptSaleQuantity(sale),
+        revenue: money(saleRevenue),
+        cost: money(saleCost),
+        profit: money(profitHere),
+      });
+      calendarByDay.set(key, d);
+    });
+    const calendarDays = Array.from(calendarByDay.values()).sort((a, b) => a.date.localeCompare(b.date));
+    const profitCalendar = {
+      from: dateFrom ? dateKey(dateFrom) : (calendarDays[0]?.date ?? todayUTC),
+      to: todayUTC,
+      days: calendarDays.map(d => ({
+        date: d.date,
+        profit: money(d.profit),
+        revenue: money(d.revenue),
+        cost: money(d.cost),
+        sales: d.sales,
+        units: d.units,
+        items: d.items.sort((a, b) => b.profit - a.profit),
+      })),
+    };
+
     res.json({
       stats: {
         totalCost: money(totalCost),
@@ -546,11 +752,18 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
           ? new Set(saleAlloc.map(({ sale }) => sale.inventory_id)).size
           : inventories.length,
         salesCount: saleAlloc.length,
-        avgCashbackRate: totalCost.greaterThan(0) ? money(totalCashback.div(totalCost).times(100)) : 0
+        avgCashbackRate: totalCost.greaterThan(0) ? money(totalCashback.div(totalCost).times(100)) : 0,
+        businessExpenses: businessExpenses === null ? null : money(businessExpenses),
+        profitAfterExpenses: businessExpenses === null ? null : money(profit.minus(businessExpenses)),
       },
+      priorStats,
+      priorTrend,
+      profitCalendar,
       topCards,
       platformBreakdown,
       vendorBreakdown,
+      priceBands,
+      storeChannels,
       categoryBreakdown,
       pipelineCounts,
       // As steps (all / Cash-out / Marketplace): units, money and items in
@@ -564,6 +777,15 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       cashFlowTransactions,
     });
 
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /cashflow -- everything the Cash Flow page shows (services/cashFlow.js).
+router.get('/cashflow', isAuthenticated, async (req, res, next) => {
+  try {
+    res.json(await computeCashFlow(prisma, req.user.id));
   } catch (err) {
     next(err);
   }

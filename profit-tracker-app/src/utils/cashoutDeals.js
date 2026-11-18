@@ -1,4 +1,4 @@
-import { roundCents } from '../../../shared/finance.mjs';
+import { effectiveCashbackRate, roundCents } from '../../../shared/finance.mjs';
 import { formatMoney } from './money';
 
 // What a deal earns if the item is bought at retail. Tax, cashback and coupons
@@ -197,6 +197,42 @@ export function groupStoreLinks(group) {
     seen.add(key);
     return true;
   });
+}
+
+// The saved card that earns the most on a deal, at whichever of the deal's
+// stores it earns the most. Rates come from the same lookup a logged purchase
+// uses (shared/finance.mjs): a store rate whose store matches the store's name
+// wins over the card's base rate, and an expired store rate doesn't count. A
+// points card's rates are already in dollars (multiplier x point value). The
+// cashback is on retail, and the profit is the deal's estimate plus it.
+// Returns null with no saved cards, and { card: null } when none earns anything.
+export function bestCardForDeal(deal, cards, today = new Date()) {
+  if (!Array.isArray(cards) || cards.length === 0) return null;
+  const stores = [];
+  for (const link of groupStoreLinks(deal)) {
+    if (link.name && !stores.some((name) => storeKey(name) === storeKey(link.name))) stores.push(link.name);
+  }
+  // A deal with no store links still gets each card's base rate.
+  const candidates = stores.length ? stores : [null];
+
+  let best = null;
+  for (const card of cards) {
+    for (const store of candidates) {
+      const rate = effectiveCashbackRate({ payment_method: card, vendor: store ? { name: store } : null }, today);
+      if (!best || rate > best.rate) best = { card, store, rate };
+    }
+  }
+  if (!(best.rate > 0)) return { card: null, store: null, rate: 0, cashback: null, profit: null };
+
+  const retail = Number(deal.retail);
+  const cashback = retail > 0 ? roundCents((retail * best.rate) / 100) : null;
+  const estimate = deal.estimatedProfit === undefined ? estimateDealProfit(deal) : deal.estimatedProfit;
+  const profitAmount = estimate && cashback !== null ? roundCents(estimate.amount + cashback) : null;
+  return {
+    ...best,
+    cashback,
+    profit: profitAmount === null ? null : { amount: profitAmount, pct: roundCents((profitAmount / retail) * 100) },
+  };
 }
 
 // Every store a deal can be bought at, once each, for the store filter.

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Check,
   Coins,
@@ -15,6 +16,10 @@ import {
   Table,
   LayoutGrid,
   ExternalLink,
+  DollarSign,
+  ShoppingCart,
+  CreditCard,
+  Truck,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -28,10 +33,13 @@ import {
   usePaymentMethods,
 } from '../hooks/useApi';
 import { formatMoney } from '../utils/money';
+import { batchCost, effectiveCashbackRate } from '../../../shared/finance.mjs';
 import { displayLabel, statusVisual } from '../data/statusWorkflow';
 import { useMatchMedia } from '../hooks/useMatchMedia';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
+import { offerPendingCommit, offerTrackingSend } from '../utils/pendingCashoutCommit';
 import {
+  bestCardForDeal,
   dealConditionLabels,
   dealLimitLabel,
   dealStoreNames,
@@ -50,6 +58,7 @@ import LoadError from '../components/UI/LoadError';
 
 // API keys are managed only in Data Setup.
 const DATA_SETUP_STATE = { tab: 'datasetup', view: 'Cashouts' };
+const PAYMENT_METHODS_STATE = { tab: 'datasetup', view: 'Payment Methods' };
 
 // Below this the table no longer fits beside the sidebar -- cards take over
 // regardless of the view toggle.
@@ -105,6 +114,7 @@ export default function Cashout() {
   } = useCashoutDeals();
 
   const { syncConnection } = useCashoutMutations();
+  const { data: paymentMethods = [] } = usePaymentMethods();
 
   // Cooldown ticker
   useEffect(() => {
@@ -558,7 +568,7 @@ export default function Cashout() {
           ) : showCards ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
               {filteredDeals.map((deal) => (
-                <DealCard key={`${deal.connectionId}-${deal.id}`} deal={deal} />
+                <DealCard key={`${deal.connectionId}-${deal.id}`} deal={deal} paymentMethods={paymentMethods} />
               ))}
             </div>
           ) : (
@@ -577,6 +587,13 @@ export default function Cashout() {
                       >
                         Est. Profit
                         <span className="block font-normal normal-case tracking-normal">before tax</span>
+                      </th>
+                      <th
+                        className="py-3 px-3 whitespace-nowrap text-center"
+                        title="Your saved card that earns the most at one of this deal's stores, and the profit with its cashback on retail."
+                      >
+                        Best Card
+                        <span className="block font-normal normal-case tracking-normal">profit with rewards</span>
                       </th>
                       <th className="py-3 px-3">Expires</th>
                       <th className="py-3 px-3">Buy At</th>
@@ -616,6 +633,11 @@ export default function Cashout() {
                           {/* Est. Profit */}
                           <td className="py-3 px-3 text-right">
                             <EstProfit profit={deal.estimatedProfit} expired={expired} />
+                          </td>
+
+                          {/* Best Card */}
+                          <td className="py-3 px-3">
+                            <BestCard best={bestCardForDeal(deal, paymentMethods)} expired={expired} />
                           </td>
 
                           {/* Expires */}
@@ -778,6 +800,37 @@ function EstProfit({ profit, expired = false }) {
   );
 }
 
+// The saved card that earns the most on a deal, what it earns and where, and
+// the deal's profit with that cashback. With no saved cards it links to where
+// cards are added.
+function BestCard({ best, expired = false, inline = false }) {
+  if (!best) {
+    return (
+      <Link to="/settings" state={PAYMENT_METHODS_STATE} className="text-[12px] text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)] underline underline-offset-2">
+        Add a card
+      </Link>
+    );
+  }
+  if (!best.card) {
+    return <span className="text-[var(--dp-text-label)]" title="None of your saved cards earn cashback at this deal's stores.">—</span>;
+  }
+
+  const rate = `${Math.round(best.rate * 100) / 100}%`;
+  const earns = best.store ? `${rate} at ${best.store}` : rate;
+  const profit = best.profit ? formatDealProfit(best.profit) : null;
+  const cardLabel = best.card.last4 ? `${best.card.name} (${best.card.last4})` : best.card.name;
+  const cashbackNote = best.cashback !== null ? `, $${formatMoney(best.cashback)} back on retail` : '';
+  return (
+    <div className={inline ? 'flex flex-wrap items-baseline gap-x-2' : 'mx-auto min-w-[9rem] max-w-[15rem] text-center'} title={`${cardLabel}: ${earns}${cashbackNote}`}>
+      <div className="font-medium text-[var(--dp-text-primary)] break-words">{best.card.name}</div>
+      <div className="text-[12px] text-[var(--dp-text-label)]">{earns}</div>
+      {profit && (
+        <div className={`tabular-nums text-sm font-bold ${PROFIT_TONES[expired ? 'neutral' : profit.tone]}`}>{profit.amount}</div>
+      )}
+    </div>
+  );
+}
+
 function CashoutName({ name }) {
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded text-[12px] font-medium bg-[var(--dp-hover-bg)] text-[var(--dp-text-primary)] border border-[color:var(--dp-border)]">
@@ -822,17 +875,18 @@ function CashoutOffers({ deal }) {
   );
 }
 
-// A cashout we can't commit to from here (Points4Days) links to the deal on its
-// website, where the commitment and tracking are done.
+// Links to the deal on the cashout's website: the deal itself for Points4Days
+// and EarnFromBuying, where the commitment and tracking are done, and the deals
+// list for ElectronicsBuyer, whose API has no per-deal address.
 function OpenOnCashout({ offer }) {
-  if (offer.connectionSupportsCommits || !offer.dealUrl) return null;
+  if (!offer.dealUrl) return null;
   return (
     <a
       href={offer.dealUrl}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={`Open on ${offer.connectionName}`}
-      title={`Open on ${offer.connectionName} to commit`}
+      title={offer.connectionSupportsCommits ? `Open on ${offer.connectionName}` : `Open on ${offer.connectionName} to commit`}
       className="p-1 rounded-md text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
     >
       <ExternalLink size={13} />
@@ -867,6 +921,15 @@ function StoreLinks({ deal, large = false }) {
 // provider itself has no way to tell us which tracking number went with
 // which commitment. Deal names come from the current live deals list when
 // available; an expired/closed deal still shows its id.
+// An active commitment whose sale has a tracking number the cashout doesn't
+// have: it changed after committing, or the first send failed.
+const needsTrackingSend = (c) => {
+  const number = String(c.sale?.tracking_number || '').trim().toUpperCase();
+  if (!number) return false;
+  if (c.tracking_error) return true;
+  return !(c.tracking_codes || []).some((code) => String(code).toUpperCase() === number);
+};
+
 function CommitmentsPanel({ commitments, allDeals }) {
   const { deleteCommitment } = useCashoutMutations();
 
@@ -879,10 +942,13 @@ function CommitmentsPanel({ commitments, allDeals }) {
   }
 
   const withdraw = async (commitment) => {
-    if (!confirm('Withdraw this commitment? The cashout frees the quantity back to the deal immediately.')) return;
+    const pending = commitment.status === 'pending';
+    if (!confirm(pending
+      ? 'Remove this from Commitments? Nothing was committed to the cashout, so nothing is sent there. The purchase and sale stay.'
+      : 'Withdraw this commitment? The cashout frees the quantity back to the deal immediately.')) return;
     try {
       await deleteCommitment.mutateAsync(commitment.id);
-      toast.success('Commitment withdrawn.');
+      toast.success(pending ? 'Removed. The purchase and sale are still there.' : 'Commitment withdrawn.');
     } catch (err) {
       toast.error(err.message);
     }
@@ -920,7 +986,7 @@ function CommitmentsPanel({ commitments, allDeals }) {
               const unitCost = c.sale?.inventory?.unit_purchase_cost;
               const unitPayout = c.sale?.unit_price;
               return (
-                <tr key={c.id} className={`hover:bg-[var(--dp-hover-bg)] transition-colors ${c.status !== 'active' ? 'opacity-60' : ''}`}>
+                <tr key={c.id} className={`hover:bg-[var(--dp-hover-bg)] transition-colors ${c.status === 'withdrawn' ? 'opacity-60' : ''}`}>
                   {/* Item */}
                   <td className="py-3 px-4">
                     <div className="flex items-start gap-3">
@@ -970,6 +1036,11 @@ function CommitmentsPanel({ commitments, allDeals }) {
                       <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[var(--dp-hover-bg)] text-[var(--dp-text-label)]">
                         Withdrawn
                       </span>
+                    ) : c.status === 'pending' || c.status === 'committing' ? (
+                      <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-sky-500/15 text-sky-300"
+                        title={c.sale?.tracking_number ? 'Has tracking, not committed to the cashout yet' : 'Logged before it shipped. Add its tracking number to commit.'}>
+                        {c.status === 'committing' ? 'Committing…' : 'Not committed'}
+                      </span>
                     ) : c.sale?.workflow_status ? (
                       <StatusChip status={c.sale.workflow_status} />
                     ) : (
@@ -989,19 +1060,53 @@ function CommitmentsPanel({ commitments, allDeals }) {
                     {c.tracking_error && (
                       <div className="text-[11px] text-rose-400 mt-0.5" title={c.tracking_error}>Tracking failed</div>
                     )}
-                    {!c.tracking_codes?.length && !c.tracking_error && <span className="text-[var(--dp-text-label)]">—</span>}
+                    {c.status === 'pending' && c.sale?.tracking_number && (
+                      <div className="text-[11px] text-[var(--dp-text-secondary)] font-mono truncate" title={c.sale.tracking_number}>{c.sale.tracking_number}</div>
+                    )}
+                    {!c.tracking_codes?.length && !c.tracking_error && !(c.status === 'pending' && c.sale?.tracking_number) && <span className="text-[var(--dp-text-label)]">—</span>}
                   </td>
 
                   {/* Actions */}
                   <td className="py-3 pl-3 pr-6 whitespace-nowrap text-right">
+                    {c.status === 'pending' && (
+                      <div className="inline-flex gap-1.5">
+                        {c.sale?.tracking_number && (
+                          <button
+                            type="button"
+                            onClick={() => offerPendingCommit(c.id)}
+                            className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap bg-[var(--dp-accent)] text-white hover:opacity-90 transition-opacity"
+                          >
+                            Commit
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => withdraw(c)}
+                          className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )}
                     {c.status === 'active' && (
-                      <button
-                        type="button"
-                        onClick={() => withdraw(c)}
-                        className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
-                      >
-                        Withdraw
-                      </button>
+                      <div className="inline-flex gap-1.5">
+                        {needsTrackingSend(c) && (
+                          <button
+                            type="button"
+                            onClick={() => offerTrackingSend({ commitment_id: c.id, tracking_number: c.sale.tracking_number, cashout: c.connection?.display_name })}
+                            className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap bg-[var(--dp-accent)] text-white hover:opacity-90 transition-opacity"
+                          >
+                            Send tracking
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => withdraw(c)}
+                          className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
+                        >
+                          Withdraw
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -1050,12 +1155,59 @@ function LogPurchaseButton({ deal }) {
   );
 }
 
+// The Log Purchase window is opened from inside a deal's table cell, which is
+// right-aligned and doesn't wrap -- a window placed there inherits both. So
+// it's rendered into the page's workspace instead, which still carries the
+// theme's form styles (document.body wouldn't).
+function ModalLayer({ children }) {
+  const host = document.querySelector('.carbon-workspace, .glass-workspace') || document.body;
+  return createPortal(
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 text-left whitespace-normal">
+      {children}
+    </div>,
+    host,
+  );
+}
+
+// The same field look as Add Transaction: label above, full-width control.
+const LP_INPUT = 'w-full px-3 py-2 text-sm rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none focus:border-[var(--dp-accent)] transition-colors';
+
+function LpField({ id, label, className = '', children }) {
+  return (
+    <div className={className}>
+      <label htmlFor={id} className="block text-xs font-medium text-[var(--dp-text-secondary)] mb-1.5">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function LpSection({ icon, title, tone, children }) {
+  return (
+    <section className="card p-4 space-y-4">
+      <div className="flex items-center gap-2">
+        {React.createElement(icon, { className: `w-4 h-4 ${tone}`, 'aria-hidden': 'true' })}
+        <h3 className={`text-xs font-semibold uppercase tracking-wider ${tone}`}>{title}</h3>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function DollarInput({ id, value, onChange }) {
+  return (
+    <div className="relative">
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--dp-text-label)]" aria-hidden="true">$</span>
+      <input id={id} type="number" step="0.01" min="0" value={value} onChange={onChange} className={`${LP_INPUT} pl-7`} />
+    </div>
+  );
+}
+
 // The Log Purchase window's frame for its confirm and saved screens.
 function ModalShell({ modalRef, title, subtitle, onClose, busy = false, children }) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <ModalLayer>
       <div ref={modalRef} role="dialog" aria-modal="true" aria-label={title}
-        className="w-full max-w-lg rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+        className="w-full max-w-xl rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
           <div>
             <h3 className="font-bold text-base text-[var(--dp-text-primary)]">{title}</h3>
@@ -1067,11 +1219,30 @@ function ModalShell({ modalRef, title, subtitle, onClose, busy = false, children
         </div>
         {children}
       </div>
-    </div>
+    </ModalLayer>
   );
 }
 
 const nameKey = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// One line per item in the picker: its name plus the UPC, which tells two
+// colors apart when EB's names are close.
+const itemOptionLabel = (item) => {
+  const upc = item.upcs?.[0];
+  return upc ? `${item.name} · UPC ${upc}` : item.name;
+};
+
+// Under the picker: what EB says about the chosen item.
+function ItemFacts({ item }) {
+  const facts = [
+    item.condition && item.condition !== 'new' ? item.condition.replace(/_/g, ' ') : null,
+    item.upcs?.length ? `UPC ${item.upcs.join(', ')}` : null,
+    item.remainingPercentage != null ? `${Math.round(item.remainingPercentage)}% of the limit left` : null,
+    item.vendorLimit ? `store limit ${item.vendorLimit}` : null,
+  ].filter(Boolean);
+  if (!facts.length) return null;
+  return <p className="mt-1.5 text-[11px] text-[var(--dp-text-secondary)]">{facts.join(' · ')}</p>;
+}
 
 function LogPurchaseModal({ product, onClose }) {
   const offers = product.offers || [product];
@@ -1102,11 +1273,15 @@ function LogPurchaseModal({ product, onClose }) {
   const items = deal.items || [];
   const dealStores = useMemo(() => dealStoreNames(deal), [deal]);
 
-  const [itemId, setItemId] = useState(items[0]?.id || '');
+  // A deal with several items (one per color, size or model) starts with none
+  // picked: each is its own commitment with EB, so the right one has to be a
+  // choice, not whatever EB happens to list first.
+  const onlyItemId = (list) => (list?.length === 1 ? list[0].id : '');
+  const [itemId, setItemId] = useState(() => onlyItemId(items));
   // Another cashout's deal has its own items and its own group to sell to.
   const pickCashout = (index) => {
     setOfferIndex(index);
-    setItemId(offers[index].items?.[0]?.id || '');
+    setItemId(onlyItemId(offers[index].items));
     setSaleToId(null);
     setError(null);
   };
@@ -1124,8 +1299,15 @@ function LogPurchaseModal({ product, onClose }) {
   const selectedVendor = vendors.find((v) => v.id === vendorId);
   const selectedPaymentMethod = paymentMethods.find((m) => m.id === paymentMethodId);
   const taxExempt = Boolean(selectedVendor?.tax_exempt_place);
-  const cashbackRate = selectedPaymentMethod?.default_cashback_rate || 0;
-  const cashbackEarned = Math.round(Number(unitCost) * quantity * (cashbackRate / 100) * 100) / 100;
+  // Same rule as Add Transaction: the card's rate for this store when it has
+  // one (e.g. 5% at Amazon), else its default, on the whole charge with tax.
+  const cashbackRate = effectiveCashbackRate({ payment_method: selectedPaymentMethod, vendor: selectedVendor });
+  const cashbackBase = batchCost({
+    unit_purchase_cost: Number(unitCost) || 0,
+    qty_purchased: quantity,
+    sales_tax: taxExempt ? 0 : Number(salesTax) || 0,
+  });
+  const cashbackEarned = Math.round(cashbackBase * (cashbackRate / 100) * 100) / 100;
   const selectedItem = items.find((i) => i.id === itemId);
 
   const modalRef = useModalKeyboard(true, () => !logPurchase.isPending && onClose());
@@ -1144,11 +1326,11 @@ function LogPurchaseModal({ product, onClose }) {
   const totalPayout = Math.round(Number(deal.payout) * quantity * 100) / 100;
 
   const validate = () => {
-    if (!itemId) return 'Pick which item you bought.';
+    if (!itemId) return 'Pick the exact item you bought (color, size or model).';
     if (!vendorId) return 'Pick the store you bought it from.';
     if (!paymentMethodId) return 'Pick the card or account you paid with.';
     if (needsSaleTo && !saleToId) return 'Pick which cashout group you sold it to.';
-    if (!tracking) return 'A tracking number is required -- this is for an item that has already shipped.';
+    if (!tracking && recordOnly) return 'A tracking number is required -- this is for an item that has already shipped.';
     return null;
   };
 
@@ -1162,11 +1344,11 @@ function LogPurchaseModal({ product, onClose }) {
         deal_name: deal.name,
         item_name: selectedItem?.name,
         quantity,
-        tracking_codes: [tracking],
-        insured_value: !recordOnly && insuredValue ? Number(insuredValue) : undefined,
+        tracking_codes: tracking ? [tracking] : [],
+        insured_value: !recordOnly && tracking && insuredValue ? Number(insuredValue) : undefined,
         platform_id: needsSaleTo ? saleToId : undefined,
-        store: selectedVendor.name,
-        payment_method: selectedPaymentMethod.name,
+        vendor_id: vendorId,
+        payment_method_id: paymentMethodId,
         unit_cost: Number(unitCost) || 0,
         tax_exempt: taxExempt,
         sales_tax: taxExempt ? 0 : Number(salesTax) || 0,
@@ -1179,11 +1361,22 @@ function LogPurchaseModal({ product, onClose }) {
         setStage('saved');
         return;
       }
-      if (result.trackingSubmitted ?? result.tracking_submitted) {
+      if (result.commitPending ?? result.commit_pending) {
+        toast.success(`Logged. Not committed to ${deal.connectionName} yet.`, {
+          description: "Add the tracking number when it ships, and you'll be asked to commit then, at that day's payout.",
+        });
+        onClose();
+        return;
+      }
+      if (result.trackingShared && (result.trackingSubmitted ?? result.tracking_submitted)) {
+        toast.success('Committed and logged.', {
+          description: `That tracking number was already sent to ${deal.connectionName} with another item, so it wasn't sent again.`,
+        });
+      } else if (result.trackingSubmitted ?? result.tracking_submitted) {
         toast.success('Committed and logged -- tracking sent to the cashout.');
       } else {
         toast.success('Committed and logged, but tracking failed to send.', {
-          description: result.tracking_error || 'Resubmit it from the Commitments section.',
+          description: result.tracking_error || 'Send it again with Send tracking in the Commitments section.',
         });
       }
       onClose();
@@ -1200,7 +1393,8 @@ function LogPurchaseModal({ product, onClose }) {
     const problem = validate();
     if (problem) return setError(problem);
     // EB's commit is binding, so it gets one more look before it's sent.
-    if (!recordOnly) return setStage('confirm');
+    // With no tracking number nothing is committed yet, so there's nothing to confirm.
+    if (!recordOnly && tracking) return setStage('confirm');
     await save();
   };
 
@@ -1221,7 +1415,14 @@ function LogPurchaseModal({ product, onClose }) {
         </p>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
           <dt className="text-[var(--dp-text-label)]">Item</dt>
-          <dd className="text-[var(--dp-text-primary)]">{selectedItem?.name || deal.name}</dd>
+          <dd className="text-[var(--dp-text-primary)] font-semibold">
+            {selectedItem?.name || deal.name}
+            {items.length > 1 && (
+              <span className="block font-normal text-[11px] text-[var(--dp-text-secondary)]">
+                One of {items.length} items in this deal. Make sure it's the exact one you bought.
+              </span>
+            )}
+          </dd>
           <dt className="text-[var(--dp-text-label)]">Quantity</dt>
           <dd className="text-[var(--dp-text-primary)] tabular-nums">{quantity}</dd>
           <dt className="text-[var(--dp-text-label)]">Payout</dt>
@@ -1279,153 +1480,155 @@ function LogPurchaseModal({ product, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <ModalLayer>
       <form
         ref={modalRef}
         onSubmit={submit}
-        className="w-full max-w-lg rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4 max-h-[85vh] overflow-y-auto"
+        aria-label="Log Purchase"
+        className="w-full max-w-2xl rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl max-h-[90vh] flex flex-col"
       >
-        <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
-          <div>
+        <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-4 border-b border-[color:var(--dp-border)]">
+          <div className="min-w-0">
             <h3 className="font-bold text-base text-[var(--dp-text-primary)]">Log Purchase</h3>
-            <p className="text-[11px] text-[var(--dp-text-secondary)] mt-0.5 truncate max-w-xs" title={product.name}>{product.name}</p>
+            <p className="text-xs text-[var(--dp-text-secondary)] mt-0.5 truncate" title={product.name}>{product.name}</p>
           </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]">
+          <button type="button" aria-label="Close" onClick={onClose} className="shrink-0 text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]">
             <X size={18} />
           </button>
         </div>
 
-        {offers.length > 1 && (
-          <div className="space-y-1.5">
-            <label htmlFor="lp-cashout" className="text-[11px] text-[var(--dp-text-label)]">Cashout</label>
-            <select id="lp-cashout" value={offerIndex} onChange={(e) => pickCashout(Number(e.target.value))} className={SELECT_CLASS + ' w-full'}>
-              {offers.map((offer, index) => (
-                <option key={`${offer.connectionId}-${offer.id}`} value={index}>
-                  {offer.connectionName} -- ${formatMoney(offer.payout)}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {recordOnly ? (
-          <p className="text-[11px] text-[var(--dp-text-secondary)] bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] rounded-lg px-3 py-2">
-            This saves the purchase and its sale to {deal.connectionName} at ${formatMoney(deal.payout)} each, in Profit Tracker only, with your tracking number on the sale. It doesn't commit or send tracking to {deal.connectionName} -- do that on their website. Only use this once you've actually shipped the item.
-          </p>
-        ) : (
-          <p className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
-            This commits to the cashout at today's payout price -- a real, binding pledge -- and submits your tracking number. Only use this once you've actually shipped the item.
-          </p>
-        )}
-
-        {needsSaleTo && (
-          <div className="space-y-1.5">
-            <label htmlFor="lp-saleto" className="text-[11px] text-[var(--dp-text-label)]">Sold to</label>
-            <select id="lp-saleto" value={saleToId} onChange={(e) => setSaleToId(e.target.value)} className={SELECT_CLASS + ' w-full'}>
-              <option value="">Select a cashout group…</option>
-              {cashoutGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-            </select>
-          </div>
-        )}
-
-        {items.length > 1 && (
-          <div className="space-y-1.5">
-            <label htmlFor="lp-item" className="text-[11px] text-[var(--dp-text-label)]">Which item</label>
-            <select id="lp-item" value={itemId} onChange={(e) => setItemId(e.target.value)} className={SELECT_CLASS + ' w-full'}>
-              {items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <label htmlFor="lp-qty" className="text-[11px] text-[var(--dp-text-label)]">Quantity</label>
-            <input id="lp-qty" type="number" min="1" value={quantity} onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
-              className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none" />
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="lp-cost" className="text-[11px] text-[var(--dp-text-label)]">Unit cost (what you paid)</label>
-            <input id="lp-cost" type="number" step="0.01" min="0" value={unitCost} onChange={(e) => setUnitCost(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none" />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <label htmlFor="lp-store" className="text-[11px] text-[var(--dp-text-label)]">Store</label>
-            <select id="lp-store" value={vendorId} onChange={(e) => setVendorId(e.target.value)} className={SELECT_CLASS + ' w-full'}>
-              <option value="">Select a store…</option>
-              {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="lp-pay" className="text-[11px] text-[var(--dp-text-label)]">Payment method</label>
-            <select id="lp-pay" value={paymentMethodId} onChange={(e) => setPaymentMethodId(e.target.value)} className={SELECT_CLASS + ' w-full'}>
-              <option value="">Select a card/account…</option>
-              {paymentMethods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <label htmlFor="lp-tax" className="text-[11px] text-[var(--dp-text-label)]">Sales tax</label>
-            {taxExempt ? (
-              <p className="text-xs text-[var(--dp-text-secondary)] px-3 py-2">$0.00 (tax-exempt store)</p>
-            ) : (
-              <input id="lp-tax" type="number" step="0.01" min="0" value={salesTax} onChange={(e) => setSalesTax(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none" />
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          <LpSection icon={DollarSign} title="Cashout" tone="text-green-400">
+            {(offers.length > 1 || needsSaleTo || items.length > 1) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {offers.length > 1 && (
+                  <LpField id="lp-cashout" label="Cashout">
+                    <select id="lp-cashout" value={offerIndex} onChange={(e) => pickCashout(Number(e.target.value))} className={LP_INPUT}>
+                      {offers.map((offer, index) => (
+                        <option key={`${offer.connectionId}-${offer.id}`} value={index}>
+                          {offer.connectionName} -- ${formatMoney(offer.payout)}
+                        </option>
+                      ))}
+                    </select>
+                  </LpField>
+                )}
+                {needsSaleTo && (
+                  <LpField id="lp-saleto" label="Sold to">
+                    <select id="lp-saleto" value={saleToId} onChange={(e) => setSaleToId(e.target.value)} className={LP_INPUT}>
+                      <option value="">Select a cashout group…</option>
+                      {cashoutGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </select>
+                  </LpField>
+                )}
+                {items.length > 1 && (
+                  <LpField id="lp-item" label="Which item (color, size or model)" className="sm:col-span-2">
+                    <select id="lp-item" value={itemId} onChange={(e) => { setItemId(e.target.value); setError(null); }}
+                      className={`${LP_INPUT} ${itemId ? '' : 'text-[var(--dp-text-label)]'}`}>
+                      <option value="" disabled>Select the exact item you bought…</option>
+                      {items.map((item) => <option key={item.id} value={item.id}>{itemOptionLabel(item)}</option>)}
+                    </select>
+                    {selectedItem && <ItemFacts item={selectedItem} />}
+                  </LpField>
+                )}
+              </div>
             )}
-          </div>
-          <div className="space-y-1.5">
-            <span className="text-[11px] text-[var(--dp-text-label)] block">Cashback</span>
-            <p className="text-xs text-[var(--dp-text-secondary)] px-3 py-2">
-              {cashbackRate ? `$${cashbackEarned.toFixed(2)} (${cashbackRate}%)` : '—'}
+            <p className="text-sm text-[var(--dp-text-secondary)]">
+              {deal.connectionName} pays <span className="font-semibold tabular-nums text-[var(--dp-text-primary)]">${formatMoney(deal.payout)}</span> each
+              {quantity > 1 && <> · <span className="tabular-nums">${formatMoney(totalPayout)}</span> total</>}
             </p>
-          </div>
+          </LpSection>
+
+          <LpSection icon={ShoppingCart} title="Purchase Details" tone="text-blue-400">
+            <div className="grid grid-cols-2 gap-4">
+              <LpField id="lp-cost" label="Unit cost (what you paid)">
+                <DollarInput id="lp-cost" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />
+              </LpField>
+              <LpField id="lp-qty" label="Quantity">
+                <input id="lp-qty" type="number" min="1" value={quantity} onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))} className={LP_INPUT} />
+              </LpField>
+              <LpField id="lp-tax" label="Sales tax">
+                {taxExempt ? (
+                  <p className={`${LP_INPUT} text-[var(--dp-text-secondary)]`}>$0.00 (tax-exempt store)</p>
+                ) : (
+                  <DollarInput id="lp-tax" value={salesTax} onChange={(e) => setSalesTax(e.target.value)} />
+                )}
+              </LpField>
+              <LpField id="lp-date" label="Purchase date">
+                <input id="lp-date" type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className={LP_INPUT} />
+              </LpField>
+            </div>
+          </LpSection>
+
+          <LpSection icon={CreditCard} title="Store & Payment" tone="text-pink-400">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <LpField id="lp-store" label="Store">
+                <select id="lp-store" value={vendorId} onChange={(e) => setVendorId(e.target.value)} className={LP_INPUT}>
+                  <option value="">Select a store…</option>
+                  {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </select>
+              </LpField>
+              <LpField id="lp-pay" label="Payment method">
+                <select id="lp-pay" value={paymentMethodId} onChange={(e) => setPaymentMethodId(e.target.value)} className={LP_INPUT}>
+                  <option value="">Select a card…</option>
+                  {paymentMethods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </LpField>
+              <div>
+                <span className="block text-xs font-medium text-[var(--dp-text-secondary)] mb-1.5">Cashback</span>
+                <p className={`${LP_INPUT} tabular-nums text-[var(--dp-text-secondary)]`}>
+                  {cashbackRate ? `$${cashbackEarned.toFixed(2)} (${cashbackRate}%)` : '—'}
+                </p>
+              </div>
+            </div>
+          </LpSection>
+
+          <LpSection icon={Truck} title="Shipping" tone="text-amber-400">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <LpField id="lp-tracking" label="Tracking number" className={!recordOnly && tracking ? '' : 'sm:col-span-2'}>
+                <input id="lp-tracking" type="text" maxLength={24} value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
+                  placeholder={recordOnly ? '1Z999AA10123456784' : 'Blank if it hasn’t shipped yet'}
+                  className={`${LP_INPUT} font-mono`} />
+              </LpField>
+              {!recordOnly && tracking && (
+                <LpField id="lp-insured" label="Insured value (optional)">
+                  <input id="lp-insured" type="number" min="200" max="1500" step="0.01" value={insuredValue} onChange={(e) => setInsuredValue(e.target.value)}
+                    placeholder="$200–$1,500" className={LP_INPUT} />
+                </LpField>
+              )}
+            </div>
+          </LpSection>
+
+          {error && <p role="alert" className="text-xs text-rose-400">{error}</p>}
         </div>
 
-        <div className="space-y-1.5">
-          <label htmlFor="lp-tracking" className="text-[11px] text-[var(--dp-text-label)]">Tracking number</label>
-          <input id="lp-tracking" type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
-            placeholder="1Z999AA10123456784"
-            className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none" />
-        </div>
-
-        {!recordOnly && <div className="space-y-1.5">
-          <label htmlFor="lp-insured" className="text-[11px] text-[var(--dp-text-label)]">Insured value (optional, $200–$1,500)</label>
-          <input id="lp-insured" type="number" min="200" max="1500" step="0.01" value={insuredValue} onChange={(e) => setInsuredValue(e.target.value)}
-            placeholder="Leave blank to skip insurance"
-            className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none" />
-        </div>}
-
-        <div className="space-y-1.5">
-          <label htmlFor="lp-date" className="text-[11px] text-[var(--dp-text-label)]">Purchase date</label>
-          <input id="lp-date" type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)}
-            className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none" />
-        </div>
-
-        {error && <p role="alert" className="text-xs text-rose-400">{error}</p>}
-
-        <div className="flex items-center justify-end gap-2 border-t border-[color:var(--dp-border)] pt-3">
-          <button type="button" onClick={onClose} disabled={logPurchase.isPending}
-            className="px-3.5 py-2 text-xs font-medium rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)]">
-            Cancel
-          </button>
-          <button type="submit" disabled={logPurchase.isPending}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90 disabled:opacity-50">
-            {logPurchase.isPending && <RefreshCw size={12} className="animate-spin" />}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-4 border-t border-[color:var(--dp-border)]">
+          <p className={`flex-1 text-xs ${!recordOnly && tracking ? 'text-amber-400' : 'text-[var(--dp-text-secondary)]'}`}>
             {recordOnly
-              ? (logPurchase.isPending ? 'Saving…' : 'Log Purchase')
-              : 'Commit & Log Purchase'}
-          </button>
+              ? `Saved here only. It doesn't commit or send tracking to ${deal.connectionName}; do that on their site.`
+              : tracking
+                ? `Commits to ${deal.connectionName} now, a real, binding pledge.`
+                : `No tracking yet: saves without committing to ${deal.connectionName}. You'll be asked to commit when you add it.`}
+          </p>
+          <div className="flex items-center justify-end gap-2 shrink-0">
+            <button type="button" onClick={onClose} disabled={logPurchase.isPending}
+              className="px-3.5 py-2 text-xs font-medium rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)]">
+              Cancel
+            </button>
+            <button type="submit" disabled={logPurchase.isPending}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90 disabled:opacity-50">
+              {logPurchase.isPending && <RefreshCw size={12} className="animate-spin" />}
+              {recordOnly || !tracking
+                ? (logPurchase.isPending ? 'Saving…' : 'Log Purchase')
+                : 'Commit & Log Purchase'}
+            </button>
+          </div>
         </div>
       </form>
-    </div>
+    </ModalLayer>
   );
 }
 
-function DealCard({ deal }) {
+function DealCard({ deal, paymentMethods }) {
   const expired = isDealExpired(deal);
 
   return (
@@ -1449,6 +1652,11 @@ function DealCard({ deal }) {
           <dd className="mt-0.5"><EstProfit profit={deal.estimatedProfit} expired={expired} /></dd>
         </div>
       </dl>
+
+      <div>
+        <div className="text-[12px] text-[var(--dp-text-label)] uppercase tracking-wider">Best Card</div>
+        <div className="mt-0.5"><BestCard best={bestCardForDeal(deal, paymentMethods)} expired={expired} inline /></div>
+      </div>
 
       <div className="mt-auto space-y-3 pt-3 border-t border-[color:var(--dp-border)]">
         {!expired && <StoreLinks deal={deal} large />}

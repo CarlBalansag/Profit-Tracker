@@ -19,6 +19,24 @@ const {
 } = require('../services/cashouts/service');
 const commitsService = require('../services/cashouts/commits');
 const { logPurchase } = require('../services/cashouts/logPurchase');
+const pendingCommit = require('../services/cashouts/pendingCommit');
+
+// Errors from these routes. A message we wrote (it has a status) or the
+// provider's own refusal is shown as is. Anything else (a database error, a
+// bug) is logged and replaced with a plain message, never a stack detail.
+// committed / ambiguous tell the app a binding write may already be done.
+function sendCashoutError(res, err) {
+  const prismaError = /^P\d{4}$/.test(String(err.code || ''));
+  const providerError = !prismaError && Boolean(err.keyRejected || err.permissionDenied || err.rateLimited || err.code);
+  const known = Boolean(err.status) || providerError;
+  if (!known) console.error('Cashout route error:', err);
+  res.status(err.status || (err.rateLimited ? 429 : providerError ? 400 : 500)).json({
+    error: known ? err.message : 'Something went wrong on our side. If this was a commit or a tracking send, check Commitments before trying again.',
+    code: prismaError ? null : (err.code || null),
+    ...(err.committed ? { committed: true } : {}),
+    ...(err.ambiguous ? { ambiguous: true } : {}),
+  });
+}
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -202,7 +220,7 @@ router.get('/connections/:id/commits', isAuthenticated, async (req, res, next) =
     });
     res.json(result);
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message, code: err.code || null });
+    sendCashoutError(res, err);
   }
 });
 
@@ -212,7 +230,7 @@ router.get('/connections/:id/commits/:commitmentId', isAuthenticated, async (req
     const result = await commitsService.getCommit(req.user.id, req.params.id, req.params.commitmentId);
     res.json(result);
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message, code: err.code || null });
+    sendCashoutError(res, err);
   }
 });
 
@@ -226,7 +244,7 @@ router.post('/connections/:id/commits', isAuthenticated, async (req, res, next) 
     });
     res.status(201).json(commitment);
   } catch (err) {
-    res.status(err.status || 400).json({ error: err.message, code: err.code || null });
+    sendCashoutError(res, err);
   }
 });
 
@@ -236,7 +254,40 @@ router.patch('/commitments/:id', isAuthenticated, async (req, res, next) => {
     const commitment = await commitsService.updateCommitment(req.user.id, req.params.id, { quantity: req.body.quantity });
     res.json(commitment);
   } catch (err) {
-    res.status(err.status || 400).json({ error: err.message, code: err.code || null });
+    sendCashoutError(res, err);
+  }
+});
+
+// GET /api/cashouts/commitments/:id/pending -- what committing a purchase that
+// was logged before it shipped would send, at the cashout's payout right now.
+router.get('/commitments/:id/pending', isAuthenticated, async (req, res) => {
+  try {
+    res.json(await pendingCommit.previewPending(req.user.id, req.params.id));
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// POST /api/cashouts/commitments/:id/commit -- commit that purchase with the
+// cashout and send the sale's tracking number. Only ever called from the
+// user's confirm; adding tracking alone never commits.
+router.post('/commitments/:id/commit', isAuthenticated, async (req, res) => {
+  try {
+    res.json(await pendingCommit.commitPending(req.user.id, req.params.id, { insuredValue: req.body?.insured_value }));
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// POST /api/cashouts/commitments/:id/tracking -- send the sale's current
+// tracking number for an active commitment (it changed after committing, or
+// the first send failed). A number the cashout already has isn't sent again.
+router.post('/commitments/:id/tracking', isAuthenticated, async (req, res) => {
+  try {
+    const result = await commitsService.sendCommitmentTracking(req.user.id, req.params.id);
+    res.json({ commitment: result.record, sent: result.sent, shared: result.shared });
+  } catch (err) {
+    sendCashoutError(res, err);
   }
 });
 
@@ -246,7 +297,7 @@ router.delete('/commitments/:id', isAuthenticated, async (req, res, next) => {
     const commitment = await commitsService.deleteCommitment(req.user.id, req.params.id);
     res.json(commitment);
   } catch (err) {
-    res.status(err.status || 400).json({ error: err.message, code: err.code || null });
+    sendCashoutError(res, err);
   }
 });
 
@@ -259,7 +310,7 @@ router.post('/connections/:id/tracking', isAuthenticated, async (req, res, next)
     });
     res.status(201).json(result);
   } catch (err) {
-    res.status(err.status || 400).json({ error: err.message, code: err.code || null });
+    sendCashoutError(res, err);
   }
 });
 
@@ -273,7 +324,7 @@ router.get('/connections/:id/tracking', isAuthenticated, async (req, res, next) 
     });
     res.json(result);
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message, code: err.code || null });
+    sendCashoutError(res, err);
   }
 });
 
@@ -305,7 +356,7 @@ router.post('/connections/:id/log-purchase', isAuthenticated, async (req, res, n
     });
     res.status(201).json(result);
   } catch (err) {
-    res.status(err.status || 400).json({ error: err.message, code: err.code || null });
+    sendCashoutError(res, err);
   }
 });
 

@@ -37,7 +37,8 @@ async function rotateApiKey(userId, existingId) {
     }
     const token = generateRawToken();
     const record = await tx.apiKey.create({
-      data: { user_id: userId, name: existing.name, key_hash: hashToken(token), key_prefix: prefixOf(token) },
+      // The new key keeps the old one's cashout write permission.
+      data: { user_id: userId, name: existing.name, key_hash: hashToken(token), key_prefix: prefixOf(token), allow_cashout_writes: Boolean(existing.allow_cashout_writes) },
     });
     return { record, token };
   });

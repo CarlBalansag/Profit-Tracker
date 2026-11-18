@@ -70,6 +70,12 @@ let currentProviders = mockProviders;
 let currentConnections = mockConnections;
 let currentCommitments = [];
 let currentDeals = mockDeals;
+const defaultPaymentMethods = [
+  { id: 'card-1', name: 'QA Card', default_cashback_rate: 2 },
+  // 1% everywhere, 5% at Amazon (store rates arrive as a JSON string too).
+  { id: 'card-amazon', name: 'Amazon Card', default_cashback_rate: 1, category_rates: JSON.stringify([{ store: 'Amazon', rate: 5 }]) },
+];
+let currentPaymentMethods = defaultPaymentMethods;
 const gainRowButton = () => within(screen.getByText('Gain Deal').closest('tr')).getByRole('button', { name: 'Log Purchase' });
 let dealsState = {};
 let connectionsState = {};
@@ -92,7 +98,7 @@ vi.mock('../hooks/useApi', () => ({
     isLoading: false,
     error: null,
   }),
-  usePaymentMethods: () => ({ data: [{ id: 'card-1', name: 'QA Card', default_cashback_rate: 2 }], isLoading: false, error: null }),
+  usePaymentMethods: () => ({ data: currentPaymentMethods, isLoading: false, error: null }),
 }));
 
 vi.mock('sonner', () => ({
@@ -107,6 +113,7 @@ describe('Cashout Page', () => {
     currentConnections = mockConnections;
     currentDeals = mockDeals;
     currentCommitments = [];
+    currentPaymentMethods = defaultPaymentMethods;
     dealsState = {};
     connectionsState = {};
     providersState = {};
@@ -224,7 +231,7 @@ describe('Cashout Page', () => {
     );
 
     expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(
-      ['Deal / Item', 'Cashout', 'Payout', 'Retail', 'Est. Profitbefore tax', 'Expires', 'Buy At', 'Actions'],
+      ['Deal / Item', 'Cashout', 'Payout', 'Retail', 'Est. Profitbefore tax', 'Best Cardprofit with rewards', 'Expires', 'Buy At', 'Actions'],
     );
     expect(gainRowButton()).toBeEnabled();
     const gainRow = screen.getByText('Gain Deal').closest('tr');
@@ -893,7 +900,113 @@ describe('Cashout Page', () => {
       };
     });
 
-    it('requires a tracking number before committing', async () => {
+    describe('a deal with one item per color', () => {
+      beforeEach(() => {
+        currentDeals.results[0].deals[0] = {
+          id: '6000', name: 'iPad Air 11', retail: 599, payout: 640,
+          items: [
+            { id: '201', name: 'iPad Air 11 128GB - Blue', upcs: ['195949000001'], remainingPercentage: 72, vendorLimit: 2 },
+            { id: '202', name: 'iPad Air 11 128GB - Purple', upcs: ['195949000002'], remainingPercentage: 40 },
+          ],
+        };
+      });
+
+      const openForm = () => {
+        render(<MemoryRouter><Cashout /></MemoryRouter>);
+        fireEvent.click(screen.getByRole('button', { name: 'Log Purchase' }));
+        fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+        fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-1' } });
+      };
+      const submitForm = () => act(async () => {
+        fireEvent.click(screen.getAllByRole('button', { name: /Log Purchase/ }).find((b) => b.type === 'submit'));
+      });
+
+      it('starts with no color picked and will not save until one is', async () => {
+        openForm();
+        const picker = screen.getByLabelText('Which item (color, size or model)');
+        expect(picker).toHaveValue('');
+        expect(screen.getByRole('option', { name: 'iPad Air 11 128GB - Blue · UPC 195949000001' })).toBeInTheDocument();
+
+        await submitForm();
+
+        expect(mockMutations.logPurchase.mutateAsync).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert')).toHaveTextContent('Pick the exact item you bought (color, size or model).');
+      });
+
+      it('sends the picked color and shows what EB says about it', async () => {
+        mockMutations.logPurchase.mutateAsync.mockResolvedValueOnce({ commitPending: true });
+        openForm();
+        fireEvent.change(screen.getByLabelText('Which item (color, size or model)'), { target: { value: '202' } });
+
+        expect(screen.getByText('UPC 195949000002 · 40% of the limit left')).toBeInTheDocument();
+        await submitForm();
+
+        expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+          item_id: '202', item_name: 'iPad Air 11 128GB - Purple',
+        }));
+      });
+
+      it('names the color on the confirm screen before committing', async () => {
+        openForm();
+        fireEvent.change(screen.getByLabelText('Which item (color, size or model)'), { target: { value: '201' } });
+        fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: '1Z999AA10123456784' } });
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' }));
+        });
+
+        expect(screen.getByText('iPad Air 11 128GB - Blue')).toBeInTheDocument();
+        expect(screen.getByText(/One of 2 items in this deal/)).toBeInTheDocument();
+        expect(mockMutations.logPurchase.mutateAsync).not.toHaveBeenCalled();
+      });
+    });
+
+    it('picks the only item of a single-item deal for you', () => {
+      render(<MemoryRouter><Cashout /></MemoryRouter>);
+      fireEvent.click(screen.getByRole('button', { name: 'Log Purchase' }));
+      expect(screen.queryByLabelText('Which item (color, size or model)')).not.toBeInTheDocument();
+    });
+
+    it("uses the card's store rate for cashback, like Add Transaction", async () => {
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Log Purchase' }));
+      fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+      fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-amazon' } });
+      fireEvent.change(screen.getByLabelText('Unit cost (what you paid)'), { target: { value: '15.99' } });
+      fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '2' } });
+      fireEvent.change(screen.getByLabelText('Sales tax'), { target: { value: '2.02' } });
+
+      // 5% of (15.99 x 2 + 2.02) = 5% of 34.00
+      expect(screen.getByText('$1.70 (5%)')).toBeInTheDocument();
+
+      const dialogSubmit = screen.getAllByRole('button', { name: 'Log Purchase' }).find((b) => b.type === 'submit');
+      await act(async () => {
+        fireEvent.click(dialogSubmit);
+      });
+      expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+        payment_method_id: 'card-amazon', cashback_rate: 5, cashback_earned: 1.7,
+      }));
+    });
+
+    it('falls back to the card default away from its bonus store', async () => {
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Log Purchase' }));
+      fireEvent.change(screen.getByLabelText('Store'), { target: { value: '' } });
+      fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-amazon' } });
+      expect(screen.getByText(/\(1%\)/)).toBeInTheDocument();
+    });
+
+    it('logs without committing when there is no tracking number yet', async () => {
+      mockMutations.logPurchase.mutateAsync.mockResolvedValueOnce({ commitPending: true });
       render(
         <MemoryRouter>
           <Cashout />
@@ -904,13 +1017,25 @@ describe('Cashout Page', () => {
       expect(screen.getByRole('heading', { name: 'Log Purchase' })).toBeInTheDocument();
       fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
       fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-1' } });
+      expect(screen.getByText(/without committing to EB Primary/)).toBeInTheDocument();
+      expect(screen.queryByText(/real, binding pledge/)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/Insured value/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Commit & Log Purchase' })).not.toBeInTheDocument();
 
+      // The dialog's own button (the deal row's Log Purchase opened it).
+      const dialogSubmit = screen.getAllByRole('button', { name: 'Log Purchase' }).find((b) => b.type === 'submit');
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' }));
+        fireEvent.click(dialogSubmit);
       });
 
-      expect(screen.getByRole('alert')).toHaveTextContent(/tracking number/i);
-      expect(mockMutations.logPurchase.mutateAsync).not.toHaveBeenCalled();
+      // No confirm screen: nothing binding is sent.
+      expect(screen.queryByRole('heading', { name: 'Commit to this deal?' })).not.toBeInTheDocument();
+      expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+        tracking_codes: [], vendor_id: 'vendor-1', payment_method_id: 'card-1',
+      }));
+      expect(mockMutations.logPurchase.mutateAsync.mock.calls[0][0].insured_value).toBeUndefined();
+      expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Not committed to EB Primary yet'), expect.anything());
+      expect(screen.queryByRole('heading', { name: 'Log Purchase' })).not.toBeInTheDocument();
     });
 
     it('asks to confirm, then commits, logs the purchase, and reports a successful tracking submission', async () => {
@@ -948,8 +1073,8 @@ describe('Cashout Page', () => {
         item_id: '10001',
         quantity: 1,
         tracking_codes: ['1Z999AA10123456784'],
-        store: 'Amazon',
-        payment_method: 'QA Card',
+        vendor_id: 'vendor-1',
+        payment_method_id: 'card-1',
         unit_payout: 1140,
         platform_id: 'group-eb', // no group linked: picked by name in the form
       }));
@@ -1103,6 +1228,26 @@ describe('Cashout Page', () => {
       expect(screen.getAllByText('Airpod 5 ANC').length).toBeGreaterThan(0); // c1/c2 resolved from the live deal list
       expect(screen.getAllByRole('button', { name: 'Withdraw' })).toHaveLength(1); // only the active one
     });
+
+    it('offers Send tracking only when the cashout lacks the sale\'s tracking number', () => {
+      const base = { status: 'active', external_deal_id: '5232', external_item_id: '1', quantity: 1, created_at: new Date().toISOString(), connection: { display_name: 'EB Primary' } };
+      currentCommitments = [
+        { ...base, id: 'sent', tracking_codes: ['1ZSAME'], sale: { tracking_number: '1zsame' } },
+        { ...base, id: 'changed', external_item_id: '2', tracking_codes: ['1ZOLD'], sale: { tracking_number: '1ZNEW' } },
+        { ...base, id: 'failed', external_item_id: '3', tracking_codes: [], tracking_error: 'EB is down', sale: { tracking_number: '1ZFAIL' } },
+        { ...base, id: 'none', external_item_id: '4', tracking_codes: [], sale: { tracking_number: null } },
+      ];
+      const seen = vi.fn();
+      window.addEventListener('cashout-tracking-send', seen);
+      render(<MemoryRouter><Cashout /></MemoryRouter>);
+      fireEvent.click(screen.getByRole('tab', { name: /Commitments/i }));
+
+      const buttons = screen.getAllByRole('button', { name: 'Send tracking' });
+      expect(buttons).toHaveLength(2);
+      fireEvent.click(buttons[0]);
+      expect(seen.mock.calls[0][0].detail).toEqual({ commitment_id: 'changed', tracking_number: '1ZNEW', cashout: 'EB Primary' });
+      window.removeEventListener('cashout-tracking-send', seen);
+    });
   });
 
   it('offers Log Purchase on a Points4Days deal, next to a link to the deal on its website', () => {
@@ -1124,6 +1269,74 @@ describe('Cashout Page', () => {
     const links = screen.getAllByRole('link', { name: 'Open on Points4Days' });
     expect(links[0]).toHaveAttribute('href', 'https://www.points4days.com/p/it@deals/deal/9');
     expect(screen.getAllByText('Points4Days').length).toBeGreaterThan(0);
+  });
+
+  it('links an ElectronicsBuyer deal to the deals page on its website, like Points4Days', () => {
+    currentDeals = {
+      results: [{
+        connection: mockConnections[0],
+        deals: [{ id: '1', name: 'EB Deal', payout: 120, retail: 100, dealUrl: 'https://electronicsbuyer.gg/app/deals', items: [] }],
+      }],
+    };
+    render(<MemoryRouter><Cashout /></MemoryRouter>);
+
+    const link = within(screen.getByText('EB Deal').closest('tr')).getByRole('link', { name: 'Open on EB Primary' });
+    expect(link).toHaveAttribute('href', 'https://electronicsbuyer.gg/app/deals');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('title', 'Open on EB Primary');
+  });
+
+  describe('Best Card column', () => {
+    const amazonDeal = {
+      id: 'amz', name: 'Amazon Deal', payout: 210, retail: 200,
+      items: [{ id: 'i1', name: 'Amazon Deal', purchaseLinks: [{ name: 'Amazon', url: 'https://amazon.com/dp/B000000000' }] }],
+    };
+    const showDeals = (deals) => {
+      currentDeals = { results: [{ connection: mockConnections[0], deals }] };
+      render(<MemoryRouter><Cashout /></MemoryRouter>);
+    };
+    const bestCardCell = (name) => within(screen.getByText(name).closest('tr')).getAllByRole('cell')[5];
+
+    it('shows the card with the best rate at the deal\'s store and the profit with its cashback', () => {
+      currentPaymentMethods = [
+        { id: 'flat', name: 'Flat 2%', default_cashback_rate: 2, category_rates: [] },
+        { id: 'prime', name: 'Prime Visa', default_cashback_rate: 1, category_rates: [{ store: 'Amazon', rate: 5 }] },
+      ];
+      showDeals([amazonDeal]);
+
+      const cell = bestCardCell('Amazon Deal');
+      expect(within(cell).getByText('Prime Visa')).toBeInTheDocument();
+      expect(within(cell).getByText('5% at Amazon')).toBeInTheDocument();
+      // $10 deal profit + 5% of $200 retail
+      expect(within(cell).getByText('+$20.00')).toBeInTheDocument();
+    });
+
+    it('skips an expired store rate', () => {
+      currentPaymentMethods = [
+        { id: 'flat', name: 'Flat 2%', default_cashback_rate: 2, category_rates: [] },
+        { id: 'prime', name: 'Prime Visa', default_cashback_rate: 1, category_rates: JSON.stringify([{ store: 'Amazon', rate: 5, expires: '2020-01-01' }]) },
+      ];
+      showDeals([amazonDeal]);
+
+      const cell = bestCardCell('Amazon Deal');
+      expect(within(cell).getByText('Flat 2%')).toBeInTheDocument();
+      expect(within(cell).getByText('2% at Amazon')).toBeInTheDocument();
+      expect(within(cell).getByText('+$14.00')).toBeInTheDocument();
+    });
+
+    it('links to Payment Methods when no card is saved', () => {
+      currentPaymentMethods = [];
+      showDeals([amazonDeal]);
+
+      expect(within(bestCardCell('Amazon Deal')).getByRole('link', { name: 'Add a card' })).toHaveAttribute('href', '/settings');
+    });
+
+    it('shows a dash when no saved card earns anything', () => {
+      currentPaymentMethods = [{ id: 'debit', name: 'Checking', default_cashback_rate: 0 }];
+      showDeals([amazonDeal]);
+
+      expect(bestCardCell('Amazon Deal')).toHaveTextContent('—');
+    });
   });
 
   describe('same product on several cashouts', () => {
@@ -1180,13 +1393,14 @@ describe('Cashout Page', () => {
 
       fireEvent.change(cashout, { target: { value: '1' } });
       expect(screen.queryByText(/doesn't commit or send tracking/)).not.toBeInTheDocument();
-      expect(screen.getByText(/real, binding pledge/)).toBeInTheDocument();
+      expect(screen.getByText(/without committing to EB Primary/)).toBeInTheDocument();
       expect(screen.getByLabelText('Sold to')).toHaveValue('group-eb');
-      expect(screen.getByLabelText(/Insured value/)).toBeInTheDocument();
 
       fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
       fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-1' } });
       fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: '1Z999AA10123456784' } });
+      expect(screen.getByText(/real, binding pledge/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Insured value/)).toBeInTheDocument();
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' }));
       });

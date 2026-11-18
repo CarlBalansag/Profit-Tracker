@@ -49,6 +49,7 @@ model User {
   cashout_deal_snapshots CashoutDealSnapshot[]
   cashout_item_matches   CashoutItemMatch[]
   cashout_commitments    CashoutCommitment[]
+  cashout_write_logs     CashoutWriteLog[]
   invites                Invite[]
 }
 
@@ -68,6 +69,9 @@ model ApiKey {
   created_at   DateTime  @default(now())
   last_used_at DateTime?
   revoked_at   DateTime?
+  // Off by default: a key can only make binding cashout writes (commit,
+  // change, withdraw, send tracking) through MCP once the owner turns this on.
+  allow_cashout_writes Boolean @default(false)
 
   @@index([user_id])
 }
@@ -75,6 +79,27 @@ model ApiKey {
 // Durable audit trail for every write the MCP server performs, since Render's
 // own process logs scroll away. Deliberately minimal: who, which tool, what
 // payload, when. Never used for reads, so it carries no query-shaping fields.
+// Every write sent to a cashout provider (EB), with what came back. Kept
+// because those writes are binding on a third party's side: when the two
+// sides disagree, this is the record of what was asked and what happened.
+// outcome: ok | failed | unknown (no answer: timeout, network, 5xx) |
+// adopted (found already on the provider's side and linked) | skipped.
+model CashoutWriteLog {
+  id            String   @id @default(uuid())
+  user_id       String
+  user          User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  connection_id String?
+  commitment_id String?
+  action        String
+  request       Json
+  outcome       String
+  error         String?
+  external_id   String?
+  created_at    DateTime @default(now())
+
+  @@index([user_id, created_at])
+}
+
 model McpWriteLog {
   id         String   @id @default(uuid())
   user_id    String
@@ -176,6 +201,18 @@ model AuthIntent {
   expires_at DateTime
   consumed Boolean @default(false)
   @@index([expires_at])
+}
+
+// Cached copy of the free OpenCard DB card catalog (CC BY 4.0), refreshed
+// about once a month from its public JSON export. One row per source; `data`
+// is the normalized card list as JSON. Global, not per user.
+model CardCatalog {
+  id           String   @id            // "opencard-us"
+  data         String                  // JSON array of normalized cards
+  card_count   Int
+  source_url   String
+  synced_at    DateTime
+  last_verified String?                // newest last_verified date in the data
 }
 
 // One row per user-visible action (a refund added or removed, a status button
@@ -478,6 +515,24 @@ model PaymentMethod {
   // personal account" calculation: unreimbursed spend on personal-flagged
   // methods, minus Expenses with category "Owner Reimbursement".
   is_personal           Boolean     @default(false)
+  // How the card earns: "cashback" (rates are % back) or "points" (points or
+  // miles per $1). For a points card, points_base_rate and each
+  // category_rates[].points hold the multipliers, and the server derives the
+  // dollar % stored in default_cashback_rate / category_rates[].rate as
+  // multiplier x point_value_cents -- so every profit total keeps reading a
+  // plain dollar rate.
+  reward_type           String      @default("cashback")
+  points_base_rate      Float?      // e.g. 1 for 1x on everything else
+  point_value_cents     Float?      // what one point is worth to the user, in cents (default 1)
+  rewards_label         String?     // e.g. "Membership Rewards points", "SkyMiles"
+  catalog_card_id       String?     // matches CardCatalog card ids (OpenCard DB), e.g. "us-amex-gold"
+  // JSON of what was last copied from the catalog (services/catalogCardFields.js),
+  // so catalog changes auto-update the card without overwriting the user's edits.
+  catalog_applied       String?
+  catalog_synced_at     DateTime?   // when the card last took rates from the catalog
+  // One-time "cards were reworked" notice for cards saved before the catalog:
+  // null = not asked yet, "switched" = updated from the catalog, "kept" = left as-is.
+  rework_prompt_state   String?
   inventories           Inventory[]
   expenses              Expense[]
   recurring_expenses    RecurringExpense[]
@@ -696,10 +751,20 @@ model CashoutCommitment {
   sale                    Sales?            @relation(fields: [sale_id], references: [id], onDelete: SetNull)
   external_deal_id        String
   external_item_id        String
-  external_commitment_id  String            @unique
+  // external_item_id while this commitment is open, null once it's withdrawn.
+  // The one-commitment-per-item rule is on this column, so a withdrawn row
+  // (kept for the sale's history) doesn't block committing that item again.
+  // Postgres lets a unique index hold any number of nulls.
+  open_item_id            String?
+  // Null while status is "pending": logged from Log Purchase with no tracking
+  // number yet, so nothing has been committed with the provider. Filled in
+  // when the tracking number is added and the user confirms the commit.
+  external_commitment_id  String?           @unique
   quantity                Int
   // Mirrors the provider deal's own status at commit time (active/expired/
-  // closed) plus "withdrawn" for our own DELETE. Not kept live in sync after
+  // closed) plus "withdrawn" for our own DELETE, "pending" for a purchase
+  // logged before it shipped (not committed yet), and "committing" while that
+  // pending commit is in flight with the provider. Not kept live in sync after
   // that -- re-synced the next time this commitment is read from the provider.
   status                  String            @default("active")
   tracking_codes          String[]          @default([])
@@ -708,7 +773,7 @@ model CashoutCommitment {
   created_at              DateTime          @default(now())
   updated_at              DateTime          @updatedAt
 
-  @@unique([connection_id, external_item_id])
+  @@unique([connection_id, open_item_id])
   @@index([user_id])
   @@index([connection_id])
 }
