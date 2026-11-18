@@ -89,7 +89,11 @@ let connectionsState = {};
 let providersState = {};
 const refetchDeals = vi.fn();
 
+const mockApiFetch = vi.fn();
+const mockInvalidate = { sales: vi.fn(), cashouts: vi.fn() };
 vi.mock('../hooks/useApi', () => ({
+  apiFetch: (...args) => mockApiFetch(...args),
+  useInvalidate: () => mockInvalidate,
   useCashoutProviders: () => ({ data: currentProviders, isLoading: false, error: null, refetch: vi.fn(), ...providersState }),
   useCashoutConnections: () => ({ data: currentConnections, isLoading: false, error: null, refetch: vi.fn(), ...connectionsState }),
   useCashoutDeals: () => ({ data: currentDeals, isLoading: false, error: null, refetch: refetchDeals, isFetching: false, ...dealsState }),
@@ -1378,17 +1382,23 @@ describe('Cashout Page', () => {
         fireEvent.click(screen.getByRole('tab', { name: /Commitments/i }));
       };
 
-      it('shows one row with the total, opening to each purchase', () => {
-        currentCommitments = [row('a', 'active', 2), row('b', 'active', 2), row('c', 'pending', 1)];
+      it('splits Not committed from Committed, with one row per committed item opening to each purchase', () => {
+        currentCommitments = [row('a', 'active', 2), row('b', 'active', 2), row('c', 'pending', 1), row('w', 'withdrawn', 1, { open_item_id: null })];
         openPanel();
-        expect(screen.getByText('4 committed')).toBeInTheDocument();
-        expect(screen.getByText('1 waiting to ship')).toBeInTheDocument();
-        expect(screen.queryByText(/Acct a/)).not.toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: '3 purchases' }));
-        expect(screen.getByText(/Qty 2 · .* · Acct a/)).toBeInTheDocument();
+        const headings = screen.getAllByRole('rowheader').map((h) => h.textContent);
+        expect(headings[0]).toMatch(/^Not committed1/);
+        expect(headings[1]).toMatch(/^Committed1/);
+        expect(headings[2]).toMatch(/^Withdrawn1/);
+        // The waiting purchase is on its own, above, saying it adds to the 4.
         expect(screen.getByText(/Qty 1 · .* · Acct c/)).toBeInTheDocument();
-        expect(screen.getAllByRole('button', { name: 'Take off' })).toHaveLength(2);
+        expect(screen.getByText('Adds to your 4 committed')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
+        // The committed ones are one row with the total.
+        expect(screen.getByText('4 committed')).toBeInTheDocument();
+        expect(screen.queryByText(/Acct a/)).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: '2 purchases' }));
+        expect(screen.getByText(/Qty 2 · .* · Acct a/)).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: 'Take off' })).toHaveLength(2);
       });
 
       it('takes one purchase off (lowering the total) or withdraws everything', async () => {
@@ -1407,12 +1417,52 @@ describe('Cashout Page', () => {
         ask.mockRestore();
       });
 
+      it('adds tracking right there: saves it on the sale, which brings up the commit prompt', async () => {
+        currentCommitments = [row('c', 'pending', 2, { sale_id: 'sale-c' })];
+        mockApiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ id: 'sale-c', cashout_commit_pending: { commitment_id: 'c' } }), { status: 200 }));
+        openPanel();
+        const box = screen.getByLabelText('Tracking number');
+        expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
+        fireEvent.change(box, { target: { value: ' 1Z999AA10123456784 ' } });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add' })); });
+        expect(mockApiFetch).toHaveBeenCalledWith('/api/sales/sale-c', expect.objectContaining({
+          method: 'PUT', body: JSON.stringify({ tracking_number: '1Z999AA10123456784' }),
+        }));
+        expect(mockInvalidate.cashouts).toHaveBeenCalled();
+        // Nothing is committed from here: that's the prompt's job.
+        expect(mockMutations.logPurchase.mutateAsync).not.toHaveBeenCalled();
+      });
+
+      it("refuses a tracking number the cashout wouldn't accept, without saving", async () => {
+        currentCommitments = [row('c', 'pending', 1, { sale_id: 'sale-c' })];
+        openPanel();
+        fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: '1Z 999' } });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add' })); });
+        expect(screen.getByRole('alert')).toHaveTextContent('Letters, digits and dashes only, 24 characters at most.');
+        expect(mockApiFetch).not.toHaveBeenCalled();
+      });
+
+      it('shows the save error and keeps what was typed', async () => {
+        currentCommitments = [row('c', 'pending', 1, { sale_id: 'sale-c' })];
+        mockApiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Sale not found or access denied' }), { status: 404 }));
+        openPanel();
+        fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: '1ZABC' } });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add' })); });
+        expect(screen.getByRole('alert')).toHaveTextContent('Sale not found or access denied');
+        expect(screen.getByLabelText('Tracking number')).toHaveValue('1ZABC');
+      });
+
+      it('has no tracking box once the purchase has tracking or is committed', () => {
+        currentCommitments = [row('a', 'active', 1), row('c', 'pending', 1, { sale: { tracking_number: '1ZHAS', unit_price: 119, inventory: { product_name: 'Airpod 5 ANC' } } })];
+        openPanel();
+        expect(screen.queryByLabelText('Tracking number')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Commit' })).toBeInTheDocument();
+      });
+
       it('shows why a purchase could not be committed, with Try again', () => {
         const note = "EB Primary wouldn't add these 1 to your commitment (Over the vendor limit.). This purchase is logged but not committed. Contact EB Primary about these units, or move the sale to another cashout.";
         currentCommitments = [row('a', 'active', 2), row('c', 'pending', 1, { commit_error: note, sale: { tracking_number: '1ZC', unit_price: 119, inventory: { product_name: 'Airpod 5 ANC' } } })];
         openPanel();
-        expect(screen.getByText('Needs attention')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: '2 purchases' }));
         expect(screen.getByRole('note')).toHaveTextContent(note);
         expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
       });

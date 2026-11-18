@@ -32,6 +32,8 @@ import {
   useCashoutCommitments,
   usePlatforms,
   usePaymentMethods,
+  useInvalidate,
+  apiFetch,
 } from '../hooks/useApi';
 import { formatMoney } from '../utils/money';
 import { accountLabel } from '../utils/storeAccounts';
@@ -959,6 +961,73 @@ const ACTION_BTN = 'px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespac
 const PRIMARY_BTN = `${ACTION_BTN} bg-[var(--dp-accent)] text-white hover:opacity-90 transition-opacity`;
 const QUIET_BTN = `${ACTION_BTN} border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)] transition-colors`;
 
+// What the cashout accepts as a tracking number (same rule as the API).
+const TRACKING_PATTERN = /^[A-Za-z0-9-]{1,24}$/;
+
+// A not-committed purchase that hasn't shipped: its tracking number can be
+// added right here. It's saved on the sale, which brings up the usual "Commit
+// now?" prompt (today's payout, the new total, insurance) -- nothing is
+// committed or sent to the cashout until Commit is pressed there.
+function TrackingEntry({ commitment }) {
+  const invalidate = useInvalidate();
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const inputId = `track-${commitment.id}`;
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const code = value.trim();
+    if (!TRACKING_PATTERN.test(code)) {
+      setError('Letters, digits and dashes only, 24 characters at most.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await apiFetch(`/api/sales/${commitment.sale_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tracking_number: code }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Could not save the tracking number.');
+      }
+      setValue('');
+      invalidate.sales();
+      invalidate.cashouts();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!commitment.sale_id) return <span className="text-[var(--dp-text-label)]">—</span>;
+  return (
+    <form onSubmit={submit} className="flex items-center gap-1.5">
+      <label htmlFor={inputId} className="sr-only">Tracking number</label>
+      <input
+        id={inputId}
+        type="text"
+        maxLength={24}
+        value={value}
+        onChange={(e) => { setValue(e.target.value); setError(null); }}
+        placeholder="Add tracking"
+        disabled={busy}
+        className="min-w-0 flex-1 px-2 py-1.5 text-[11px] font-mono rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none focus:border-[var(--dp-accent)]"
+      />
+      <button type="submit" disabled={busy || !value.trim()}
+        className="px-2 py-1.5 text-[11px] font-semibold rounded-lg whitespace-nowrap bg-[var(--dp-accent)] text-white hover:opacity-90 disabled:opacity-40">
+        {busy ? 'Saving…' : 'Add'}
+      </button>
+      {error && <span role="alert" className="sr-only">{error}</span>}
+      {error && <span className="text-[11px] text-rose-400" aria-hidden="true">{error}</span>}
+    </form>
+  );
+}
+
 function CommitmentsPanel({ commitments, allDeals }) {
   const { deleteCommitment } = useCashoutMutations();
   const [openGroups, setOpenGroups] = useState(() => new Set());
@@ -971,7 +1040,12 @@ function CommitmentsPanel({ commitments, allDeals }) {
     );
   }
 
-  const groups = groupCommitments(commitments);
+  // Not committed first (what still needs a tracking number or a commit),
+  // then what's committed, then withdrawn history.
+  const notCommitted = commitments.filter((c) => c.status === 'pending' || c.status === 'committing');
+  const committedGroups = groupCommitments(commitments.filter((c) => c.status === 'active'));
+  const withdrawn = commitments.filter((c) => c.status === 'withdrawn');
+  const committedFor = (c) => committedGroups.find((g) => g.key === `${c.connection_id}:${c.open_item_id}`)?.committed || 0;
   const toggle = (key) => setOpenGroups((prev) => {
     const next = new Set(prev);
     if (next.has(key)) next.delete(key); else next.add(key);
@@ -1054,7 +1128,8 @@ function CommitmentsPanel({ commitments, allDeals }) {
       {c.status === 'pending' && c.sale?.tracking_number && (
         <div className="text-[11px] text-[var(--dp-text-secondary)] font-mono truncate" title={c.sale.tracking_number}>{c.sale.tracking_number}</div>
       )}
-      {!c.tracking_codes?.length && !c.tracking_error && !(c.status === 'pending' && c.sale?.tracking_number) && <span className="text-[var(--dp-text-label)]">—</span>}
+      {c.status === 'pending' && !c.sale?.tracking_number && <TrackingEntry commitment={c} />}
+      {!c.tracking_codes?.length && !c.tracking_error && c.status !== 'pending' && <span className="text-[var(--dp-text-label)]">—</span>}
     </>
   );
 
@@ -1116,6 +1191,9 @@ function CommitmentsPanel({ commitments, allDeals }) {
               <div className={`text-[12px] ${nested ? 'text-[var(--dp-text-secondary)]' : 'text-[var(--dp-text-label)] mt-0.5'}`}>
                 Qty {c.quantity} · {new Date(c.created_at).toLocaleDateString()}{account ? ` · ${account}` : ''}
               </div>
+              {c.status === 'pending' && group?.addsTo > 0 && (
+                <div className="text-[11px] text-sky-300 mt-0.5">Adds to your {group.addsTo} committed</div>
+              )}
             </div>
           </div>
         </td>
@@ -1228,11 +1306,30 @@ function CommitmentsPanel({ commitments, allDeals }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-[color:var(--dp-border)]">
-            {groups.flatMap((group) => (group.rows.length > 1 ? groupRows(group) : [purchaseRow(group.rows[0], group)]))}
+            {notCommitted.length > 0 && <SectionRow title="Not committed" count={notCommitted.length}
+              hint="Logged, not sent to the cashout yet. Add the tracking number when it ships to commit it." />}
+            {notCommitted.map((c) => purchaseRow(c, { rows: [c], committed: 0, addsTo: committedFor(c) }))}
+            {committedGroups.length > 0 && <SectionRow title="Committed" count={committedGroups.length} />}
+            {committedGroups.flatMap((group) => (group.rows.length > 1 ? groupRows(group) : [purchaseRow(group.rows[0], group)]))}
+            {withdrawn.length > 0 && <SectionRow title="Withdrawn" count={withdrawn.length} />}
+            {withdrawn.map((c) => purchaseRow(c, null))}
           </tbody>
         </table>
       </div>
     </div>
+  );
+}
+
+// A heading row inside the Commitments table.
+function SectionRow({ title, count, hint }) {
+  return (
+    <tr className="bg-[var(--dp-hover-bg)]">
+      <th colSpan={7} scope="rowgroup" className="py-2 px-4 text-left">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--dp-text-secondary)]">{title}</span>
+        <span className="ml-1.5 text-[11px] text-[var(--dp-text-label)] tabular-nums">{count}</span>
+        {hint && <span className="block text-[11px] font-normal normal-case text-[var(--dp-text-label)] mt-0.5">{hint}</span>}
+      </th>
+    </tr>
   );
 }
 
