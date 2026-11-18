@@ -4,3 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
+| feat-responsive-ui | Mobile/responsive UI fixes F1–F17 (dialogs, menus, drawer, stat cards, tabs, touch targets, dark accent text, page layouts). Local only until approved. | `profit-tracker-app/src/index.css`, `src/components/UI/{StatCard,MoreActionsMenu,PageNav}.jsx`, `src/components/Layout/{Sidebar,BottomNav,Shell}.jsx`, `src/pages/{Transactions,CreditCard,Analytics,Receipts,CashFlow,AddTransaction,Dashboard,TaxExempt,Calendar,Login}.jsx`, page-level modal wrappers | In progress | 2026-11-18 |
