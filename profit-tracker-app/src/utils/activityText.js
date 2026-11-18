@@ -81,7 +81,7 @@ const FIELD_LABELS = {
   purchase_date: ['Date', 'date'], sale_date: ['Date', 'date'], date: ['Date', 'date'],
   payout_date: ['Payout date', 'date'], return_by_date: ['Return by', 'date'],
   category: ['Category'], order_number: ['Order #'], tracking_number: ['Tracking'], notes: ['Notes'],
-  platform_id: ['Platform', 'ref'], vendor_id: ['Vendor', 'ref'], payment_method_id: ['Card', 'ref'], buyer_id: ['Buyer', 'ref'],
+  platform_id: ['Platform', 'ref'], vendor_id: ['Vendor', 'ref'], account_id: ['Account', 'ref'], payment_method_id: ['Card', 'ref'], buyer_id: ['Buyer', 'ref'],
 };
 
 function formatField(kind, value) {

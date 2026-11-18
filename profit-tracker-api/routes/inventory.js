@@ -5,7 +5,7 @@ const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { createInventory, updateInventory, updateSale, createSale, statusActionBody } = require('../validation/schemas');
 const { publishCalendarFeed } = require('../services/calendarFeed');
-const { requireOwned } = require('../services/ownership');
+const { requireOwned, requireStoreAccount, resolveStoreAccountUpdate } = require('../services/ownership');
 const { checkTrackingRateLimit, refreshSharedTracking } = require('../services/tracking');
 const statusTransitions = require('../services/statusTransitions');
 const activityLog = require('../services/activityLog');
@@ -63,7 +63,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
         id: true, product_name: true, category: true, status: true,
         // Status-workflow columns, needed to compute allowed_actions below.
         receiving_status: true, receiving_status_changed_at: true, is_listed: true,
-        vendor_id: true, payment_method_id: true,
+        vendor_id: true, account_id: true, payment_method_id: true,
         purchase_date: true, received_date: true, return_by_date: true,
         refunded_amount: true, refunded_qty: true,
         unit_purchase_cost: true, qty_purchased: true, qty_on_hand: true,
@@ -103,6 +103,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
     const {
       product_name,
       vendor_id,
+      account_id,
       payment_method_id,
       purchase_date,
       return_by_date,
@@ -163,6 +164,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
     const statusChangedAt = new Date();
     if (workflowData.receiving_status) workflowData.receiving_status_changed_at = statusChangedAt;
     await requireOwned('platform', vendor_id, req.user.id, 'Vendor');
+    await requireStoreAccount(account_id, vendor_id, req.user.id);
     await requireOwned('paymentMethod', payment_method_id, req.user.id, 'Payment method');
 
     const saleQty = sale_price ? (parseInt(qty_sold, 10) || qty) : 0;
@@ -192,6 +194,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
         user_id: req.user.id,
         product_name,
         vendor_id: vendor_id || null,
+        account_id: account_id || null,
         payment_method_id: payment_method_id || null,
         purchase_date: parseLocalDate(purchase_date) || new Date(),
         return_by_date: return_by_date ? parseLocalDate(return_by_date) : null,
@@ -282,7 +285,7 @@ router.get('/recent-by-name', isAuthenticated, async (req, res, next) => {
         unit_purchase_cost: true, qty_purchased: true,
         sales_tax: true, shipping_cost_inbound: true, fees: true,
         gift_card_amount: true, cashback_rate: true, cashback_earned: true, tax_exempt: true, category: true,
-        vendor_id: true, payment_method_id: true,
+        vendor_id: true, account_id: true, payment_method_id: true,
         unit_purchase_cost_decimal: true, sales_tax_decimal: true, shipping_cost_inbound_decimal: true,
         fees_decimal: true, gift_card_amount_decimal: true, cashback_rate_decimal: true, cashback_earned_decimal: true,
         vendor: { select: { id: true, name: true } },
@@ -413,6 +416,7 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
       cashback_earned,
       category,
       vendor_id,
+      account_id,
       payment_method_id,
       purchase_date,
       return_by_date,
@@ -480,6 +484,8 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
     if (cashback_earned !== undefined)       data.cashback_earned = parseFloat(cashback_earned) || 0;
     if (category !== undefined)              data.category = category || null;
     if (vendor_id !== undefined)             data.vendor_id = vendor_id || null;
+    const nextAccountId = await resolveStoreAccountUpdate(existing, { vendor_id, account_id }, req.user.id);
+    if (nextAccountId !== undefined)         data.account_id = nextAccountId;
     if (payment_method_id !== undefined)     data.payment_method_id = payment_method_id || null;
     if (purchase_date !== undefined)         data.purchase_date = parseLocalDate(purchase_date);
     if (return_by_date !== undefined)        data.return_by_date = return_by_date ? parseLocalDate(return_by_date) : null;

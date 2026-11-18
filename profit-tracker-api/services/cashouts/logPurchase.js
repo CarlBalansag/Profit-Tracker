@@ -2,7 +2,7 @@
 // record the purchase and its sale locally -- in that order, because the
 // first two are real calls to a third party and the last two are not.
 const prisma = require('../../prisma');
-const { requireOwned } = require('../ownership');
+const { requireOwned, requireStoreAccount } = require('../ownership');
 const statusTransitions = require('../statusTransitions');
 const { getConnection } = require('./service');
 const commitsService = require('./commits');
@@ -58,7 +58,7 @@ const required = (value, label) => {
 async function logPurchase(userId, {
   connectionId, dealId, itemId, dealName, itemName,
   quantity, trackingCodes, insuredValue,
-  vendorId, paymentMethodId, unitCost, taxExempt, salesTax,
+  vendorId, accountId, paymentMethodId, unitCost, taxExempt, salesTax,
   cashbackRate, cashbackEarned, purchaseDate,
   unitPayout, saleDate, platformId,
 }) {
@@ -107,6 +107,7 @@ async function logPurchase(userId, {
     throw Object.assign(new Error('The sale has to go to one of your cashout groups.'), { status: 400 });
   }
   await requireOwned('platform', vendorId, userId, 'Store');
+  await requireStoreAccount(accountId, vendorId, userId);
   await requireOwned('paymentMethod', paymentMethodId, userId, 'Payment method');
 
   // An active commitment for this item with no purchase recorded yet (made
@@ -200,6 +201,7 @@ async function logPurchase(userId, {
         user_id: userId,
         product_name: itemName || dealName || 'Cashout deal',
         vendor_id: vendorId,
+        account_id: accountId || null,
         payment_method_id: paymentMethodId,
         purchase_date: parseLocalDate(purchaseDate) || new Date(),
         unit_purchase_cost: Number(unitCost) || 0,

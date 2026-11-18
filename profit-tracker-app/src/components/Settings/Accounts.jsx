@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { apiFetch } from '../../hooks/useApi';
+import { apiFetch, useInvalidate } from '../../hooks/useApi';
 import { requireSuccessfulResponse } from '../../hooks/apiResponse';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 import { toast } from 'sonner';
@@ -253,6 +253,9 @@ export function Accounts() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+  // The purchase forms read accounts from the shared platform list, so it
+  // has to refresh after an account is added or removed here.
+  const invalidate = useInvalidate();
 
   const fetchPlatforms = useCallback(async () => {
     setIsLoading(true);
@@ -280,6 +283,7 @@ export function Accounts() {
       }
       return p;
     }));
+    invalidate.platforms();
   };
 
   const handleAccountDeleted = async (accountId, platformId) => {
@@ -296,6 +300,7 @@ export function Accounts() {
         }
         return p;
       }));
+      invalidate.platforms();
       toast.success('Account removed.');
     } catch (err) {
       console.error(err);

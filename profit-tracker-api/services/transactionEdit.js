@@ -1,5 +1,5 @@
 const { updateInventory, updateSale, createSale } = require('../validation/schemas');
-const { requireOwned } = require('./ownership');
+const { requireOwned, resolveStoreAccountUpdate } = require('./ownership');
 const statusTransitions = require('./statusTransitions');
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
@@ -32,6 +32,7 @@ async function editTransaction(prisma, inventoryId, userId, payload, options = {
   if (new Set(ids).size !== ids.length) throw fail(400, 'A sale can only appear once');
   await requireOwned('platform', payload.inventory.vendor_id, userId, 'Vendor');
   await requireOwned('paymentMethod', payload.inventory.payment_method_id, userId, 'Payment method');
+  const nextAccountId = await resolveStoreAccountUpdate(existing, payload.inventory, userId);
   let newSalePlatform = null;
   for (const sale of [...payload.sales, ...(payload.newSale ? [payload.newSale] : [])]) {
     const ownedPlatform = await requireOwned('platform', sale.platform_id, userId, 'Sale platform');
@@ -75,6 +76,8 @@ async function editTransaction(prisma, inventoryId, userId, payload, options = {
     }
 
     const inventoryData = { ...writable(payload.inventory, updateInventory), qty_purchased: purchased, qty_on_hand: purchased - sold };
+    delete inventoryData.account_id;
+    if (nextAccountId !== undefined) inventoryData.account_id = nextAccountId;
     // Same rules as PUT /api/inventory/:id: a first tracking number is only
     // valid while the purchase is still on its way, and it moves the status
     // along unless this save picked a different status itself.

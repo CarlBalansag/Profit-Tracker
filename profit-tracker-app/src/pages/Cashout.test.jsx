@@ -76,6 +76,13 @@ const defaultPaymentMethods = [
   { id: 'card-amazon', name: 'Amazon Card', default_cashback_rate: 1, category_rates: JSON.stringify([{ store: 'Amazon', rate: 5 }]) },
 ];
 let currentPaymentMethods = defaultPaymentMethods;
+const defaultPlatforms = [
+  { id: 'vendor-1', name: 'Amazon', type: 'Vendor', tax_exempt_place: false },
+  { id: 'group-eb', name: 'EB', type: 'Cashout' },
+  { id: 'group-p4d-short', name: 'P4D', type: 'Cashout' }, // listed first: the full name still wins
+  { id: 'group-p4d', name: 'POINTS4DAYS', type: 'Cashout' },
+];
+let currentPlatforms = defaultPlatforms;
 const gainRowButton = () => within(screen.getByText('Gain Deal').closest('tr')).getByRole('button', { name: 'Log Purchase' });
 let dealsState = {};
 let connectionsState = {};
@@ -89,12 +96,7 @@ vi.mock('../hooks/useApi', () => ({
   useCashoutMutations: () => mockMutations,
   useCashoutCommitments: () => ({ data: currentCommitments, isLoading: false, error: null }),
   usePlatforms: () => ({
-    data: [
-      { id: 'vendor-1', name: 'Amazon', type: 'Vendor', tax_exempt_place: false },
-      { id: 'group-eb', name: 'EB', type: 'Cashout' },
-      { id: 'group-p4d-short', name: 'P4D', type: 'Cashout' }, // listed first: the full name still wins
-      { id: 'group-p4d', name: 'POINTS4DAYS', type: 'Cashout' },
-    ],
+    data: currentPlatforms,
     isLoading: false,
     error: null,
   }),
@@ -114,6 +116,7 @@ describe('Cashout Page', () => {
     currentDeals = mockDeals;
     currentCommitments = [];
     currentPaymentMethods = defaultPaymentMethods;
+    currentPlatforms = defaultPlatforms;
     dealsState = {};
     connectionsState = {};
     providersState = {};
@@ -898,6 +901,61 @@ describe('Cashout Page', () => {
           }],
         }],
       };
+    });
+
+    describe('store account', () => {
+      beforeEach(() => {
+        currentPlatforms = [
+          { id: 'vendor-1', name: 'Amazon', type: 'Vendor', accounts: [
+            { id: 'acct-main', name: 'Main', email: 'main@example.com', status: 'Active' },
+            { id: 'acct-biz', name: 'Business', username: 'biz', status: 'Suspended' },
+          ] },
+          { id: 'vendor-2', name: 'Walmart', type: 'Vendor', accounts: [] },
+          ...defaultPlatforms.filter((p) => p.type === 'Cashout'),
+        ];
+      });
+      const open = () => {
+        render(<MemoryRouter><Cashout /></MemoryRouter>);
+        fireEvent.click(screen.getByRole('button', { name: 'Log Purchase' }));
+        fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-1' } });
+      };
+      const submit = () => act(async () => {
+        fireEvent.click(screen.getAllByRole('button', { name: /Log Purchase/ }).find((b) => b.type === 'submit'));
+      });
+
+      it('shows the account picker only for a store with accounts', () => {
+        open();
+        fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-2' } });
+        expect(screen.queryByLabelText('Account (optional)')).not.toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+        const picker = screen.getByLabelText('Account (optional)');
+        expect(picker).toHaveValue('');
+        expect(within(picker).getByRole('option', { name: 'Main (main@example.com)' })).toBeInTheDocument();
+        expect(within(picker).getByRole('option', { name: 'Business (biz) · Suspended' })).toBeInTheDocument();
+      });
+
+      it('sends the picked account with the purchase', async () => {
+        open();
+        fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+        fireEvent.change(screen.getByLabelText('Account (optional)'), { target: { value: 'acct-biz' } });
+        await submit();
+        expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+          vendor_id: 'vendor-1', account_id: 'acct-biz',
+        }));
+      });
+
+      it('sends no account when none is picked, or after switching stores', async () => {
+        open();
+        fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+        fireEvent.change(screen.getByLabelText('Account (optional)'), { target: { value: 'acct-main' } });
+        fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-2' } });
+        fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+        expect(screen.getByLabelText('Account (optional)')).toHaveValue('');
+        await submit();
+        const sent = mockMutations.logPurchase.mutateAsync.mock.calls[0][0];
+        expect(sent.vendor_id).toBe('vendor-1');
+        expect(sent.account_id).toBeUndefined();
+      });
     });
 
     describe('a deal with one item per color', () => {

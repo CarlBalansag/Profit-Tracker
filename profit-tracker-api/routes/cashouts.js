@@ -343,6 +343,7 @@ router.post('/connections/:id/log-purchase', isAuthenticated, async (req, res, n
       trackingCodes: b.tracking_codes,
       insuredValue: b.insured_value,
       vendorId: b.vendor_id,
+      accountId: b.account_id,
       paymentMethodId: b.payment_method_id,
       unitCost: b.unit_cost,
       taxExempt: b.tax_exempt,

@@ -33,6 +33,7 @@ import {
   usePaymentMethods,
 } from '../hooks/useApi';
 import { formatMoney } from '../utils/money';
+import { accountLabel } from '../utils/storeAccounts';
 import { batchCost, effectiveCashbackRate } from '../../../shared/finance.mjs';
 import { displayLabel, statusVisual } from '../data/statusWorkflow';
 import { useMatchMedia } from '../hooks/useMatchMedia';
@@ -1287,6 +1288,7 @@ function LogPurchaseModal({ product, onClose }) {
   };
   const [quantity, setQuantity] = useState(1);
   const [pickedVendor, setVendorId] = useState(null);
+  const [pickedAccountId, setAccountId] = useState('');
   const vendorId = pickedVendor ?? (vendors.find((v) => dealStores.map(nameKey).includes(nameKey(v.name)))?.id || '');
   const [paymentMethodId, setPaymentMethodId] = useState('');
   const [unitCost, setUnitCost] = useState(product.retail || deal.retail || 0);
@@ -1297,6 +1299,10 @@ function LogPurchaseModal({ product, onClose }) {
   const [error, setError] = useState(null);
 
   const selectedVendor = vendors.find((v) => v.id === vendorId);
+  // Optional login at that store (Data Setup > Accounts). Only one of the
+  // picked store's accounts is ever sent.
+  const storeAccounts = useMemo(() => vendors.find((v) => v.id === vendorId)?.accounts || [], [vendors, vendorId]);
+  const accountId = storeAccounts.some((a) => a.id === pickedAccountId) ? pickedAccountId : '';
   const selectedPaymentMethod = paymentMethods.find((m) => m.id === paymentMethodId);
   const taxExempt = Boolean(selectedVendor?.tax_exempt_place);
   // Same rule as Add Transaction: the card's rate for this store when it has
@@ -1348,6 +1354,7 @@ function LogPurchaseModal({ product, onClose }) {
         insured_value: !recordOnly && tracking && insuredValue ? Number(insuredValue) : undefined,
         platform_id: needsSaleTo ? saleToId : undefined,
         vendor_id: vendorId,
+        account_id: accountId || undefined,
         payment_method_id: paymentMethodId,
         unit_cost: Number(unitCost) || 0,
         tax_exempt: taxExempt,
@@ -1562,11 +1569,20 @@ function LogPurchaseModal({ product, onClose }) {
           <LpSection icon={CreditCard} title="Store & Payment" tone="text-pink-400">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <LpField id="lp-store" label="Store">
-                <select id="lp-store" value={vendorId} onChange={(e) => setVendorId(e.target.value)} className={LP_INPUT}>
+                <select id="lp-store" value={vendorId} onChange={(e) => { setVendorId(e.target.value); setAccountId(''); }} className={LP_INPUT}>
                   <option value="">Select a store…</option>
                   {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
                 </select>
               </LpField>
+              {/* Only when the store has accounts; under Store on every width. */}
+              {storeAccounts.length > 0 && (
+                <LpField id="lp-account" label="Account (optional)" className="sm:order-last">
+                  <select id="lp-account" value={accountId} onChange={(e) => setAccountId(e.target.value)} className={LP_INPUT}>
+                    <option value="">No account</option>
+                    {storeAccounts.map((a) => <option key={a.id} value={a.id}>{accountLabel(a)}</option>)}
+                  </select>
+                </LpField>
+              )}
               <LpField id="lp-pay" label="Payment method">
                 <select id="lp-pay" value={paymentMethodId} onChange={(e) => setPaymentMethodId(e.target.value)} className={LP_INPUT}>
                   <option value="">Select a card…</option>

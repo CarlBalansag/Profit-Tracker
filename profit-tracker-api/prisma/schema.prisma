@@ -287,6 +287,11 @@ model Inventory {
   product_name          String
   vendor_id             String?
   vendor                Platform?      @relation(fields: [vendor_id], references: [id])
+  // Optional login at the store (Settings > Data Setup > Accounts) the purchase
+  // was made on. Must belong to the same store as vendor_id; cleared when the
+  // account is deleted.
+  account_id            String?
+  account               Account?       @relation(fields: [account_id], references: [id], onDelete: SetNull)
   payment_method_id     String?
   payment_method        PaymentMethod? @relation(fields: [payment_method_id], references: [id])
   purchase_date         DateTime
@@ -351,6 +356,7 @@ model Inventory {
 
   @@index([user_id])
   @@index([user_id, purchase_date])
+  @@index([account_id])
   @@index([tax_exempt])
 }
 
@@ -476,6 +482,7 @@ model Account {
   username    String?
   status      String   @default("Active")
   notes       String?
+  inventories Inventory[]
 
   @@index([user_id])
 }

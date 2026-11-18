@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { toastWithUndo } from '../utils/undoToast';
 import ReturnWindowBadge from './ReturnWindowBadge';
 import { addDays, daysBetween } from '../utils/returnWindow';
+import { accountsForStore, accountLabel, validAccountId } from '../utils/storeAccounts';
 import TransactionNotesPanel from './TransactionNotesPanel';
 import RefundsPanel from './RefundsPanel';
 import { recordStatusLabel } from '../data/statusWorkflow';
@@ -203,6 +204,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             _savedProductName:       d.product_name ?? '',
             status:                  d.status ?? 'PURCHASED',
             vendor_id:               d.vendor_id ?? '',
+            account_id:              d.account_id ?? '',
             purchase_date:           d.purchase_date ? d.purchase_date.split('T')[0] : '',
             return_by_date:          d.return_by_date ? d.return_by_date.split('T')[0] : '',
             return_window_days:      daysBetween(d.purchase_date, d.return_by_date) ?? '',
@@ -293,6 +295,8 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
       ...prev,
       payment_method_id: paymentMethodId,
       vendor_id: vendorId,
+      // A different store has its own accounts.
+      ...(String(vendorId) !== String(prev.vendor_id) ? { account_id: '' } : {}),
       cashback_rate: rate,
       cashback_earned: grossBatchCost(prev) * rate / 100,
     }));
@@ -367,6 +371,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             cashback_earned:       cbEarned,
             category:              form.category || null,
             vendor_id:             form.vendor_id || null,
+            account_id:            validAccountId(platforms, form.vendor_id, form.account_id) || null,
             payment_method_id:     form.payment_method_id || null,
             tax_exempt:            form.tax_exempt ?? false,
           },
@@ -544,6 +549,21 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                 <Field label="Status">
                   <Sel value={form.status} onChange={v => set('status', v)} options={STATUSES.map(s => ({ id: s, name: recordStatusLabel(s) }))} />
                 </Field>
+                {/* Only when this store has accounts saved in Data Setup; sits
+                    under Store, with the empty cell beside it on wide screens. */}
+                {accountsForStore(platforms, form.vendor_id).length > 0 && (
+                  <>
+                    <Field label="Account (optional)">
+                      <Sel
+                        value={validAccountId(platforms, form.vendor_id, form.account_id)}
+                        onChange={v => set('account_id', v)}
+                        options={accountsForStore(platforms, form.vendor_id).map(a => ({ id: a.id, name: accountLabel(a) }))}
+                        placeholder="No account"
+                      />
+                    </Field>
+                    <div className="hidden sm:block" aria-hidden="true" />
+                  </>
+                )}
                 <Field label="Order Number">
                   <div className="relative">
                     <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />

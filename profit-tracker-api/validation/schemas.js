@@ -144,6 +144,7 @@ const categoryRate = z.object({
 const createInventory = z.object({
   product_name: requiredString('product_name'),
   vendor_id: id,
+  account_id: id,
   payment_method_id: id,
   purchase_date: optionalDateString,
   return_by_date: optionalDateString,
@@ -180,6 +181,7 @@ const createInventory = z.object({
 const updateInventory = z.object({
   product_name: requiredString('product_name').optional(),
   vendor_id: id,
+  account_id: id,
   payment_method_id: id,
   purchase_date: optionalDateString,
   return_by_date: nullableOptionalDateString,

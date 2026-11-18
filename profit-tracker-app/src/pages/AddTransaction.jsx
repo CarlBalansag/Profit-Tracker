@@ -11,6 +11,7 @@ import { addDays, localToday } from '../utils/returnWindow';
 import { usePaymentMethods, usePlatforms, useBuyers, useInvalidate, apiFetch, useProductNote, useProductNoteMutations, useProductNames, useRecentTransaction } from '../hooks/useApi';
 import { toastWithUndo } from '../utils/undoToast';
 import InfoTip from '../components/UI/InfoTip';
+import { accountsForStore, accountLabel, validAccountId } from '../utils/storeAccounts';
 import { pointsFromDollars, pointsUnit, formatEarnRate } from '../utils/cardRewards';
 
 // Points cards: the rate and amount on this form stay in dollars (what every
@@ -85,6 +86,7 @@ const AddTransaction = () => {
     fees: '',
     tax_exempt: false,
     vendor_id: '',
+    account_id: '',
     payment_method_id: '',
     status: 'PURCHASED',
     order_number: '',
@@ -194,6 +196,7 @@ const AddTransaction = () => {
       tax_exempt: recentTxn.tax_exempt ?? prev.tax_exempt,
       category: recentTxn.category ?? prev.category,
       vendor_id: recentTxn.vendor_id ?? prev.vendor_id,
+      account_id: recentTxn.vendor_id ? (recentTxn.account_id ?? '') : prev.account_id,
       payment_method_id: recentTxn.payment_method_id ?? prev.payment_method_id,
       cashback_rate: '',
       cashback_earned: '',
@@ -246,6 +249,8 @@ const AddTransaction = () => {
       ...(['payment_method_id', 'vendor_id'].includes(name)
         ? { cashback_rate: '', cashback_earned: '' }
         : {}),
+      // A new store has its own accounts.
+      ...(name === 'vendor_id' ? { account_id: '' } : {}),
     }));
     if (['payment_method_id', 'vendor_id'].includes(name)) setCashbackOverrideMode('default');
   };
@@ -290,6 +295,7 @@ const AddTransaction = () => {
           apiFetch,
           formData: {
             ...formData,
+            account_id: validAccountId(platforms, formData.vendor_id, formData.account_id),
             return_by_date: addDays(formData.purchase_date, formData.return_window_days),
             cashback_rate: Number(cashbackRate.toFixed(6)),
             cashback_earned: Number(cashbackAmount.toFixed(2)),
@@ -341,6 +347,7 @@ const AddTransaction = () => {
   // Cashback calculation — auto-applies category rate when vendor matches
   const selectedCard = paymentMethods.find(pm => pm.id === formData.payment_method_id);
   const selectedVendor = platforms.find(p => p.id === formData.vendor_id);
+  const storeAccounts = accountsForStore(platforms, formData.vendor_id);
   const vendorReturnDays = selectedVendor?.default_return_days ?? '';
 
   // Prefill the return window from the vendor until the person edits the box.
@@ -749,6 +756,23 @@ const AddTransaction = () => {
                     {platforms.filter(p => p.type === 'Vendor').map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </Field>
+
+                {/* Only when this store has accounts saved in Data Setup. Sits
+                    under Store on phones; on wider screens Status takes the
+                    space beside Store and this goes on the next row. */}
+                {storeAccounts.length > 0 && (
+                  <Field label="Account (optional)" className="sm:order-last">
+                    <select
+                      name="account_id"
+                      value={validAccountId(platforms, formData.vendor_id, formData.account_id)}
+                      onChange={handleChange}
+                      className={`${inputCls('amber')} appearance-none`}
+                    >
+                      <option value="">No account</option>
+                      {storeAccounts.map(a => <option key={a.id} value={a.id}>{accountLabel(a)}</option>)}
+                    </select>
+                  </Field>
+                )}
 
                 <Field label="Status" className="phone-extra">
                   <select
