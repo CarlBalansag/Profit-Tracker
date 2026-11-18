@@ -90,6 +90,7 @@ const mockEb = () => {
   });
   vi.spyOn(ebAdapter, 'submitTracking').mockResolvedValue({ received_tracking_codes: [] });
   vi.spyOn(ebAdapter, 'deleteCommit').mockResolvedValue(null);
+  vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([{ id: '2000', name: 'PS5 Pro', payout: 480, status: 'active', expiresAt: null, items: [{ id: '101', name: 'PS5 Pro' }, { id: '102', name: 'PS5 Pro Digital' }] }]);
   return commitSpy;
 };
 

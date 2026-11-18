@@ -5,10 +5,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
 import PendingCashoutCommit from './PendingCashoutCommit';
-import { offerPendingCommit, PENDING_COMMIT_EVENT } from '../utils/pendingCashoutCommit';
+import { offerPendingCommit, offerTrackingSend, PENDING_COMMIT_EVENT, TRACKING_SEND_EVENT } from '../utils/pendingCashoutCommit';
 import { apiFetch } from '../hooks/useApi';
 
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() } }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn(), warning: vi.fn() } }));
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -221,5 +221,54 @@ describe('tracking added to the purchase', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Sale changed while saving');
     expect(screen.getByRole('heading', { name: 'Is this package going straight to EB Primary?' })).toBeInTheDocument();
+  });
+});
+
+describe('sending a changed tracking number', () => {
+  const detail = { commitment_id: 'a1', tracking_number: '1ZNEW', cashout: 'EB Primary' };
+
+  it('asks first, starting on Not now, and sends nothing until Send', async () => {
+    renderPrompt();
+    act(() => offerTrackingSend(detail));
+    expect(await screen.findByRole('heading', { name: 'Send this tracking number to EB Primary?' })).toBeInTheDocument();
+    expect(screen.getByText('1ZNEW')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Not now' })).toHaveFocus());
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sends it on Send', async () => {
+    fetchMock.mockResolvedValueOnce(json({ sent: ['1ZNEW'], shared: [] }));
+    renderPrompt();
+    act(() => offerTrackingSend(detail));
+    fireEvent.click(await screen.findByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Tracking sent to EB Primary.'));
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/cashouts/commitments/a1/tracking');
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('keeps the dialog open with the reason when the send is refused', async () => {
+    fetchMock.mockResolvedValueOnce(json({ error: 'Too many cashout writes in a short time. Nothing was sent. Try again in 30s.' }, 429));
+    renderPrompt();
+    act(() => offerTrackingSend(detail));
+    fireEvent.click(await screen.findByRole('button', { name: 'Send' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Nothing was sent');
+  });
+
+  it('apiFetch offers it when a sale save says the cashout lacks the new number', async () => {
+    const seen = vi.fn();
+    window.addEventListener(TRACKING_SEND_EVENT, seen);
+    fetchMock.mockResolvedValueOnce(json({ id: 's1', cashout_tracking_changed: detail }));
+    await apiFetch('/api/sales/s1', { method: 'PUT', body: '{}' });
+    await waitFor(() => expect(seen).toHaveBeenCalledTimes(1));
+    expect(seen.mock.calls[0][0].detail).toEqual(detail);
+    window.removeEventListener(TRACKING_SEND_EVENT, seen);
+  });
+
+  it('apiFetch warns after deleting something whose commitment is still active', async () => {
+    fetchMock.mockResolvedValueOnce(json({ success: true, cashout_warning: 'Your commitment with EB Primary is still active.' }));
+    await apiFetch('/api/inventory/i1', { method: 'DELETE' });
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith('Your commitment with EB Primary is still active.', expect.anything()));
   });
 });

@@ -37,13 +37,14 @@ const liveDeal = (overrides = {}) => ({
   ...overrides,
 });
 
-const logWithoutTracking = (conn) => logPurchase(harness.ids.user, {
+// Logging checks the deal, which caches it; each test then sets the deal it wants.
+const logWithoutTracking = async (conn) => logPurchase(harness.ids.user, {
   connectionId: conn.id, dealId: '2000', itemId: '101', dealName: 'PS5 Pro', itemName: 'PS5 Pro',
   quantity: 2, trackingCodes: [],
   vendorId: harness.ids.vendor, paymentMethodId: harness.ids.card,
   unitCost: 400, taxExempt: false, salesTax: 10,
   unitPayout: 480, purchaseDate: '2026-11-08',
-});
+}).finally(() => dealsCache.clear());
 
 let server;
 let baseUrl;
@@ -60,6 +61,8 @@ beforeEach(() => {
   dealsCache.clear();
   syncBlockedUntil.clear();
   process.env.CASHOUT_KEY_ENCRYPTION_KEY = TEST_ENCRYPTION_KEY;
+  // The deal as EB lists it now; tests that need another one override this.
+  vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([liveDeal()]);
 });
 
 const call = async (method, path, body) => {

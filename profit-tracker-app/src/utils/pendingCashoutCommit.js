@@ -15,3 +15,13 @@ export const offerPendingCommit = (commitmentId, askDirect = null) => {
     detail: { commitment_id: commitmentId, ask_direct: askDirect || null },
   }));
 };
+
+// An active commitment whose sale has a tracking number the cashout doesn't
+// have yet (it changed after committing, or the first send failed). The app
+// shell asks whether to send it. detail: { commitment_id, tracking_number, cashout }
+export const TRACKING_SEND_EVENT = 'cashout-tracking-send';
+
+export const offerTrackingSend = (detail) => {
+  if (!detail?.commitment_id) return;
+  window.dispatchEvent(new CustomEvent(TRACKING_SEND_EVENT, { detail }));
+};

@@ -1228,6 +1228,26 @@ describe('Cashout Page', () => {
       expect(screen.getAllByText('Airpod 5 ANC').length).toBeGreaterThan(0); // c1/c2 resolved from the live deal list
       expect(screen.getAllByRole('button', { name: 'Withdraw' })).toHaveLength(1); // only the active one
     });
+
+    it('offers Send tracking only when the cashout lacks the sale\'s tracking number', () => {
+      const base = { status: 'active', external_deal_id: '5232', external_item_id: '1', quantity: 1, created_at: new Date().toISOString(), connection: { display_name: 'EB Primary' } };
+      currentCommitments = [
+        { ...base, id: 'sent', tracking_codes: ['1ZSAME'], sale: { tracking_number: '1zsame' } },
+        { ...base, id: 'changed', external_item_id: '2', tracking_codes: ['1ZOLD'], sale: { tracking_number: '1ZNEW' } },
+        { ...base, id: 'failed', external_item_id: '3', tracking_codes: [], tracking_error: 'EB is down', sale: { tracking_number: '1ZFAIL' } },
+        { ...base, id: 'none', external_item_id: '4', tracking_codes: [], sale: { tracking_number: null } },
+      ];
+      const seen = vi.fn();
+      window.addEventListener('cashout-tracking-send', seen);
+      render(<MemoryRouter><Cashout /></MemoryRouter>);
+      fireEvent.click(screen.getByRole('tab', { name: /Commitments/i }));
+
+      const buttons = screen.getAllByRole('button', { name: 'Send tracking' });
+      expect(buttons).toHaveLength(2);
+      fireEvent.click(buttons[0]);
+      expect(seen.mock.calls[0][0].detail).toEqual({ commitment_id: 'changed', tracking_number: '1ZNEW', cashout: 'EB Primary' });
+      window.removeEventListener('cashout-tracking-send', seen);
+    });
   });
 
   it('offers Log Purchase on a Points4Days deal, next to a link to the deal on its website', () => {

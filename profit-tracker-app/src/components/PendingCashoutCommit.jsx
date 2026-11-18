@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { apiFetch, useInvalidate } from '../hooks/useApi';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { formatMoney } from '../utils/money';
-import { PENDING_COMMIT_EVENT } from '../utils/pendingCashoutCommit';
+import { PENDING_COMMIT_EVENT, TRACKING_SEND_EVENT } from '../utils/pendingCashoutCommit';
 
 const readError = async (response) => {
   const body = await response.json().catch(() => ({}));
@@ -16,16 +16,27 @@ export default function PendingCashoutCommit() {
   // { id, askDirect }: askDirect is set when the tracking went on the purchase,
   // so the first question is whether that package is going to the cashout.
   const [pending, setPending] = useState(null);
+  const [trackingSend, setTrackingSend] = useState(null);
 
   useEffect(() => {
     const onPending = (event) => {
       const id = event.detail?.commitment_id;
       if (id) setPending({ id, askDirect: event.detail?.ask_direct || null });
     };
+    const onTrackingSend = (event) => {
+      if (event.detail?.commitment_id) setTrackingSend(event.detail);
+    };
     window.addEventListener(PENDING_COMMIT_EVENT, onPending);
-    return () => window.removeEventListener(PENDING_COMMIT_EVENT, onPending);
+    window.addEventListener(TRACKING_SEND_EVENT, onTrackingSend);
+    return () => {
+      window.removeEventListener(PENDING_COMMIT_EVENT, onPending);
+      window.removeEventListener(TRACKING_SEND_EVENT, onTrackingSend);
+    };
   }, []);
 
+  if (trackingSend && !pending) {
+    return <SendTrackingDialog key={trackingSend.commitment_id} detail={trackingSend} onClose={() => setTrackingSend(null)} />;
+  }
   if (!pending) return null;
   const close = () => setPending(null);
   if (pending.askDirect) {
@@ -35,6 +46,63 @@ export default function PendingCashoutCommit() {
     );
   }
   return <CommitDialog key={pending.id} commitmentId={pending.id} onClose={close} />;
+}
+
+// The sale of a committed purchase has a tracking number the cashout doesn't
+// have yet. Nothing is sent until "Send" is pressed.
+function SendTrackingDialog({ detail, onClose }) {
+  const invalidate = useInvalidate();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const notNowRef = useRef(null);
+  const modalRef = useModalKeyboard(true, () => !busy && onClose(), notNowRef);
+  const cashout = detail.cashout || 'the cashout';
+
+  const send = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await apiFetch(`/api/cashouts/commitments/${detail.commitment_id}/tracking`, { method: 'POST' });
+      if (!response.ok) throw new Error(await readError(response));
+      const result = await response.json();
+      invalidate.cashouts();
+      toast.success(result.sent?.length ? `Tracking sent to ${cashout}.` : `${cashout} already has this tracking number.`);
+      onClose();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div ref={modalRef} role="dialog" aria-modal="true" aria-label={`Send this tracking number to ${cashout}?`}
+        className="w-full max-w-md rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
+          <h3 className="font-bold text-base text-[var(--dp-text-primary)]">Send this tracking number to {cashout}?</h3>
+          <button type="button" aria-label="Close" onClick={onClose} disabled={busy} className="text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]">
+            <X size={18} />
+          </button>
+        </div>
+        <p className="text-xs text-[var(--dp-text-secondary)]">
+          This purchase is already committed to {cashout}, but {cashout} doesn't have this tracking number yet.
+        </p>
+        {detail.tracking_number && <p className="text-xs font-mono break-all text-[var(--dp-text-primary)]">{detail.tracking_number}</p>}
+        {error && <p role="alert" className="text-xs text-rose-400">{error}</p>}
+        <div className="flex items-center justify-end gap-2 border-t border-[color:var(--dp-border)] pt-3">
+          <button type="button" ref={notNowRef} onClick={onClose} disabled={busy}
+            className="px-3.5 py-2 text-xs font-medium rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)]">
+            Not now
+          </button>
+          <button type="button" onClick={send} disabled={busy}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90 disabled:opacity-50">
+            {busy && <RefreshCw size={12} className="animate-spin" />}
+            {busy ? 'Sending…' : 'Send'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // A tracking number was added to the purchase, not the sale. It's the right
@@ -153,7 +221,7 @@ function CommitDialog({ commitmentId, onClose }) {
         toast.success(`Committed to ${preview.cashout}, and tracking sent.`, priceNote ? { description: priceNote.trim() } : undefined);
       } else {
         toast.success(`Committed to ${preview.cashout}, but tracking failed to send.`, {
-          description: `${result.trackingError || 'Resubmit it from the Commitments section.'}${priceNote}`,
+          description: `${result.trackingError || 'Send it again with Send tracking in Cashout > Commitments.'}${priceNote}`,
         });
       }
       onClose();

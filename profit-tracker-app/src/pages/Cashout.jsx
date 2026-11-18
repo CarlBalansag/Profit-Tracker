@@ -37,7 +37,7 @@ import { batchCost, effectiveCashbackRate } from '../../../shared/finance.mjs';
 import { displayLabel, statusVisual } from '../data/statusWorkflow';
 import { useMatchMedia } from '../hooks/useMatchMedia';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
-import { offerPendingCommit } from '../utils/pendingCashoutCommit';
+import { offerPendingCommit, offerTrackingSend } from '../utils/pendingCashoutCommit';
 import {
   bestCardForDeal,
   dealConditionLabels,
@@ -921,6 +921,15 @@ function StoreLinks({ deal, large = false }) {
 // provider itself has no way to tell us which tracking number went with
 // which commitment. Deal names come from the current live deals list when
 // available; an expired/closed deal still shows its id.
+// An active commitment whose sale has a tracking number the cashout doesn't
+// have: it changed after committing, or the first send failed.
+const needsTrackingSend = (c) => {
+  const number = String(c.sale?.tracking_number || '').trim().toUpperCase();
+  if (!number) return false;
+  if (c.tracking_error) return true;
+  return !(c.tracking_codes || []).some((code) => String(code).toUpperCase() === number);
+};
+
 function CommitmentsPanel({ commitments, allDeals }) {
   const { deleteCommitment } = useCashoutMutations();
 
@@ -1080,13 +1089,24 @@ function CommitmentsPanel({ commitments, allDeals }) {
                       </div>
                     )}
                     {c.status === 'active' && (
-                      <button
-                        type="button"
-                        onClick={() => withdraw(c)}
-                        className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
-                      >
-                        Withdraw
-                      </button>
+                      <div className="inline-flex gap-1.5">
+                        {needsTrackingSend(c) && (
+                          <button
+                            type="button"
+                            onClick={() => offerTrackingSend({ commitment_id: c.id, tracking_number: c.sale.tracking_number, cashout: c.connection?.display_name })}
+                            className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap bg-[var(--dp-accent)] text-white hover:opacity-90 transition-opacity"
+                          >
+                            Send tracking
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => withdraw(c)}
+                          className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
+                        >
+                          Withdraw
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -1356,7 +1376,7 @@ function LogPurchaseModal({ product, onClose }) {
         toast.success('Committed and logged -- tracking sent to the cashout.');
       } else {
         toast.success('Committed and logged, but tracking failed to send.', {
-          description: result.tracking_error || 'Resubmit it from the Commitments section.',
+          description: result.tracking_error || 'Send it again with Send tracking in the Commitments section.',
         });
       }
       onClose();
@@ -1565,7 +1585,7 @@ function LogPurchaseModal({ product, onClose }) {
           <LpSection icon={Truck} title="Shipping" tone="text-amber-400">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <LpField id="lp-tracking" label="Tracking number" className={!recordOnly && tracking ? '' : 'sm:col-span-2'}>
-                <input id="lp-tracking" type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
+                <input id="lp-tracking" type="text" maxLength={24} value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
                   placeholder={recordOnly ? '1Z999AA10123456784' : 'Blank if it hasn’t shipped yet'}
                   className={`${LP_INPUT} font-mono`} />
               </LpField>

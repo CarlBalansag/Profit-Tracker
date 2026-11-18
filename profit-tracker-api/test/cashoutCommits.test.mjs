@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const harness = require('../../qa/harness.cjs');
 const { encryptKey } = require('../services/cashouts/crypto');
+const { dealsCache } = require('../services/cashouts/service');
 const ebAdapter = require('../services/cashouts/eb');
 const commits = require('../services/cashouts/commits');
 const { logPurchase } = require('../services/cashouts/logPurchase');
@@ -39,7 +40,10 @@ describe('cashout commits and tracking', () => {
   beforeEach(() => {
     harness.reset();
     vi.restoreAllMocks();
+    dealsCache.clear();
     process.env.CASHOUT_KEY_ENCRYPTION_KEY = TEST_ENCRYPTION_KEY;
+    // The deal as EB lists it: every write checks the item is part of it.
+    vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([{ id: '2000', name: 'PS5 Pro', payout: 480, status: 'active', expiresAt: null, items: [{ id: '101', name: 'PS5 Pro' }, { id: '102', name: 'PS5 Pro Digital' }] }]);
   });
 
   describe('createCommitment', () => {
@@ -69,7 +73,7 @@ describe('cashout commits and tracking', () => {
     it('rejects a quantity of 0 before ever calling the provider', async () => {
       const conn = seed();
       const spy = vi.spyOn(ebAdapter, 'createCommit');
-      await expect(commits.createCommitment(harness.ids.user, conn.id, { dealId: '2000', itemId: '101', quantity: 0 })).rejects.toThrow('positive');
+      await expect(commits.createCommitment(harness.ids.user, conn.id, { dealId: '2000', itemId: '101', quantity: 0 })).rejects.toThrow('whole number');
       expect(spy).not.toHaveBeenCalled();
     });
   });
@@ -109,7 +113,7 @@ describe('cashout commits and tracking', () => {
   it('submitTracking requires at least one code before calling the provider', async () => {
     const conn = seed();
     const spy = vi.spyOn(ebAdapter, 'submitTracking');
-    await expect(commits.submitTracking(harness.ids.user, conn.id, { trackingCodes: [], description: 'x' })).rejects.toThrow('tracking code');
+    await expect(commits.submitTracking(harness.ids.user, conn.id, { trackingCodes: [], description: 'x' })).rejects.toThrow('tracking number');
     expect(spy).not.toHaveBeenCalled();
   });
 
