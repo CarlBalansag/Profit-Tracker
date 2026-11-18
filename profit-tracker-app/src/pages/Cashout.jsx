@@ -583,7 +583,7 @@ export default function Cashout() {
                         <span className="block font-normal normal-case tracking-normal">before tax</span>
                       </th>
                       <th
-                        className="py-3 px-3 whitespace-nowrap"
+                        className="py-3 px-3 whitespace-nowrap text-center"
                         title="Your saved card that earns the most at one of this deal's stores, and the profit with its cashback on retail."
                       >
                         Best Card
@@ -815,8 +815,8 @@ function BestCard({ best, expired = false, inline = false }) {
   const cardLabel = best.card.last4 ? `${best.card.name} (${best.card.last4})` : best.card.name;
   const cashbackNote = best.cashback !== null ? `, $${formatMoney(best.cashback)} back on retail` : '';
   return (
-    <div className={inline ? 'flex flex-wrap items-baseline gap-x-2' : 'min-w-[8rem] max-w-[12rem]'} title={`${cardLabel}: ${earns}${cashbackNote}`}>
-      <div className={`font-medium text-[var(--dp-text-primary)] ${inline ? '' : 'truncate'}`}>{best.card.name}</div>
+    <div className={inline ? 'flex flex-wrap items-baseline gap-x-2' : 'mx-auto min-w-[9rem] max-w-[15rem] text-center'} title={`${cardLabel}: ${earns}${cashbackNote}`}>
+      <div className="font-medium text-[var(--dp-text-primary)] break-words">{best.card.name}</div>
       <div className="text-[12px] text-[var(--dp-text-label)]">{earns}</div>
       {profit && (
         <div className={`tabular-nums text-sm font-bold ${PROFIT_TONES[expired ? 'neutral' : profit.tone]}`}>{profit.amount}</div>
