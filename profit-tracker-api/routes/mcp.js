@@ -192,6 +192,38 @@ async function findPaymentMethod(userId, name) {
   throw Object.assign(new Error(`No payment method named "${trimmed}". Existing methods: ${names}`), { toolError: true });
 }
 
+// A store that must already exist (no auto-create): used when an account at
+// that store is named, since a brand-new store can't have accounts yet.
+async function findExistingStore(userId, name, client = prisma) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) throw Object.assign(new Error('store is required'), { toolError: true });
+  const existing = await client.platform.findFirst({
+    where: { user_id: userId, name: { equals: trimmed, mode: 'insensitive' } },
+  });
+  if (existing) return existing;
+  throw Object.assign(new Error(`No store named "${trimmed}" yet, so it has no saved accounts. Leave account out, or add the store and its accounts in Data Setup first.`), { toolError: true });
+}
+
+const storeAccountText = (a) => `${a.name}${a.username || a.email ? ` (${a.username || a.email})` : ''}`;
+
+// One of the user's saved logins at a store (Data Setup > Accounts), named by
+// its id, account name, username or email -- only that store's accounts count.
+async function findStoreAccount(userId, store, wanted, client = prisma) {
+  const key = String(wanted || '').trim().toLowerCase();
+  const accounts = await client.account.findMany({ where: { user_id: userId, platform_id: store.id } });
+  if (!accounts.length) {
+    throw Object.assign(new Error(`${store.name} has no saved accounts. Leave account out, or add one in Data Setup > Accounts.`), { toolError: true });
+  }
+  const byId = accounts.find((a) => a.id.toLowerCase() === key);
+  if (byId) return byId;
+  const matches = accounts.filter((a) => [a.name, a.username, a.email].some((v) => v && v.trim().toLowerCase() === key));
+  if (matches.length === 1) return matches[0];
+  if (matches.length > 1) {
+    throw Object.assign(new Error(`"${wanted}" matches more than one ${store.name} account (${matches.map(storeAccountText).join(', ')}). Pass its id from list_store_accounts.`), { toolError: true });
+  }
+  throw Object.assign(new Error(`No ${store.name} account matching "${wanted}". Its accounts: ${accounts.map(storeAccountText).join(', ')}`), { toolError: true });
+}
+
 // Platforms (a sale's buyer) are never auto-created by update_sale/add_sale --
 // unlike a purchase's vendor, picking the wrong existing marketplace/cashout
 // by typo would misattribute a sale's payout, so the caller must name one
@@ -407,7 +439,7 @@ function buildServer(userId, apiKeyId) {
   }, async ({ status, availability, return_closing_within_days, limit, offset }) => {
     const inventories = await prisma.inventory.findMany({
       where: { user_id: userId },
-      include: { vendor: true },
+      include: { vendor: true, account: { select: { name: true } } },
       orderBy: { purchase_date: 'desc' },
     });
     const now = Date.now();
@@ -431,6 +463,7 @@ function buildServer(userId, apiKeyId) {
       total_cost: toNum(batchCost(inv).toDecimalPlaces(2)),
       purchase_date: toDateOnly(inv.purchase_date),
       store: inv.vendor?.name || null,
+      account: inv.account?.name || null,
       status: inv.receiving_status || inv.status,
       availability: statusTransitions.availabilityLabel(inv),
       days_held: Math.max(0, Math.floor((now - new Date(inv.purchase_date).getTime()) / 86400000)),
@@ -600,12 +633,13 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('add_purchase', {
-    description: 'Log a reselling inventory purchase. The store is created automatically if it is new; the card/account must already exist.',
+    description: 'Log a reselling inventory purchase. The store is created automatically if it is new; the card must already exist. Optionally name which of your saved accounts at that store you used (see list_store_accounts).',
     inputSchema: {
       item: z.string().min(1),
       qty: z.number().int().min(1),
       unit_cost: z.number().nonnegative(),
       store: z.string().min(1).describe('Vendor name, e.g. "POINTS4DAYS". Created automatically if new.'),
+      account: z.string().optional().describe('Optional: which of your saved accounts at this store you bought on -- its name, username, email or id from list_store_accounts. The store must already exist and have that account.'),
       card_used: z.string().min(1).describe('Existing payment method name, e.g. "Chase College".'),
       purchase_date: z.string().describe('YYYY-MM-DD'),
       tax_exempt: z.boolean().optional(),
@@ -613,9 +647,13 @@ function buildServer(userId, apiKeyId) {
       tracking_number: z.string().optional(),
       carrier: z.string().optional().describe('Set explicitly if known; otherwise auto-detected from the tracking number.'),
     },
-  }, async ({ item, qty, unit_cost, store, card_used, purchase_date, tax_exempt, order_number, tracking_number, carrier }) => {
+  }, async ({ item, qty, unit_cost, store, account, card_used, purchase_date, tax_exempt, order_number, tracking_number, carrier }) => {
     try {
-      const vendor = await findOrCreateVendor(userId, store);
+      const wantsAccount = Boolean(account && account.trim());
+      // A named account needs a store that already exists, so nothing is
+      // created when the account can't be found.
+      const vendor = wantsAccount ? await findExistingStore(userId, store) : await findOrCreateVendor(userId, store);
+      const storeAccount = wantsAccount ? await findStoreAccount(userId, vendor, account) : null;
       const paymentMethod = await findPaymentMethod(userId, card_used);
       const { result: created, activity } = await prisma.$transaction((tx) => track(tx, {
         action: 'create', recordType: 'purchase',
@@ -626,6 +664,7 @@ function buildServer(userId, apiKeyId) {
           user_id: userId,
           product_name: item.trim(),
           vendor_id: vendor.id,
+          account_id: storeAccount ? storeAccount.id : null,
           payment_method_id: paymentMethod.id,
           purchase_date: localNoon(purchase_date),
           unit_purchase_cost: unit_cost,
@@ -637,7 +676,7 @@ function buildServer(userId, apiKeyId) {
           carrier: carrier || null,
         },
       })));
-      await logWrite(userId, apiKeyId, 'add_purchase', { item, qty, unit_cost, store, card_used, purchase_date, tax_exempt, order_number, tracking_number, carrier });
+      await logWrite(userId, apiKeyId, 'add_purchase', { item, qty, unit_cost, store, account, card_used, purchase_date, tax_exempt, order_number, tracking_number, carrier });
       return jsonResult({
         id: created.id,
         activity_id: activity?.id ?? null,
@@ -645,6 +684,7 @@ function buildServer(userId, apiKeyId) {
         qty: created.qty_purchased,
         unit_cost: toNum(decimal(created.unit_purchase_cost)),
         store: vendor.name,
+        account: storeAccount ? storeAccount.name : null,
         card_used: paymentMethod.name,
         purchase_date: toDateOnly(created.purchase_date),
         tax_exempt: created.tax_exempt,
@@ -813,20 +853,21 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('update_purchase', {
-    description: 'Edit an existing purchase\'s quantity, unit cost, purchase date, store, notes, tracking, order number, or tax-exempt flag. Total cost is derived (unit_cost x qty plus any tax/shipping/fees already on the purchase), not a separate field -- adjust unit_cost or qty to change it. Adding a tracking number for the first time behaves the same as on the website: it is rejected once the purchase has already been received, and otherwise auto-advances receiving status unless a status change happens through update_shipment in the same beat.',
+    description: 'Edit an existing purchase\'s quantity, unit cost, purchase date, store, store account, notes, tracking, order number, or tax-exempt flag. Total cost is derived (unit_cost x qty plus any tax/shipping/fees already on the purchase), not a separate field -- adjust unit_cost or qty to change it. Adding a tracking number for the first time behaves the same as on the website: it is rejected once the purchase has already been received, and otherwise auto-advances receiving status unless a status change happens through update_shipment in the same beat.',
     inputSchema: z.object({
       purchase_id: z.string().uuid(),
       qty: z.number().int().min(1).optional().describe('Quantity purchased. Cannot be set below the amount already sold from this purchase.'),
       unit_cost: z.number().nonnegative().optional(),
       purchase_date: strictDate.optional(),
-      store: z.string().min(1).optional().describe('Vendor name -- created automatically if new, same as add_purchase.'),
+      store: z.string().min(1).optional().describe('Vendor name -- created automatically if new, same as add_purchase. Changing the store clears an account from the old store unless account is also given.'),
+      account: z.string().optional().describe('Which of your saved accounts at the purchase\'s store (after any store change) -- name, username, email or id from list_store_accounts. Empty string clears it.'),
       order_number: z.string().optional().describe('Empty string clears it.'),
       tracking_number: z.string().optional().describe('Empty string clears it.'),
       carrier: z.string().optional().describe('Empty string clears it. Auto-detected from the tracking number when not set.'),
       tax_exempt: z.boolean().optional(),
       notes: z.string().max(2000).optional().describe('Legacy single note field. Prefer add_note, which keeps a dated history of notes.'),
     }).strict(),
-  }, async ({ purchase_id, qty, unit_cost, purchase_date, store, order_number, tracking_number, carrier, tax_exempt, notes }) => {
+  }, async ({ purchase_id, qty, unit_cost, purchase_date, store, account, order_number, tracking_number, carrier, tax_exempt, notes }) => {
     try {
       const { result, activity } = await prisma.$transaction(async (tx) => track(tx, {
         action: 'edit', recordType: 'purchase', recordId: purchase_id,
@@ -869,6 +910,21 @@ function buildServer(userId, apiKeyId) {
           if (purchase_date !== oldDate) { data.purchase_date = localNoon(purchase_date); changes.push({ field: 'purchase_date', oldValue: oldDate, newValue: purchase_date }); }
         }
         if (store !== undefined && vendorId !== existing.vendor_id) { data.vendor_id = vendorId; changes.push({ field: 'vendor_id', oldValue: existing.vendor_id, newValue: vendorId }); }
+        // The account always has to belong to the purchase's store.
+        const oldAccountId = existing.account_id ?? null;
+        let accountId = oldAccountId;
+        if (account !== undefined) {
+          if (!account.trim()) accountId = null;
+          else {
+            const storeRecord = vendorId ? await tx.platform.findFirst({ where: { id: vendorId, user_id: userId } }) : null;
+            if (!storeRecord) throw Object.assign(new Error('This purchase has no store, so it can\'t have a store account. Set store too.'), { toolError: true });
+            accountId = (await findStoreAccount(userId, storeRecord, account, tx)).id;
+          }
+        } else if (accountId && vendorId !== existing.vendor_id) {
+          const current = await tx.account.findFirst({ where: { id: accountId, user_id: userId } });
+          if (!current || current.platform_id !== vendorId) accountId = null;
+        }
+        if (accountId !== oldAccountId) { data.account_id = accountId; changes.push({ field: 'account_id', oldValue: oldAccountId, newValue: accountId }); }
         if (order_number !== undefined) {
           const newOrderNumber = order_number || null;
           if (newOrderNumber !== existing.order_number) { data.order_number = newOrderNumber; changes.push({ field: 'order_number', oldValue: existing.order_number, newValue: newOrderNumber }); }
@@ -895,7 +951,8 @@ function buildServer(userId, apiKeyId) {
         await recordChanges(tx, userId, 'Inventory', purchase_id, changes);
         return tx.inventory.findUnique({ where: { id: purchase_id } });
       }));
-      await logWrite(userId, apiKeyId, 'update_purchase', { purchase_id, qty, unit_cost, purchase_date, store, order_number, tracking_number, carrier, tax_exempt, notes });
+      await logWrite(userId, apiKeyId, 'update_purchase', { purchase_id, qty, unit_cost, purchase_date, store, account, order_number, tracking_number, carrier, tax_exempt, notes });
+      const resultAccount = result.account_id ? await prisma.account.findFirst({ where: { id: result.account_id, user_id: userId }, select: { name: true } }) : null;
       return jsonResult({
         id: result.id,
         activity_id: activity?.id ?? null,
@@ -904,6 +961,7 @@ function buildServer(userId, apiKeyId) {
         qty_on_hand: result.qty_on_hand,
         unit_cost: toNum(result.unit_purchase_cost),
         purchase_date: toDateOnly(result.purchase_date),
+        account: resultAccount ? resultAccount.name : null,
         order_number: result.order_number,
         tracking_number: result.tracking_number,
         carrier: resolveCarrier(result.carrier, result.tracking_number, result.tracking_info),
@@ -1225,6 +1283,24 @@ function buildServer(userId, apiKeyId) {
     point_value_cents: z.number().gt(0).max(100).optional().describe('Points card: what one point is worth to the user in cents (default 1). Profit totals count points at this value.'),
     program: z.string().trim().max(80).optional().describe('Points card: program name, e.g. "Membership Rewards points".'),
   };
+
+  server.registerTool('list_store_accounts', {
+    description: 'List your saved logins at each store (Settings > Data Setup > Accounts), e.g. two Amazon accounts. Use one as `account` on add_purchase, update_purchase or log_cashout_purchase. These are store logins, not cards -- cards are list_payment_methods.',
+    inputSchema: {
+      store: z.string().optional().describe('Only this store (by name, case-insensitive).'),
+    },
+  }, async ({ store }) => {
+    try {
+      const where = { user_id: userId };
+      if (store && store.trim()) where.platform_id = (await findExistingStore(userId, store)).id;
+      const accounts = await prisma.account.findMany({ where, include: { platform: { select: { name: true } } } });
+      return jsonResult(accounts
+        .map((a) => ({ id: a.id, store: a.platform?.name || null, name: a.name, username: a.username || null, email: a.email || null, status: a.status }))
+        .sort((x, y) => String(x.store).localeCompare(String(y.store)) || x.name.localeCompare(y.name)));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to list store accounts');
+    }
+  });
 
   server.registerTool('list_payment_methods', {
     description: 'Every saved card/account and how it earns: cash back % or points (points per $1, point value in cents, program) with the dollar-equivalent rate profit totals use, store-specific rates, whether its rates follow the card list automatically, and its perks that matter for reselling (purchase protection, shipping credits...).',
@@ -2462,6 +2538,7 @@ function buildServer(userId, apiKeyId) {
       tracking_codes: z.array(z.string()).min(1).describe('At least one tracking number -- required.'),
       insured_value: z.number().min(200).max(1500).optional(),
       store: z.string().describe('Where you actually bought it (an existing Vendor by name, case-insensitive).'),
+      account: z.string().optional().describe('Optional: which of your saved accounts at that store you bought on -- name, username, email or id from list_store_accounts.'),
       payment_method: z.string().describe('Which saved payment method you used (by name).'),
       unit_cost: z.number().min(0).describe('What you actually paid per unit, including any coupon.'),
       tax_exempt: z.boolean().optional().describe('Default false.'),
@@ -2474,26 +2551,29 @@ function buildServer(userId, apiKeyId) {
     },
   }, async ({
     cashout, deal_id, item_id, deal_name, item_name, quantity, tracking_codes: trackingCodes, insured_value: insuredValue,
-    store, payment_method, unit_cost: unitCost, tax_exempt: taxExempt, sales_tax: salesTax,
+    store, account, payment_method, unit_cost: unitCost, tax_exempt: taxExempt, sales_tax: salesTax,
     cashback_rate: cashbackRate, cashback_earned: cashbackEarned, unit_payout: unitPayout, purchase_date: purchaseDate, sale_date: saleDate,
   }) => {
     try {
       const conn = await resolveConnection(userId, cashout);
-      const vendor = await findOrCreateVendor(userId, store);
+      const wantsAccount = Boolean(account && account.trim());
+      const vendor = wantsAccount ? await findExistingStore(userId, store) : await findOrCreateVendor(userId, store);
+      const storeAccount = wantsAccount ? await findStoreAccount(userId, vendor, account) : null;
       const paymentMethod = await findPaymentMethod(userId, payment_method);
       await requireCashoutWrites(apiKeyId);
       const result = await logPurchase(userId, {
         connectionId: conn.id, dealId: deal_id, itemId: item_id, dealName: deal_name, itemName: item_name,
         quantity, trackingCodes, insuredValue,
-        vendorId: vendor.id, paymentMethodId: paymentMethod.id, unitCost, taxExempt, salesTax,
+        vendorId: vendor.id, accountId: storeAccount ? storeAccount.id : null, paymentMethodId: paymentMethod.id, unitCost, taxExempt, salesTax,
         cashbackRate, cashbackEarned, purchaseDate, unitPayout, saleDate,
       });
-      await logWrite(userId, apiKeyId, 'log_cashout_purchase', { cashout: conn.displayName || conn.provider, deal_id, item_id, quantity, tracking_codes: trackingCodes });
+      await logWrite(userId, apiKeyId, 'log_cashout_purchase', { cashout: conn.displayName || conn.provider, deal_id, item_id, quantity, tracking_codes: trackingCodes, store, account });
       return jsonResult({
         tracking_submitted: result.trackingSubmitted,
         tracking_error: result.trackingError,
         commitment: presentCommitment({ ...result.commitment, connection: conn }),
         purchase_id: result.inventory.id,
+        account: storeAccount ? storeAccount.name : null,
         sale_id: result.sale.id,
       });
     } catch (err) {

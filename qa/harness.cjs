@@ -20,6 +20,7 @@ function reset() {
 reset();
 function relations(model,row,key) {
   if(model==='inventory'&&key==='vendor') return ['platform',db.platform.find(x=>x.id===row.vendor_id)||null];
+  if(model==='inventory'&&key==='account') return ['account',row.account_id?(db.account.find(x=>x.id===row.account_id)||null):null];
   if((model==='inventory'||model==='expense'||model==='recurringExpense')&&key==='payment_method') return ['paymentMethod',db.paymentMethod.find(x=>x.id===row.payment_method_id)||null];
   if(model==='inventory'&&key==='sales') return ['sales',db.sales.filter(x=>x.inventory_id===row.id)];
   if((model==='inventory'||model==='sales')&&key==='refunds') return ['refund',db.refund.filter(x=>model==='inventory'?x.inventory_id===row.id:x.sale_id===row.id)];
