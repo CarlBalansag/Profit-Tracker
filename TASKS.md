@@ -4,4 +4,3 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| feat-commitments-split-tracking | Cashout > Commitments: separate Not committed / Committed sections; add a tracking number inline on a not-committed purchase (opens the usual commit prompt) | `profit-tracker-app/src/pages/Cashout.jsx` (CommitmentsPanel only), `profit-tracker-app/src/pages/Cashout.test.jsx` | In progress | 2026-11-18 |

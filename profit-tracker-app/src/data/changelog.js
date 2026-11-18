@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.41',
+    date: '2026-11-18',
+    notes: "Cashout Commitments now separates what isn't committed yet from what is, and you can type a purchase's tracking number right there to commit it.",
+  },
+  {
     version: '1.40',
     date: '2026-11-18',
     notes: "You can now log more of a cashout item you've already committed to, even on a different store account: each purchase is added to your commitment when its tracking number goes in. If the cashout won't take more, the purchase stays saved with a note to contact them, and cancelling a committed sale asks before lowering your commitment. Commitments groups purchases of the same item together.",
