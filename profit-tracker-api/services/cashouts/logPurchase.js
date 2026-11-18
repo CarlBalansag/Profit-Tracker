@@ -116,6 +116,7 @@ async function logPurchase(userId, {
 
   let commitment = null;
   let trackingSubmitted = false;
+  let trackingShared = false;
   let trackingError = null;
   if (!recordOnly && !deferCommit) {
     // Step 1: commit with EB. Left to throw straight through -- a failure here
@@ -126,12 +127,19 @@ async function logPurchase(userId, {
 
     // Step 2: submit tracking. A failure here is caught, not thrown -- see the
     // doc comment above for why the purchase still gets written either way.
+    // A code already sent with another commitment (two items in one box) is
+    // not sent again; only the new ones go.
     try {
-      await commitsService.submitTracking(userId, connectionId, {
-        trackingCodes: codes,
-        description: `${dealName || 'Cashout deal'} x${qty}`.slice(0, 200),
-        insuredValue,
-      });
+      const alreadySent = await commitsService.trackingAlreadySent(userId, connectionId, codes);
+      const toSend = codes.filter((code) => !alreadySent.includes(code));
+      if (toSend.length) {
+        await commitsService.submitTracking(userId, connectionId, {
+          trackingCodes: toSend,
+          description: `${dealName || 'Cashout deal'} x${qty}`.slice(0, 200),
+          insuredValue,
+        });
+      }
+      trackingShared = alreadySent.length > 0;
       trackingSubmitted = true;
     } catch (err) {
       trackingError = err.message;
@@ -231,6 +239,7 @@ async function logPurchase(userId, {
     sale,
     commitment: updatedCommitment,
     trackingSubmitted,
+    trackingShared,
     trackingError,
     recordedOnly: recordOnly,
     commitPending: deferCommit,

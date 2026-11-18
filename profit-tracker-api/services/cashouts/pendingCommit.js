@@ -10,7 +10,7 @@
 // the purchase was logged, and the sale's price follows it. If the deal has
 // closed, nothing is committed and the row stays pending.
 const prisma = require('../../prisma');
-const { connectionAndAdapter } = require('./commits');
+const { connectionAndAdapter, trackingAlreadySent } = require('./commits');
 const { fetchConnectionDeals } = require('./service');
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
@@ -93,13 +93,19 @@ async function commitPending(userId, commitmentId, { insuredValue } = {}) {
   });
 
   let trackingSubmitted = false;
+  let trackingShared = false;
   let trackingError = null;
   try {
-    await adapter.submitTracking(rawKey, {
-      trackingCodes: [tracking],
-      description: `${offer.deal.name || 'Cashout deal'} x${record.quantity}`.slice(0, 200),
-      ...(insuredValue !== undefined && insuredValue !== null && insuredValue !== '' ? { insuredValue: Number(insuredValue) } : {}),
-    });
+    // Same box as an item already committed: its tracking is already with the
+    // cashout, so it isn't sent a second time.
+    trackingShared = (await trackingAlreadySent(userId, record.connection_id, [tracking])).length > 0;
+    if (!trackingShared) {
+      await adapter.submitTracking(rawKey, {
+        trackingCodes: [tracking],
+        description: `${offer.deal.name || 'Cashout deal'} x${record.quantity}`.slice(0, 200),
+        ...(insuredValue !== undefined && insuredValue !== null && insuredValue !== '' ? { insuredValue: Number(insuredValue) } : {}),
+      });
+    }
     trackingSubmitted = true;
   } catch (err) {
     trackingError = err.message;
@@ -124,6 +130,7 @@ async function commitPending(userId, commitmentId, { insuredValue } = {}) {
     commitment,
     sale,
     trackingSubmitted,
+    trackingShared,
     trackingError,
     payout: offer.payout,
     previousPayout: payoutChanged ? Number(record.sale.unit_price) : null,
@@ -137,4 +144,33 @@ async function pendingForSale(saleId) {
   return record ? { commitment_id: record.id } : null;
 }
 
-module.exports = { previewPending, commitPending, pendingForSale };
+// For the purchase routes: a purchase that just got a tracking number, whose
+// sale is still waiting to be committed and has no tracking of its own. The
+// package may be shipping straight from the store to the cashout, or to the
+// user first, so the client asks which before anything is copied or committed.
+async function pendingForPurchase(inventoryId, trackingNumber) {
+  const sales = await prisma.sales.findMany({ where: { inventory_id: inventoryId } });
+  const untracked = sales.filter((s) => !s.tracking_number).map((s) => s.id);
+  if (!untracked.length) return null;
+  const record = await prisma.cashoutCommitment.findFirst({
+    where: { sale_id: { in: untracked }, status: 'pending' },
+    include: { connection: true },
+  });
+  if (!record) return null;
+  return {
+    commitment_id: record.id,
+    ask_direct: {
+      sale_id: record.sale_id,
+      tracking_number: trackingNumber,
+      cashout: record.connection?.display_name || record.connection?.provider || 'the cashout',
+    },
+  };
+}
+
+// A tracking number that is new or changed, or null.
+const newTracking = (next, previous) => {
+  const value = String(next || '').trim();
+  return value && value !== String(previous || '').trim() ? value : null;
+};
+
+module.exports = { previewPending, commitPending, pendingForSale, pendingForPurchase, newTracking };

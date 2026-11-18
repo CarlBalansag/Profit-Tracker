@@ -137,7 +137,7 @@ describe('apiFetch offering the prompt', () => {
     // The caller still gets to read the body.
     expect((await response.json()).id).toBe('s1');
     await waitFor(() => expect(seen).toHaveBeenCalledTimes(1));
-    expect(seen.mock.calls[0][0].detail).toEqual({ commitment_id: 'pc-1' });
+    expect(seen.mock.calls[0][0].detail).toEqual({ commitment_id: 'pc-1', ask_direct: null });
     stop();
   });
 
@@ -149,15 +149,77 @@ describe('apiFetch offering the prompt', () => {
     stop();
   });
 
+  it('offers it, with the straight-to-cashout question, on purchase and transaction saves', async () => {
+    const { seen, stop } = listen();
+    const askDirect = { sale_id: 's1', tracking_number: '1Z', cashout: 'EB Primary' };
+    fetchMock.mockImplementation(async () => json({ cashout_commit_pending: { commitment_id: 'pc-4', ask_direct: askDirect } }));
+    await apiFetch('/api/inventory/i1', { method: 'PUT', body: '{}' });
+    await apiFetch('/api/inventory/i1/transaction', { method: 'PUT', body: '{}' });
+    await apiFetch('/api/inventory/i1/actions/add_tracking', { method: 'POST', body: '{}' });
+    await waitFor(() => expect(seen).toHaveBeenCalledTimes(3));
+    expect(seen.mock.calls[0][0].detail).toEqual({ commitment_id: 'pc-4', ask_direct: askDirect });
+    stop();
+  });
+
   it('ignores ordinary saves and other endpoints', async () => {
     const { seen, stop } = listen();
     fetchMock
       .mockResolvedValueOnce(json({ id: 's1' }))
       .mockResolvedValueOnce(json({ cashout_commit_pending: { commitment_id: 'pc-3' } }));
     await apiFetch('/api/sales/s1', { method: 'PUT', body: '{}' });
-    await apiFetch('/api/inventory/i1', { method: 'PUT', body: '{}' });
+    await apiFetch('/api/expenses/e1', { method: 'PUT', body: '{}' });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(seen).not.toHaveBeenCalled();
     stop();
+  });
+});
+
+describe('tracking added to the purchase', () => {
+  const askDirect = { sale_id: 's1', tracking_number: '1ZDIRECT', cashout: 'EB Primary' };
+
+  it('asks first whether it ships straight to the cashout, starting on No', async () => {
+    renderPrompt();
+    act(() => offerPendingCommit('pc-1', askDirect));
+
+    expect(await screen.findByRole('heading', { name: 'Is this package going straight to EB Primary?' })).toBeInTheDocument();
+    expect(screen.getByText('1ZDIRECT')).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole('button', { name: "No, it's coming to me" })).toHaveFocus());
+  });
+
+  it('"No" closes without saving anything', async () => {
+    renderPrompt();
+    act(() => offerPendingCommit('pc-1', askDirect));
+    fireEvent.click(await screen.findByRole('button', { name: "No, it's coming to me" }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(toast.message).toHaveBeenCalledWith('Saved on the purchase only', expect.anything());
+  });
+
+  it('"Yes" puts the number on the sale, then shows the commit prompt without committing', async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({ id: 's1', tracking_number: '1ZDIRECT', cashout_commit_pending: { commitment_id: 'pc-1' } }))
+      .mockResolvedValue(json(preview({ tracking_number: '1ZDIRECT' })));
+    renderPrompt();
+    act(() => offerPendingCommit('pc-1', askDirect));
+    fireEvent.click(await screen.findByRole('button', { name: 'Yes, commit with it' }));
+
+    expect(await screen.findByRole('heading', { name: 'Commit to EB Primary now?' })).toBeInTheDocument();
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toContain('/api/sales/s1');
+    expect(options.method).toBe('PUT');
+    expect(JSON.parse(options.body)).toEqual({ tracking_number: '1ZDIRECT' });
+    expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith('/commit'))).toBe(false);
+  });
+
+  it('keeps the question open with the error when the sale save fails', async () => {
+    fetchMock.mockResolvedValueOnce(json({ error: 'Sale changed while saving. Reload and retry.' }, 409));
+    renderPrompt();
+    act(() => offerPendingCommit('pc-1', askDirect));
+    fireEvent.click(await screen.findByRole('button', { name: 'Yes, commit with it' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sale changed while saving');
+    expect(screen.getByRole('heading', { name: 'Is this package going straight to EB Primary?' })).toBeInTheDocument();
   });
 });

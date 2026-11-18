@@ -1320,12 +1320,16 @@ function LogPurchaseModal({ product, onClose }) {
       }
       if (result.commitPending ?? result.commit_pending) {
         toast.success(`Logged. Not committed to ${deal.connectionName} yet.`, {
-          description: "Add the tracking number to the sale when it ships, and you'll be asked to commit then, at that day's payout.",
+          description: "Add the tracking number when it ships, and you'll be asked to commit then, at that day's payout.",
         });
         onClose();
         return;
       }
-      if (result.trackingSubmitted ?? result.tracking_submitted) {
+      if (result.trackingShared && (result.trackingSubmitted ?? result.tracking_submitted)) {
+        toast.success('Committed and logged.', {
+          description: `That tracking number was already sent to ${deal.connectionName} with another item, so it wasn't sent again.`,
+        });
+      } else if (result.trackingSubmitted ?? result.tracking_submitted) {
         toast.success('Committed and logged -- tracking sent to the cashout.');
       } else {
         toast.success('Committed and logged, but tracking failed to send.', {

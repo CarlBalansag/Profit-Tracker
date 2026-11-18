@@ -112,6 +112,26 @@ async function submitTracking(userId, connectionId, { trackingCodes, description
   return adapter.submitTracking(rawKey, { trackingCodes, description, insuredValue });
 }
 
+// Tracking codes already sent to this cashout with another commitment. Two
+// items in one box share a tracking number, and the cashout only needs it
+// once: EB's tracking submission is per account, not per commitment, so a
+// second send would just make a duplicate entry there.
+async function trackingAlreadySent(userId, connectionId, codes) {
+  const wanted = new Set((codes || []).map((c) => String(c).trim().toUpperCase()).filter(Boolean));
+  if (!wanted.size) return [];
+  const sent = await prisma.cashoutCommitment.findMany({
+    where: { user_id: userId, connection_id: connectionId, tracking_submitted_at: { not: null } },
+  });
+  const found = new Set();
+  for (const row of sent) {
+    for (const code of row.tracking_codes || []) {
+      const key = String(code).trim().toUpperCase();
+      if (wanted.has(key)) found.add(key);
+    }
+  }
+  return (codes || []).filter((c) => found.has(String(c).trim().toUpperCase()));
+}
+
 async function listTrackingSubmissions(userId, connectionId, pagination) {
   const { adapter, rawKey } = await connectionAndAdapter(userId, connectionId);
   return adapter.listTrackingSubmissions(rawKey, pagination);
@@ -126,5 +146,6 @@ module.exports = {
   deleteCommitment,
   listLocalCommitments,
   submitTracking,
+  trackingAlreadySent,
   listTrackingSubmissions,
 };

@@ -10,6 +10,7 @@ const { checkTrackingRateLimit, refreshSharedTracking } = require('../services/t
 const statusTransitions = require('../services/statusTransitions');
 const activityLog = require('../services/activityLog');
 const { editTransaction } = require('../services/transactionEdit');
+const pendingCommit = require('../services/cashouts/pendingCommit');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 
 const isAuthenticated = (req, res, next) => {
@@ -323,6 +324,8 @@ router.put('/:id/transaction', isAuthenticated, validateBody(transactionEditBody
     // The purchase and every one of its sales, before and after: the detail
     // window saves them together, so they undo together.
     let activity = null;
+    // Tracking before the save, to tell which numbers are new (below).
+    const before = await prisma.inventory.findUnique({ where: { id: req.params.id }, include: { sales: true } });
     const result = await editTransaction(prisma, req.params.id, req.user.id, req.body, {
       track: async (tx, work) => {
         const tracked = await activityLog.trackChange(tx, req.user.id, {
@@ -339,11 +342,31 @@ router.put('/:id/transaction', isAuthenticated, validateBody(transactionEditBody
       },
     });
     await publishCalendarFeed(req.user.id);
-    res.json({ ...exactInventory(result), activity_id: activity?.id ?? null });
+    const cashoutCommitPending = await transactionCommitPending(req.params.id, before, req.body);
+    res.json({
+      ...exactInventory(result),
+      activity_id: activity?.id ?? null,
+      ...(cashoutCommitPending ? { cashout_commit_pending: cashoutCommitPending } : {}),
+    });
   } catch (err) {
     next(err);
   }
 });
+
+// The detail window can add tracking to a sale or to the purchase. Either one
+// on a cashout purchase logged before it shipped gets the same commit prompt
+// the other screens give (a new sale number first: that's the package to the
+// cashout for sure). Nothing is committed here.
+async function transactionCommitPending(inventoryId, before, body) {
+  const oldSales = new Map((before?.sales || []).map((s) => [s.id, s.tracking_number]));
+  for (const sale of body.sales || []) {
+    if (sale.tracking_number === undefined || !pendingCommit.newTracking(sale.tracking_number, oldSales.get(sale.id))) continue;
+    const pending = await pendingCommit.pendingForSale(sale.id);
+    if (pending) return pending;
+  }
+  const purchaseTracking = pendingCommit.newTracking(body.inventory?.tracking_number, before?.tracking_number);
+  return purchaseTracking ? pendingCommit.pendingForPurchase(inventoryId, purchaseTracking) : null;
+}
 
 // PUT - update an inventory record
 router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, res, next) => {
@@ -469,7 +492,15 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
         include: { vendor: true, payment_method: true }
       }));
     await publishCalendarFeed(req.user.id);
-    res.json({ ...exactInventory(updated), activity_id: activity?.id ?? null });
+    // A purchase tracking number may be the package going straight to the
+    // cashout; the client asks before using it for a commit.
+    const purchaseTracking = pendingCommit.newTracking(tracking_number, existing.tracking_number);
+    const cashoutCommitPending = purchaseTracking ? await pendingCommit.pendingForPurchase(updated.id, purchaseTracking) : null;
+    res.json({
+      ...exactInventory(updated),
+      activity_id: activity?.id ?? null,
+      ...(cashoutCommitPending ? { cashout_commit_pending: cashoutCommitPending } : {}),
+    });
   } catch (err) {
     next(err);
   }
@@ -551,7 +582,14 @@ router.post('/:id/actions/:action', isAuthenticated, validateBody(statusActionBo
     await publishCalendarFeed(req.user.id);
     // The recomputed actions travel with the record so the client can redraw
     // its buttons without a second request.
-    res.json({ ...withActions(exactInventory(result.record)), activity_id: result.activity.id });
+    const purchaseTracking = action === 'add_tracking'
+      ? pendingCommit.newTracking(result.record.tracking_number, existing.tracking_number) : null;
+    const cashoutCommitPending = purchaseTracking ? await pendingCommit.pendingForPurchase(id, purchaseTracking) : null;
+    res.json({
+      ...withActions(exactInventory(result.record)),
+      activity_id: result.activity.id,
+      ...(cashoutCommitPending ? { cashout_commit_pending: cashoutCommitPending } : {}),
+    });
   } catch (err) {
     next(err);
   }
