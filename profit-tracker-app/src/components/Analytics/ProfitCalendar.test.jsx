@@ -42,27 +42,31 @@ describe('ProfitCalendar range', () => {
     expect(dayCells(container)[0].dataset.day).toBe('2026-01-01');
   });
 
-  it('starts All Time at the first sale, so a new account shows only a few days', () => {
+  it('shows only the days with sales for All Time, so a new account has just a few squares', () => {
     const { container } = render(<ProfitCalendar calendar={{ from: '2026-11-15', to: '2026-11-17', days }} dateRange="All Time" />);
-    expect(dayCells(container)).toHaveLength(3);
-    expect(screen.getByText(/since your first sale on Nov 15, 2026/)).toBeInTheDocument();
+    expect(Array.from(dayCells(container)).map((c) => c.dataset.day)).toEqual(['2026-11-15', '2026-11-16']);
+    expect(screen.getByText(/Only the days you made sales, since your first on Nov 15, 2026/)).toBeInTheDocument();
+    expect(screen.getByText('Nov')).toBeInTheDocument();
   });
 
-  it('draws a few weeks of history as a wall calendar', () => {
-    const { container } = render(<ProfitCalendar calendar={{ from: '2026-10-25', to: '2026-11-17', days }} dateRange="All Time" />);
-    expect(dayCells(container)).toHaveLength(24);
-    expect(screen.getByText('Wed')).toBeInTheDocument(); // weekday header row
+  it('groups years of sale days by month, oldest first, with each month\'s total and the year', () => {
+    const history = [
+      { date: '2024-03-02', profit: 12, sales: 1, units: 1, revenue: 50, cost: 38, items: [] },
+      { date: '2024-03-20', profit: -2, sales: 1, units: 1, revenue: 10, cost: 12, items: [] },
+      { date: '2025-07-04', profit: 0, sales: 0, units: 0, revenue: 0, cost: 0, items: [] },
+      ...days,
+    ];
+    const { container } = render(<ProfitCalendar calendar={{ from: '2024-03-02', to: '2026-11-17', days: history }} dateRange="All Time" />);
+    expect(dayCells(container)).toHaveLength(4); // the no-sales day is left out
+    expect(screen.getByText('Mar 2024')).toBeInTheDocument();
+    expect(screen.getByText('+$10.00')).toBeInTheDocument();
+    expect(screen.getByText('Nov 2026')).toBeInTheDocument();
+    expect(screen.queryByText('Jul 2025')).toBeNull();
   });
 
-  it('gives years of history one strip per year, newest first, with each year\'s total', () => {
-    const old = [{ date: '2024-03-02', profit: 12, sales: 1, units: 1, revenue: 50, cost: 38, items: [] }, ...days];
-    const { container } = render(<ProfitCalendar calendar={{ from: '2024-03-02', to: '2026-11-17', days: old }} dateRange="All Time" />);
-    const labels = Array.from(container.querySelectorAll('.text-\\[11px\\].font-semibold'))
-      .map((e) => e.textContent).filter((t) => /^\d{4} /.test(t));
-    expect(labels).toEqual(['2026 +$511.55', '2025 $0.00', '2024 +$12.00']);
-    expect(dayCells(container)[0].dataset.day.startsWith('2026')).toBe(true);
-    // Mar 2, 2024 to Nov 17, 2026, every day once.
-    expect(dayCells(container)).toHaveLength(991);
+  it('says so when there are no sales at all', () => {
+    render(<ProfitCalendar calendar={{ from: '2026-11-17', to: '2026-11-17', days: [] }} dateRange="All Time" />);
+    expect(screen.getByText('No sales yet.')).toBeInTheDocument();
   });
 });
 

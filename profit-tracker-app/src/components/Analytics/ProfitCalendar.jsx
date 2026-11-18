@@ -2,9 +2,8 @@
 //   7 Days    one row of seven days
 //   30 Days   a wall calendar (Sun–Sat columns, one row per week)
 //   YTD       GitHub-style year: one column per week since Jan 1
-//   All Time  from the first sale to today, so it grows with the account:
-//             a few days is a row, a few weeks a wall calendar, up to a
-//             year one GitHub-style strip, and past that one strip per year.
+//   All Time  only the days that had sales, grouped by month, so it is a
+//             handful of squares for a new account and grows with the history.
 // Hovering a day shows its totals; clicking it opens the sales behind them
 // in a panel at the side (below, on a phone).
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -226,34 +225,33 @@ export default function ProfitCalendar({ calendar, dateRange }) {
     const days = (Array.isArray(calendar) ? calendar : calendar?.days) ?? [];
     const byDay = new Map(days.map((d) => [d.date, d]));
     const { from, to } = rangeFor(dateRange, calendar, days);
-    const span = Math.round((to - from) / DAY) + 1;
     const layout = dateRange === '7 Days' ? 'row'
       : dateRange === '30 Days' ? 'month'
-        : span <= 7 ? 'row' : span <= 42 ? 'month' : 'year';
+        : dateRange === 'All Time' ? 'active' : 'year';
 
-    // Up to about a year is one strip; longer runs get one strip per year,
-    // newest first.
-    let strips = [];
-    if (layout === 'year') {
-      if (span <= 371) {
-        strips = [{ key: 'one', label: null, cells: buildCells(from, to, true) }];
-      } else {
-        for (let y = to.getUTCFullYear(); y >= from.getUTCFullYear(); y -= 1) {
-          const sFrom = new Date(Math.max(from.getTime(), Date.UTC(y, 0, 1)));
-          const sTo = new Date(Math.min(to.getTime(), Date.UTC(y, 11, 31)));
-          const inYear = days.filter((d) => d.date.startsWith(String(y)));
-          const yearTotal = inYear.reduce((s, d) => s + d.profit, 0);
-          strips.push({ key: String(y), year: y, total: yearTotal, cells: buildCells(sFrom, sTo, true) });
+    // All Time: just the days with sales, in date order, one group per month.
+    const months = [];
+    if (layout === 'active') {
+      days.filter((d) => d.sales > 0).forEach((d) => {
+        const key = d.date.slice(0, 7);
+        let group = months[months.length - 1];
+        if (!group || group.key !== key) {
+          group = { key, total: 0, cells: [] };
+          months.push(group);
         }
-      }
+        group.total += d.profit;
+        group.cells.push({ key: d.date, inRange: true, dayOfMonth: parse(d.date).getUTCDate() });
+      });
     }
+    const multiYear = months.length > 0 && months[0].key.slice(0, 4) !== months[months.length - 1].key.slice(0, 4);
     const inRange = days.filter((d) => { const t = parse(d.date); return t >= from && t <= to; });
     return {
       byDay,
       from,
       layout,
-      strips,
-      cells: layout === 'year' ? [] : buildCells(from, to, layout === 'month'),
+      months,
+      multiYear,
+      cells: layout === 'active' ? [] : buildCells(from, to, layout !== 'row'),
       max: Math.max(1, ...inRange.map((d) => Math.abs(d.profit))),
       best: inRange.reduce((b, d) => (d.profit > (b?.profit ?? 0) ? d : b), null),
       worst: inRange.reduce((w, d) => (d.profit < (w?.profit ?? 0) ? d : w), null),
@@ -321,7 +319,7 @@ export default function ProfitCalendar({ calendar, dateRange }) {
   };
 
   const subtitle = dateRange === 'All Time'
-    ? `Every day since your first sale${view.activeDays ? ` on ${fullDate(iso(view.from))}` : ''}.`
+    ? `Only the days you made sales${view.activeDays ? `, since your first on ${fullDate(iso(view.from))}` : ''}.`
     : { '7 Days': 'The last 7 days.', '30 Days': 'The last 30 days.', YTD: 'Every day this year so far.' }[dateRange] || '';
 
   return (
@@ -354,19 +352,34 @@ export default function ProfitCalendar({ calendar, dateRange }) {
           )}
 
           {view.layout === 'year' && (
-            <div role="grid" aria-label="Profit per day" className="space-y-4">
-              {view.strips.map((strip, si) => (
-                <YearStrip
-                  key={strip.key}
-                  cells={strip.cells}
-                  scrollToEnd={si === 0}
-                  renderCell={renderCell}
-                  label={strip.year ? (
-                    <span>{strip.year} <span className={`ml-1 tabular-nums ${profitTone(strip.total)}`}>{signed(strip.total)}</span></span>
-                  ) : null}
-                />
-              ))}
+            <div role="grid" aria-label="Profit per day">
+              <YearStrip cells={view.cells} scrollToEnd renderCell={renderCell} />
             </div>
+          )}
+
+          {view.layout === 'active' && (
+            view.months.length ? (
+              <div role="grid" aria-label="Days with sales" className="flex flex-wrap gap-x-6 gap-y-4">
+                {view.months.map((month, mi) => {
+                  const offset = view.months.slice(0, mi).reduce((n, m) => n + m.cells.length, 0);
+                  const label = parse(`${month.key}-01`).toLocaleDateString('en-US', {
+                    month: 'short', ...(view.multiYear ? { year: 'numeric' } : {}), timeZone: 'UTC',
+                  });
+                  return (
+                    <div key={month.key} className="min-w-0">
+                      <div className="mb-1.5 flex items-baseline gap-2 text-[11px]">
+                        <span className="font-semibold text-[var(--dp-text-secondary)]">{label}</span>
+                        <span className={`tabular-nums ${profitTone(month.total)}`}>{signed(month.total)}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {month.cells.map((cell, i) => renderCell(cell, offset + i, 'relative h-9 w-9 rounded-md',
+                          <span className="absolute left-1.5 top-1 text-[9px] text-[var(--dp-text-primary)] opacity-70">{cell.dayOfMonth}</span>))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : <p className="py-6 text-center text-sm text-[var(--dp-text-muted)]">No sales yet.</p>
           )}
         </div>
 
