@@ -98,7 +98,7 @@ function CommitDialog({ commitmentId, onClose }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
       <div ref={modalRef} role="dialog" aria-modal="true" aria-label={`Commit to ${preview?.cashout || 'the cashout'} now?`}
-        className="w-full max-w-lg rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+        className="w-full max-w-xl rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
           <div className="min-w-0">
             <h3 className="font-bold text-base text-[var(--dp-text-primary)]">Commit to {preview?.cashout || 'the cashout'} now?</h3>
@@ -139,7 +139,7 @@ function CommitDialog({ commitmentId, onClose }) {
               <dd className="text-[var(--dp-text-primary)] font-mono break-all">{preview.tracking_number}</dd>
             </dl>
             <div className="space-y-1.5">
-              <label htmlFor="pc-insured" className="text-[11px] text-[var(--dp-text-label)]">Insured value (optional, $200–$1,500)</label>
+              <label htmlFor="pc-insured" className="block text-[11px] text-[var(--dp-text-label)]">Insured value (optional, $200–$1,500)</label>
               <input id="pc-insured" type="number" min="200" max="1500" step="0.01" value={insuredValue} onChange={(e) => setInsuredValue(e.target.value)}
                 placeholder="Leave blank to skip insurance"
                 className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none" />
