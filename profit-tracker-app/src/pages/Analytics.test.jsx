@@ -82,18 +82,19 @@ describe('Analytics Products & Stores tab', () => {
     });
     render(<Analytics />);
     openTab(/Products/);
+    expect(screen.queryByText(/Category profitability/i)).toBeNull();
 
     expect(screen.getByText('QA Store')).toBeTruthy();
     expect(screen.getByText(/33\.3% ROI/)).toBeTruthy();
     expect(screen.queryByText('Unsold Store')).toBeNull();
-    expect(screen.getByText('Shoes')).toBeTruthy();
+    expect(screen.queryByText('Shoes')).toBeNull();
   });
 
-  it('shows empty states when nothing sold in the period', () => {
+  it('shows an empty state when nothing sold in the period', () => {
     setData();
     render(<Analytics />);
     openTab(/Products/);
-    expect(screen.getAllByText('No sold items in this period')).toHaveLength(2);
+    expect(screen.getAllByText('No sold items in this period')).toHaveLength(1);
   });
 });
 

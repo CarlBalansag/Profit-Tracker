@@ -175,7 +175,6 @@ function Analytics() {
   const topCards = data?.topCards ?? [];
   const platformBreakdown = data?.platformBreakdown ?? [];
   const vendorBreakdown = data?.vendorBreakdown ?? [];
-  const categoryBreakdown = data?.categoryBreakdown ?? [];
   const storesWithSales = vendorBreakdown.filter((v) => v.unitsSold > 0).sort((a, b) => b.profit - a.profit);
   const cashbackRateTrend = useMemo(() => {
     const byMonth = new Map();
@@ -269,7 +268,7 @@ function Analytics() {
         )}
 
         {activeTab === 'products' && (
-          <Rise key={`products-${mode}-${dateRange}`} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Rise key={`products-${mode}-${dateRange}`} className="grid grid-cols-1 gap-6">
             <RiseItem>
               <Panel title="Store ROI" sub="Profit on items sold this period, by the store you bought them from.">
                 {storesWithSales.length ? (
@@ -291,35 +290,6 @@ function Analytics() {
                       );
                     })}
                   </div>
-                ) : <Empty>{loading ? 'Loading…' : 'No sold items in this period'}</Empty>}
-              </Panel>
-            </RiseItem>
-            <RiseItem>
-              <Panel title="Category profitability" sub="Which product categories are actually worth buying.">
-                {categoryBreakdown.length > 0 ? (
-                  <>
-                    <div className="w-full mb-4" style={{ height: 220 }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={categoryBreakdown} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }} barSize={16}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-hover)" horizontal={false} />
-                          <XAxis type="number" {...AXIS} tickFormatter={axisMoney} />
-                          <YAxis type="category" dataKey="category" {...AXIS} width={90} />
-                          <Tooltip {...TOOLTIP} cursor={{ fill: 'var(--dp-hover-bg)' }} formatter={(v, n, item) => [`${usd(v)} (${fmtPct(item.payload.margin)} margin)`, 'Profit']} />
-                          <Bar dataKey="profit" name="Profit" radius={[0, 4, 4, 0]} isAnimationActive animationDuration={900}>
-                            {categoryBreakdown.map((entry, i) => <Cell key={i} fill={entry.profit >= 0 ? 'var(--green)' : 'var(--red)'} />)}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div className="space-y-2">
-                      {categoryBreakdown.map((c) => (
-                        <div key={c.category} className="flex items-center justify-between text-xs">
-                          <span className="text-[var(--dp-text-primary)] font-medium">{c.category}</span>
-                          <span className="text-[var(--dp-text-muted)]">{c.unitsSold} sold · {fmtPct(c.margin)} margin · <span className={`font-medium ${c.profit >= 0 ? 'text-[var(--dp-green-text)]' : 'text-[var(--dp-red-text)]'}`}>{usd(c.profit)}</span></span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
                 ) : <Empty>{loading ? 'Loading…' : 'No sold items in this period'}</Empty>}
               </Panel>
             </RiseItem>
