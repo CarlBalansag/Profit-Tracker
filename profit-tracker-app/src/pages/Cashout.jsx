@@ -33,6 +33,7 @@ import { useMatchMedia } from '../hooks/useMatchMedia';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { offerPendingCommit } from '../utils/pendingCashoutCommit';
 import {
+  bestCardForDeal,
   dealConditionLabels,
   dealLimitLabel,
   dealStoreNames,
@@ -51,6 +52,7 @@ import LoadError from '../components/UI/LoadError';
 
 // API keys are managed only in Data Setup.
 const DATA_SETUP_STATE = { tab: 'datasetup', view: 'Cashouts' };
+const PAYMENT_METHODS_STATE = { tab: 'datasetup', view: 'Payment Methods' };
 
 // Below this the table no longer fits beside the sidebar -- cards take over
 // regardless of the view toggle.
@@ -106,6 +108,7 @@ export default function Cashout() {
   } = useCashoutDeals();
 
   const { syncConnection } = useCashoutMutations();
+  const { data: paymentMethods = [] } = usePaymentMethods();
 
   // Cooldown ticker
   useEffect(() => {
@@ -559,7 +562,7 @@ export default function Cashout() {
           ) : showCards ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
               {filteredDeals.map((deal) => (
-                <DealCard key={`${deal.connectionId}-${deal.id}`} deal={deal} />
+                <DealCard key={`${deal.connectionId}-${deal.id}`} deal={deal} paymentMethods={paymentMethods} />
               ))}
             </div>
           ) : (
@@ -578,6 +581,13 @@ export default function Cashout() {
                       >
                         Est. Profit
                         <span className="block font-normal normal-case tracking-normal">before tax</span>
+                      </th>
+                      <th
+                        className="py-3 px-3 whitespace-nowrap"
+                        title="Your saved card that earns the most at one of this deal's stores, and the profit with its cashback on retail."
+                      >
+                        Best Card
+                        <span className="block font-normal normal-case tracking-normal">profit with rewards</span>
                       </th>
                       <th className="py-3 px-3">Expires</th>
                       <th className="py-3 px-3">Buy At</th>
@@ -617,6 +627,11 @@ export default function Cashout() {
                           {/* Est. Profit */}
                           <td className="py-3 px-3 text-right">
                             <EstProfit profit={deal.estimatedProfit} expired={expired} />
+                          </td>
+
+                          {/* Best Card */}
+                          <td className="py-3 px-3">
+                            <BestCard best={bestCardForDeal(deal, paymentMethods)} expired={expired} />
                           </td>
 
                           {/* Expires */}
@@ -779,6 +794,37 @@ function EstProfit({ profit, expired = false }) {
   );
 }
 
+// The saved card that earns the most on a deal, what it earns and where, and
+// the deal's profit with that cashback. With no saved cards it links to where
+// cards are added.
+function BestCard({ best, expired = false, inline = false }) {
+  if (!best) {
+    return (
+      <Link to="/settings" state={PAYMENT_METHODS_STATE} className="text-[12px] text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)] underline underline-offset-2">
+        Add a card
+      </Link>
+    );
+  }
+  if (!best.card) {
+    return <span className="text-[var(--dp-text-label)]" title="None of your saved cards earn cashback at this deal's stores.">—</span>;
+  }
+
+  const rate = `${Math.round(best.rate * 100) / 100}%`;
+  const earns = best.store ? `${rate} at ${best.store}` : rate;
+  const profit = best.profit ? formatDealProfit(best.profit) : null;
+  const cardLabel = best.card.last4 ? `${best.card.name} (${best.card.last4})` : best.card.name;
+  const cashbackNote = best.cashback !== null ? `, $${formatMoney(best.cashback)} back on retail` : '';
+  return (
+    <div className={inline ? 'flex flex-wrap items-baseline gap-x-2' : 'min-w-[8rem] max-w-[12rem]'} title={`${cardLabel}: ${earns}${cashbackNote}`}>
+      <div className={`font-medium text-[var(--dp-text-primary)] ${inline ? '' : 'truncate'}`}>{best.card.name}</div>
+      <div className="text-[12px] text-[var(--dp-text-label)]">{earns}</div>
+      {profit && (
+        <div className={`tabular-nums text-sm font-bold ${PROFIT_TONES[expired ? 'neutral' : profit.tone]}`}>{profit.amount}</div>
+      )}
+    </div>
+  );
+}
+
 function CashoutName({ name }) {
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded text-[12px] font-medium bg-[var(--dp-hover-bg)] text-[var(--dp-text-primary)] border border-[color:var(--dp-border)]">
@@ -823,17 +869,18 @@ function CashoutOffers({ deal }) {
   );
 }
 
-// A cashout we can't commit to from here (Points4Days) links to the deal on its
-// website, where the commitment and tracking are done.
+// Links to the deal on the cashout's website: the deal itself for Points4Days
+// and EarnFromBuying, where the commitment and tracking are done, and the deals
+// list for ElectronicsBuyer, whose API has no per-deal address.
 function OpenOnCashout({ offer }) {
-  if (offer.connectionSupportsCommits || !offer.dealUrl) return null;
+  if (!offer.dealUrl) return null;
   return (
     <a
       href={offer.dealUrl}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={`Open on ${offer.connectionName}`}
-      title={`Open on ${offer.connectionName} to commit`}
+      title={offer.connectionSupportsCommits ? `Open on ${offer.connectionName}` : `Open on ${offer.connectionName} to commit`}
       className="p-1 rounded-md text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
     >
       <ExternalLink size={13} />
@@ -1471,7 +1518,7 @@ function LogPurchaseModal({ product, onClose }) {
   );
 }
 
-function DealCard({ deal }) {
+function DealCard({ deal, paymentMethods }) {
   const expired = isDealExpired(deal);
 
   return (
@@ -1495,6 +1542,11 @@ function DealCard({ deal }) {
           <dd className="mt-0.5"><EstProfit profit={deal.estimatedProfit} expired={expired} /></dd>
         </div>
       </dl>
+
+      <div>
+        <div className="text-[12px] text-[var(--dp-text-label)] uppercase tracking-wider">Best Card</div>
+        <div className="mt-0.5"><BestCard best={bestCardForDeal(deal, paymentMethods)} expired={expired} inline /></div>
+      </div>
 
       <div className="mt-auto space-y-3 pt-3 border-t border-[color:var(--dp-border)]">
         {!expired && <StoreLinks deal={deal} large />}
