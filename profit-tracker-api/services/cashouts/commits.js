@@ -44,6 +44,7 @@ async function createCommitment(userId, connectionId, { dealId, itemId, quantity
       sale_id: saleId,
       external_deal_id: String(dealId),
       external_item_id: String(itemId),
+      open_item_id: String(itemId),
       external_commitment_id: preview.id,
       quantity: preview.quantity,
       status: 'active',
@@ -86,7 +87,8 @@ async function deleteCommitment(userId, commitmentRecordId) {
   const { adapter, rawKey } = await connectionAndAdapter(userId, record.connection_id);
   await adapter.deleteCommit(rawKey, record.external_commitment_id);
 
-  return prisma.cashoutCommitment.update({ where: { id: record.id }, data: { status: 'withdrawn' } });
+  // open_item_id clears so this item can be committed again later.
+  return prisma.cashoutCommitment.update({ where: { id: record.id }, data: { status: 'withdrawn', open_item_id: null } });
 }
 
 async function listLocalCommitments(userId, { connectionId, saleId, status } = {}) {
