@@ -151,6 +151,15 @@ function errorResult(message) {
   return { content: [{ type: 'text', text: message }], isError: true };
 }
 
+// Binding cashout writes (commit, change, withdraw, send tracking) only go
+// through a key its owner has allowed to make them (Settings > API Keys).
+async function requireCashoutWrites(apiKeyId) {
+  const key = apiKeyId ? await prisma.apiKey.findUnique({ where: { id: apiKeyId } }) : null;
+  if (!key?.allow_cashout_writes) {
+    throw new Error("This API key isn't allowed to make cashout commitments or send tracking. Nothing was sent. Turn on \"Allow cashout writes\" for this key in Settings > API Keys.");
+  }
+}
+
 async function logWrite(userId, apiKeyId, tool, payload) {
   try {
     await prisma.mcpWriteLog.create({ data: { user_id: userId, api_key_id: apiKeyId || null, tool, payload } });
@@ -2364,6 +2373,7 @@ function buildServer(userId, apiKeyId) {
   }, async ({ cashout, deal_id, item_id, quantity }) => {
     try {
       const conn = await resolveConnection(userId, cashout);
+      await requireCashoutWrites(apiKeyId);
       const record = await cashoutCommits.createCommitment(userId, conn.id, { dealId: deal_id, itemId: item_id, quantity });
       await logWrite(userId, apiKeyId, 'commit_cashout_deal', { cashout: conn.displayName || conn.provider, deal_id, item_id, quantity });
       return jsonResult(presentCommitment({ ...record, connection: conn }));
@@ -2380,6 +2390,7 @@ function buildServer(userId, apiKeyId) {
     },
   }, async ({ commitment_id, quantity }) => {
     try {
+      await requireCashoutWrites(apiKeyId);
       const record = await cashoutCommits.updateCommitment(userId, commitment_id, { quantity });
       await logWrite(userId, apiKeyId, 'update_cashout_commitment', { commitment_id, quantity });
       return jsonResult(presentCommitment(record));
@@ -2393,6 +2404,7 @@ function buildServer(userId, apiKeyId) {
     inputSchema: { commitment_id: z.string().describe('The id from list_cashout_commitments / commit_cashout_deal.') },
   }, async ({ commitment_id }) => {
     try {
+      await requireCashoutWrites(apiKeyId);
       const record = await cashoutCommits.deleteCommitment(userId, commitment_id);
       await logWrite(userId, apiKeyId, 'delete_cashout_commitment', { commitment_id });
       return jsonResult(presentCommitment(record));
@@ -2412,6 +2424,7 @@ function buildServer(userId, apiKeyId) {
   }, async ({ cashout, tracking_codes: trackingCodes, description, insured_value: insuredValue }) => {
     try {
       const conn = await resolveConnection(userId, cashout);
+      await requireCashoutWrites(apiKeyId);
       const result = await cashoutCommits.submitTracking(userId, conn.id, { trackingCodes, description, insuredValue });
       await logWrite(userId, apiKeyId, 'submit_cashout_tracking', { cashout: conn.displayName || conn.provider, tracking_codes: trackingCodes });
       return jsonResult({ received_tracking_codes: result?.received_tracking_codes || [] });
@@ -2468,6 +2481,7 @@ function buildServer(userId, apiKeyId) {
       const conn = await resolveConnection(userId, cashout);
       const vendor = await findOrCreateVendor(userId, store);
       const paymentMethod = await findPaymentMethod(userId, payment_method);
+      await requireCashoutWrites(apiKeyId);
       const result = await logPurchase(userId, {
         connectionId: conn.id, dealId: deal_id, itemId: item_id, dealName: deal_name, itemName: item_name,
         quantity, trackingCodes, insuredValue,

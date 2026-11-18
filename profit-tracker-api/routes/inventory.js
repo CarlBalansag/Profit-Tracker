@@ -10,6 +10,8 @@ const { checkTrackingRateLimit, refreshSharedTracking } = require('../services/t
 const statusTransitions = require('../services/statusTransitions');
 const activityLog = require('../services/activityLog');
 const { editTransaction } = require('../services/transactionEdit');
+const pendingCommit = require('../services/cashouts/pendingCommit');
+const cashoutCommits = require('../services/cashouts/commits');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 
 const isAuthenticated = (req, res, next) => {
@@ -323,6 +325,8 @@ router.put('/:id/transaction', isAuthenticated, validateBody(transactionEditBody
     // The purchase and every one of its sales, before and after: the detail
     // window saves them together, so they undo together.
     let activity = null;
+    // Tracking before the save, to tell which numbers are new (below).
+    const before = await prisma.inventory.findUnique({ where: { id: req.params.id }, include: { sales: true } });
     const result = await editTransaction(prisma, req.params.id, req.user.id, req.body, {
       track: async (tx, work) => {
         const tracked = await activityLog.trackChange(tx, req.user.id, {
@@ -339,11 +343,50 @@ router.put('/:id/transaction', isAuthenticated, validateBody(transactionEditBody
       },
     });
     await publishCalendarFeed(req.user.id);
-    res.json({ ...exactInventory(result), activity_id: activity?.id ?? null });
+    const cashoutCommitPending = (await transactionCommitPending(req.params.id, before, req.body))
+      || (await purchaseCommitPending(req.params.id, before, req.body));
+    const cashoutTrackingChanged = cashoutCommitPending ? null : await transactionTrackingChanged(before, req.body);
+    res.json({
+      ...exactInventory(result),
+      activity_id: activity?.id ?? null,
+      ...(cashoutCommitPending ? { cashout_commit_pending: cashoutCommitPending } : {}),
+      ...(cashoutTrackingChanged ? { cashout_tracking_changed: cashoutTrackingChanged } : {}),
+    });
   } catch (err) {
     next(err);
   }
 });
+
+// The detail window can add tracking to a sale or to the purchase. Either one
+// on a cashout purchase logged before it shipped gets the same commit prompt
+// the other screens give (a new sale number first: that's the package to the
+// cashout for sure). Nothing is committed here.
+async function transactionCommitPending(inventoryId, before, body) {
+  const oldSales = new Map((before?.sales || []).map((s) => [s.id, s.tracking_number]));
+  for (const sale of body.sales || []) {
+    if (sale.tracking_number === undefined || !pendingCommit.newTracking(sale.tracking_number, oldSales.get(sale.id))) continue;
+    const pending = await pendingCommit.pendingForSale(sale.id);
+    if (pending) return pending;
+  }
+  return null;
+}
+
+// A sale already committed whose tracking number the detail window changed.
+async function transactionTrackingChanged(before, body) {
+  const oldSales = new Map((before?.sales || []).map((s) => [s.id, s.tracking_number]));
+  for (const sale of body.sales || []) {
+    const value = sale.tracking_number === undefined ? null : pendingCommit.newTracking(sale.tracking_number, oldSales.get(sale.id));
+    if (!value) continue;
+    const changed = await cashoutCommits.trackingChangedForSale(sale.id, value);
+    if (changed) return changed;
+  }
+  return null;
+}
+
+async function purchaseCommitPending(inventoryId, before, body) {
+  const purchaseTracking = pendingCommit.newTracking(body.inventory?.tracking_number, before?.tracking_number);
+  return purchaseTracking ? pendingCommit.pendingForPurchase(inventoryId, purchaseTracking) : null;
+}
 
 // PUT - update an inventory record
 router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, res, next) => {
@@ -469,7 +512,15 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
         include: { vendor: true, payment_method: true }
       }));
     await publishCalendarFeed(req.user.id);
-    res.json({ ...exactInventory(updated), activity_id: activity?.id ?? null });
+    // A purchase tracking number may be the package going straight to the
+    // cashout; the client asks before using it for a commit.
+    const purchaseTracking = pendingCommit.newTracking(tracking_number, existing.tracking_number);
+    const cashoutCommitPending = purchaseTracking ? await pendingCommit.pendingForPurchase(updated.id, purchaseTracking) : null;
+    res.json({
+      ...exactInventory(updated),
+      activity_id: activity?.id ?? null,
+      ...(cashoutCommitPending ? { cashout_commit_pending: cashoutCommitPending } : {}),
+    });
   } catch (err) {
     next(err);
   }
@@ -507,6 +558,8 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
     // succeed while the inventory delete that follows it fails.
     // Snapshotted first (purchase, sales, their refunds, any cashout
     // commitment linked to a sale) so the Activity log can put it all back.
+    const saleIds = (await prisma.sales.findMany({ where: { inventory_id: req.params.id } })).map((sale) => sale.id);
+    const cashoutWarning = await activeCommitmentWarning(saleIds);
     const { activity } = await prisma.$transaction((tx) => activityLog.trackChange(tx, req.user.id, {
       action: 'delete',
       recordType: 'purchase',
@@ -516,7 +569,7 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
     }, () => tx.inventory.delete({ where: { id: req.params.id } })));
 
     await publishCalendarFeed(req.user.id);
-    res.json({ success: true, activity_id: activity?.id ?? null });
+    res.json({ success: true, activity_id: activity?.id ?? null, ...(cashoutWarning ? { cashout_warning: cashoutWarning } : {}) });
   } catch (err) {
     console.error('DELETE inventory error:', err);
     next(err);
@@ -551,7 +604,14 @@ router.post('/:id/actions/:action', isAuthenticated, validateBody(statusActionBo
     await publishCalendarFeed(req.user.id);
     // The recomputed actions travel with the record so the client can redraw
     // its buttons without a second request.
-    res.json({ ...withActions(exactInventory(result.record)), activity_id: result.activity.id });
+    const purchaseTracking = action === 'add_tracking'
+      ? pendingCommit.newTracking(result.record.tracking_number, existing.tracking_number) : null;
+    const cashoutCommitPending = purchaseTracking ? await pendingCommit.pendingForPurchase(id, purchaseTracking) : null;
+    res.json({
+      ...withActions(exactInventory(result.record)),
+      activity_id: result.activity.id,
+      ...(cashoutCommitPending ? { cashout_commit_pending: cashoutCommitPending } : {}),
+    });
   } catch (err) {
     next(err);
   }
@@ -586,5 +646,18 @@ router.post('/:id/track', isAuthenticated, async (req, res, next) => {
     next(err);
   }
 });
+
+// Deleting a purchase or sale here doesn't withdraw its cashout commitment:
+// that pledge stays live with the provider. Said in the delete response.
+async function activeCommitmentWarning(saleIds) {
+  if (!saleIds.length) return null;
+  const active = await prisma.cashoutCommitment.findFirst({
+    where: { sale_id: { in: saleIds }, status: 'active' },
+    include: { connection: true },
+  });
+  if (!active) return null;
+  const name = active.connection?.display_name || active.connection?.provider || 'the cashout';
+  return `Your commitment with ${name} is still active: deleting here doesn't withdraw it. Withdraw it in Cashout > Commitments if you're not sending the item.`;
+}
 
 module.exports = router;

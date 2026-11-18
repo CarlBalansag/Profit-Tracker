@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.38',
+    date: '2026-11-18',
+    notes: "Committing to ElectronicsBuyer is safer: deals with several colors or models make you pick the exact one, a tracking number added to the purchase can be used to commit when the store ships straight to the cashout, and a box holding two items sends its tracking number once. If a commit hangs or a save fails, the app now checks with ElectronicsBuyer instead of committing twice, and your AI assistant can only commit or send tracking once you allow it in Settings.",
+  },
+  {
     version: '1.37',
     date: '2026-11-17',
     notes: "Cash Flow is rebuilt around money in vs out: who still owes you, which card bills are coming up and whether payouts land in time, and where your money is tied up. Analytics has new tabs with store ROI, cashback by card, a profit calendar you can click to see what sold, and a breakdown of which stores' items sell best where. On Cashout, ElectronicsBuyer deals get a link to the deal, and a new Best Card column shows which of your cards earns the most on each deal.",

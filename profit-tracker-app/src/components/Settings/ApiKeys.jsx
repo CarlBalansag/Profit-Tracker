@@ -185,6 +185,26 @@ export const ApiKeys = () => {
     }
   };
 
+  // Binding cashout writes through MCP (commit, change, withdraw, send
+  // tracking) are off for every key until turned on here.
+  const setCashoutWrites = async (id, allow) => {
+    setBusyId(id);
+    try {
+      const res = await apiFetch(`/api/api-keys/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allow_cashout_writes: allow }),
+      });
+      await requireSuccessfulResponse(res, 'Could not change this key');
+      await load();
+      toast.success(allow ? 'This key can now make cashout commitments and send tracking.' : 'Cashout writes turned off for this key.');
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const revoke = async (id) => {
     setBusyId(id);
     try {
@@ -238,6 +258,21 @@ export const ApiKeys = () => {
                   </div>
                   <p className="text-[11px] text-gray-600 font-mono">{key.key_prefix}…</p>
                   <p className="text-[11px] text-gray-600">Created {fmtDate(key.created_at)} · Last used {fmtDate(key.last_used_at)}</p>
+                  {!key.revoked_at && (
+                    <label className="mt-2 flex items-start gap-2 text-[11px] text-gray-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(key.allow_cashout_writes)}
+                        disabled={busyId === key.id}
+                        onChange={(e) => setCashoutWrites(key.id, e.target.checked)}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        Allow cashout writes
+                        <span className="block text-gray-600">Lets this key commit to cashout deals, change or withdraw commitments, and send tracking. These are binding with the cashout.</span>
+                      </span>
+                    </label>
+                  )}
                 </div>
                 {!key.revoked_at && (
                   <div className="flex gap-2 flex-shrink-0">

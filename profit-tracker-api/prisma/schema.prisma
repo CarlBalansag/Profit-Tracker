@@ -49,6 +49,7 @@ model User {
   cashout_deal_snapshots CashoutDealSnapshot[]
   cashout_item_matches   CashoutItemMatch[]
   cashout_commitments    CashoutCommitment[]
+  cashout_write_logs     CashoutWriteLog[]
   invites                Invite[]
 }
 
@@ -68,6 +69,9 @@ model ApiKey {
   created_at   DateTime  @default(now())
   last_used_at DateTime?
   revoked_at   DateTime?
+  // Off by default: a key can only make binding cashout writes (commit,
+  // change, withdraw, send tracking) through MCP once the owner turns this on.
+  allow_cashout_writes Boolean @default(false)
 
   @@index([user_id])
 }
@@ -75,6 +79,27 @@ model ApiKey {
 // Durable audit trail for every write the MCP server performs, since Render's
 // own process logs scroll away. Deliberately minimal: who, which tool, what
 // payload, when. Never used for reads, so it carries no query-shaping fields.
+// Every write sent to a cashout provider (EB), with what came back. Kept
+// because those writes are binding on a third party's side: when the two
+// sides disagree, this is the record of what was asked and what happened.
+// outcome: ok | failed | unknown (no answer: timeout, network, 5xx) |
+// adopted (found already on the provider's side and linked) | skipped.
+model CashoutWriteLog {
+  id            String   @id @default(uuid())
+  user_id       String
+  user          User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  connection_id String?
+  commitment_id String?
+  action        String
+  request       Json
+  outcome       String
+  error         String?
+  external_id   String?
+  created_at    DateTime @default(now())
+
+  @@index([user_id, created_at])
+}
+
 model McpWriteLog {
   id         String   @id @default(uuid())
   user_id    String

@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const harness = require('../../qa/harness.cjs');
 const { encryptKey } = require('../services/cashouts/crypto');
 const ebAdapter = require('../services/cashouts/eb');
+const { dealsCache } = require('../services/cashouts/service');
 
 const TEST_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const CASHOUT_PLATFORM_ID = 'cashout-platform-1';
@@ -24,7 +25,11 @@ afterAll(() => server.close());
 beforeEach(() => {
   harness.reset();
   vi.restoreAllMocks();
+  dealsCache.clear();
   process.env.CASHOUT_KEY_ENCRYPTION_KEY = TEST_ENCRYPTION_KEY;
+  vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([{ id: '2000', name: 'PS5 Pro', payout: 480, status: 'active', expiresAt: null, items: [{ id: '101', name: 'PS5 Pro' }, { id: '102', name: 'PS5 Pro Digital' }] }]);
+  // The QA key is allowed to make cashout writes (off by default for real keys).
+  harness.db.apiKey.push({ id: 'qa-api-key', user_id: harness.ids.user, name: 'QA', key_hash: 'qa', key_prefix: 'qa', created_at: new Date(), revoked_at: null, allow_cashout_writes: true });
   harness.db.platform.push({
     id: CASHOUT_PLATFORM_ID, user_id: harness.ids.user, name: 'EB (cashout)', type: 'Cashout',
     fee_pct: 0, workflow_preset: 'CASHOUT',

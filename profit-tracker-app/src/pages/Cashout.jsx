@@ -37,7 +37,7 @@ import { batchCost, effectiveCashbackRate } from '../../../shared/finance.mjs';
 import { displayLabel, statusVisual } from '../data/statusWorkflow';
 import { useMatchMedia } from '../hooks/useMatchMedia';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
-import { offerPendingCommit } from '../utils/pendingCashoutCommit';
+import { offerPendingCommit, offerTrackingSend } from '../utils/pendingCashoutCommit';
 import {
   bestCardForDeal,
   dealConditionLabels,
@@ -921,6 +921,15 @@ function StoreLinks({ deal, large = false }) {
 // provider itself has no way to tell us which tracking number went with
 // which commitment. Deal names come from the current live deals list when
 // available; an expired/closed deal still shows its id.
+// An active commitment whose sale has a tracking number the cashout doesn't
+// have: it changed after committing, or the first send failed.
+const needsTrackingSend = (c) => {
+  const number = String(c.sale?.tracking_number || '').trim().toUpperCase();
+  if (!number) return false;
+  if (c.tracking_error) return true;
+  return !(c.tracking_codes || []).some((code) => String(code).toUpperCase() === number);
+};
+
 function CommitmentsPanel({ commitments, allDeals }) {
   const { deleteCommitment } = useCashoutMutations();
 
@@ -1080,13 +1089,24 @@ function CommitmentsPanel({ commitments, allDeals }) {
                       </div>
                     )}
                     {c.status === 'active' && (
-                      <button
-                        type="button"
-                        onClick={() => withdraw(c)}
-                        className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
-                      >
-                        Withdraw
-                      </button>
+                      <div className="inline-flex gap-1.5">
+                        {needsTrackingSend(c) && (
+                          <button
+                            type="button"
+                            onClick={() => offerTrackingSend({ commitment_id: c.id, tracking_number: c.sale.tracking_number, cashout: c.connection?.display_name })}
+                            className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap bg-[var(--dp-accent)] text-white hover:opacity-90 transition-opacity"
+                          >
+                            Send tracking
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => withdraw(c)}
+                          className="px-2.5 py-1.5 text-[12px] font-semibold rounded-lg whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
+                        >
+                          Withdraw
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -1205,6 +1225,25 @@ function ModalShell({ modalRef, title, subtitle, onClose, busy = false, children
 
 const nameKey = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
+// One line per item in the picker: its name plus the UPC, which tells two
+// colors apart when EB's names are close.
+const itemOptionLabel = (item) => {
+  const upc = item.upcs?.[0];
+  return upc ? `${item.name} · UPC ${upc}` : item.name;
+};
+
+// Under the picker: what EB says about the chosen item.
+function ItemFacts({ item }) {
+  const facts = [
+    item.condition && item.condition !== 'new' ? item.condition.replace(/_/g, ' ') : null,
+    item.upcs?.length ? `UPC ${item.upcs.join(', ')}` : null,
+    item.remainingPercentage != null ? `${Math.round(item.remainingPercentage)}% of the limit left` : null,
+    item.vendorLimit ? `store limit ${item.vendorLimit}` : null,
+  ].filter(Boolean);
+  if (!facts.length) return null;
+  return <p className="mt-1.5 text-[11px] text-[var(--dp-text-secondary)]">{facts.join(' · ')}</p>;
+}
+
 function LogPurchaseModal({ product, onClose }) {
   const offers = product.offers || [product];
   const [offerIndex, setOfferIndex] = useState(0);
@@ -1234,11 +1273,15 @@ function LogPurchaseModal({ product, onClose }) {
   const items = deal.items || [];
   const dealStores = useMemo(() => dealStoreNames(deal), [deal]);
 
-  const [itemId, setItemId] = useState(items[0]?.id || '');
+  // A deal with several items (one per color, size or model) starts with none
+  // picked: each is its own commitment with EB, so the right one has to be a
+  // choice, not whatever EB happens to list first.
+  const onlyItemId = (list) => (list?.length === 1 ? list[0].id : '');
+  const [itemId, setItemId] = useState(() => onlyItemId(items));
   // Another cashout's deal has its own items and its own group to sell to.
   const pickCashout = (index) => {
     setOfferIndex(index);
-    setItemId(offers[index].items?.[0]?.id || '');
+    setItemId(onlyItemId(offers[index].items));
     setSaleToId(null);
     setError(null);
   };
@@ -1283,7 +1326,7 @@ function LogPurchaseModal({ product, onClose }) {
   const totalPayout = Math.round(Number(deal.payout) * quantity * 100) / 100;
 
   const validate = () => {
-    if (!itemId) return 'Pick which item you bought.';
+    if (!itemId) return 'Pick the exact item you bought (color, size or model).';
     if (!vendorId) return 'Pick the store you bought it from.';
     if (!paymentMethodId) return 'Pick the card or account you paid with.';
     if (needsSaleTo && !saleToId) return 'Pick which cashout group you sold it to.';
@@ -1320,16 +1363,20 @@ function LogPurchaseModal({ product, onClose }) {
       }
       if (result.commitPending ?? result.commit_pending) {
         toast.success(`Logged. Not committed to ${deal.connectionName} yet.`, {
-          description: "Add the tracking number to the sale when it ships, and you'll be asked to commit then, at that day's payout.",
+          description: "Add the tracking number when it ships, and you'll be asked to commit then, at that day's payout.",
         });
         onClose();
         return;
       }
-      if (result.trackingSubmitted ?? result.tracking_submitted) {
+      if (result.trackingShared && (result.trackingSubmitted ?? result.tracking_submitted)) {
+        toast.success('Committed and logged.', {
+          description: `That tracking number was already sent to ${deal.connectionName} with another item, so it wasn't sent again.`,
+        });
+      } else if (result.trackingSubmitted ?? result.tracking_submitted) {
         toast.success('Committed and logged -- tracking sent to the cashout.');
       } else {
         toast.success('Committed and logged, but tracking failed to send.', {
-          description: result.tracking_error || 'Resubmit it from the Commitments section.',
+          description: result.tracking_error || 'Send it again with Send tracking in the Commitments section.',
         });
       }
       onClose();
@@ -1368,7 +1415,14 @@ function LogPurchaseModal({ product, onClose }) {
         </p>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
           <dt className="text-[var(--dp-text-label)]">Item</dt>
-          <dd className="text-[var(--dp-text-primary)]">{selectedItem?.name || deal.name}</dd>
+          <dd className="text-[var(--dp-text-primary)] font-semibold">
+            {selectedItem?.name || deal.name}
+            {items.length > 1 && (
+              <span className="block font-normal text-[11px] text-[var(--dp-text-secondary)]">
+                One of {items.length} items in this deal. Make sure it's the exact one you bought.
+              </span>
+            )}
+          </dd>
           <dt className="text-[var(--dp-text-label)]">Quantity</dt>
           <dd className="text-[var(--dp-text-primary)] tabular-nums">{quantity}</dd>
           <dt className="text-[var(--dp-text-label)]">Payout</dt>
@@ -1467,10 +1521,13 @@ function LogPurchaseModal({ product, onClose }) {
                   </LpField>
                 )}
                 {items.length > 1 && (
-                  <LpField id="lp-item" label="Which item" className="sm:col-span-2">
-                    <select id="lp-item" value={itemId} onChange={(e) => setItemId(e.target.value)} className={LP_INPUT}>
-                      {items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  <LpField id="lp-item" label="Which item (color, size or model)" className="sm:col-span-2">
+                    <select id="lp-item" value={itemId} onChange={(e) => { setItemId(e.target.value); setError(null); }}
+                      className={`${LP_INPUT} ${itemId ? '' : 'text-[var(--dp-text-label)]'}`}>
+                      <option value="" disabled>Select the exact item you bought…</option>
+                      {items.map((item) => <option key={item.id} value={item.id}>{itemOptionLabel(item)}</option>)}
                     </select>
+                    {selectedItem && <ItemFacts item={selectedItem} />}
                   </LpField>
                 )}
               </div>
@@ -1528,7 +1585,7 @@ function LogPurchaseModal({ product, onClose }) {
           <LpSection icon={Truck} title="Shipping" tone="text-amber-400">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <LpField id="lp-tracking" label="Tracking number" className={!recordOnly && tracking ? '' : 'sm:col-span-2'}>
-                <input id="lp-tracking" type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
+                <input id="lp-tracking" type="text" maxLength={24} value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
                   placeholder={recordOnly ? '1Z999AA10123456784' : 'Blank if it hasn’t shipped yet'}
                   className={`${LP_INPUT} font-mono`} />
               </LpField>

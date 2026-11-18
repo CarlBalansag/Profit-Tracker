@@ -35,6 +35,11 @@ const required = (value, label) => {
  * failure recorded on the commitment row so the UI can show it and let the
  * item be resubmitted later.
  *
+ * If the commit succeeds but writing the purchase and sale fails, the error
+ * says the commit went through. Logging the same item again with the same
+ * quantity then finds that commitment (it has no sale yet) and records the
+ * purchase against it, without committing a second time.
+ *
  * With no tracking number yet, an EB purchase skips steps 1 and 2 too: the
  * purchase and sale are written, plus a "pending" commitment row holding the
  * deal, item and quantity. Nothing is sent to EB. Adding a tracking number to
@@ -73,9 +78,17 @@ async function logPurchase(userId, {
 
   const conn = await getConnection(userId, connectionId);
   const recordOnly = typeof getAdapter(conn.provider).createCommit !== 'function';
-  const codes = Array.isArray(trackingCodes)
+  let codes = Array.isArray(trackingCodes)
     ? trackingCodes.map((code) => String(code || '').trim()).filter(Boolean)
     : [];
+  let insured;
+  if (!recordOnly) {
+    // Everything that would be sent is checked before anything is saved or sent.
+    commitsService.cleanItemId(itemId);
+    commitsService.cleanQuantity(qty);
+    if (codes.length) codes = commitsService.cleanTrackingCodes(codes);
+    insured = commitsService.cleanInsuredValue(insuredValue);
+  }
   if (codes.length === 0 && recordOnly) {
     throw Object.assign(new Error('At least one tracking number is required.'), { status: 400 });
   }
@@ -96,45 +109,61 @@ async function logPurchase(userId, {
   await requireOwned('platform', vendorId, userId, 'Store');
   await requireOwned('paymentMethod', paymentMethodId, userId, 'Payment method');
 
+  // An active commitment for this item with no purchase recorded yet (made
+  // through MCP, or an earlier Log Purchase whose save failed after the commit
+  // went through) is used as is: nothing is committed a second time.
+  let attachTo = null;
   if (!recordOnly) {
     // EB takes one open commitment per item, and so does our table. Checked
     // before EB is called: a commit EB accepted that we then failed to save
     // would leave a real pledge with no record of it here. A withdrawn
     // commitment doesn't count -- its open_item_id is null.
-    const existing = await prisma.cashoutCommitment.findFirst({
-      where: { connection_id: conn.id, open_item_id: String(itemId) },
-    });
-    if (existing) {
+    let existing = await commitsService.openRowFor(conn.id, itemId);
+    if (existing) existing = await commitsService.recoverStuck(userId, existing);
+    if (existing && existing.status === 'active' && !existing.sale_id && existing.quantity === Number(qty)) {
+      attachTo = existing;
+    } else if (existing && existing.status === 'active' && !existing.sale_id) {
+      throw Object.assign(new Error(`You already have a commitment for this item for ${existing.quantity}, with no purchase logged. Log Purchase with quantity ${existing.quantity} to record it, or change the commitment's quantity first.`), { status: 409 });
+    } else if (existing) {
       throw Object.assign(
-        new Error(existing.status === 'pending'
+        new Error(existing.status === 'pending' || existing.status === 'committing'
           ? 'This item is already logged and waiting to be committed. Add its tracking number to commit it.'
           : 'You already have a commitment for this item. Change its quantity from Commitments instead.'),
         { status: 409 },
       );
     }
+    // The item has to be part of this deal, and the deal still open.
+    if (!attachTo) await commitsService.requireLiveItem(userId, conn.id, dealId, itemId);
   }
 
-  let commitment = null;
+  let commitment = attachTo;
   let trackingSubmitted = false;
+  let trackingShared = false;
   let trackingError = null;
-  if (!recordOnly && !deferCommit) {
+  if (!recordOnly && (!deferCommit || attachTo)) {
     // Step 1: commit with EB. Left to throw straight through -- a failure here
     // (deal closed, already committed, over the limit) means nothing below runs.
-    commitment = await commitsService.createCommitment(userId, connectionId, {
-      dealId, itemId, quantity: qty,
-    });
+    if (!attachTo) {
+      commitment = await commitsService.createCommitment(userId, connectionId, {
+        dealId, itemId, quantity: qty,
+      });
+    }
 
     // Step 2: submit tracking. A failure here is caught, not thrown -- see the
     // doc comment above for why the purchase still gets written either way.
-    try {
-      await commitsService.submitTracking(userId, connectionId, {
-        trackingCodes: codes,
-        description: `${dealName || 'Cashout deal'} x${qty}`.slice(0, 200),
-        insuredValue,
-      });
-      trackingSubmitted = true;
-    } catch (err) {
-      trackingError = err.message;
+    // A code already sent with another commitment (two items in one box) is
+    // not sent again; only the new ones go.
+    if (codes.length) {
+      try {
+        const ctx = await commitsService.connectionAndAdapter(userId, connectionId);
+        const sent = await commitsService.sendNewTracking(userId, ctx, {
+          codes, description: `${dealName || 'Cashout deal'} x${qty}`, insuredValue: insured, commitmentId: commitment.id,
+        });
+        trackingShared = sent.shared.length > 0;
+        trackingSubmitted = true;
+      } catch (err) {
+        trackingError = err.message;
+      }
     }
   }
 
@@ -163,7 +192,9 @@ async function logPurchase(userId, {
   const statusChangedAt = new Date();
   if (saleWorkflowData.workflow_status) saleWorkflowData.workflow_status_changed_at = statusChangedAt;
 
-  const { inventory, sale, commitment: updatedCommitment } = await prisma.$transaction(async (tx) => {
+  let books;
+  try {
+  books = await prisma.$transaction(async (tx) => {
     const createdInventory = await tx.inventory.create({
       data: {
         user_id: userId,
@@ -196,7 +227,7 @@ async function logPurchase(userId, {
       },
     });
 
-    if (deferCommit) {
+    if (deferCommit && !attachTo) {
       const pending = await tx.cashoutCommitment.create({
         data: {
           user_id: userId,
@@ -217,20 +248,39 @@ async function logPurchase(userId, {
       where: { id: commitment.id },
       data: {
         sale_id: createdSale.id,
-        tracking_codes: trackingSubmitted ? codes : [],
-        tracking_submitted_at: trackingSubmitted ? new Date() : null,
+        // Attaching with no new number keeps what the commitment already had.
+        tracking_codes: trackingSubmitted ? [...new Set([...(attachTo?.tracking_codes || []), ...codes])] : (attachTo?.tracking_codes || []),
+        tracking_submitted_at: trackingSubmitted ? new Date() : (attachTo?.tracking_submitted_at || null),
         tracking_error: trackingError,
       },
     });
 
     return { inventory: createdInventory, sale: createdSale, commitment: updatedCommitment };
   });
+  } catch (err) {
+    if (!commitment) throw err;
+    // The commit (and maybe the tracking) already went to the cashout. Keep
+    // what was sent on the commitment, and say plainly what happened.
+    await prisma.cashoutCommitment.update({
+      where: { id: commitment.id },
+      data: {
+        ...(trackingSubmitted ? { tracking_codes: codes, tracking_submitted_at: new Date() } : {}),
+        tracking_error: trackingError,
+      },
+    }).catch(() => null);
+    throw Object.assign(new Error(
+      `Committed to ${conn.display_name || 'the cashout'}${trackingSubmitted ? ' and tracking sent' : ''}, but saving the purchase here failed (${err.message}). `
+      + 'Log Purchase again for this item with the same quantity: it will record it against that commitment without committing twice.',
+    ), { status: 500, committed: true });
+  }
+  const { inventory, sale, commitment: updatedCommitment } = books;
 
   return {
     inventory,
     sale,
     commitment: updatedCommitment,
     trackingSubmitted,
+    trackingShared,
     trackingError,
     recordedOnly: recordOnly,
     commitPending: deferCommit,

@@ -12,6 +12,7 @@ const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 const { markPaidBatch } = require('../validation/schemas');
 const { markSalesPaid } = require('../services/markSalesPaid');
 const pendingCommit = require('../services/cashouts/pendingCommit');
+const cashoutCommits = require('../services/cashouts/commits');
 
 // Task 8 read cutover: substitute each Decimal column's exact value into its
 // paired Float field, for a sale and its nested inventory/platform (if included).
@@ -282,10 +283,15 @@ router.put('/:id', isAuthenticated, validateBody(updateSale), async (req, res, n
     // client asks whether to commit it now (nothing is committed here).
     const trackingAdded = Boolean(tracking_number) && tracking_number !== existing.tracking_number;
     const cashoutCommitPending = trackingAdded ? await pendingCommit.pendingForSale(updated.id) : null;
+    // Already committed: the cashout has the old number (or none), so the
+    // client offers to send this one.
+    const cashoutTrackingChanged = trackingAdded && !cashoutCommitPending
+      ? await cashoutCommits.trackingChangedForSale(updated.id, tracking_number) : null;
     res.json({
       ...exactSale(updated),
       activity_id: activity?.id ?? null,
       ...(cashoutCommitPending ? { cashout_commit_pending: cashoutCommitPending } : {}),
+      ...(cashoutTrackingChanged ? { cashout_tracking_changed: cashoutTrackingChanged } : {}),
     });
   } catch (err) {
     next(err);
@@ -301,6 +307,7 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
     }
     // Snapshotted first (the sale, its refunds, the stock it gives back, any
     // cashout commitment linked to it) so the Activity log can put it back.
+    const cashoutWarning = await activeCommitmentWarning([existing.id]);
     const { activity } = await prisma.$transaction(async (tx) => activityLog.trackChange(tx, req.user.id, {
       action: 'delete',
       recordType: 'sale',
@@ -338,7 +345,7 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
       }
     }));
     await publishCalendarFeed(req.user.id);
-    res.json({ success: true, activity_id: activity?.id ?? null });
+    res.json({ success: true, activity_id: activity?.id ?? null, ...(cashoutWarning ? { cashout_warning: cashoutWarning } : {}) });
   } catch (err) {
     next(err);
   }
@@ -396,10 +403,13 @@ router.post('/:id/actions/:action', isAuthenticated, validateBody(statusActionBo
     // The recomputed actions travel with the record so the client can redraw
     // its buttons without a second request.
     const cashoutCommitPending = action === 'add_outbound_tracking' ? await pendingCommit.pendingForSale(id) : null;
+    const cashoutTrackingChanged = action === 'add_outbound_tracking' && !cashoutCommitPending
+      ? await cashoutCommits.trackingChangedForSale(id, result.record.tracking_number) : null;
     res.json({
       ...withActions(exactSale(result.record)),
       activity_id: result.activity.id,
       ...(cashoutCommitPending ? { cashout_commit_pending: cashoutCommitPending } : {}),
+      ...(cashoutTrackingChanged ? { cashout_tracking_changed: cashoutTrackingChanged } : {}),
     });
   } catch (err) {
     next(err);
@@ -438,5 +448,18 @@ router.post('/:id/track', isAuthenticated, async (req, res, next) => {
     next(err);
   }
 });
+
+// Deleting a purchase or sale here doesn't withdraw its cashout commitment:
+// that pledge stays live with the provider. Said in the delete response.
+async function activeCommitmentWarning(saleIds) {
+  if (!saleIds.length) return null;
+  const active = await prisma.cashoutCommitment.findFirst({
+    where: { sale_id: { in: saleIds }, status: 'active' },
+    include: { connection: true },
+  });
+  if (!active) return null;
+  const name = active.connection?.display_name || active.connection?.provider || 'the cashout';
+  return `Your commitment with ${name} is still active: deleting here doesn't withdraw it. Withdraw it in Cashout > Commitments if you're not sending the item.`;
+}
 
 module.exports = router;
