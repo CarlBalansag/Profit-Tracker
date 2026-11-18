@@ -11,8 +11,8 @@ const EASE = [0.16, 1, 0.3, 1];
 // Fixed order, so a store keeps its color as long as it keeps its rank.
 const SHARE_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100'];
 const OTHER_COLOR = '#898781';
-const MAX_ROUTE_STORES = 8;
-const MAX_ROUTE_CHANNELS = 6;
+const MAX_ROUTE_STORES = 10;
+const MAX_ROUTE_CHANNELS = 8;
 
 const fmt = (n) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const usd = (n) => `${n < 0 ? '−' : ''}$${fmt(Math.abs(n ?? 0))}`;
@@ -118,61 +118,88 @@ export function StoreRoutes({ routes, loading }) {
   const shownChannels = channels.slice(0, MAX_ROUTE_CHANNELS);
   const cell = new Map(routes.map((r) => [`${r.store}|${r.channel}`, r]));
   const max = Math.max(1, ...routes.map((r) => Math.abs(r.profitPerUnit)));
+  const shade = (ppu) => (ppu >= 0
+    ? `color-mix(in srgb, var(--dp-green-text) ${Math.round(12 + (Math.abs(ppu) / max) * 50)}%, transparent)`
+    : `color-mix(in srgb, var(--dp-red-text) ${Math.round(18 + (Math.abs(ppu) / max) * 50)}%, transparent)`);
+  const routesFor = (store) => shownChannels.map((c) => cell.get(`${store}|${c}`)).filter(Boolean);
+  const bestFor = (store) => {
+    const list = routesFor(store);
+    if (list.length < 2) return null;
+    return list.reduce((top, r) => (r.profitPerUnit > top.profitPerUnit ? r : top));
+  };
+  const titleOf = (r) => `${r.store} → ${r.channel}: ${usd(r.profitPerUnit)} per unit · ${r.unitsSold} unit${r.unitsSold === 1 ? '' : 's'} · ${usd(r.profit)} total`;
 
   return (
     <Panel title="Where each store's items sell best" sub="Average profit per unit, by the store you bought from and where it sold. The best route for each store is outlined.">
       {routes.length ? (
         <>
-          <div className="overflow-x-auto">
-            <div
-              className="grid min-w-max gap-1.5 text-xs tabular-nums"
-              style={{ gridTemplateColumns: `minmax(90px, max-content) repeat(${shownChannels.length}, minmax(76px, 1fr))` }}
-              role="table"
-              aria-label="Profit per unit by store and where it sold"
-            >
-              <span role="columnheader" />
-              {shownChannels.map((c) => (
-                <span key={c} role="columnheader" className="truncate px-1 pb-1 text-center text-[11px] text-[var(--dp-text-label)]" title={c}>{c}</span>
-              ))}
-              {shownStores.map((store, si) => {
-                const best = shownChannels
-                  .map((c) => cell.get(`${store}|${c}`))
-                  .filter(Boolean)
-                  .reduce((top, r) => (r.profitPerUnit > (top?.profitPerUnit ?? -Infinity) ? r : top), null);
-                return (
-                  <React.Fragment key={store}>
-                    <span role="rowheader" className="self-center truncate pr-2 text-[var(--dp-text-secondary)]" title={store}>{store}</span>
-                    {shownChannels.map((c, ci) => {
-                      const r = cell.get(`${store}|${c}`);
-                      if (!r) {
-                        return <span key={c} role="cell" className="rounded-md bg-[var(--dp-hover-bg)] py-2 text-center text-[var(--dp-text-label)]">—</span>;
-                      }
-                      const strength = Math.abs(r.profitPerUnit) / max;
-                      const bg = r.profitPerUnit >= 0
-                        ? `color-mix(in srgb, var(--dp-green-text) ${Math.round(12 + strength * 50)}%, transparent)`
-                        : `color-mix(in srgb, var(--dp-red-text) ${Math.round(18 + strength * 50)}%, transparent)`;
-                      const isBest = best === r && shownChannels.filter((x) => cell.get(`${store}|${x}`)).length > 1;
-                      return (
-                        <MotionDiv
-                          key={c}
-                          role="cell"
-                          title={`${store} → ${c}: ${usd(r.profitPerUnit)} per unit · ${r.unitsSold} unit${r.unitsSold === 1 ? '' : 's'} · ${usd(r.profit)} total`}
-                          className="rounded-md py-1.5 text-center"
-                          style={{ backgroundColor: bg, outline: isBest ? '1.5px solid var(--dp-text-primary)' : 'none', outlineOffset: -1.5 }}
-                          initial={{ opacity: 0, scale: 0.85 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ duration: 0.35, ease: EASE, delay: Math.min((si * shownChannels.length + ci) * 0.03, 0.6) }}
-                        >
-                          <div className="font-semibold text-[var(--dp-text-primary)]">{signedShort(r.profitPerUnit)}</div>
-                          <div className="text-[10px] text-[var(--dp-text-secondary)]">{r.unitsSold} unit{r.unitsSold === 1 ? '' : 's'}</div>
-                        </MotionDiv>
-                      );
-                    })}
-                  </React.Fragment>
-                );
-              })}
-            </div>
+          {/* Wider screens: a grid that always fits the card, no scrolling. */}
+          <div
+            className="hidden sm:grid gap-1.5 text-xs tabular-nums"
+            style={{ gridTemplateColumns: `minmax(72px, 150px) repeat(${shownChannels.length}, minmax(0, 1fr))` }}
+            role="table"
+            aria-label="Profit per unit by store and where it sold"
+          >
+            <span role="columnheader" />
+            {shownChannels.map((c) => (
+              <span key={c} role="columnheader" className="truncate px-1 pb-1 text-center text-[11px] text-[var(--dp-text-label)]" title={c}>{c}</span>
+            ))}
+            {shownStores.map((store, si) => {
+              const best = bestFor(store);
+              return (
+                <React.Fragment key={store}>
+                  <span role="rowheader" className="self-center truncate pr-2 text-[var(--dp-text-secondary)]" title={store}>{store}</span>
+                  {shownChannels.map((c, ci) => {
+                    const r = cell.get(`${store}|${c}`);
+                    if (!r) {
+                      return <span key={c} role="cell" className="rounded-md bg-[var(--dp-hover-bg)] py-2 text-center text-[var(--dp-text-label)]">—</span>;
+                    }
+                    return (
+                      <MotionDiv
+                        key={c}
+                        role="cell"
+                        title={titleOf(r)}
+                        className="min-w-0 rounded-md py-1.5 text-center"
+                        style={{ backgroundColor: shade(r.profitPerUnit), outline: best === r ? '1.5px solid var(--dp-text-primary)' : 'none', outlineOffset: -1.5 }}
+                        initial={{ opacity: 0, scale: 0.85 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.35, ease: EASE, delay: Math.min((si * shownChannels.length + ci) * 0.03, 0.6) }}
+                      >
+                        <div className="font-semibold text-[var(--dp-text-primary)]">{signedShort(r.profitPerUnit)}</div>
+                        <div className="truncate text-[10px] text-[var(--dp-text-secondary)]">{r.unitsSold} unit{r.unitsSold === 1 ? '' : 's'}</div>
+                      </MotionDiv>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })}
           </div>
+
+          {/* Phones: one row per store, its routes as chips, best first. */}
+          <ul className="space-y-3 sm:hidden">
+            {shownStores.map((store) => {
+              const best = bestFor(store);
+              const list = routesFor(store).sort((a, b) => b.profitPerUnit - a.profitPerUnit);
+              return (
+                <li key={store}>
+                  <div className="mb-1.5 truncate text-xs font-medium text-[var(--dp-text-primary)]">{store}</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {list.map((r) => (
+                      <span
+                        key={r.channel}
+                        title={titleOf(r)}
+                        className="rounded-md px-2 py-1 text-[11px] tabular-nums text-[var(--dp-text-primary)]"
+                        style={{ backgroundColor: shade(r.profitPerUnit), outline: best === r ? '1.5px solid var(--dp-text-primary)' : 'none', outlineOffset: -1.5 }}
+                      >
+                        {r.channel} <b>{signedShort(r.profitPerUnit)}</b> <span className="text-[var(--dp-text-secondary)]">· {r.unitsSold}u</span>
+                      </span>
+                    ))}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
           {(stores.length > shownStores.length || channels.length > shownChannels.length) && (
             <p className="mt-3 text-[11px] text-[var(--dp-text-muted)]">
               Showing your top {shownStores.length} stores by profit and {shownChannels.length} busiest places you sell.

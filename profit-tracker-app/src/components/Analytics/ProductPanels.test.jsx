@@ -45,8 +45,15 @@ describe('StoreRoutes', () => {
       route('Nike', 'StockX', 38, 10), route('Nike', 'eBay', 22, 4), route('Amazon', 'eBay', 12, 6),
     ]} />);
     expect(screen.getByRole('columnheader', { name: 'StockX' })).toBeInTheDocument();
-    expect(screen.getByTitle('Nike → StockX: $38.00 per unit · 10 units · $380.00 total')).toHaveTextContent('+$38');
-    expect(screen.getAllByText('—')).toHaveLength(1); // Amazon → StockX
+    // The wide grid and the phone list are both in the page; CSS shows one.
+    const [gridCell, chip] = screen.getAllByTitle('Nike → StockX: $38.00 per unit · 10 units · $380.00 total');
+    expect(gridCell).toHaveAttribute('role', 'cell');
+    expect(gridCell).toHaveTextContent('+$38');
+    expect(chip).toHaveTextContent('StockX +$38 · 10u');
+    expect(screen.getAllByText('—')).toHaveLength(1); // Amazon → StockX, grid only
+    // Each store's best route is outlined in both, and only when it has a choice.
+    expect(gridCell.style.outline).toContain('solid');
+    expect(screen.getAllByTitle(/^Amazon → eBay/)[0].style.outline).toBe('none');
   });
 
   it('says so when nothing sold', () => {

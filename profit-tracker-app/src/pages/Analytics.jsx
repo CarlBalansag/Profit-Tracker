@@ -269,7 +269,7 @@ function Analytics() {
         )}
 
         {activeTab === 'products' && (
-          <Rise key={`products-${mode}-${dateRange}`} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Rise key={`products-${mode}-${dateRange}`} className="grid grid-cols-1 lg:grid-cols-2 items-start gap-6">
             <RiseItem>
               <Panel title="Store ROI" sub="Profit on items sold this period, by the store you bought them from.">
                 {storesWithSales.length ? (
@@ -294,9 +294,13 @@ function Analytics() {
                 ) : <Empty>{loading ? 'Loading…' : 'No sold items in this period'}</Empty>}
               </Panel>
             </RiseItem>
-            <RiseItem><ProfitShare stores={storesWithSales} loading={loading} /></RiseItem>
-            <RiseItem><PriceBands bands={data?.priceBands ?? []} loading={loading} /></RiseItem>
-            <RiseItem><StoreRoutes routes={data?.storeChannels ?? []} loading={loading} /></RiseItem>
+            {/* The two shorter cards stack beside Store ROI, so neither waits
+                for it to end; the store-to-channel grid gets the full width. */}
+            <RiseItem className="space-y-6">
+              <ProfitShare stores={storesWithSales} loading={loading} />
+              <PriceBands bands={data?.priceBands ?? []} loading={loading} />
+            </RiseItem>
+            <RiseItem className="lg:col-span-2"><StoreRoutes routes={data?.storeChannels ?? []} loading={loading} /></RiseItem>
           </Rise>
         )}
 
