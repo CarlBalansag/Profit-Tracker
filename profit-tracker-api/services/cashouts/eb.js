@@ -1,5 +1,8 @@
 const BASE_URL = 'https://api.electronicsbuyer.gg';
 const TIMEOUT_MS = 10000;
+// EB's API gives no per-deal web address, so the Cashout page's link button
+// opens the deals list on EB's vendor dashboard instead.
+const DEALS_PAGE_URL = 'https://electronicsbuyer.gg/app/deals';
 
 // Shared request helper for the commits/tracking endpoints added after
 // testKey/fetchDeals -- those two keep their own inline fetch rather than
@@ -197,6 +200,7 @@ const ebAdapter = {
           payout: typeof deal.payout === 'number' ? deal.payout : (parseFloat(deal.payout) || 0),
           profitMargin: typeof deal.profit_margin === 'number' ? deal.profit_margin : (parseFloat(deal.profit_margin) || 0),
           productLinks: Array.isArray(deal.product_links) ? deal.product_links : [],
+          dealUrl: DEALS_PAGE_URL,
           categoryId: deal.category_id ? String(deal.category_id) : null,
           expiresAt: deal.expires_at ? new Date(deal.expires_at * 1000).toISOString() : null,
           startsAt: deal.starts_at ? new Date(deal.starts_at * 1000).toISOString() : null,

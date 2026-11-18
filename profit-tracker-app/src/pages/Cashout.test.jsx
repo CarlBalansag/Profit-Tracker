@@ -70,6 +70,12 @@ let currentProviders = mockProviders;
 let currentConnections = mockConnections;
 let currentCommitments = [];
 let currentDeals = mockDeals;
+const defaultPaymentMethods = [
+  { id: 'card-1', name: 'QA Card', default_cashback_rate: 2 },
+  // 1% everywhere, 5% at Amazon (store rates arrive as a JSON string too).
+  { id: 'card-amazon', name: 'Amazon Card', default_cashback_rate: 1, category_rates: JSON.stringify([{ store: 'Amazon', rate: 5 }]) },
+];
+let currentPaymentMethods = defaultPaymentMethods;
 const gainRowButton = () => within(screen.getByText('Gain Deal').closest('tr')).getByRole('button', { name: 'Log Purchase' });
 let dealsState = {};
 let connectionsState = {};
@@ -92,15 +98,7 @@ vi.mock('../hooks/useApi', () => ({
     isLoading: false,
     error: null,
   }),
-  usePaymentMethods: () => ({
-    data: [
-      { id: 'card-1', name: 'QA Card', default_cashback_rate: 2 },
-      // 1% everywhere, 5% at Amazon (store rates arrive as a JSON string too).
-      { id: 'card-amazon', name: 'Amazon Card', default_cashback_rate: 1, category_rates: JSON.stringify([{ store: 'Amazon', rate: 5 }]) },
-    ],
-    isLoading: false,
-    error: null,
-  }),
+  usePaymentMethods: () => ({ data: currentPaymentMethods, isLoading: false, error: null }),
 }));
 
 vi.mock('sonner', () => ({
@@ -115,6 +113,7 @@ describe('Cashout Page', () => {
     currentConnections = mockConnections;
     currentDeals = mockDeals;
     currentCommitments = [];
+    currentPaymentMethods = defaultPaymentMethods;
     dealsState = {};
     connectionsState = {};
     providersState = {};
@@ -232,7 +231,7 @@ describe('Cashout Page', () => {
     );
 
     expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(
-      ['Deal / Item', 'Cashout', 'Payout', 'Retail', 'Est. Profitbefore tax', 'Expires', 'Buy At', 'Actions'],
+      ['Deal / Item', 'Cashout', 'Payout', 'Retail', 'Est. Profitbefore tax', 'Best Cardprofit with rewards', 'Expires', 'Buy At', 'Actions'],
     );
     expect(gainRowButton()).toBeEnabled();
     const gainRow = screen.getByText('Gain Deal').closest('tr');
@@ -1184,6 +1183,74 @@ describe('Cashout Page', () => {
     const links = screen.getAllByRole('link', { name: 'Open on Points4Days' });
     expect(links[0]).toHaveAttribute('href', 'https://www.points4days.com/p/it@deals/deal/9');
     expect(screen.getAllByText('Points4Days').length).toBeGreaterThan(0);
+  });
+
+  it('links an ElectronicsBuyer deal to the deals page on its website, like Points4Days', () => {
+    currentDeals = {
+      results: [{
+        connection: mockConnections[0],
+        deals: [{ id: '1', name: 'EB Deal', payout: 120, retail: 100, dealUrl: 'https://electronicsbuyer.gg/app/deals', items: [] }],
+      }],
+    };
+    render(<MemoryRouter><Cashout /></MemoryRouter>);
+
+    const link = within(screen.getByText('EB Deal').closest('tr')).getByRole('link', { name: 'Open on EB Primary' });
+    expect(link).toHaveAttribute('href', 'https://electronicsbuyer.gg/app/deals');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('title', 'Open on EB Primary');
+  });
+
+  describe('Best Card column', () => {
+    const amazonDeal = {
+      id: 'amz', name: 'Amazon Deal', payout: 210, retail: 200,
+      items: [{ id: 'i1', name: 'Amazon Deal', purchaseLinks: [{ name: 'Amazon', url: 'https://amazon.com/dp/B000000000' }] }],
+    };
+    const showDeals = (deals) => {
+      currentDeals = { results: [{ connection: mockConnections[0], deals }] };
+      render(<MemoryRouter><Cashout /></MemoryRouter>);
+    };
+    const bestCardCell = (name) => within(screen.getByText(name).closest('tr')).getAllByRole('cell')[5];
+
+    it('shows the card with the best rate at the deal\'s store and the profit with its cashback', () => {
+      currentPaymentMethods = [
+        { id: 'flat', name: 'Flat 2%', default_cashback_rate: 2, category_rates: [] },
+        { id: 'prime', name: 'Prime Visa', default_cashback_rate: 1, category_rates: [{ store: 'Amazon', rate: 5 }] },
+      ];
+      showDeals([amazonDeal]);
+
+      const cell = bestCardCell('Amazon Deal');
+      expect(within(cell).getByText('Prime Visa')).toBeInTheDocument();
+      expect(within(cell).getByText('5% at Amazon')).toBeInTheDocument();
+      // $10 deal profit + 5% of $200 retail
+      expect(within(cell).getByText('+$20.00')).toBeInTheDocument();
+    });
+
+    it('skips an expired store rate', () => {
+      currentPaymentMethods = [
+        { id: 'flat', name: 'Flat 2%', default_cashback_rate: 2, category_rates: [] },
+        { id: 'prime', name: 'Prime Visa', default_cashback_rate: 1, category_rates: JSON.stringify([{ store: 'Amazon', rate: 5, expires: '2020-01-01' }]) },
+      ];
+      showDeals([amazonDeal]);
+
+      const cell = bestCardCell('Amazon Deal');
+      expect(within(cell).getByText('Flat 2%')).toBeInTheDocument();
+      expect(within(cell).getByText('2% at Amazon')).toBeInTheDocument();
+      expect(within(cell).getByText('+$14.00')).toBeInTheDocument();
+    });
+
+    it('links to Payment Methods when no card is saved', () => {
+      currentPaymentMethods = [];
+      showDeals([amazonDeal]);
+
+      expect(within(bestCardCell('Amazon Deal')).getByRole('link', { name: 'Add a card' })).toHaveAttribute('href', '/settings');
+    });
+
+    it('shows a dash when no saved card earns anything', () => {
+      currentPaymentMethods = [{ id: 'debit', name: 'Checking', default_cashback_rate: 0 }];
+      showDeals([amazonDeal]);
+
+      expect(bestCardCell('Amazon Deal')).toHaveTextContent('—');
+    });
   });
 
   describe('same product on several cashouts', () => {
