@@ -1087,7 +1087,7 @@ function ModalShell({ modalRef, title, subtitle, onClose, busy = false, children
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
       <div ref={modalRef} role="dialog" aria-modal="true" aria-label={title}
-        className="w-full max-w-lg rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+        className="w-full max-w-xl rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
           <div>
             <h3 className="font-bold text-base text-[var(--dp-text-primary)]">{title}</h3>
@@ -1323,7 +1323,7 @@ function LogPurchaseModal({ product, onClose }) {
       <form
         ref={modalRef}
         onSubmit={submit}
-        className="w-full max-w-lg rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4 max-h-[85vh] overflow-y-auto"
+        className="w-full max-w-xl rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4 max-h-[85vh] overflow-y-auto"
       >
         <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
           <div>
@@ -1337,7 +1337,7 @@ function LogPurchaseModal({ product, onClose }) {
 
         {offers.length > 1 && (
           <div className="space-y-1.5">
-            <label htmlFor="lp-cashout" className="text-[11px] text-[var(--dp-text-label)]">Cashout</label>
+            <label htmlFor="lp-cashout" className="block text-[11px] text-[var(--dp-text-label)]">Cashout</label>
             <select id="lp-cashout" value={offerIndex} onChange={(e) => pickCashout(Number(e.target.value))} className={SELECT_CLASS + ' w-full'}>
               {offers.map((offer, index) => (
                 <option key={`${offer.connectionId}-${offer.id}`} value={index}>
@@ -1366,7 +1366,7 @@ function LogPurchaseModal({ product, onClose }) {
 
         {needsSaleTo && (
           <div className="space-y-1.5">
-            <label htmlFor="lp-saleto" className="text-[11px] text-[var(--dp-text-label)]">Sold to</label>
+            <label htmlFor="lp-saleto" className="block text-[11px] text-[var(--dp-text-label)]">Sold to</label>
             <select id="lp-saleto" value={saleToId} onChange={(e) => setSaleToId(e.target.value)} className={SELECT_CLASS + ' w-full'}>
               <option value="">Select a cashout group…</option>
               {cashoutGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
@@ -1376,36 +1376,36 @@ function LogPurchaseModal({ product, onClose }) {
 
         {items.length > 1 && (
           <div className="space-y-1.5">
-            <label htmlFor="lp-item" className="text-[11px] text-[var(--dp-text-label)]">Which item</label>
+            <label htmlFor="lp-item" className="block text-[11px] text-[var(--dp-text-label)]">Which item</label>
             <select id="lp-item" value={itemId} onChange={(e) => setItemId(e.target.value)} className={SELECT_CLASS + ' w-full'}>
               {items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label htmlFor="lp-qty" className="text-[11px] text-[var(--dp-text-label)]">Quantity</label>
+            <label htmlFor="lp-qty" className="block text-[11px] text-[var(--dp-text-label)]">Quantity</label>
             <input id="lp-qty" type="number" min="1" value={quantity} onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
               className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none" />
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="lp-cost" className="text-[11px] text-[var(--dp-text-label)]">Unit cost (what you paid)</label>
+            <label htmlFor="lp-cost" className="block text-[11px] text-[var(--dp-text-label)]">Unit cost (what you paid)</label>
             <input id="lp-cost" type="number" step="0.01" min="0" value={unitCost} onChange={(e) => setUnitCost(e.target.value)}
               className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none" />
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label htmlFor="lp-store" className="text-[11px] text-[var(--dp-text-label)]">Store</label>
+            <label htmlFor="lp-store" className="block text-[11px] text-[var(--dp-text-label)]">Store</label>
             <select id="lp-store" value={vendorId} onChange={(e) => setVendorId(e.target.value)} className={SELECT_CLASS + ' w-full'}>
               <option value="">Select a store…</option>
               {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="lp-pay" className="text-[11px] text-[var(--dp-text-label)]">Payment method</label>
+            <label htmlFor="lp-pay" className="block text-[11px] text-[var(--dp-text-label)]">Payment method</label>
             <select id="lp-pay" value={paymentMethodId} onChange={(e) => setPaymentMethodId(e.target.value)} className={SELECT_CLASS + ' w-full'}>
               <option value="">Select a card/account…</option>
               {paymentMethods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
@@ -1413,9 +1413,9 @@ function LogPurchaseModal({ product, onClose }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label htmlFor="lp-tax" className="text-[11px] text-[var(--dp-text-label)]">Sales tax</label>
+            <label htmlFor="lp-tax" className="block text-[11px] text-[var(--dp-text-label)]">Sales tax</label>
             {taxExempt ? (
               <p className="text-xs text-[var(--dp-text-secondary)] px-3 py-2">$0.00 (tax-exempt store)</p>
             ) : (
@@ -1432,21 +1432,21 @@ function LogPurchaseModal({ product, onClose }) {
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="lp-tracking" className="text-[11px] text-[var(--dp-text-label)]">Tracking number</label>
+          <label htmlFor="lp-tracking" className="block text-[11px] text-[var(--dp-text-label)]">Tracking number</label>
           <input id="lp-tracking" type="text" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
             placeholder={recordOnly ? '1Z999AA10123456784' : "Leave blank if it hasn't shipped yet"}
             className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none" />
         </div>
 
         {!recordOnly && tracking && <div className="space-y-1.5">
-          <label htmlFor="lp-insured" className="text-[11px] text-[var(--dp-text-label)]">Insured value (optional, $200–$1,500)</label>
+          <label htmlFor="lp-insured" className="block text-[11px] text-[var(--dp-text-label)]">Insured value (optional, $200–$1,500)</label>
           <input id="lp-insured" type="number" min="200" max="1500" step="0.01" value={insuredValue} onChange={(e) => setInsuredValue(e.target.value)}
             placeholder="Leave blank to skip insurance"
             className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none" />
         </div>}
 
         <div className="space-y-1.5">
-          <label htmlFor="lp-date" className="text-[11px] text-[var(--dp-text-label)]">Purchase date</label>
+          <label htmlFor="lp-date" className="block text-[11px] text-[var(--dp-text-label)]">Purchase date</label>
           <input id="lp-date" type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)}
             className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] focus:outline-none" />
         </div>
