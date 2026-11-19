@@ -395,7 +395,7 @@ function CreditCard() {
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--dp-accent-bg)]">
                         <CreditCardIcon size={15} className="text-[var(--dp-accent-light)]" />
                       </span>
-                      <span className="truncate text-sm font-semibold text-[var(--dp-text-primary)]" title={card.name}>
+                      <span className="line-clamp-2 sm:line-clamp-1 break-words text-sm font-semibold leading-snug text-[var(--dp-text-primary)]" title={card.name}>
                         {card.name}
                       </span>
                     </div>
@@ -421,13 +421,15 @@ function CreditCard() {
               {activeCard && (creditLimit > 0 || days !== null || minPayment !== null) && (
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-400">
                   {creditLimit > 0 && (
-                    <span className="flex items-center gap-2 whitespace-nowrap">
+                    // Wraps on narrow phones: label + bar + % on one line, the
+                    // amount moves under them instead of running off-screen.
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span className="font-semibold uppercase tracking-wider">Utilization</span>
-                      <span className="block h-1.5 w-24 overflow-hidden rounded-full bg-[var(--dp-border-hover)]">
+                      <span className="block h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-[var(--dp-border-hover)]">
                         <span className="block h-full rounded-full transition-[width] duration-300" style={{ width: `${utilPct}%`, background: utilColor }} />
                       </span>
                       <span className="font-semibold tabular-nums" style={{ color: utilColor }}>{utilPct.toFixed(0)}%</span>
-                      <span className="tabular-nums">{money(totalSpend)} / ${fmt(creditLimit)}</span>
+                      <span className="tabular-nums whitespace-nowrap">{money(totalSpend)} / ${fmt(creditLimit)}</span>
                     </span>
                   )}
                   {minPayment !== null && (

@@ -33,6 +33,9 @@
     --dp-accent-light: var(--color-accent-light);
     --dp-accent-bg: var(--color-accent-bg);
     --dp-accent-gradient: var(--color-accent-gradient);
+    /* Accent used as text. Same as --dp-accent in light mode; the dark theme
+       lightens it so small accent text clears 4.5:1 on dark surfaces. */
+    --dp-accent-text: var(--dp-accent);
     --dp-green-bg: var(--color-success-bg);
     --dp-green-text: var(--color-success-text);
     --dp-red-bg: var(--color-danger-bg);
@@ -419,12 +422,12 @@
   .carbon-workspace :is([class^="text-pink"],[class*=" text-pink"]),
   .carbon-workspace :is([class^="text-violet"],[class*=" text-violet"]),
   .carbon-workspace :is([class^="text-sky"],[class*=" text-sky"]) {
-    color: var(--dp-accent) !important;
+    color: var(--dp-accent-text) !important;
   }
 
   .carbon-workspace [class*="text-[#60a5fa]"],
   .carbon-workspace [class*="text-[#c084fc]"] {
-    color: var(--dp-accent) !important;
+    color: var(--dp-accent-text) !important;
   }
 
   .carbon-workspace :is([class^="bg-amber"],[class*=" bg-amber"]),
@@ -689,6 +692,18 @@
     border-color: var(--glass-accent) !important;
     color: #111315 !important;
   }
+
+  /* F1: no modal may be taller than the screen. Every modal gets
+     role=dialog + aria-modal from useModalKeyboard; a modal that sets its own
+     max-h/overflow utility keeps it (utilities beat this layer). Short
+     screens (phone landscape, on-screen keyboard) scroll the dialog body
+     instead of pushing the title and buttons off-screen. The mobile nav
+     drawer (<aside>) is excluded. */
+  [role="dialog"][aria-modal="true"]:not(aside) {
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
 }
 
 @layer utilities {
@@ -741,7 +756,7 @@
 }
 
 .carbon-workspace .dp-clickable-card:hover .dp-card-value {
-  color: var(--dp-accent) !important;
+  color: var(--dp-accent-text) !important;
 }
 
 .carbon-workspace .dp-clickable-card:hover .dp-card-subtext {
@@ -759,7 +774,7 @@
 }
 
 .carbon-workspace .dp-clickable-card:hover .dp-card-info-btn {
-  color: var(--dp-accent) !important;
+  color: var(--dp-accent-text) !important;
   background-color: color-mix(in srgb, var(--dp-accent) 15%, transparent) !important;
 }
 
@@ -822,7 +837,7 @@
 }
 
 .carbon-workspace .dp-clickable-pipeline:hover .dp-pipeline-count {
-  color: var(--dp-accent) !important;
+  color: var(--dp-accent-text) !important;
 }
 
 .carbon-workspace .dp-clickable-pipeline:hover .dp-pipeline-icon-wrap {
@@ -1098,7 +1113,7 @@ body,
   font-weight: 500;
 }
 .calendar-wrapper .fc .fc-daygrid-more-link:hover {
-  color: var(--dp-accent);
+  color: var(--dp-accent-text);
 }
 
 /* Popover that appears when clicking "+N more" */
@@ -1319,6 +1334,9 @@ body,
   --dp-field-label: #d4d2ce;
   /* Accent's light step: the base accent is too dark to read at 11px here. */
   --dp-table-label: var(--dp-accent-light);
+  /* Accent as text: the base accent is 1.96:1 on the card colour here, so
+     text uses a lighter step (about 6:1). Fills keep the base accent. */
+  --dp-accent-text: color-mix(in srgb, var(--accent-300) 70%, #ffffff);
   /* Accent comes from the --accent-* preset via the palette; dark mode just
      uses a slightly stronger tint behind accent text. */
   --dp-accent-bg: rgba(var(--accent-rgb), 0.18);
@@ -1423,7 +1441,7 @@ body,
     0 15px 24px -11px rgba(var(--accent-deep-rgb), 0.26) !important;
 }
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-clickable-card:hover .dp-card-info-btn {
-  color: var(--dp-accent) !important;
+  color: var(--dp-accent-text) !important;
   background-color: color-mix(in srgb, var(--dp-dash-hover) 30%, transparent) !important;
 }
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-clickable-pipeline::before {
@@ -1545,4 +1563,75 @@ body,
 }
 ::-webkit-scrollbar-thumb:active {
   background: var(--dp-scroll-thumb-active, color-mix(in srgb, var(--dp-accent) 45%, #000000));
+}
+
+/* Dark theme: Tailwind `text-[var(--dp-accent)]` (active nav items, links,
+   accent numbers) reads the lighter accent-text step. */
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) [class~="text-[var(--dp-accent)]"] {
+  color: var(--dp-accent-text);
+}
+
+/* F11: touch screens get finger-sized controls. Desktop (fine pointer) keeps
+   the compact sizes. min-height wins over any fixed height utility. */
+@media (pointer: coarse) {
+  .page-btn,
+  .page-btn-sm {
+    height: auto;
+    min-height: 44px;
+  }
+  .page-btn-icon {
+    min-width: 44px;
+  }
+  /* Small icon-only buttons (⋮, edit, expand, note…) keep their look but get
+     an invisible 8px hit zone on every side, so a 28px icon is a 44px target
+     without moving anything. */
+  :is(main, [role="dialog"], nav) :is(button[aria-label], button[title]):not(.fixed):not(.sticky):not(.absolute) {
+    position: relative;
+  }
+  :is(main, [role="dialog"], nav) :is(button[aria-label], button[title])::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
+  [role="tablist"] > [role="tab"],
+  [role="radiogroup"] > [role="radio"] {
+    min-height: 40px;
+  }
+  /* Text buttons (segment controls, Columns, Export, Add…) and the drawer's
+     links reach 44px. Icon-only buttons are left to the hit zone above so
+     card headers don't grow; switches keep their drawn size. */
+  :is(main, [role="dialog"]) button:not([role="switch"]):not(.page-dot):not([aria-label]):not([title]):not([role="tab"]),
+  aside nav a {
+    min-height: 44px;
+  }
+  main :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]), select),
+  [role="dialog"] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]), select) {
+    min-height: 44px;
+  }
+}
+
+/* F14: the transactions table fits a 1280px laptop with the default columns
+   (sidebar open), so Sale and Profit stay in view. Wide screens keep the
+   roomier padding. Extra columns still scroll sideways. */
+@media (max-width: 1535px) {
+  .txn-table :is(th, td) {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  /* Fixed column minimums (money 90px, status 130px, date 100px) are wider
+     than their content; let those columns size to what they hold. Product
+     keeps its minimum so names stay readable. */
+  .txn-table :is(th, td):not(.min-w-40) {
+    min-width: 0;
+  }
+}
+@media (max-width: 1439px) {
+  .txn-table :is(th, td) {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  /* Store/platform and product truncate a little sooner (full name on hover). */
+  .txn-table td.max-w-\[170px\] { max-width: 120px; }
+  .txn-table td.max-w-\[190px\] { max-width: 160px; }
+  .txn-table .min-w-40 { min-width: 140px; }
 }

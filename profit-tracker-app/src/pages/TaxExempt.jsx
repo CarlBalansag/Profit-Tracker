@@ -65,6 +65,16 @@ const QUARTERS = [
   { value: '4',   label: 'Q4 (Oct–Dec)' },
 ];
 
+// A purchase's total: units at cost plus its sales tax and inbound shipping.
+// Shared by the phone cards, the table rows and the Total Spend footer.
+const purchaseTotal = (item) => (item.unit_purchase_cost * item.qty_purchased) + (item.sales_tax || 0) + (item.shipping_cost_inbound || 0);
+
+const YesNo = ({ yes, tone }) => (
+  <span className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wider border ${yes ? tone : 'bg-gray-500/10 text-gray-400 border-gray-500/20'}`}>
+    {yes ? 'Yes' : 'No'}
+  </span>
+);
+
 const TaxExempt = () => {
   // Start from cached inventory and sales when both are there; fetchData
   // below still refreshes them on every visit.
@@ -338,7 +348,29 @@ const TaxExempt = () => {
               <p className="text-gray-600 text-xs mt-1">Mark items as tax exempt when adding or editing a transaction</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Phones: one card per purchase, every column visible without scrolling sideways. */}
+            <ul className="md:hidden divide-y divide-white/[0.04]">
+              {filteredPurchases.map(item => (
+                <li key={item.id} className="px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 text-white font-medium leading-snug">{item.product_name}</p>
+                    <p className="shrink-0 text-right text-white font-semibold tabular-nums">${formatMoney(purchaseTotal(item))}</p>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-400">
+                    {new Date(item.purchase_date).toLocaleDateString()} · {item.vendor?.name || '—'}
+                  </p>
+                  <p className="mt-0.5 text-xs text-gray-400 tabular-nums">
+                    {item.qty_purchased} × ${formatMoney(item.unit_purchase_cost)}
+                  </p>
+                </li>
+              ))}
+              <li className="flex items-center justify-between px-4 py-3 bg-white/[0.02]">
+                <span className="text-xs font-semibold text-gray-400">Total Spend</span>
+                <span className="font-bold text-white tabular-nums">${formatMoney(filteredPurchases.reduce((sum, i) => sum + purchaseTotal(i), 0))}</span>
+              </li>
+            </ul>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/[0.06] text-[11px] uppercase tracking-wider text-gray-500">
@@ -352,7 +384,7 @@ const TaxExempt = () => {
                 </thead>
                 <tbody className="divide-y divide-white/[0.04]">
                   {filteredPurchases.map(item => {
-                    const totalCost = (item.unit_purchase_cost * item.qty_purchased) + (item.sales_tax || 0) + (item.shipping_cost_inbound || 0);
+                    const totalCost = purchaseTotal(item);
                     return (
                       <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
                         <td className="px-4 py-3 text-white font-medium">{item.product_name}</td>
@@ -371,12 +403,13 @@ const TaxExempt = () => {
                   <tr className="border-t border-white/[0.08] bg-white/[0.02]">
                     <td colSpan={5} className="px-4 py-3 text-xs font-semibold text-gray-400 text-right">Total Spend</td>
                     <td className="px-4 py-3 text-right font-bold text-white">
-                      ${formatMoney(filteredPurchases.reduce((sum, i) => sum + (i.unit_purchase_cost * i.qty_purchased) + (i.sales_tax || 0) + (i.shipping_cost_inbound || 0), 0))}
+                      ${formatMoney(filteredPurchases.reduce((sum, i) => sum + purchaseTotal(i), 0))}
                     </td>
                   </tr>
                 </tfoot>
               </table>
             </div>
+            </>
           )
         ) : (
           filteredSales.length === 0 ? (
@@ -386,7 +419,27 @@ const TaxExempt = () => {
               <p className="text-gray-600 text-xs mt-1">Sales linked to tax exempt inventory will appear here</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <ul className="md:hidden divide-y divide-white/[0.04]">
+              {filteredSales.map(sale => (
+                <li key={sale.id} className="px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 text-white font-medium leading-snug">{sale._inv.product_name}</p>
+                    <p className="shrink-0 text-right text-green-400 font-semibold tabular-nums">${formatMoney(sale.unit_price * sale.quantity)}</p>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-400">
+                    {new Date(sale.sale_date).toLocaleDateString()} · {sale.platform?.name || '—'}
+                  </p>
+                  <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                    <div className="flex items-center justify-between gap-2"><dt className="text-gray-500">Taxable</dt><dd><YesNo yes={sale.taxable} tone="bg-amber-500/10 text-amber-400 border-amber-500/20" /></dd></div>
+                    <div className="flex items-center justify-between gap-2"><dt className="text-gray-500">Tax collected</dt><dd className="text-blue-400 tabular-nums">{sale.sale_tax_collected > 0 ? `$${formatMoney(Number(sale.sale_tax_collected))}` : '—'}</dd></div>
+                    <div className="flex items-center justify-between gap-2"><dt className="text-gray-500">Customer exempt</dt><dd><YesNo yes={sale.customer_tax_exempt} tone="bg-green-500/10 text-green-400 border-green-500/20" /></dd></div>
+                    <div className="flex items-center justify-between gap-2"><dt className="text-gray-500">Exemption</dt><dd className="text-gray-300 text-right">{sale.exemption_type || '—'}</dd></div>
+                  </dl>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/[0.06] text-[11px] uppercase tracking-wider text-gray-500">
@@ -431,6 +484,7 @@ const TaxExempt = () => {
                 </tbody>
               </table>
             </div>
+            </>
           )
         )}
       </div>

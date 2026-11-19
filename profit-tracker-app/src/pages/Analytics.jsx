@@ -72,7 +72,7 @@ function Metric({ label, value, number, sub, icon: Icon, tone = 'default', pendi
   return (
     <RiseItem className="card relative min-w-0 p-4">
       {Icon && <Icon size={16} className={`absolute right-4 top-4 ${TONE[tone]}`} />}
-      <span className="pr-6 text-[11px] font-semibold uppercase tracking-wider text-[var(--dp-text-label)]">{label}</span>
+      <span className="block pr-6 text-[11px] font-semibold uppercase tracking-wider text-[var(--dp-text-label)]">{label}</span>
       <p className={`mt-2 text-xl font-bold tabular-nums ${TONE[tone]}`}>
         {Number.isFinite(number) ? <FlashNumber value={value} number={number} pending={pending} /> : value}
       </p>

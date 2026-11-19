@@ -42,7 +42,11 @@ export function SlidingTabs({ options, value, onChange, ariaLabel, size = 'md', 
             role="tab"
             aria-selected={active}
             onClick={() => onChange(key)}
-            className={`relative flex-1 whitespace-nowrap rounded-lg font-medium transition-colors ${pad} ${active ? 'text-[var(--dp-text-primary)]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
+            // Grow to share spare room, but never shrink below the label: when
+            // the labels don't fit (e.g. "Products & Stores" on a phone) the
+            // row scrolls sideways instead of the labels running together.
+            style={{ flex: '1 0 auto' }}
+            className={`relative whitespace-nowrap rounded-lg font-medium transition-colors ${pad} ${active ? 'text-[var(--dp-text-primary)]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
           >
             {active && (
               <MotionSpan

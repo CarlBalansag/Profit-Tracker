@@ -29,13 +29,13 @@ const STATE_PILL = {
   due_soon: { label: () => 'Due soon', cls: 'bg-[var(--dp-warning-bg)] text-[var(--dp-warning-text)]' },
   on_time: { label: () => 'On time', cls: 'bg-[var(--dp-green-bg)] text-[var(--dp-green-text)]' },
 };
-const Pill = ({ cls, children }) => <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${cls}`}>{children}</span>;
+const Pill = ({ cls, children }) => <span className={`shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${cls}`}>{children}</span>;
 
 function Kpi({ label, value, number, sub, tone = 'text-[var(--dp-text-primary)]', icon: Icon, pending }) {
   return (
     <RiseItem className="card relative min-w-0 p-4">
       {Icon && <Icon size={16} className="absolute right-4 top-4 text-[var(--dp-text-label)]" />}
-      <span className="pr-6 text-[11px] font-semibold uppercase tracking-wider text-[var(--dp-text-label)]">{label}</span>
+      <span className="block pr-6 text-[11px] font-semibold uppercase tracking-wider text-[var(--dp-text-label)]">{label}</span>
       <p className={`mt-2 text-xl font-bold tabular-nums ${tone}`}><FlashNumber value={value} number={number} pending={pending} /></p>
       {sub && <p className="mt-1 text-[11px] text-[var(--dp-text-muted)]">{sub}</p>}
     </RiseItem>
@@ -60,8 +60,11 @@ function OwedRow({ group }) {
             {plural(group.count, 'sale')} · oldest {group.oldestDays}d<span className="hidden sm:inline"> · usually pays in {group.expectedDays}d</span>
           </span>
         </span>
-        <Pill cls={pill.cls}>{pill.label(group)}</Pill>
-        <span className="w-24 shrink-0 text-right text-sm font-bold tabular-nums text-[var(--dp-green-text)]">{usd(group.amount)}</span>
+        {/* Phones stack the pill over the amount so the name keeps its width. */}
+        <span className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-3">
+          <Pill cls={pill.cls}>{pill.label(group)}</Pill>
+          <span className="text-right text-sm font-bold tabular-nums text-[var(--dp-green-text)] sm:w-24">{usd(group.amount)}</span>
+        </span>
       </button>
       <Expand open={open}>
         <div className="pl-9 pr-2 pb-2">
@@ -107,10 +110,12 @@ function BillRow({ bill, index }) {
             Due {dayLabel(bill.dueDate)} · {bill.dueInDays === 0 ? 'today' : `in ${bill.dueInDays}d`}{!bill.final && ' · cycle still open'}
           </span>
         </span>
-        {bill.covered
-          ? <Pill cls="bg-[var(--dp-green-bg)] text-[var(--dp-green-text)]">Covered</Pill>
-          : <Pill cls="bg-[var(--dp-red-bg)] text-[var(--dp-red-text)]">Short {usd(-bill.gap)}</Pill>}
-        <span className="w-24 shrink-0 text-right text-sm font-bold tabular-nums text-[var(--dp-red-text)]">{usd(bill.amount)}</span>
+        <span className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-3">
+          {bill.covered
+            ? <Pill cls="bg-[var(--dp-green-bg)] text-[var(--dp-green-text)]">Covered</Pill>
+            : <Pill cls="bg-[var(--dp-red-bg)] text-[var(--dp-red-text)]">Short {usd(-bill.gap)}</Pill>}
+          <span className="text-right text-sm font-bold tabular-nums text-[var(--dp-red-text)] sm:w-24">{usd(bill.amount)}</span>
+        </span>
       </div>
       <div className="mt-2 pl-0">
         <GrowBar pct={pct} color={bill.covered ? 'var(--dp-green-text)' : 'var(--dp-warning-text)'} delay={0.1 + index * 0.06} height={5} />

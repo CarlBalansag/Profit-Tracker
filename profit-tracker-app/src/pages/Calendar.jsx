@@ -16,6 +16,7 @@ import CalendarEventModal from '../components/Calendar/CalendarEventModal';
 import CalendarEventPopover from '../components/Calendar/CalendarEventPopover';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import LoadError from '../components/UI/LoadError';
+import { useMatchMedia } from '../hooks/useMatchMedia';
 
 // ─── Color maps ───────────────────────────────────────────────────────────────
 const TYPE_COLOR = {
@@ -130,6 +131,9 @@ export default function Calendar() {
   const calendarRef = useRef(null);
   const colorScheme = useColorScheme();
   const [currentMonth, setCurrentMonth] = useState(() => toMonthStr(new Date()));
+  // Phones: a month cell is ~45px wide, too narrow for event titles, so each
+  // event is a coloured dot and tapping a day lists that day's events.
+  const isPhone = useMatchMedia('(max-width: 767px)');
   const [popover, setPopover] = useState(null); // { date, events }
   const [modal, setModal] = useState({ open: false, event: null, defaultDate: null });
   const [showSubscribe, setShowSubscribe] = useState(false);
@@ -162,6 +166,12 @@ export default function Calendar() {
   };
 
   const handleDateClick = (info) => {
+    if (isPhone) {
+      // The day's events, with "Add event" in the same panel.
+      const eventsOnDay = [...autoEvents, ...manualEvents].filter(e => e.date === info.dateStr);
+      setPopover({ date: info.dateStr, events: eventsOnDay });
+      return;
+    }
     setModal({ open: true, event: null, defaultDate: info.dateStr });
   };
 
@@ -251,8 +261,17 @@ export default function Calendar() {
               datesSet={handleDatesSet}
               height="auto"
               fixedWeekCount={false}
-              dayMaxEvents={4}
+              dayMaxEvents={isPhone ? 3 : 4}
               moreLinkClick={handleMoreLinkClick}
+              eventDisplay={isPhone ? 'list-item' : 'auto'}
+              eventContent={isPhone ? (arg) => (
+                <span
+                  aria-label={arg.event.title}
+                  title={arg.event.title}
+                  className="mx-auto block h-2 w-2 rounded-full"
+                  style={{ backgroundColor: eventBgColor(arg.event.extendedProps.raw) }}
+                />
+              ) : undefined}
               nowIndicator
             />
           </div>

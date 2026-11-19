@@ -204,7 +204,7 @@ const Receipts = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 rounded-xl bg-[#111318] border border-white/5 w-max">
+      <div className="flex gap-1 p-1 rounded-xl bg-[#111318] border border-white/5 w-full sm:w-max">
         {[
           { key: 'without', label: 'Without Receipt', count: withoutReceipts.length },
           { key: 'with',    label: 'With Receipt',    count: withReceipts.length },
@@ -212,7 +212,7 @@ const Receipts = () => {
           <button
             key={key}
             onClick={() => { setTab(key); setAttachingId(null); setDetachConfirmId(null); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            className={`flex flex-1 sm:flex-none items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-xs min-[360px]:text-sm font-medium whitespace-nowrap transition-all ${
               tab === key
                 ? 'text-white bg-white/8 border border-white/10 shadow-sm'
                 : 'text-gray-400 hover:text-gray-200 border border-transparent hover:bg-white/5'

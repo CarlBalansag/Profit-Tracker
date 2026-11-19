@@ -541,4 +541,8 @@
 }
 .lp-flash { animation: lp-flash 1400ms ease-out; }
 
-
+/* 16px on phones so iOS Safari doesn't zoom in when a field is focused. */
+@media (max-width: 767px) {
+  .lp-input,
+  .lp-login-form input { font-size: 16px; }
+}

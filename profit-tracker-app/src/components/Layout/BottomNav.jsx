@@ -96,7 +96,7 @@ const BottomNav = ({ onMoreClick, isGlass }) => {
           </span>
         </button>
         <Tab to="/inventory" label="Inventory" icon={Package} colors={colors} />
-        <button type="button" aria-label="Open menu" onClick={onMoreClick} className={clsx(ITEM, colors.idle)}>
+        <button type="button" aria-haspopup="dialog" onClick={onMoreClick} className={clsx(ITEM, colors.idle)}>
           <Menu size={20} aria-hidden="true" />
           <span>More</span>
         </button>

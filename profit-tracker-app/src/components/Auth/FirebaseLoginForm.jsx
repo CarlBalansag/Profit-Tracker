@@ -89,7 +89,8 @@ export default function FirebaseLoginForm({ migration = false, inviteToken = nul
       await finish(result.user, migration ? 'migration' : mode === 'signup' ? 'signup' : 'login');
     });
   }
-  const inputClass = 'w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2';
+  // 16px text on phones: iOS Safari zooms the page when a smaller field is focused.
+  const inputClass = 'w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-base sm:text-sm';
   return <form onSubmit={submit} className="w-full max-w-sm space-y-3">
     <h2 className="font-semibold">{migration ? 'Move your existing account to Firebase' : mode === 'signup' ? 'Create an account' : mode === 'reset' ? 'Reset password' : 'Sign in'}</h2>
     {migration && <><p>Your records stay with this account. Verify a real email, then request owner approval before continuing.</p>

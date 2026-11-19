@@ -25,7 +25,7 @@ describe('BottomNav', () => {
   it('opens the full menu from More', () => {
     const onMore = vi.fn();
     mount(onMore);
-    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
     expect(onMore).toHaveBeenCalledOnce();
   });
 

@@ -6,7 +6,8 @@ import {
   Settings, History, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins
 } from 'lucide-react';
 import clsx from 'clsx';
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 import { useReducedMotion } from 'motion/react';
 import { useAuth } from '../../context/AuthContext';
 import { SCHEDULE_C_ENABLED } from '../../config/features';
@@ -27,6 +28,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
   const isGlass = uiStyle === 'glassmorphism-brown';
   const navRef = useRef(null);
   const marker = useNavMarker(navRef, [isCollapsed, isGlass, hasCashoutAccess]);
+  const drawerRef = useMobileDrawer(isOpen, () => setIsOpen(false));
 
   if (isGlass) {
     return (
@@ -39,6 +41,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
         )}
 
         <aside
+          ref={drawerRef}
           className={clsx(
             "fixed left-4 top-1/2 z-50 -translate-y-1/2 transition-transform duration-300 lg:translate-x-0",
             isOpen ? "translate-x-0" : "-translate-x-24 lg:translate-x-0"
@@ -98,6 +101,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
       )}
       
       <aside
+        ref={drawerRef}
         className={clsx(
           "fixed inset-y-0 left-0 z-50 flex flex-col transition-all duration-300 ease-in-out lg:static lg:translate-x-0 border-r border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] dp-elevated dp-sidebar",
           isOpen ? "translate-x-0" : "-translate-x-full",
@@ -422,5 +426,27 @@ const GlassBranchLabel = ({ label }) => (
     </span>
   </>
 );
+
+
+// The sidebar doubles as the phone's "More" drawer. While it is open as a
+// drawer it behaves like a modal: announced as a dialog, Escape closes it,
+// Tab stays inside, and focus returns to the More button afterwards. On
+// desktop it is a plain, always-visible sidebar, so none of this applies.
+function useMobileDrawer(isOpen, close) {
+  const isDrawer = isOpen && typeof window !== 'undefined' && !window.matchMedia?.('(min-width: 1024px)').matches;
+  const ref = useModalKeyboard(isDrawer, close);
+  useEffect(() => {
+    const el = ref.current;
+    if (!isDrawer || !el) return undefined;
+    el.setAttribute('aria-label', 'Menu');
+    return () => {
+      el.removeAttribute('role');
+      el.removeAttribute('aria-modal');
+      el.removeAttribute('aria-label');
+      el.removeAttribute('aria-labelledby');
+    };
+  }, [isDrawer, ref]);
+  return ref;
+}
 
 export default Sidebar;

@@ -484,7 +484,9 @@ const AddTransaction = () => {
 
   return (
     // The app shell never scrolls; each page owns its scroll container.
-    <div className="h-full overflow-auto">
+    // scroll-pb keeps a focused field above the sticky "Net cost" bar on
+    // phones (the browser scrolls fields into view against this padding).
+    <div className="h-full overflow-auto max-md:scroll-pb-24">
     <div className="w-full max-w-7xl mx-auto px-4 py-6 sm:px-6">
 
       {/* Header */}
@@ -978,7 +980,9 @@ const AddTransaction = () => {
               type="button"
               onClick={() => setShowExtra(open => !open)}
               aria-expanded={showExtra}
-              className="md:hidden page-btn page-btn-secondary w-full justify-center"
+              className="md:hidden page-btn page-btn-secondary w-full justify-center text-center"
+              // The long label wraps on a 320px phone instead of overflowing.
+              style={{ whiteSpace: 'normal', height: 'auto', minHeight: 36, paddingTop: 8, paddingBottom: 8 }}
             >
               {showExtra ? 'Fewer details' : 'More details: tax, shipping, order number, cashback'}
             </button>

@@ -708,7 +708,7 @@ const Transactions = () => {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <div className="flex gap-1 p-1 rounded-xl bg-[#111318] border border-white/5 w-max">
+        <div className="flex gap-1 p-1 rounded-xl bg-[#111318] border border-white/5 w-full sm:w-max">
           {[['All', List, 'text-purple-400'], ['Cashout', Tag, 'text-yellow-400'], ['Marketplace', Globe, 'text-blue-400']].map(([mode, Icon, iconColor]) => {
             const active = txnMode === mode;
             return (
@@ -716,13 +716,14 @@ const Transactions = () => {
                 key={mode}
                 type="button"
                 onClick={() => setTxnMode(mode)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                className={`flex flex-1 sm:flex-none items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   active
                     ? 'text-white bg-white/[0.08] border border-white/10 shadow-sm'
                     : 'text-gray-400 hover:text-gray-200 border border-transparent hover:bg-white/5'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${active ? iconColor : ''}`} />
+                {/* Icons drop out under 360px so all three labels fit a 320px phone. */}
+                <Icon className={`w-4 h-4 shrink-0 max-[359px]:hidden ${active ? iconColor : ''}`} />
                 {mode}
               </button>
             );
@@ -1010,7 +1011,8 @@ const Transactions = () => {
             </div>
 
             {/* Bottom row: cost → sale → profit */}
-            <div className="flex items-center gap-4 pt-1 border-t border-white/[0.04]">
+            {/* Wraps on narrow phones: five money columns don't fit one line at 360px. */}
+            <div className="flex flex-wrap items-start gap-x-4 gap-y-2 pt-1 border-t border-white/[0.04]">
               <div>
                 <p className="text-[11px] text-gray-600 uppercase tracking-wider mb-0.5">Cost</p>
                 <p className="text-sm font-semibold text-blue-400">${formatMoney(row.cost)}</p>
@@ -1100,7 +1102,7 @@ const Transactions = () => {
 
       {/* Table — hidden on mobile, shown md+ */}
       <div ref={tableScrollRef} onScroll={handleTableScroll} className="hidden md:block card overflow-x-auto bg-[#0f1115] table-scrollbar">
-        <table className="w-full text-left whitespace-nowrap">
+        <table className="txn-table w-full text-left whitespace-nowrap">
           <thead>
             <tr className="border-b border-white/[0.06] text-[11px] uppercase font-semibold text-gray-500 tracking-widest">
               <th className="px-4 py-3.5 w-10 sticky left-0 z-20 bg-[#0f1115]">
@@ -1217,7 +1219,7 @@ const Transactions = () => {
                         </td>
                       );
                       case 'vendor': return (
-                        <td key="vendor" className="px-4 py-3.5 min-w-[120px]">
+                        <td key="vendor" className="px-4 py-3.5 min-w-[120px] max-w-[170px]">
                           {isEditing ? (
                             <EditSelect
                               value={editData.vendorId}
@@ -1226,12 +1228,12 @@ const Transactions = () => {
                               placeholder="Select vendor..."
                             />
                           ) : (
-                            <span className="text-xs text-gray-300">{row.vendor}</span>
+                            <span className="block truncate text-xs text-gray-300" title={row.vendor || undefined}>{row.vendor}</span>
                           )}
                         </td>
                       );
                       case 'platform': return (
-                        <td key="platform" className="px-4 py-3.5 min-w-[120px]">
+                        <td key="platform" className="px-4 py-3.5 min-w-[120px] max-w-[170px]">
                           {isEditing ? (
                             <EditSelect
                               value={editData.platformId}
@@ -1240,7 +1242,7 @@ const Transactions = () => {
                               placeholder="Select platform..."
                             />
                           ) : (
-                            <span className="text-xs text-gray-400">{row.platform || '—'}</span>
+                            <span className="block truncate text-xs text-gray-400" title={row.platform || undefined}>{row.platform || '—'}</span>
                           )}
                         </td>
                       );

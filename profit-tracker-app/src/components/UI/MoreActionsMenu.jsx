@@ -41,6 +41,24 @@ const MoreActionsMenu = ({ record, kind, actions, onSuccess, className = '' }) =
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState(null); // { mode: 'confirm'|'form'|'paid'|'refund', descriptor }
   const rootRef = useRef(null);
+  // Which side of the ⋮ button the menu opens on, picked as it opens so the
+  // whole menu stays on screen (a button near the left edge of a phone opens
+  // it to the right; one near the bottom opens it upward).
+  const [placement, setPlacement] = useState({ x: 'right', y: 'down' });
+
+  const toggle = () => {
+    if (!open && rootRef.current) {
+      const trigger = rootRef.current.getBoundingClientRect();
+      const gap = 8;
+      const menuWidth = 224; // w-56
+      const menuHeight = 8 + 34 * (descriptors.length + (showRefund ? 1 : 0));
+      const x = trigger.right - menuWidth < gap && trigger.left + menuWidth <= window.innerWidth - gap ? 'left' : 'right';
+      const spaceBelow = window.innerHeight - trigger.bottom;
+      const y = spaceBelow < menuHeight + gap && trigger.top > spaceBelow ? 'up' : 'down';
+      setPlacement({ x, y });
+    }
+    setOpen((value) => !value);
+  };
 
   useEffect(() => {
     if (!open) return undefined;
@@ -91,7 +109,7 @@ const MoreActionsMenu = ({ record, kind, actions, onSuccess, className = '' }) =
         type="button"
         aria-label="More actions"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={toggle}
         className="flex items-center justify-center w-7 h-7 rounded-lg border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
       >
         <MoreVertical className="w-3.5 h-3.5" />
@@ -104,7 +122,7 @@ const MoreActionsMenu = ({ record, kind, actions, onSuccess, className = '' }) =
           // -- without it, a click that drags even slightly can leave a text
           // selection highlighted across them (in whatever selection color the
           // browser/OS uses, which need not be the default blue).
-          className="absolute right-0 top-full mt-1 w-56 z-40 rounded-lg bg-[#16181d] border border-white/10 shadow-xl py-1 overflow-hidden select-none"
+          className={`absolute ${placement.x === 'left' ? 'left-0' : 'right-0'} ${placement.y === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'} w-56 max-w-[calc(100vw-1rem)] z-40 rounded-lg bg-[#16181d] border border-white/10 shadow-xl py-1 overflow-hidden select-none`}
         >
           {showRefund && (
             <button
