@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.42',
+    date: '2026-11-18',
+    notes: "The app works much better on phones and tablets: pages no longer scroll sideways, dialogs and menus fit the screen, and tables become easy-to-read cards. Analytics, Goals and Top Cards can be swiped through, and on phones What's New, Data Setup, Guide and Theme are in the profile menu.",
+  },
+  {
     version: '1.41',
     date: '2026-11-18',
     notes: "Cashout Commitments now separates what isn't committed yet from what is, and you can type a purchase's tracking number right there to commit it.",
