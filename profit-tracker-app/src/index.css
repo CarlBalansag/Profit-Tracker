@@ -1216,7 +1216,9 @@ body,
     padding: 0 !important;
     text-align: left !important;
     white-space: normal;
-    overflow-wrap: anywhere;
+    /* break-word, not anywhere: a word only splits when it can't fit a line
+       on its own, so labels like "Cashback" never break mid-word. */
+    overflow-wrap: break-word;
   }
   .phone-cards td[data-label] {
     display: inline-flex;
@@ -1335,8 +1337,9 @@ body,
   /* Accent's light step: the base accent is too dark to read at 11px here. */
   --dp-table-label: var(--dp-accent-light);
   /* Accent as text: the base accent is 1.96:1 on the card colour here, so
-     text uses a lighter step (about 6:1). Fills keep the base accent. */
-  --dp-accent-text: color-mix(in srgb, var(--accent-300) 70%, #ffffff);
+     text uses the light accent step, nudged just enough to read (about 5:1,
+     still a red rather than a pink). Fills keep the base accent. */
+  --dp-accent-text: color-mix(in srgb, var(--accent-300) 90%, #ffffff);
   /* Accent comes from the --accent-* preset via the palette; dark mode just
      uses a slightly stronger tint behind accent text. */
   --dp-accent-bg: rgba(var(--accent-rgb), 0.18);

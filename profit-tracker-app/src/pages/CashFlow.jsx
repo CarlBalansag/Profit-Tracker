@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useMatchMedia } from '../hooks/useMatchMedia';
 import { RotateCcw, ChevronRight, ArrowDownLeft, ArrowUpRight, CreditCard, Package } from 'lucide-react';
 import {
   ComposedChart, Bar, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
@@ -44,6 +45,7 @@ function Kpi({ label, value, number, sub, tone = 'text-[var(--dp-text-primary)]'
 
 function OwedRow({ group }) {
   const [open, setOpen] = useState(false);
+  const isPhone = useMatchMedia('(max-width: 639px)');
   const pill = STATE_PILL[group.state];
   return (
     <LateGlow active={group.state === 'late'} className="rounded-xl">
@@ -67,7 +69,29 @@ function OwedRow({ group }) {
         </span>
       </button>
       <Expand open={open}>
-        <div className="pl-9 pr-2 pb-2">
+        <div className="pl-9 pr-2 pb-2 max-sm:pl-2">
+          {/* Phones: one block per sale (item + owed, then sold / expected),
+              since four columns don't fit beside the indent at 360px. */}
+          {isPhone ? (
+          <ul className="divide-y divide-[color:var(--dp-border)] text-xs tabular-nums">
+            {group.items.map((item) => (
+              <li key={item.id} className="py-2">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="min-w-0 text-[var(--dp-text-secondary)]">
+                    {item.product}{item.payoutStatus === 'partial' && <span className="text-[var(--dp-warning-text)]"> · short-paid</span>}
+                  </span>
+                  <span className="shrink-0 font-semibold text-[var(--dp-text-primary)]">{usd(item.amount)}</span>
+                </div>
+                <div className="mt-0.5 text-[11px] text-[var(--dp-text-muted)]">
+                  Sold {dayLabel(item.saleDate)} · Expected{' '}
+                  <span className={item.lateDays > 0 ? 'text-[var(--dp-red-text)]' : ''}>
+                    {dayLabel(item.expectedDate)}{item.lateDays > 0 ? ` (${item.lateDays}d late)` : ''}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+          ) : (
           <table className="w-full text-xs tabular-nums">
             <thead>
               <tr className="text-[10px] uppercase tracking-wider text-[var(--dp-text-label)]">
@@ -92,6 +116,7 @@ function OwedRow({ group }) {
               ))}
             </tbody>
           </table>
+          )}
           <p className="mt-1.5 text-[10px] text-[var(--dp-text-label)]">Expected date from {group.expectedBasis === 'default' ? 'a 14-day default (no paid sales from them yet)' : group.expectedBasis}.</p>
         </div>
       </Expand>

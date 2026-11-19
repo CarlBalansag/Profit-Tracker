@@ -181,8 +181,10 @@ function ItemRow({ item, card }) {
               margin: '0 0 12px',
               padding: '14px 16px',
               display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '12px 24px',
+              // Three columns when they fit, two on a narrow phone, so no label
+              // is ever squeezed narrower than its longest word.
+              gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))',
+              gap: '12px 16px',
             }}>
               {[
                 { label: item.kind === 'refund' ? 'Refund credit' : 'Cost Basis', value: money(item.cost), color: item.cost < 0 ? 'var(--green)' : 'var(--text-primary)' },
@@ -197,7 +199,7 @@ function ItemRow({ item, card }) {
                 { label: 'Cashback Redeemed', value: item.lossToRedeem > 0 ? `$${fmt(item.lossToRedeem)}` : '—', color: item.lossToRedeem > 0 ? 'var(--red)' : 'var(--text-muted)' },
               ].map(({ label, value, color }) => (
                 <div key={label}>
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 3 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 3, overflowWrap: 'normal', hyphens: 'none' }}>
                     {label}
                   </div>
                   <div style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 600, color }}>

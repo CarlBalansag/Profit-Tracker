@@ -11,6 +11,7 @@ import ReturnWindowBadge from '../components/ReturnWindowBadge';
 import { returnWindowStatus } from '../utils/returnWindow';
 import { recordStatusLabel } from '../data/statusWorkflow';
 import LoadError from '../components/UI/LoadError';
+import { useMatchMedia } from '../hooks/useMatchMedia';
 
 // The batch whose return window runs out first, so a collapsed group still
 // warns about it. Closed windows only count when no batch is still open.
@@ -40,12 +41,159 @@ const STATUS_COLORS = {
   CANCELLED:      'bg-gray-500/10 text-gray-400 border-gray-500/20',
 };
 
+// eBay sold-listings search for a product name.
+const ebayUrl = (productName) =>
+  `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(productName)}&LH_Sold=1&LH_Complete=1&_sop=13`;
+
+// ── Phone layout ────────────────────────────────────────────────────────────
+// Phones get a compact card per product instead of the table: name and status
+// on top, a Qty / Aging / Cost strip that uses the full width, then the eBay
+// link and Sell on one line. Same data and actions as the table rows.
+const agingTone = (days) => (days > 90 ? 'text-red-400' : days > 30 ? 'text-amber-400' : 'text-gray-400');
+
+const StatusBadge = ({ status }) => (
+  <span className={`shrink-0 whitespace-nowrap px-2 py-0.5 rounded text-[11px] font-bold tracking-wider border uppercase ${STATUS_COLORS[status] || STATUS_COLORS.PURCHASED}`}>
+    {recordStatusLabel(status)}
+  </span>
+);
+
+const PhoneStat = ({ label, children, sub }) => (
+  <div className="min-w-0">
+    <p className="text-[11px] text-gray-500">{label}</p>
+    <div className="mt-0.5 text-sm font-semibold text-gray-200 tabular-nums">{children}</div>
+    {sub && <p className="text-[11px] text-gray-500 tabular-nums whitespace-nowrap">{sub}</p>}
+  </div>
+);
+
+const EbayLink = ({ name }) => (
+  <a
+    href={ebayUrl(name)}
+    target="_blank"
+    rel="noopener noreferrer"
+    onClick={e => e.stopPropagation()}
+    className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 hover:text-blue-400"
+  >
+    <ExternalLink className="w-3.5 h-3.5" /> eBay sold prices
+  </a>
+);
+
+const SellLink = ({ item }) => (
+  <Link to="/add-sale" state={{ inventoryId: item.id }} aria-label={`Sell ${item.product_name}`} className="page-btn page-btn-secondary page-btn-sm">
+    Sell
+  </Link>
+);
+
+function PhoneInventoryList({ grouped, expandedGroups, toggleGroup }) {
+  if (grouped.length === 0) {
+    return (
+      <div className="px-4 py-16 text-center">
+        <Package className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+        <p className="text-gray-400">No inventory items found.</p>
+        <p className="text-gray-600 text-xs mt-1">Add a transaction to generate inventory.</p>
+      </div>
+    );
+  }
+  return (
+    <ul className="divide-y divide-white/[0.06]">
+      {grouped.map((group) => {
+        const isMulti = group.entries.length > 1;
+        const isOpen = expandedGroups.has(group.product_name);
+        const item = group.entries[0];
+        const statuses = new Set(group.entries.map(e => e.status));
+        const days = isMulti ? group.oldestDays : item.daysInInv;
+        const returnItem = isMulti ? soonestReturnWindow(group.entries) : item;
+        return (
+          <li key={group.product_name} className="px-4 py-3.5">
+            <div className="flex items-start gap-2">
+              {isMulti && (
+                <button
+                  type="button"
+                  aria-expanded={isOpen}
+                  aria-label={`${isOpen ? 'Hide' : 'Show'} batches for ${group.product_name}`}
+                  onClick={() => toggleGroup(group.product_name)}
+                  className="-ml-1 mt-0.5 p-1 rounded shrink-0"
+                >
+                  {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
+                </button>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="min-w-0 text-sm font-semibold leading-snug text-gray-200">{group.product_name}</p>
+                  {statuses.size === 1 ? <StatusBadge status={item.status} /> : <span className="shrink-0 text-xs text-gray-400">Mixed</span>}
+                </div>
+                <div className="mt-0.5 flex items-center gap-1 text-[11px] text-gray-500">
+                  <span className="truncate">{isMulti ? `${group.entries.length} purchase entries` : (item.category || 'Uncategorized')}</span>
+                  <ProductNoteButton productName={group.product_name} />
+                </div>
+                {returnItem && <ReturnWindowBadge item={returnItem} className="mt-1" />}
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-3 gap-3 rounded-lg bg-white/[0.03] px-3 py-2.5">
+              <PhoneStat label="Qty">{isMulti ? group.totalQty : item.qty_on_hand}</PhoneStat>
+              <PhoneStat label="Aging">
+                <span className={`inline-flex items-center gap-1 ${agingTone(days)}`}>
+                  <Clock className="w-3.5 h-3.5 shrink-0" />{isMulti ? `≤${days}d` : `${days}d`}
+                </span>
+              </PhoneStat>
+              <PhoneStat
+                label="Cost"
+                sub={isMulti ? 'combined' : `$${money(allocatedCost(item, 1))} / unit`}
+              >
+                ${money(isMulti ? group.totalCost : allocatedCost(item, item.qty_on_hand))}
+              </PhoneStat>
+            </div>
+
+            <div className="mt-2.5 flex items-center justify-between gap-3">
+              <EbayLink name={group.product_name} />
+              {!isMulti && <SellLink item={item} />}
+            </div>
+
+            {isMulti && isOpen && (
+              <ul className="mt-3 space-y-2 border-l-2 border-white/10 pl-3">
+                {group.entries.map(entry => (
+                  <li key={entry.id} className="rounded-lg bg-white/[0.02] px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="min-w-0 text-xs text-gray-400">
+                        {entry.category || 'Uncategorized'} · #{entry.order_number || entry.id.slice(0, 8)}
+                      </p>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <StatusBadge status={entry.status} />
+                        <SellLink item={entry} />
+                      </div>
+                    </div>
+                    <ReturnWindowBadge item={entry} className="mt-1" />
+                    <div className="mt-2">
+                      <div className="grid grid-cols-3 gap-3">
+                        <PhoneStat label="Qty">{entry.qty_on_hand}</PhoneStat>
+                        <PhoneStat label="Aging">
+                          <span className={agingTone(entry.daysInInv)}>{entry.daysInInv}d</span>
+                        </PhoneStat>
+                        <PhoneStat label="Cost" sub={`$${money(allocatedCost(entry, 1))} / unit`}>
+                          ${money(allocatedCost(entry, entry.qty_on_hand))}
+                        </PhoneStat>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+
+
 // Always two decimals, rounded the way the API rounds, so these match Analytics.
 const money = (value) => roundCents(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const Inventory = () => {
   const { data: rawInventory = [], isLoading, isLoadingError, refetch } = useInventory();
   const [expandedGroups, setExpandedGroups] = useState(new Set());
+  const isPhone = useMatchMedia('(max-width: 767px)');
   const toggleGroup = (name) => setExpandedGroups(prev => {
     const next = new Set(prev);
     next.has(name) ? next.delete(name) : next.add(name);
@@ -65,9 +213,6 @@ const Inventory = () => {
       Status: recordStatusLabel(item.status),
     }))), 'text/csv');
   };
-
-  const ebayUrl = (productName) =>
-    `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(productName)}&LH_Sold=1&LH_Complete=1&_sop=13`;
 
   const inventory = rawInventory.filter(item => item.qty_on_hand > 0);
 
@@ -151,7 +296,14 @@ const Inventory = () => {
         </div>
       </div>
 
-      {/* Inventory Table */}
+      {/* Phones: compact cards. Only one layout is rendered, so each row
+          exists once (for screen readers, find-in-page and tests). */}
+      {isPhone ? (
+      <div className="card p-0 overflow-hidden bg-[#0f1115] animate-in slide-in-from-bottom-4 duration-500 fade-in delay-500 fill-mode-both">
+        <PhoneInventoryList grouped={grouped} expandedGroups={expandedGroups} toggleGroup={toggleGroup} />
+      </div>
+      ) : (
+      /* Inventory Table (tablet and up) */
       <div className="card overflow-x-auto bg-[#0f1115] animate-in slide-in-from-bottom-4 duration-500 fade-in delay-500 fill-mode-both">
         <table className="phone-cards w-full text-left whitespace-nowrap">
           <thead>
@@ -358,6 +510,7 @@ const Inventory = () => {
           </tbody>
         </table>
       </div>
+      )}
 
     </div>
   );

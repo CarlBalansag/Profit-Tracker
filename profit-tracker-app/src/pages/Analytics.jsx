@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { SectionPager, SwipeArea } from '../components/Analytics/SectionPager';
 import { useDashboard } from '../hooks/useApi';
 import LoadError from '../components/UI/LoadError';
 import {
@@ -239,8 +240,18 @@ function Analytics() {
             sub={`${usd(s.inventoryValue)} at cost · ${s.listedQty ?? 0} listed`} />
         </Rise>
 
-        <SlidingTabs ariaLabel="Analytics sections" value={activeTab} onChange={setActiveTab} options={TABS} />
+        {/* Desktop and tablet: tabs. Phones: the section pager (arrows, dots,
+            neighbouring names peeking in) plus swiping on the content. */}
+        <div className="hidden md:block">
+          <SlidingTabs ariaLabel="Analytics sections" value={activeTab} onChange={setActiveTab} options={TABS} />
+        </div>
+        <SectionPager className="md:hidden" ariaLabel="Analytics sections" options={TABS} value={activeTab} onChange={setActiveTab} />
 
+        <SwipeArea
+          className="space-y-6"
+          onPrev={() => { const i = TABS.findIndex(t => t.key === activeTab); if (i > 0) setActiveTab(TABS[i - 1].key); }}
+          onNext={() => { const i = TABS.findIndex(t => t.key === activeTab); if (i < TABS.length - 1) setActiveTab(TABS[i + 1].key); }}
+        >
         {activeTab === 'overview' && (
           <Rise key={`overview-${mode}-${dateRange}`} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <RiseItem className="lg:col-span-2"><ProfitTrend data={data} dateRange={dateRange} /></RiseItem>
@@ -399,6 +410,7 @@ function Analytics() {
             </RiseItem>
           </Rise>
         )}
+        </SwipeArea>
       </div>
     </div>
   );
