@@ -320,8 +320,9 @@ export default function Cashout() {
           </p>
         </div>
 
-        <div className="flex items-start gap-2.5">
-          <div className="flex flex-col items-center gap-1">
+        {/* Wraps on phones: "Last synced …" plus Manage Cashouts don't fit one row at 375px. */}
+        <div className="flex flex-wrap items-start gap-2.5">
+          <div className="flex flex-col items-start sm:items-center gap-1">
             <button
               type="button"
               onClick={handleSyncNow}
@@ -1031,6 +1032,8 @@ function TrackingEntry({ commitment }) {
 function CommitmentsPanel({ commitments, allDeals }) {
   const { deleteCommitment } = useCashoutMutations();
   const [openGroups, setOpenGroups] = useState(() => new Set());
+  // Phones get one card per commitment; the 7-column table can't fit 375px.
+  const isPhone = useMatchMedia('(max-width: 767px)');
 
   if (commitments.length === 0) {
     return (
@@ -1280,6 +1283,119 @@ function CommitmentsPanel({ commitments, allDeals }) {
       ...(expanded ? group.rows.map((c) => purchaseRow(c, group, true)) : []),
     ];
   };
+
+  // ── Phone layout: same cells as the table rows, laid out as a card ──
+  const phoneThumb = (deal, itemName) => (deal?.imageUrl ? (
+    <img src={deal.imageUrl} alt={itemName} className="w-11 h-11 rounded-lg object-contain bg-white/5 border border-[color:var(--dp-border)] flex-shrink-0" />
+  ) : (
+    <div className="w-11 h-11 rounded-lg bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] flex items-center justify-center text-[var(--dp-text-label)] flex-shrink-0">
+      <Package size={16} />
+    </div>
+  ));
+  const phoneField = (label, value) => (
+    <div className="min-w-0">
+      <div className="text-[11px] text-[var(--dp-text-label)]">{label}</div>
+      <div className="mt-0.5 text-[13px]">{value}</div>
+    </div>
+  );
+
+  const purchaseCard = (c, group, nested = false) => {
+    const { deal, itemName, upc } = itemInfo(c);
+    const unitCost = c.sale?.inventory?.unit_purchase_cost;
+    const unitPayout = c.sale?.unit_price;
+    const account = c.sale?.inventory?.account?.name;
+    return (
+      <li key={c.id} className={`px-4 py-3.5 ${c.status === 'withdrawn' ? 'opacity-60' : ''} ${nested ? 'bg-[var(--dp-hover-bg)]/40 pl-6' : ''}`}>
+        <div className="flex items-start gap-3">
+          {!nested && phoneThumb(deal, itemName)}
+          <div className="min-w-0 flex-1">
+            {!nested && <div className="font-semibold text-sm leading-snug text-[var(--dp-text-primary)]">{itemName}</div>}
+            {!nested && upc && <div className="text-[12px] text-[var(--dp-text-label)] font-mono">UPC: {upc}</div>}
+            <div className={`text-[12px] ${nested ? 'text-[var(--dp-text-secondary)]' : 'text-[var(--dp-text-label)] mt-0.5'}`}>
+              Qty {c.quantity} · {new Date(c.created_at).toLocaleDateString()}{account ? ` · ${account}` : ''}
+            </div>
+            {c.status === 'pending' && group?.addsTo > 0 && (
+              <div className="text-[11px] text-sky-300 mt-0.5">Adds to your {group.addsTo} committed</div>
+            )}
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5">
+          {!nested && phoneField('Cashout', <CashoutName name={c.connection?.display_name || c.connection?.provider} />)}
+          {phoneField('Status', statusCell(c))}
+          {phoneField('Bought at', <span className="tabular-nums text-[var(--dp-text-secondary)]">{unitCost != null ? `$${formatMoney(unitCost)}` : '—'}</span>)}
+          {phoneField('Committed at', <span className="font-semibold tabular-nums text-[var(--dp-text-primary)]">{unitPayout != null ? `$${formatMoney(unitPayout)}` : '—'}</span>)}
+        </div>
+        <div className="mt-2.5">{phoneField('Tracking', trackingCell(c))}</div>
+        {(c.status === 'pending' || c.status === 'active') && <div className="mt-3 flex justify-end">{actionsCell(c, group)}</div>}
+      </li>
+    );
+  };
+
+  const groupCard = (group) => {
+    const first = group.rows[0];
+    const { deal, itemName, upc } = itemInfo(first);
+    const expanded = openGroups.has(group.key);
+    const flagged = group.rows.some((r) => r.status === 'pending' && r.commit_error);
+    return (
+      <li key={group.key}>
+        <div className="px-4 py-3.5">
+          <div className="flex items-start gap-3">
+            {phoneThumb(deal, itemName)}
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-sm leading-snug text-[var(--dp-text-primary)]">{itemName}</div>
+              {upc && <div className="text-[12px] text-[var(--dp-text-label)] font-mono">UPC: {upc}</div>}
+              <button type="button" onClick={() => toggle(group.key)} aria-expanded={expanded}
+                className="mt-0.5 inline-flex items-center gap-1 text-[12px] font-medium text-[var(--dp-accent)]">
+                <ChevronDown size={12} className={`transition-transform ${expanded ? '' : '-rotate-90'}`} aria-hidden="true" />
+                {group.rows.length} purchases
+              </button>
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5">
+            {phoneField('Cashout', <CashoutName name={first.connection?.display_name || first.connection?.provider} />)}
+            {phoneField('Committed at', <span className="font-semibold tabular-nums text-[var(--dp-text-primary)]">{first.sale?.unit_price != null ? `$${formatMoney(first.sale.unit_price)}` : '—'}</span>)}
+            {phoneField('Status', (
+              <>
+                <div className="font-semibold tabular-nums text-[var(--dp-text-primary)]">{group.committed > 0 ? `${group.committed} committed` : 'Not committed'}</div>
+                {group.waiting > 0 && <div className="text-[11px] text-sky-300 tabular-nums">{group.waiting} waiting to ship</div>}
+                {flagged && <div className="text-[11px] text-rose-400">Needs attention</div>}
+              </>
+            ))}
+            {phoneField('Tracking', <span className="text-[12px] text-[var(--dp-text-secondary)]">{group.rows.filter((r) => r.tracking_codes?.length).length} of {group.rows.length} sent</span>)}
+          </div>
+          {group.committed > 0 && (
+            <div className="mt-3 flex justify-end">
+              <button type="button" onClick={() => withdrawAll(group)} className={QUIET_BTN}>Withdraw all</button>
+            </div>
+          )}
+        </div>
+        {expanded && <ul className="divide-y divide-[color:var(--dp-border)] border-t border-[color:var(--dp-border)]">{group.rows.map((c) => purchaseCard(c, group, true))}</ul>}
+      </li>
+    );
+  };
+
+  const phoneSection = (title, count, hint) => (
+    <li className="bg-[var(--dp-hover-bg)] py-2 px-4">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--dp-text-secondary)]">{title}</span>
+      <span className="ml-1.5 text-[11px] text-[var(--dp-text-label)] tabular-nums">{count}</span>
+      {hint && <span className="block text-[11px] text-[var(--dp-text-label)] mt-0.5">{hint}</span>}
+    </li>
+  );
+
+  if (isPhone) {
+    return (
+      <div className="rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] overflow-hidden shadow-sm">
+        <ul className="divide-y divide-[color:var(--dp-border)]">
+          {notCommitted.length > 0 && phoneSection('Not committed', notCommitted.length, 'Logged, not sent to the cashout yet. Add the tracking number when it ships to commit it.')}
+          {notCommitted.map((c) => purchaseCard(c, { rows: [c], committed: 0, addsTo: committedFor(c) }))}
+          {committedGroups.length > 0 && phoneSection('Committed', committedGroups.length)}
+          {committedGroups.map((group) => (group.rows.length > 1 ? groupCard(group) : purchaseCard(group.rows[0], group)))}
+          {withdrawn.length > 0 && phoneSection('Withdrawn', withdrawn.length)}
+          {withdrawn.map((c) => purchaseCard(c, null))}
+        </ul>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] overflow-hidden shadow-sm">
