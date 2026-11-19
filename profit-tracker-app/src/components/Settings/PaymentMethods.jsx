@@ -342,14 +342,25 @@ export const PaymentMethods = () => {
                       )}
                    </div>
                 </div>
-                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                   <button aria-label="Edit card" 
+                <div className="flex items-center gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 [@media(hover:none)]:opacity-100 focus-within:opacity-100 transition-opacity">
+                   <button
+                     type="button"
+                     aria-label="Edit card"
+                     title={`Edit ${card.name}`}
                      onClick={() => openEditModal(card)}
-                     className="text-gray-500 hover:text-white"
+                     className="p-1 text-gray-400 hover:text-white transition-colors rounded hover:bg-white/5"
                    >
-                     <PenSquare size={14}/>
+                     <PenSquare size={15}/>
                    </button>
-                   <button aria-label="Delete card" onClick={() => removeCard(card.id)} className="text-red-500 hover:text-red-400"><Trash2 size={14}/></button>
+                   <button
+                     type="button"
+                     aria-label="Delete card"
+                     title={`Delete ${card.name}`}
+                     onClick={() => removeCard(card.id)}
+                     className="p-1 text-red-500 hover:text-red-400 transition-colors rounded hover:bg-red-500/10"
+                   >
+                     <Trash2 size={15}/>
+                   </button>
                 </div>
               </div>
 

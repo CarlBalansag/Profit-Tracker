@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.43',
+    date: '2026-11-18',
+    notes: 'In Settings, Payment Methods now always shows the edit and delete card buttons on mobile and touch screens instead of requiring a hover.',
+  },
+  {
     version: '1.42',
     date: '2026-11-18',
     notes: "The app works much better on phones and tablets: pages no longer scroll sideways, dialogs and menus fit the screen, and tables become easy-to-read cards. Analytics, Goals and Top Cards can be swiped through, and on phones What's New, Data Setup, Guide and Theme are in the profile menu.",

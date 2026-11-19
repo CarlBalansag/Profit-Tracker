@@ -413,3 +413,23 @@ describe('"Credit cards were reworked" notice', () => {
     expect(screen.queryByText('Credit cards were reworked')).toBeNull();
   });
 });
+
+describe('PaymentMethods action buttons responsive visibility', () => {
+  it('renders edit and delete buttons with mobile-visible opacity classes', async () => {
+    savedMethods = [
+      { id: 'c1', name: 'Chase Freedom', type: 'Credit', default_cashback_rate: 1.5, category_rates: [] }
+    ];
+    render(<PaymentMethods />);
+    await waitFor(() => expect(screen.getByText('Chase Freedom')).toBeTruthy());
+
+    const editBtn = screen.getByRole('button', { name: 'Edit card' });
+    const deleteBtn = screen.getByRole('button', { name: 'Delete card' });
+    expect(editBtn).toBeTruthy();
+    expect(deleteBtn).toBeTruthy();
+
+    const actionsContainer = editBtn.parentElement;
+    expect(actionsContainer.className).toContain('opacity-100');
+    expect(actionsContainer.className).toContain('md:opacity-0');
+    expect(actionsContainer.className).toContain('group-hover:opacity-100');
+  });
+});
