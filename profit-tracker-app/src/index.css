@@ -1641,16 +1641,28 @@ body,
 
 /* Analytics on phones: the section pager, the section's panels and the dots
    read as one framed component. Panels inside drop their own card chrome and
-   are split by hairlines instead of floating as separate boxes. */
-.section-frame { padding: 0 !important; }
-.section-frame-body > * { gap: 0 !important; }
-.section-frame .section-frame-body section.card,
-.section-frame .section-frame-body .card {
-  background: transparent !important;
-  box-shadow: none !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  border-top: 1px solid var(--dp-border) !important;
-  padding-left: 16px !important;
-  padding-right: 16px !important;
+   are split by hairlines instead of floating as separate boxes. This has to
+   live in @layer components: the carbon-workspace card remap sets these with
+   !important inside that layer, and a layered !important beats an unlayered
+   one, so the higher-specificity selectors below win only inside the layer. */
+@layer components {
+  .carbon-workspace .section-frame { padding: 0 !important; }
+  .carbon-workspace .section-frame .section-frame-body > * { gap: 0 !important; }
+  .carbon-workspace .section-frame .section-frame-body .card,
+  .carbon-workspace .section-frame .section-frame-body section.card {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    border-top: 1px solid var(--dp-border) !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  /* Bordered rows inside a panel (e.g. Channels) become divided rows. */
+  .carbon-workspace .section-frame .section-frame-body .card .rounded-lg.border {
+    border-width: 1px 0 0 0 !important;
+    border-radius: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
 }
