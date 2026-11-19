@@ -607,14 +607,15 @@ export function Vendors() {
 
       {/* Vendors List */}
       <div>
-        <div className="flex items-center justify-between mb-5">
-          <p className="text-sm text-gray-500">
+        {/* Phones: the count takes its own line, both buttons sit together below. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 mb-5">
+          <p className="text-sm text-gray-500 max-sm:basis-full">
             <span className="font-semibold text-gray-300">{vendors.length}</span> vendors — where you purchase from
           </p>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowQuickAdd(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-gray-300 text-sm font-medium hover:bg-white/[0.06] transition-colors"
+              className="flex items-center gap-2 whitespace-nowrap px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-gray-300 text-sm font-medium hover:bg-white/[0.06] transition-colors"
             >
               <Plus className="w-3.5 h-3.5" /> Quick Add
             </button>

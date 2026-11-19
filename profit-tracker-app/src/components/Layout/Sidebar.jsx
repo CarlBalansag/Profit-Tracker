@@ -171,7 +171,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
 
         </nav>
 
-        <div className="p-2 border-t border-[color:var(--dp-border)]">
+        <div className="hidden lg:block p-2 border-t border-[color:var(--dp-border)]">
           <button
             onClick={() => setShowChangelog(true)}
             title={isCollapsed ? `v${CURRENT_VERSION} — What's New` : undefined}
@@ -218,6 +218,23 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
                <NavLink to="/activity" className="flex items-center gap-3 px-4 py-2.5 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
                  <History size={14} className="text-[var(--dp-text-secondary)]" /> Activity
                </NavLink>
+               {/* Phone drawer only: the items the desktop sidebar keeps in its footer. */}
+               <div className="lg:hidden">
+                 <div className="h-px w-full bg-[var(--dp-border)] my-1"></div>
+                 <button type="button" className="flex items-center gap-3 px-4 py-2.5 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); setShowChangelog(true); }}>
+                   <Sparkles size={14} className="text-[var(--dp-text-secondary)]" /> What's New <span className="ml-auto text-[11px] text-[var(--dp-text-label)]">v{CURRENT_VERSION}</span>
+                 </button>
+                 <button type="button" className="flex items-center gap-3 px-4 py-2.5 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); setIsOpen(false); navigate('/settings', { state: { tab: 'datasetup' } }); }}>
+                   <Settings size={14} className="text-[var(--dp-text-secondary)]" /> Data Setup
+                 </button>
+                 <NavLink to="/guide" className="flex items-center gap-3 px-4 py-2.5 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
+                   <BookOpen size={14} className="text-[var(--dp-text-secondary)]" /> Guide
+                 </NavLink>
+                 <div className="flex items-center justify-between px-4 py-1.5">
+                   <span className="text-[12px] font-medium text-[var(--dp-text-secondary)]">Theme</span>
+                   <ThemeSwitch inline />
+                 </div>
+               </div>
                <div className="h-px w-full bg-[var(--dp-border)] my-1"></div>
                <button className="flex items-center gap-3 px-4 py-2.5 text-[12px] font-medium text-[var(--dp-red-text)] hover:bg-[var(--dp-red-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); logout(); }}>
                  <PanelLeftClose size={14} className="rotate-180 text-[var(--dp-red-text)] opacity-80" /> Sign Out

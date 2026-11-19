@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { SectionPager, SwipeArea } from '../components/Analytics/SectionPager';
+import { SectionPager, SectionDots, SwipeArea } from '../components/Analytics/SectionPager';
+import { useMatchMedia } from '../hooks/useMatchMedia';
 import { useDashboard } from '../hooks/useApi';
 import LoadError from '../components/UI/LoadError';
 import {
@@ -163,6 +164,7 @@ function ProfitTrend({ data, dateRange }) {
 
 function Analytics() {
   const [activeTab, setActiveTab] = useState('overview');
+  const isPhone = useMatchMedia('(max-width: 767px)');
   const [mode, setMode] = useState('All');
   const [dateRange, setDateRange] = useState('All Time');
 
@@ -245,10 +247,15 @@ function Analytics() {
         <div className="hidden md:block">
           <SlidingTabs ariaLabel="Analytics sections" value={activeTab} onChange={setActiveTab} options={TABS} />
         </div>
-        <SectionPager className="md:hidden" ariaLabel="Analytics sections" options={TABS} value={activeTab} onChange={setActiveTab} />
+        {/* Phones: one framed section. Pager on top, the section's panels in
+            the middle (flattened, see .section-frame in index.css), dots under. */}
+        <div className={isPhone ? 'card section-frame overflow-hidden' : ''}>
+        {isPhone && (
+          <SectionPager className="p-1.5" dots={false} ariaLabel="Analytics sections" options={TABS} value={activeTab} onChange={setActiveTab} />
+        )}
 
         <SwipeArea
-          className="space-y-6"
+          className={isPhone ? 'section-frame-body' : 'space-y-6'}
           onPrev={() => { const i = TABS.findIndex(t => t.key === activeTab); if (i > 0) setActiveTab(TABS[i - 1].key); }}
           onNext={() => { const i = TABS.findIndex(t => t.key === activeTab); if (i < TABS.length - 1) setActiveTab(TABS[i + 1].key); }}
         >
@@ -411,6 +418,8 @@ function Analytics() {
           </Rise>
         )}
         </SwipeArea>
+        {isPhone && <SectionDots className="py-2.5 border-t border-[color:var(--dp-border)]" options={TABS} value={activeTab} onChange={setActiveTab} />}
+        </div>
       </div>
     </div>
   );

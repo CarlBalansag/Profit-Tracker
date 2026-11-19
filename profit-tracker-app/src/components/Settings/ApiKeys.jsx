@@ -222,7 +222,8 @@ export const ApiKeys = () => {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-gray-800 bg-[#12121A] p-6 space-y-6">
-        <div className="flex items-start justify-between">
+        {/* Phones: the button sits under the description instead of squeezing beside it. */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="text-sm font-bold text-white flex items-center gap-2"><Key size={16} /> AI Assistant Access</h2>
             <p className="text-xs text-gray-500 mt-1 max-w-lg">
@@ -233,7 +234,7 @@ export const ApiKeys = () => {
           <button
             onClick={create}
             disabled={creating}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-semibold whitespace-nowrap"
+            className="flex shrink-0 items-center gap-1.5 self-start px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-semibold whitespace-nowrap"
           >
             <Plus size={14} /> {creating ? 'Generating...' : 'Generate Key'}
           </button>

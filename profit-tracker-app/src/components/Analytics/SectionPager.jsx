@@ -11,7 +11,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
  *
  * options: [{ key, label, icon? }]
  */
-export function SectionPager({ options, value, onChange, ariaLabel = 'Sections', className = '' }) {
+export function SectionPager({ options, value, onChange, ariaLabel = 'Sections', className = 'card p-1.5', dots = true }) {
   const index = Math.max(0, options.findIndex((o) => o.key === value));
   const prev = options[index - 1];
   const next = options[index + 1];
@@ -22,7 +22,7 @@ export function SectionPager({ options, value, onChange, ariaLabel = 'Sections',
   const arrow = 'flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--dp-text-secondary)] transition-colors hover:bg-[var(--dp-hover-bg)] disabled:opacity-25 disabled:hover:bg-transparent';
 
   return (
-    <nav aria-label={ariaLabel} className={`card p-1.5 ${className}`}>
+    <nav aria-label={ariaLabel} className={className}>
       <div className="flex items-center gap-1">
         <button type="button" className={arrow} onClick={() => go(index - 1)} disabled={!prev} aria-label={prev ? `Previous: ${prev.label}` : 'Previous section'}>
           <ChevronLeft size={18} />
@@ -65,22 +65,29 @@ export function SectionPager({ options, value, onChange, ariaLabel = 'Sections',
         </button>
       </div>
 
-      {/* Position dots */}
-      <div className="flex items-center justify-center gap-1.5 pb-1">
-        {options.map((o, i) => (
-          <button
-            key={o.key}
-            type="button"
-            onClick={() => go(i)}
-            className="page-dot flex items-center justify-center p-1.5"
-            aria-label={`Go to ${o.label}`}
-            aria-current={i === index ? 'true' : undefined}
-          >
-            <span className={`block h-1.5 rounded-full transition-all ${i === index ? 'w-4 bg-[var(--dp-accent)]' : 'w-1.5 bg-[var(--dp-border-hover)]'}`} />
-          </button>
-        ))}
-      </div>
+      {dots && <SectionDots options={options} value={value} onChange={onChange} />}
     </nav>
+  );
+}
+
+/** Position dots for SectionPager; can sit on their own, e.g. under the content. */
+export function SectionDots({ options, value, onChange, className = 'pb-1' }) {
+  const index = Math.max(0, options.findIndex((o) => o.key === value));
+  return (
+    <div className={`flex items-center justify-center gap-1.5 ${className}`}>
+      {options.map((o, i) => (
+        <button
+          key={o.key}
+          type="button"
+          onClick={() => onChange(o.key)}
+          className="page-dot flex items-center justify-center p-1.5"
+          aria-label={`Go to ${o.label}`}
+          aria-current={i === index ? 'true' : undefined}
+        >
+          <span className={`block h-1.5 rounded-full transition-all ${i === index ? 'w-4 bg-[var(--dp-accent)]' : 'w-1.5 bg-[var(--dp-border-hover)]'}`} />
+        </button>
+      ))}
+    </div>
   );
 }
 

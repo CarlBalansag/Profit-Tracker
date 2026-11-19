@@ -19,6 +19,7 @@ import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import ProfitCostTrendChart from '../components/Dashboard/ProfitCostTrendChart';
 import MonthlyProfitSpendChart from '../components/Dashboard/MonthlyProfitSpendChart';
 import PageNav from '../components/UI/PageNav';
+import { SwipeArea } from '../components/Analytics/SectionPager';
 import HScrollbar from '../components/UI/HScrollbar';
 import CountUp from '../components/UI/CountUp';
 import WorkflowPipeline from '../components/Dashboard/WorkflowPipeline';
@@ -400,9 +401,15 @@ const Dashboard = () => {
                         {/* 3 cards at a time, paginated — same on every breakpoint
                             so this column doesn't grow taller than the chart
                             next to it. */}
+                        {/* Swipe left/right to page, same as the arrows. */}
+                        <SwipeArea
+                          onPrev={() => setTopCardsPage((safeTopCardsPage - 1 + topCardsPageCount) % topCardsPageCount)}
+                          onNext={() => setTopCardsPage((safeTopCardsPage + 1) % topCardsPageCount)}
+                        >
                         <div key={safeTopCardsPage} className="space-y-3 page-transition">
                           {mobileTopCards.map((card, i) => renderCardRow(card, safeTopCardsPage * topCardsPerPage + i))}
                         </div>
+                        </SwipeArea>
                         <PageNav count={topCardsPageCount} index={safeTopCardsPage} onChange={setTopCardsPage} isGlass={isGlass} />
                       </>
                     )}
@@ -1133,7 +1140,8 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate, r
       </div>
 
       {/* Carousel — grows to fill remaining height */}
-      <div className="flex flex-col flex-1 min-h-0">
+      {/* Swipe left/right to change goal, same as the arrows. */}
+      <SwipeArea className="flex flex-col flex-1 min-h-0" onPrev={() => setIdx((safeIdx - 1 + count) % count)} onNext={() => setIdx((safeIdx + 1) % count)}>
         {/* Big ring + label centred */}
         <div key={safeIdx} className="flex flex-col items-center justify-center flex-1 gap-2.5 page-transition">
           {/* Ring */}
@@ -1193,7 +1201,7 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate, r
 
         {/* Nav arrows + dot indicators */}
         <PageNav count={count} index={safeIdx} onChange={setIdx} isGlass={isGlass} label="goal" />
-      </div>
+      </SwipeArea>
     </div>
   );
 }

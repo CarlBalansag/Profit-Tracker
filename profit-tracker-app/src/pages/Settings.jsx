@@ -74,15 +74,21 @@ function Settings() {
         <p className="text-sm text-gray-400 mt-1">Manage your account preferences</p>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-8">
-        {/* Left Sidebar Navigation */}
-        <div data-stagger-rows className="w-full md:w-56 flex-shrink-0 space-y-1">
+      <div className="flex flex-col md:flex-row gap-5 md:gap-8">
+        {/* Section navigation. Phones: one row of chips that scrolls sideways
+            (edges fade to show there's more), so the section's content starts
+            right under it instead of a screen further down. Tablet+: the
+            vertical list. */}
+        <div
+          data-stagger-rows
+          className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:block md:w-56 md:flex-shrink-0 md:space-y-1 md:overflow-visible md:px-0 md:pb-0 dp-no-native-scrollbar max-md:[mask-image:linear-gradient(90deg,transparent_0,#000_16px,#000_calc(100%-24px),transparent_100%)]"
+        >
           {navItems.map((item) => (
             <button
               key={item.id}
               disabled={item.disabled}
-              onClick={() => { setActiveTab(item.id); setActiveDataSetupView(null); }}
-              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              onClick={(e) => { setActiveTab(item.id); setActiveDataSetupView(null); e.currentTarget.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); }}
+              className={`shrink-0 whitespace-nowrap md:w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors max-md:border max-md:border-[color:var(--dp-border)] ${
                 activeTab === item.id
                   ? 'bg-[var(--accent-bg)] text-[var(--accent)] border border-transparent'
                   : (item.disabled ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-white hover:bg-white/5')

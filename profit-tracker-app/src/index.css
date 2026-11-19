@@ -1638,3 +1638,19 @@ body,
   .txn-table td.max-w-\[190px\] { max-width: 160px; }
   .txn-table .min-w-40 { min-width: 140px; }
 }
+
+/* Analytics on phones: the section pager, the section's panels and the dots
+   read as one framed component. Panels inside drop their own card chrome and
+   are split by hairlines instead of floating as separate boxes. */
+.section-frame { padding: 0 !important; }
+.section-frame-body > * { gap: 0 !important; }
+.section-frame .section-frame-body section.card,
+.section-frame .section-frame-body .card {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  border-top: 1px solid var(--dp-border) !important;
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+}

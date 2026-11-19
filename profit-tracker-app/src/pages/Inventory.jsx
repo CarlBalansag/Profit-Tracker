@@ -57,13 +57,16 @@ const StatusBadge = ({ status }) => (
   </span>
 );
 
+// One centred cell of the Qty / Aging / Cost strip. Centred columns with thin
+// dividers stay balanced at any phone width instead of drifting left.
 const PhoneStat = ({ label, children, sub }) => (
-  <div className="min-w-0">
+  <div className="min-w-0 px-2 text-center">
     <p className="text-[11px] text-gray-500">{label}</p>
-    <div className="mt-0.5 text-sm font-semibold text-gray-200 tabular-nums">{children}</div>
+    <div className="mt-0.5 flex justify-center text-sm font-semibold text-gray-200 tabular-nums">{children}</div>
     {sub && <p className="text-[11px] text-gray-500 tabular-nums whitespace-nowrap">{sub}</p>}
   </div>
 );
+const STAT_STRIP = 'grid grid-cols-3 divide-x divide-white/[0.07] rounded-lg bg-white/[0.03] py-2.5';
 
 const EbayLink = ({ name }) => (
   <a
@@ -104,19 +107,8 @@ function PhoneInventoryList({ grouped, expandedGroups, toggleGroup }) {
         const returnItem = isMulti ? soonestReturnWindow(group.entries) : item;
         return (
           <li key={group.product_name} className="px-4 py-3.5">
-            <div className="flex items-start gap-2">
-              {isMulti && (
-                <button
-                  type="button"
-                  aria-expanded={isOpen}
-                  aria-label={`${isOpen ? 'Hide' : 'Show'} batches for ${group.product_name}`}
-                  onClick={() => toggleGroup(group.product_name)}
-                  className="-ml-1 mt-0.5 p-1 rounded shrink-0"
-                >
-                  {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
-                </button>
-              )}
-              <div className="min-w-0 flex-1">
+            <div>
+              <div className="min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <p className="min-w-0 text-sm font-semibold leading-snug text-gray-200">{group.product_name}</p>
                   {statuses.size === 1 ? <StatusBadge status={item.status} /> : <span className="shrink-0 text-xs text-gray-400">Mixed</span>}
@@ -129,7 +121,7 @@ function PhoneInventoryList({ grouped, expandedGroups, toggleGroup }) {
               </div>
             </div>
 
-            <div className="mt-3 grid grid-cols-3 gap-3 rounded-lg bg-white/[0.03] px-3 py-2.5">
+            <div className={`mt-2.5 ${STAT_STRIP}`}>
               <PhoneStat label="Qty">{isMulti ? group.totalQty : item.qty_on_hand}</PhoneStat>
               <PhoneStat label="Aging">
                 <span className={`inline-flex items-center gap-1 ${agingTone(days)}`}>
@@ -144,13 +136,24 @@ function PhoneInventoryList({ grouped, expandedGroups, toggleGroup }) {
               </PhoneStat>
             </div>
 
-            <div className="mt-2.5 flex items-center justify-between gap-3">
+            <div className="mt-2 flex min-h-[36px] items-center justify-between gap-3">
               <EbayLink name={group.product_name} />
-              {!isMulti && <SellLink item={item} />}
+              {isMulti ? (
+                <button
+                  type="button"
+                  aria-expanded={isOpen}
+                  aria-label={`${isOpen ? 'Hide' : 'Show'} batches for ${group.product_name}`}
+                  onClick={() => toggleGroup(group.product_name)}
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-gray-300 hover:bg-white/5"
+                >
+                  {group.entries.length} batches
+                  {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+              ) : <SellLink item={item} />}
             </div>
 
             {isMulti && isOpen && (
-              <ul className="mt-3 space-y-2 border-l-2 border-white/10 pl-3">
+              <ul className="mt-2 space-y-2">
                 {group.entries.map(entry => (
                   <li key={entry.id} className="rounded-lg bg-white/[0.02] px-3 py-2.5">
                     <div className="flex items-center justify-between gap-2">
@@ -164,7 +167,7 @@ function PhoneInventoryList({ grouped, expandedGroups, toggleGroup }) {
                     </div>
                     <ReturnWindowBadge item={entry} className="mt-1" />
                     <div className="mt-2">
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className={STAT_STRIP}>
                         <PhoneStat label="Qty">{entry.qty_on_hand}</PhoneStat>
                         <PhoneStat label="Aging">
                           <span className={agingTone(entry.daysInInv)}>{entry.daysInInv}d</span>
