@@ -10,15 +10,12 @@ import { SpotlightOverlay } from '../Tutorial/SpotlightOverlay';
 import AnimatedLogo from '../UI/AnimatedLogo';
 import PendingCashoutCommit from '../PendingCashoutCommit';
 
-const Header = ({ onMenuClick, isGlass }) => {
+const Header = ({ isGlass }) => {
   return (
     <header className={clsx(
       "lg:hidden flex items-center gap-4 px-4 py-3",
       isGlass ? "border-b border-white/10" : "border-b border-[color:var(--dp-border)] bg-[var(--dp-card-bg)]"
     )}>
-      <button aria-label="Open menu" className={clsx("-m-2.5 p-2.5 max-md:hidden", isGlass ? "text-gray-400 hover:text-white" : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]")} onClick={onMenuClick}>
-        <Menu size={24} />
-      </button>
       <div className="flex items-center gap-2">
         <AnimatedLogo size={28} label={null} />
         <span className={isGlass ? "font-bold text-white" : "font-bold text-[var(--dp-text-primary)]"}>Profit Tracker</span>
@@ -26,6 +23,26 @@ const Header = ({ onMenuClick, isGlass }) => {
     </header>
   );
 };
+
+// Tablet widths (768-1023px) have no bottom bar and no fixed sidebar, so the
+// menu opens from a round button pinned to the bottom-right corner, within
+// thumb reach, instead of a hamburger in the top bar.
+const MenuFab = ({ onClick, isGlass, hidden }) => (
+  <button
+    type="button"
+    aria-label="Open menu"
+    aria-haspopup="dialog"
+    onClick={onClick}
+    className={clsx(
+      "fixed right-5 z-40 hidden h-14 w-14 items-center justify-center rounded-full shadow-lg transition-transform active:scale-95 md:flex lg:hidden",
+      hidden && "md:hidden",
+      isGlass ? "bg-[#d8a65a] text-[#111315]" : "bg-[var(--dp-accent-solid)] text-white"
+    )}
+    style={{ bottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}
+  >
+    <Menu size={24} aria-hidden="true" />
+  </button>
+);
 
 const Shell = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -89,7 +106,7 @@ const Shell = ({ children }) => {
           : "bg-[var(--dp-bg)]"
       )}>
         {/* Mobile top bar — hidden on lg+ */}
-        <Header onMenuClick={() => setIsSidebarOpen(true)} isGlass={isGlass} />
+        <Header isGlass={isGlass} />
 
         {/* Content region. min-h-0 ensures the flex child can shrink so
             each page component controls its own scroll boundary.
@@ -106,6 +123,7 @@ const Shell = ({ children }) => {
 
         <BottomNav onMoreClick={() => setIsSidebarOpen(true)} isGlass={isGlass} />
       </main>
+      <MenuFab onClick={() => setIsSidebarOpen(true)} isGlass={isGlass} hidden={isSidebarOpen} />
       <SpotlightOverlay />
       <PendingCashoutCommit />
     </div>
