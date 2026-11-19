@@ -52,8 +52,9 @@ const BottomNav = ({ onMoreClick, isGlass }) => {
     ? { active: 'text-[#d8a65a]', idle: 'text-[#e8e2d6]/70' }
     : { active: 'text-[var(--dp-accent)]', idle: 'text-[var(--dp-text-secondary)]' };
 
+  // Shown below 1024px (phones and tablets); the sidebar is always visible from there up.
   return (
-    <div className="relative md:hidden">
+    <div className="relative lg:hidden">
       {addOpen && (
         <>
           <button type="button" aria-label="Close quick add" tabIndex={-1} onClick={close} className="fixed inset-0 z-30 cursor-default" />

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import BottomNav from './BottomNav';
-import { Menu } from 'lucide-react';
 import clsx from 'clsx';
 import { useUiPreferences } from '../../hooks/useUiPreferences';
 import { useAuth } from '../../context/AuthContext';
@@ -23,26 +22,6 @@ const Header = ({ isGlass }) => {
     </header>
   );
 };
-
-// Tablet widths (768-1023px) have no bottom bar and no fixed sidebar, so the
-// menu opens from a round button pinned to the bottom-right corner, within
-// thumb reach, instead of a hamburger in the top bar.
-const MenuFab = ({ onClick, isGlass, hidden }) => (
-  <button
-    type="button"
-    aria-label="Open menu"
-    aria-haspopup="dialog"
-    onClick={onClick}
-    className={clsx(
-      "fixed right-5 z-40 hidden h-14 w-14 items-center justify-center rounded-full shadow-lg transition-transform active:scale-95 md:flex lg:hidden",
-      hidden && "md:hidden",
-      isGlass ? "bg-[#d8a65a] text-[#111315]" : "bg-[var(--dp-accent-solid)] text-white"
-    )}
-    style={{ bottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}
-  >
-    <Menu size={24} aria-hidden="true" />
-  </button>
-);
 
 const Shell = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -123,7 +102,6 @@ const Shell = ({ children }) => {
 
         <BottomNav onMoreClick={() => setIsSidebarOpen(true)} isGlass={isGlass} />
       </main>
-      <MenuFab onClick={() => setIsSidebarOpen(true)} isGlass={isGlass} hidden={isSidebarOpen} />
       <SpotlightOverlay />
       <PendingCashoutCommit />
     </div>
