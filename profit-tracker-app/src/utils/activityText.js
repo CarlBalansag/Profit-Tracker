@@ -151,8 +151,14 @@ const SETUP = {
   buyer: ['buyer', 'buyer', 'Buyer'],
   goal: ['goal', 'goal', 'Goal'],
   recurring_expense: ['recurringExpense', 'recurring expense', 'Recurring expense'],
+  cashout_connection: ['cashoutConnection', 'cashout connection', 'Cashout connection'],
+  calendar_event: ['calendarEvent', 'calendar event', 'Calendar event'],
+  // Notes are tracked the same way but listed with buys and sales.
+  product_note: ['productNote', 'note', 'Note'],
+  transaction_note: ['transactionNote', 'note', 'Note'],
 };
-export const isSetupEntry = (entry) => Boolean(SETUP[entry?.record_type]);
+const NOTE_TYPES = new Set(['product_note', 'transaction_note']);
+export const isSetupEntry = (entry) => Boolean(SETUP[entry?.record_type]) && !NOTE_TYPES.has(entry.record_type);
 
 const GOAL_NAMES = { netProfit: 'Net profit goal', totalRevenue: 'Revenue goal', unitsSold: 'Units sold goal' };
 
@@ -168,12 +174,23 @@ const SETUP_FIELDS = {
   target_7d: ['7-day target'], target_30d: ['30-day target'], target_ytd: ['Year target'], active: ['Active', 'bool'],
   amount: ['Amount', 'money'], category: ['Category'], frequency: ['Frequency'],
   start_date: ['Starts', 'date'], end_date: ['Ends', 'date'], payment_method_id: ['Card', 'ref'], platform_id: ['Platform', 'ref'],
+  display_name: ['Name'], title: ['Title'], date: ['Date', 'date'], color: ['Colour'],
+  note: ['Note', 'text'], body: ['Note', 'text'], pinned: ['Pinned', 'bool'],
+};
+
+// A note's text, shortened for one line.
+const snippet = (text) => {
+  const s = String(text || '').replace(/\s+/g, ' ').trim();
+  return s.length > 40 ? `“${s.slice(0, 39)}…”` : `“${s}”`;
 };
 
 // What the records that lost (or got back) the link are called.
 function linkNoun(row) {
   if (row.model === 'sales') return row.fields?.sale_shipping_payment_method_id ? 'shipping label' : 'sale';
-  return { inventory: 'purchase', expense: 'expense', recurringExpense: 'recurring expense', cashoutConnection: 'cashout connection', account: 'store account' }[row.model] || 'record';
+  return {
+    inventory: 'purchase', expense: 'expense', recurringExpense: 'recurring expense', cashoutConnection: 'cashout connection', account: 'store account',
+    cashoutCommitment: 'commitment', cashoutItemMatch: 'matched item',
+  }[row.model] || 'record';
 }
 
 function setupText(entry) {
@@ -192,6 +209,8 @@ function setupText(entry) {
     if (entry.record_type === 'card' && v.type) parts.push(v.type);
     if (entry.record_type === 'platform' && v.type) parts.push(v.type);
     if (entry.record_type === 'recurring_expense') parts.push(`${formatField('money', v.amount)} ${v.frequency || ''}`.trim());
+    if (entry.record_type === 'calendar_event' && v.date) parts.push(formatField('date', v.date));
+    if (NOTE_TYPES.has(entry.record_type)) parts.push(snippet(v.note ?? v.body));
     const others = rows.filter((r) => r.model === model && r !== main && r.op === main.op).length;
     if (others) parts.push(`+ ${others} more`);
     // Records that came or went with it (a platform's store accounts, a
@@ -206,6 +225,7 @@ function setupText(entry) {
       const [name, kind] = label;
       if (kind === 'ref') parts.push(`${name} changed`);
       else if (kind === 'bool') parts.push(`${name} ${f.after ? 'on' : 'off'}`);
+      else if (kind === 'text') parts.push(`${name} ${snippet(f.after)}`);
       else parts.push(`${name} ${formatField(kind, f.before)} → ${formatField(kind, f.after)}`);
     }
     if (parts.length > 3) parts.splice(3, parts.length - 3, `${parts.length - 3} more`);
@@ -221,12 +241,51 @@ function setupText(entry) {
     const restoring = rows.some((r) => r.link && Object.values(r.fields || {}).some((f) => f.after));
     parts.push(restoring ? `Put back on ${linkList}` : `Taken off ${linkList}`);
   }
+  if (d.key_replaced) parts.push('Key replaced');
+  if (d.key_needed) parts.push('Enter its key again to sync');
   return { title, change: parts.join(' · ') };
+}
+
+// ─── Log-only entries (kind 'event'): undo can't reverse these ───────────────
+const RESET_COUNTS = [['purchases', 'purchase'], ['sales', 'sale'], ['expenses', 'expense'], ['paymentMethods', 'card'], ['platforms', 'platform']];
+
+function eventText(entry) {
+  const d = entry.detail || {};
+  const type = entry.record_type;
+  if (type === 'api_key') {
+    const titles = {
+      create: 'Created an API key', rotate: 'Replaced an API key', revoke: 'Revoked an API key',
+      cashout_writes: d.allowed ? 'Allowed cashout actions for an API key' : 'Stopped cashout actions for an API key',
+    };
+    return { title: titles[d.action] || 'Changed an API key', change: '', product: d.product_name || 'API key' };
+  }
+  if (type === 'setting') {
+    return { title: `Turned ${d.enabled ? 'on' : 'off'} ${d.product_name || 'a setting'}`, change: '', product: 'Settings' };
+  }
+  if (type === 'data_reset') {
+    const deleted = d.deleted || {};
+    const counts = RESET_COUNTS.filter(([k]) => Number(deleted[k]) > 0).map(([k, word]) => plural(Number(deleted[k]), word));
+    return {
+      title: d.action === 'everything' ? 'Reset all data' : 'Reset purchases and sales',
+      change: counts.length ? `${counts.join(', ')} deleted` : '',
+      product: d.product_name || 'Data',
+    };
+  }
+  if (type === 'cashout_connection') return { title: 'Replaced a cashout key', change: '', product: d.product_name || 'Cashout connection' };
+  if (type === 'cashout') {
+    const titles = { commit: 'Committed to a cashout deal', change_quantity: 'Changed a cashout commitment', withdraw: 'Withdrew a cashout commitment', log_purchase: 'Logged a purchase with a cashout' };
+    const parts = [];
+    if (Number(d.quantity) > 0) parts.push(`Qty ${Number(d.quantity)}`);
+    if (d.cashout) parts.push(d.cashout);
+    return { title: titles[d.action] || 'Cashout action', change: parts.join(' · '), product: d.product_name || 'Cashout' };
+  }
+  return { title: 'Activity', change: '', product: d.product_name || 'Record' };
 }
 
 // { title, change, product } -- e.g. "Cancel Sale", "Paid → Cancelled · 2 units
 // back in stock", "Meta Quest 3S".
 export function describeActivity(entry) {
+  if (entry.kind === 'event') return eventText(entry);
   const setup = SETUP[entry.record_type];
   const text = setup && entry.kind === 'change' ? setupText(entry)
     : entry.kind === 'status' ? statusText(entry)

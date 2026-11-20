@@ -178,22 +178,41 @@ async function logStatus(tx, userId, kind, before, result, { source, revertsId, 
 // order routes/sales.js uses; setup records are parents of all of those).
 const PARENT_FIRST = {
   platform: 0, account: 1, paymentMethod: 2, buyer: 3, goal: 4, recurringExpense: 5,
-  inventory: 6, sales: 7, refund: 8, cashoutCommitment: 9, expense: 10, cashoutConnection: 11,
+  cashoutConnection: 6, calendarEvent: 7, productNote: 8,
+  inventory: 9, sales: 10, refund: 11, cashoutCommitment: 12, cashoutItemMatch: 13, expense: 14, transactionNote: 15,
 };
 const MODELS = Object.keys(PARENT_FIRST);
 // Background refreshes (carrier tracking, market price checks, the card
-// catalog sync, recurring-expense generation) rewrite these on their own. They
-// are never part of a change set and never block an undo.
+// catalog sync, recurring-expense generation, cashout syncs) rewrite these on
+// their own. They are never part of a change set and never block an undo.
 // receipt_url is here too: Add Transaction attaches the receipt in a second
 // request right after saving, which must not make the add impossible to undo.
 const VOLATILE = new Set([
   'tracking_info', 'carrier', 'market_value', 'market_source', 'market_checked_at', 'tax_version', 'receipt_url', 'updated_at',
   'catalog_synced_at', 'catalog_applied', 'last_generated', 'last_synced_at',
 ]);
+// The same, for one model only. A cashout connection's status and last error
+// come from syncs, and its key (which never goes into the log) is changed by
+// replacing it, which undo can't reverse.
+const MODEL_VOLATILE = {
+  cashoutConnection: new Set(['status', 'last_error', 'key_last4', 'encrypted_key']),
+};
+const isVolatile = (model, key) => VOLATILE.has(key) || Boolean(MODEL_VOLATILE[model]?.has(key));
 const TABLE = {
   inventory: 'Inventory', sales: 'Sales', refund: 'Refund', cashoutCommitment: 'CashoutCommitment', expense: 'Expense',
   paymentMethod: 'PaymentMethod', account: 'Account', platform: 'Platform', buyer: 'Buyer', goal: 'Goal',
-  recurringExpense: 'RecurringExpense', cashoutConnection: 'CashoutConnection',
+  recurringExpense: 'RecurringExpense', cashoutConnection: 'CashoutConnection', cashoutItemMatch: 'CashoutItemMatch',
+  calendarEvent: 'CalendarEvent', productNote: 'ProductNote', transactionNote: 'TransactionNote',
+};
+// A removed cashout connection comes back without its key (the key is never
+// logged), marked as needing attention so background sync leaves it alone
+// until the user enters the key again.
+const RESTORE_OVERRIDES = {
+  cashoutConnection: {
+    encrypted_key: '',
+    status: 'attention_needed',
+    last_error: 'Brought back by Undo without its key. Enter the key again.',
+  },
 };
 // Records that point at a setup record, as [model, field]. Platforms also own
 // their store accounts (ON DELETE CASCADE), whose purchases lose that account.
@@ -204,6 +223,10 @@ const LINKS = {
   platform: [['inventory', 'vendor_id'], ['sales', 'platform_id'], ['cashoutConnection', 'platform_id'], ['account', 'platform_id']],
   buyer: [['sales', 'buyer_id']],
   recurringExpense: [['expense', 'recurring_expense_id']],
+  // Removing a connection deletes its commitments and item matches (ON DELETE
+  // CASCADE), so they are logged with it. Its deal-price history is a cache
+  // the next sync rebuilds and is not.
+  cashoutConnection: [['cashoutCommitment', 'connection_id'], ['cashoutItemMatch', 'connection_id']],
   goal: [],
 };
 const ownerFilter = (model, userId) => (model === 'sales' ? { inventory: { user_id: userId } } : { user_id: userId });
@@ -280,7 +303,7 @@ function diffRows(before, after, linkKeys = new Set()) {
     const b = before.get(key);
     const a = after.get(key);
     if (b && a) {
-      const keys = Object.keys({ ...b, ...a }).filter((k) => !VOLATILE.has(k) && !sameValue(b[k], a[k]));
+      const keys = Object.keys({ ...b, ...a }).filter((k) => !isVolatile(model, k) && !sameValue(b[k], a[k]));
       if (keys.length) changes.push({ model, id, op: 'update', fields: fieldSnapshot(b, a, keys), ...(linkKeys.has(key) ? { link: true } : {}) });
     } else if (a) {
       changes.push({ model, id, op: 'create', row: rowSnapshot(a) });
@@ -338,10 +361,17 @@ async function trackChange(tx, userId, meta, work) {
 // Activity record_type -> model, for setup records.
 const SETUP_MODEL = {
   card: 'paymentMethod', account: 'account', platform: 'platform', buyer: 'buyer', goal: 'goal', recurring_expense: 'recurringExpense',
+  cashout_connection: 'cashoutConnection', calendar_event: 'calendarEvent',
 };
+// Records that can be tracked the same way but belong with purchases and sales
+// on the Activity page (notes about a product or one purchase/sale).
+const RECORD_MODEL = { ...SETUP_MODEL, product_note: 'productNote', transaction_note: 'transactionNote' };
+// Log-only entries ('event'): things undo can't reverse. Setup ones show under
+// Setup; 'cashout' (commitments, Log Purchase) under buys and sales.
+const SETUP_EVENT_TYPES = ['api_key', 'setting', 'data_reset'];
 
-// trackChange for one setup record (see SETUP_MODEL), run inside the caller's
-// transaction.
+// trackChange for one tracked record (see RECORD_MODEL), run inside the
+// caller's transaction.
 //   action    'create' | 'edit' | 'delete'
 //   id        the record (edit/delete); a create takes it from `work`'s result
 //   extraRefs (tx, result) => refs of other rows the work changes, e.g. the
@@ -349,7 +379,7 @@ const SETUP_MODEL = {
 // A delete also snapshots everything that points at the record, so undo can
 // put those links back.
 function trackSetupChange(tx, userId, { action, recordType, id, source, extraRefs }, work) {
-  const model = SETUP_MODEL[recordType];
+  const model = RECORD_MODEL[recordType];
   if (!model) throw new Error(`Unknown setup record type: ${recordType}`);
   const idOf = (result) => id ?? result?.id;
   return trackChange(tx, userId, {
@@ -366,14 +396,50 @@ function trackSetupChange(tx, userId, { action, recordType, id, source, extraRef
   }, work);
 }
 
+// A purchase/sale note is shown under the product it is about.
+async function productNameForNote(tx, note) {
+  if (note.entity_type === 'purchase') {
+    return (await tx.inventory.findUnique({ where: { id: note.entity_id }, select: { product_name: true } }))?.product_name ?? null;
+  }
+  const sale = await tx.sales.findUnique({ where: { id: note.entity_id }, select: { inventory: { select: { product_name: true } } } });
+  return sale?.inventory?.product_name ?? null;
+}
+
+// Writes a log-only entry: something the user did that undo can't reverse
+// (an API key, a setting, a data reset, a cashout commitment sent to the
+// provider). `client` is a transaction or the prisma client.
+function logEvent(client, userId, { recordType, recordId, action, name = null, detail = {}, source = 'web' }) {
+  return write(client, userId, {
+    kind: 'event',
+    recordType,
+    recordId: recordId || userId,
+    detail: { action, product_name: name, ...detail },
+    source,
+  });
+}
+
+// logEvent after the action already succeeded outside a transaction: a failed
+// log write is reported, never turned into a failed request.
+async function recordEvent(userId, options) {
+  try {
+    return await logEvent(prisma, userId, options);
+  } catch (err) {
+    console.error('[activity] could not log event:', err.message);
+    return null;
+  }
+}
+
 // What the Activity page calls the record: the product (purchases and sales),
 // the expense name, or the setup record's name (a goal's metric).
 async function nameFor(tx, recordType, recordId, rows) {
   if (recordType === 'expense') return (rows.get(`expense:${recordId}`) || {}).name ?? null;
-  const setupModel = SETUP_MODEL[recordType];
+  const setupModel = RECORD_MODEL[recordType];
   if (setupModel) {
     const row = rows.get(`${setupModel}:${recordId}`) || await tx[setupModel].findUnique({ where: { id: recordId } });
-    return row?.name ?? row?.metric ?? null;
+    if (!row) return null;
+    if (recordType === 'cashout_connection') return row.display_name || row.provider;
+    if (recordType === 'transaction_note') return productNameForNote(tx, row);
+    return row.name ?? row.metric ?? row.title ?? row.product_name ?? null;
   }
   if (recordType === 'purchase') {
     const row = rows.get(`inventory:${recordId}`) || await tx.inventory.findUnique({ where: { id: recordId } });
@@ -385,13 +451,14 @@ async function nameFor(tx, recordType, recordId, rows) {
   return inv?.product_name ?? null;
 }
 
-const rowMatches = (current, { values }) => Object.entries(values)
-  .every(([key, v]) => VOLATILE.has(key) || sameValue(current[key], v));
+const rowMatches = (model, current, { values }) => Object.entries(values)
+  .every(([key, v]) => isVolatile(model, key) || sameValue(current[key], v));
 
 // What the messages call each record type.
 const RECORD_LABEL = {
   purchase: 'purchase', sale: 'sale', expense: 'expense', card: 'card', account: 'store account',
   platform: 'platform', buyer: 'buyer', goal: 'goal', recurring_expense: 'recurring expense',
+  cashout_connection: 'cashout connection', calendar_event: 'calendar event', product_note: 'note', transaction_note: 'note',
 };
 const labelFor = (recordType) => RECORD_LABEL[recordType] || 'record';
 const changedMessage = (recordType) => `This ${labelFor(recordType)} changed after this, so it can't be undone safely.`;
@@ -399,6 +466,7 @@ const changedMessage = (recordType) => `This ${labelFor(recordType)} changed aft
 const USED_BY = {
   inventory: 'purchases', sales: 'sales', expense: 'expenses', recurringExpense: 'recurring expenses',
   cashoutConnection: 'cashout connections', account: 'store accounts',
+  cashoutCommitment: 'cashout commitments', cashoutItemMatch: 'matched cashout items',
 };
 
 async function undoChange(tx, userId, entry, source) {
@@ -434,7 +502,7 @@ async function undoChange(tx, userId, entry, source) {
     if (!row || owner !== userId) throw requestError(409, `This ${labelFor(entry.record_type)} no longer exists.`);
     if (change.op === 'update') {
       if (!fieldsMatch) throw requestError(409, refused);
-    } else if (!rowMatches(row, change.row)) {
+    } else if (!rowMatches(change.model, row, change.row)) {
       throw requestError(409, refused);
     }
   }
@@ -467,7 +535,7 @@ async function undoChange(tx, userId, entry, source) {
   // remove added rows (children first).
   try {
     for (const change of applied.filter((c) => c.op === 'delete')) {
-      await tx[change.model].create({ data: rowData(change.row) });
+      await tx[change.model].create({ data: { ...rowData(change.row), ...(RESTORE_OVERRIDES[change.model] || {}) } });
     }
     for (const change of applied.filter((c) => c.op === 'update')) {
       const data = Object.fromEntries(Object.entries(change.fields)
@@ -493,11 +561,12 @@ async function undoChange(tx, userId, entry, source) {
     ? { ...c, fields: swapFields(c.fields) }
     : { ...c, op: c.op === 'create' ? 'delete' : 'create' }))
     .sort((x, y) => PARENT_FIRST[x.model] - PARENT_FIRST[y.model]);
+  const keyNeeded = applied.some((c) => c.op === 'delete' && c.model === 'cashoutConnection');
   return write(tx, userId, {
     kind: 'change',
     recordType: entry.record_type,
     recordId: entry.record_id,
-    detail: { ...entry.detail, undo: !entry.detail.undo, rows: inverse },
+    detail: { ...entry.detail, undo: !entry.detail.undo, rows: inverse, ...(keyNeeded ? { key_needed: true } : {}) },
     revertsId: entry.id,
     source,
   });
@@ -508,6 +577,7 @@ async function undoChange(tx, userId, entry, source) {
 const undoDeadline = (entry) => new Date(new Date(entry.created_at).getTime() + UNDO_WINDOW_DAYS * DAY_MS);
 
 function undoState(entry, now = new Date()) {
+  if (entry.kind === 'event') return 'not_undoable';
   if (entry.undone_at) return 'undone';
   if (now > undoDeadline(entry)) return 'expired';
   return 'available';
@@ -533,7 +603,7 @@ const toJson = (entry, now) => entry && ({
 // `group`: 'setup' (cards, accounts, platforms, buyers, goals, recurring
 // expenses), 'records' (everything else: purchases, sales, expenses), or
 // omitted for all.
-const SETUP_TYPES = Object.keys(SETUP_MODEL);
+const SETUP_TYPES = [...Object.keys(SETUP_MODEL), ...SETUP_EVENT_TYPES];
 async function listActivity(userId, { before, limit, group } = {}) {
   const take = Math.min(Math.max(Number(limit) || 50, 1), 100);
   const beforeDate = before ? new Date(before) : null;
@@ -647,6 +717,7 @@ async function undoActivity(userId, entryId, { source = 'web' } = {}) {
   const state = undoState(entry);
   if (state === 'undone') throw requestError(409, 'This was already undone.');
   if (state === 'expired') throw requestError(409, `Only the last ${UNDO_WINDOW_DAYS} days can be undone.`);
+  if (state === 'not_undoable') throw requestError(409, 'This can\'t be undone.');
 
   let created;
   if (entry.kind === 'status') {
@@ -695,6 +766,9 @@ module.exports = {
   logStatus,
   trackChange,
   trackSetupChange,
+  logEvent,
+  recordEvent,
+  SETUP_TYPES,
   linkedRefs,
   listActivity,
   undoActivity,

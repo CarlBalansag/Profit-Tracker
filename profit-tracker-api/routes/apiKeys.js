@@ -2,6 +2,13 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
 const { createApiKey, rotateApiKey, revokeApiKey } = require('../services/apiKeys');
+const activityLog = require('../services/activityLog');
+
+// API key actions are log-only Activity entries (a key can't be un-revoked or
+// un-issued). The key itself never goes into the log, only its name.
+const logKey = (userId, action, record, detail = {}) => activityLog.recordEvent(userId, {
+  recordType: 'api_key', recordId: record.id, action, name: record.name || 'API key', detail,
+});
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -36,6 +43,7 @@ router.post('/', isAuthenticated, async (req, res, next) => {
   try {
     const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 100) || null : null;
     const { record, token } = await createApiKey(req.user.id, name);
+    await logKey(req.user.id, 'create', record);
     res.json({ ...publicKey(record), token });
   } catch (err) {
     next(err);
@@ -47,6 +55,7 @@ router.post('/', isAuthenticated, async (req, res, next) => {
 router.post('/:id/rotate', isAuthenticated, async (req, res, next) => {
   try {
     const { record, token } = await rotateApiKey(req.user.id, req.params.id);
+    await logKey(req.user.id, 'rotate', record);
     res.json({ ...publicKey(record), token });
   } catch (err) {
     next(err);
@@ -64,6 +73,9 @@ router.patch('/:id', isAuthenticated, async (req, res, next) => {
     if (!existing) return res.status(404).json({ error: 'API key not found' });
     if (existing.revoked_at) return res.status(409).json({ error: 'This key is revoked.' });
     const record = await prisma.apiKey.update({ where: { id: existing.id }, data: { allow_cashout_writes: req.body.allow_cashout_writes } });
+    if (record.allow_cashout_writes !== existing.allow_cashout_writes) {
+      await logKey(req.user.id, 'cashout_writes', record, { allowed: record.allow_cashout_writes });
+    }
     res.json(publicKey(record));
   } catch (err) {
     next(err);
@@ -75,6 +87,7 @@ router.patch('/:id', isAuthenticated, async (req, res, next) => {
 router.delete('/:id', isAuthenticated, async (req, res, next) => {
   try {
     const revoked = await revokeApiKey(req.user.id, req.params.id);
+    await logKey(req.user.id, 'revoke', revoked);
     res.json(publicKey(revoked));
   } catch (err) {
     next(err);

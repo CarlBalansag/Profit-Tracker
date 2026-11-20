@@ -5,6 +5,7 @@ const { randomUUID } = require('crypto');
 const { getCalendarFeedUrl, publishCalendarFeed } = require('../services/calendarFeed');
 const { validateBody } = require('../middleware/validate');
 const { calendarEvent, updateCalendarEvent } = require('../validation/schemas');
+const activityLog = require('../services/activityLog');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -378,7 +379,9 @@ router.post('/', isAuthenticated, validateBody(calendarEvent), async (req, res, 
   try {
     const { title, date, end_date, color, notes } = req.body;
 
-    const event = await prisma.calendarEvent.create({
+    const { result: event, activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'create', recordType: 'calendar_event',
+    }, () => tx.calendarEvent.create({
       data: {
         user_id: req.user.id,
         title: title.trim(),
@@ -387,10 +390,10 @@ router.post('/', isAuthenticated, validateBody(calendarEvent), async (req, res, 
         color: color || null,
         notes: notes || null,
       },
-    });
+    })));
 
     await publishCalendarFeed(req.user.id);
-    res.status(201).json(event);
+    res.status(201).json({ ...event, activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -415,7 +418,9 @@ router.put('/:id', isAuthenticated, validateBody(updateCalendarEvent), async (re
         details: [{ path: 'end_date', message: 'end_date cannot be before date' }],
       });
     }
-    const updated = await prisma.calendarEvent.update({
+    const { result: updated, activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'edit', recordType: 'calendar_event', id: req.params.id,
+    }, () => tx.calendarEvent.update({
       where: { id: req.params.id },
       data: {
         ...(title !== undefined && { title: title.trim() }),
@@ -424,10 +429,10 @@ router.put('/:id', isAuthenticated, validateBody(updateCalendarEvent), async (re
         ...(color !== undefined && { color: color || null }),
         ...(notes !== undefined && { notes: notes || null }),
       },
-    });
+    })));
 
     await publishCalendarFeed(req.user.id);
-    res.json(updated);
+    res.json({ ...updated, activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -443,9 +448,11 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
       return res.status(404).json({ error: 'Not found' });
     }
 
-    await prisma.calendarEvent.delete({ where: { id: req.params.id } });
+    const { activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'delete', recordType: 'calendar_event', id: req.params.id,
+    }, () => tx.calendarEvent.delete({ where: { id: req.params.id } })));
     await publishCalendarFeed(req.user.id);
-    res.json({ success: true });
+    res.json({ success: true, activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }

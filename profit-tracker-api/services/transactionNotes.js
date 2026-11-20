@@ -141,6 +141,24 @@ async function productNamesFor(client, userId, notes) {
   return names;
 }
 
+// The note writes, each logged in Activity (in the caller's transaction) so
+// it can be undone. `source` 'mcp' is the AI assistant.
+const activityLog = require('./activityLog');
+const tracked = (action, work) => (client, userId, idOrInput, ...rest) => {
+  const source = rest[rest.length - 1] === 'mcp' ? 'assistant' : 'web';
+  const noteId = typeof idOrInput === 'string' ? idOrInput : undefined;
+  return activityLog.trackSetupChange(client, userId, { action, recordType: 'transaction_note', id: noteId, source },
+    () => work(client, userId, idOrInput, ...rest))
+    .then(({ result }) => result);
+};
+const trackedCreate = (client, userId, input, source) => activityLog.trackSetupChange(
+  client, userId, { action: 'create', recordType: 'transaction_note', source: source === 'mcp' ? 'assistant' : 'web' },
+  async () => {
+    const out = await createNote(client, userId, input, source);
+    return Object.assign(out, { id: out.note.id });
+  },
+).then(({ result }) => { delete result.id; return result; });
+
 module.exports = {
   ENTITY_TYPES,
   BODY_MAX,
@@ -152,9 +170,9 @@ module.exports = {
   requireOwnedEntity,
   cleanBody,
   serializeNote,
-  createNote,
-  updateNote,
-  deleteNote,
+  createNote: trackedCreate,
+  updateNote: tracked('edit', updateNote),
+  deleteNote: tracked('delete', deleteNote),
   listEntityNotes,
   productNamesFor,
 };

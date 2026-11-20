@@ -2,6 +2,7 @@ const prisma = require('../../prisma');
 const { requireOwned } = require('../ownership');
 const { encryptKey, decryptKey, maskKey } = require('./crypto');
 const { getAdapter } = require('./registry');
+const activityLog = require('../activityLog');
 
 // In-memory cache for live deals per connection
 // Key: connectionId -> { deals: CashoutDeal[], fetchedAt: number, error: string | null }
@@ -102,7 +103,9 @@ async function createConnection(userId, { provider, displayName, apiKey, email, 
   const encryptedKey = encryptKey(credential.raw);
   const keyLast4 = credential.masked;
 
-  const created = await prisma.cashoutConnection.create({
+  const { result: created, activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, userId, {
+    action: 'create', recordType: 'cashout_connection',
+  }, () => tx.cashoutConnection.create({
     data: {
       user_id: userId,
       provider,
@@ -114,9 +117,9 @@ async function createConnection(userId, { provider, displayName, apiKey, email, 
       last_synced_at: new Date(),
     },
     include: { platform: { select: { id: true, name: true } } },
-  });
+  })));
 
-  return safeConnection(created);
+  return { ...safeConnection(created), activity_id: activity?.id ?? null };
 }
 
 async function updateConnection(userId, connectionId, { displayName, apiKey, email, password, platformId }) {
@@ -150,13 +153,32 @@ async function updateConnection(userId, connectionId, { displayName, apiKey, ema
     syncBlockedUntil.delete(connectionId);
   }
 
-  const updated = await prisma.cashoutConnection.update({
-    where: { id: connectionId },
-    data: updateData,
-    include: { platform: { select: { id: true, name: true } } },
+  // A replaced key is logged as such (never the key itself); undo can put the
+  // name and platform back but not the old key.
+  const { result: updated, activity } = await prisma.$transaction(async (tx) => {
+    const tracked = await activityLog.trackSetupChange(tx, userId, {
+      action: 'edit', recordType: 'cashout_connection', id: connectionId,
+    }, () => tx.cashoutConnection.update({
+      where: { id: connectionId },
+      data: updateData,
+      include: { platform: { select: { id: true, name: true } } },
+    }));
+    if (!credential) return tracked;
+    if (tracked.activity) {
+      const entry = await tx.activityLog.update({
+        where: { id: tracked.activity.id },
+        data: { detail: { ...tracked.activity.detail, key_replaced: true } },
+      });
+      return { ...tracked, activity: entry };
+    }
+    const entry = await activityLog.logEvent(tx, userId, {
+      recordType: 'cashout_connection', recordId: connectionId, action: 'key_replaced',
+      name: tracked.result.display_name || tracked.result.provider,
+    });
+    return { ...tracked, activity: entry };
   });
 
-  return safeConnection(updated);
+  return { ...safeConnection(updated), activity_id: activity?.id ?? null };
 }
 
 async function testConnection(userId, connectionId) {
@@ -200,10 +222,13 @@ async function deleteConnection(userId, connectionId) {
   await getConnection(userId, connectionId);
   dealsCache.delete(connectionId);
   syncBlockedUntil.delete(connectionId);
-  await prisma.cashoutConnection.delete({
-    where: { id: connectionId },
-  });
-  return { success: true };
+  // Its commitments and item matches go with it (ON DELETE CASCADE); they are
+  // logged so undo can bring them back. The key is not, so undo brings the
+  // connection back without it.
+  const { activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, userId, {
+    action: 'delete', recordType: 'cashout_connection', id: connectionId,
+  }, () => tx.cashoutConnection.delete({ where: { id: connectionId } })));
+  return { success: true, activity_id: activity?.id ?? null };
 }
 
 /**

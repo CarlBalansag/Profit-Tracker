@@ -9,6 +9,12 @@ const isAuthenticated = (req, res, next) => {
 
 // Normalize product name for case-insensitive matching
 const normalize = (name) => name?.trim().toLowerCase() ?? '';
+const activityLog = require('../services/activityLog');
+// The note for this product, if any, as trackChange refs.
+const noteRefs = async (tx, userId, productName) => {
+  const row = await tx.productNote.findUnique({ where: { user_id_product_name: { user_id: userId, product_name: productName } }, select: { id: true } });
+  return { productNote: row ? [row.id] : [] };
+};
 
 // GET /api/product-notes?product_name=...
 // Returns { note: string } or { note: null } if no note exists
@@ -51,22 +57,23 @@ router.put('/', isAuthenticated, async (req, res, next) => {
       return res.status(400).json({ error: 'note must be 2000 characters or fewer' });
     }
 
-    const record = await prisma.productNote.upsert({
-      where: {
-        user_id_product_name: {
-          user_id: req.user.id,
-          product_name: normalize(product_name),
-        },
-      },
-      update: { note: note.trim() },
-      create: {
-        user_id: req.user.id,
-        product_name: normalize(product_name),
-        note: note.trim(),
-      },
+    const key = normalize(product_name);
+    const { result: record, activity } = await prisma.$transaction(async (tx) => {
+      const existed = (await noteRefs(tx, req.user.id, key)).productNote.length > 0;
+      return activityLog.trackChange(tx, req.user.id, {
+        action: existed ? 'edit' : 'create',
+        recordType: 'product_note',
+        productName: product_name.trim(),
+        refs: (t) => noteRefs(t, req.user.id, key),
+        recordId: (row) => row.id,
+      }, () => tx.productNote.upsert({
+        where: { user_id_product_name: { user_id: req.user.id, product_name: key } },
+        update: { note: note.trim() },
+        create: { user_id: req.user.id, product_name: key, note: note.trim() },
+      }));
     });
 
-    res.json(record);
+    res.json({ ...record, activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -81,14 +88,20 @@ router.delete('/', isAuthenticated, async (req, res, next) => {
       return res.status(400).json({ error: 'product_name is required' });
     }
 
-    await prisma.productNote.deleteMany({
-      where: {
-        user_id: req.user.id,
-        product_name: normalize(product_name),
-      },
-    });
+    const key = normalize(product_name);
+    const existing = await prisma.productNote.findUnique({ where: { user_id_product_name: { user_id: req.user.id, product_name: key } } });
+    let activity = null;
+    if (existing) {
+      ({ activity } = await prisma.$transaction((tx) => activityLog.trackChange(tx, req.user.id, {
+        action: 'delete',
+        recordType: 'product_note',
+        productName: String(product_name).trim(),
+        refs: async () => ({ productNote: [existing.id] }),
+        recordId: existing.id,
+      }, () => tx.productNote.deleteMany({ where: { id: existing.id, user_id: req.user.id } }))));
+    }
 
-    res.json({ success: true });
+    res.json({ success: true, activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }

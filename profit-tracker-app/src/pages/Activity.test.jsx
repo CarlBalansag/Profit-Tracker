@@ -57,6 +57,14 @@ describe('Activity page', () => {
     expect(screen.getByText(/add, edit or remove a card, store account, platform/)).toBeInTheDocument();
   });
 
+  it('shows a log-only entry without an Undo button', () => {
+    setQuery({ data: page([entry({ id: 'k', kind: 'event', record_type: 'api_key', undo_state: 'not_undoable', detail: { action: 'revoke', product_name: 'Claude' } })]) });
+    render(<Activity />);
+    expect(screen.getByText('Revoked an API key')).toBeInTheDocument();
+    expect(screen.getByText("Can't be undone")).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Undo / })).toBeNull();
+  });
+
   it('lists an action under Today with what it did', () => {
     render(<Activity />);
     const today = screen.getByRole('region', { name: 'Today' });

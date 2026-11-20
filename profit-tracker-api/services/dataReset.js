@@ -102,7 +102,8 @@ async function deleteTransactions(tx, userId) {
   // Activity entries point at the purchases and sales deleted below and could
   // never be undone afterwards, so they go with them. Not reported in the
   // counts: they are history, not data the user entered.
-  await tx.activityLog.deleteMany({ where: { user_id: userId, record_type: { in: ['purchase', 'sale'] } } });
+  // Notes on them and cashout actions about them go too.
+  await tx.activityLog.deleteMany({ where: { user_id: userId, record_type: { in: ['purchase', 'sale', 'transaction_note', 'cashout'] } } });
   const refunds = await tx.refund.deleteMany({ where: { user_id: userId } });
   const sales = await tx.sales.deleteMany({ where: { inventory: { user_id: userId } } });
   const purchases = await tx.inventory.deleteMany({ where: { user_id: userId } });
@@ -123,6 +124,9 @@ async function deleteTransactions(tx, userId) {
 async function deleteSetupData(tx, userId) {
   const where = { user_id: userId };
   const remainingChangeLogs = await tx.changeLog.deleteMany({ where });
+  // Everything an Activity entry could undo is about to be gone; undo would
+  // only bring back pieces of it. The reset itself is logged afterwards.
+  await tx.activityLog.deleteMany({ where });
   const aiWriteLogs = await tx.mcpWriteLog.deleteMany({ where });
   const cashoutDealSnapshots = await tx.cashoutDealSnapshot.deleteMany({ where });
   const cashoutConnections = await tx.cashoutConnection.deleteMany({ where });
@@ -187,6 +191,11 @@ async function resetUserData(userId, scope, client = defaultPrisma) {
       Object.assign(deleted, setup);
       deleted.changeLogs += remainingChangeLogs;
     }
+    // Log-only: a reset can't be undone. Lazy require: activityLog loads the
+    // prisma client this module is handed in tests.
+    await require('./activityLog').logEvent(tx, userId, {
+      recordType: 'data_reset', action: scope, name: everything ? 'All data' : 'Purchases and sales', detail: { deleted },
+    });
 
     return {
       deleted,

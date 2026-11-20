@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Bot, Undo2, History, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Bot, Undo2, History, Info, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useActivity, useInvalidate } from '../hooks/useApi';
 import { undoActivity } from '../utils/undoToast';
 import { describeActivity } from '../utils/activityText';
@@ -42,6 +42,13 @@ function groupByDay(entries) {
 const CHANGE_ICON = { create: Plus, edit: Pencil, delete: Trash2 };
 
 function EntryIcon({ entry }) {
+  if (entry.kind === 'event') {
+    return (
+      <span className="flex items-center justify-center w-8 h-8 rounded-full shrink-0 bg-[var(--dp-hover-bg)] text-[var(--dp-text-label)]">
+        <Info className="w-4 h-4" />
+      </span>
+    );
+  }
   if (entry.kind === 'change') {
     const Icon = CHANGE_ICON[entry.detail?.action] || Pencil;
     return (
@@ -77,6 +84,9 @@ function ActivityRow({ entry, busy, onUndo }) {
         {change && <p className="text-xs text-gray-500 mt-0.5">{change}</p>}
         <p className="flex items-center gap-1.5 text-[11px] text-gray-500 mt-1">
           <span>{timeOf(entry.created_at)}</span>
+          {entry.undo_state === 'not_undoable' && (
+            <span className="inline-flex items-center gap-1"><span aria-hidden="true">·</span>Can't be undone</span>
+          )}
           {entry.source === 'assistant' && (
             <span className="inline-flex items-center gap-1"><span aria-hidden="true">·</span><Bot className="w-3 h-3" /> AI assistant</span>
           )}
@@ -110,8 +120,8 @@ const FILTERS = [
 
 const EMPTY_TEXT = {
   all: 'When you add or edit a purchase, sale, expense, card or platform, record a refund, or press a status button, it shows up here so you can undo it.',
-  records: 'When you add or edit a purchase, sale or expense, record a refund, or press a status button, it shows up here so you can undo it.',
-  setup: 'When you add, edit or remove a card, store account, platform, buyer, goal or recurring expense, it shows up here so you can undo it.',
+  records: 'When you add or edit a purchase, sale, expense or note, record a refund, press a status button, or commit to a cashout deal, it shows up here.',
+  setup: 'When you add, edit or remove a card, store account, platform, buyer, goal, recurring expense, cashout connection or calendar event, or change an API key or setting, it shows up here.',
 };
 
 function FilterBar({ value, onChange }) {
@@ -163,7 +173,7 @@ export default function Activity() {
       <div>
         <h1 className="text-2xl font-bold text-white">Activity</h1>
         <p className="text-sm text-gray-400 mt-1">
-          Purchases, sales and expenses you added or edited, refunds, status changes, and changes to your cards, store accounts, platforms, buyers, goals and recurring expenses, newest first. Anything from the last 30 days can be undone, as long as nothing changed it since.
+          Everything you added, edited or removed, newest first, from purchases and sales to your cards, platforms and cashouts. Most of it can be undone for 30 days, as long as nothing changed it since.
         </p>
       </div>
 

@@ -73,7 +73,15 @@ router.get('/schedule-c', isAuthenticated, async (req, res, next) => {
 router.put('/schedule-c', isAuthenticated, async (req, res, next) => {
   try {
     if (!req.body || Array.isArray(req.body) || typeof req.body.enabled !== 'boolean' || Object.keys(req.body).some(key => key !== 'enabled')) return res.status(400).json({ error: 'enabled must be a boolean' });
+    const before = await prisma.user.findUnique({ where: { id: req.user.id }, select: { schedule_c_enabled: true } });
     await prisma.user.update({ where: { id: req.user.id }, data: { schedule_c_enabled: req.body.enabled } });
+    // Log-only: turning it back is the same switch. Dashboard layout changes
+    // are not logged; they save on every tweak and are display-only.
+    if ((before?.schedule_c_enabled === true) !== req.body.enabled) {
+      await require('../services/activityLog').recordEvent(req.user.id, {
+        recordType: 'setting', action: 'schedule_c', name: 'Schedule C', detail: { enabled: req.body.enabled },
+      });
+    }
     res.json({ enabled: req.body.enabled });
   } catch (error) { next(error); }
 });
