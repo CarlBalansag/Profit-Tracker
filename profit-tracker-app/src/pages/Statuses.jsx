@@ -204,6 +204,10 @@ const counterpartOf = (record) => (isInventory(record)
   ? (record.vendor?.name || 'Direct')
   : (record.platform?.name || record.buyer?.name || '—'));
 
+// The store account a purchase was made on (e.g. which Amazon account), shown
+// after the store name. Sales and purchases without one show nothing extra.
+const storeAccountOf = (record) => (isInventory(record) ? (record.account?.name || null) : null);
+
 const units = (count) => `${count} unit${Number(count) === 1 ? '' : 's'}`;
 
 // The unit count a card shows for this record: a purchase's whole batch, a
@@ -364,6 +368,7 @@ function TrackingNumberRow({ record }) {
 // it: a record under "Not in the workflow yet" has no status to change and no
 // workflow to scope a list from, so it keeps its dedicated Set Status form alone.
 function RecordCard({ record, quickStatus = false }) {
+  const storeAccount = storeAccountOf(record);
   const statusKey = statusKeyOf(record);
   const visual = statusVisual(statusKey);
   const exception = exceptionTagOf(record);
@@ -404,7 +409,14 @@ function RecordCard({ record, quickStatus = false }) {
         <p className="text-[11px] font-semibold" style={{ color: `color-mix(in srgb, ${visual.color} 50%, var(--dp-text-primary))` }}>
           {statusLabel}
         </p>
-        <p className="text-xs text-gray-500 truncate">{counterpartOf(record)}</p>
+        {/* A long account name truncates; the tooltip keeps the whole line readable. */}
+        <p
+          className="text-xs text-gray-500 truncate"
+          title={storeAccount ? `${counterpartOf(record)} · ${storeAccount} (store account)` : undefined}
+        >
+          {counterpartOf(record)}
+          {storeAccount && <span data-store-account>{' · '}{storeAccount}</span>}
+        </p>
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
