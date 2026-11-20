@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.44',
+    date: '2026-11-20',
+    notes: "Activity now also shows changes to your setup (cards, store accounts, platforms, buyers, goals, recurring expenses, cashout connections, calendar events, notes, API keys and settings) next to your buys and sales, and most of them can be undone, including putting a removed card back on its purchases. Removing a card now asks first and offers Undo.",
+  },
+  {
     version: '1.43',
     date: '2026-11-18',
     notes: 'In Settings, Payment Methods now always shows the edit and delete card buttons on mobile and touch screens instead of requiring a hover.',
