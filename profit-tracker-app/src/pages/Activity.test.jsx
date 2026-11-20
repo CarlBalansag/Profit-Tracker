@@ -57,6 +57,24 @@ describe('Activity page', () => {
     expect(screen.getByText(/add, edit or remove a card, store account, platform/)).toBeInTheDocument();
   });
 
+  it('on wide screens shows buys and sales on the left and data setup on the right, without the filter', () => {
+    const original = window.matchMedia;
+    window.matchMedia = (query) => ({ matches: query === '(min-width: 1024px)', addEventListener: () => {}, removeEventListener: () => {} });
+    try {
+      mocks.groups = [];
+      render(<Activity />);
+      const columns = screen.getAllByRole('region').filter((r) => ['Buys & sales', 'Data setup'].includes(r.getAttribute('aria-label') || r.querySelector('h2')?.textContent));
+      expect(screen.getByRole('heading', { level: 2, name: 'Buys & sales' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2, name: 'Data setup' })).toBeInTheDocument();
+      expect(columns.map((c) => c.querySelector('h2').textContent)).toEqual(['Buys & sales', 'Data setup']);
+      expect(screen.queryByRole('radiogroup')).toBeNull();
+      expect(mocks.groups).toEqual(expect.arrayContaining(['records', 'setup']));
+      expect(mocks.groups).not.toContain(undefined);
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
   it('shows a log-only entry without an Undo button', () => {
     setQuery({ data: page([entry({ id: 'k', kind: 'event', record_type: 'api_key', undo_state: 'not_undoable', detail: { action: 'revoke', product_name: 'Claude' } })]) });
     render(<Activity />);

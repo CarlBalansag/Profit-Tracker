@@ -6,6 +6,7 @@ import { undoActivity } from '../utils/undoToast';
 import { describeActivity } from '../utils/activityText';
 import { statusVisual } from '../data/statusWorkflow';
 import LoadError from '../components/UI/LoadError';
+import { useMatchMedia } from '../hooks/useMatchMedia';
 
 // Everything the user did that can be undone, newest first, grouped by day.
 // Undo asks the server to reverse that exact entry; it refuses with a reason
@@ -143,22 +144,69 @@ function FilterBar({ value, onChange }) {
   );
 }
 
-export default function Activity() {
-  const [filter, setFilter] = useState('all');
-  const { group } = FILTERS.find((f) => f.value === filter);
+// One list of entries (a filter's, or one column's): its own query, day
+// groups and "Show older". Undo is handled by the page, one at a time.
+function ActivityFeed({ group, emptyText, heading, headingId, pendingId, onUndo }) {
   const { data, isLoading, isError, refetch, isRefetching, hasNextPage, fetchNextPage, isFetchingNextPage } = useActivity(group);
-  const invalidate = useInvalidate();
-  const [pendingId, setPendingId] = useState(null);
 
-  if (isError && !data) return <LoadError title="Activity" what="your activity" onRetry={refetch} retrying={isRefetching} />;
+  if (isError && !data) return <LoadError title={heading || 'Activity'} what="your activity" onRetry={refetch} retrying={isRefetching} />;
 
   const entries = data?.pages.flatMap((page) => page.entries) ?? [];
+  const DayHeading = heading ? 'h3' : 'h2';
+
+  return (
+    <div className="min-w-0 space-y-4">
+      {heading && <h2 id={headingId} className="text-sm font-semibold text-gray-200">{heading}</h2>}
+      {isLoading ? (
+        <p className="text-sm text-gray-500">Loading activity…</p>
+      ) : entries.length === 0 ? (
+        <div className={`mx-auto max-w-sm text-center ${heading ? 'mt-6' : 'mt-12'}`}>
+          <History className="mx-auto mb-3 h-8 w-8 text-gray-600" aria-hidden="true" />
+          <p className="font-semibold text-gray-200">Nothing here yet</p>
+          <p className="mt-1 text-sm text-gray-400">{emptyText}</p>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {groupByDay(entries).map((day) => (
+            <section key={day.key} aria-label={day.label}>
+              <DayHeading className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-2">{day.label}</DayHeading>
+              <ul className="rounded-xl border border-white/[0.08] bg-white/[0.02] divide-y divide-white/[0.06]">
+                {day.entries.map((entry) => (
+                  <ActivityRow key={entry.id} entry={entry} busy={pendingId !== null} onUndo={onUndo} />
+                ))}
+              </ul>
+            </section>
+          ))}
+          {hasNextPage && (
+            <button
+              type="button"
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+              className="page-btn page-btn-secondary"
+            >
+              {isFetchingNextPage ? 'Loading…' : 'Show older'}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Wide screens show buys and sales and setup side by side; below 1024px one
+// list with a filter (one layout per breakpoint, see AGENTS.md).
+export default function Activity() {
+  const wide = useMatchMedia('(min-width: 1024px)');
+  const [filter, setFilter] = useState('all');
+  const { group } = FILTERS.find((f) => f.value === filter);
+  const invalidate = useInvalidate();
+  const [pendingId, setPendingId] = useState(null);
 
   const handleUndo = async (entry) => {
     setPendingId(entry.id);
     try {
       await undoActivity(entry.id);
-      // Stock, totals and this list all change.
+      // Stock, totals and every list here change.
       invalidate.all();
       toast.success('Undone.');
     } catch (err) {
@@ -177,39 +225,22 @@ export default function Activity() {
         </p>
       </div>
 
-      <FilterBar value={filter} onChange={setFilter} />
-
-      {isLoading ? (
-        <p className="text-sm text-gray-500">Loading activity…</p>
-      ) : entries.length === 0 ? (
-        <div className="mx-auto mt-12 max-w-sm text-center">
-          <History className="mx-auto mb-3 h-8 w-8 text-gray-600" aria-hidden="true" />
-          <p className="font-semibold text-gray-200">Nothing here yet</p>
-          <p className="mt-1 text-sm text-gray-400">{EMPTY_TEXT[filter]}</p>
+      {wide ? (
+        <div className="grid grid-cols-2 gap-6 items-start">
+          <section aria-labelledby="activity-records">
+            <ActivityFeed group="records" heading="Buys & sales" headingId="activity-records" emptyText={EMPTY_TEXT.records} pendingId={pendingId} onUndo={handleUndo} />
+          </section>
+          <section aria-labelledby="activity-setup">
+            <ActivityFeed group="setup" heading="Data setup" headingId="activity-setup" emptyText={EMPTY_TEXT.setup} pendingId={pendingId} onUndo={handleUndo} />
+          </section>
         </div>
       ) : (
-        <div className="max-w-3xl space-y-5">
-          {groupByDay(entries).map((group) => (
-            <section key={group.key} aria-label={group.label}>
-              <h2 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-2">{group.label}</h2>
-              <ul className="rounded-xl border border-white/[0.08] bg-white/[0.02] divide-y divide-white/[0.06]">
-                {group.entries.map((entry) => (
-                  <ActivityRow key={entry.id} entry={entry} busy={pendingId !== null} onUndo={handleUndo} />
-                ))}
-              </ul>
-            </section>
-          ))}
-          {hasNextPage && (
-            <button
-              type="button"
-              onClick={() => fetchNextPage()}
-              disabled={isFetchingNextPage}
-              className="page-btn page-btn-secondary"
-            >
-              {isFetchingNextPage ? 'Loading…' : 'Show older'}
-            </button>
-          )}
-        </div>
+        <>
+          <FilterBar value={filter} onChange={setFilter} />
+          <div className="max-w-3xl">
+            <ActivityFeed key={filter} group={group} emptyText={EMPTY_TEXT[filter]} pendingId={pendingId} onUndo={handleUndo} />
+          </div>
+        </>
       )}
     </div>
   );
