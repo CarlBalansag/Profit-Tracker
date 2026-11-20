@@ -101,8 +101,42 @@ function ActivityRow({ entry, busy, onUndo }) {
   );
 }
 
+// value -> API `group` (undefined = everything).
+const FILTERS = [
+  { value: 'all', label: 'All', group: undefined },
+  { value: 'records', label: 'Buys & sales', group: 'records' },
+  { value: 'setup', label: 'Setup', group: 'setup' },
+];
+
+const EMPTY_TEXT = {
+  all: 'When you add or edit a purchase, sale, expense, card or platform, record a refund, or press a status button, it shows up here so you can undo it.',
+  records: 'When you add or edit a purchase, sale or expense, record a refund, or press a status button, it shows up here so you can undo it.',
+  setup: 'When you add, edit or remove a card, store account, platform, buyer, goal or recurring expense, it shows up here so you can undo it.',
+};
+
+function FilterBar({ value, onChange }) {
+  return (
+    <div role="radiogroup" aria-label="Show" className="inline-flex flex-wrap gap-0.5 rounded-lg bg-[var(--dp-hover-bg)] border border-[color:var(--dp-border)] p-0.5">
+      {FILTERS.map((f) => (
+        <button
+          key={f.value}
+          type="button"
+          role="radio"
+          aria-checked={value === f.value}
+          onClick={() => onChange(f.value)}
+          className={`px-3 h-8 rounded-md text-xs font-medium transition-colors ${value === f.value ? 'bg-[var(--dp-card-bg)] text-[var(--dp-accent-text)] shadow-sm' : 'text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]'}`}
+        >
+          {f.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function Activity() {
-  const { data, isLoading, isError, refetch, isRefetching, hasNextPage, fetchNextPage, isFetchingNextPage } = useActivity();
+  const [filter, setFilter] = useState('all');
+  const { group } = FILTERS.find((f) => f.value === filter);
+  const { data, isLoading, isError, refetch, isRefetching, hasNextPage, fetchNextPage, isFetchingNextPage } = useActivity(group);
   const invalidate = useInvalidate();
   const [pendingId, setPendingId] = useState(null);
 
@@ -129,9 +163,11 @@ export default function Activity() {
       <div>
         <h1 className="text-2xl font-bold text-white">Activity</h1>
         <p className="text-sm text-gray-400 mt-1">
-          Purchases, sales and expenses you added or edited, refunds, and status changes, newest first. Anything from the last 30 days can be undone, as long as nothing changed it since.
+          Purchases, sales and expenses you added or edited, refunds, status changes, and changes to your cards, store accounts, platforms, buyers, goals and recurring expenses, newest first. Anything from the last 30 days can be undone, as long as nothing changed it since.
         </p>
       </div>
+
+      <FilterBar value={filter} onChange={setFilter} />
 
       {isLoading ? (
         <p className="text-sm text-gray-500">Loading activity…</p>
@@ -139,7 +175,7 @@ export default function Activity() {
         <div className="mx-auto mt-12 max-w-sm text-center">
           <History className="mx-auto mb-3 h-8 w-8 text-gray-600" aria-hidden="true" />
           <p className="font-semibold text-gray-200">Nothing here yet</p>
-          <p className="mt-1 text-sm text-gray-400">When you add or edit a purchase, sale or expense, record a refund, or press a status button, it shows up here so you can undo it.</p>
+          <p className="mt-1 text-sm text-gray-400">{EMPTY_TEXT[filter]}</p>
         </div>
       ) : (
         <div className="max-w-3xl space-y-5">

@@ -142,12 +142,98 @@ function changeText(entry) {
   return { title, change: parts.join(' · ') };
 }
 
+// ─── Setup records (cards, store accounts, platforms, ...) ───────────────────
+// record_type -> [model the entry is about, what to call it, fallback name]
+const SETUP = {
+  card: ['paymentMethod', 'card', 'Card'],
+  account: ['account', 'store account', 'Store account'],
+  platform: ['platform', 'platform', 'Platform'],
+  buyer: ['buyer', 'buyer', 'Buyer'],
+  goal: ['goal', 'goal', 'Goal'],
+  recurring_expense: ['recurringExpense', 'recurring expense', 'Recurring expense'],
+};
+export const isSetupEntry = (entry) => Boolean(SETUP[entry?.record_type]);
+
+const GOAL_NAMES = { netProfit: 'Net profit goal', totalRevenue: 'Revenue goal', unitsSold: 'Units sold goal' };
+
+const SETUP_FIELDS = {
+  name: ['Name'], type: ['Type'], last4: ['Last 4'], default_cashback_rate: ['Cashback %'],
+  points_base_rate: ['Points per $'], point_value_cents: ['Point value ¢'],
+  statement_close_day: ['Statement closes'], due_day: ['Due day'], credit_limit: ['Limit', 'money'],
+  min_payment_pct: ['Min payment %'], is_personal: ['Personal', 'bool'], category_rates: ['Store rates', 'ref'],
+  catalog_card_id: ['Linked card', 'ref'], reward_type: ['Rewards'],
+  fee_pct: ['Fee %'], address: ['Address'], notes: ['Notes'], tax_exempt_place: ['Tax-exempt', 'bool'],
+  default_return_days: ['Return days'], email: ['Email'], username: ['Username'], status: ['Status'],
+  avg_days_to_payout: ['Days to payout'], metric: ['Goal'],
+  target_7d: ['7-day target'], target_30d: ['30-day target'], target_ytd: ['Year target'], active: ['Active', 'bool'],
+  amount: ['Amount', 'money'], category: ['Category'], frequency: ['Frequency'],
+  start_date: ['Starts', 'date'], end_date: ['Ends', 'date'], payment_method_id: ['Card', 'ref'], platform_id: ['Platform', 'ref'],
+};
+
+// What the records that lost (or got back) the link are called.
+function linkNoun(row) {
+  if (row.model === 'sales') return row.fields?.sale_shipping_payment_method_id ? 'shipping label' : 'sale';
+  return { inventory: 'purchase', expense: 'expense', recurringExpense: 'recurring expense', cashoutConnection: 'cashout connection', account: 'store account' }[row.model] || 'record';
+}
+
+function setupText(entry) {
+  const [model, noun] = SETUP[entry.record_type];
+  const d = entry.detail || {};
+  const rows = d.rows || [];
+  const main = rows.find((r) => r.model === model) || {};
+  const prefix = d.undo ? 'Undid: ' : '';
+  const article = /^[aeiou]/.test(noun) ? 'an' : 'a';
+  const verb = d.action === 'create' ? 'Added' : d.action === 'delete' ? 'Removed' : 'Edited';
+  const title = `${prefix}${verb} ${verb === 'Edited' ? '' : `${article} `}${noun}`;
+  const parts = [];
+
+  if (main.op === 'create' || main.op === 'delete') {
+    const v = main.row?.values || {};
+    if (entry.record_type === 'card' && v.type) parts.push(v.type);
+    if (entry.record_type === 'platform' && v.type) parts.push(v.type);
+    if (entry.record_type === 'recurring_expense') parts.push(`${formatField('money', v.amount)} ${v.frequency || ''}`.trim());
+    const others = rows.filter((r) => r.model === model && r !== main && r.op === main.op).length;
+    if (others) parts.push(`+ ${others} more`);
+    // Records that came or went with it (a platform's store accounts, a
+    // recurring expense's generated expenses).
+    const along = {};
+    for (const r of rows.filter((x) => x.model !== model && (x.op === 'create' || x.op === 'delete'))) along[linkNoun(r)] = (along[linkNoun(r)] || 0) + 1;
+    for (const [what, n] of Object.entries(along)) parts.push(`with ${plural(n, what)}`);
+  } else {
+    for (const [key, f] of Object.entries(main.fields || {})) {
+      const label = SETUP_FIELDS[key];
+      if (!label) continue;
+      const [name, kind] = label;
+      if (kind === 'ref') parts.push(`${name} changed`);
+      else if (kind === 'bool') parts.push(`${name} ${f.after ? 'on' : 'off'}`);
+      else parts.push(`${name} ${formatField(kind, f.before)} → ${formatField(kind, f.after)}`);
+    }
+    if (parts.length > 3) parts.splice(3, parts.length - 3, `${parts.length - 3} more`);
+    const sales = rows.filter((r) => r.model === 'sales' && !r.link).length;
+    if (sales) parts.push(`${plural(sales, 'sale')} updated`);
+  }
+
+  // Links a removal cleared, or an undo put back.
+  const links = {};
+  for (const r of rows.filter((x) => x.link)) links[linkNoun(r)] = (links[linkNoun(r)] || 0) + 1;
+  const linkList = Object.entries(links).map(([what, n]) => plural(n, what)).join(', ');
+  if (linkList) {
+    const restoring = rows.some((r) => r.link && Object.values(r.fields || {}).some((f) => f.after));
+    parts.push(restoring ? `Put back on ${linkList}` : `Taken off ${linkList}`);
+  }
+  return { title, change: parts.join(' · ') };
+}
+
 // { title, change, product } -- e.g. "Cancel Sale", "Paid → Cancelled · 2 units
 // back in stock", "Meta Quest 3S".
 export function describeActivity(entry) {
-  const text = entry.kind === 'status' ? statusText(entry)
-    : entry.kind === 'change' ? changeText(entry)
-      : refundText(entry);
-  const fallback = { sale: 'Sale', purchase: 'Purchase', expense: 'Expense' }[entry.record_type] || 'Record';
-  return { ...text, product: entry.detail?.product_name || fallback };
+  const setup = SETUP[entry.record_type];
+  const text = setup && entry.kind === 'change' ? setupText(entry)
+    : entry.kind === 'status' ? statusText(entry)
+      : entry.kind === 'change' ? changeText(entry)
+        : refundText(entry);
+  const fallback = setup ? setup[2] : ({ sale: 'Sale', purchase: 'Purchase', expense: 'Expense' }[entry.record_type] || 'Record');
+  const name = entry.detail?.product_name;
+  const product = entry.record_type === 'goal' ? (GOAL_NAMES[name] || fallback) : (name || fallback);
+  return { ...text, product };
 }

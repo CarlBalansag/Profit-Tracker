@@ -386,10 +386,11 @@ export const useRefundMutations = (kind, id) => {
 // ─── Activity (log + Undo) ───────────────────────────────────────────────────
 // Newest first, 50 at a time. Undo itself lives in utils/undoToast.js; every
 // undo invalidates all queries, which refreshes this list too.
-export const useActivity = () =>
+// group: undefined (everything), 'records' (buys, sales, expenses) or 'setup'.
+export const useActivity = (group) =>
   useInfiniteQuery({
-    queryKey: ['activity'],
-    queryFn: ({ pageParam }) => fetcher(`/api/activity?limit=50${pageParam ? `&before=${encodeURIComponent(pageParam)}` : ''}`),
+    queryKey: ['activity', group ?? 'all'],
+    queryFn: ({ pageParam }) => fetcher(`/api/activity?limit=50${group ? `&group=${group}` : ''}${pageParam ? `&before=${encodeURIComponent(pageParam)}` : ''}`),
     initialPageParam: null,
     getNextPageParam: (last) => last.next_before ?? undefined,
   });

@@ -166,15 +166,68 @@ async function logStatus(tx, userId, kind, before, result, { source, revertsId, 
 // refund and cashoutCommitment ride along with a deleted purchase or sale:
 // its refunds are cascaded away and a cashout commitment loses its sale link
 // (ON DELETE SET NULL), so both have to come back with it.
-const MODELS = ['inventory', 'sales', 'refund', 'cashoutCommitment', 'expense'];
-// Lock / write order: parents before children, the order routes/sales.js uses.
-const PARENT_FIRST = { inventory: 0, sales: 1, refund: 2, cashoutCommitment: 3, expense: 4 };
-// Background refreshes (carrier tracking, market price checks) rewrite these on
-// their own. They are never part of a change set and never block an undo.
+//
+// Setup records (cards, store accounts, platforms, buyers, goals, recurring
+// expenses) are tracked the same way. Deleting one makes the database clear
+// the link on everything that used it (ON DELETE SET NULL), so a setup delete
+// also snapshots those rows (`linkRefs`): their cleared link is stored as an
+// update marked `link: true`. Undo puts the record back first, then the links
+// -- each only where the field still holds what the delete left (empty), so a
+// purchase that was given another card since keeps it.
+// Lock / write order: parents before children (inventory before sales is the
+// order routes/sales.js uses; setup records are parents of all of those).
+const PARENT_FIRST = {
+  platform: 0, account: 1, paymentMethod: 2, buyer: 3, goal: 4, recurringExpense: 5,
+  inventory: 6, sales: 7, refund: 8, cashoutCommitment: 9, expense: 10, cashoutConnection: 11,
+};
+const MODELS = Object.keys(PARENT_FIRST);
+// Background refreshes (carrier tracking, market price checks, the card
+// catalog sync, recurring-expense generation) rewrite these on their own. They
+// are never part of a change set and never block an undo.
 // receipt_url is here too: Add Transaction attaches the receipt in a second
 // request right after saving, which must not make the add impossible to undo.
-const VOLATILE = new Set(['tracking_info', 'carrier', 'market_value', 'market_source', 'market_checked_at', 'tax_version', 'receipt_url', 'updated_at']);
-const TABLE = { inventory: 'Inventory', sales: 'Sales', refund: 'Refund', cashoutCommitment: 'CashoutCommitment', expense: 'Expense' };
+const VOLATILE = new Set([
+  'tracking_info', 'carrier', 'market_value', 'market_source', 'market_checked_at', 'tax_version', 'receipt_url', 'updated_at',
+  'catalog_synced_at', 'catalog_applied', 'last_generated', 'last_synced_at',
+]);
+const TABLE = {
+  inventory: 'Inventory', sales: 'Sales', refund: 'Refund', cashoutCommitment: 'CashoutCommitment', expense: 'Expense',
+  paymentMethod: 'PaymentMethod', account: 'Account', platform: 'Platform', buyer: 'Buyer', goal: 'Goal',
+  recurringExpense: 'RecurringExpense', cashoutConnection: 'CashoutConnection',
+};
+// Records that point at a setup record, as [model, field]. Platforms also own
+// their store accounts (ON DELETE CASCADE), whose purchases lose that account.
+// Invoices are left out: the database refuses to delete a buyer that has them.
+const LINKS = {
+  paymentMethod: [['inventory', 'payment_method_id'], ['expense', 'payment_method_id'], ['recurringExpense', 'payment_method_id'], ['sales', 'sale_shipping_payment_method_id']],
+  account: [['inventory', 'account_id']],
+  platform: [['inventory', 'vendor_id'], ['sales', 'platform_id'], ['cashoutConnection', 'platform_id'], ['account', 'platform_id']],
+  buyer: [['sales', 'buyer_id']],
+  recurringExpense: [['expense', 'recurring_expense_id']],
+  goal: [],
+};
+const ownerFilter = (model, userId) => (model === 'sales' ? { inventory: { user_id: userId } } : { user_id: userId });
+
+// Every row of the user's that points at `model` `id`, as refs for trackChange
+// (a platform's store accounts bring their purchases along).
+async function linkedRefs(tx, userId, model, id) {
+  const refs = {};
+  const add = (m, ids) => { refs[m] = [...new Set([...(refs[m] || []), ...ids])]; };
+  for (const [m, field] of LINKS[model] || []) {
+    const rows = await tx[m].findMany({ where: { [field]: id, ...ownerFilter(m, userId) }, select: { id: true } });
+    add(m, rows.map((r) => r.id));
+    if (m === 'account') {
+      for (const accountId of rows.map((r) => r.id)) {
+        const nested = await linkedRefs(tx, userId, 'account', accountId);
+        for (const [nm, ids] of Object.entries(nested)) add(nm, ids);
+      }
+    }
+  }
+  return refs;
+}
+// Secrets never go into the log. A cashout connection is only ever snapshotted
+// for its platform link, but its key columns are dropped regardless.
+const NEVER_STORED = new Set(['encrypted_key']);
 // Prisma refuses a bare null for a Json column: it has to be DbNull.
 const JSON_FIELDS = Object.fromEntries(Object.entries(TABLE).map(([model, name]) => [
   model,
@@ -200,20 +253,27 @@ const rowData = ({ values, dates }) => Object.fromEntries(
     .map(([key, v]) => [key, dates.includes(key) ? new Date(v) : v]),
 );
 
-// refs: { inventory: [ids], sales: [ids], expense: [ids] } -> Map "model:id" -> row
-// (scalar columns only: no relations are included).
+// refs: { inventory: [ids], sales: [ids], expense: [ids], ... } -> Map "model:id" -> row
+// (scalar columns only: no relations are included; secrets are dropped).
 async function snapshotRows(tx, refs = {}) {
   const rows = new Map();
   for (const model of MODELS) {
-    for (const id of new Set((refs[model] || []).filter(Boolean))) {
-      const row = await tx[model].findUnique({ where: { id } });
-      if (row) rows.set(`${model}:${id}`, row);
+    const ids = [...new Set((refs[model] || []).filter(Boolean))];
+    // One query per 500 ids: a card can be on hundreds of purchases.
+    for (let i = 0; i < ids.length; i += 500) {
+      const found = await tx[model].findMany({ where: { id: { in: ids.slice(i, i + 500) } } });
+      for (const row of found) {
+        for (const key of NEVER_STORED) delete row[key];
+        rows.set(`${model}:${row.id}`, row);
+      }
     }
   }
   return rows;
 }
 
-function diffRows(before, after) {
+// linkKeys: "model:id" of rows only snapshotted for the link a setup delete
+// clears; their updates are marked `link: true` (see LINKS above).
+function diffRows(before, after, linkKeys = new Set()) {
   const changes = [];
   for (const key of new Set([...before.keys(), ...after.keys()])) {
     const [model, id] = key.split(':');
@@ -221,7 +281,7 @@ function diffRows(before, after) {
     const a = after.get(key);
     if (b && a) {
       const keys = Object.keys({ ...b, ...a }).filter((k) => !VOLATILE.has(k) && !sameValue(b[k], a[k]));
-      if (keys.length) changes.push({ model, id, op: 'update', fields: fieldSnapshot(b, a, keys) });
+      if (keys.length) changes.push({ model, id, op: 'update', fields: fieldSnapshot(b, a, keys), ...(linkKeys.has(key) ? { link: true } : {}) });
     } else if (a) {
       changes.push({ model, id, op: 'create', row: rowSnapshot(a) });
     } else if (b) {
@@ -236,8 +296,16 @@ function diffRows(before, after) {
 //                          and after, so rows the work creates are seen.
 //   meta.recordId(result)  the purchase/sale/expense the entry is about.
 // Returns { result, activity } (activity is null when nothing changed).
+//   meta.linkRefs(tx)      optional: rows that point at a setup record being
+//                          deleted (see linkedRefs), snapshotted for undo.
 async function trackChange(tx, userId, meta, work) {
-  const before = await snapshotRows(tx, await meta.refs(tx));
+  const refs = await meta.refs(tx);
+  const links = meta.linkRefs ? await meta.linkRefs(tx) : {};
+  const own = new Set(Object.entries(refs).flatMap(([m, ids]) => (ids || []).map((id) => `${m}:${id}`)));
+  const linkKeys = new Set(Object.entries(links).flatMap(([m, ids]) => ids.map((id) => `${m}:${id}`)).filter((k) => !own.has(k)));
+  const merged = { ...refs };
+  for (const [m, ids] of Object.entries(links)) merged[m] = [...(merged[m] || []), ...ids];
+  const before = await snapshotRows(tx, merged);
   const result = await work();
   const afterRefs = await meta.refs(tx, result);
   // Rows that existed before stay in view after, so a delete is noticed too.
@@ -246,12 +314,13 @@ async function trackChange(tx, userId, meta, work) {
     afterRefs[model] = [...(afterRefs[model] || []), id];
   }
   const after = await snapshotRows(tx, afterRefs);
-  const changes = diffRows(before, after);
+  const changes = diffRows(before, after, linkKeys);
   if (!changes.length) return { result, activity: null };
   const recordId = typeof meta.recordId === 'function' ? meta.recordId(result) : meta.recordId;
   const productName = meta.productName !== undefined
     ? meta.productName
-    : await nameFor(tx, meta.recordType, recordId, after.size ? after : before);
+    // After wins (an edit shows the new name); before covers a deleted record.
+    : await nameFor(tx, meta.recordType, recordId, new Map([...before, ...after]));
   const activity = await write(tx, userId, {
     kind: 'change',
     recordType: meta.recordType,
@@ -266,10 +335,46 @@ async function trackChange(tx, userId, meta, work) {
   return { result, activity };
 }
 
-// What the Activity page calls the record: the product (purchases and sales)
-// or the expense name.
+// Activity record_type -> model, for setup records.
+const SETUP_MODEL = {
+  card: 'paymentMethod', account: 'account', platform: 'platform', buyer: 'buyer', goal: 'goal', recurring_expense: 'recurringExpense',
+};
+
+// trackChange for one setup record (see SETUP_MODEL), run inside the caller's
+// transaction.
+//   action    'create' | 'edit' | 'delete'
+//   id        the record (edit/delete); a create takes it from `work`'s result
+//   extraRefs (tx, result) => refs of other rows the work changes, e.g. the
+//             expenses a recurring expense generates
+// A delete also snapshots everything that points at the record, so undo can
+// put those links back.
+function trackSetupChange(tx, userId, { action, recordType, id, source, extraRefs }, work) {
+  const model = SETUP_MODEL[recordType];
+  if (!model) throw new Error(`Unknown setup record type: ${recordType}`);
+  const idOf = (result) => id ?? result?.id;
+  return trackChange(tx, userId, {
+    action,
+    recordType,
+    source,
+    recordId: (result) => idOf(result),
+    refs: async (t, result) => {
+      const own = idOf(result);
+      const extra = extraRefs ? await extraRefs(t, result) : {};
+      return { ...extra, [model]: [...(extra[model] || []), ...(own ? [own] : [])] };
+    },
+    ...(action === 'delete' ? { linkRefs: (t) => linkedRefs(t, userId, model, id) } : {}),
+  }, work);
+}
+
+// What the Activity page calls the record: the product (purchases and sales),
+// the expense name, or the setup record's name (a goal's metric).
 async function nameFor(tx, recordType, recordId, rows) {
   if (recordType === 'expense') return (rows.get(`expense:${recordId}`) || {}).name ?? null;
+  const setupModel = SETUP_MODEL[recordType];
+  if (setupModel) {
+    const row = rows.get(`${setupModel}:${recordId}`) || await tx[setupModel].findUnique({ where: { id: recordId } });
+    return row?.name ?? row?.metric ?? null;
+  }
   if (recordType === 'purchase') {
     const row = rows.get(`inventory:${recordId}`) || await tx.inventory.findUnique({ where: { id: recordId } });
     return row?.product_name ?? null;
@@ -283,31 +388,36 @@ async function nameFor(tx, recordType, recordId, rows) {
 const rowMatches = (current, { values }) => Object.entries(values)
   .every(([key, v]) => VOLATILE.has(key) || sameValue(current[key], v));
 
-const CHANGE_REFUSED = {
-  purchase: 'This purchase changed after this, so it can\'t be undone safely.',
-  sale: 'This sale changed after this, so it can\'t be undone safely.',
-  expense: 'This expense changed after this, so it can\'t be undone safely.',
+// What the messages call each record type.
+const RECORD_LABEL = {
+  purchase: 'purchase', sale: 'sale', expense: 'expense', card: 'card', account: 'store account',
+  platform: 'platform', buyer: 'buyer', goal: 'goal', recurring_expense: 'recurring expense',
+};
+const labelFor = (recordType) => RECORD_LABEL[recordType] || 'record';
+const changedMessage = (recordType) => `This ${labelFor(recordType)} changed after this, so it can't be undone safely.`;
+// What a model's rows are called when other records still point at them.
+const USED_BY = {
+  inventory: 'purchases', sales: 'sales', expense: 'expenses', recurringExpense: 'recurring expenses',
+  cashoutConnection: 'cashout connections', account: 'store accounts',
 };
 
 async function undoChange(tx, userId, entry, source) {
   const rows = entry.detail.rows || [];
-  const refused = CHANGE_REFUSED[entry.record_type] || CHANGE_REFUSED.purchase;
+  const refused = changedMessage(entry.record_type);
 
-  // Lock every row involved first, parents before children.
+  // Lock every row involved first, parents before children. TABLE is a fixed
+  // whitelist, so the table name is never user input.
   for (const change of rows) {
-    const id = change.id;
-    if (change.model === 'inventory') await tx.$queryRaw`SELECT id FROM "Inventory" WHERE id = ${id} FOR UPDATE`;
-    else if (change.model === 'sales') await tx.$queryRaw`SELECT id FROM "Sales" WHERE id = ${id} FOR UPDATE`;
-    else if (change.model === 'refund') await tx.$queryRaw`SELECT id FROM "Refund" WHERE id = ${id} FOR UPDATE`;
-    else if (change.model === 'cashoutCommitment') await tx.$queryRaw`SELECT id FROM "CashoutCommitment" WHERE id = ${id} FOR UPDATE`;
-    else await tx.$queryRaw`SELECT id FROM "Expense" WHERE id = ${id} FOR UPDATE`;
+    if (!TABLE[change.model]) throw requestError(409, 'This entry can\'t be undone.');
+    await tx.$queryRaw`SELECT id FROM ${Prisma.raw(`"${TABLE[change.model]}"`)} WHERE id = ${change.id} FOR UPDATE`;
   }
 
-  // Check everything before writing anything.
-  const current = new Map();
+  // Check everything before writing anything. A link a setup delete cleared
+  // (`link: true`) is only put back where it still holds what the delete left:
+  // a purchase deleted since, or given another card since, is skipped.
+  const skipped = new Set();
   for (const change of rows) {
     const row = await tx[change.model].findUnique({ where: { id: change.id } });
-    current.set(`${change.model}:${change.id}`, row);
     const owner = change.model === 'sales'
       ? (row ? (await tx.inventory.findUnique({ where: { id: row.inventory_id } }))?.user_id : null)
       : row?.user_id;
@@ -315,18 +425,33 @@ async function undoChange(tx, userId, entry, source) {
       if (row) throw requestError(409, refused);
       continue;
     }
-    if (!row || owner !== userId) throw requestError(409, `This ${entry.record_type} no longer exists.`);
+    const fieldsMatch = change.op !== 'update'
+      || Object.entries(change.fields).every(([key, f]) => row && sameValue(row[key], f.after));
+    if (change.link && change.op === 'update') {
+      if (!row || owner !== userId || !fieldsMatch) skipped.add(change);
+      continue;
+    }
+    if (!row || owner !== userId) throw requestError(409, `This ${labelFor(entry.record_type)} no longer exists.`);
     if (change.op === 'update') {
-      for (const [key, f] of Object.entries(change.fields)) {
-        if (!sameValue(row[key], f.after)) throw requestError(409, refused);
-      }
+      if (!fieldsMatch) throw requestError(409, refused);
     } else if (!rowMatches(row, change.row)) {
       throw requestError(409, refused);
     }
   }
-  // Removing an added purchase or sale must not take anything else with it.
-  const removing = new Set(rows.filter((c) => c.op === 'create').map((c) => `${c.model}:${c.id}`));
-  for (const change of rows.filter((c) => c.op === 'create')) {
+  const applied = rows.filter((c) => !skipped.has(c));
+  // Removing an added record must not take anything else with it.
+  const removing = new Set(applied.filter((c) => c.op === 'create').map((c) => `${c.model}:${c.id}`));
+  for (const change of applied.filter((c) => c.op === 'create')) {
+    // A setup record: everything pointing at it now must be part of this undo
+    // (removed with it, or unlinked by it). Otherwise removing it would quietly
+    // clear the card / account / platform on records added since.
+    for (const [m, field] of LINKS[change.model] || []) {
+      const users = await tx[m].findMany({ where: { [field]: change.id }, select: { id: true } });
+      const handled = (id) => removing.has(`${m}:${id}`)
+        || applied.some((c) => c.model === m && c.id === id && c.op === 'update' && c.fields[field]);
+      const left = users.filter((u) => !handled(u.id)).length;
+      if (left) throw requestError(409, `This ${labelFor(entry.record_type)} is used by ${left} ${USED_BY[m] || 'records'} now, so undo can't remove it. Remove it from its own page instead.`);
+    }
     if (change.model === 'inventory') {
       const sales = await tx.sales.findMany({ where: { inventory_id: change.id }, select: { id: true } });
       if (sales.some((s) => !removing.has(`sales:${s.id}`))) throw requestError(409, 'This purchase has sales recorded since, so it can\'t be removed. Delete those first.');
@@ -341,29 +466,30 @@ async function undoChange(tx, userId, entry, source) {
   // Write: put removed rows back (parents first), restore edited fields, then
   // remove added rows (children first).
   try {
-    for (const change of rows.filter((c) => c.op === 'delete')) {
+    for (const change of applied.filter((c) => c.op === 'delete')) {
       await tx[change.model].create({ data: rowData(change.row) });
     }
-    for (const change of rows.filter((c) => c.op === 'update')) {
+    for (const change of applied.filter((c) => c.op === 'update')) {
       const data = Object.fromEntries(Object.entries(change.fields)
         .map(([key, f]) => [key, writeValue(change.model, key, restoreValue(f, f.before))]));
       // An expense's tax worksheet watches tax_version to notice edits.
       if (change.model === 'expense') data.tax_version = { increment: 1 };
       await tx[change.model].update({ where: { id: change.id }, data });
     }
-    for (const change of rows.filter((c) => c.op === 'create').reverse()) {
+    for (const change of applied.filter((c) => c.op === 'create').reverse()) {
       await tx[change.model].delete({ where: { id: change.id } });
     }
   } catch (err) {
     // Foreign key / unique conflicts: something else now points at, or took
     // the place of, a row this would change.
     if (err.code === 'P2003' || err.code === 'P2002' || err.code === 'P2014') {
-      throw requestError(409, `Other records are linked to this ${entry.record_type} now, so it can't be undone.`);
+      throw requestError(409, `Other records are linked to this ${labelFor(entry.record_type)} now, so it can't be undone.`);
     }
     throw err;
   }
 
-  const inverse = rows.map((c) => (c.op === 'update'
+  // Skipped links were not written, so the undo entry leaves them out.
+  const inverse = applied.map((c) => (c.op === 'update'
     ? { ...c, fields: swapFields(c.fields) }
     : { ...c, op: c.op === 'create' ? 'delete' : 'create' }))
     .sort((x, y) => PARENT_FIRST[x.model] - PARENT_FIRST[y.model]);
@@ -404,12 +530,19 @@ const toJson = (entry, now) => entry && ({
 
 // Newest first, `limit` at a time; pass the last entry's created_at as
 // `before` for the next page.
-async function listActivity(userId, { before, limit } = {}) {
+// `group`: 'setup' (cards, accounts, platforms, buyers, goals, recurring
+// expenses), 'records' (everything else: purchases, sales, expenses), or
+// omitted for all.
+const SETUP_TYPES = Object.keys(SETUP_MODEL);
+async function listActivity(userId, { before, limit, group } = {}) {
   const take = Math.min(Math.max(Number(limit) || 50, 1), 100);
   const beforeDate = before ? new Date(before) : null;
   if (beforeDate && Number.isNaN(beforeDate.getTime())) throw requestError(400, 'Invalid "before" date');
+  if (group !== undefined && group !== 'setup' && group !== 'records') throw requestError(400, 'Invalid "group"');
+  const typeFilter = group === 'setup' ? { record_type: { in: SETUP_TYPES } }
+    : group === 'records' ? { record_type: { notIn: SETUP_TYPES } } : {};
   const rows = await prisma.activityLog.findMany({
-    where: { user_id: userId, ...(beforeDate ? { created_at: { lt: beforeDate } } : {}) },
+    where: { user_id: userId, ...typeFilter, ...(beforeDate ? { created_at: { lt: beforeDate } } : {}) },
     orderBy: { created_at: 'desc' },
     take: take + 1,
   });
@@ -561,6 +694,8 @@ module.exports = {
   logRefund,
   logStatus,
   trackChange,
+  trackSetupChange,
+  linkedRefs,
   listActivity,
   undoActivity,
   // exported for tests

@@ -3,9 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Activity from './Activity';
 
-const mocks = vi.hoisted(() => ({ query: {}, apiFetch: vi.fn(), invalidateAll: vi.fn(), success: vi.fn(), error: vi.fn() }));
+const mocks = vi.hoisted(() => ({ query: {}, groups: [], apiFetch: vi.fn(), invalidateAll: vi.fn(), success: vi.fn(), error: vi.fn() }));
 vi.mock('../hooks/useApi', () => ({
-  useActivity: () => mocks.query,
+  useActivity: (group) => { mocks.groups.push(group); return mocks.query; },
   useInvalidate: () => ({ all: mocks.invalidateAll }),
   apiFetch: mocks.apiFetch,
 }));
@@ -27,6 +27,36 @@ beforeEach(() => setQuery({ data: page([entry()]) }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe('Activity page', () => {
+  it('filters to setup changes or to buys and sales through the server', () => {
+    mocks.groups = [];
+    render(<Activity />);
+    expect(screen.getByRole('radio', { name: 'All' })).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByRole('radio', { name: 'Setup' }));
+    expect(screen.getByRole('radio', { name: 'Setup' })).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByRole('radio', { name: 'Buys & sales' }));
+    expect(mocks.groups.at(0)).toBeUndefined();
+    expect(mocks.groups).toContain('setup');
+    expect(mocks.groups.at(-1)).toBe('records');
+  });
+
+  it('shows a removed card with what it was taken off, and an empty Setup view explains itself', () => {
+    setQuery({ data: page([entry({ id: 'c', kind: 'change', record_type: 'card', detail: {
+      action: 'delete', product_name: 'Amazon Store Card',
+      rows: [{ model: 'paymentMethod', id: 'c1', op: 'delete', row: { values: { type: 'Credit' } } },
+        { model: 'inventory', id: 'i1', op: 'update', link: true, fields: { payment_method_id: { before: 'c1', after: null } } }],
+    } })]) });
+    render(<Activity />);
+    expect(screen.getByText('Removed a card')).toBeInTheDocument();
+    expect(screen.getByText('Credit · Taken off 1 purchase')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Undo Removed a card, Amazon Store Card' })).toBeInTheDocument();
+    cleanup();
+
+    setQuery({ data: page([]) });
+    render(<Activity />);
+    fireEvent.click(screen.getByRole('radio', { name: 'Setup' }));
+    expect(screen.getByText(/add, edit or remove a card, store account, platform/)).toBeInTheDocument();
+  });
+
   it('lists an action under Today with what it did', () => {
     render(<Activity />);
     const today = screen.getByRole('region', { name: 'Today' });

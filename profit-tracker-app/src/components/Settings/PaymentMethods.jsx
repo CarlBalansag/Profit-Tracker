@@ -8,6 +8,8 @@ import { QuickAddModal } from './QuickAddModal';
 import { CustomCardModal } from './CustomCardModal';
 import { IssuerLogo } from './IssuerLogo';
 import { CardReworkNotice } from './CardReworkNotice';
+import ConfirmDialog from '../UI/ConfirmDialog';
+import { toastWithUndo } from '../../utils/undoToast';
 import clsx from 'clsx';
 import {
   loadCardCatalog, rewardFieldsFromCatalog, reworkSwitchBody, cardsNeedingRework,
@@ -190,18 +192,28 @@ export const PaymentMethods = () => {
     setIsCustomModalOpen(true);
   };
 
-  const removeCard = async (id) => {
+  // The trash button only asks; removing happens on confirm. The server logs
+  // the removal in Activity, so the toast (and the Activity page) can undo it.
+  const [removeTarget, setRemoveTarget] = useState(null);
+  const [removing, setRemoving] = useState(false);
+  const afterCardChange = () => { invalidate.all(); fetchCards(); };
+  const removeCard = async () => {
+    if (!removeTarget) return;
+    setRemoving(true);
     try {
-      const res = await apiFetch(`/api/payment-methods/${id}`, {
+      const res = await apiFetch(`/api/payment-methods/${removeTarget.id}`, {
         method: 'DELETE',
         credentials: 'include'
       });
       await requireSuccessfulResponse(res, 'Could not remove payment method');
-      invalidate.paymentMethods();
-      fetchCards();
-      toast.success('Payment method removed.');
+      const body = await res.json().catch(() => null);
+      afterCardChange();
+      toastWithUndo(`${removeTarget.name} removed.`, body?.activity_id, afterCardChange);
+      setRemoveTarget(null);
     } catch (err) {
       toast.error(`Could not remove payment method: ${err.message}`);
+    } finally {
+      setRemoving(false);
     }
   };
 
@@ -356,7 +368,7 @@ export const PaymentMethods = () => {
                      type="button"
                      aria-label="Delete card"
                      title={`Delete ${card.name}`}
-                     onClick={() => removeCard(card.id)}
+                     onClick={() => setRemoveTarget(card)}
                      className="p-1 text-red-500 hover:text-red-400 transition-colors rounded hover:bg-red-500/10"
                    >
                      <Trash2 size={15}/>
@@ -528,6 +540,16 @@ export const PaymentMethods = () => {
         onAddCard={handleCustomAdd}
         cardToEdit={editingCard}
         defaultType={newCardType}
+      />
+
+      <ConfirmDialog
+        open={!!removeTarget}
+        title={`Remove ${removeTarget?.name || 'this card'}?`}
+        consequence="The card is removed, and every purchase, expense and shipping label on it shows no card. You can undo this from the toast or the Activity page for 30 days."
+        confirmLabel="Remove card"
+        busy={removing}
+        onConfirm={removeCard}
+        onClose={() => setRemoveTarget(null)}
       />
     </div>
   );

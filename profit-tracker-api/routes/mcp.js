@@ -1207,9 +1207,11 @@ function buildServer(userId, apiKeyId) {
         if (existing) throw toolError(`A platform named "${existing.name}" (${existing.type}) already exists`);
         // Same defaults as POST /api/platforms. fee_pct_decimal is filled by
         // the database trigger; workflow_preset is left unset there too.
-        const platform = await tx.platform.create({
+        const { result: platform } = await activityLog.trackSetupChange(tx, userId, {
+          action: 'create', recordType: 'platform', source: 'assistant',
+        }, () => tx.platform.create({
           data: { user_id: userId, name, type, fee_pct: fee_pct ?? 0 },
-        });
+        }));
         await recordChanges(tx, userId, 'Platform', platform.id, [
           { field: 'created', oldValue: null, newValue: `${platform.name} (${platform.type})` },
         ]);
@@ -1397,14 +1399,16 @@ function buildServer(userId, apiKeyId) {
         if (existing) throw toolError(`A payment method named "${existing.name}" (${existing.type}) already exists`);
         // Same fields as POST /api/payment-methods; the _decimal twins are
         // filled by the database trigger.
-        const method = await tx.paymentMethod.create({
+        const { result: method } = await activityLog.trackSetupChange(tx, userId, {
+          action: 'create', recordType: 'card', source: 'assistant',
+        }, () => tx.paymentMethod.create({
           data: {
             user_id: userId, name: finalName, type, last4: last4 || null,
             ...rewardColumns(input, rewards),
             // A card added from the card list never needs the rework notice.
             rework_prompt_state: input.catalog_card_id ? 'switched' : null,
           },
-        });
+        }));
         await recordChanges(tx, userId, 'PaymentMethod', method.id, [
           { field: 'created', oldValue: null, newValue: `${method.name} (${method.type})` },
         ]);
@@ -1452,7 +1456,9 @@ function buildServer(userId, apiKeyId) {
           ...rewardColumns(input, rewards, existing),
           ...(input.catalog_card_id ? { rework_prompt_state: 'switched' } : {}),
         };
-        const { count } = await tx.paymentMethod.updateMany({ where: { id: existing.id, user_id: userId }, data });
+        const { result: count } = await activityLog.trackSetupChange(tx, userId, {
+          action: 'edit', recordType: 'card', id: existing.id, source: 'assistant',
+        }, async () => (await tx.paymentMethod.updateMany({ where: { id: existing.id, user_id: userId }, data })).count);
         if (!count) throw toolError('That payment method no longer exists');
         const fields = ['name', 'last4', 'reward_type', 'points_base_rate', 'point_value_cents', 'default_cashback_rate', 'rewards_label', 'catalog_card_id'];
         const changes = fields

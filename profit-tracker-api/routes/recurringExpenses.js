@@ -5,6 +5,12 @@ const { validateBody } = require('../middleware/validate');
 const { recurringExpense, updateRecurringExpense } = require('../validation/schemas');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 const { requireOwned } = require('../services/ownership');
+const activityLog = require('../services/activityLog');
+
+// The expenses a recurring expense has generated, as trackChange refs.
+const generatedRefs = async (tx, rec) => (rec?.id
+  ? { expense: (await tx.expense.findMany({ where: { recurring_expense_id: rec.id }, select: { id: true } })).map((e) => e.id) }
+  : {});
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -127,7 +133,11 @@ router.post('/', isAuthenticated, validateBody(recurringExpense), async (req, re
     }
     await requireOwned('paymentMethod', payment_method_id, req.user.id, 'Payment method');
 
-    const rec = await prisma.$transaction(async (tx) => {
+    const { result: rec, activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'create', recordType: 'recurring_expense',
+      // The past occurrences it generates are part of the add (undo removes them).
+      extraRefs: generatedRefs,
+    }, async () => {
       const created = await tx.recurringExpense.create({
         data: {
           user_id:    req.user.id,
@@ -146,9 +156,9 @@ router.post('/', isAuthenticated, validateBody(recurringExpense), async (req, re
       // Immediately generate all past occurrences
       await generateEntries(created, tx);
       return tx.recurringExpense.findUnique({ where: { id: created.id }, include: CARD_SELECT });
-    });
+    }));
 
-    res.json(exactRecurring(rec));
+    res.json({ ...exactRecurring(rec), activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -186,7 +196,10 @@ router.put('/:id', isAuthenticated, validateBody(updateRecurringExpense), async 
       return res.status(400).json({ error: 'End date cannot be before start date' });
     }
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const { result: updated, activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'edit', recordType: 'recurring_expense', id: req.params.id,
+      extraRefs: (t) => generatedRefs(t, { id: req.params.id }),
+    }, async () => {
       const saved = await tx.recurringExpense.update({ where: { id: req.params.id }, data });
 
       // If still active after update, generate any new entries
@@ -194,9 +207,9 @@ router.put('/:id', isAuthenticated, validateBody(updateRecurringExpense), async 
         await generateEntries(saved, tx);
       }
       return tx.recurringExpense.findUnique({ where: { id: saved.id }, include: CARD_SELECT });
-    });
+    }));
 
-    res.json(exactRecurring(updated));
+    res.json({ ...exactRecurring(updated), activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -210,13 +223,16 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
       return res.status(404).json({ error: 'Not found' });
     }
 
-    // Delete all auto-generated expense entries tied to this recurring record
-    await prisma.$transaction(async (tx) => {
+    // Delete all auto-generated expense entries tied to this recurring record.
+    // They are logged with it, so undo brings them all back.
+    const { activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'delete', recordType: 'recurring_expense', id: req.params.id,
+    }, async () => {
       await tx.expense.deleteMany({ where: { recurring_expense_id: req.params.id, user_id: req.user.id } });
       await tx.recurringExpense.delete({ where: { id: req.params.id } });
-    });
+    }));
 
-    res.json({ success: true });
+    res.json({ success: true, activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
