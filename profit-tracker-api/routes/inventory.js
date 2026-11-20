@@ -56,6 +56,14 @@ function withActions(item) {
   return result;
 }
 
+// Writes already require account_id to be the caller's own account, but the list
+// re-checks on read so another user's account name can never reach the client.
+function ownAccountOnly(item, userId) {
+  const { account, ...rest } = item;
+  if (!account || account.user_id !== userId) return { ...rest, account: null };
+  return { ...rest, account: { id: account.id, name: account.name } };
+}
+
 // GET all inventory items for current user
 router.get('/', isAuthenticated, async (req, res, next) => {
   try {
@@ -76,6 +84,9 @@ router.get('/', isAuthenticated, async (req, res, next) => {
         order_number: true, tracking_number: true, tracking_info: true, receipt_url: true,
         tax_exempt: true,
         vendor: { select: { id: true, name: true, type: true } },
+        // The store account the purchase was made on (shown on the Statuses board).
+        // user_id is read only to drop an account that isn't the caller's.
+        account: { select: { id: true, name: true, user_id: true } },
         payment_method: { select: { id: true, name: true, type: true, default_cashback_rate: true, default_cashback_rate_decimal: true, preset_card_id: true, category_rates: true } },
         sales: {
           select: {
@@ -93,7 +104,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       },
       orderBy: { purchase_date: 'desc' }
     });
-    res.json(items.map((item) => withActions(exactInventory(item))));
+    res.json(items.map((item) => withActions(exactInventory(ownAccountOnly(item, req.user.id)))));
   } catch (err) {
     next(err);
   }

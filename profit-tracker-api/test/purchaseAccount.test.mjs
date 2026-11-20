@@ -53,6 +53,35 @@ const newPurchase = (extra = {}) => ({
 const stored = (id) => harness.db.inventory.find((row) => row.id === id);
 const existing = () => stored(harness.ids.inventory);
 
+describe('GET /api/inventory store account', () => {
+  const listed = async (id) => (await send('GET', '/api/inventory')).body.find((row) => row.id === id);
+
+  it('includes the linked store account name, and only id and name', async () => {
+    existing().account_id = STORE_ACCOUNT;
+    const row = await listed(harness.ids.inventory);
+    expect(row.account_id).toBe(STORE_ACCOUNT);
+    expect(row.account).toEqual({ id: STORE_ACCOUNT, name: 'Main' });
+  });
+
+  it('returns a null account for a purchase without one', async () => {
+    existing().account_id = null;
+    expect((await listed(harness.ids.inventory)).account).toBeNull();
+  });
+
+  it("never returns another user's account, even if one were linked", async () => {
+    existing().account_id = FOREIGN_ACCOUNT;
+    const row = await listed(harness.ids.inventory);
+    expect(row.account).toBeNull();
+    expect(JSON.stringify(row)).not.toContain('Not yours');
+  });
+
+  it('follows a renamed account on the next read', async () => {
+    existing().account_id = STORE_ACCOUNT_2;
+    harness.db.account.find((a) => a.id === STORE_ACCOUNT_2).name = 'Business Prime';
+    expect((await listed(harness.ids.inventory)).account.name).toBe('Business Prime');
+  });
+});
+
 describe('POST /api/inventory with a store account', () => {
   it('saves the account when it belongs to the store', async () => {
     const res = await send('POST', '/api/inventory', newPurchase({ account_id: STORE_ACCOUNT }));
