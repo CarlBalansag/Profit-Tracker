@@ -532,7 +532,15 @@ const dataReset = z.object({
   confirmation: z.literal('RESET'),
 }).strict();
 
+// PUT /api/schedule-c/years/:year. The key is required; '' or null clears it.
+const taxYearSettingBody = z.object({
+  untracked_inventory_end: nullableDecimalAmount(),
+}).strict().refine((body) => body.untracked_inventory_end !== undefined, {
+  message: 'Enter an amount, or leave it blank to clear it.', path: ['untracked_inventory_end'],
+});
+
 module.exports = {
+  taxYearSettingBody,
   dataReset,
   createCashoutConnection,
   updateCashoutConnection,

@@ -191,3 +191,69 @@ describe('Schedule C profit (Parts I and III)', () => {
     expect(screen.getByText('-$40.00')).toBeTruthy();
   });
 });
+
+describe('Schedule C: stock not in ProfitTracker', () => {
+  const base = {
+    year: 2026, basis: 'Cash method.', lines: [{ line: '1', label: 'Gross', amount: '0.00' }, { line: '31', label: 'Net', amount: '0.00' }],
+    partIII: [{ line: '35', label: 'Beginning inventory', amount: '672.50' }], netProfit: '0.00', sales: { count: 0, byPlatform: [] },
+    reconciliation: { appProfitOnSales: '0.00', appExpenses: '0.00', appProfitAfterExpenses: '0.00', differences: [], scheduleCNetProfit: '0.00' },
+    checks: { directCostOfUnitsSold: '0.00', oversold: [], soldBeforePurchase: [], salesWithRestoredUnits: 0, negativeCogs: false },
+    yearEndCutoff: { sales: [], total: '0.00' }, notes: [],
+    untracked: { start: '500.00', end: '500.00', startEntered: '500.00', endEntered: null, trackedBeginning: '172.50' },
+  };
+  let books; let puts;
+  beforeEach(() => {
+    books = structuredClone(base); puts = [];
+    apiFetch.mockImplementation(async (path, options) => {
+      if (options?.method === 'PUT') { puts.push({ path, body: JSON.parse(options.body) }); return response({ ok: true }); }
+      return response(path.includes('/preferences/') ? { enabled: true } : { ...report(2026), books });
+    });
+  });
+  const open = async () => {
+    mount(<ScheduleC />);
+    await screen.findAllByText(/Stock not in ProfitTracker/);
+    fireEvent.change(screen.getByLabelText('Tax year'), { target: { value: '2026' } });
+    return { start: await screen.findByLabelText('On hand January 1, 2026'), end: screen.getByLabelText('Still on hand December 31, 2026') };
+  };
+
+  it('shows the January 1 amount, explains a blank December 31, and saves only what changed', async () => {
+    const { start, end } = await open();
+    expect(start.value).toBe('500.00');
+    expect(end.value).toBe('');
+    expect(screen.getByText(/Left blank, the January 1 amount \(\$500\.00\) is treated as still on hand/)).toBeTruthy();
+    expect(screen.getByText(/\$172\.50 from your purchases plus this/)).toBeTruthy();
+    const save = screen.getByRole('button', { name: 'Save amounts' });
+    expect(save.disabled).toBe(true);
+    fireEvent.change(end, { target: { value: '200' } });
+    const loads = apiFetch.mock.calls.length;
+    fireEvent.click(save);
+    await waitFor(() => expect(puts).toEqual([{ path: '/api/schedule-c/years/2026', body: { untracked_inventory_end: '200' } }]));
+    await waitFor(() => expect(apiFetch.mock.calls.length).toBeGreaterThan(loads + 1)); // worksheet reloaded
+  });
+
+  it('saves January 1 to the previous tax year, and a blank clears it', async () => {
+    const { start } = await open();
+    fireEvent.change(start, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save amounts' }));
+    await waitFor(() => expect(puts).toEqual([{ path: '/api/schedule-c/years/2025', body: { untracked_inventory_end: '' } }]));
+  });
+
+  it('refuses a bad amount without saving, and shows a server error', async () => {
+    const { end } = await open();
+    fireEvent.change(end, { target: { value: '-5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save amounts' }));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/dollars and cents/);
+    expect(puts).toEqual([]);
+    apiFetch.mockImplementation(async (path, options) => options?.method === 'PUT' ? response({ error: 'Enable Schedule C in Settings first' }, false) : response(path.includes('/preferences/') ? { enabled: true } : { ...report(2026), books }));
+    fireEvent.change(end, { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save amounts' }));
+    expect((await screen.findByText('Enable Schedule C in Settings first')).getAttribute('role')).toBe('alert');
+    expect(end.value).toBe('5');
+  });
+
+  it('warns when cost of goods sold is below zero', async () => {
+    books.checks.negativeCogs = true;
+    await open();
+    expect(screen.getByRole('alert').textContent).toMatch(/Cost of goods sold is below zero/);
+  });
+});

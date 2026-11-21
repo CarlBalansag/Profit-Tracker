@@ -196,6 +196,7 @@ describe('resetUserData on a real database', () => {
     await db.goal.create({ data: { user_id: id, metric: 'netProfit' } });
     await db.productNote.create({ data: { user_id: id, product_name: tag('item'), note: 'n' } });
     await db.calendarEvent.create({ data: { user_id: id, title: 't', date: '2026-11-06' } });
+    await db.taxYearSetting.create({ data: { user_id: id, year: 2025, untracked_inventory_end: 500 } });
 
     const connection = await db.cashoutConnection.create({ data: {
       user_id: id, provider: 'eb', encrypted_key: 'x', key_last4: '1234', platform_id: cashout.id,
@@ -231,6 +232,7 @@ describe('resetUserData on a real database', () => {
       goal: await db.goal.count({ where }),
       productNote: await db.productNote.count({ where }),
       calendarEvent: await db.calendarEvent.count({ where }),
+      taxYearSetting: await db.taxYearSetting.count({ where }),
       mcpWriteLog: await db.mcpWriteLog.count({ where }),
     };
   }
@@ -238,7 +240,7 @@ describe('resetUserData on a real database', () => {
   const FULL = {
     inventory: 1, sales: 1, refund: 2, transactionNote: 2, attachment: 1, changeLog: 2, cashoutItemMatch: 1,
     cashoutDealSnapshot: 1, cashoutConnection: 1, platform: 3, account: 1, paymentMethod: 1, buyer: 1, invoice: 1,
-    expense: 1, recurringExpense: 1, goal: 1, productNote: 1, calendarEvent: 1, mcpWriteLog: 1,
+    expense: 1, recurringExpense: 1, goal: 1, productNote: 1, calendarEvent: 1, taxYearSetting: 1, mcpWriteLog: 1,
   };
 
   async function expectLoginIntact(id) {
@@ -301,7 +303,7 @@ describe('resetUserData on a real database', () => {
 
     expect(Object.values(await counts(ME)).every((count) => count === 0)).toBe(true);
     await expectLoginIntact(ME);
-    expect(result.deleted).toMatchObject({ platforms: 3, paymentMethods: 1, accounts: 1, cashoutConnections: 1, changeLogs: 2 });
+    expect(result.deleted).toMatchObject({ platforms: 3, paymentMethods: 1, accounts: 1, cashoutConnections: 1, changeLogs: 2, taxYearSettings: 1 });
     expect(result.connectionIds).toHaveLength(1);
   });
 

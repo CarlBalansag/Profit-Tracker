@@ -17,6 +17,10 @@
 //   still keeps out of stock (quantity less units refunded or put back).
 // - Cancelled purchases are not inventory.
 // - COGS (line 42) = beginning inventory + purchases - ending inventory.
+// - Stock not entered as purchases (e.g. owned before tracking began) is added
+//   to beginning and ending inventory from the user's tax-year settings: one
+//   December 31 amount per year, carried forward until changed. January 1 of a
+//   year is the previous December 31.
 //
 // Everything is Decimal internally and rounded to cents once, on output.
 const { Decimal, decimal, isRealizedSale, batchCost, keptQuantity, keptSaleQuantity, effectiveCashbackRate, inventoryCashback, saleEconomics } = require('./decimalFinance');
@@ -57,12 +61,31 @@ function heldAtYearEnd(b, year) {
   return Math.max(0, b.kept - out);
 }
 
+// The untracked-stock amounts for `year` from TaxYearSetting rows (any years
+// up to `year`). A year with no amount carries the latest earlier one.
+function untrackedInventory(settings = [], year) {
+  const entered = settings
+    .filter((row) => row.untracked_inventory_end !== null && row.untracked_inventory_end !== undefined)
+    .sort((a, b) => b.year - a.year);
+  const latestBy = (y) => entered.find((row) => row.year <= y) || null;
+  const end = latestBy(year);
+  const start = latestBy(year - 1);
+  return {
+    start: start ? money(start.untracked_inventory_end) : '0.00',
+    end: end ? money(end.untracked_inventory_end) : '0.00',
+    // Exactly what the person typed for each date (null = nothing typed).
+    startEntered: start && start.year === year - 1 ? money(start.untracked_inventory_end) : null,
+    endEntered: end && end.year === year ? money(end.untracked_inventory_end) : null,
+  };
+}
+
 /**
  * inventories: rows with sales (platform), payment_method and vendor.
  * worksheet: the Part II result from services/scheduleC.js for the same year.
  * expensesInYear: manual Expense rows dated in the year (for the reconciliation).
+ * untracked: untrackedInventory() for the year (stock not entered as purchases).
  */
-function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = [] }) {
+function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = [], untracked = untrackedInventory([], year) }) {
   const batches = inventories.filter((inv) => !isCancelledPurchase(inv)).map(batchFacts);
   let gross = ZERO; let purchases = ZERO; let beginning = ZERO; let ending = ZERO;
   let cashbackOnPurchases = ZERO; let salesTaxCollected = ZERO;
@@ -116,6 +139,11 @@ function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = []
 
   const returns = decimal(worksheet?.returns_and_allowances?.total || 0);
   const netReceipts = gross.minus(returns);
+  const trackedBeginning = beginning;
+  const untrackedStart = decimal(untracked.start);
+  const untrackedEnd = decimal(untracked.end);
+  beginning = beginning.plus(untrackedStart);
+  ending = ending.plus(untrackedEnd);
   const cogs = beginning.plus(purchases).minus(ending);
   const grossProfit = netReceipts.minus(cogs);
   const otherIncome = ZERO;
@@ -159,8 +187,13 @@ function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = []
   ];
 
   const notes = [];
-  if (earliestPurchaseYear === null || earliestPurchaseYear >= year) {
-    notes.push(`Beginning inventory is $${money(beginning)} because ProfitTracker has no purchases from before ${year}. If you had stock before you started tracking, your beginning inventory is higher.`);
+  if (untrackedStart.greaterThan(0)) {
+    notes.push(`Beginning inventory includes $${money(untrackedStart)} of stock that isn't entered as purchases in ProfitTracker.`);
+  } else if (earliestPurchaseYear === null || earliestPurchaseYear >= year) {
+    notes.push(`Beginning inventory is $${money(beginning)} because ProfitTracker has no purchases from before ${year}. If you had stock before you started tracking, add what it cost you under "Stock not in ProfitTracker".`);
+  }
+  if (untracked.endEntered === null && untrackedEnd.greaterThan(0)) {
+    notes.push(`No December 31 amount is entered for stock not in ProfitTracker, so all $${money(untrackedEnd)} of it is treated as still on hand. If you sold or used some of it, enter what was left.`);
   }
   if (giftCards.costed.greaterThan(0)) notes.push(`Gift cards paid $${money(giftCards.costed)} of this year's purchases. They cost you $${money(giftCards.cost)}, and that is what counts in your inventory cost.`);
   if (giftCards.uncostedCount > 0) notes.push(`${giftCards.uncostedCount} ${giftCards.uncostedCount === 1 ? 'purchase was' : 'purchases were'} paid partly with gift cards ($${money(giftCards.uncosted)}) with no gift card cost entered, so those gift cards count as free. If you bought them, add what they cost you on the purchase so your inventory cost is right.`);
@@ -187,7 +220,9 @@ function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = []
       ],
       scheduleCNetProfit: money(netProfit),
     },
+    untracked: { ...untracked, trackedBeginning: money(trackedBeginning) },
     checks: {
+      negativeCogs: cogs.isNegative(),
       directCostOfUnitsSold: money(directCogs),
       oversold: issues.oversold,
       soldBeforePurchase: issues.soldBeforePurchase,
@@ -198,4 +233,4 @@ function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = []
   };
 }
 
-module.exports = { scheduleCBooks, heldAtYearEnd, unitsOut };
+module.exports = { scheduleCBooks, untrackedInventory, heldAtYearEnd, unitsOut };

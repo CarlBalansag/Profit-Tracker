@@ -137,6 +137,7 @@ async function deleteSetupData(tx, userId) {
   const goals = await tx.goal.deleteMany({ where });
   const productNotes = await tx.productNote.deleteMany({ where });
   const calendarEvents = await tx.calendarEvent.deleteMany({ where });
+  const taxYearSettings = await tx.taxYearSetting.deleteMany({ where });
   const accounts = await tx.account.deleteMany({ where });
   const platforms = await tx.platform.deleteMany({ where });
   const paymentMethods = await tx.paymentMethod.deleteMany({ where });
@@ -153,6 +154,7 @@ async function deleteSetupData(tx, userId) {
     goals: goals.count,
     productNotes: productNotes.count,
     calendarEvents: calendarEvents.count,
+    taxYearSettings: taxYearSettings.count,
     accounts: accounts.count,
     platforms: platforms.count,
     paymentMethods: paymentMethods.count,

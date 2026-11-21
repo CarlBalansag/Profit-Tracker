@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { UntrackedStock } from './UntrackedStock';
 
 const usd = (value) => {
   const n = Number(value) || 0;
@@ -19,12 +20,13 @@ function LineTable({ caption, rows }) {
   </table>;
 }
 
-export function ScheduleCBooks({ books, year }) {
+export function ScheduleCBooks({ books, year, onSettingsSaved }) {
   if (!books) return null;
   const line = (n) => books.lines.find((l) => l.line === n)?.amount;
   const net = Number(books.netProfit);
   const { reconciliation: rec, checks, yearEndCutoff: cutoff } = books;
   const problems = [
+    checks.negativeCogs && 'Cost of goods sold is below zero, which usually means more stock is on hand at the end of the year than you started with plus what you bought. Check the amounts under "Stock not in ProfitTracker".',
     checks.oversold.length > 0 && `${checks.oversold.length} ${checks.oversold.length === 1 ? 'purchase has' : 'purchases have'} more units sold than bought (${checks.oversold.map((o) => o.product_name).join(', ')}). Fix the quantities so cost of goods sold is right.`,
     checks.soldBeforePurchase.length > 0 && `${checks.soldBeforePurchase.length} ${checks.soldBeforePurchase.length === 1 ? 'sale is' : 'sales are'} dated before the purchase ${checks.soldBeforePurchase.length === 1 ? 'it came' : 'they came'} from (${checks.soldBeforePurchase.map((s) => s.product_name).join(', ')}). Check the dates.`,
   ].filter(Boolean);
@@ -52,6 +54,8 @@ export function ScheduleCBooks({ books, year }) {
       </div>
       <p className="mt-3 text-xs text-gray-500">Line 4 comes from Part III: what your inventory was worth on January 1, plus what you bought, minus what was still on hand on December 31. Money spent on stock you still hold isn&apos;t deducted until you sell it.</p>
     </details>
+
+    {books.untracked && <UntrackedStock key={`${year}-${books.untracked.startEntered}-${books.untracked.endEntered}`} year={Number(year)} untracked={books.untracked} onSaved={onSettingsSaved || (() => {})} />}
 
     <details className={card}>
       <summary className="cursor-pointer text-sm font-medium text-purple-300">Why this differs from your profit elsewhere in the app</summary>
