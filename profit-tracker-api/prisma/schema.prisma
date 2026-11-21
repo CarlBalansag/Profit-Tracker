@@ -55,6 +55,7 @@ model User {
   tax_forms_1099k        TaxForm1099K[]
   tax_profiles           TaxProfile[]
   tax_reserve_entries    TaxReserveEntry[]
+  tax_payments           TaxPayment[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -876,6 +877,8 @@ model TaxProfile {
   other_se_income        Decimal? @db.Decimal(19, 2)
   federal_withholding    Decimal? @db.Decimal(19, 2)
   state_withholding      Decimal? @db.Decimal(19, 2)
+  // Superseded by TaxPayment (phase 7): no longer read or written. Kept so
+  // the migration stays additive.
   federal_estimated_paid Decimal? @db.Decimal(19, 2)
   state_estimated_paid   Decimal? @db.Decimal(19, 2)
   qualifying_children    Int?
@@ -912,6 +915,24 @@ model TaxReserveEntry {
   date       DateTime
   note       String?
   created_at DateTime @default(now())
+
+  @@index([user_id, year])
+}
+
+// A tax payment the user made: an estimated payment for a quarter, an
+// extension payment, or another payment toward a year's tax. Kept apart from
+// the reserve (money set aside) and never part of any profit total.
+model TaxPayment {
+  id           String   @id @default(uuid())
+  user_id      String
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year         Int      // the tax year the payment is for
+  jurisdiction String   // "US" for the IRS, or a two-letter state code
+  period       String   // Q1 | Q2 | Q3 | Q4 | extension | other
+  amount       Decimal  @db.Decimal(19, 2)
+  paid_date    DateTime
+  reference    String?  // e.g. a confirmation number, if the user wants it
+  created_at   DateTime @default(now())
 
   @@index([user_id, year])
 }

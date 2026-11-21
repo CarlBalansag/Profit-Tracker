@@ -92,18 +92,12 @@ export function TaxProfileForm({ year, initial, mode = 'edit', saved = false, bu
         <Money id={id('other_se_income')} value={values.other_se_income} onChange={set('other_se_income')} disabled={busy} why />
       </Field>
     </Section>
-    <Section title={`Already paid for ${year}`}>
+    <Section title={`Withheld from paychecks in ${year}`}>
       <Field id={id('federal_withholding')} label="Federal tax withheld from paychecks" why="Withholding already counts toward your tax bill. Your pay stub shows it year to date; estimate the full year.">
         <Money id={id('federal_withholding')} value={values.federal_withholding} onChange={set('federal_withholding')} disabled={busy} why />
       </Field>
       <Field id={id('state_withholding')} label="State tax withheld from paychecks">
         <Money id={id('state_withholding')} value={values.state_withholding} onChange={set('state_withholding')} disabled={busy} />
-      </Field>
-      <Field id={id('federal_estimated_paid')} label="Federal estimated payments made" why="Quarterly payments you've sent the IRS for this year (Form 1040-ES).">
-        <Money id={id('federal_estimated_paid')} value={values.federal_estimated_paid} onChange={set('federal_estimated_paid')} disabled={busy} why />
-      </Field>
-      <Field id={id('state_estimated_paid')} label="State estimated payments made">
-        <Money id={id('state_estimated_paid')} value={values.state_estimated_paid} onChange={set('state_estimated_paid')} disabled={busy} />
       </Field>
     </Section>
     <Section title="Family">

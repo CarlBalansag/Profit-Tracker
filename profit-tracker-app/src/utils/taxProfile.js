@@ -9,8 +9,8 @@ export const FILING_STATUS_LABELS = {
   hoh: 'Head of household',
   qss: 'Qualifying surviving spouse',
 };
-const MONEY_FIELDS = ['non_business_income', 'wages', 'other_se_income', 'federal_withholding', 'state_withholding', 'federal_estimated_paid',
-  'state_estimated_paid', 'adjustments', 'itemized_deductions', 'prior_year_tax', 'prior_year_agi'];
+const MONEY_FIELDS = ['non_business_income', 'wages', 'other_se_income', 'federal_withholding', 'state_withholding',
+  'adjustments', 'itemized_deductions', 'prior_year_tax', 'prior_year_agi'];
 
 const pct = (rate) => (rate === null || rate === undefined || rate === '' ? '' : String(Math.round(Number(rate) * 10000) / 100));
 export const toForm = (p = {}) => {

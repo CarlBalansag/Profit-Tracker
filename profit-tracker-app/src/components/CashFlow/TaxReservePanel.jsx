@@ -11,12 +11,13 @@ const usd = (n) => `${n < 0 ? '−' : ''}$${Math.abs(Number(n) || 0).toLocaleStr
 async function load(year) {
   const pref = await (await requireSuccessfulResponse(await apiFetch('/api/preferences/schedule-c'))).json();
   if (!pref.enabled) return null;
-  const [report, profile, ledger] = await Promise.all([
+  const [report, profile, ledger, paid] = await Promise.all([
     apiFetch(`/api/schedule-c?year=${year}`).then(requireSuccessfulResponse).then((r) => r.json()),
     apiFetch(`/api/tax/profile/${year}`).then(requireSuccessfulResponse).then((r) => r.json()),
     apiFetch(`/api/tax/reserves/${year}`).then(requireSuccessfulResponse).then((r) => r.json()),
+    apiFetch(`/api/tax/payments/${year}`).then(requireSuccessfulResponse).then((r) => r.json()),
   ]);
-  return { report, profile: profile.profile, ledger };
+  return { report, profile: profile.profile, ledger, payments: paid.payments };
 }
 
 /**
@@ -34,14 +35,14 @@ export function TaxReservePanel() {
   }, [year]);
   if (!data) return null;
 
-  const { report, profile, ledger } = data;
+  const { report, profile, ledger, payments } = data;
   // Without saved details, the same flat 25% the tax estimate falls back to.
-  const o = buildTaxOverview({ profile: profile || { reserve_mode: 'flat' }, year, businessProfit: report.books.netProfit, today: localToday(), forecast: report.books.forecast || null, reserveBalance: ledger.balance });
+  const o = buildTaxOverview({ profile: profile || { reserve_mode: 'flat' }, year, businessProfit: report.books.netProfit, today: localToday(), forecast: report.books.forecast || null, reserveBalance: ledger.balance, payments });
   const coverage = o.coverage === null ? null : Math.min(100, Math.round(o.coverage * 100));
   const items = [
     ['Recommended', usd(o.recommended), profile ? `${o.forecastChoice.label}, ${o.effectiveMode === 'flat' ? 'flat percentage' : o.effectiveMode}` : 'A flat 25% of projected profit'],
     ['Set aside', usd(o.reserveBalance), 'In your tax savings'],
-    ['Paid', usd(o.estimatedPaid), 'Estimated payments'],
+    ['Paid', usd(o.estimatedPaid), 'Tax payments recorded'],
     ['Shortfall', usd(o.stillToSetAside), o.stillToSetAside > 0 ? 'Still to set aside' : 'Fully covered'],
   ];
   return <Panel title={`Tax reserve, ${year}`} sub="Money to keep back for this year's taxes on your reselling profit. Moving it aside never counts as an expense."

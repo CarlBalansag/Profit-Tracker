@@ -83,6 +83,7 @@ describe('Cash Flow: tax reserve', () => {
     if (path.startsWith('/api/schedule-c')) return res({ books });
     if (path.startsWith('/api/tax/profile/')) return res({ profile: overrides.profile ?? null });
     if (path.startsWith('/api/tax/reserves/')) return res({ entries: [], balance: overrides.balance ?? '1000.00' });
+    if (path.startsWith('/api/tax/payments/')) return res({ payments: overrides.payments ?? [{ id: 'p1', year: 2026, jurisdiction: 'US', period: 'Q1', amount: '500.00', paid_date: '2026-04-10' }] });
     throw new Error(path);
   });
 
@@ -93,14 +94,16 @@ describe('Cash Flow: tax reserve', () => {
   });
 
   it('shows the recommendation, what is set aside, the shortfall and coverage', async () => {
-    // Without saved details: a flat 25% of the projected $20,000 = $5,000.
+    // Without saved details: a flat 25% of the projected $20,000 = $5,000;
+    // $1,000 set aside and $500 paid leave $3,500.
     mocks.apiFetch = api();
     page();
     expect(await screen.findByText(/Tax reserve,/)).toBeInTheDocument();
     expect(screen.getByText('$5,000.00')).toBeInTheDocument();
     expect(screen.getByText('$1,000.00')).toBeInTheDocument();
-    expect(screen.getByText('$4,000.00')).toBeInTheDocument();
-    expect(screen.getByRole('progressbar', { name: 'Tax reserve covered' })).toHaveAttribute('aria-valuenow', '20');
+    expect(screen.getByText('$500.00')).toBeInTheDocument(); // a recorded federal payment
+    expect(screen.getByText('$3,500.00')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Tax reserve covered' })).toHaveAttribute('aria-valuenow', '30');
     expect(screen.getByRole('link', { name: 'Open tax estimate' })).toHaveAttribute('href', '/schedule-c');
   });
 

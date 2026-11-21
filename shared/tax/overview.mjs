@@ -56,8 +56,9 @@ export function profileToEstimateInput(profile, { year, businessProfit }) {
     dependents: { qualifyingChildren: amount(profile.qualifying_children), otherDependents: amount(profile.other_dependents) },
     federalWithholding: amount(profile.federal_withholding),
     stateWithholding: amount(profile.state_withholding),
-    federalEstimatedPayments: amount(profile.federal_estimated_paid),
-    stateEstimatedPayments: amount(profile.state_estimated_paid),
+    // Estimated payments come from recorded TaxPayment rows (buildTaxOverview).
+    federalEstimatedPayments: 0,
+    stateEstimatedPayments: 0,
   };
 }
 
@@ -77,7 +78,22 @@ function missingDetails(profile) {
  * businessProfit: Schedule C line 31 for the year so far.
  * today: 'YYYY-MM-DD' (for the next due date).
  */
-export function buildTaxOverview({ profile, year, businessProfit, today, forecast = null, reserveBalance = 0 }) {
+// Splits each installment of a plan into what the recorded payments cover,
+// oldest first, and marks it paid, partly paid, overdue or upcoming.
+export function trackInstallments(plan, paid, today) {
+  if (!plan?.supported || !plan.installments?.length) return [];
+  let left = cents(paid);
+  return plan.installments.map((inst) => {
+    const due = cents(inst.amount);
+    const applied = Math.max(0, Math.min(due, left));
+    left -= applied;
+    const remaining = due - applied;
+    const status = remaining <= 0 ? 'paid' : inst.due < today ? 'overdue' : applied > 0 ? 'partly_paid' : 'upcoming';
+    return { ...inst, paid: dollars(applied), remaining: dollars(remaining), status };
+  });
+}
+
+export function buildTaxOverview({ profile, year, businessProfit, today, forecast = null, reserveBalance = 0, payments = [] }) {
   year = Number(year);
   const actualProfit = amount(businessProfit);
   // With the API's projection inputs, the estimate uses the chosen projection
@@ -89,9 +105,15 @@ export function buildTaxOverview({ profile, year, businessProfit, today, forecas
   const mode = RESERVE_MODES.includes(profile?.reserve_mode) ? profile.reserve_mode : 'personalized';
   const flatRate = num(profile?.flat_rate) ?? DEFAULT_FLAT_RATE;
   const bufferRate = num(profile?.buffer_rate) ?? DEFAULT_BUFFER_RATE;
-  const estimatedPaid = dollars(cents(profile?.federal_estimated_paid) + cents(profile?.state_estimated_paid));
+  // Recorded payments toward this tax year: the IRS's, and the state of
+  // residence's (payments to another state are listed but not counted here).
+  const forYear = payments.filter((p) => Number(p.year ?? year) === year);
+  const paidTo = (code) => dollars(forYear.filter((p) => p.jurisdiction === code).reduce((t, p) => t + cents(p.amount), 0));
+  const federalPaid = paidTo('US');
+  const statePaid = profile?.state ? paidTo(profile.state) : 0;
+  const estimatedPaid = dollars(cents(federalPaid) + cents(statePaid));
   const filingDue = `${year + 1}-04-15`;
-  const base = { year, businessProfit: profit, actualProfit, projection, forecastChoice: chosen, mode, flatRate, bufferRate, filingDue, estimatedPaid, reserveBalance: reserved };
+  const base = { year, businessProfit: profit, actualProfit, projection, forecastChoice: chosen, mode, flatRate, bufferRate, filingDue, estimatedPaid, federalPaid, statePaid, reserveBalance: reserved };
 
   const supportedYear = Boolean(FEDERAL_RULES[year]);
   const readyForPersonalized = supportedYear && profile && FILING_STATUSES.includes(profile.filing_status);
@@ -99,7 +121,7 @@ export function buildTaxOverview({ profile, year, businessProfit, today, forecas
   let limitations = [];
   if (!supportedYear) limitations.push(`Tax year ${year} isn't supported yet (supported: ${supportedTaxYears().join(', ')}). You can still use a flat percentage.`);
   if (readyForPersonalized) {
-    impact = businessTaxImpact(profileToEstimateInput(profile, { year, businessProfit: profit }));
+    impact = businessTaxImpact({ ...profileToEstimateInput(profile, { year, businessProfit: profit }), federalEstimatedPayments: federalPaid, stateEstimatedPayments: statePaid });
     if (!impact.supported) { limitations = limitations.concat(impact.limitations || []); impact = null; }
   }
   const effectiveMode = mode !== 'flat' && !impact ? 'flat' : mode;
@@ -126,16 +148,23 @@ export function buildTaxOverview({ profile, year, businessProfit, today, forecas
       statePlan = stateEstimatedPayments({ taxYear: year, state: profile.state, filingStatus: profile.filing_status, currentYearTax: w.state.tax, withholding: w.state.withholding, priorYear: null, agi: w.federal.agi, paymentsMade: w.state.estimatedPayments });
     }
   }
+  const federalInstallments = trackInstallments(federalPlan, federalPaid, today);
+  const stateInstallments = trackInstallments(statePlan, statePaid, today);
   const nextDue = [];
-  const upcoming = (plan, who) => {
+  const overdue = [];
+  const upcoming = (plan, installments, who, code) => {
     // Only real payments: a plan that needs none (withholding covers it, or
     // the state doesn't require any) has nothing due.
-    if (!plan?.supported || !plan.installments?.length || !(plan.requiredFromEstimatedPayments > 0)) return;
-    const next = plan.installments.find((i) => i.due >= today && i.amount > 0);
-    if (next) nextDue.push({ who, period: next.period, due: next.due, amount: next.amount, remainingForYear: plan.remaining });
+    if (!plan?.supported || !installments.length || !(plan.requiredFromEstimatedPayments > 0)) return;
+    for (const i of installments) if (i.status === 'overdue') overdue.push({ who, code, period: i.period, due: i.due, amount: i.remaining });
+    const next = installments.find((i) => i.due >= today && i.remaining > 0);
+    if (!next) return;
+    // Pay anything overdue along with the next installment to catch up.
+    const catchUp = installments.filter((i) => i.due < today).reduce((t, i) => t + cents(i.remaining), 0);
+    nextDue.push({ who, code, period: next.period, due: next.due, amount: dollars(cents(next.remaining) + catchUp), installment: next.remaining, catchUp: dollars(catchUp), remainingForYear: plan.remaining });
   };
-  upcoming(federalPlan, 'Federal (IRS)');
-  if (profile?.state) upcoming(statePlan, STATE_NAMES[profile.state] || profile.state);
+  upcoming(federalPlan, federalInstallments, 'Federal (IRS)', 'US');
+  if (profile?.state) upcoming(statePlan, stateInstallments, STATE_NAMES[profile.state] || profile.state, profile.state);
   nextDue.sort((a, b) => a.due.localeCompare(b.due));
 
   return {
@@ -151,7 +180,10 @@ export function buildTaxOverview({ profile, year, businessProfit, today, forecas
     coverage,
     federalPlan,
     statePlan,
+    federalInstallments,
+    stateInstallments,
     nextDue,
+    overdue,
     missing: profile ? missingDetails(profile) : [],
     limitations: limitations.concat(impact?.limitations || []),
     stateSupport: profile?.state ? stateSupport(year, profile.state) : null,

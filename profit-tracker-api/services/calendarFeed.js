@@ -69,6 +69,10 @@ async function buildCalendarFeed(userId) {
     addEvent(`cc_due_${item.id}`, toDateStr(dueDate), `CC Due: ${item.product_name} ($${amount.toFixed(2)})`);
   });
 
+  // Tax deadlines (Schedule C users): dates and titles only.
+  const { userTaxDeadlines } = require('./taxDeadlines');
+  (await userTaxDeadlines(userId)).forEach((d) => addEvent(d.id, d.date, d.title, d.notes));
+
   lines.push('END:VCALENDAR');
   return lines.join('\r\n');
 }

@@ -17,13 +17,15 @@ describe('buildTaxOverview', () => {
     expect(o.recommended).toBe(9732.07);
     expect(o.reserves).toEqual({ personalized: 9732.07, flat: 12500, conservative: 10705.28 });
     // Texas: no state payments, so only the IRS's Q4 installment remains.
-    expect(o.nextDue).toEqual([{ who: 'Federal (IRS)', period: 'Q4', due: '2027-01-15', amount: 2189.7, remainingForYear: 8758.86 }]);
+    // Nothing recorded yet: Q4's $2,189.70 plus the three missed quarters to catch up.
+    expect(o.nextDue).toEqual([{ who: 'Federal (IRS)', code: 'US', period: 'Q4', due: '2027-01-15', amount: 8758.86, installment: 2189.7, catchUp: 6569.16, remainingForYear: 8758.86 }]);
+    expect(o.overdue.map((d) => d.period)).toEqual(['Q1', 'Q2', 'Q3']);
     expect(o.missing.map((m) => m.field)).toEqual(['federal_withholding', 'prior_year_tax']);
     expect(o.filingDue).toBe('2027-04-15');
   });
 
   it('takes estimated payments off what is still to set aside, and uses the chosen mode', () => {
-    const o = buildTaxOverview({ profile: { ...single, federal_estimated_paid: '3000', reserve_mode: 'conservative', buffer_rate: '0.2' }, year: 2026, businessProfit: 50000, today: '2026-11-21' });
+    const o = buildTaxOverview({ profile: { ...single, reserve_mode: 'conservative', buffer_rate: '0.2' }, year: 2026, businessProfit: 50000, today: '2026-11-21', payments: [{ jurisdiction: 'US', period: 'Q1', amount: '3000' }] });
     expect(o.recommended).toBe(11678.48); // 9732.07 x 1.2
     expect(o.stillToSetAside).toBe(8678.48);
     const flat = buildTaxOverview({ profile: { ...single, reserve_mode: 'flat', flat_rate: '0.3' }, year: 2026, businessProfit: 50000, today: '2026-11-21' });
@@ -35,7 +37,7 @@ describe('buildTaxOverview', () => {
     // than $1,000 after withholding, so only Colorado's installment is due.
     const o = buildTaxOverview({ profile: { filing_status: 'single', state: 'CO', non_business_income: '40000', federal_withholding: '3000' }, year: 2026, businessProfit: 130.96, today: '2026-11-21' });
     expect(o.federalPlan.requiredFromEstimatedPayments).toBe(0);
-    expect(o.nextDue).toEqual([{ who: 'Colorado', period: 'Q4', due: '2027-01-15', amount: 184.83, remainingForYear: 739.35 }]);
+    expect(o.nextDue).toEqual([{ who: 'Colorado', code: 'CO', period: 'Q4', due: '2027-01-15', amount: 739.35, installment: 184.83, catchUp: 554.52, remainingForYear: 739.35 }]);
     const none = buildTaxOverview({ profile: { filing_status: 'single', state: 'TX', non_business_income: '40000', federal_withholding: '6000' }, year: 2026, businessProfit: 100, today: '2026-11-21' });
     expect(none.nextDue).toEqual([]);
   });

@@ -567,8 +567,6 @@ const taxProfileBody = z.object({
   other_se_income: nullableDecimalAmount(),
   federal_withholding: nullableDecimalAmount(),
   state_withholding: nullableDecimalAmount(),
-  federal_estimated_paid: nullableDecimalAmount(),
-  state_estimated_paid: nullableDecimalAmount(),
   qualifying_children: optionalCount,
   other_dependents: optionalCount,
   age65: z.boolean().optional(),
@@ -596,8 +594,20 @@ const taxReserveEntryBody = z.object({
   note: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(200).nullable().optional()),
 }).strict().refine((b) => b.amount > 0, { message: 'Enter an amount above $0.', path: ['amount'] });
 
+// POST /api/tax/payments/:year: a tax payment the user made.
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a date like 2026-11-21.')
+  .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v, 'Enter a real calendar date.');
+const taxPaymentBody = z.object({
+  jurisdiction: z.enum(['US', ...STATE_CODES]),
+  period: z.enum(['Q1', 'Q2', 'Q3', 'Q4', 'extension', 'other']),
+  amount: decimalAmount(),
+  paid_date: isoDate,
+  reference: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(100).nullable().optional()),
+}).strict().refine((b) => b.amount > 0, { message: 'Enter an amount above $0.', path: ['amount'] });
+
 module.exports = {
   taxProfileBody,
+  taxPaymentBody,
   taxReserveEntryBody,
   createForm1099K,
   updateForm1099K,

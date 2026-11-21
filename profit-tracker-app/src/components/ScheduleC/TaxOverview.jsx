@@ -6,6 +6,7 @@ import { localToday } from '../../utils/returnWindow';
 import { TaxProfileForm } from './TaxProfileForm';
 import { TaxProjection } from './TaxProjection';
 import { TaxReserve } from './TaxReserve';
+import { TaxPayments } from './TaxPayments';
 import { FILING_STATUS_LABELS } from '../../utils/taxProfile';
 
 const usd = (value) => {
@@ -89,11 +90,12 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
     let active = true;
     (async () => {
       try {
-        const [p, m, r] = await Promise.all([apiFetch(`/api/tax/profile/${year}`), apiFetch('/api/preferences/tax-math'), apiFetch(`/api/tax/reserves/${year}`)]);
+        const [p, m, r, pay] = await Promise.all([apiFetch(`/api/tax/profile/${year}`), apiFetch('/api/preferences/tax-math'), apiFetch(`/api/tax/reserves/${year}`), apiFetch(`/api/tax/payments/${year}`)]);
         const { profile } = await (await requireSuccessfulResponse(p)).json();
         const { taxMath } = await (await requireSuccessfulResponse(m)).json();
         const ledger = await (await requireSuccessfulResponse(r)).json();
-        if (active) setLoaded({ saved: profile, taxMath, ledger });
+        const { payments } = await (await requireSuccessfulResponse(pay)).json();
+        if (active) setLoaded({ saved: profile, taxMath, ledger, payments });
       } catch (err) { if (active) setLoaded({ error: err.message || 'Could not load your tax details.' }); }
     })();
     return () => { active = false; };
@@ -125,7 +127,7 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
   // A change from the overview itself (the projection choice): saved
   // details are saved again, unsaved ones stay in this tab only.
   const PROFILE_KEYS = ['state', 'filing_status', 'non_business_income', 'wages', 'other_se_income', 'federal_withholding', 'state_withholding',
-    'federal_estimated_paid', 'state_estimated_paid', 'qualifying_children', 'other_dependents', 'age65', 'spouse_age65', 'adjustments',
+    'qualifying_children', 'other_dependents', 'age65', 'spouse_age65', 'adjustments',
     'itemized_deductions', 'prior_year_tax', 'prior_year_agi', 'reserve_mode', 'flat_rate', 'buffer_rate', 'forecast_method', 'profit_target'];
   const updateProfile = (patch) => {
     const merged = { ...profile, ...patch };
@@ -134,6 +136,7 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
     else setSession(clean);
   };
   const setLedger = (ledger) => setLoaded((l) => ({ ...l, ledger }));
+  const setPayments = (payments) => setLoaded((l) => ({ ...l, payments }));
   const removeSaved = async () => {
     setBusy(true); setError('');
     try {
@@ -161,7 +164,7 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
     </section>;
   }
 
-  const o = buildTaxOverview({ profile, year, businessProfit: books.netProfit, today: localToday(), forecast: books.forecast || null, reserveBalance: loaded.ledger?.balance || 0 });
+  const o = buildTaxOverview({ profile, year, businessProfit: books.netProfit, today: localToday(), forecast: books.forecast || null, reserveBalance: loaded.ledger?.balance || 0, payments: loaded.payments || [] });
   const projected = o.forecastChoice.key !== 'actual';
   const describe = profile?.filing_status
     ? `${FILING_STATUS_LABELS[profile.filing_status]}${profile.state ? `, ${STATE_NAMES[profile.state]}` : ''}`
@@ -172,6 +175,11 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
   return <section aria-label="Tax estimate" className="space-y-4">
     {header}
     {session && <p className="rounded-xl border border-amber-500/30 p-3 text-sm text-amber-200">Not saved: these details are only in this browser tab and are gone when you leave.{session.filing_status && <> <button type="button" disabled={busy} onClick={() => submit({ profile: session, save: true })} className="underline">Save them</button></>}</p>}
+    {o.overdue.length > 0 && <div role="alert" className="rounded-xl border border-red-500/40 p-3 text-sm text-red-200">
+      <p className="font-medium">{o.overdue.length === 1 ? 'An estimated tax payment looks unpaid' : `${o.overdue.length} estimated tax payments look unpaid`}</p>
+      <ul className="mt-1 space-y-0.5">{o.overdue.map((d) => <li key={`${d.code}-${d.period}`}>{d.who} {d.period}, due {day(d.due)}: <span className="tabular-nums">{usd(d.amount)}</span></li>)}</ul>
+      <p className="mt-1 text-xs text-red-200/80">If you've already paid, record it under Tax payments. If not, the IRS charges a penalty that grows the longer a payment is late, so paying soon keeps it small. <a className="underline" href="https://www.irs.gov/payments" target="_blank" rel="noreferrer">Ways to pay the IRS</a></p>
+    </div>}
     {o.limitations.length > 0 && <ul role="note" className="space-y-1 rounded-xl border border-amber-500/30 p-3 text-sm text-amber-200">{o.limitations.map((l) => <li key={l}>{l}</li>)}</ul>}
 
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -179,7 +187,7 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
       <div className={card}><p className="text-sm text-gray-400">Tax the business adds</p><p className="mt-2 text-2xl tabular-nums">{o.impact ? usd(Math.max(0, o.impact.additionalTaxFromBusiness)) : '—'}</p><p className="mt-1 text-xs text-gray-500">{o.impact ? (o.impact.effectiveBusinessTaxRate !== null ? `About ${pct(o.impact.effectiveBusinessTaxRate)} of ${projected ? 'projected' : 'your'} profit` : 'No profit yet, so no extra tax') : 'Add your filing status to see this'}</p></div>
       <div className={`${card} border-purple-500/30`}><p className="text-sm text-gray-400">Set aside</p><p className="mt-2 text-2xl font-semibold tabular-nums text-white">{usd(o.recommended)}</p><p className="mt-1 text-xs text-gray-500">{MODE_LABEL[o.effectiveMode]} · {usd(o.stillToSetAside)} still to set aside{o.coverage !== null && o.covered > 0 ? ` · ${Math.min(100, Math.round(o.coverage * 100))}% covered` : ''}</p></div>
       <div className={card}><p className="text-sm text-gray-400">Next payment due</p>{next
-        ? <><p className="mt-2 text-2xl tabular-nums">{day(next.due)}</p>{o.nextDue.filter((d) => d.due === next.due).map((d) => <p key={d.who} className="mt-1 text-xs text-gray-500">{d.who} {d.period}: {usd(d.amount)}</p>)}</>
+        ? <><p className="mt-2 text-2xl tabular-nums">{day(next.due)}</p>{o.nextDue.filter((d) => d.due === next.due).map((d) => <p key={d.who} className="mt-1 text-xs text-gray-500">{d.who} {d.period}: {usd(d.amount)}{d.catchUp > 0 ? `, including ${usd(d.catchUp)} overdue` : ''}</p>)}</>
         : <><p className="mt-2 text-lg">{o.impact ? 'Nothing scheduled' : '—'}</p><p className="mt-1 text-xs text-gray-500">{o.impact ? `Any balance is due when you file, by ${day(o.filingDue)}.` : unsupportedYear ? 'Not available for this year' : 'Add your details to see this'}</p></>}</div>
     </div>
 
@@ -199,7 +207,7 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
       <table className="mt-3 w-full text-sm"><tbody>
         <Row label="Recommended to set aside" value={usd(o.recommended)} />
         <Row label="In your tax savings" value={usd(o.reserveBalance)} />
-        <Row label="Estimated payments made" value={usd(o.estimatedPaid)} />
+        <Row label="Tax payments made" hint="Recorded under Tax payments" value={usd(o.estimatedPaid)} />
         <Row strong label={o.stillToSetAside > 0 ? 'Still to set aside' : 'Covered'} hint={o.coverage !== null ? `${Math.min(100, Math.round(o.coverage * 100))}% of the recommendation is covered` : undefined} value={usd(o.stillToSetAside)} />
       </tbody></table>
       {o.impact ? <table className="mt-3 w-full text-sm"><tbody>
@@ -211,21 +219,14 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
         <Row strong label="Left to pay on your whole return" hint="Your total estimated tax minus everything above" value={usd(Math.max(0, o.impact.withBusiness.remainingBalance))} />
       </tbody></table> : <p className="mt-3 text-sm text-gray-400">Add your details to include withholding and payments.</p>}
       <TaxReserve year={year} ledger={loaded.ledger || { entries: [], balance: '0.00' }} onChanged={setLedger} />
-      <p className="mt-2 text-xs text-gray-500">Recording each tax payment comes in a later update. For now, enter payment totals in your tax details.</p>
+
     </details>
 
-    {o.impact && <details className={card} open={detailed || undefined}>
-      <summary className="cursor-pointer text-sm font-medium text-purple-300">Payment plan</summary>
-      {[[o.federalPlan, 'Federal (IRS)'], [o.statePlan, profile.state ? STATE_NAMES[profile.state] : null]].filter(([p, who]) => p && who).map(([plan, who]) => <div key={who} className="mt-3 text-sm">
-        <p className="font-medium text-white">{who}</p>
-        {!plan.supported ? <p className="text-gray-400">{plan.limitations?.[0]}</p> : <>
-          {plan.requiredFromEstimatedPayments > 0 && <p className="text-gray-400">{usd(plan.requiredFromEstimatedPayments)} for the year from estimated payments{plan.basis?.startsWith('prior') ? ', based on last year\'s tax' : ''}. {usd(plan.remaining)} still to pay.</p>}
-          {plan.installments.length > 0 && plan.requiredFromEstimatedPayments > 0 && <table className="mt-2 w-full"><tbody>{plan.installments.map((inst) => <Row key={inst.period} label={`${inst.period} · due ${day(inst.due)}`} hint={inst.covers} value={usd(inst.amount)} />)}</tbody></table>}
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-gray-500">{plan.notes.map((n) => <li key={n}>{n}</li>)}</ul>
-        </>}
-      </div>)}
+    <details className={card} open={detailed || o.overdue.length > 0 || undefined}>
+      <summary className="cursor-pointer text-sm font-medium text-purple-300">Tax payments{o.estimatedPaid > 0 ? ` (${usd(o.estimatedPaid)} paid)` : ''}</summary>
+      <TaxPayments year={year} o={o} profile={profile} payments={loaded.payments || []} onChanged={setPayments} />
       <p className="mt-3 text-xs text-gray-500"><a className="underline" href={IRS.estimated.url} target="_blank" rel="noreferrer">{IRS.estimated.label}</a> · <a className="underline" href={IRS.se.url} target="_blank" rel="noreferrer">{IRS.se.label}</a></p>
-    </details>}
+    </details>
 
     <details className={card}>
       <summary className="cursor-pointer text-sm font-medium text-purple-300">Deductions you might be missing</summary>

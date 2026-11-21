@@ -85,7 +85,7 @@ describe('buildTaxOverview with a projection and a reserve', () => {
   const forecast = { status: 'current', daysElapsed: 325, daysInYear: 365, recent: { days: 90, profit: 0 }, prior: null };
 
   it('estimates on the projected profit and counts the reserve toward what to set aside', () => {
-    const o = buildTaxOverview({ profile: { ...profile, federal_estimated_paid: '2000' }, year: 2026, businessProfit: 30000, today: '2026-11-21', forecast, reserveBalance: '3000' });
+    const o = buildTaxOverview({ profile, year: 2026, businessProfit: 30000, today: '2026-11-21', forecast, reserveBalance: '3000', payments: [{ jurisdiction: 'US', period: 'Q2', amount: '2000' }] });
     expect([o.actualProfit, o.businessProfit, o.forecastChoice.key]).toEqual([30000, 50000, 'target']);
     expect(o.impact.additionalTaxFromBusiness).toBe(9732.07); // same as the $50,000 walk-through
     expect([o.covered, o.stillToSetAside, o.coverage]).toEqual([5000, 4732.07, 0.514]);

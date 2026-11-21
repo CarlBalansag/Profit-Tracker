@@ -5,7 +5,8 @@
 const router = require('express').Router();
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
-const { taxProfileBody, taxReserveEntryBody } = require('../validation/schemas');
+const { taxProfileBody, taxReserveEntryBody, taxPaymentBody } = require('../validation/schemas');
+const { publishCalendarFeed } = require('../services/calendarFeed');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -17,14 +18,19 @@ const scheduleCEnabled = async (userId) => {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { schedule_c_enabled: true } });
   return Boolean(user?.schedule_c_enabled);
 };
+// The published calendar feed is rebuilt in the background; a failure there
+// must never fail the save.
+const refreshCalendar = (userId) => { Promise.resolve().then(() => publishCalendarFeed(userId)).catch(() => {}); };
 const guard = async (req, res) => {
   if (!validYear(req.params.year)) { res.status(400).json({ error: YEAR_ERROR }); return false; }
   if (!await scheduleCEnabled(req.user.id)) { res.status(403).json({ error: 'Enable Schedule C in Settings first' }); return false; }
   return true;
 };
 
+// federal_estimated_paid / state_estimated_paid are no longer used: payments
+// are recorded one by one (TaxPayment).
 const FIELDS = ['state', 'filing_status', 'non_business_income', 'wages', 'other_se_income', 'federal_withholding', 'state_withholding',
-  'federal_estimated_paid', 'state_estimated_paid', 'qualifying_children', 'other_dependents', 'age65', 'spouse_age65',
+  'qualifying_children', 'other_dependents', 'age65', 'spouse_age65',
   'adjustments', 'itemized_deductions', 'prior_year_tax', 'prior_year_agi', 'reserve_mode', 'flat_rate', 'buffer_rate',
   'forecast_method', 'profit_target'];
 // Decimals as strings, the rest as stored.
@@ -62,6 +68,8 @@ router.put('/profile/:year', isAuthenticated, validateBody(taxProfileBody), asyn
       create: { user_id: req.user.id, year, ...data },
       update: data,
     });
+    // Tax deadlines in the calendar feed follow the state of residence.
+    refreshCalendar(req.user.id);
     res.json({ profile: publicProfile(row) });
   } catch (error) { next(error); }
 });
@@ -70,6 +78,7 @@ router.delete('/profile/:year', isAuthenticated, async (req, res, next) => {
   try {
     if (!await guard(req, res)) return;
     const result = await prisma.taxProfile.deleteMany({ where: { user_id: req.user.id, year: Number(req.params.year) } });
+    refreshCalendar(req.user.id);
     res.json({ deleted: result.count });
   } catch (error) { next(error); }
 });
@@ -141,6 +150,43 @@ router.delete('/reserves/entry/:id', isAuthenticated, async (req, res, next) => 
     if (error.status === 400 || error.status === 404) return res.status(error.status).json({ error: error.message });
     next(error);
   }
+});
+
+// Tax payments: estimated (quarterly), extension or other payments toward a
+// tax year, to the IRS or a state. Owner-only, like everything here.
+const publicPayment = (p) => ({ id: p.id, year: p.year, jurisdiction: p.jurisdiction, period: p.period, amount: String(p.amount), paid_date: new Date(p.paid_date).toISOString().slice(0, 10), reference: p.reference ?? null });
+const paymentList = async (userId, year) => {
+  const rows = await prisma.taxPayment.findMany({ where: { user_id: userId, year }, orderBy: [{ paid_date: 'desc' }, { created_at: 'desc' }] });
+  return { payments: rows.map(publicPayment) };
+};
+
+router.get('/payments/:year', isAuthenticated, async (req, res, next) => {
+  try {
+    if (!await guard(req, res)) return;
+    res.json(await paymentList(req.user.id, Number(req.params.year)));
+  } catch (error) { next(error); }
+});
+
+router.post('/payments/:year', isAuthenticated, validateBody(taxPaymentBody), async (req, res, next) => {
+  try {
+    if (!await guard(req, res)) return;
+    const year = Number(req.params.year);
+    await prisma.taxPayment.create({ data: {
+      user_id: req.user.id, year, jurisdiction: req.body.jurisdiction, period: req.body.period, amount: req.body.amount,
+      paid_date: new Date(`${req.body.paid_date}T12:00:00Z`), reference: req.body.reference ?? null,
+    } });
+    res.status(201).json(await paymentList(req.user.id, year));
+  } catch (error) { next(error); }
+});
+
+router.delete('/payments/entry/:id', isAuthenticated, async (req, res, next) => {
+  try {
+    if (!await scheduleCEnabled(req.user.id)) return res.status(403).json({ error: 'Enable Schedule C in Settings first' });
+    const row = await prisma.taxPayment.findFirst({ where: { id: req.params.id, user_id: req.user.id } });
+    if (!row) return res.status(404).json({ error: 'Payment not found' });
+    await prisma.taxPayment.deleteMany({ where: { id: row.id, user_id: req.user.id } });
+    res.json(await paymentList(req.user.id, row.year));
+  } catch (error) { next(error); }
 });
 
 module.exports = router;
