@@ -16,6 +16,7 @@ const activityLog = require('../services/activityLog');
 const { saleEconomics, allocatedCost, batchCost, isRealizedSale, keptQuantity, keptSaleQuantity } = require('../services/decimalFinance');
 const { payoutStatus } = require('../services/payoutStatus');
 const { markSalesPaid } = require('../services/markSalesPaid');
+const bookkeeping = require('../services/bookkeeping');
 const statusTransitions = require('../services/statusTransitions');
 const { detectCarrier } = require('../services/tracking');
 const { computeCardDashboard, nextDueDate } = require('../services/cardNetToPay');
@@ -2115,6 +2116,159 @@ function buildServer(userId, apiKeyId) {
       return jsonResult({ results: rows.slice(0, max).map((r) => r.row), truncated: rows.length > max });
     } catch (err) {
       return errorResult(err.message || 'Failed to search');
+    }
+  });
+
+  // ------------------------------------------------- read-only bookkeeping
+  // find_records, reconcile_transactions, list_all_costs, data_quality_report
+  // and match_deposit only read: they load the user's rows once and hand them
+  // to services/bookkeeping.js, which is pure. None of them logs a write.
+  const loadBooks = () => prisma.inventory.findMany({
+    where: { user_id: userId },
+    include: {
+      vendor: true,
+      payment_method: { select: { id: true, name: true, type: true } },
+      sales: {
+        include: {
+          platform: true,
+          buyer: true,
+          sale_shipping_payment_method: { select: { id: true, name: true, type: true } },
+        },
+      },
+    },
+  });
+  const loadExpenses = () => prisma.expense.findMany({ where: { user_id: userId }, include: { payment_method: true } });
+  const loadNotesByEntity = async () => {
+    const notes = await prisma.transactionNote.findMany({ where: { user_id: userId, deleted_at: null } });
+    const map = new Map();
+    for (const n of notes) map.set(n.entity_id, [...(map.get(n.entity_id) || []), n.body]);
+    return map;
+  };
+
+  server.registerTool('find_records', {
+    description: 'Look up purchases and sales by order number, tracking number (inbound or outbound), ASIN/UPC, or part of a product name -- a quick duplicate check before add_purchase or add_sale. '
+      + 'Identifiers match ignoring case, spaces and dashes. There is no separate ASIN/UPC field, so those are found in product names and notes. '
+      + 'Each row has its id, status, payout_status (sales), and the linked purchase_id (sales) or sale_ids (purchases), plus matched_on saying which field hit. Read-only.',
+    inputSchema: z.object({
+      query: z.string().min(1).max(200),
+      fields: z.array(z.enum(bookkeeping.FIND_FIELDS)).min(1).optional().describe('Which fields to search. Default all: order_number, tracking_number, product_name, notes.'),
+      types: z.array(z.enum(['purchase', 'sale'])).min(1).optional().describe('Default both.'),
+      limit: z.number().int().min(1).max(100).optional().describe('Default 25.'),
+    }).strict(),
+  }, async ({ query, fields, types, limit }) => {
+    try {
+      if (!query.trim()) throw toolError('query cannot be blank');
+      const [inventories, notesByEntity] = await Promise.all([loadBooks(), loadNotesByEntity()]);
+      const found = bookkeeping.findRecords(inventories, { query, fields, notesByEntity, limit: 1000 });
+      const want = new Set(types && types.length ? types : ['purchase', 'sale']);
+      const rows = found.results.filter((r) => want.has(r.type));
+      const max = limit ?? 25;
+      return jsonResult({ results: rows.slice(0, max), total: rows.length, truncated: rows.length > max });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to find records');
+    }
+  });
+
+  server.registerTool('reconcile_transactions', {
+    description: 'Match bank or card statement lines against the tracker. For each transaction, returns the best matches among manual expenses, purchase charges (the receipt total, or a tax/shipping/fee part charged on its own), sale shipping labels and platform fees, and payouts (one deposit = the sales sharing a payout date, account and reference). '
+      + 'Amounts match on their absolute value, so the sign convention of your bank export does not matter; each match says direction "in" or "out". '
+      + 'Tiers, best first: external_id (an expense already holds this transaction id), amount_date (same amount to the cent, date within tolerance), amount (same amount, date further off, up to 30 days), merchant (similar merchant, date within tolerance, amount within 10%). confidence is 0-1. '
+      + 'Also returns unmatched_transactions, and unmatched_records: tracker charges and deposits in the statement\'s date range that no transaction matched. Read-only: records nothing.',
+    inputSchema: z.object({
+      transactions: z.array(z.object({
+        id: z.string().max(200).optional().describe('Your bank/Copilot transaction id, echoed back.'),
+        date: strictDate,
+        amount: z.number(),
+        merchant: z.string().max(300).optional(),
+        account: z.string().max(200).optional(),
+      }).strict()).min(1).max(500),
+      tolerance_days: z.number().int().min(0).max(30).optional().describe('Default 3.'),
+      max_matches: z.number().int().min(1).max(10).optional().describe('Matches returned per transaction. Default 3.'),
+    }).strict(),
+  }, async ({ transactions, tolerance_days, max_matches }) => {
+    try {
+      const [inventories, expenses] = await Promise.all([loadBooks(), loadExpenses()]);
+      const txns = transactions.map((t) => ({ ...t, date: localNoon(t.date) }));
+      const result = bookkeeping.reconcileTransactions(inventories, expenses, {
+        transactions: txns, toleranceDays: tolerance_days ?? 3, maxMatches: max_matches ?? 3,
+      });
+      const echo = (t) => ({ ...t, date: toDateOnly(t.date) });
+      return jsonResult({
+        ...result,
+        matched: result.matched.map((m) => ({ ...m, transaction: echo(m.transaction) })),
+        unmatched_transactions: result.unmatched_transactions.map(echo),
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to reconcile transactions');
+    }
+  });
+
+  server.registerTool('list_all_costs', {
+    description: 'Every cost in a date range, the same set the website\'s Expenses tab shows: manual expenses (source "expense"), costs entered on purchases -- sales tax, inbound shipping, purchase fees, and gift-card credit as a negative line (source "purchase") -- and costs on realized sales -- shipping labels and platform fees (source "sale"). '
+      + 'Totals by month (YYYY-MM), by category and by source. Purchase and sale lines are already counted in profit (in cost and net), so do not add them again as expenses. Read-only.',
+    inputSchema: z.object({
+      start_date: strictDate.optional().describe('Inclusive.'),
+      end_date: strictDate.optional().describe('Inclusive.'),
+      include_lines: z.boolean().optional().describe('Default true. false returns only the totals.'),
+    }).strict(),
+  }, async ({ start_date, end_date, include_lines }) => {
+    try {
+      if (start_date && end_date && start_date > end_date) throw toolError('start_date must be on or before end_date');
+      const [inventories, expenses] = await Promise.all([loadBooks(), loadExpenses()]);
+      const result = bookkeeping.listAllCosts(inventories, expenses, { startDate: start_date, endDate: end_date });
+      if (include_lines === false) delete result.lines;
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err.message || 'Failed to list costs');
+    }
+  });
+
+  server.registerTool('data_quality_report', {
+    description: 'Finds records that need attention, grouped by issue, each with ids: purchases missing an order number or inbound tracking; sales counted as paid with no payout date/amount (mark_sale_paid can backfill them); purchases whose total cost is $0 or less while a unit cost is set; one outbound tracking number on several sales; sales with no platform or buyer; possible duplicate purchases (same item, date, qty and unit cost); and sales whose notes contradict their payment state. '
+      + 'Cancelled purchases and cancelled/returned/disputed sales are left out. These are prompts to check, not certain errors. Read-only.',
+    inputSchema: z.object({
+      issues: z.array(z.string()).min(1).optional().describe('Only these issue keys (see a full report for the names). Default all.'),
+      max_items: z.number().int().min(1).max(500).optional().describe('Items listed per issue (count is always the full number). Default 50.'),
+    }).strict(),
+  }, async ({ issues, max_items }) => {
+    try {
+      const [inventories, notesByEntity] = await Promise.all([loadBooks(), loadNotesByEntity()]);
+      const report = bookkeeping.dataQualityReport(inventories, { notesByEntity });
+      const keep = issues && issues.length ? new Set(issues) : null;
+      const unknown = keep ? [...keep].filter((k) => !report.issues[k]) : [];
+      if (unknown.length) throw toolError(`Unknown issue key(s): ${unknown.join(', ')}. Valid: ${Object.keys(report.issues).join(', ')}`);
+      const max = max_items ?? 50;
+      const out = {};
+      for (const [key, issue] of Object.entries(report.issues)) {
+        if (keep && !keep.has(key)) continue;
+        out[key] = { ...issue, items: issue.items.slice(0, max), truncated: issue.items.length > max };
+      }
+      return jsonResult({ issues: out, total_issues: Object.values(out).reduce((sum, i) => sum + i.count, 0) });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to build the data quality report');
+    }
+  });
+
+  server.registerTool('match_deposit', {
+    description: 'Suggest which unpaid sales a deposit covers, so mark_sale_paid can be called with the right sale_ids. Looks for combinations of sales whose expected net adds up to the deposit: exact sums first (fewest platforms, then fewest sales, then oldest), and only when there is none, the closest sums with the difference. '
+      + 'Candidates are sales mark_sale_paid would accept -- unpaid, not cancelled/returned/disputed, at a payable status (or already PAID with no payment recorded) -- sold on or before the deposit date. Short-paid (partial) sales and sales not yet shipped are left out and counted under excluded. '
+      + 'platform narrows to one marketplace/cashout; account narrows to the platforms that have paid into that account before (ignored if none have). Read-only: records nothing.',
+    inputSchema: z.object({
+      amount: z.number().positive(),
+      date: strictDate.describe('The day the deposit arrived.'),
+      platform: z.string().max(200).optional(),
+      account: z.string().max(200).optional(),
+      max_sales: z.number().int().min(1).max(15).optional().describe('Most sales in one combination. Default 8.'),
+      max_results: z.number().int().min(1).max(20).optional().describe('Default 5.'),
+    }).strict(),
+  }, async ({ amount, date, platform, account, max_sales, max_results }) => {
+    try {
+      const inventories = await loadBooks();
+      return jsonResult(bookkeeping.matchDeposit(inventories, {
+        amount, date, platform, account, maxSales: max_sales ?? 8, maxResults: max_results ?? 5,
+      }));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to match the deposit');
     }
   });
 
