@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.45',
+    date: '2026-11-20',
+    notes: "Expenses have a new Proxies category and an optional Transaction ID, so the same bank or Copilot charge can't be added twice. Your AI assistant can now match bank statements and deposits to your records, list every cost in one place, flag records that need a look, and fill in missing payout details on sales already marked paid.",
+  },
+  {
     version: '1.44',
     date: '2026-11-20',
     notes: "Activity now also shows changes to your setup (cards, store accounts, platforms, buyers, goals, recurring expenses, cashout connections, calendar events, notes, API keys and settings) next to your buys and sales, and most of them can be undone, including putting a removed card back on its purchases. Removing a card now asks first and offers Undo.",
