@@ -883,8 +883,6 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <TodoSummary isGlass />
-
         <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-12">
           {glassLayoutOrder.map((itemId, index) => {
             const node = renderGlassLayoutItem(itemId);
@@ -896,6 +894,9 @@ const Dashboard = () => {
             );
           })}
         </div>
+
+        {/* Under the Status Pipeline (part of the grid above). */}
+        <TodoSummary isGlass />
 
         {settingsOpen && (
           <DashboardSettingsModal
@@ -996,9 +997,15 @@ const Dashboard = () => {
         </div>
       </div>
 
-      <TodoSummary />
-
-      {dashboardSections.map(section => renderDashboardSection(section.id))}
+      {/* "Needs attention" goes right under the Status Pipeline, or at the
+          top when the pipeline is hidden. */}
+      {!showPipeline && <TodoSummary />}
+      {dashboardSections.map(section => (
+        <React.Fragment key={section.id}>
+          {renderDashboardSection(section.id)}
+          {section.id === 'pipeline' && showPipeline && <TodoSummary />}
+        </React.Fragment>
+      ))}
 
 
 
