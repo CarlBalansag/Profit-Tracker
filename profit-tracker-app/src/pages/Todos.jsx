@@ -10,6 +10,7 @@ import TodoStats from '../components/Todos/TodoStats';
 import TodoGroupTabs from '../components/Todos/TodoGroupTabs';
 import MoneyWaiting from '../components/Todos/MoneyWaiting';
 import WaitingPayments from '../components/Todos/WaitingPayments';
+import ClearedWeek from '../components/Todos/ClearedWeek';
 import TodoSection from '../components/Todos/TodoSection';
 import RemindersPanel from '../components/Todos/RemindersPanel';
 import HiddenPanel from '../components/Todos/HiddenPanel';
@@ -22,7 +23,7 @@ import { PANEL, URGENCIES, whenText } from '../components/Todos/todoMeta';
 // closes that one cycle, and a reminder's "Done" finishes it (a repeating one
 // moves to its next date).
 
-const DONE_TEXT = { snooze: 'Snoozed.', dismiss: 'Dismissed.', done: 'Marked paid.' };
+const DONE_TEXT = { snooze: 'Snoozed.', dismiss: 'Dismissed.', done: 'Marked paid.', until_paid: "Hidden until it's paid." };
 // A month or more is "Holding" (todoMeta HOLDS), and says so.
 const doneText = (action, days) => (action === 'snooze' && days >= 30 ? 'On hold.' : DONE_TEXT[action]);
 
@@ -66,7 +67,7 @@ export default function Todos() {
     const keys = row.items.map((entry) => entry.key);
     try {
       await Promise.all(keys.map((key) => mutation.mutateAsync({ key, action, until })));
-      toast.success(`${keys.length} ${doneText(action, days).toLowerCase()}`, {
+      toast.success(`${keys.length} ${action === 'until_paid' ? 'hidden until paid.' : doneText(action, days).toLowerCase()}`, {
         action: { label: 'Undo', onClick: () => keys.forEach((key) => mutation.mutate({ key, action: 'restore' })) },
       });
     } catch (err) {
@@ -153,6 +154,7 @@ export default function Todos() {
           {/* ── Side column (below the list on phones) ── */}
           <aside aria-label="Reminders and more" className="min-w-0 space-y-4 lg:sticky lg:top-0">
             <WaitingPayments payers={data?.waiting_payments ?? []} className={`${PANEL} px-4 py-3`} />
+            <ClearedWeek week={data?.cleared_week} />
             <RemindersPanel reminders={reminders} onNew={() => setEditing({})} onEdit={setEditing} />
             <HiddenPanel items={data?.hidden_items ?? []} busy={busy} onRestore={restore} />
             <PhoneAlertsCard />

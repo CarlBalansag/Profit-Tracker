@@ -1,7 +1,7 @@
 // To-Do page API. The items are worked out from the user's records on every
 // read (services/todos.js); the only thing written is what the user did with
-// one item -- snoozed, dismissed, or marked done (a card bill paid) -- as a
-// TodoState row keyed by the item's key.
+// one item -- snoozed, dismissed, waiting until paid (a late payout), or
+// marked done (a card bill paid) -- as a TodoState row keyed by the item's key.
 const express = require('express');
 const { z } = require('zod');
 const prisma = require('../prisma');
@@ -34,12 +34,12 @@ function resolveToday(value) {
 
 const stateBody = z.object({
   key: z.string().regex(KEY_RE, 'Not a to-do key.'),
-  action: z.enum(['snooze', 'dismiss', 'done']),
+  action: z.enum(['snooze', 'dismiss', 'done', 'until_paid']),
   until: z.string().regex(DATE_RE, 'until must be YYYY-MM-DD.').optional(),
   today: z.string().optional(),
 }).strict();
 
-const STATE_OF = { snooze: 'snoozed', dismiss: 'dismissed', done: 'done' };
+const STATE_OF = { snooze: 'snoozed', dismiss: 'dismissed', done: 'done', until_paid: 'waiting' };
 
 router.get('/', isAuthenticated, async (req, res, next) => {
   try {
@@ -53,6 +53,10 @@ router.post('/state', isAuthenticated, validateBody(stateBody), async (req, res,
   try {
     const { key, action, until } = req.body;
     const today = resolveToday(req.body.today);
+    // Only a late payout can wait until it's paid; it clears once it is.
+    if (action === 'until_paid' && !key.startsWith('payout:')) {
+      return res.status(400).json({ error: 'Only a late payout can wait until it is paid.' });
+    }
     if (action === 'snooze') {
       if (!until) return res.status(400).json({ error: 'Pick a date to snooze until.' });
       const days = (Date.parse(`${until}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000;

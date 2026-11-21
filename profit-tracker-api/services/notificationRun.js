@@ -42,11 +42,25 @@ function moneyLines(items) {
   ].filter(([value]) => value > 0).map(([value, label]) => `${usd(value)} ${label}`);
 }
 
-// Sunday's summary: the week's standing, money first.
+// What got done this week, for the Sunday review: "Done this week: 3
+// payouts in ($1,240), 5 sales moved on."
+function clearedLine(week) {
+  if (!week) return null;
+  const parts = [
+    week.payouts && `${week.payouts} ${week.payouts === 1 ? 'payout' : 'payouts'} in (${usd(week.paid_total)})`,
+    week.sales_moved && `${week.sales_moved} ${week.sales_moved === 1 ? 'sale' : 'sales'} moved on`,
+    week.bills_paid && `${week.bills_paid} ${week.bills_paid === 1 ? 'card bill' : 'card bills'} paid`,
+  ].filter(Boolean);
+  return parts.length ? `Done this week: ${parts.join(', ')}.` : null;
+}
+
+// Sunday's summary: the week's standing, money first, then what got done.
 function weeklyBody(todos) {
   const overdue = todos.items.filter((entry) => entry.urgency === 'overdue').length;
   const parts = [...moneyLines(todos.items), overdue && `${overdue} overdue`].filter(Boolean);
-  return parts.length ? `${parts.join(' · ')}.` : summaryBody(todos);
+  const standing = parts.length ? `${parts.join(' · ')}.` : summaryBody(todos);
+  const done = clearedLine(todos.cleared_week);
+  return done ? `${standing} ${done}` : standing;
 }
 
 const isSunday = (date) => new Date(`${date}T12:00:00Z`).getUTCDay() === 0;

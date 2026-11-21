@@ -32,6 +32,8 @@ const cashoutService = require('../services/cashouts/service');
 const { presentDeal } = require('../services/cashouts/dealPresenter');
 const cashoutCommits = require('../services/cashouts/commits');
 const { logPurchase } = require('../services/cashouts/logPurchase');
+const { listTodos, GROUPS: TODO_GROUPS } = require('../services/todos');
+const { localNow, DEFAULTS: NOTIFY_DEFAULTS } = require('../services/notificationRun');
 
 // The AI guide (shared/aiGuide.mjs) is an ES module shared with the website,
 // so it loads asynchronously once; every request waits for it before building
@@ -688,6 +690,51 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
     return jsonResult([...byBuyer.values()]
       .map((b) => ({ buyer: b.buyer, owed: toNum(b.owed.toDecimalPlaces(2)), sale_count: b.sale_count }))
       .sort((a, b) => b.owed - a.owed));
+  });
+
+  server.registerTool('get_todos', {
+    description: 'The To-Do list, the same one the To-Do page shows: what needs them now, worked out from their records '
+      + '(unshipped sales, late payouts, cash-out commitments needing tracking, card bills due, unlisted stock, their own reminders...). '
+      + 'Each item has a type, group, urgency (overdue, today, soon, info), title, detail, optional due_date and amount, and a link (the app page it opens). '
+      + 'An item clears on its own once its record is fixed, so to act on one, change the record with the usual tools (confirm with the user first). '
+      + 'Also returns waiting_payments (money owed by each payer, with overdue_sales owed 21+ days) and cleared_week (payouts in, sales moved on and card bills paid in the last 7 days). '
+      + 'Items the user snoozed, dismissed or set to wait until paid are left out unless include_hidden is true. Read-only.',
+    inputSchema: {
+      group: z.enum(TODO_GROUPS).optional().describe(`Only one group: ${TODO_GROUPS.join(', ')}.`),
+      include_hidden: z.boolean().optional().describe('Also list items the user snoozed, dismissed or set to wait until paid.'),
+    },
+  }, async ({ group, include_hidden: includeHidden }) => {
+    try {
+      // "Today" in the user's own time zone (saved with their notification
+      // settings), so a bill due today isn't a day off for the AI.
+      const settings = await prisma.notificationSettings.findUnique({ where: { user_id: userId }, select: { timezone: true } });
+      const { date: today } = localNow(new Date(), settings?.timezone || NOTIFY_DEFAULTS.timezone);
+      const todos = await listTodos(prisma, userId, today);
+      const shape = (entry) => ({
+        key: entry.key,
+        type: entry.type,
+        group: entry.group,
+        urgency: entry.urgency,
+        title: entry.title,
+        detail: entry.detail,
+        due_date: entry.due_date,
+        amount: entry.amount,
+        link: entry.link,
+        ...(entry.state ? { hidden_as: entry.state, hidden_until: entry.until || null } : {}),
+      });
+      const pick = (list) => (group ? list.filter((entry) => entry.group === group) : list);
+      return jsonResult({
+        today,
+        counts: todos.counts,
+        items: pick(todos.items).map(shape),
+        hidden_count: todos.hidden,
+        ...(includeHidden ? { hidden_items: pick(todos.hidden_items).map(shape) } : {}),
+        waiting_payments: todos.waiting_payments,
+        cleared_week: todos.cleared_week,
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to load the to-do list');
+    }
   });
 
   // ----------------------------------------------------------------- writes

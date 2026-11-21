@@ -820,7 +820,8 @@ model TodoState {
   user_id    String
   user       User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
   key        String
-  // "snoozed" (hidden until `until`), "dismissed" or "done" (hidden for good).
+  // "snoozed" (hidden until `until`), "dismissed" or "done" (hidden for good),
+  // or "waiting" (a late payout hidden until the sale is paid).
   state      String
   // Local date (YYYY-MM-DD) a snoozed item comes back on. NULL otherwise.
   until      String?

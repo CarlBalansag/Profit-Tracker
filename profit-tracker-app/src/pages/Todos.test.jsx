@@ -434,3 +434,51 @@ describe('Money waiting', () => {
     expect(screen.queryByRole('region', { name: 'Money waiting' })).not.toBeInTheDocument();
   });
 });
+
+describe('Before the push: payers, until paid, this week', () => {
+  it('warns about a payer that has owed money for 3+ weeks', () => {
+    todos = { ...response([]), waiting_payments: [
+      { platform_id: 'p1', name: 'TradePost', cashout: true, total: 5414.6, sales: 3, oldest_days: 30, overdue_sales: 2, overdue_total: 5000 },
+      { platform_id: 'p2', name: 'EB', cashout: true, total: 649, sales: 1, oldest_days: 3, overdue_sales: 0, overdue_total: 0 },
+    ] };
+    mount();
+    const [late, fine] = within(screen.getByRole('region', { name: 'Waiting on payment' })).getAllByRole('listitem');
+    expect(late).toHaveTextContent('$5,000.00 owed 3+ weeks');
+    expect(fine).not.toHaveTextContent('3+ weeks');
+  });
+
+  it('hides a late payout until it is paid', () => {
+    todos = response([entry({ key: 'payout:1', type: 'payout_late', title: 'Payout late', actions: ['until_paid', 'snooze', 'dismiss'] })]);
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /Later/ }));
+    fireEvent.click(screen.getByRole('button', { name: "Until it's paid" }));
+    expect(mutate).toHaveBeenCalledWith({ key: 'payout:1', action: 'until_paid', until: undefined }, expect.any(Object));
+  });
+
+  it('offers Until paid only where the API allows it', () => {
+    todos = response([entry({ key: 'ship:1' })]);
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /Later/ }));
+    expect(screen.queryByRole('button', { name: "Until it's paid" })).not.toBeInTheDocument();
+  });
+
+  it('lists a payout waiting until paid under hidden items', () => {
+    todos = response([entry({ key: 'ship:1' })], [entry({ key: 'payout:1', type: 'payout_late', title: 'Payout late', detail: 'PS5 · eBay', state: 'waiting', until: null })]);
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /Snoozed and dismissed/ }));
+    expect(screen.getByText("Until it's paid · PS5 · eBay")).toBeInTheDocument();
+  });
+
+  it('shows what got done this week', () => {
+    todos = { ...response([entry({ key: 'ship:1' })]), cleared_week: { since: '2026-11-15', payouts: 3, paid_total: 1240, sales_moved: 1, bills_paid: 0 } };
+    mount();
+    const week = screen.getByRole('region', { name: 'Done this week' });
+    expect(within(week).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['3 payouts in$1,240.00', '1 sale moved on']);
+  });
+
+  it('says so when nothing is done yet this week', () => {
+    todos = { ...response([]), cleared_week: { since: '2026-11-15', payouts: 0, paid_total: 0, sales_moved: 0, bills_paid: 0 } };
+    mount();
+    expect(screen.getByRole('region', { name: 'Done this week' })).toHaveTextContent('Nothing yet.');
+  });
+});

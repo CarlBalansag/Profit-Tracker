@@ -535,7 +535,7 @@ describe('waiting on payment', () => {
     addSale({ workflow_status: 'WAITING_FOR_PAYMENT', voided_at: day(-1) }); // voided
     const { body } = await list();
     expect(body.waiting_payments).toEqual([
-      { platform_id: CASHOUT, name: 'QA Cashout', cashout: true, total: 2807.3, sales: 2, oldest_days: 14 },
+      { platform_id: CASHOUT, name: 'QA Cashout', cashout: true, total: 2807.3, sales: 2, oldest_days: 14, overdue_sales: 0, overdue_total: 0 },
       expect.objectContaining({ platform_id: ids.platform, cashout: false, total: 80, sales: 1, oldest_days: 1 }),
     ]);
   });
@@ -546,5 +546,71 @@ describe('waiting on payment', () => {
     const { body } = await list();
     expect(byType(body.items, 'payout_late')).toEqual([]);
     expect(body.waiting_payments).toEqual([expect.objectContaining({ total: 150, sales: 1 })]);
+  });
+
+  it('flags the sales a payer has owed for 21 days or more', async () => {
+    addSale({ platform_id: CASHOUT, workflow_status: 'WAITING_FOR_PAYMENT', workflow_status_changed_at: day(-30), unit_price: 200 });
+    addSale({ platform_id: CASHOUT, workflow_status: 'SCANNED_IN', workflow_status_changed_at: day(-21), unit_price: 50 });
+    addSale({ platform_id: CASHOUT, workflow_status: 'SCANNED_IN', workflow_status_changed_at: day(-20), unit_price: 10 });
+    const { body } = await list();
+    expect(body.waiting_payments).toEqual([
+      expect.objectContaining({ sales: 3, total: 260, oldest_days: 30, overdue_sales: 2, overdue_total: 250 }),
+    ]);
+  });
+});
+
+describe('until paid', () => {
+  it('hides a late payout until it is paid, and lists it as waiting', async () => {
+    const sale = addSale({ workflow_status: 'WAITING_FOR_PAYMENT', workflow_status_changed_at: day(-10) });
+    const before = await list();
+    expect(byType(before.body.items, 'payout_late')[0].actions).toContain('until_paid');
+    const saved = await request('POST', '/api/todos/state', { key: `payout:${sale.id}`, action: 'until_paid', today: TODAY });
+    expect(saved).toMatchObject({ status: 200, body: { state: 'waiting', until: null } });
+    const after = await list();
+    expect(byType(after.body.items, 'payout_late')).toEqual([]);
+    expect(after.body.hidden_items).toEqual([expect.objectContaining({ key: `payout:${sale.id}`, state: 'waiting' })]);
+    // Still owed, so still counted.
+    expect(after.body.waiting_payments).toEqual([expect.objectContaining({ sales: 1 })]);
+    // Paid: gone from everywhere.
+    Object.assign(sale, { workflow_status: 'PAID', paid_at: day(0) });
+    const paid = await list();
+    expect(paid.body.hidden_items).toEqual([]);
+    expect(paid.body.waiting_payments).toEqual([]);
+  });
+
+  it('can be brought back', async () => {
+    const sale = addSale({ workflow_status: 'WAITING_FOR_PAYMENT', workflow_status_changed_at: day(-10) });
+    await request('POST', '/api/todos/state', { key: `payout:${sale.id}`, action: 'until_paid', today: TODAY });
+    await request('DELETE', `/api/todos/state?key=payout:${sale.id}`);
+    expect(byType((await list()).body.items, 'payout_late')).toHaveLength(1);
+  });
+
+  it('is refused for anything but a late payout', async () => {
+    const saved = await request('POST', '/api/todos/state', { key: 'ship:abc', action: 'until_paid', today: TODAY });
+    expect(saved.status).toBe(400);
+    expect(harness.db.todoState.filter((row) => row.key === 'ship:abc')).toEqual([]);
+  });
+});
+
+describe('cleared this week', () => {
+  it('counts payouts in, sales moved on and card bills paid in the last 7 days', async () => {
+    addSale({ workflow_status: 'PAID', paid_at: day(-2), paid_amount: 120, workflow_status_changed_at: day(-2) });
+    addSale({ workflow_status: 'PAID', paid_at: day(-6), unit_price: 80, quantity: 1, workflow_status_changed_at: day(-6) });
+    addSale({ workflow_status: 'PAID', paid_at: day(-7), paid_amount: 999, workflow_status_changed_at: day(-7) }); // last week
+    addSale({ workflow_status: 'OUTBOUND', workflow_status_changed_at: day(-1) });
+    addSale({ workflow_status: 'AWAITING_SHIPMENT', workflow_status_changed_at: day(-1) }); // not moved on
+    addSale({ workflow_status: 'RETURNED', workflow_status_changed_at: day(-1) }); // not progress
+    addSale({ workflow_status: 'PAID', paid_at: day(-1), paid_amount: 50, voided_at: day(-1) }); // voided
+    harness.db.todoState.push(
+      { id: uuid(), user_id: ids.user, key: 'card-due:x:2026-01-01', state: 'done', until: null, updated_at: day(-3) },
+      { id: uuid(), user_id: ids.user, key: 'ship:y', state: 'dismissed', until: null, updated_at: day(-3) },
+    );
+    const { body } = await list();
+    expect(body.cleared_week).toEqual({ since: dayStr(-6), payouts: 2, paid_total: 200, sales_moved: 3, bills_paid: 1 });
+  });
+
+  it('is all zero for a quiet week', async () => {
+    const { body } = await list();
+    expect(body.cleared_week).toMatchObject({ payouts: 0, paid_total: 0, sales_moved: 0, bills_paid: 0 });
   });
 });

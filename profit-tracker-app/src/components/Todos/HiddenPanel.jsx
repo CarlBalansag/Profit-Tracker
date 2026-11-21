@@ -4,7 +4,14 @@ import { PANEL, PANEL_TITLE } from './todoMeta';
 
 const until = (date) => new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
-// What the user snoozed or dismissed, closed by default, with Bring back.
+// What the user snoozed, dismissed or left waiting until paid, closed by
+// default, with Bring back.
+const hiddenText = (entry) => {
+  if (entry.state === 'snoozed') return `Snoozed until ${until(entry.until)}`;
+  if (entry.state === 'waiting') return "Until it's paid";
+  return 'Dismissed';
+};
+
 export default function HiddenPanel({ items, busy, onRestore }) {
   const [open, setOpen] = useState(false);
   if (!items.length) return null;
@@ -23,7 +30,7 @@ export default function HiddenPanel({ items, busy, onRestore }) {
               <div className="min-w-0 flex-1">
                 <p className="break-words text-sm text-gray-200">{entry.title}</p>
                 <p className="break-words text-xs text-gray-500">
-                  {entry.state === 'snoozed' ? `Snoozed until ${until(entry.until)}` : 'Dismissed'} · {entry.detail}
+                  {hiddenText(entry)} · {entry.detail}
                 </p>
               </div>
               <button type="button" disabled={busy} onClick={() => onRestore(entry)} className="page-btn page-btn-secondary !h-9 shrink-0 !px-3 !text-xs">

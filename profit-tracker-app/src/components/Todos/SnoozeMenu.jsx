@@ -2,9 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Clock } from 'lucide-react';
 import { HOLDS, SNOOZES } from './todoMeta';
 
-// "Later" on a to-do: snooze it for a while, or dismiss it. Opens below the
-// button, or above when there isn't room (near the bottom of a phone screen).
-export default function SnoozeMenu({ entry, canSnooze, canDismiss, canHold = false, busy, onAct, label }) {
+// "Later" on a to-do: snooze it for a while, wait until it's paid (a late
+// payout), or dismiss it. Opens below the button, or above when there isn't
+// room (near the bottom of a phone screen).
+export default function SnoozeMenu({ entry, canSnooze, canDismiss, canHold = false, canWaitPaid = false, busy, onAct, label }) {
   const [open, setOpen] = useState(false);
   const [up, setUp] = useState(false);
   const rootRef = useRef(null);
@@ -24,7 +25,7 @@ export default function SnoozeMenu({ entry, canSnooze, canDismiss, canHold = fal
   const toggle = () => {
     if (!open && rootRef.current) {
       const rect = rootRef.current.getBoundingClientRect();
-      const height = 8 + 44 * ((canHold ? HOLDS.length : 0) + (canSnooze ? SNOOZES.length : 0) + (canDismiss ? 1 : 0));
+      const height = 8 + 44 * ((canWaitPaid ? 1 : 0) + (canHold ? HOLDS.length : 0) + (canSnooze ? SNOOZES.length : 0) + (canDismiss ? 1 : 0));
       setUp(window.innerHeight - rect.bottom < height + 16 && rect.top > height);
     }
     setOpen((value) => !value);
@@ -49,6 +50,12 @@ export default function SnoozeMenu({ entry, canSnooze, canDismiss, canHold = fal
           aria-label={`Hide ${entry.title}`}
           className={`absolute right-0 z-30 w-48 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] p-1 shadow-xl ${up ? 'bottom-full mb-2' : 'top-full mt-2'}`}
         >
+          {canWaitPaid && (
+            <>
+              <button type="button" disabled={busy} onClick={() => pick('until_paid')} className={item}>Until it&apos;s paid</button>
+              {canSnooze && <div className="my-1 border-t border-white/[0.06]" aria-hidden="true" />}
+            </>
+          )}
           {canHold && HOLDS.map((hold) => (
             <button key={`hold-${hold.days}`} type="button" disabled={busy} onClick={() => pick('snooze', hold.days)} className={item}>{hold.label}</button>
           ))}

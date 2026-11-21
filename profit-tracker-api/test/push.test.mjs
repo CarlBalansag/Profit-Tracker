@@ -292,6 +292,12 @@ describe('weekly review', () => {
     expect(plan.digest.payload.body).toBe('$5,415 in late payouts · $540 to ship · $720 in unlisted stock · 1 overdue.');
   });
 
+  it('ends the weekly review with what got done this week', () => {
+    const week = { since: '2026-11-16', payouts: 3, paid_total: 1240, sales_moved: 1, bills_paid: 0 };
+    const plan = run.planNotifications({ todos: { ...todos, cleared_week: week }, settings, local: { date: '2026-11-22', time: '09:00' } });
+    expect(plan.digest.payload.body).toBe('$5,415 in late payouts · $540 to ship · $720 in unlisted stock · 1 overdue. Done this week: 3 payouts in ($1,240), 1 sale moved on.');
+  });
+
   it('keeps the normal summary on other days', () => {
     const plan = run.planNotifications({ todos, settings, local: { date: '2026-11-23', time: '09:00' } }); // a Monday
     expect(plan.digest.payload.title).toBe('To-Do: 4 things need you');

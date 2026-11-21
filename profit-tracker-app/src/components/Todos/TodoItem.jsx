@@ -48,7 +48,7 @@ function TodoActions({ entry, busy, onAct, onEdit }) {
         </button>
       )}
       {(has('snooze') || has('dismiss')) && (
-        <SnoozeMenu entry={entry} canSnooze={has('snooze')} canDismiss={has('dismiss')} canHold={has('hold')} busy={busy} onAct={onAct} />
+        <SnoozeMenu entry={entry} canSnooze={has('snooze')} canDismiss={has('dismiss')} canHold={has('hold')} canWaitPaid={has('until_paid')} busy={busy} onAct={onAct} />
       )}
     </div>
   );

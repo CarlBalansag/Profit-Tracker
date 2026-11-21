@@ -54,6 +54,7 @@ function FoldedItem({ row, busy, onAct, onEdit }) {
               canSnooze={canSnooze}
               canDismiss={canDismiss}
               canHold={every('hold')}
+              canWaitPaid={every('until_paid')}
               busy={busy}
               onAct={(_entry, action, days) => onAct(row, action, days)}
             />

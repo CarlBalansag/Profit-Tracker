@@ -358,6 +358,9 @@ function saleItems(sales, today) {
           lot: lotText(sale.inventory),
           record: saleRecord(sale, { mark_paid: 'Mark paid' }),
           link,
+          // "Until paid": hide it while you wait on the payer; it clears for
+          // good once the sale is marked paid.
+          actions: ['until_paid', 'snooze', 'dismiss'],
         }));
       }
     }
@@ -679,23 +682,68 @@ function waitingPayments(sales, today) {
       total: decimal(0),
       sales: 0,
       oldest_days: 0,
+      overdue_sales: 0,
+      overdue_total: decimal(0),
     };
     const since = dateStr(sale.workflow_status_changed_at) || dateStr(sale.sale_date);
+    const days = since ? daysBetween(since, today) : 0;
     row.total = row.total.plus(saleValue(sale));
     row.sales += 1;
-    row.oldest_days = Math.max(row.oldest_days, since ? daysBetween(since, today) : 0);
+    row.oldest_days = Math.max(row.oldest_days, days);
+    // Owed three weeks or more with nothing moving: the payer may have
+    // stopped paying.
+    if (days >= THRESHOLDS.payoutOverdue) {
+      row.overdue_sales += 1;
+      row.overdue_total = row.overdue_total.plus(saleValue(sale));
+    }
     byPayer.set(id, row);
   }
   return [...byPayer.values()]
-    .map((row) => ({ ...row, total: row.total.toDecimalPlaces(2).toNumber() }))
+    .map((row) => ({ ...row, total: row.total.toDecimalPlaces(2).toNumber(), overdue_total: row.overdue_total.toDecimalPlaces(2).toNumber() }))
     .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
 }
 
-// Hidden: dismissed, done, or snoozed until a day after today.
+// Hidden: dismissed, done, waiting until paid, or snoozed until a day after
+// today.
 function isHidden(state, today) {
   if (!state) return false;
   if (state.state === 'snoozed') return Boolean(state.until && state.until > today);
-  return state.state === 'dismissed' || state.state === 'done';
+  return state.state === 'dismissed' || state.state === 'done' || state.state === 'waiting';
+}
+
+// Sale statuses that count as moving a sale along (not the first step, not
+// an exception like a return).
+const MOVED_ON = ['OUTBOUND', 'HANDED_OVER', 'DELIVERED_TO_AUTHENTICATOR', 'AUTHENTICATING', 'DELIVERED_TO_PROVIDER', 'WAITING_FOR_SCAN_IN', 'SCANNED_IN', 'ACCEPTED', 'WAITING_FOR_PAYMENT', 'PAID'];
+
+// What got done in the last 7 days (today included), from the records
+// themselves: payouts that came in, sales whose status moved on, and card
+// bills marked paid here. Fixing a record is how most to-dos clear, so this
+// is the honest measure of progress.
+function clearedThisWeek(sales, states, today) {
+  const start = addDays(today, -6);
+  const inWeek = (value) => {
+    const day = dateStr(value);
+    return Boolean(day && day >= start && day <= today);
+  };
+  let paidCount = 0;
+  let paidTotal = decimal(0);
+  let moved = 0;
+  for (const sale of sales) {
+    if (sale.voided_at || sale.cancelled_at) continue;
+    if (sale.paid_at && inWeek(sale.paid_at)) {
+      paidCount += 1;
+      paidTotal = paidTotal.plus(sale.paid_amount != null ? decimal(sale.paid_amount) : saleValue(sale));
+    }
+    if (inWeek(sale.workflow_status_changed_at) && MOVED_ON.includes(saleStatus(sale))) moved += 1;
+  }
+  const billsPaid = states.filter((s) => s.state === 'done' && s.key.startsWith('card-due:') && inWeek(s.updated_at)).length;
+  return {
+    since: start,
+    payouts: paidCount,
+    paid_total: paidTotal.toDecimalPlaces(2).toNumber(),
+    sales_moved: moved,
+    bills_paid: billsPaid,
+  };
 }
 
 async function loadTodoData(prisma, userId, today) {
@@ -762,6 +810,7 @@ async function listTodos(prisma, userId, today) {
     hidden: hiddenItems.length,
     hidden_items: hiddenItems.filter((entry) => entry.state !== 'done'),
     waiting_payments: waitingPayments(data.sales || [], today),
+    cleared_week: clearedThisWeek(data.sales || [], states, today),
   };
 }
 
@@ -771,6 +820,7 @@ module.exports = {
   buildTodos,
   listTodos,
   isHidden,
+  clearedThisWeek,
   // exported for tests
   monthlyDates,
   nextRecurringDate,
