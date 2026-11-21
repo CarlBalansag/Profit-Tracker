@@ -7,7 +7,7 @@
 // Anything the engine does not model is reported in `limitations` rather than
 // silently estimated, and everything it assumed is listed in `assumptions`.
 import { FEDERAL_RULES } from './rules/federal.mjs';
-import { STATE_RULES, STATE_NAMES } from './rules/states.mjs';
+import { stateIncomeTax } from './stateTax.mjs';
 
 export const FILING_STATUSES = ['single', 'mfj', 'mfs', 'hoh', 'qss'];
 const MARRIED = new Set(['mfj', 'mfs']);
@@ -126,19 +126,6 @@ function childCredits(input, rules, { magiCents, incomeTaxCents, earnedCents }) 
   return { nonrefundable, refundable: pos(refundable), gross: afterPhaseOut };
 }
 
-function stateTax(input, year) {
-  const code = String(input.state || '').toUpperCase();
-  const name = STATE_NAMES[code];
-  if (!name) return { code, supported: false, tax: 0, limitation: 'Choose a state of residence to include state income tax.' };
-  const rule = STATE_RULES[year]?.[code];
-  if (!rule || rule.status !== 'verified') {
-    return { code, name, supported: false, tax: 0, limitation: `${name} income tax is not supported yet, so it is not included in this estimate.` };
-  }
-  if (rule.type === 'none') return { code, name, supported: true, tax: 0, version: rule.version, note: rule.note, sources: rule.sources };
-  // Flat and bracket states are added, with their own tests, in the state-rules phase.
-  return { code, name, supported: false, tax: 0, limitation: `${name} income tax is not supported yet, so it is not included in this estimate.` };
-}
-
 /**
  * Full estimate for one set of inputs. Returns cents internally converted to
  * dollars, plus the steps (for "show the math"), assumptions and limitations.
@@ -206,8 +193,16 @@ export function estimateTaxes(rawInput = {}) {
   const additionalMedicare = wageAdditionalMedicare + se.additionalMedicare;
   const federalTax = incomeTax - nonrefundable + se.total + additionalMedicare - credits.refundable;
 
-  const state = stateTax(input, year);
+  const state = stateIncomeTax(input.state, year, {
+    filingStatus, agi, federalTaxable: taxable, federalDeduction: deduction, federalBasicStandardDeduction: D(rules.standardDeduction[filingStatus]),
+    seniorDeduction: senior, qbi: qbi.deduction, wages, business, otherSE, otherIncome,
+    qualifyingChildren: Math.max(0, Math.floor(Number(input.dependents?.qualifyingChildren) || 0)),
+    otherDependents: Math.max(0, Math.floor(Number(input.dependents?.otherDependents) || 0)),
+    age65: input.age65, blind: input.blind,
+  });
   if (!state.supported && state.limitation) limitations.push(state.limitation);
+  if (state.local) limitations.push(state.local);
+  if (state.status === 'provisional') limitations.push(`${state.name} estimate is provisional: ${state.notes[0]}`);
 
   const federalWithholding = pos(toCents(input.federalWithholding));
   const federalPayments = pos(toCents(input.federalEstimatedPayments));
@@ -247,7 +242,8 @@ export function estimateTaxes(rawInput = {}) {
       estimatedPayments: toDollars(federalPayments),
       balance: toDollars(federalTax - federalWithholding - federalPayments),
     },
-    state: { ...state, tax: toDollars(state.tax), withholding: toDollars(stateWithholding), estimatedPayments: toDollars(statePayments), balance: toDollars(state.tax - stateWithholding - statePayments) },
+    state: { ...state, tax: toDollars(state.tax), taxableIncome: state.taxableIncome == null ? null : toDollars(state.taxableIncome),
+      steps: (state.steps || []).map((s) => ({ ...s, amount: toDollars(s.amount) })), withholding: toDollars(stateWithholding), estimatedPayments: toDollars(statePayments), balance: toDollars(state.tax - stateWithholding - statePayments) },
     totalTax: toDollars(total),
     remainingBalance: toDollars(total - federalWithholding - federalPayments - stateWithholding - statePayments),
     notes: qbi.notes,

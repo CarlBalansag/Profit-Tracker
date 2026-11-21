@@ -224,8 +224,8 @@ describe('states', () => {
   });
 
   it('never estimates an unverified state; it says it is not included', () => {
-    const unsupported = Object.entries(STATE_RULES[2026]).filter(([, rule]) => rule.status !== 'verified').map(([code]) => code);
-    expect(unsupported).toHaveLength(42);
+    const unsupported = Object.entries(STATE_RULES[2026]).filter(([, rule]) => rule.status === 'unsupported').map(([code]) => code);
+    expect(unsupported).toHaveLength(29);
     for (const code of unsupported) {
       const r = estimateTaxes({ taxYear: 2026, filingStatus: 'single', state: code, businessProfit: 90000 });
       expect(r.state.supported).toBe(false);

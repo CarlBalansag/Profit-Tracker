@@ -5,3 +5,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
 | feat-tax-engine | Schedule C tax planning phase 2: shared tax engine (federal 2025/2026, SE, QBI, credits, estimated payments, no-tax states) + IRS and Tax-Calculator tests; no UI | `shared/tax/`, `profit-tracker-api/test/taxEngine*.test.mjs`, `profit-tracker-api/test/fixtures/taxcalcOracle.json`, `profit-tracker-api/scripts/tax-oracle/`, `notes/schedule-c-tax-plan.md` | In progress | 2026-11-21 |
+| feat-tax-states-flat | Schedule C tax planning: flat-tax state rules (AZ CO GA IL IN IA KY LA MA MI MS NC PA, UT 2025) and verified state estimated-payment schedules; builds on feat-tax-engine | `shared/tax/rules/states.mjs`, `shared/tax/stateTax.mjs`, `shared/tax/engine.mjs`, `profit-tracker-api/test/taxStates.test.mjs` | In progress | 2026-11-21 |
