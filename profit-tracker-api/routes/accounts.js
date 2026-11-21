@@ -4,6 +4,7 @@ const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { account, updateAccount } = require('../validation/schemas');
 const { requireOwned } = require('../services/ownership');
+const activityLog = require('../services/activityLog');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 
 const isAuthenticated = (req, res, next) => {
@@ -29,7 +30,9 @@ router.post('/', isAuthenticated, validateBody(account), async (req, res, next) 
     }
     await requireOwned('platform', platform_id, req.user.id, 'Platform');
 
-    const account = await prisma.account.create({
+    const { result: account, activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'create', recordType: 'account',
+    }, () => tx.account.create({
       data: {
         user_id: req.user.id,
         platform_id,
@@ -39,9 +42,9 @@ router.post('/', isAuthenticated, validateBody(account), async (req, res, next) 
         status:   status   || 'Active',
         notes:    notes    || null,
       }
-    });
+    })));
 
-    res.status(201).json(account);
+    res.status(201).json({ ...account, activity_id: activity?.id ?? null });
   } catch (error) {
     console.error('Error creating account:', error);
     next(error);
@@ -71,7 +74,9 @@ router.put('/:id', isAuthenticated, validateBody(updateAccount), async (req, res
     }
 
     const { name, email, username, status, notes } = req.body;
-    const account = await prisma.account.update({
+    const { result: account, activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'edit', recordType: 'account', id: req.params.id,
+    }, () => tx.account.update({
       where: { id: req.params.id },
       data: {
         name:     name     ?? existing.name,
@@ -80,8 +85,8 @@ router.put('/:id', isAuthenticated, validateBody(updateAccount), async (req, res
         status:   status   ?? existing.status,
         notes:    notes    !== undefined ? notes : existing.notes,
       }
-    });
-    res.json(account);
+    })));
+    res.json({ ...account, activity_id: activity?.id ?? null });
   } catch (error) {
     console.error('Error updating account:', error);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -96,7 +101,10 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
       return res.status(404).json({ error: 'Not found' });
     }
 
-    await prisma.account.delete({ where: { id: req.params.id } });
+    // Purchases made on this account lose the link; logged for undo.
+    await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'delete', recordType: 'account', id: req.params.id,
+    }, () => tx.account.delete({ where: { id: req.params.id } })));
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting account:', error);

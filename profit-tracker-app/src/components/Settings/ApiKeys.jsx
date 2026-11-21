@@ -1,98 +1,81 @@
 import React, { useEffect, useState } from 'react';
-import { Key, Copy, RotateCw, Ban, Plus, ChevronDown, ChevronRight, Eye, Pencil, BookOpen } from 'lucide-react';
+import { Key, Copy, RotateCw, Ban, Plus, ChevronDown, ChevronRight, BookOpen } from 'lucide-react';
 import { apiFetch } from '../../hooks/useApi';
 import { requireSuccessfulResponse } from '../../hooks/apiResponse';
 import { toast } from 'sonner';
+import AiGuideCopy from './AiGuideCopy';
+import { AI_GUIDE_BODY, AI_GUIDE_VERSION } from '../../../../shared/aiGuide.mjs';
 
-// Kept in sync with the tool list in profit-tracker-api/routes/mcp.js and README.md's
-// "MCP Server" section -- this is the same set, just in plain-English form for
-// someone setting up their assistant rather than a developer reading the code.
-const READ_TOOLS = [
-  { name: 'list_sales', args: 'start_date?, end_date?, buyer?, payout_status?, limit?', description: 'Look up sales by date range, buyer, or payout status.' },
-  { name: 'list_inventory', args: 'status?, return_closing_within_days?', description: 'Look up purchases, optionally filtered by status — or the ones whose store return window closes soon.' },
-  { name: 'list_activity', args: 'limit?, before?', description: "Your Activity log — what you or the assistant added, edited, refunded or moved, and whether it can still be undone." },
-  { name: 'list_expenses', args: 'start_date?, end_date?, category?', description: 'Look up business expenses by date or category.' },
-  { name: 'get_cashflow_summary', args: '', description: "What's owed to you, what you've spent, and what's sitting in inventory." },
-  { name: 'get_unpaid_by_buyer', args: '', description: 'Who still owes you money, grouped by marketplace or cashout.' },
-  { name: 'list_shipments', args: 'direction?, status?, missing_tracking?', description: "What's still in transit — inbound purchases or outbound sales." },
-  { name: 'get_card_net_to_pay', args: 'month?', description: 'What you still owe on each credit card, the next due date, and the rewards (cash back or points) earned that month.' },
-  { name: 'list_payment_methods', args: 'type?', description: 'Your cards and how each earns — cash back % or points at your point value — plus store rates and reselling perks.' },
-  { name: 'search_card_list', args: 'query, reward_type?, limit?', description: 'Look up a card in the built-in card list to add it or switch a saved card to it.' },
-  { name: 'list_changes', args: 'limit?, record_id?', description: 'History of edits the assistant has made, so you can review or correct one.' },
-];
-
-const WRITE_TOOLS = [
-  { name: 'add_purchase', args: 'item, qty, unit_cost, store, card_used, purchase_date, …', description: 'Log a new purchase. The store is created automatically if new.' },
-  { name: 'add_sale', args: 'inventory_id, qty, sale_price, sale_date, platform, …', description: 'Log a new sale against an existing purchase.' },
-  { name: 'add_expense', args: 'description, amount, date, paid_from_account, …', description: 'Log a business expense.' },
-  { name: 'update_purchase', args: 'purchase_id, …', description: 'Edit an existing purchase — quantity, cost, tracking, order number, and more.' },
-  { name: 'update_sale', args: 'sale_id, …', description: 'Edit an existing sale — price, fees, tracking, and more.' },
-  { name: 'update_shipment', args: 'item_id, tracking_number?, carrier?, status?', description: 'Update the tracking number, carrier, or shipping status on a purchase or sale.' },
-  { name: 'mark_sale_paid', args: 'sale_ids[], payout_date, payout_amount, …', description: 'Mark one or more sales as paid from a single deposit.' },
-  { name: 'add_refund', args: 'purchase_id | sale_id, amount | full_refund, date, …', description: 'Record a refund or return — or a full refund worked out for you, like the website\'s "Returning everything".' },
-  { name: 'undo_activity', args: 'activity_id, confirm', description: 'Undo one change from the Activity log. Everything the assistant adds or edits shows up there too.' },
-  { name: 'add_payment_method', args: 'type, card_id? | name + cashback_rate or points, …', description: 'Add a card — from the card list (rates stay current) or by hand, as cash back or points.' },
-  { name: 'update_payment_method', args: 'payment_method, point_value_cents?, card_id?, new_name?, …', description: "Change a card's point value, name, last 4 or rates, or switch it to the right card from the list." },
-];
-
-function ToolRow({ tool }) {
+// Renders the AI guide's plain text (shared/aiGuide.mjs) -- the exact text an
+// AI gets from get_ai_guide or the copy buttons -- so the page and the AI can
+// never describe the tools differently. ALL-CAPS lines are section headings,
+// "- " lines are bullets, "1." lines are steps.
+function GuideText({ text }) {
+  const blocks = [];
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    if (/^[A-Z][A-Z0-9 ,'()-]+$/.test(line.trim())) blocks.push({ type: 'h', text: line.trim() });
+    else if (/^- /.test(line)) blocks.push({ type: 'li', text: line.slice(2) });
+    else if (/^\d+\. /.test(line)) blocks.push({ type: 'li', text: line.replace(/^\d+\. /, ''), step: line.match(/^\d+/)[0] });
+    else blocks.push({ type: 'p', text: line });
+  }
+  // "- tool_name: what it does" shows the tool name in code style.
+  const withTool = (t) => {
+    const m = /^([a-z_]+(?:, [a-z_]+)*): (.*)$/.exec(t);
+    return m ? <><code className="font-mono text-gray-200">{m[1]}</code>: {m[2]}</> : t;
+  };
   return (
-    <div className="py-2">
-      <div className="flex items-baseline gap-2 flex-wrap">
-        <code className="text-xs text-gray-200 font-mono">{tool.name}</code>
-        {tool.args && <code className="text-[11px] text-gray-600 font-mono">({tool.args})</code>}
-      </div>
-      <p className="text-[11px] text-gray-500 mt-0.5">{tool.description}</p>
+    <div className="space-y-1.5 text-xs text-gray-400 leading-relaxed break-words">
+      {blocks.map((b, i) => {
+        if (b.type === 'h') return <h4 key={i} className="pt-3 text-[11px] font-bold text-gray-300 uppercase tracking-wide">{b.text.toLowerCase()}</h4>;
+        if (b.type === 'li') return <p key={i} className="pl-4 -indent-3">{b.step ? `${b.step}. ` : '• '}{withTool(b.text)}</p>;
+        return <p key={i}>{b.text}</p>;
+      })}
     </div>
   );
 }
 
 function ToolsGuide() {
   const [open, setOpen] = useState(true);
+  const [showGuide, setShowGuide] = useState(false);
   return (
     <div className="rounded-xl border border-gray-800 bg-[#12121A] overflow-hidden">
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-3 px-6 py-4 text-left hover:bg-white/[0.02] transition-colors"
+        className="w-full flex items-center gap-3 px-4 sm:px-6 py-4 text-left hover:bg-white/[0.02] transition-colors"
       >
         <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400 flex-shrink-0">
           <BookOpen size={16} />
         </div>
         <div className="flex-1">
           <span className="text-sm font-bold text-white">Guide: what it can do</span>
-          <p className="text-[11px] text-gray-500 mt-0.5">How to connect, and every tool your assistant has access to.</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">How to connect, and the same guide your AI reads.</p>
         </div>
         {open ? <ChevronDown size={16} className="text-gray-500 flex-shrink-0" /> : <ChevronRight size={16} className="text-gray-500 flex-shrink-0" />}
       </button>
 
       {open && (
-        <div className="px-6 pb-6 pt-1 space-y-6 border-t border-gray-800">
+        <div className="px-4 sm:px-6 pb-6 pt-1 space-y-5 border-t border-gray-800">
           <div className="space-y-2 pt-4">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wide">How to connect</h3>
             <ol className="text-xs text-gray-500 space-y-1.5 list-decimal list-inside">
               <li>Click <span className="text-gray-300 font-medium">Generate Key</span> above and copy the token — it's shown only once.</li>
-              <li>In your AI assistant's MCP settings, add a server pointed at <code className="text-gray-300 font-mono text-[11px]">https://api.profittracker.carltechs.com/mcp</code>, using the token as the bearer auth header.</li>
-              <li>Ask it something like <span className="text-gray-400 italic">"What do I still owe on my credit cards?"</span> or <span className="text-gray-400 italic">"Mark my eBay sales from this week as paid."</span></li>
+              <li>In your AI assistant's MCP settings, add a server pointed at <code className="text-gray-300 font-mono text-[11px] break-all">https://api.profittracker.carltechs.com/mcp</code>, using the token as the bearer auth header.</li>
+              <li>Ask it to call <code className="text-gray-300 font-mono text-[11px]">get_ai_guide</code> first, then something like <span className="text-gray-400 italic">"What do I still owe on my credit cards?"</span></li>
             </ol>
           </div>
 
-          <div className="space-y-1">
-            <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wide flex items-center gap-1.5">
-              <Eye size={12} /> Read — {READ_TOOLS.length} tools
-            </h3>
-            <div className="divide-y divide-gray-800/60">
-              {READ_TOOLS.map((tool) => <ToolRow key={tool.name} tool={tool} />)}
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wide flex items-center gap-1.5">
-              <Pencil size={12} /> Write — {WRITE_TOOLS.length} tools
-            </h3>
-            <p className="text-[11px] text-gray-600">No delete tools exist. Every write is logged — review or revert one with <code className="font-mono">list_changes</code>.</p>
-            <div className="divide-y divide-gray-800/60">
-              {WRITE_TOOLS.map((tool) => <ToolRow key={tool.name} tool={tool} />)}
-            </div>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setShowGuide(v => !v)}
+              aria-expanded={showGuide}
+              className="page-btn page-btn-secondary"
+            >
+              {showGuide ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              {showGuide ? 'Hide the guide' : `Show the guide (version ${AI_GUIDE_VERSION})`}
+            </button>
+            {showGuide && <GuideText text={AI_GUIDE_BODY} />}
           </div>
         </div>
       )}
@@ -101,6 +84,13 @@ function ToolsGuide() {
 }
 
 const fmtDate = (value) => (value ? new Date(value).toLocaleString() : '—');
+
+// Which AI guide version the AI using this key last pulled with get_ai_guide.
+function guideStatus(version) {
+  if (!version) return { text: 'AI guide: not pulled yet', tone: 'text-gray-600' };
+  if (Number.parseFloat(version) >= Number.parseFloat(AI_GUIDE_VERSION)) return { text: `AI guide: up to date (${version})`, tone: 'text-emerald-400' };
+  return { text: `AI guide: read ${version}, now ${AI_GUIDE_VERSION} — it catches up next time it calls get_ai_guide`, tone: 'text-amber-400' };
+}
 
 // The raw token is only ever available in the response of create/rotate --
 // the server stores only its hash and will never return it again. This
@@ -205,6 +195,25 @@ export const ApiKeys = () => {
     }
   };
 
+  // Next get_ai_guide call from this key returns the whole guide again.
+  const resetGuide = async (id) => {
+    setBusyId(id);
+    try {
+      const res = await apiFetch(`/api/api-keys/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset_ai_guide: true }),
+      });
+      await requireSuccessfulResponse(res, 'Could not change this key');
+      await load();
+      toast.success('Its AI gets the whole guide the next time it calls get_ai_guide.');
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const revoke = async (id) => {
     setBusyId(id);
     try {
@@ -250,7 +259,9 @@ export const ApiKeys = () => {
           <div className="divide-y divide-gray-800 border border-gray-800 rounded-lg overflow-hidden">
             {keys.map((key) => (
               <div key={key.id} className="p-3 flex items-center justify-between gap-3">
-                <div>
+                {/* min-w-0 lets this column shrink on a phone so the rotate and
+                    revoke buttons beside it stay inside the row. */}
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-200 font-medium">{key.name || 'Unnamed key'}</span>
                     {key.revoked_at && (
@@ -259,6 +270,24 @@ export const ApiKeys = () => {
                   </div>
                   <p className="text-[11px] text-gray-600 font-mono">{key.key_prefix}…</p>
                   <p className="text-[11px] text-gray-600">Created {fmtDate(key.created_at)} · Last used {fmtDate(key.last_used_at)}</p>
+                  {!key.revoked_at && (() => {
+                    const status = guideStatus(key.ai_guide_version);
+                    return (
+                      <div className="flex flex-wrap items-center gap-x-2">
+                        <p className={`text-[11px] ${status.tone}`} data-testid="key-guide-status">{status.text}</p>
+                        {key.ai_guide_version && (
+                          <button
+                            type="button"
+                            onClick={() => resetGuide(key.id)}
+                            disabled={busyId === key.id}
+                            className="text-left text-[11px] text-gray-400 underline underline-offset-2 hover:text-white disabled:opacity-50"
+                          >
+                            Send the full guide again
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {!key.revoked_at && (
                     <label className="mt-2 flex items-start gap-2 text-[11px] text-gray-400 cursor-pointer">
                       <input
@@ -281,6 +310,7 @@ export const ApiKeys = () => {
                       onClick={() => rotate(key.id)}
                       disabled={busyId === key.id}
                       title="Issue a new key and invalidate this one"
+                      aria-label="Rotate key"
                       className="p-2 rounded-lg border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 disabled:opacity-50"
                     >
                       <RotateCw size={14} />
@@ -289,6 +319,7 @@ export const ApiKeys = () => {
                       onClick={() => revoke(key.id)}
                       disabled={busyId === key.id}
                       title="Revoke this key"
+                      aria-label="Revoke key"
                       className="p-2 rounded-lg border border-white/10 text-gray-400 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-50"
                     >
                       <Ban size={14} />
@@ -300,6 +331,8 @@ export const ApiKeys = () => {
           </div>
         )}
       </div>
+
+      <AiGuideCopy />
 
       <ToolsGuide />
     </div>

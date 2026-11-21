@@ -16,6 +16,9 @@ const activityLog = require('../services/activityLog');
 const { saleEconomics, allocatedCost, batchCost, isRealizedSale, keptQuantity, keptSaleQuantity } = require('../services/decimalFinance');
 const { payoutStatus } = require('../services/payoutStatus');
 const { markSalesPaid } = require('../services/markSalesPaid');
+const bookkeeping = require('../services/bookkeeping');
+const { normalizeExternalId, findExpenseByExternalId, duplicateError, isExternalIdConflict } = require('../services/expenseExternalId');
+const { MANUAL_EXPENSE_CATEGORIES, normalizeExpenseCategory } = require('../services/expenseCategories');
 const statusTransitions = require('../services/statusTransitions');
 const { detectCarrier } = require('../services/tracking');
 const { computeCardDashboard, nextDueDate } = require('../services/cardNetToPay');
@@ -29,6 +32,12 @@ const cashoutService = require('../services/cashouts/service');
 const { presentDeal } = require('../services/cashouts/dealPresenter');
 const cashoutCommits = require('../services/cashouts/commits');
 const { logPurchase } = require('../services/cashouts/logPurchase');
+
+// The AI guide (shared/aiGuide.mjs) is an ES module shared with the website,
+// so it loads asynchronously once; every request waits for it before building
+// its server (it is needed for the server instructions and get_ai_guide).
+let aiGuide = null;
+const aiGuideReady = import('../../shared/aiGuide.mjs').then((mod) => { aiGuide = mod; return mod; });
 
 const toDateOnly = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 const toNum = (d) => (d === null || d === undefined ? 0 : (typeof d.toNumber === 'function' ? d.toNumber() : Number(d)));
@@ -351,6 +360,13 @@ async function updateSaleShipment(tx, userId, existing, { tracking_number, carri
     if (statusTransitions.reopensRestoredSale(existing, { workflow_status: normalized })) {
       throw Object.assign(new Error(statusTransitions.REOPEN_REFUSED_MESSAGE), { toolError: true });
     }
+    // Moving a sale to PAID here would only flip the status, leaving paid_at,
+    // paid_amount and payout_account empty -- a "paid" sale with no record of
+    // the money. mark_sale_paid is the one MCP path that writes the payment.
+    // Re-sending PAID for a sale already PAID stays a harmless no-op.
+    if (normalized === 'PAID' && existing.workflow_status !== 'PAID') {
+      throw Object.assign(new Error('update_shipment cannot mark a sale PAID because it records no payment. Use mark_sale_paid with the payout date and amount instead.'), { toolError: true });
+    }
     if (normalized !== existing.workflow_status) {
       data.workflow_status = normalized;
       data.workflow_status_changed_at = new Date();
@@ -372,18 +388,90 @@ async function updateSaleShipment(tx, userId, existing, { tracking_number, carri
   return shipmentResult('outbound', updated, existing.inventory.product_name);
 }
 
-function buildServer(userId, apiKeyId) {
-  const server = new McpServer({ name: 'profit-tracker', version: '1.0.0' }, { capabilities: {} });
+// One short line added to every tool result while this key's AI hasn't read
+// the current guide, for AIs that ignore the connect instructions. It stops
+// as soon as the AI calls get_ai_guide (the key's version is then current).
+function guideNotice(guideVersion) {
+  const current = aiGuide.AI_GUIDE_VERSION;
+  if (!guideVersion) return `Note: you haven't read the Profit Tracker AI guide yet. Call get_ai_guide (no arguments) to learn how these tools work.`;
+  if (Number.parseFloat(guideVersion) < Number.parseFloat(current)) {
+    return `Note: the Profit Tracker AI guide has updates (you have ${guideVersion}, current is ${current}). Call get_ai_guide (no arguments) for just the changes.`;
+  }
+  return null;
+}
+
+function buildServer(userId, apiKeyId, guideVersion = null) {
+  // Sent once when an AI connects. Clients that pass server instructions to
+  // the model get told to catch up on the guide; get_ai_guide works either way.
+  const instructions = `Profit Tracker records a reseller's purchases, sales, payouts, expenses and cards. `
+    + `Its AI guide (how the data works, the rules, and every tool) is at version ${aiGuide.AI_GUIDE_VERSION}. `
+    + 'At the start of a session, before other tools, call get_ai_guide with no arguments: it returns the full guide the first time, '
+    + 'and after that only what changed since this connection last read it (or that you are up to date).';
+  const server = new McpServer({ name: 'profit-tracker', version: '1.0.0' }, { capabilities: {}, instructions });
+  const notice = guideNotice(guideVersion);
+  if (notice) {
+    // Every tool except get_ai_guide itself gets the notice as a separate
+    // trailing text block, so its JSON result (content[0]) is unchanged.
+    const register = server.registerTool.bind(server);
+    server.registerTool = (name, config, handler) => register(name, config, async (...args) => {
+      const result = await handler(...args);
+      if (name === 'get_ai_guide' || !result || !Array.isArray(result.content)) return result;
+      return { ...result, content: [...result.content, { type: 'text', text: notice }] };
+    });
+  }
 
   // ------------------------------------------------------------------ reads
 
+  server.registerTool('get_ai_guide', {
+    description: 'How to use these tools: the Profit Tracker AI guide. Call it at the start of a session with no arguments. '
+      + 'The first time, it returns the full guide. After that it remembers (per API key) which version you last read and returns only what changed since, '
+      + 'or kind "up_to_date" with nothing to read -- so calling it every session is cheap. '
+      + 'Pass full: true for the whole guide again (e.g. in a new chat that has forgotten it), or since to say which version you already know.',
+    inputSchema: z.object({
+      full: z.boolean().optional().describe('Return the whole guide, whatever you have read before.'),
+      since: z.string().regex(/^\d+\.\d+$/, 'since must look like 1.45').optional().describe('The guide version you already know, instead of the one remembered for this key.'),
+    }).strict(),
+  }, async ({ full, since }) => {
+    try {
+      const current = aiGuide.AI_GUIDE_VERSION;
+      const oldest = aiGuide.AI_GUIDE_UPDATES[aiGuide.AI_GUIDE_UPDATES.length - 1].version;
+      const key = apiKeyId ? await prisma.apiKey.findFirst({ where: { id: apiKeyId, user_id: userId } }) : null;
+      const remembered = key?.ai_guide_version ?? null;
+      const known = since ?? remembered;
+      let kind;
+      let text;
+      if (full || !known || Number.parseFloat(known) < Number.parseFloat(oldest)) {
+        kind = 'full';
+        text = aiGuide.fullGuideText();
+      } else {
+        text = aiGuide.updatesSinceText(known);
+        kind = text ? 'updates' : 'up_to_date';
+        if (!text) text = `You already know the current guide (version ${current}). Nothing new.`;
+      }
+      // Remember what this key's AI now knows. Metadata on the key, like
+      // last_used_at -- not the user's records, so not an Activity entry.
+      if (key && remembered !== current) {
+        await prisma.apiKey.update({ where: { id: key.id }, data: { ai_guide_version: current } });
+      }
+      return jsonResult({ kind, current_version: current, you_had: known ?? null, text });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to load the AI guide');
+    }
+  });
+
   server.registerTool('list_sales', {
-    description: 'List sales with optional filters. Dates are YYYY-MM-DD. "buyer" is the marketplace/cashout the sale went through (e.g. eBay, Windy City) -- the same platform picked when the sale was recorded, not a separate contact.',
+    description: 'List sales with optional filters. Dates are YYYY-MM-DD. "buyer" is the marketplace/cashout the sale went through (e.g. eBay, Windy City) -- the same platform picked when the sale was recorded, not a separate contact. '
+      + 'To tell whether a sale was paid, read payout_status, not status: status is the workflow step, and a sale can be paid before it reaches PAID. '
+      + 'payout_status is "unpaid" (no payment recorded), "partial" (paid, but payout_short_amount says it came in short) or "paid". '
+      + 'payout_date is the day the money actually arrived, not an expected date; payout_amount is this sale\'s share of that deposit. '
+      + 'One deposit covering several sales shows as the same payout_date, payout_account and payout_reference on each of them -- there is no separate deposit record. '
+      + 'A "paid" sale with an empty payout_date and payout_amount was marked paid by a status change alone, so no payment details were recorded for it; mark_sale_paid can add them. '
+      + 'net (sale_amount minus fees and buyer refunds) is what the sale should pay out, and is what profit is based on -- not payout_amount.',
     inputSchema: {
       start_date: z.string().optional().describe('YYYY-MM-DD, inclusive'),
       end_date: z.string().optional().describe('YYYY-MM-DD, inclusive'),
       buyer: z.string().optional().describe('Filter by the sale\'s marketplace/cashout name (case-insensitive, partial match)'),
-      payout_status: z.enum(['unpaid', 'partial', 'paid']).optional(),
+      payout_status: z.enum(['unpaid', 'partial', 'paid']).optional().describe('Payment state, worked out from the recorded payment -- the field to use for "was I paid".'),
       limit: z.number().int().min(1).max(500).optional().describe('Omit to return every matching sale.'),
     },
   }, async ({ start_date, end_date, buyer, payout_status: payoutFilter, limit }) => {
@@ -520,6 +608,8 @@ function buildServer(userId, apiKeyId) {
       date: toDateOnly(e.date),
       category: e.category,
       paid_from_account: e.payment_method?.name || null,
+      notes: e.notes || null,
+      external_id: e.external_id || null,
     })));
   });
 
@@ -578,7 +668,8 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('get_unpaid_by_buyer', {
-    description: 'Totals of sold-but-unpaid (and short-paid) sales, grouped by buyer (the sale\'s marketplace/cashout).',
+    description: 'Totals of sold-but-unpaid (and short-paid) sales, grouped by buyer -- the sale\'s marketplace/cashout (e.g. eBay), not a person. '
+      + 'An unpaid sale counts its full net; a partial one counts only its payout_short_amount. Cancelled, returned and disputed sales are left out.',
     inputSchema: {},
   }, async () => {
     const sales = await prisma.sales.findMany({ where: { inventory: { user_id: userId } }, include: { inventory: true, platform: true } });
@@ -604,8 +695,9 @@ function buildServer(userId, apiKeyId) {
   // Activity log: every add/edit the assistant makes is logged in the same
   // transaction, exactly like the website's routes, so it shows on the
   // Activity page (marked "AI assistant") and can be undone there or with
-  // undo_activity. mark_sale_paid and log_cashout_purchase are not logged,
-  // same as their website counterparts.
+  // undo_activity. mark_sale_paid logs one entry per deposit inside
+  // services/markSalesPaid.js; log_cashout_purchase is not logged, same as
+  // its website counterpart.
   const track = (tx, meta, work) => activityLog.trackChange(tx, userId, { source: 'assistant', ...meta }, work);
   const saleRefs = async (t, saleId) => {
     const sale = await t.sales.findUnique({ where: { id: saleId }, select: { inventory_id: true } });
@@ -617,27 +709,35 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('mark_sale_paid', {
-    description: 'Mark one or more sales as paid from a single deposit. If payout_amount is less than the combined expected revenue of the given sales, the shortfall is split across them proportionally and recorded, rather than silently absorbed.',
+    description: 'Record a payout you received: marks one or more sales paid from a single deposit, and is the only tool that records payment details. Call it once per deposit with every sale it covers. '
+      + 'If payout_amount is less than the combined net of the given sales, the shortfall is split across them in proportion and recorded as payout_short_amount (those sales show as "partial"), rather than silently absorbed. '
+      + 'Paying more than the combined net is not recorded: each sale\'s payout_amount is capped at its own net. '
+      + 'A sale can be marked paid while it is OUTBOUND, AWAITING_HANDOFF, HANDED_OVER or WAITING_FOR_PAYMENT. '
+      + 'It also backfills a sale that is already PAID but has no payment recorded (payout_date empty): the payout details are added and its status stays PAID. '
+      + 'A sale already PAID with a payment recorded, or not yet shipped, is refused. '
+      + 'Each call is one Activity log entry covering every sale in it (activity_id in the result), and undo_activity reverses the whole deposit.',
     inputSchema: {
-      sale_ids: z.array(z.string().uuid()).min(1),
-      payout_date: z.string().describe('YYYY-MM-DD'),
-      payout_amount: z.number().nonnegative(),
-      payout_account: z.string().optional().describe('e.g. "Chase College", "PayPal", "eBay"'),
-      payout_reference: z.string().optional(),
+      sale_ids: z.array(z.string().uuid()).min(1).describe('Every sale the deposit covers.'),
+      payout_date: z.string().describe('YYYY-MM-DD -- the day the money arrived.'),
+      payout_amount: z.number().nonnegative().describe('The total of the deposit, not a per-sale amount.'),
+      payout_account: z.string().optional().describe('Where the money landed, e.g. "Chase College", "PayPal", "eBay"'),
+      payout_reference: z.string().optional().describe('A note that identifies the deposit (e.g. a transfer id). Use the same one for every sale it covers.'),
     },
   }, async ({ sale_ids, payout_date, payout_amount, payout_account, payout_reference }) => {
     try {
-      const updated = await markSalesPaid({
+      const { sales: updated, activity } = await markSalesPaid({
         userId,
         saleIds: sale_ids,
         payoutDate: localNoon(payout_date),
         payoutAmount: payout_amount,
         payoutAccount: payout_account || null,
         payoutReference: payout_reference || null,
+        source: 'assistant',
       });
       await logWrite(userId, apiKeyId, 'mark_sale_paid', { sale_ids, payout_date, payout_amount, payout_account, payout_reference });
       return jsonResult(updated.map((s) => ({
         id: s.id,
+        activity_id: activity?.id ?? null,
         payout_status: payoutStatus(s),
         payout_amount: toNum(s.paid_amount),
         payout_short_amount: s.payout_short_amount !== null ? toNum(s.payout_short_amount) : 0,
@@ -715,17 +815,43 @@ function buildServer(userId, apiKeyId) {
     }
   });
 
+  const CATEGORY_HELP = `One of ${MANUAL_EXPENSE_CATEGORIES.map((c) => c.value).join(', ')} (a label such as "Proxies" or "Software / Tools" is turned into its code). Any other text is stored as given.`;
+  const expenseJson = (e, paymentMethodName, extra = {}) => ({
+    id: e.id,
+    ...extra,
+    description: e.name,
+    amount: toNum(decimal(e.amount)),
+    date: toDateOnly(e.date),
+    category: e.category,
+    paid_from_account: paymentMethodName,
+    notes: e.notes || null,
+    external_id: e.external_id || null,
+  });
+
   server.registerTool('add_expense', {
-    description: 'Log a general business expense (shipping supplies, tools, subscriptions, etc.). Do NOT use this for a cost that belongs to one purchase or sale -- purchase tax/shipping/fees and a sale\'s shipping label or platform fee are entered on that purchase or sale (update_purchase / update_sale) and already appear on the Expenses tab automatically. The account must already exist.',
+    description: 'Log a general business expense (shipping supplies, tools, subscriptions, proxies, etc.). Do NOT use this for a cost that belongs to one purchase or sale -- purchase tax/shipping/fees and a sale\'s shipping label or platform fee are entered on that purchase or sale (update_purchase / update_sale) and already appear on the Expenses tab automatically. The account must already exist. '
+      + 'Pass external_id (the bank/card/Copilot transaction id) when importing from a statement: if an expense with that id is already recorded, nothing is added and that expense comes back with already_recorded: true, so importing the same line twice is safe.',
     inputSchema: {
       description: z.string().min(1),
       amount: z.number().nonnegative(),
-      date: z.string().describe('YYYY-MM-DD'),
-      category: z.string().optional(),
+      date: strictDate,
+      category: z.string().optional().describe(CATEGORY_HELP),
       paid_from_account: z.string().min(1).describe('Existing payment method name.'),
+      notes: z.string().max(2000).optional(),
+      external_id: z.string().max(200).optional().describe('Transaction id from your bank, card or Copilot. Unique per expense.'),
     },
-  }, async ({ description, amount, date, category, paid_from_account }) => {
+  }, async ({ description, amount, date, category, paid_from_account, notes, external_id }) => {
+    const alreadyRecorded = async (externalId) => {
+      const existing = await findExpenseByExternalId(prisma, userId, externalId);
+      if (!existing) return null;
+      const pm = existing.payment_method_id ? await prisma.paymentMethod.findUnique({ where: { id: existing.payment_method_id } }) : null;
+      return jsonResult(expenseJson(existing, pm?.name || null, { already_recorded: true, activity_id: null }));
+    };
+    let externalId = null;
     try {
+      externalId = normalizeExternalId(external_id) ?? null;
+      const duplicate = await alreadyRecorded(externalId);
+      if (duplicate) return duplicate;
       const paymentMethod = await findPaymentMethod(userId, paid_from_account);
       const { result: created, activity } = await prisma.$transaction((tx) => track(tx, {
         action: 'create', recordType: 'expense',
@@ -736,23 +862,85 @@ function buildServer(userId, apiKeyId) {
           user_id: userId,
           name: description.trim(),
           amount,
-          category: category || null,
+          category: normalizeExpenseCategory(category) ?? null,
           date: localNoon(date),
           payment_method_id: paymentMethod.id,
+          notes: notes?.trim() || null,
+          external_id: externalId,
         },
       })));
-      await logWrite(userId, apiKeyId, 'add_expense', { description, amount, date, category, paid_from_account });
-      return jsonResult({
-        id: created.id,
-        activity_id: activity?.id ?? null,
-        description: created.name,
-        amount: toNum(decimal(created.amount)),
-        date: toDateOnly(created.date),
-        category: created.category,
-        paid_from_account: paymentMethod.name,
-      });
+      await logWrite(userId, apiKeyId, 'add_expense', { description, amount, date, category, paid_from_account, notes, external_id });
+      return jsonResult(expenseJson(created, paymentMethod.name, { already_recorded: false, activity_id: activity?.id ?? null }));
     } catch (err) {
+      // Two imports of the same line at once: the unique index stops the
+      // second, which then reports the first as already recorded.
+      if (isExternalIdConflict(err)) {
+        const duplicate = await alreadyRecorded(externalId);
+        if (duplicate) return duplicate;
+      }
       return errorResult(err.message || 'Failed to add expense');
+    }
+  });
+
+  server.registerTool('update_expense', {
+    description: 'Edit a manual expense (from list_expenses): description, amount, date, category, the account it was paid from, notes, or external_id. Only the fields you pass change; an empty string clears notes, category or external_id. '
+      + 'Costs shown on the Expenses tab from a purchase or sale are not expenses -- edit them with update_purchase / update_sale. Logged in Activity and can be undone.',
+    inputSchema: z.object({
+      expense_id: z.string().uuid(),
+      description: z.string().min(1).optional(),
+      amount: z.number().nonnegative().optional(),
+      date: strictDate.optional(),
+      category: z.string().optional().describe(`${CATEGORY_HELP} Empty string clears it.`),
+      paid_from_account: z.string().min(1).optional().describe('Existing payment method name.'),
+      notes: z.string().max(2000).optional(),
+      external_id: z.string().max(200).optional(),
+    }).strict(),
+  }, async ({ expense_id, description, amount, date, category, paid_from_account, notes, external_id }) => {
+    try {
+      const existing = await prisma.expense.findUnique({ where: { id: expense_id } });
+      if (!existing || existing.user_id !== userId) throw toolError('Expense not found or access denied');
+      const data = {};
+      if (description !== undefined) data.name = description.trim();
+      if (amount !== undefined) data.amount = amount;
+      if (date !== undefined) data.date = localNoon(date);
+      if (category !== undefined) data.category = normalizeExpenseCategory(category);
+      if (notes !== undefined) data.notes = notes.trim() || null;
+      let paymentMethodName = null;
+      if (paid_from_account !== undefined) {
+        const pm = await findPaymentMethod(userId, paid_from_account);
+        data.payment_method_id = pm.id;
+        paymentMethodName = pm.name;
+      }
+      const externalId = normalizeExternalId(external_id);
+      if (externalId !== undefined) {
+        const duplicate = await findExpenseByExternalId(prisma, userId, externalId, expense_id);
+        if (duplicate) throw toolError(duplicateError(duplicate).message);
+        data.external_id = externalId;
+      }
+      // Same rule as the website: changing what an expense is undoes its tax review.
+      if (existing.tax_details?.reviewed && ['name', 'amount', 'date', 'category'].some((k) => data[k] !== undefined)) {
+        data.tax_details = { ...existing.tax_details, reviewed: false };
+      }
+      const { result: updated, activity } = await prisma.$transaction((tx) => track(tx, {
+        action: 'edit', recordType: 'expense', recordId: expense_id,
+        refs: async () => ({ expense: [expense_id] }),
+      }, async () => {
+        if (!Object.keys(data).length) return existing;
+        const claim = await tx.expense.updateMany({
+          where: { id: expense_id, user_id: userId, tax_version: existing.tax_version ?? 0 },
+          data: { ...data, tax_version: { increment: 1 } },
+        });
+        if (claim.count !== 1) throw toolError('Expense changed while saving. Reload and retry.');
+        return tx.expense.findUnique({ where: { id: expense_id } });
+      }));
+      if (!paymentMethodName && updated.payment_method_id) {
+        paymentMethodName = (await prisma.paymentMethod.findUnique({ where: { id: updated.payment_method_id } }))?.name || null;
+      }
+      await logWrite(userId, apiKeyId, 'update_expense', { expense_id, description, amount, date, category, paid_from_account, notes, external_id });
+      return jsonResult(expenseJson(updated, paymentMethodName, { activity_id: activity?.id ?? null }));
+    } catch (err) {
+      if (isExternalIdConflict(err)) return errorResult('An expense with this external_id is already recorded.');
+      return errorResult(err.message || 'Failed to update expense');
     }
   });
 
@@ -1130,12 +1318,12 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('update_shipment', {
-    description: 'Set or correct the tracking number, carrier, or shipping status on one inbound purchase or outbound sale, looked up by id -- works the same way for either, no need to say which. Adding a tracking number for the first time is rejected if the item is already past the shipping stage, same as the website. Every change is recorded and reviewable via list_changes.',
+    description: 'Set or correct the tracking number, carrier, or shipping status on one inbound purchase or outbound sale, looked up by id -- works the same way for either, no need to say which. Adding a tracking number for the first time is rejected if the item is already past the shipping stage, same as the website. A sale cannot be moved to PAID here, because a status change records no payment -- use mark_sale_paid. Every change is recorded and reviewable via list_changes.',
     inputSchema: z.object({
       item_id: z.string().uuid().describe('An id from list_shipments (or list_inventory/list_sales).'),
       tracking_number: z.string().optional().describe('Empty string clears it.'),
       carrier: z.string().optional().describe('Empty string clears it. Auto-detected from the tracking number when not set.'),
-      status: z.string().optional().describe('Receiving status for an inbound item (PRE_ORDER, PURCHASED, INBOUND, ON_HAND) or workflow status for an outbound sale -- see list_shipments for the item\'s current value and workflow.'),
+      status: z.string().optional().describe('Receiving status for an inbound item (PRE_ORDER, PURCHASED, INBOUND, ON_HAND) or workflow status for an outbound sale -- see list_shipments for the item\'s current value and workflow. PAID is refused for a sale; use mark_sale_paid.'),
     }).strict(),
   }, async ({ item_id, tracking_number, carrier, status }) => {
     try {
@@ -1207,9 +1395,11 @@ function buildServer(userId, apiKeyId) {
         if (existing) throw toolError(`A platform named "${existing.name}" (${existing.type}) already exists`);
         // Same defaults as POST /api/platforms. fee_pct_decimal is filled by
         // the database trigger; workflow_preset is left unset there too.
-        const platform = await tx.platform.create({
+        const { result: platform } = await activityLog.trackSetupChange(tx, userId, {
+          action: 'create', recordType: 'platform', source: 'assistant',
+        }, () => tx.platform.create({
           data: { user_id: userId, name, type, fee_pct: fee_pct ?? 0 },
-        });
+        }));
         await recordChanges(tx, userId, 'Platform', platform.id, [
           { field: 'created', oldValue: null, newValue: `${platform.name} (${platform.type})` },
         ]);
@@ -1397,14 +1587,16 @@ function buildServer(userId, apiKeyId) {
         if (existing) throw toolError(`A payment method named "${existing.name}" (${existing.type}) already exists`);
         // Same fields as POST /api/payment-methods; the _decimal twins are
         // filled by the database trigger.
-        const method = await tx.paymentMethod.create({
+        const { result: method } = await activityLog.trackSetupChange(tx, userId, {
+          action: 'create', recordType: 'card', source: 'assistant',
+        }, () => tx.paymentMethod.create({
           data: {
             user_id: userId, name: finalName, type, last4: last4 || null,
             ...rewardColumns(input, rewards),
             // A card added from the card list never needs the rework notice.
             rework_prompt_state: input.catalog_card_id ? 'switched' : null,
           },
-        });
+        }));
         await recordChanges(tx, userId, 'PaymentMethod', method.id, [
           { field: 'created', oldValue: null, newValue: `${method.name} (${method.type})` },
         ]);
@@ -1452,7 +1644,9 @@ function buildServer(userId, apiKeyId) {
           ...rewardColumns(input, rewards, existing),
           ...(input.catalog_card_id ? { rework_prompt_state: 'switched' } : {}),
         };
-        const { count } = await tx.paymentMethod.updateMany({ where: { id: existing.id, user_id: userId }, data });
+        const { result: count } = await activityLog.trackSetupChange(tx, userId, {
+          action: 'edit', recordType: 'card', id: existing.id, source: 'assistant',
+        }, async () => (await tx.paymentMethod.updateMany({ where: { id: existing.id, user_id: userId }, data })).count);
         if (!count) throw toolError('That payment method no longer exists');
         const fields = ['name', 'last4', 'reward_type', 'points_base_rate', 'point_value_cents', 'default_cashback_rate', 'rewards_label', 'catalog_card_id'];
         const changes = fields
@@ -2089,6 +2283,159 @@ function buildServer(userId, apiKeyId) {
     }
   });
 
+  // ------------------------------------------------- read-only bookkeeping
+  // find_records, reconcile_transactions, list_all_costs, data_quality_report
+  // and match_deposit only read: they load the user's rows once and hand them
+  // to services/bookkeeping.js, which is pure. None of them logs a write.
+  const loadBooks = () => prisma.inventory.findMany({
+    where: { user_id: userId },
+    include: {
+      vendor: true,
+      payment_method: { select: { id: true, name: true, type: true } },
+      sales: {
+        include: {
+          platform: true,
+          buyer: true,
+          sale_shipping_payment_method: { select: { id: true, name: true, type: true } },
+        },
+      },
+    },
+  });
+  const loadExpenses = () => prisma.expense.findMany({ where: { user_id: userId }, include: { payment_method: true } });
+  const loadNotesByEntity = async () => {
+    const notes = await prisma.transactionNote.findMany({ where: { user_id: userId, deleted_at: null } });
+    const map = new Map();
+    for (const n of notes) map.set(n.entity_id, [...(map.get(n.entity_id) || []), n.body]);
+    return map;
+  };
+
+  server.registerTool('find_records', {
+    description: 'Look up purchases and sales by order number, tracking number (inbound or outbound), ASIN/UPC, or part of a product name -- a quick duplicate check before add_purchase or add_sale. '
+      + 'Identifiers match ignoring case, spaces and dashes. There is no separate ASIN/UPC field, so those are found in product names and notes. '
+      + 'Each row has its id, status, payout_status (sales), and the linked purchase_id (sales) or sale_ids (purchases), plus matched_on saying which field hit. Read-only.',
+    inputSchema: z.object({
+      query: z.string().min(1).max(200),
+      fields: z.array(z.enum(bookkeeping.FIND_FIELDS)).min(1).optional().describe('Which fields to search. Default all: order_number, tracking_number, product_name, notes.'),
+      types: z.array(z.enum(['purchase', 'sale'])).min(1).optional().describe('Default both.'),
+      limit: z.number().int().min(1).max(100).optional().describe('Default 25.'),
+    }).strict(),
+  }, async ({ query, fields, types, limit }) => {
+    try {
+      if (!query.trim()) throw toolError('query cannot be blank');
+      const [inventories, notesByEntity] = await Promise.all([loadBooks(), loadNotesByEntity()]);
+      const found = bookkeeping.findRecords(inventories, { query, fields, notesByEntity, limit: 1000 });
+      const want = new Set(types && types.length ? types : ['purchase', 'sale']);
+      const rows = found.results.filter((r) => want.has(r.type));
+      const max = limit ?? 25;
+      return jsonResult({ results: rows.slice(0, max), total: rows.length, truncated: rows.length > max });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to find records');
+    }
+  });
+
+  server.registerTool('reconcile_transactions', {
+    description: 'Match bank or card statement lines against the tracker. For each transaction, returns the best matches among manual expenses, purchase charges (the receipt total, or a tax/shipping/fee part charged on its own), sale shipping labels and platform fees, and payouts (one deposit = the sales sharing a payout date, account and reference). '
+      + 'Amounts match on their absolute value, so the sign convention of your bank export does not matter; each match says direction "in" or "out". '
+      + 'Tiers, best first: external_id (an expense already holds this transaction id), amount_date (same amount to the cent, date within tolerance), amount (same amount, date further off, up to 30 days), merchant (similar merchant, date within tolerance, amount within 10%). confidence is 0-1. '
+      + 'Also returns unmatched_transactions, and unmatched_records: tracker charges and deposits in the statement\'s date range that no transaction matched. Read-only: records nothing.',
+    inputSchema: z.object({
+      transactions: z.array(z.object({
+        id: z.string().max(200).optional().describe('Your bank/Copilot transaction id, echoed back.'),
+        date: strictDate,
+        amount: z.number(),
+        merchant: z.string().max(300).optional(),
+        account: z.string().max(200).optional(),
+      }).strict()).min(1).max(500),
+      tolerance_days: z.number().int().min(0).max(30).optional().describe('Default 3.'),
+      max_matches: z.number().int().min(1).max(10).optional().describe('Matches returned per transaction. Default 3.'),
+    }).strict(),
+  }, async ({ transactions, tolerance_days, max_matches }) => {
+    try {
+      const [inventories, expenses] = await Promise.all([loadBooks(), loadExpenses()]);
+      const txns = transactions.map((t) => ({ ...t, date: localNoon(t.date) }));
+      const result = bookkeeping.reconcileTransactions(inventories, expenses, {
+        transactions: txns, toleranceDays: tolerance_days ?? 3, maxMatches: max_matches ?? 3,
+      });
+      const echo = (t) => ({ ...t, date: toDateOnly(t.date) });
+      return jsonResult({
+        ...result,
+        matched: result.matched.map((m) => ({ ...m, transaction: echo(m.transaction) })),
+        unmatched_transactions: result.unmatched_transactions.map(echo),
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to reconcile transactions');
+    }
+  });
+
+  server.registerTool('list_all_costs', {
+    description: 'Every cost in a date range, the same set the website\'s Expenses tab shows: manual expenses (source "expense"), costs entered on purchases -- sales tax, inbound shipping, purchase fees, and gift-card credit as a negative line (source "purchase") -- and costs on realized sales -- shipping labels and platform fees (source "sale"). '
+      + 'Totals by month (YYYY-MM), by category and by source. Purchase and sale lines are already counted in profit (in cost and net), so do not add them again as expenses. Read-only.',
+    inputSchema: z.object({
+      start_date: strictDate.optional().describe('Inclusive.'),
+      end_date: strictDate.optional().describe('Inclusive.'),
+      include_lines: z.boolean().optional().describe('Default true. false returns only the totals.'),
+    }).strict(),
+  }, async ({ start_date, end_date, include_lines }) => {
+    try {
+      if (start_date && end_date && start_date > end_date) throw toolError('start_date must be on or before end_date');
+      const [inventories, expenses] = await Promise.all([loadBooks(), loadExpenses()]);
+      const result = bookkeeping.listAllCosts(inventories, expenses, { startDate: start_date, endDate: end_date });
+      if (include_lines === false) delete result.lines;
+      return jsonResult(result);
+    } catch (err) {
+      return errorResult(err.message || 'Failed to list costs');
+    }
+  });
+
+  server.registerTool('data_quality_report', {
+    description: 'Finds records that need attention, grouped by issue, each with ids: purchases missing an order number or inbound tracking; sales counted as paid with no payout date/amount (mark_sale_paid can backfill them); purchases whose total cost is $0 or less while a unit cost is set; one outbound tracking number on several sales; sales with no platform or buyer; possible duplicate purchases (same item, date, qty and unit cost); and sales whose notes contradict their payment state. '
+      + 'Cancelled purchases and cancelled/returned/disputed sales are left out. These are prompts to check, not certain errors. Read-only.',
+    inputSchema: z.object({
+      issues: z.array(z.string()).min(1).optional().describe('Only these issue keys (see a full report for the names). Default all.'),
+      max_items: z.number().int().min(1).max(500).optional().describe('Items listed per issue (count is always the full number). Default 50.'),
+    }).strict(),
+  }, async ({ issues, max_items }) => {
+    try {
+      const [inventories, notesByEntity] = await Promise.all([loadBooks(), loadNotesByEntity()]);
+      const report = bookkeeping.dataQualityReport(inventories, { notesByEntity });
+      const keep = issues && issues.length ? new Set(issues) : null;
+      const unknown = keep ? [...keep].filter((k) => !report.issues[k]) : [];
+      if (unknown.length) throw toolError(`Unknown issue key(s): ${unknown.join(', ')}. Valid: ${Object.keys(report.issues).join(', ')}`);
+      const max = max_items ?? 50;
+      const out = {};
+      for (const [key, issue] of Object.entries(report.issues)) {
+        if (keep && !keep.has(key)) continue;
+        out[key] = { ...issue, items: issue.items.slice(0, max), truncated: issue.items.length > max };
+      }
+      return jsonResult({ issues: out, total_issues: Object.values(out).reduce((sum, i) => sum + i.count, 0) });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to build the data quality report');
+    }
+  });
+
+  server.registerTool('match_deposit', {
+    description: 'Suggest which unpaid sales a deposit covers, so mark_sale_paid can be called with the right sale_ids. Looks for combinations of sales whose expected net adds up to the deposit: exact sums first (fewest platforms, then fewest sales, then oldest), and only when there is none, the closest sums with the difference. '
+      + 'Candidates are sales mark_sale_paid would accept -- unpaid, not cancelled/returned/disputed, at a payable status (or already PAID with no payment recorded) -- sold on or before the deposit date. Short-paid (partial) sales and sales not yet shipped are left out and counted under excluded. '
+      + 'platform narrows to one marketplace/cashout; account narrows to the platforms that have paid into that account before (ignored if none have). Read-only: records nothing.',
+    inputSchema: z.object({
+      amount: z.number().positive(),
+      date: strictDate.describe('The day the deposit arrived.'),
+      platform: z.string().max(200).optional(),
+      account: z.string().max(200).optional(),
+      max_sales: z.number().int().min(1).max(15).optional().describe('Most sales in one combination. Default 8.'),
+      max_results: z.number().int().min(1).max(20).optional().describe('Default 5.'),
+    }).strict(),
+  }, async ({ amount, date, platform, account, max_sales, max_results }) => {
+    try {
+      const inventories = await loadBooks();
+      return jsonResult(bookkeeping.matchDeposit(inventories, {
+        amount, date, platform, account, maxSales: max_sales ?? 8, maxResults: max_results ?? 5,
+      }));
+    } catch (err) {
+      return errorResult(err.message || 'Failed to match the deposit');
+    }
+  });
+
   server.registerTool('get_item_profit', {
     description: 'Profit for one purchase, one sale, or every purchase of a product. net_profit = revenue - fees - shipping - refunds_to_buyers - cost_of_units_sold + cashback, over realized sales only. revenue is the gross sale price; refunds_to_buyers is money refunded on those sales; units a buyer returned are back in stock and not counted as sold; fees/shipping are sale-side; cost_of_units_sold already includes tax, purchase fees and inbound shipping (shown in purchase_fees_and_shipping); cashback is card cashback on the units sold.',
     inputSchema: z.object({
@@ -2610,7 +2957,14 @@ function buildServer(userId, apiKeyId) {
 }
 
 router.post('/', async (req, res) => {
-  const server = buildServer(req.user.id, req.apiKeyId);
+  await aiGuideReady;
+  // The auth middleware already loaded the key; look it up only if it didn't.
+  let guideVersion = req.apiKeyGuideVersion;
+  if (guideVersion === undefined && req.apiKeyId) {
+    const key = await prisma.apiKey.findFirst({ where: { id: req.apiKeyId, user_id: req.user.id } }).catch(() => null);
+    guideVersion = key?.ai_guide_version ?? null;
+  }
+  const server = buildServer(req.user.id, req.apiKeyId, guideVersion ?? null);
   try {
     // enableJsonResponse: none of these tools stream partial results or
     // server notifications mid-call, so a single JSON response per request

@@ -80,3 +80,90 @@ describe('describeActivity', () => {
     expect(actionLabel('mark_something_new')).toBe('Mark Something New');
   });
 });
+
+describe('describeActivity: setup records', () => {
+  const link = (model, field, before, after) => ({ model, id: `${model}-${Math.random()}`, op: 'update', link: true, fields: { [field]: { before, after } } });
+  const cardRow = (op) => ({ model: 'paymentMethod', id: 'c1', op, row: { values: { name: 'Amazon Store Card', type: 'Credit' }, dates: [] } });
+  const setup = (record_type, detail) => ({ kind: 'change', record_type, detail });
+
+  it('says what removing a card took it off', () => {
+    const entry = setup('card', {
+      action: 'delete', product_name: 'Amazon Store Card',
+      rows: [cardRow('delete'), link('inventory', 'payment_method_id', 'c1', null), link('inventory', 'payment_method_id', 'c1', null),
+        link('expense', 'payment_method_id', 'c1', null), link('sales', 'sale_shipping_payment_method_id', 'c1', null)],
+    });
+    expect(describeActivity(entry)).toEqual({
+      title: 'Removed a card',
+      change: 'Credit · Taken off 2 purchases, 1 expense, 1 shipping label',
+      product: 'Amazon Store Card',
+    });
+  });
+
+  it('says an undone removal put the card back on its records', () => {
+    const entry = setup('card', {
+      action: 'delete', undo: true, product_name: 'Amazon Store Card',
+      rows: [cardRow('create'), link('inventory', 'payment_method_id', null, 'c1')],
+    });
+    expect(describeActivity(entry)).toMatchObject({ title: 'Undid: Removed a card', change: 'Credit · Put back on 1 purchase' });
+  });
+
+  it('names the fields an edit changed', () => {
+    const entry = setup('card', {
+      action: 'edit', product_name: 'Chase Freedom Flex',
+      rows: [{ model: 'paymentMethod', id: 'c1', op: 'update', fields: { due_day: { before: 7, after: 9 }, credit_limit: { before: 3000, after: 5000 } } }],
+    });
+    expect(describeActivity(entry)).toEqual({ title: 'Edited card', change: 'Due day 7 → 9 · Limit $3,000.00 → $5,000.00', product: 'Chase Freedom Flex' });
+  });
+
+  it('shows what came and went with a platform, a recurring expense, and names goals', () => {
+    const platform = setup('platform', {
+      action: 'delete', product_name: 'Target',
+      rows: [{ model: 'platform', id: 'p1', op: 'delete', row: { values: { type: 'Vendor' } } },
+        { model: 'account', id: 'a1', op: 'delete', row: { values: {} } }, link('inventory', 'vendor_id', 'p1', null)],
+    });
+    expect(describeActivity(platform)).toMatchObject({ title: 'Removed a platform', change: 'Vendor · with 1 store account · Taken off 1 purchase' });
+
+    const recurring = setup('recurring_expense', {
+      action: 'create', product_name: 'Storage',
+      rows: [{ model: 'recurringExpense', id: 'r1', op: 'create', row: { values: { amount: '50', frequency: 'monthly' } } },
+        { model: 'expense', id: 'x1', op: 'create', row: { values: {} } }, { model: 'expense', id: 'x2', op: 'create', row: { values: {} } }],
+    });
+    expect(describeActivity(recurring)).toMatchObject({ title: 'Added a recurring expense', change: '$50.00 monthly · with 2 expenses' });
+
+    expect(describeActivity(setup('goal', { action: 'create', product_name: 'totalRevenue', rows: [] })))
+      .toMatchObject({ title: 'Added a goal', product: 'Revenue goal' });
+    expect(describeActivity(setup('account', { action: 'edit', rows: [] }))).toMatchObject({ title: 'Edited store account', product: 'Store account' });
+  });
+
+  it('describes a removed cashout connection, and says its key is needed after undo', () => {
+    const rows = [{ model: 'cashoutConnection', id: 'k1', op: 'delete', row: { values: {} } },
+      { model: 'cashoutCommitment', id: 'm1', op: 'delete', row: { values: {} } }, { model: 'cashoutItemMatch', id: 'x1', op: 'delete', row: { values: {} } }];
+    expect(describeActivity(setup('cashout_connection', { action: 'delete', product_name: 'My EB', rows })))
+      .toEqual({ title: 'Removed a cashout connection', change: 'with 1 commitment · with 1 matched item', product: 'My EB' });
+    const undone = setup('cashout_connection', { action: 'delete', undo: true, key_needed: true, product_name: 'My EB', rows: [{ ...rows[0], op: 'create' }] });
+    expect(describeActivity(undone).change).toBe('Enter its key again to sync');
+  });
+
+  it('quotes a note, and names calendar events by date', () => {
+    const note = setup('product_note', { action: 'create', product_name: 'Switch 2', rows: [{ model: 'productNote', id: 'n', op: 'create', row: { values: { note: 'Ask for price match' } } }] });
+    expect(describeActivity(note)).toEqual({ title: 'Added a note', change: '“Ask for price match”', product: 'Switch 2' });
+    const edit = setup('transaction_note', { action: 'edit', product_name: 'Switch 2', rows: [{ model: 'transactionNote', id: 'n', op: 'update', fields: { body: { before: 'a', after: 'Box dented' } } }] });
+    expect(describeActivity(edit).change).toBe('Note “Box dented”');
+    const event = setup('calendar_event', { action: 'create', product_name: 'Restock', rows: [{ model: 'calendarEvent', id: 'c', op: 'create', row: { values: { date: '2026-12-01' } } }] });
+    expect(describeActivity(event)).toMatchObject({ title: 'Added a calendar event', change: 'Dec 1, 2026' });
+  });
+});
+
+describe('describeActivity: log-only entries', () => {
+  const event = (record_type, detail) => ({ kind: 'event', record_type, detail });
+  it('names API key, setting, reset and cashout actions', () => {
+    expect(describeActivity(event('api_key', { action: 'revoke', product_name: 'Claude' }))).toEqual({ title: 'Revoked an API key', change: '', product: 'Claude' });
+    expect(describeActivity(event('api_key', { action: 'cashout_writes', allowed: true, product_name: 'Claude' })).title).toBe('Allowed cashout actions for an API key');
+    expect(describeActivity(event('setting', { action: 'schedule_c', enabled: false, product_name: 'Schedule C' }))).toMatchObject({ title: 'Turned off Schedule C', product: 'Settings' });
+    expect(describeActivity(event('data_reset', { action: 'everything', product_name: 'All data', deleted: { purchases: 12, sales: 1, expenses: 0 } })))
+      .toEqual({ title: 'Reset all data', change: '12 purchases, 1 sale deleted', product: 'All data' });
+    expect(describeActivity(event('cashout', { action: 'log_purchase', product_name: 'Switch 2', quantity: 2, cashout: 'My EB' })))
+      .toEqual({ title: 'Logged a purchase with a cashout', change: 'Qty 2 · My EB', product: 'Switch 2' });
+    expect(describeActivity(event('cashout_connection', { action: 'key_replaced', product_name: 'My EB' })).title).toBe('Replaced a cashout key');
+  });
+});

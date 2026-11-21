@@ -77,6 +77,10 @@ model ApiKey {
   // Off by default: a key can only make binding cashout writes (commit,
   // change, withdraw, send tracking) through MCP once the owner turns this on.
   allow_cashout_writes Boolean @default(false)
+  // The AI guide version (shared/aiGuide.mjs) the AI using this key last
+  // pulled with the get_ai_guide MCP tool, so the next call returns only what
+  // is new. NULL = it has never pulled the guide.
+  ai_guide_version String?
 
   @@index([user_id])
 }
@@ -585,6 +589,10 @@ model Expense {
   category             String?
   date                 DateTime
   notes                String?
+  // An id from outside the tracker -- a bank, card or Copilot transaction id
+  // -- so the same statement line can't be imported twice. Unique per user;
+  // NULL for expenses entered by hand.
+  external_id          String?
   receipt_url          String?
   recurring_expense_id String?
   recurring_expense    RecurringExpense? @relation(fields: [recurring_expense_id], references: [id], onDelete: SetNull)
@@ -596,6 +604,7 @@ model Expense {
   @@index([user_id])
   @@index([user_id, date])
   @@unique([recurring_expense_id, date])
+  @@unique([user_id, external_id])
 }
 
 model RecurringExpense {

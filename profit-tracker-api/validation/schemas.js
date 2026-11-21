@@ -281,6 +281,7 @@ const createExpense = z.object({
   category: optionalString,
   date: dateString,
   notes: optionalString,
+  external_id: z.string().max(200).nullable().optional(),
   receipt_url: optionalString,
   payment_method_id: id,
   tax_details: taxDetails.optional(),

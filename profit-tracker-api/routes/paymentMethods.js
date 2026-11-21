@@ -6,6 +6,7 @@ const { paymentMethod, reworkPrompt } = require('../validation/schemas');
 const { resolveRewardFields } = require('../services/cardRewards');
 const linkedCards = require('../services/linkedCards');
 const { publishCalendarFeed } = require('../services/calendarFeed');
+const activityLog = require('../services/activityLog');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 const { Decimal, batchCost, isRealizedSale } = require('../services/decimalFinance');
 
@@ -86,7 +87,9 @@ router.post('/', isAuthenticated, validateBody(paymentMethod), async (req, res, 
             statement_close_day, due_day, credit_limit, min_payment_pct, is_personal,
             rewards_label, catalog_card_id, rework_prompt_state } = input;
     const rewards = resolveRewardFields(input, null);
-    const method = await prisma.paymentMethod.create({
+    const { result: method, activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'create', recordType: 'card',
+    }, () => tx.paymentMethod.create({
       data: {
         user_id: req.user.id,
         name,
@@ -110,9 +113,9 @@ router.post('/', isAuthenticated, validateBody(paymentMethod), async (req, res, 
         min_payment_pct: min_payment_pct ? parseFloat(min_payment_pct) : null,
         is_personal: is_personal === true || is_personal === 'true',
       }
-    });
+    })));
     await publishCalendarFeed(req.user.id);
-    res.json(parseRates(method));
+    res.json({ ...parseRates(method), activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -138,7 +141,9 @@ router.put('/:id', isAuthenticated, validateBody(paymentMethod), async (req, res
     const rewards = resolveRewardFields(input, existing);
     const ratesTouched = category_rates !== undefined || rewards.reward_type === 'points' || existing.reward_type !== rewards.reward_type;
 
-    const updated = await prisma.paymentMethod.update({
+    const { result: updated, activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'edit', recordType: 'card', id,
+    }, () => tx.paymentMethod.update({
       where: { id },
       data: {
         name,
@@ -163,9 +168,9 @@ router.put('/:id', isAuthenticated, validateBody(paymentMethod), async (req, res
         min_payment_pct: min_payment_pct !== undefined ? (min_payment_pct ? parseFloat(min_payment_pct) : null) : existing.min_payment_pct,
         is_personal: is_personal !== undefined ? (is_personal === true || is_personal === 'true') : existing.is_personal,
       }
-    });
+    })));
     await publishCalendarFeed(req.user.id);
-    res.json(parseRates(updated));
+    res.json({ ...parseRates(updated), activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -201,9 +206,13 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
       return res.status(404).json({ error: 'Not found' });
     }
 
-    await prisma.paymentMethod.delete({ where: { id } });
+    // Logged with every purchase, expense and label that loses this card, so
+    // Activity can undo the removal and put the card back on them.
+    const { activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'delete', recordType: 'card', id,
+    }, () => tx.paymentMethod.delete({ where: { id } })));
     await publishCalendarFeed(req.user.id);
-    res.json({ success: true });
+    res.json({ success: true, activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }

@@ -25,6 +25,7 @@ const CATEGORIES = [
   { value: 'MEMBERSHIP',        label: 'Membership',        color: 'text-amber-400' },
   { value: 'SHIPPING_SUPPLIES', label: 'Shipping Supplies', color: 'text-green-400' },
   { value: 'SOFTWARE',          label: 'Software / Tools',  color: 'text-cyan-400' },
+  { value: 'PROXY',             label: 'Proxies',           color: 'text-rose-400' },
   { value: 'OTHER',             label: 'Other',             color: 'text-gray-400' },
 ];
 // Retired manual categories: still shown on existing rows, no longer offered for new ones.
@@ -68,6 +69,8 @@ const EMPTY_FORM = {
   recurring: false, frequency: 'monthly', start_date: '', end_date: '',
   // shared
   notes: '', payment_method_id: '',
+  // one-off only: a bank/card/Copilot transaction id, unique per expense
+  external_id: '',
 };
 
 // ─── Unified Add/Edit Modal ──────────────────────────────────────────────────
@@ -107,6 +110,7 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
           end_date:   '',
           notes:      initial.notes    || '',
           payment_method_id: initial.payment_method_id || '',
+          external_id: initial.external_id || '',
         });
       }
     } else {
@@ -150,6 +154,7 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
           date:     form.date,
           notes:    form.notes.trim() || null,
           payment_method_id: form.payment_method_id || null,
+          external_id: form.external_id.trim() || null,
         });
       }
       onClose();
@@ -276,6 +281,15 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
             <textarea placeholder="Optional description..." value={form.notes} onChange={e => set('notes', e.target.value)} rows={2}
               className={`w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-gray-600 bg-white/[0.04] border border-white/10 focus:outline-none focus:border-${accent}-500/50 resize-none`} />
           </div>
+
+          {/* External transaction id: lets an import skip a line already recorded */}
+          {!form.recurring && (
+            <div>
+              <label htmlFor="expense-external-id" className="block text-xs font-medium text-gray-400 mb-1.5">Transaction ID <span className="text-gray-600">(optional)</span></label>
+              <input id="expense-external-id" type="text" maxLength={200} placeholder="e.g. a Copilot or bank ID" value={form.external_id} onChange={e => set('external_id', e.target.value)}
+                className={`w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-gray-600 bg-white/[0.04] border border-white/10 focus:outline-none focus:border-${accent}-500/50`} />
+            </div>
+          )}
 
           {/* Recurring toggle — hide when editing an existing entry (type is fixed) */}
           {!initial && (
@@ -504,7 +518,7 @@ const Expenses = () => {
       if (catFilter && e.category !== catFilter) return false;
       if (search) {
         const q = search.toLowerCase();
-        if (!e.name.toLowerCase().includes(q) && !(e.notes || '').toLowerCase().includes(q) && !(CATEGORY_MAP[e.category]?.label || '').toLowerCase().includes(q)) return false;
+        if (!e.name.toLowerCase().includes(q) && !(e.notes || '').toLowerCase().includes(q) && !(e.external_id || '').toLowerCase().includes(q) && !(CATEGORY_MAP[e.category]?.label || '').toLowerCase().includes(q)) return false;
       }
       return true;
     })

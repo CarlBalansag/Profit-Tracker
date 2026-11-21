@@ -356,7 +356,7 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
 router.post('/mark-paid-batch', isAuthenticated, validateBody(markPaidBatch), async (req, res, next) => {
   try {
     const { sale_ids, payout_date, payout_amount, payout_account, payout_reference } = req.body;
-    const updated = await markSalesPaid({
+    const { sales: updated } = await markSalesPaid({
       userId: req.user.id,
       saleIds: sale_ids,
       payoutDate: parseLocalDate(payout_date),

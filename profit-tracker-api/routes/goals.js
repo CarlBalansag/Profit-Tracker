@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { goal, updateGoal } = require('../validation/schemas');
+const activityLog = require('../services/activityLog');
 const { parseAmount } = require('../services/money');
 const { withExactFields, withExactList, MAPPINGS } = require('../services/decimalRead');
 
@@ -57,7 +58,9 @@ router.post('/', isAuthenticated, validateBody(goal), async (req, res, next) => 
     const { metric, target_7d, target_30d, target_ytd, active } = req.body;
     const targets = validateGoalTargets(metric, { target_7d, target_30d, target_ytd });
 
-    const goal = await prisma.goal.create({
+    const { result: goal, activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'create', recordType: 'goal',
+    }, () => tx.goal.create({
       data: {
         user_id:    req.user.id,
         metric,
@@ -66,8 +69,8 @@ router.post('/', isAuthenticated, validateBody(goal), async (req, res, next) => 
         target_ytd: targets.target_ytd,
         active:     active ?? true,
       },
-    });
-    res.json(withExactFields(goal, MAPPINGS.goal));
+    })));
+    res.json({ ...withExactFields(goal, MAPPINGS.goal), activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -85,7 +88,9 @@ router.put('/:id', isAuthenticated, validateBody(updateGoal), async (req, res, n
     const effectiveMetric = metric !== undefined ? metric : existing.metric;
     const targets = validateGoalTargets(effectiveMetric, { target_7d, target_30d, target_ytd });
 
-    const updated = await prisma.goal.update({
+    const { result: updated, activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'edit', recordType: 'goal', id: req.params.id,
+    }, () => tx.goal.update({
       where: { id: req.params.id },
       data: {
         ...(metric                    !== undefined && { metric }),
@@ -94,8 +99,8 @@ router.put('/:id', isAuthenticated, validateBody(updateGoal), async (req, res, n
         ...(targets.target_ytd        !== undefined && { target_ytd: targets.target_ytd }),
         ...(active                    !== undefined && { active }),
       },
-    });
-    res.json(withExactFields(updated, MAPPINGS.goal));
+    })));
+    res.json({ ...withExactFields(updated, MAPPINGS.goal), activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -108,8 +113,10 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
     if (!existing || existing.user_id !== req.user.id) {
       return res.status(404).json({ error: 'Not found' });
     }
-    await prisma.goal.delete({ where: { id: req.params.id } });
-    res.json({ success: true });
+    const { activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'delete', recordType: 'goal', id: req.params.id,
+    }, () => tx.goal.delete({ where: { id: req.params.id } })));
+    res.json({ success: true, activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }

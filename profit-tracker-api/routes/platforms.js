@@ -4,6 +4,7 @@ const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { platform, updatePlatform, platformBatch } = require('../validation/schemas');
 const { requireOwned } = require('../services/ownership');
+const activityLog = require('../services/activityLog');
 const { withExactFields, withExactList, MAPPINGS } = require('../services/decimalRead');
 
 const isAuthenticated = (req, res, next) => {
@@ -29,7 +30,9 @@ router.get('/', isAuthenticated, async (req, res, next) => {
 router.post('/', isAuthenticated, validateBody(platform), async (req, res, next) => {
   try {
     const { name, type, fee_pct, address, notes, tax_exempt_place, default_return_days } = req.body;
-    const platform = await prisma.platform.create({
+    const { result: platform, activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'create', recordType: 'platform',
+    }, () => tx.platform.create({
       data: {
         user_id: req.user.id,
         name,
@@ -40,8 +43,8 @@ router.post('/', isAuthenticated, validateBody(platform), async (req, res, next)
         tax_exempt_place: tax_exempt_place === true || tax_exempt_place === 'true',
         default_return_days: default_return_days ?? null,
       }
-    });
-    res.json(withExactFields(platform, MAPPINGS.platform));
+    })));
+    res.json({ ...withExactFields(platform, MAPPINGS.platform), activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -57,9 +60,18 @@ router.post('/batch', isAuthenticated, validateBody(platformBatch), async (req, 
     await Promise.all(vendors.map((vendor) =>
       requireOwned('platform', vendor.id, req.user.id, 'Platform')
     ));
-    const created = await prisma.$transaction(
-      vendors.map(v =>
-        prisma.platform.upsert({
+    // One Activity entry for the whole batch; vendors that already existed are
+    // left as they were, so only the new ones are in it.
+    const givenIds = new Set(vendors.map((v) => v.id).filter(Boolean));
+    const { result: created } = await prisma.$transaction((tx) => activityLog.trackChange(tx, req.user.id, {
+      action: 'create',
+      recordType: 'platform',
+      refs: async (t, rows) => ({ platform: rows ? rows.map((p) => p.id) : [...givenIds] }),
+      recordId: (rows) => (rows.find((p) => !givenIds.has(p.id)) || rows[0])?.id,
+    }, async () => {
+      const rows = [];
+      for (const v of vendors) {
+        rows.push(await tx.platform.upsert({
           where: { id: v.id || '' },
           update: {},
           create: {
@@ -69,9 +81,10 @@ router.post('/batch', isAuthenticated, validateBody(platformBatch), async (req, 
             fee_pct: 0,
             notes: v.category || null
           }
-        })
-      )
-    );
+        }));
+      }
+      return rows;
+    }));
     res.json(withExactList(created, MAPPINGS.platform));
   } catch (err) {
     next(err);
@@ -92,7 +105,15 @@ router.put('/:id', isAuthenticated, validateBody(updatePlatform), async (req, re
       ? (tax_exempt_place === true || tax_exempt_place === 'true')
       : existing.tax_exempt_place;
 
-    const [updated, bulkResult] = await prisma.$transaction(async (tx) => {
+    const taxChanging = tax_exempt_place !== undefined && newTaxExempt !== existing.tax_exempt_place;
+    const { result: [updated, bulkResult], activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'edit', recordType: 'platform', id: req.params.id,
+      // Switching tax-exempt rewrites every sale on this platform, so those
+      // sales are part of the change (and of its undo).
+      extraRefs: async (t) => (taxChanging
+        ? { sales: (await t.sales.findMany({ where: { platform_id: req.params.id, inventory: { user_id: req.user.id } }, select: { id: true } })).map((s) => s.id) }
+        : {}),
+    }, async () => {
       const p = await tx.platform.update({
         where: { id: req.params.id },
         data: {
@@ -118,9 +139,9 @@ router.put('/:id', isAuthenticated, validateBody(updatePlatform), async (req, re
       }
 
       return [p, bulk];
-    });
+    }));
 
-    res.json({ ...withExactFields(updated, MAPPINGS.platform), _salesUpdated: bulkResult.count });
+    res.json({ ...withExactFields(updated, MAPPINGS.platform), _salesUpdated: bulkResult.count, activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
@@ -134,8 +155,12 @@ router.delete('/:id', isAuthenticated, async (req, res, next) => {
       return res.status(404).json({ error: 'Platform not found' });
     }
 
-    await prisma.platform.delete({ where: { id: req.params.id } });
-    res.json({ success: true });
+    // Its store accounts go with it (ON DELETE CASCADE) and purchases, sales
+    // and cashout connections lose the link; all of it is logged for undo.
+    const { activity } = await prisma.$transaction((tx) => activityLog.trackSetupChange(tx, req.user.id, {
+      action: 'delete', recordType: 'platform', id: req.params.id,
+    }, () => tx.platform.delete({ where: { id: req.params.id } })));
+    res.json({ success: true, activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }
