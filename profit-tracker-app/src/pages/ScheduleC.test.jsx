@@ -143,3 +143,51 @@ describe('Schedule C: sale costs included automatically', () => {
     expect(csv).toContain('Cup · Shipping label');
   });
 });
+
+describe('Schedule C profit (Parts I and III)', () => {
+  const amounts = { 1: '205.00', 2: '0.00', 3: '205.00', 4: '124.50', 5: '80.50', 6: '0.00', 7: '80.50', 28: '7.00', 29: '73.50', 30: '0.00', 31: '73.50' };
+  const books = {
+    year: 2026, basis: 'Cash method; inventory at cost (specific identification); sales counted on the sale date.',
+    lines: Object.entries(amounts).map(([line, amount]) => ({ line, label: `Line ${line} label`, amount })),
+    partIII: [{ line: '33', label: 'Method', value: 'Cost' }, { line: '35', label: 'Beginning inventory', amount: '172.50' }, { line: '42', label: 'Cost of goods sold', amount: '124.50' }],
+    netProfit: '73.50',
+    sales: { count: 2, byPlatform: [{ platform: 'StockX', gross: '180.00', count: 1 }, { platform: 'eBay', gross: '25.00', count: 1 }] },
+    reconciliation: { appProfitOnSales: '93.50', appExpenses: '12.00', appProfitAfterExpenses: '81.50', differences: [{ key: 'refund_timing', label: 'Refund timing', amount: '-20.00' }, { key: 'inventory_cost', label: 'Inventory', amount: '0.00' }, { key: 'expenses', label: 'Expense review', amount: '12.00' }], scheduleCNetProfit: '73.50' },
+    checks: { directCostOfUnitsSold: '124.50', oversold: [{ inventory_id: 'A', product_name: 'Console' }], soldBeforePurchase: [], salesWithRestoredUnits: 0 },
+    yearEndCutoff: { from: '2026-12-25', sales: [{ sale_id: 's9', inventory_id: 'i9', product_name: 'Late Shoe', sale_date: '2026-12-28', paid_at: null, amount: '80.00' }], total: '80.00' },
+    notes: ['Gift cards paid $5.00 of this year\'s purchases and are counted as free.'],
+  };
+  beforeEach(() => {
+    apiFetch.mockImplementation(async path => response(path.includes('/preferences/') ? { enabled: true } : { ...report(2026), books }));
+  });
+
+  it('shows gross receipts, cost of goods sold, expenses and net profit with the lines behind them', async () => {
+    mount(<ScheduleC />);
+    expect(await screen.findByText('Net profit (line 31)')).toBeTruthy();
+    expect(screen.getAllByText('$73.50').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('$205.00').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('$124.50').length).toBeGreaterThan(0);
+    expect(screen.getByText('Part III: Cost of goods sold')).toBeTruthy();
+    expect(screen.getByText('Cost')).toBeTruthy();
+  });
+
+  it('reconciles to app profit, lists platforms, late-December sales, data problems and notes', async () => {
+    mount(<ScheduleC />);
+    await screen.findByText('Why this differs from your profit elsewhere in the app');
+    expect(screen.getByText('$93.50')).toBeTruthy();
+    expect(screen.getByText('-$20.00')).toBeTruthy();
+    expect(screen.getByText('+$12.00')).toBeTruthy();
+    expect(screen.getByText('StockX')).toBeTruthy();
+    expect(screen.getByText(/1 late-December sale paid after the year ended/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Late Shoe' })).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toMatch(/more units sold than bought \(Console\)/);
+    expect(screen.getByText(/Gift cards paid \$5\.00/)).toBeTruthy();
+  });
+
+  it('says loss instead of profit when line 31 is negative', async () => {
+    apiFetch.mockImplementation(async path => response(path.includes('/preferences/') ? { enabled: true } : { ...report(2026), books: { ...books, netProfit: '-40.00', checks: { ...books.checks, oversold: [] } } }));
+    mount(<ScheduleC />);
+    expect(await screen.findByText('Net loss (line 31)')).toBeTruthy();
+    expect(screen.getByText('-$40.00')).toBeTruthy();
+  });
+});

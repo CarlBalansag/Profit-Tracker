@@ -3,6 +3,7 @@ const prisma = require('../prisma');
 const { expenseWorksheet } = require('../services/scheduleC');
 const { withExactList, MAPPINGS } = require('../services/decimalRead');
 const { derivedExpenseLines } = require('../services/derivedExpenses');
+const { scheduleCBooks } = require('../services/scheduleCBooks');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -21,12 +22,17 @@ router.get('/', isAuthenticated, async (req, res, next) => {
         where: { user_id: req.user.id },
         include: {
           sales: { include: { platform: { select: { name: true } }, sale_shipping_payment_method: { select: { id: true, name: true, type: true } } } },
-          payment_method: { select: { id: true, name: true, type: true } },
+          payment_method: { select: { id: true, name: true, type: true, default_cashback_rate: true, default_cashback_rate_decimal: true, category_rates: true } },
+          vendor: { select: { name: true } },
         },
       }),
       prisma.refund.findMany({ where: { user_id: req.user.id, sale_id: { not: null } }, include: { sale: true } }),
     ]);
-    res.json(await expenseWorksheet(withExactList(expenses, MAPPINGS.expense), Number(req.query.year), derivedExpenseLines(inventories), saleRefunds));
+    const year = Number(req.query.year);
+    const exactExpenses = withExactList(expenses, MAPPINGS.expense);
+    const worksheet = await expenseWorksheet(exactExpenses, year, derivedExpenseLines(inventories), saleRefunds);
+    const expensesInYear = exactExpenses.filter((e) => new Date(e.date).getUTCFullYear() === year);
+    res.json({ ...worksheet, books: scheduleCBooks({ inventories, year, worksheet, expensesInYear }) });
   } catch (error) { next(error); }
 });
 module.exports = router;
