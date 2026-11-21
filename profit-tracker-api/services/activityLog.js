@@ -180,6 +180,7 @@ const PARENT_FIRST = {
   platform: 0, account: 1, paymentMethod: 2, buyer: 3, goal: 4, recurringExpense: 5,
   cashoutConnection: 6, calendarEvent: 7, productNote: 8,
   inventory: 9, sales: 10, refund: 11, cashoutCommitment: 12, cashoutItemMatch: 13, expense: 14, transactionNote: 15,
+  taxForm1099K: 16,
 };
 const MODELS = Object.keys(PARENT_FIRST);
 // Background refreshes (carrier tracking, market price checks, the card
@@ -203,6 +204,7 @@ const TABLE = {
   paymentMethod: 'PaymentMethod', account: 'Account', platform: 'Platform', buyer: 'Buyer', goal: 'Goal',
   recurringExpense: 'RecurringExpense', cashoutConnection: 'CashoutConnection', cashoutItemMatch: 'CashoutItemMatch',
   calendarEvent: 'CalendarEvent', productNote: 'ProductNote', transactionNote: 'TransactionNote',
+  taxForm1099K: 'TaxForm1099K',
 };
 // A removed cashout connection comes back without its key (the key is never
 // logged), marked as needing attention so background sync leaves it alone
@@ -220,7 +222,8 @@ const RESTORE_OVERRIDES = {
 const LINKS = {
   paymentMethod: [['inventory', 'payment_method_id'], ['expense', 'payment_method_id'], ['recurringExpense', 'payment_method_id'], ['sales', 'sale_shipping_payment_method_id']],
   account: [['inventory', 'account_id']],
-  platform: [['inventory', 'vendor_id'], ['sales', 'platform_id'], ['cashoutConnection', 'platform_id'], ['account', 'platform_id']],
+  // A 1099-K form keeps its payer name when its platform goes; undo relinks it.
+  platform: [['inventory', 'vendor_id'], ['sales', 'platform_id'], ['cashoutConnection', 'platform_id'], ['account', 'platform_id'], ['taxForm1099K', 'platform_id']],
   buyer: [['sales', 'buyer_id']],
   recurringExpense: [['expense', 'recurring_expense_id']],
   // Removing a connection deletes its commitments and item matches (ON DELETE
@@ -467,6 +470,7 @@ const USED_BY = {
   inventory: 'purchases', sales: 'sales', expense: 'expenses', recurringExpense: 'recurring expenses',
   cashoutConnection: 'cashout connections', account: 'store accounts',
   cashoutCommitment: 'cashout commitments', cashoutItemMatch: 'matched cashout items',
+  taxForm1099K: '1099-K forms',
 };
 
 async function undoChange(tx, userId, entry, source) {

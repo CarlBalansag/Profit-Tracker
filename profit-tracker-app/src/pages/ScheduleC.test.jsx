@@ -156,6 +156,10 @@ describe('Schedule C profit (Parts I and III)', () => {
     checks: { directCostOfUnitsSold: '124.50', oversold: [{ inventory_id: 'A', product_name: 'Console' }], soldBeforePurchase: [], salesWithRestoredUnits: 0 },
     yearEndCutoff: { from: '2026-12-25', sales: [{ sale_id: 's9', inventory_id: 'i9', product_name: 'Late Shoe', sale_date: '2026-12-28', paid_at: null, amount: '80.00' }], total: '80.00' },
     notes: ['Gift cards paid $5.00 of this year\'s purchases and are counted as free.'],
+    form1099K: { forms: [], platforms: [], total: '0.00', unlinkedTotal: '0.00', comparison: [
+      { platform_id: 'p1', platform: 'StockX', recordedGross: '180.00', recordedCount: 1, formGross: null, formCount: null, difference: null },
+      { platform_id: 'p2', platform: 'eBay', recordedGross: '25.00', recordedCount: 1, formGross: null, formCount: null, difference: null },
+    ] },
   };
   beforeEach(() => {
     apiFetch.mockImplementation(async path => response(path.includes('/preferences/') ? { enabled: true } : { ...report(2026), books }));
@@ -255,5 +259,80 @@ describe('Schedule C: stock not in ProfitTracker', () => {
     books.checks.negativeCogs = true;
     await open();
     expect(screen.getByRole('alert').textContent).toMatch(/Cost of goods sold is below zero/);
+  });
+});
+
+describe('Schedule C: 1099-K forms', () => {
+  const books = () => ({
+    year: 2026, basis: 'Cash method.', lines: [{ line: '1', label: 'Gross', amount: '330.00' }, { line: '31', label: 'Net', amount: '0.00' }],
+    partIII: [], netProfit: '0.00', sales: { count: 3, byPlatform: [] },
+    reconciliation: { appProfitOnSales: '0.00', appExpenses: '0.00', appProfitAfterExpenses: '0.00', differences: [], scheduleCNetProfit: '0.00' },
+    checks: { directCostOfUnitsSold: '0.00', oversold: [], soldBeforePurchase: [], salesWithRestoredUnits: 0, negativeCogs: false },
+    yearEndCutoff: { sales: [], total: '0.00' }, notes: [],
+    form1099K: {
+      platforms: [{ id: 'p-ebay', name: 'eBay', type: 'Marketplace' }, { id: 'p-mercari', name: 'Mercari', type: 'Marketplace' }],
+      forms: [{ id: 'f1', payer_name: 'eBay', platform_id: 'p-ebay', platform_name: 'eBay', gross_amount: '350.00', transaction_count: 3 }],
+      comparison: [{ platform_id: 'p-ebay', platform: 'eBay', recordedGross: '300.00', recordedCount: 2, formGross: '350.00', formCount: 3, difference: '50.00' }],
+      total: '350.00', unlinkedTotal: '0.00',
+    },
+  });
+  let calls;
+  beforeEach(() => {
+    calls = [];
+    apiFetch.mockImplementation(async (path, options) => {
+      if (options?.method) { calls.push({ path, method: options.method, body: options.body && JSON.parse(options.body) }); return response({ ok: true }); }
+      return response(path.includes('/preferences/') ? { enabled: true } : { ...report(2026), books: books() });
+    });
+  });
+  const open = async () => { mount(<ScheduleC />); await screen.findByText(/Sales by platform and 1099-K forms \(1 form, \$350\.00\)/); };
+
+  it('shows each platform next to its 1099-K and the difference', async () => {
+    await open();
+    expect(screen.getByText('+$50.00')).toBeTruthy();
+    expect(screen.getAllByText('$350.00').length).toBeGreaterThan(0);
+    expect(screen.getByText(/3 transactions/)).toBeTruthy();
+  });
+
+  it('adds a form, filling the payer from the platform picked', async () => {
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Add a 1099-K' }));
+    const form = screen.getByRole('form', { name: 'Add a 1099-K' });
+    expect(screen.getByLabelText(/Who sent it/).value).toBe('eBay');
+    fireEvent.change(screen.getByLabelText('Which platform is it for?'), { target: { value: 'p-mercari' } });
+    expect(screen.getByLabelText(/Who sent it/).value).toBe('Mercari');
+    fireEvent.change(screen.getByLabelText('Which platform is it for?'), { target: { value: '' } });
+    expect(screen.getByLabelText(/Who sent it/).value).toBe('');
+    fireEvent.change(screen.getByLabelText(/Who sent it/), { target: { value: 'PayPal' } });
+    fireEvent.change(screen.getByLabelText('Which platform is it for?'), { target: { value: 'p-ebay' } });
+    expect(screen.getByLabelText(/Who sent it/).value).toBe('PayPal'); // typed names stay
+    fireEvent.change(screen.getByLabelText(/Who sent it/), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Which platform is it for?'), { target: { value: 'p-mercari' } });
+    fireEvent.change(screen.getByLabelText('Gross amount (box 1a)'), { target: { value: '25' } });
+    fireEvent.submit(form);
+    await waitFor(() => expect(calls).toEqual([{ path: '/api/schedule-c/years/2026/1099-k', method: 'POST', body: { payer_name: 'Mercari', platform_id: 'p-mercari', gross_amount: '25', transaction_count: null } }]));
+  });
+
+  it('refuses a missing amount without saving', async () => {
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Add a 1099-K' }));
+    fireEvent.submit(screen.getByRole('form', { name: 'Add a 1099-K' }));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/box 1a amount/);
+    expect(calls).toEqual([]);
+  });
+
+  it('edits and deletes a form, asking before deleting', async () => {
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const amount = screen.getByLabelText('Gross amount (box 1a)');
+    expect(amount.value).toBe('350.00');
+    fireEvent.change(amount, { target: { value: '340' } });
+    fireEvent.change(screen.getByLabelText('Which platform is it for?'), { target: { value: '' } });
+    fireEvent.submit(screen.getByRole('form', { name: 'Edit 1099-K from eBay' }));
+    await waitFor(() => expect(calls[0]).toEqual({ path: '/api/schedule-c/1099-k/f1', method: 'PUT', body: { payer_name: 'eBay', platform_id: null, gross_amount: '340', transaction_count: '3' } }));
+    await screen.findByRole('button', { name: 'Delete' });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(calls).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, delete' }));
+    await waitFor(() => expect(calls[1]).toEqual({ path: '/api/schedule-c/1099-k/f1', method: 'DELETE', body: undefined }));
   });
 });

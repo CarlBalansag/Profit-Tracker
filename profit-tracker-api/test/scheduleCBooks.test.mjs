@@ -35,7 +35,7 @@ describe('Schedule C books', () => {
     expect(line(y2026, '4')).toBe('124.50');
     expect(line(y2026, '31')).toBe('73.50'); // 205 - 124.50 - 7
     expect(y2026.checks.directCostOfUnitsSold).toBe('124.50');
-    expect(y2026.sales.byPlatform).toEqual([{ platform: 'StockX', gross: '180.00', count: 1 }, { platform: 'eBay', gross: '25.00', count: 1 }]);
+    expect(y2026.sales.byPlatform).toEqual([{ platform: 'StockX', platform_id: null, gross: '180.00', count: 1 }, { platform: 'eBay', platform_id: null, gross: '25.00', count: 1 }]);
   });
 
   it('matches app profit when nothing differs, and every difference adds up to line 31', () => {

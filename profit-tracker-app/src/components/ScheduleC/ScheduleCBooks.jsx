@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { UntrackedStock } from './UntrackedStock';
+import { Forms1099K } from './Forms1099K';
 
 const usd = (value) => {
   const n = Number(value) || 0;
@@ -67,12 +68,7 @@ export function ScheduleCBooks({ books, year, onSettingsSaved }) {
       </tbody></table>
     </details>
 
-    {books.sales.byPlatform.length > 0 && <details className={card}>
-      <summary className="cursor-pointer text-sm font-medium text-purple-300">Sales by platform (compare with your 1099-K forms)</summary>
-      <table className="mt-4 w-full text-sm"><thead><tr className="text-left text-xs text-gray-500"><th className="pb-2 font-normal">Platform</th><th className="pb-2 text-right font-normal">Sales</th><th className="pb-2 text-right font-normal">Gross</th></tr></thead>
-        <tbody>{books.sales.byPlatform.map((p) => <tr key={p.platform} className="border-t border-white/5 text-gray-300"><td className="py-2 pr-3">{p.platform}</td><td className="py-2 text-right tabular-nums">{p.count}</td><td className="py-2 text-right tabular-nums">{usd(p.gross)}</td></tr>)}</tbody></table>
-      <p className="mt-3 text-xs text-gray-500">A 1099-K shows the gross the platform processed, which can include shipping the buyer paid and sales tax, before fees and refunds. Platforms send one when you have more than $20,000 and more than 200 sales; all sales count as income either way. <a className="underline" href="https://www.irs.gov/businesses/understanding-your-form-1099-k" target="_blank" rel="noreferrer">IRS: Understanding your 1099-K</a></p>
-    </details>}
+    {books.form1099K && <Forms1099K year={Number(year)} data={books.form1099K} onSaved={onSettingsSaved || (() => {})} />}
 
     {cutoff.sales.length > 0 && <details className={card}>
       <summary className="cursor-pointer text-sm font-medium text-purple-300">{cutoff.sales.length} late-December {cutoff.sales.length === 1 ? 'sale' : 'sales'} paid after the year ended ({usd(cutoff.total)})</summary>

@@ -52,6 +52,7 @@ model User {
   cashout_write_logs     CashoutWriteLog[]
   invites                Invite[]
   tax_year_settings      TaxYearSetting[]
+  tax_forms_1099k        TaxForm1099K[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -476,6 +477,7 @@ model Platform {
   sales            Sales[]     // Platforms as marketplaces
   accounts         Account[]
   cashout_connections CashoutConnection[]
+  tax_forms_1099k  TaxForm1099K[]
 
   @@index([user_id])
 }
@@ -830,4 +832,27 @@ model TaxYearSetting {
   updated_at DateTime @updatedAt
 
   @@unique([user_id, year])
+}
+
+// A Form 1099-K the user received, entered by hand to compare with their sales
+// on the Schedule C page. Only the amounts are stored: no TIN or account number.
+model TaxForm1099K {
+  id                String    @id @default(uuid())
+  user_id           String
+  user              User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year              Int
+  // Who sent the form, as printed on it (e.g. "eBay", "PayPal").
+  payer_name        String
+  // The user's marketplace this form covers, for the comparison. Optional:
+  // a payment app may cover sales from several places.
+  platform_id       String?
+  platform          Platform? @relation(fields: [platform_id], references: [id], onDelete: SetNull)
+  // Box 1a, gross amount of payment transactions.
+  gross_amount      Decimal   @db.Decimal(19, 2)
+  // Box 3, number of payment transactions (optional).
+  transaction_count Int?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  @@index([user_id, year])
 }

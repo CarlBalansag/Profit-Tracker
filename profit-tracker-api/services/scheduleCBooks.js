@@ -61,6 +61,37 @@ function heldAtYearEnd(b, year) {
   return Math.max(0, b.kept - out);
 }
 
+// Entered 1099-K forms side by side with recorded sales on the same platform.
+// difference = form gross - recorded gross (null when the form isn't linked
+// to a platform, or the platform has no form).
+function compare1099K(byPlatform, forms = [], platforms = []) {
+  const names = new Map(platforms.map((p) => [p.id, p.name]));
+  const list = forms.map((f) => ({
+    id: f.id, payer_name: f.payer_name, platform_id: f.platform_id || null,
+    platform_name: f.platform_id ? (names.get(f.platform_id) || null) : null,
+    gross_amount: money(f.gross_amount), transaction_count: f.transaction_count ?? null,
+  }));
+  const rows = new Map();
+  for (const [platform, v] of byPlatform) {
+    rows.set(v.id || `name:${platform}`, { platform_id: v.id, platform, recordedGross: v.total, recordedCount: v.count, formGross: null, formCount: null });
+  }
+  for (const f of list.filter((x) => x.platform_id)) {
+    const row = rows.get(f.platform_id) || { platform_id: f.platform_id, platform: f.platform_name || f.payer_name, recordedGross: ZERO, recordedCount: 0, formGross: null, formCount: null };
+    row.formGross = (row.formGross || ZERO).plus(decimal(f.gross_amount));
+    if (f.transaction_count !== null) row.formCount = (row.formCount || 0) + f.transaction_count;
+    rows.set(f.platform_id, row);
+  }
+  const comparison = [...rows.values()].map((r) => ({
+    platform_id: r.platform_id, platform: r.platform,
+    recordedGross: money(r.recordedGross), recordedCount: r.recordedCount,
+    formGross: r.formGross === null ? null : money(r.formGross), formCount: r.formCount,
+    difference: r.formGross === null ? null : money(r.formGross.minus(r.recordedGross)),
+  })).sort((a, b) => Number(b.recordedGross) - Number(a.recordedGross));
+  const total = list.reduce((s, f) => s.plus(decimal(f.gross_amount)), ZERO);
+  const unlinked = list.filter((f) => !f.platform_id).reduce((s, f) => s.plus(decimal(f.gross_amount)), ZERO);
+  return { forms: list, platforms, comparison, total: money(total), unlinkedTotal: money(unlinked) };
+}
+
 // The untracked-stock amounts for `year` from TaxYearSetting rows (any years
 // up to `year`). A year with no amount carries the latest earlier one.
 function untrackedInventory(settings = [], year) {
@@ -84,8 +115,10 @@ function untrackedInventory(settings = [], year) {
  * worksheet: the Part II result from services/scheduleC.js for the same year.
  * expensesInYear: manual Expense rows dated in the year (for the reconciliation).
  * untracked: untrackedInventory() for the year (stock not entered as purchases).
+ * forms1099K: TaxForm1099K rows for the year; platforms: [{ id, name, type }]
+ * the user can link a form to.
  */
-function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = [], untracked = untrackedInventory([], year) }) {
+function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = [], untracked = untrackedInventory([], year), forms1099K = [], platforms = [] }) {
   const batches = inventories.filter((inv) => !isCancelledPurchase(inv)).map(batchFacts);
   let gross = ZERO; let purchases = ZERO; let beginning = ZERO; let ending = ZERO;
   let cashbackOnPurchases = ZERO; let salesTaxCollected = ZERO;
@@ -118,7 +151,7 @@ function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = []
       gross = gross.plus(price);
       salesTaxCollected = salesTaxCollected.plus(decimal(sale.sale_tax_collected || 0));
       const platform = sale.platform?.name || 'No platform';
-      byPlatform.set(platform, (byPlatform.get(platform) || { total: ZERO, count: 0 }));
+      byPlatform.set(platform, (byPlatform.get(platform) || { total: ZERO, count: 0, id: sale.platform?.id || sale.platform_id || null }));
       const row = byPlatform.get(platform);
       row.total = row.total.plus(price); row.count++;
       directCogs = directCogs.plus(b.unit.times(unitsOut(sale)));
@@ -186,6 +219,8 @@ function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = []
     { line: '42', label: 'Cost of goods sold', amount: money(cogs) },
   ];
 
+  const form1099K = compare1099K(byPlatform, forms1099K, platforms);
+
   const notes = [];
   if (untrackedStart.greaterThan(0)) {
     notes.push(`Beginning inventory includes $${money(untrackedStart)} of stock that isn't entered as purchases in ProfitTracker.`);
@@ -199,6 +234,10 @@ function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = []
   if (giftCards.uncostedCount > 0) notes.push(`${giftCards.uncostedCount} ${giftCards.uncostedCount === 1 ? 'purchase was' : 'purchases were'} paid partly with gift cards ($${money(giftCards.uncosted)}) with no gift card cost entered, so those gift cards count as free. If you bought them, add what they cost you on the purchase so your inventory cost is right.`);
   if (salesTaxCollected.greaterThan(0)) notes.push(`Sales tax you recorded collecting ($${money(salesTaxCollected)}) is not in gross receipts. If you collected and paid it to the state yourself, you may instead include it in gross receipts and deduct it as a tax on line 23; the result is the same.`);
   if (cashbackOnPurchases.greaterThan(0)) notes.push(`Card rewards on this year's purchases ($${money(cashbackOnPurchases)}) lower your inventory cost instead of counting as income, so they are not taxed twice.`);
+  const over = form1099K.comparison.filter((r) => r.difference !== null && Number(r.difference) > 0);
+  const under = form1099K.comparison.filter((r) => r.difference !== null && Number(r.difference) < 0);
+  if (over.length) notes.push(`Your 1099-K ${over.length === 1 ? 'form shows' : 'forms show'} more than the sales you recorded on ${over.map((r) => r.platform).join(', ')}. That is common: a 1099-K counts shipping and sales tax the buyer paid and is before fees and refunds. Your gross receipts come from your sales records; keep a note of why they differ in case you're asked.`);
+  if (under.length) notes.push(`You recorded more sales on ${under.map((r) => r.platform).join(', ')} than ${under.length === 1 ? 'its 1099-K shows' : 'their 1099-K forms show'}. All sales are income either way, but check those sales are on the right platform and year.`);
   const pending = (worksheet?.rows || []).filter((r) => r.status === 'pending');
   if (pending.length) notes.push(`${pending.length} ${pending.length === 1 ? 'expense is' : 'expenses are'} waiting for review and not included in Part II yet.`);
 
@@ -208,7 +247,8 @@ function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = []
     lines,
     partIII,
     netProfit: money(netProfit),
-    sales: { count: saleCount, byPlatform: [...byPlatform].map(([platform, v]) => ({ platform, gross: money(v.total), count: v.count })).sort((a, b) => Number(b.gross) - Number(a.gross)) },
+    sales: { count: saleCount, byPlatform: [...byPlatform].map(([platform, v]) => ({ platform, platform_id: v.id, gross: money(v.total), count: v.count })).sort((a, b) => Number(b.gross) - Number(a.gross)) },
+    form1099K,
     reconciliation: {
       appProfitOnSales: money(appSalesProfit),
       appExpenses: money(appExpenses),

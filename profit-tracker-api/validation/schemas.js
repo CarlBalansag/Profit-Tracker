@@ -539,7 +539,24 @@ const taxYearSettingBody = z.object({
   message: 'Enter an amount, or leave it blank to clear it.', path: ['untracked_inventory_end'],
 });
 
+// A Form 1099-K entered by hand. Only amounts: never a TIN or account number.
+const form1099KFields = {
+  payer_name: z.string().trim().min(1, 'Enter who sent the form.').max(100, 'Keep the name under 100 characters.'),
+  platform_id: z.preprocess((v) => (v === '' ? null : v), z.string().uuid().nullable().optional()),
+  gross_amount: decimalAmount(),
+  transaction_count: z.preprocess((v) => (v === '' ? null : v), z.coerce.number().int().min(0).max(100000000).nullable().optional()),
+};
+const createForm1099K = z.object(form1099KFields).strict();
+const updateForm1099K = z.object({
+  payer_name: form1099KFields.payer_name.optional(),
+  platform_id: form1099KFields.platform_id,
+  gross_amount: decimalAmount({ optional: true }),
+  transaction_count: form1099KFields.transaction_count,
+}).strict();
+
 module.exports = {
+  createForm1099K,
+  updateForm1099K,
   taxYearSettingBody,
   dataReset,
   createCashoutConnection,
