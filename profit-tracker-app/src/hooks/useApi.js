@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { QueryClient, useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { EXPENSES_PAGE_KEY, RECEIPTS_PAGE_KEY, useOptionalQueryClient } from './usePageCache';
 import { toast } from 'sonner';
@@ -416,7 +417,13 @@ export function useTodoCount() {
   const client = useOptionalQueryClient();
   inertClient ??= client ? null : new QueryClient();
   const { data } = useQuery({ ...todosQuery(), enabled: Boolean(client) }, client || inertClient);
-  return data?.counts?.total || 0;
+  const count = data?.counts?.total || 0;
+  // The number on the installed app's icon (phones and desktops that support it).
+  useEffect(() => {
+    if (!data || typeof navigator === 'undefined' || !('setAppBadge' in navigator)) return;
+    (count > 0 ? navigator.setAppBadge(count) : navigator.clearAppBadge()).catch(() => {});
+  }, [data, count]);
+  return count;
 }
 
 // Snooze / dismiss / mark done one item, or (action 'restore') undo that.
@@ -470,7 +477,7 @@ export const remindersQuery = (status = 'open') => ({
 });
 export const useReminders = (status = 'open') => useQuery(remindersQuery(status));
 
-async function reminderRequest(path, method, body) {
+async function jsonRequest(path, method, body) {
   const response = await apiFetch(path, {
     method,
     headers: { 'Content-Type': 'application/json' },
@@ -494,11 +501,27 @@ export const useReminderMutations = () => {
   };
   const options = (mutationFn) => ({ mutationFn, onSettled: settle });
   return {
-    create: useMutation(options((data) => reminderRequest('/api/reminders', 'POST', data))),
-    update: useMutation(options(({ id, ...data }) => reminderRequest(`/api/reminders/${id}`, 'PATCH', data))),
-    remove: useMutation(options((id) => reminderRequest(`/api/reminders/${id}`, 'DELETE'))),
-    complete: useMutation(options(({ id, due_date }) => reminderRequest(`/api/reminders/${id}/complete`, 'POST', { due_date, today: localToday() }))),
-    undoComplete: useMutation(options(({ id, due_date }) => reminderRequest(`/api/reminders/${id}/undo-complete`, 'POST', { due_date }))),
+    create: useMutation(options((data) => jsonRequest('/api/reminders', 'POST', data))),
+    update: useMutation(options(({ id, ...data }) => jsonRequest(`/api/reminders/${id}`, 'PATCH', data))),
+    remove: useMutation(options((id) => jsonRequest(`/api/reminders/${id}`, 'DELETE'))),
+    complete: useMutation(options(({ id, due_date }) => jsonRequest(`/api/reminders/${id}/complete`, 'POST', { due_date, today: localToday() }))),
+    undoComplete: useMutation(options(({ id, due_date }) => jsonRequest(`/api/reminders/${id}/undo-complete`, 'POST', { due_date }))),
+  };
+};
+
+// ─── Push notifications ───────────────────────────────────────────────────────
+export const usePushConfig = () => useQuery({ queryKey: ['push', 'config'], queryFn: () => fetcher('/api/push/config'), staleTime: 1000 * 60 * 30 });
+export const usePushSettings = () => useQuery({ queryKey: ['push', 'settings'], queryFn: () => fetcher('/api/push/settings') });
+
+export const usePushMutations = () => {
+  const qc = useQueryClient();
+  const onSuccess = (data) => { if (data && 'devices' in data) qc.setQueryData(['push', 'settings'], data); };
+  return {
+    save: useMutation({ mutationFn: (changes) => jsonRequest('/api/push/settings', 'PUT', changes), onSuccess }),
+    subscribe: useMutation({ mutationFn: (body) => jsonRequest('/api/push/subscriptions', 'POST', body), onSuccess }),
+    unsubscribe: useMutation({ mutationFn: (endpoint) => jsonRequest('/api/push/subscriptions', 'DELETE', { endpoint }), onSuccess }),
+    removeDevice: useMutation({ mutationFn: (id) => jsonRequest(`/api/push/subscriptions/${id}`, 'DELETE'), onSuccess }),
+    test: useMutation({ mutationFn: () => jsonRequest('/api/push/test', 'POST') }),
   };
 };
 

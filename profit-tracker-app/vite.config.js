@@ -9,6 +9,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
+      // Push notification handlers (public/push-sw.js) run inside the
+      // generated service worker.
+      workbox: { importScripts: ['push-sw.js'] },
       manifest: {
         name: 'Profit Tracker',
         short_name: 'Profit Tracker',

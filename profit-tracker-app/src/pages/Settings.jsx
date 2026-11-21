@@ -12,6 +12,7 @@ import { Cashouts } from '../components/Settings/Cashouts';
 import { Marketplaces } from '../components/Settings/Marketplaces';
 import { Accounts } from '../components/Settings/Accounts';
 import { UiPreferences } from '../components/Settings/UiPreferences';
+import { Notifications } from '../components/Settings/Notifications';
 import { ScheduleCSettings } from '../components/Settings/ScheduleCSettings';
 import { useAuth } from '../context/AuthContext';
 import FirebaseAccount from '../components/Auth/FirebaseAccount';
@@ -35,7 +36,7 @@ function Settings() {
     { id: 'data', label: 'Data', icon: FileJson },
     { id: 'ai-assistant', label: 'AI Assistant', icon: Bot },
     ...(SCHEDULE_C_ENABLED ? [{ id: 'tax', label: 'Schedule C', icon: FileJson }] : []),
-    { id: 'notifications', label: 'Notifications', icon: Bell, disabled: true, tag: 'Soon' },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'appearance', label: 'Appearance', icon: Palette },
   ];
 
@@ -178,6 +179,8 @@ function Settings() {
           {SCHEDULE_C_ENABLED && activeTab === 'tax' && <ScheduleCSettings />}
 
           {/* APPEARANCE TAB */}
+          {activeTab === 'notifications' && <Notifications />}
+
           {activeTab === 'appearance' && (
             <div className="rounded-xl border border-gray-800 bg-[#12121A] p-6">
               <UiPreferences />
