@@ -5,12 +5,25 @@ import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { ExpenseTaxFields } from '../components/ScheduleC/ExpenseTaxFields';
 import { ScheduleCBooks } from '../components/ScheduleC/ScheduleCBooks';
 import { TaxOverview } from '../components/ScheduleC/TaxOverview';
-import { emptyTaxDetails, taxReviewIssues } from '../../../shared/scheduleC.mjs';
+import { emptyTaxDetails, taxReviewIssues, taxCategories } from '../../../shared/scheduleC.mjs';
 import { csvText, downloadFile, downloadJSON } from '../utils/downloads';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 
-function TaxEditor({ expense, onClose, onSaved }) {
+const categoryLabel = (id) => taxCategories.find((c) => c.id === id)?.label || id;
+
+function TaxEditor({ expense, onClose, onSaved, hasNext = false }) {
   const [tax, setTax] = useState(() => ({ ...emptyTaxDetails(), ...expense.tax_details }));
+  const nextAfterSave = useRef(false);
+  const suggestion = expense.suggestion;
+  // Only fields still blank in the form; nothing is saved until the user does.
+  const applySuggestion = () => setTax((current) => {
+    const out = { ...current };
+    for (const [key, value] of Object.entries(suggestion.fields)) {
+      const blank = key === 'business_use' ? current.business_use === 'unreviewed' : key === 'payment_status' ? current.payment_status === 'unknown' : !String(current[key] ?? '').trim();
+      if (blank) out[key] = value;
+    }
+    return out;
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const busy = useRef(false);
@@ -22,7 +35,7 @@ function TaxEditor({ expense, onClose, onSaved }) {
     busy.current = true; setSaving(true); setError('');
     try {
       await requireSuccessfulResponse(await apiFetch(`/api/expenses/${expense.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tax_details: tax, expected_tax_version: expense.tax_version ?? 0 }) }));
-      onSaved();
+      onSaved({ next: nextAfterSave.current });
     } catch (error) { setError(error.message); }
     finally { busy.current = false; setSaving(false); }
   };
@@ -30,10 +43,16 @@ function TaxEditor({ expense, onClose, onSaved }) {
     <div className="absolute inset-0 bg-black/70" onClick={close} />
     <form ref={modalRef} role="dialog" aria-modal="true" aria-label="Review expense tax details" onSubmit={save} className="relative max-h-[90vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-xl border border-white/10 bg-[#16181d] p-5">
       <h2 className="text-lg font-semibold text-white">{expense.name} · ${expense.amount}</h2>
+      {suggestion && <div className="rounded-lg border border-purple-500/30 p-3 text-sm">
+        <p className="text-gray-200">Suggested from this expense{suggestion.fields.tax_category ? <>: <strong className="text-white">{categoryLabel(suggestion.fields.tax_category)}</strong></> : ''}.</p>
+        {suggestion.reason && <p className="mt-1 text-xs text-gray-400">{suggestion.reason}</p>}
+        <p className="mt-1 text-xs text-gray-400">Fills only blank fields. Check each one; nothing is saved until you save.</p>
+        <button type="button" disabled={saving} onClick={applySuggestion} className="mt-2 rounded-lg border border-white/10 px-3 py-1.5 text-purple-300">Use suggestions</button>
+      </div>}
       <ExpenseTaxFields value={tax} onChange={setTax} disabled={saving} />
       <p className="text-xs text-gray-400">Attach supporting receipts through <Link to="/receipts" className="underline">Receipts</Link>. Keep the payment evidence referenced here.</p>
       {error && <div><p role="alert" className="text-sm text-red-400">{error}</p><button type="button" disabled={saving} onClick={onSaved} className="mt-2 text-sm underline">Discard draft and reload worksheet</button></div>}
-      <div className="flex justify-end gap-3"><button type="button" disabled={saving} onClick={close} className="rounded-lg border border-white/10 px-4 py-2 text-gray-300">Cancel</button><button disabled={saving} className="rounded-lg bg-purple-600 px-4 py-2 text-white">{saving ? 'Saving…' : 'Save tax details'}</button></div>
+      <div className="flex justify-end gap-3"><button type="button" disabled={saving} onClick={close} className="rounded-lg border border-white/10 px-4 py-2 text-gray-300">Cancel</button>{hasNext && <button disabled={saving} onClick={() => { nextAfterSave.current = true; }} className="rounded-lg border border-purple-500/40 px-4 py-2 text-purple-200">Save and review next</button>}<button disabled={saving} onClick={() => { nextAfterSave.current = false; }} className="rounded-lg bg-purple-600 px-4 py-2 text-white">{saving ? 'Saving…' : 'Save tax details'}</button></div>
     </form>
   </div>;
 }
@@ -45,6 +64,8 @@ export default function ScheduleC() {
   const [editing, setEditing] = useState(null);
   const [filter, setFilter] = useState('all');
   const [view, setView] = useState('overview');
+  // "Save and review next": open the next one when the worksheet reloads.
+  const reviewNext = useRef(false);
   const validYear = /^\d{4}$/.test(year) && Number(year) >= 1900;
   useEffect(() => {
     if (!/^\d{4}$/.test(year) || Number(year) < 1900) return;
@@ -54,14 +75,22 @@ export default function ScheduleC() {
         const preference = await requireSuccessfulResponse(await apiFetch('/api/preferences/schedule-c'));
         const { enabled } = await preference.json();
         const data = enabled ? await (await requireSuccessfulResponse(await apiFetch(`/api/schedule-c?year=${year}`))).json() : null;
-        if (active) setResult({ year, revision, enabled, data });
+        if (active) {
+          setResult({ year, revision, enabled, data });
+          if (reviewNext.current) {
+            reviewNext.current = false;
+            const next = data?.rows.find(row => row.status === 'pending');
+            if (next) setEditing(next);
+          }
+        }
       } catch (error) { if (active) setResult({ year, revision, error: error.message }); }
     })();
     return () => { active = false; };
   }, [year, revision]);
   const current = result?.year === year && result?.revision === revision ? result : null;
   const report = current?.data;
-  const rows = report?.rows.filter(row => filter === 'all' || row.status === filter || row.tax_details.tax_category === filter || (filter === 'duplicates' && row.possible_duplicate_of)) || [];
+  const rows = report?.rows.filter(row => filter === 'all' || row.status === filter || row.tax_details.tax_category === filter || (filter === 'duplicates' && row.possible_duplicate_of) || (filter === 'receipts' && row.documentation_missing && row.status !== 'excluded')) || [];
+  const pendingRows = report?.rows.filter(row => row.status === 'pending') || [];
   const exportCSV = () => downloadFile(`schedule-c-${year}-expenses.csv`, csvText(report.rows.map(row => ({ tax_year: year, reference_mapping_year: report.mapping_year, planning: report.planning, expense_id: row.id, source: row.source || 'manual', name: row.name, status: row.status, amount: row.amount, worksheet_amount: row.eligible, business_percent: row.tax_details.business_use === 'business' ? '100' : row.tax_details.business_percent, tax_category: row.tax_details.tax_category, reference_line: report.groups.find(group => group.id === row.tax_details.tax_category)?.line2025 || '', payee: row.tax_details.payee, purpose: row.tax_details.purpose, paid_date: row.tax_details.paid_date, payment_reference: row.tax_details.payment_reference, receipt_url: row.receipt_url, review_issues: row.issues.join('; '), possible_duplicate_of: row.possible_duplicate_of || '', receipt_missing: row.documentation_missing }))), 'text/csv;charset=utf-8');
   return <div className="schedule-c-page h-full overflow-auto space-y-6 px-4 py-6 text-white sm:px-6">
     <style>{`@media print { aside, header, .schedule-c-actions, .schedule-c-page button { display:none!important; } .schedule-c-page section[aria-label="Schedule C categories"] button { display:block!important; } .schedule-c-page, .schedule-c-page * { color:#000!important; background:#fff!important; } main, main > div, .schedule-c-page { overflow:visible!important; height:auto!important; } body,#root {height:auto!important;} }`}</style>
@@ -78,21 +107,28 @@ export default function ScheduleC() {
       <ScheduleCBooks books={report.books} year={report.year} onSettingsSaved={() => setRevision(value => value + 1)} />
       <h2 className="pt-2 text-lg font-semibold">Expenses (Part II)</h2>
       <div className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl border border-white/10 p-4"><p className="text-sm text-gray-400">Worksheet total</p><p className="mt-2 text-2xl">${report.total}</p>{report.automatic && <p className="mt-1 text-xs text-gray-500">Includes ${report.automatic.total} from {report.automatic.count} sale {report.automatic.count === 1 ? 'cost' : 'costs'} (labels and platform fees)</p>}</div><button onClick={() => setFilter('pending')} className="rounded-xl border border-white/10 p-4 text-left"><p className="text-sm text-gray-400">Needs review</p><p className="mt-2 text-2xl">{report.pending}</p></button><div className="rounded-xl border border-white/10 p-4"><p className="text-sm text-gray-400">Missing receipt attachments</p><p className="mt-2 text-2xl">{report.documentation_gaps}</p></div></div>
-      {report.possible_duplicates > 0 && <button onClick={() => setFilter('duplicates')} className="w-full rounded-xl border border-amber-500/40 p-4 text-left text-sm text-amber-300">{report.possible_duplicates} manual {report.possible_duplicates === 1 ? 'expense looks' : 'expenses look'} like a shipping label or platform fee already included from a sale. Review and delete duplicates so they aren&apos;t deducted twice.</button>}
+      {report.possible_duplicates > 0 && <button onClick={() => setFilter('duplicates')} className="w-full rounded-xl border border-amber-500/40 p-4 text-left text-sm text-amber-300">{(() => {
+        const ofExpenses = report.possible_duplicates_of_expenses ?? 0;
+        const ofSales = report.possible_duplicates_of_sales ?? report.possible_duplicates - ofExpenses;
+        return [ofSales > 0 && `${ofSales} manual ${ofSales === 1 ? 'expense looks' : 'expenses look'} like a shipping label or platform fee already included from a sale`,
+          ofExpenses > 0 && `${ofExpenses} ${ofExpenses === 1 ? 'expense looks' : 'expenses look'} like another expense entered twice`].filter(Boolean).join('; ');
+      })()}. Review and delete duplicates so they aren&apos;t deducted twice.</button>}
       {report.inventory_costs_excluded && Number(report.inventory_costs_excluded.total) !== 0 && <p className="rounded-xl border border-white/10 p-4 text-sm text-gray-400">Purchase tax, inbound shipping and purchase fees (${report.inventory_costs_excluded.total} this year, net of gift cards) are part of what your inventory cost, so they belong in cost of goods sold (Part III), not here. They are left out on purpose so nothing is deducted twice.</p>}
       {report.returns_and_allowances?.count > 0 && <p className="rounded-xl border border-white/10 p-4 text-sm text-gray-400">Refunds to buyers (${report.returns_and_allowances.total} this year, {report.returns_and_allowances.count} {report.returns_and_allowances.count === 1 ? 'refund' : 'refunds'}) are returns and allowances ({report.planning ? '2025 reference line' : 'line'} {report.returns_and_allowances.line}). They lower your gross receipts, so they are not expenses and are not in the worksheet total.</p>}
       <p className="text-sm text-gray-400">Unknown payment dates remain in the review queue across all years until assigned. Personal and unpaid entries are excluded. Missing receipts remain flagged even when other details are reviewed.</p>
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Schedule C categories">{report.groups.map(group => <button key={group.id} onClick={() => setFilter(group.id)} className="rounded-xl border border-white/10 p-4 text-left"><p className="text-sm text-gray-400">{report.planning ? '2025 reference line' : 'Line'} {group.line2025}{group.detail ? ` — ${group.detail}` : ''}</p><h2 className="mt-1 font-medium">{group.label}</h2><p className="mt-2 text-xl">${group.total}</p><p className="text-xs text-gray-500">{group.count} {group.count === 1 ? 'record' : 'records'} · view records</p></button>)}</section>
       <p className="rounded-xl border border-white/10 p-4">Other expenses combined ({report.planning ? '2025 reference line' : 'line'} 27b): <strong>${report.lines?.find(line => line.line === '27b')?.total || '0.00'}</strong>. This combines the itemized postage, software and other expense categories above.</p>
       <div className="schedule-c-actions flex flex-wrap gap-3"><button className="rounded-lg border border-white/10 px-3 py-2" onClick={exportCSV} disabled={!report.rows.length}>Export supporting CSV</button><button className="rounded-lg border border-white/10 px-3 py-2" onClick={() => downloadJSON(`schedule-c-${year}-expenses.json`, report)}>Export worksheet JSON</button><button className="rounded-lg border border-white/10 px-3 py-2" onClick={() => window.print()}>Print / save PDF</button><Link className="rounded-lg border border-white/10 px-3 py-2" to="/expenses">Manage expenses</Link></div>
-      <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Supporting records and review queue</h2><label className="schedule-c-actions text-sm">Show<select aria-label="Show records" value={filter} onChange={e => setFilter(e.target.value)} className="ml-2 rounded-lg border border-white/10 bg-[#16181d] p-2"><option value="all">All records</option><option value="pending">Needs review</option><option value="reviewed">Reviewed</option><option value="excluded">Excluded</option><option value="automatic">From sales (automatic)</option><option value="duplicates">Possible duplicates</option>{report.groups.map(group => <option key={group.id} value={group.id}>{group.label}</option>)}</select></label></div>
+      <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Supporting records and review queue</h2><label className="schedule-c-actions text-sm">Show<select aria-label="Show records" value={filter} onChange={e => setFilter(e.target.value)} className="ml-2 rounded-lg border border-white/10 bg-[#16181d] p-2"><option value="all">All records</option><option value="pending">Needs review</option><option value="reviewed">Reviewed</option><option value="excluded">Excluded</option><option value="automatic">From sales (automatic)</option><option value="duplicates">Possible duplicates</option><option value="receipts">Missing receipts</option>{report.groups.map(group => <option key={group.id} value={group.id}>{group.label}</option>)}</select></label></div>
         {!rows.length && <p className="rounded-xl border border-white/10 p-5 text-gray-400">No expenses match this view.</p>}
         {rows.map(row => row.source === 'sale'
           ? <article key={row.id} className="space-y-2 rounded-xl border border-white/10 p-4"><div className="flex flex-wrap justify-between gap-3"><h3 className="font-medium">{row.name}</h3><span>${row.amount} · worksheet ${row.eligible}</span></div><p className="text-sm text-gray-400">Automatic · from your sale · {row.tax_details.payee} · {row.tax_details.paid_date}</p><p className="break-words text-sm text-gray-400">{row.tax_details.purpose}</p><Link to="/transactions" state={{ openTransaction: { inventoryId: row.inventory_id, saleId: row.sale_id } }} className="text-sm text-purple-300 underline">Open sale</Link></article>
-          : <article key={row.id} className="space-y-2 rounded-xl border border-white/10 p-4"><div className="flex flex-wrap justify-between gap-3"><h3 className="font-medium">{row.name}</h3><span>${row.amount} · worksheet ${row.eligible}</span></div><p className="text-sm text-gray-400">{row.status} · {row.tax_details.payee || 'Payee missing'} · {row.tax_details.paid_date || 'Payment date unknown'}{row.tax_details.business_use === 'mixed' ? ` · ${row.tax_details.business_percent}% business` : ''}</p><p className="break-words text-sm text-gray-400">{row.tax_details.purpose || 'Business purpose missing'}</p>{row.tax_details.payment_reference && <p className="break-words text-xs text-gray-400">Payment evidence: {row.tax_details.payment_reference}</p>}{row.possible_duplicate_of && <p className="text-sm text-amber-300">Possible duplicate of “{row.possible_duplicate_of}”, which is already included from the sale. If it&apos;s the same cost, delete this expense on the <Link to="/expenses" className="underline">Expenses</Link> tab.</p>}{row.issues.length > 0 && <p className="text-sm text-amber-300">{row.issues.join(' · ')}</p>}{row.documentation_missing ? <p className="text-xs text-amber-300">Receipt attachment missing — review supporting documentation.</p> : /^https:\/\//i.test(row.receipt_url) && <a href={row.receipt_url} target="_blank" rel="noreferrer" className="text-sm text-purple-300 underline">View receipt</a>}<button onClick={() => setEditing(row)} className="text-sm text-purple-300 underline">Review {row.name}</button></article>)}
+          : <article key={row.id} className="space-y-2 rounded-xl border border-white/10 p-4"><div className="flex flex-wrap justify-between gap-3"><h3 className="font-medium">{row.name}</h3><span>${row.amount} · worksheet ${row.eligible}</span></div><p className="text-sm text-gray-400">{row.status} · {row.tax_details.payee || 'Payee missing'} · {row.tax_details.paid_date || 'Payment date unknown'}{row.tax_details.business_use === 'mixed' ? ` · ${row.tax_details.business_percent}% business` : ''}</p><p className="break-words text-sm text-gray-400">{row.tax_details.purpose || 'Business purpose missing'}</p>{row.tax_details.payment_reference && <p className="break-words text-xs text-gray-400">Payment evidence: {row.tax_details.payment_reference}</p>}{row.possible_duplicate_of && (row.possible_duplicate_source === 'expense'
+            ? <p className="text-sm text-amber-300">Possible duplicate of the expense “{row.possible_duplicate_of}”: same amount within a day. If it&apos;s the same charge entered twice, delete one on the <Link to="/expenses" className="underline">Expenses</Link> tab.</p>
+            : <p className="text-sm text-amber-300">Possible duplicate of “{row.possible_duplicate_of}”, which is already included from the sale. If it&apos;s the same cost, delete this expense on the <Link to="/expenses" className="underline">Expenses</Link> tab.</p>)}{row.status === 'pending' && row.suggestion?.fields.tax_category && <p className="text-xs text-purple-300">Suggested: {categoryLabel(row.suggestion.fields.tax_category)}</p>}{row.issues.length > 0 && <p className="text-sm text-amber-300">{row.issues.join(' · ')}</p>}{row.documentation_missing ? <p className="text-xs text-amber-300">Receipt attachment missing — review supporting documentation.</p> : /^https:\/\//i.test(row.receipt_url) && <a href={row.receipt_url} target="_blank" rel="noreferrer" className="text-sm text-purple-300 underline">View receipt</a>}<button onClick={() => setEditing(row)} className="text-sm text-purple-300 underline">Review {row.name}</button></article>)}
       </section>
       </>}
     </>}
-    {editing && <TaxEditor key={editing.id} expense={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setRevision(value => value + 1); }} />}
+    {editing && <TaxEditor key={editing.id} expense={editing} hasNext={pendingRows.some(row => row.id !== editing.id)} onClose={() => setEditing(null)} onSaved={({ next } = {}) => { setEditing(null); reviewNext.current = Boolean(next); setRevision(value => value + 1); }} />}
   </div>;
 }

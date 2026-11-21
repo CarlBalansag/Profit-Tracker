@@ -27,7 +27,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
     if (!await scheduleCEnabled(req.user.id)) return res.status(403).json({ error: 'Enable Schedule C in Settings first' });
     const year = Number(req.query.year);
     const [expenses, inventories, saleRefunds, settings, forms1099K, platforms] = await Promise.all([
-      prisma.expense.findMany({ where: { user_id: req.user.id } }),
+      prisma.expense.findMany({ where: { user_id: req.user.id }, include: { payment_method: { select: { name: true } } } }),
       // Same source the Expenses tab's computed lines use, so the two never disagree.
       prisma.inventory.findMany({
         where: { user_id: req.user.id },

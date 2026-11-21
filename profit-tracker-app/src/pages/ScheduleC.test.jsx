@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import ScheduleC from './ScheduleC';
 import { ScheduleCSettings } from '../components/Settings/ScheduleCSettings';
@@ -336,5 +336,60 @@ describe('Schedule C: 1099-K forms', () => {
     expect(calls).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Yes, delete' }));
     await waitFor(() => expect(calls[1]).toEqual({ path: '/api/schedule-c/1099-k/f1', method: 'DELETE', body: undefined }));
+  });
+});
+
+describe('Schedule C: reviewing expenses faster', () => {
+  const pending = (id, name, suggestion, extra = {}) => ({ id, name, amount: '20.00', date: '2026-03-01', tax_details: emptyTaxDetails(), status: 'pending', eligible: '0.00', issues: ['Choose tax category'], documentation_missing: true, suggestion, possible_duplicate_of: null, ...extra });
+  const labels = { fields: { tax_category: 'POSTAGE', business_use: 'business', payee: 'Pirate Ship labels', purpose: 'Postage to ship orders to buyers', payment_status: 'paid', paid_date: '2026-03-01', payment_reference: 'Paid with QA Card on 2026-03-01' }, reason: 'Suggested because the name mentions "labels".' };
+  let rows; let puts;
+  beforeEach(() => {
+    rows = [pending('e1', 'Pirate Ship labels', labels), pending('e2', 'Uline boxes', { fields: { tax_category: 'SUPPLIES' }, reason: null }),
+      { ...row, id: 'e3', name: 'Canva', possible_duplicate_of: 'Canva Pro', possible_duplicate_source: 'expense', documentation_missing: false }];
+    puts = [];
+    apiFetch.mockImplementation(async (path, options) => {
+      if (options?.method === 'PUT') {
+        const body = JSON.parse(options.body); puts.push({ path, body });
+        const id = path.split('/').pop();
+        rows = rows.map((r) => (r.id === id ? { ...r, tax_details: body.tax_details, status: 'reviewed', suggestion: null } : r));
+        return response({});
+      }
+      return response(path.includes('/preferences/') ? { enabled: true } : { ...report(2026), rows, possible_duplicates: 1, possible_duplicates_of_sales: 0, possible_duplicates_of_expenses: 1 });
+    });
+  });
+
+  it('shows suggestions on rows and fills only blank fields when asked', async () => {
+    mountWorksheet();
+    expect(await screen.findByText('Suggested: Postage / shipping labels')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Review Pirate Ship labels' }));
+    expect(screen.getByText(/name mentions "labels"/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Payee/i), { target: { value: 'Pirate Ship LLC' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Use suggestions' }));
+    expect(screen.getByLabelText(/Payee/i).value).toBe('Pirate Ship LLC'); // kept
+    expect(screen.getByLabelText(/Purpose/i).value).toBe('Postage to ship orders to buyers');
+    expect(puts).toEqual([]); // nothing saved yet
+  });
+
+  it('saves and opens the next expense waiting for review', async () => {
+    mountWorksheet();
+    fireEvent.click(await screen.findByRole('button', { name: 'Review Pirate Ship labels' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use suggestions' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /reviewed/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save and review next' }));
+    await waitFor(() => expect(puts).toHaveLength(1));
+    expect(puts[0].body.tax_details).toMatchObject({ tax_category: 'POSTAGE', payee: 'Pirate Ship labels', payment_reference: 'Paid with QA Card on 2026-03-01', reviewed: true });
+    const dialog = await screen.findByRole('dialog', { name: 'Review expense tax details' });
+    expect(within(dialog).getByRole('heading', { name: /Uline boxes/ })).toBeTruthy();
+    // The last one waiting has no "next".
+    expect(screen.queryByRole('button', { name: 'Save and review next' })).toBeNull();
+  });
+
+  it('filters to missing receipts and explains an expense entered twice', async () => {
+    mountWorksheet();
+    await screen.findByText(/1 expense looks like another expense entered twice/);
+    expect(screen.getByText(/Possible duplicate of the expense “Canva Pro”/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Show records'), { target: { value: 'receipts' } });
+    expect(screen.getByRole('button', { name: 'Review Pirate Ship labels' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Review Canva' })).toBeNull();
   });
 });
