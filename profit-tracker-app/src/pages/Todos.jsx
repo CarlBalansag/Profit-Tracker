@@ -23,11 +23,19 @@ const GROUPS = [
 ];
 const GROUP_BY_ID = Object.fromEntries(GROUPS.map((group) => [group.id, group]));
 
+// Theme status colors (inline, so the light theme's soft remap of bg-* tints
+// doesn't wash the dots out).
+const URGENCY_COLOR = {
+  overdue: 'var(--dp-red-text)',
+  today: 'var(--dp-warning-text)',
+  soon: 'var(--dp-info-text)',
+  info: 'var(--dp-text-label)',
+};
 const URGENCIES = [
-  { id: 'overdue', label: 'Overdue', dot: 'bg-red-500' },
-  { id: 'today', label: 'Today', dot: 'bg-amber-400' },
-  { id: 'soon', label: 'This week', dot: 'bg-sky-400' },
-  { id: 'info', label: 'For your info', dot: 'bg-gray-500' },
+  { id: 'overdue', label: 'Overdue' },
+  { id: 'today', label: 'Today' },
+  { id: 'soon', label: 'This week' },
+  { id: 'info', label: 'For your info' },
 ];
 
 // Three or more of one kind in one section fold into a single expandable row.
@@ -82,9 +90,17 @@ function TodoRow({ entry, onAct, busy, nested = false }) {
     <li data-todo={entry.key} className={nested ? 'py-3' : 'px-4 py-3'}>
       <div className="flex items-start gap-3">
         {!nested && <GroupIcon group={entry.group} />}
+        {/* Inside a folded group the shared title is the group's; each row
+            leads with its own detail instead. */}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-100">{entry.title}</p>
-          <p className="text-xs text-gray-400 break-words">{entry.detail}</p>
+          {nested
+            ? <p className="text-sm text-gray-100 break-words">{entry.detail}</p>
+            : (
+              <>
+                <p className="text-sm font-medium text-gray-100">{entry.title}</p>
+                <p className="text-xs text-gray-400 break-words">{entry.detail}</p>
+              </>
+            )}
         </div>
       </div>
       <div className={`mt-2 flex flex-wrap items-center gap-2 ${nested ? '' : 'pl-12'}`}>
@@ -93,9 +109,11 @@ function TodoRow({ entry, onAct, busy, nested = false }) {
             <CircleCheck className="w-3.5 h-3.5" aria-hidden="true" /> Mark paid
           </button>
         )}
+        {/* Named by hidden text, not aria-label: touch screens give text
+            buttons the full 44px height (index.css, pointer: coarse). */}
         {entry.link && (
-          <button type="button" onClick={() => openTodoLink(navigate, entry.link)} className="page-btn page-btn-secondary !h-9 !px-3 !text-xs" aria-label={`Open: ${entry.title}, ${entry.detail}`}>
-            Open
+          <button type="button" onClick={() => openTodoLink(navigate, entry.link)} className="page-btn page-btn-secondary !h-9 !px-3 !text-xs">
+            <span aria-hidden="true">Open</span><span className="sr-only">Open {entry.title}, {entry.detail}</span>
           </button>
         )}
         {(canSnooze || canDismiss) && (
@@ -225,7 +243,7 @@ export default function Todos() {
                 type="button"
                 aria-pressed={active}
                 onClick={() => setFilter(group.id)}
-                className={`px-3 h-9 rounded-full text-xs font-medium border transition-colors ${active ? 'border-[var(--dp-accent)] bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]' : 'border-white/10 text-gray-300 hover:bg-white/5'}`}
+                className={`px-3 h-9 rounded-full text-xs font-medium border transition-colors ${active ? 'border-[var(--accent)] bg-[var(--accent-bg)] text-[var(--accent)]' : 'border-white/10 text-gray-300 hover:bg-white/5'}`}
               >
                 {group.label} <span className="tabular-nums opacity-70">{count}</span>
               </button>
@@ -250,7 +268,7 @@ export default function Todos() {
             return (
               <section key={urgency.id} aria-label={urgency.label}>
                 <h2 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-2">
-                  <span className={`h-1.5 w-1.5 rounded-full ${urgency.dot}`} aria-hidden="true" />
+                  <span className="h-2 w-2 rounded-full" style={{ background: URGENCY_COLOR[urgency.id] }} aria-hidden="true" />
                   {urgency.label} <span className="tabular-nums">{inSection.length}</span>
                 </h2>
                 <ul className="rounded-xl border border-white/[0.08] bg-white/[0.02] divide-y divide-white/[0.06]">

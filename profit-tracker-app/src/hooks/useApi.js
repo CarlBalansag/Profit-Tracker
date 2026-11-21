@@ -402,7 +402,9 @@ export const useActivity = () =>
 export const todosQuery = () => ({
   queryKey: ['todos'],
   queryFn: () => fetcher(`/api/todos?today=${localToday()}`),
-  staleTime: 1000 * 30,
+  // Always refetched when the page (or the Dashboard card) opens, so a record
+  // fixed on another page has already dropped off the list.
+  staleTime: 0,
   refetchInterval: 1000 * 60 * 5,
 });
 export const useTodos = () => useQuery(todosQuery());

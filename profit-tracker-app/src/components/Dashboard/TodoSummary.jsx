@@ -5,7 +5,7 @@ import { useTodos } from '../../hooks/useApi';
 import { openTodoLink } from '../../utils/todoLink';
 
 const SHOWN = 3;
-const DOT = { overdue: 'bg-red-500', today: 'bg-amber-400', soon: 'bg-sky-400', info: 'bg-gray-500' };
+const DOT = { overdue: 'var(--dp-red-text)', today: 'var(--dp-warning-text)', soon: 'var(--dp-info-text)', info: 'var(--dp-text-label)' };
 
 // The Dashboard's "Needs attention" card: the most urgent few to-dos and a way
 // to the full list. Renders nothing when the list is empty or still loading.
@@ -40,13 +40,13 @@ export default function TodoSummary({ isGlass = false }) {
       </div>
       <ul className="mt-2 grid gap-1 md:grid-cols-3">
         {items.slice(0, SHOWN).map((entry) => (
-          <li key={entry.key}>
+          <li key={entry.key} className="min-w-0">
             <button
               type="button"
               onClick={() => (entry.link ? openTodoLink(navigate, entry.link) : navigate('/todos'))}
               className={`flex w-full items-start gap-2.5 rounded-xl px-2 py-2 text-left transition-colors ${hover}`}
             >
-              <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${DOT[entry.urgency] || DOT.info}`} aria-hidden="true" />
+              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: DOT[entry.urgency] || DOT.info }} aria-hidden="true" />
               <span className="min-w-0">
                 <span className={`block text-[13px] font-medium ${strong}`}>{entry.title}</span>
                 <span className={`block truncate text-xs ${muted}`}>{entry.detail}</span>

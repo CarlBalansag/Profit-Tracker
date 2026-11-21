@@ -88,22 +88,22 @@ describe('To-Do page', () => {
     mount();
     const fold = screen.getByRole('button', { name: /Ship it \(3\)/ });
     expect(fold).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('button', { name: /^Open:/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Open / })).not.toBeInTheDocument();
     fireEvent.click(fold);
-    expect(screen.getAllByRole('button', { name: /^Open:/ })).toHaveLength(3);
+    expect(screen.getAllByRole('button', { name: /^Open / })).toHaveLength(3);
   });
 
   it('opens a purchase or sale in the Transactions window', () => {
     todos = response([entry({ key: 'ship:1' })]);
     mount();
-    fireEvent.click(screen.getByRole('button', { name: /^Open: Ship it/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Open Ship it/ }));
     expect(screen.getByTestId('where').textContent).toBe('/transactions {"openTransaction":{"inventoryId":"inv-1","saleId":"sale-1"}}');
   });
 
   it('opens a page link with its state', () => {
     todos = response([entry({ key: 'card-setup:1', type: 'card_setup', group: 'cards', title: 'Finish card setup: Amex', link: { kind: 'page', to: '/settings', state: { tab: 'datasetup' } } })]);
     mount();
-    fireEvent.click(screen.getByRole('button', { name: /^Open: Finish card setup/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Open Finish card setup/ }));
     expect(screen.getByTestId('where').textContent).toBe('/settings {"tab":"datasetup"}');
   });
 
