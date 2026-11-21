@@ -184,6 +184,7 @@ app.use('/api/cashouts', cashoutsRouter);
 app.use('/api/data-reset', dataResetRouter);
 app.use('/api/invites', invitesRouter);
 app.use('/api/activity', require('./routes/activity'));
+app.use('/api/todos', require('./routes/todos'));
 
 // Health Check
 app.get('/health', (req, res) => {

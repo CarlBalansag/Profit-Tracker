@@ -50,6 +50,7 @@ model User {
   cashout_item_matches   CashoutItemMatch[]
   cashout_commitments    CashoutCommitment[]
   cashout_write_logs     CashoutWriteLog[]
+  todo_states            TodoState[]
   invites                Invite[]
 }
 
@@ -790,6 +791,27 @@ model CashoutCommitment {
   @@index([external_commitment_id])
   @@index([user_id])
   @@index([connection_id])
+}
+
+// What the user did with one item on the To-Do page (services/todos.js). The
+// items themselves are never stored: they are worked out from the records on
+// every read. `key` names one occurrence of one item, e.g.
+// "card-due:<card id>:2026-12-10" -- so dismissing or paying this month's card
+// bill never hides next month's. A key with no row is simply shown.
+model TodoState {
+  id         String    @id @default(uuid())
+  user_id    String
+  user       User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  key        String
+  // "snoozed" (hidden until `until`), "dismissed" or "done" (hidden for good).
+  state      String
+  // Local date (YYYY-MM-DD) a snoozed item comes back on. NULL otherwise.
+  until      String?
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+
+  @@unique([user_id, key])
+  @@index([user_id])
 }
 
 /// Managed by connect-pg-simple — Prisma should not touch this table
