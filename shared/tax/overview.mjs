@@ -6,6 +6,7 @@ import { businessTaxImpact, federalEstimatedPayments, reserveRecommendations, FI
 import { stateEstimatedPayments } from './stateTax.mjs';
 import { FEDERAL_RULES } from './rules/federal.mjs';
 import { STATE_RULES, STATE_NAMES } from './rules/states.mjs';
+import { projectProfit, chooseForecast } from './forecast.mjs';
 
 export const RESERVE_MODES = ['personalized', 'flat', 'conservative'];
 export const DEFAULT_BUFFER_RATE = 0.10;
@@ -76,15 +77,21 @@ function missingDetails(profile) {
  * businessProfit: Schedule C line 31 for the year so far.
  * today: 'YYYY-MM-DD' (for the next due date).
  */
-export function buildTaxOverview({ profile, year, businessProfit, today }) {
+export function buildTaxOverview({ profile, year, businessProfit, today, forecast = null, reserveBalance = 0 }) {
   year = Number(year);
-  const profit = amount(businessProfit);
+  const actualProfit = amount(businessProfit);
+  // With the API's projection inputs, the estimate uses the chosen projection
+  // of the full year's profit; without them, profit so far.
+  const projection = forecast ? projectProfit({ actual: actualProfit, inputs: forecast, target: num(profile?.profit_target) }) : null;
+  const chosen = projection ? chooseForecast(projection, profile?.forecast_method) : { key: 'actual', value: actualProfit, label: 'Profit so far', usedFallback: false };
+  const profit = chosen.value;
+  const reserved = amount(reserveBalance);
   const mode = RESERVE_MODES.includes(profile?.reserve_mode) ? profile.reserve_mode : 'personalized';
   const flatRate = num(profile?.flat_rate) ?? DEFAULT_FLAT_RATE;
   const bufferRate = num(profile?.buffer_rate) ?? DEFAULT_BUFFER_RATE;
   const estimatedPaid = dollars(cents(profile?.federal_estimated_paid) + cents(profile?.state_estimated_paid));
   const filingDue = `${year + 1}-04-15`;
-  const base = { year, businessProfit: profit, mode, flatRate, bufferRate, filingDue, estimatedPaid };
+  const base = { year, businessProfit: profit, actualProfit, projection, forecastChoice: chosen, mode, flatRate, bufferRate, filingDue, estimatedPaid, reserveBalance: reserved };
 
   const supportedYear = Boolean(FEDERAL_RULES[year]);
   const readyForPersonalized = supportedYear && profile && FILING_STATUSES.includes(profile.filing_status);
@@ -104,7 +111,10 @@ export function buildTaxOverview({ profile, year, businessProfit, today }) {
   });
   // Conservative builds on the personalized number when there is one.
   const recommended = effectiveMode === 'flat' ? reserves.flat : effectiveMode === 'conservative' ? reserves.conservative : reserves.personalized;
-  const stillToSetAside = Math.max(0, dollars(cents(recommended) - cents(estimatedPaid)));
+  // Money already covering this tax: estimated payments plus the reserve.
+  const covered = dollars(cents(estimatedPaid) + cents(reserved));
+  const stillToSetAside = Math.max(0, dollars(cents(recommended) - cents(covered)));
+  const coverage = recommended > 0 ? Math.round(covered / recommended * 1000) / 1000 : null;
 
   let federalPlan = null;
   let statePlan = null;
@@ -137,6 +147,8 @@ export function buildTaxOverview({ profile, year, businessProfit, today }) {
     reserves,
     recommended,
     stillToSetAside,
+    covered,
+    coverage,
     federalPlan,
     statePlan,
     nextDue,

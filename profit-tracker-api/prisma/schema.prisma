@@ -54,6 +54,7 @@ model User {
   tax_year_settings      TaxYearSetting[]
   tax_forms_1099k        TaxForm1099K[]
   tax_profiles           TaxProfile[]
+  tax_reserve_entries    TaxReserveEntry[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -888,8 +889,29 @@ model TaxProfile {
   reserve_mode           String   @default("personalized") // personalized | flat | conservative
   flat_rate              Decimal? @db.Decimal(6, 4)          // 0.25 = 25%
   buffer_rate            Decimal? @db.Decimal(6, 4)          // 0.10 = 10% extra
+  // How to project the year's profit: actual | run_rate | recent | seasonal |
+  // target. NULL = the default (run_rate for the current year).
+  forecast_method        String?
+  profit_target          Decimal? @db.Decimal(19, 2) // the user's own full-year estimate
   created_at             DateTime @default(now())
   updated_at             DateTime @updatedAt
 
   @@unique([user_id, year])
+}
+
+// Money the user moved aside for taxes (or took back), per tax year. A ledger
+// of their own savings: never an expense, never part of any profit total, and
+// separate from tax payments.
+model TaxReserveEntry {
+  id         String   @id @default(uuid())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year       Int
+  kind       String   // set_aside | released
+  amount     Decimal  @db.Decimal(19, 2)
+  date       DateTime
+  note       String?
+  created_at DateTime @default(now())
+
+  @@index([user_id, year])
 }

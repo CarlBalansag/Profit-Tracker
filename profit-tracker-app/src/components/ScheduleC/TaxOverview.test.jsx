@@ -10,15 +10,24 @@ vi.mock('../../hooks/useApi', () => ({ apiFetch: mocks.apiFetch }));
 vi.mock('../../utils/returnWindow', () => ({ localToday: () => '2026-11-21' }));
 
 const json = (body, ok = true) => ({ ok, json: async () => structuredClone(body) });
-let saved; let taxMath; let calls;
+let saved; let taxMath; let calls; let entries;
+const ledgerOf = () => {
+  const sum = (k) => entries.filter((e) => e.kind === k).reduce((t, e) => t + Number(e.amount), 0);
+  return { entries, setAside: sum('set_aside').toFixed(2), released: sum('released').toFixed(2), balance: (sum('set_aside') - sum('released')).toFixed(2) };
+};
 beforeEach(() => {
-  saved = null; taxMath = 'simple'; calls = [];
+  saved = null; taxMath = 'simple'; calls = []; entries = [];
   mocks.apiFetch.mockReset();
   mocks.apiFetch.mockImplementation(async (path, options = {}) => {
     if (options.method) calls.push({ path, method: options.method, body: options.body ? JSON.parse(options.body) : undefined });
     if (path === '/api/preferences/tax-math') {
       if (options.method === 'PUT') taxMath = JSON.parse(options.body).taxMath;
       return json({ taxMath });
+    }
+    if (path.startsWith('/api/tax/reserves/entry/')) { entries = entries.filter((e) => e.id !== path.split('/').pop()); return json(ledgerOf()); }
+    if (path.startsWith('/api/tax/reserves/')) {
+      if (options.method === 'POST') { entries = [{ id: `e${entries.length + 1}`, ...JSON.parse(options.body) }, ...entries]; return json(ledgerOf()); }
+      return json(ledgerOf());
     }
     if (path.startsWith('/api/tax/profile/')) {
       if (options.method === 'PUT') { saved = { ...JSON.parse(options.body), year: 2026, updated_at: 'now' }; return json({ profile: saved }); }
@@ -137,5 +146,65 @@ describe('Tax estimate', () => {
     mountOverview();
     expect((await screen.findByRole('alert')).textContent).toBe('Enable Schedule C in Settings first');
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
+  describe('projection and tax savings', () => {
+    // 325 days into 2026, $10,000 so far, $4,500 in the last 90 days, and 80%
+    // of last year's profit was made by this date.
+    const forecast = { status: 'current', asOf: '2026-11-21', daysElapsed: 325, daysInYear: 365, recent: { days: 90, profit: 4500 }, prior: { netProfit: '9000.00', shareByThen: 0.8 }, monthly: [] };
+    const withForecast = () => mountOverview({ books: { netProfit: '10000.00', forecast } });
+    beforeEach(() => { saved = { year: 2026, state: 'TX', filing_status: 'single', non_business_income: '0', reserve_mode: 'personalized', forecast_method: null, profit_target: null }; });
+
+    it('projects the year at the same pace by default and lets you choose another way', async () => {
+      withForecast();
+      expect(await screen.findByText(/Projected for 2026:/)).toBeInTheDocument();
+      expect(within(cardValue('Profit so far')).getByText('$10,000.00')).toBeInTheDocument();
+      expect(within(cardValue('Profit so far')).getByText('$11,230.77')).toBeInTheDocument();
+      fireEvent.click(screen.getByText(/Projection for 2026/));
+      fireEvent.click(screen.getByRole('radio', { name: /Last year's pattern/ }));
+      await waitFor(() => expect(calls.at(-1)).toMatchObject({ path: '/api/tax/profile/2026', method: 'PUT', body: { forecast_method: 'seasonal', filing_status: 'single', state: 'TX' } }));
+      expect(calls.at(-1).body).not.toHaveProperty('year');
+      expect(await screen.findByText(/Projection for 2026: last year's pattern \(\$12,500\.00\)/)).toBeInTheDocument();
+    });
+
+    it('uses your own estimate once you enter one', async () => {
+      withForecast();
+      fireEvent.click(await screen.findByText(/Projection for 2026/));
+      fireEvent.click(screen.getByRole('button', { name: 'Use my estimate' }));
+      expect(screen.getByRole('alert').textContent).toMatch(/full-year profit estimate/);
+      fireEvent.change(screen.getByLabelText('My full-year profit estimate'), { target: { value: '50000' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Use my estimate' }));
+      await waitFor(() => expect(calls.at(-1).body).toMatchObject({ forecast_method: 'target', profit_target: '50000' }));
+      // $50,000, single, Texas: the business adds $9,732.07 (the engine walk-through).
+      await waitFor(() => expect(within(cardValue('Tax the business adds')).getByText('$9,732.07')).toBeInTheDocument());
+    });
+
+    it('records money set aside and counts it toward the recommendation', async () => {
+      withForecast();
+      fireEvent.click(await screen.findByText(/already saved and paid/));
+      fireEvent.click(screen.getByRole('button', { name: 'Record money set aside' }));
+      fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '500' } });
+      fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'moved to savings' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(calls.at(-1)).toMatchObject({ path: '/api/tax/reserves/2026', method: 'POST', body: { kind: 'set_aside', amount: '500', date: '2026-11-21', note: 'moved to savings' } }));
+      expect(await screen.findByText('+$500.00')).toBeInTheDocument();
+      const row = screen.getByText('In your tax savings').closest('tr');
+      expect(within(row).getByText('$500.00')).toBeInTheDocument();
+      // Delete asks first.
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Yes, delete' }));
+      await waitFor(() => expect(calls.at(-1)).toMatchObject({ path: '/api/tax/reserves/entry/e1', method: 'DELETE' }));
+      await waitFor(() => expect(screen.queryByText('+$500.00')).toBeNull());
+    });
+
+    it('refuses a bad amount without sending it', async () => {
+      withForecast();
+      fireEvent.click(await screen.findByText(/already saved and paid/));
+      fireEvent.click(screen.getByRole('button', { name: 'Record money set aside' }));
+      fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '0' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(screen.getByRole('alert').textContent).toMatch(/dollars and cents/);
+      expect(calls.filter((c) => c.path.startsWith('/api/tax/reserves'))).toEqual([]);
+    });
   });
 });

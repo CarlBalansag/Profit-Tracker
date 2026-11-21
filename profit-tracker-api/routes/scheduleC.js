@@ -4,6 +4,7 @@ const { expenseWorksheet } = require('../services/scheduleC');
 const { withExactList, MAPPINGS } = require('../services/decimalRead');
 const { derivedExpenseLines } = require('../services/derivedExpenses');
 const { scheduleCBooks, untrackedInventory } = require('../services/scheduleCBooks');
+const { profitEvents, forecastInputs } = require('../services/taxForecast');
 const { validateBody } = require('../middleware/validate');
 const { taxYearSettingBody, createForm1099K, updateForm1099K } = require('../validation/schemas');
 const { requireOwned } = require('../services/ownership');
@@ -46,7 +47,17 @@ router.get('/', isAuthenticated, async (req, res, next) => {
     const worksheet = await expenseWorksheet(exactExpenses, year, derivedExpenseLines(inventories), saleRefunds);
     const expensesInYear = exactExpenses.filter((e) => new Date(e.date).getUTCFullYear() === year);
     const untracked = untrackedInventory(settings, year);
-    res.json({ ...worksheet, books: scheduleCBooks({ inventories, year, worksheet, expensesInYear, untracked, forms1099K, platforms }) });
+    const books = scheduleCBooks({ inventories, year, worksheet, expensesInYear, untracked, forms1099K, platforms });
+    // Projection inputs: this year's dated profit and last year's pattern.
+    const derived = derivedExpenseLines(inventories);
+    const priorWorksheet = await expenseWorksheet(exactExpenses, year - 1, derived, saleRefunds);
+    const priorEvents = profitEvents({ inventories, year: year - 1, worksheet: priorWorksheet });
+    const priorBooks = priorEvents.length ? scheduleCBooks({ inventories, year: year - 1, worksheet: priorWorksheet, untracked: untrackedInventory(settings, year - 1) }) : null;
+    books.forecast = forecastInputs({
+      year, today: new Date(), events: profitEvents({ inventories, year, worksheet }),
+      priorEvents, priorNetProfit: priorBooks ? priorBooks.netProfit : null,
+    });
+    res.json({ ...worksheet, books });
   } catch (error) { next(error); }
 });
 

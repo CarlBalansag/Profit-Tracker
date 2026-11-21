@@ -4,6 +4,8 @@ import { requireSuccessfulResponse } from '../../hooks/apiResponse';
 import { buildTaxOverview, STATE_NAMES } from '../../../../shared/tax/index.mjs';
 import { localToday } from '../../utils/returnWindow';
 import { TaxProfileForm } from './TaxProfileForm';
+import { TaxProjection } from './TaxProjection';
+import { TaxReserve } from './TaxReserve';
 import { FILING_STATUS_LABELS } from '../../utils/taxProfile';
 
 const usd = (value) => {
@@ -87,10 +89,11 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
     let active = true;
     (async () => {
       try {
-        const [p, m] = await Promise.all([apiFetch(`/api/tax/profile/${year}`), apiFetch('/api/preferences/tax-math')]);
+        const [p, m, r] = await Promise.all([apiFetch(`/api/tax/profile/${year}`), apiFetch('/api/preferences/tax-math'), apiFetch(`/api/tax/reserves/${year}`)]);
         const { profile } = await (await requireSuccessfulResponse(p)).json();
         const { taxMath } = await (await requireSuccessfulResponse(m)).json();
-        if (active) setLoaded({ saved: profile, taxMath });
+        const ledger = await (await requireSuccessfulResponse(r)).json();
+        if (active) setLoaded({ saved: profile, taxMath, ledger });
       } catch (err) { if (active) setLoaded({ error: err.message || 'Could not load your tax details.' }); }
     })();
     return () => { active = false; };
@@ -108,6 +111,8 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
   };
   const submit = async ({ profile: next, save }) => {
     setError('');
+    // The form doesn't show the projection choice; keep it.
+    next = { forecast_method: profile?.forecast_method ?? null, profit_target: profile?.profit_target ?? null, ...next };
     if (!save) { setSession(next); setEditing(false); return; }
     setBusy(true);
     try {
@@ -117,6 +122,18 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
     } catch (err) { setError(err.message || 'Could not save. Try again.'); }
     finally { setBusy(false); }
   };
+  // A change from the overview itself (the projection choice): saved
+  // details are saved again, unsaved ones stay in this tab only.
+  const PROFILE_KEYS = ['state', 'filing_status', 'non_business_income', 'wages', 'other_se_income', 'federal_withholding', 'state_withholding',
+    'federal_estimated_paid', 'state_estimated_paid', 'qualifying_children', 'other_dependents', 'age65', 'spouse_age65', 'adjustments',
+    'itemized_deductions', 'prior_year_tax', 'prior_year_agi', 'reserve_mode', 'flat_rate', 'buffer_rate', 'forecast_method', 'profit_target'];
+  const updateProfile = (patch) => {
+    const merged = { ...profile, ...patch };
+    const clean = Object.fromEntries(PROFILE_KEYS.filter((k) => merged[k] !== undefined).map((k) => [k, merged[k]]));
+    if (saved && !session && clean.filing_status) submit({ profile: clean, save: true });
+    else setSession(clean);
+  };
+  const setLedger = (ledger) => setLoaded((l) => ({ ...l, ledger }));
   const removeSaved = async () => {
     setBusy(true); setError('');
     try {
@@ -129,7 +146,7 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
   const header = <div className="flex flex-wrap items-center justify-between gap-3">
     <div>
       <h2 className="text-lg font-semibold">Your {year} tax estimate</h2>
-      <p className="mt-1 text-sm text-gray-400">An estimate to plan with, not a tax bill. Based on your profit recorded so far this year.</p>
+      <p className="mt-1 text-sm text-gray-400">An estimate to plan with, not a tax bill. Based on your records and a projection of the rest of the year.</p>
     </div>
     <div role="group" aria-label="How much math to show" className="inline-flex rounded-lg border border-white/10 p-0.5 text-sm">
       {['simple', 'detailed'].map((v) => <button key={v} type="button" aria-pressed={loaded.taxMath === v} onClick={() => setTaxMath(v)}
@@ -144,7 +161,8 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
     </section>;
   }
 
-  const o = buildTaxOverview({ profile, year, businessProfit: books.netProfit, today: localToday() });
+  const o = buildTaxOverview({ profile, year, businessProfit: books.netProfit, today: localToday(), forecast: books.forecast || null, reserveBalance: loaded.ledger?.balance || 0 });
+  const projected = o.forecastChoice.key !== 'actual';
   const describe = profile?.filing_status
     ? `${FILING_STATUS_LABELS[profile.filing_status]}${profile.state ? `, ${STATE_NAMES[profile.state]}` : ''}`
     : 'Flat percentage only';
@@ -157,13 +175,18 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
     {o.limitations.length > 0 && <ul role="note" className="space-y-1 rounded-xl border border-amber-500/30 p-3 text-sm text-amber-200">{o.limitations.map((l) => <li key={l}>{l}</li>)}</ul>}
 
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <div className={card}><p className="text-sm text-gray-400">Profit so far</p><p className="mt-2 text-2xl tabular-nums">{usd(o.businessProfit)}</p><p className="mt-1 text-xs text-gray-500">Schedule C line 31 · <button type="button" onClick={onShowWorksheet} className="underline">see how</button></p></div>
-      <div className={card}><p className="text-sm text-gray-400">Tax the business adds</p><p className="mt-2 text-2xl tabular-nums">{o.impact ? usd(Math.max(0, o.impact.additionalTaxFromBusiness)) : '—'}</p><p className="mt-1 text-xs text-gray-500">{o.impact ? (o.impact.effectiveBusinessTaxRate !== null ? `About ${pct(o.impact.effectiveBusinessTaxRate)} of your profit` : 'No profit yet, so no extra tax') : 'Add your filing status to see this'}</p></div>
-      <div className={`${card} border-purple-500/30`}><p className="text-sm text-gray-400">Set aside</p><p className="mt-2 text-2xl font-semibold tabular-nums text-white">{usd(o.recommended)}</p><p className="mt-1 text-xs text-gray-500">{MODE_LABEL[o.effectiveMode]} · {usd(o.stillToSetAside)} still to set aside</p></div>
+      <div className={card}><p className="text-sm text-gray-400">Profit so far</p><p className="mt-2 text-2xl tabular-nums">{usd(o.actualProfit)}</p><p className="mt-1 text-xs text-gray-500">{projected ? <>Projected for {year}: <span className="text-gray-300">{usd(o.businessProfit)}</span> · </> : null}Schedule C line 31 · <button type="button" onClick={onShowWorksheet} className="underline">see how</button></p></div>
+      <div className={card}><p className="text-sm text-gray-400">Tax the business adds</p><p className="mt-2 text-2xl tabular-nums">{o.impact ? usd(Math.max(0, o.impact.additionalTaxFromBusiness)) : '—'}</p><p className="mt-1 text-xs text-gray-500">{o.impact ? (o.impact.effectiveBusinessTaxRate !== null ? `About ${pct(o.impact.effectiveBusinessTaxRate)} of ${projected ? 'projected' : 'your'} profit` : 'No profit yet, so no extra tax') : 'Add your filing status to see this'}</p></div>
+      <div className={`${card} border-purple-500/30`}><p className="text-sm text-gray-400">Set aside</p><p className="mt-2 text-2xl font-semibold tabular-nums text-white">{usd(o.recommended)}</p><p className="mt-1 text-xs text-gray-500">{MODE_LABEL[o.effectiveMode]} · {usd(o.stillToSetAside)} still to set aside{o.coverage !== null && o.covered > 0 ? ` · ${Math.min(100, Math.round(o.coverage * 100))}% covered` : ''}</p></div>
       <div className={card}><p className="text-sm text-gray-400">Next payment due</p>{next
         ? <><p className="mt-2 text-2xl tabular-nums">{day(next.due)}</p>{o.nextDue.filter((d) => d.due === next.due).map((d) => <p key={d.who} className="mt-1 text-xs text-gray-500">{d.who} {d.period}: {usd(d.amount)}</p>)}</>
         : <><p className="mt-2 text-lg">{o.impact ? 'Nothing scheduled' : '—'}</p><p className="mt-1 text-xs text-gray-500">{o.impact ? `Any balance is due when you file, by ${day(o.filingDue)}.` : unsupportedYear ? 'Not available for this year' : 'Add your details to see this'}</p></>}</div>
     </div>
+
+    {o.projection && <details className={card} open={detailed || undefined}>
+      <summary className="cursor-pointer text-sm font-medium text-purple-300">Projection for {year}: {o.forecastChoice.label.toLowerCase()} ({usd(o.businessProfit)})</summary>
+      <TaxProjection key={`${o.forecastChoice.key}-${profile?.profit_target ?? ''}`} o={o} target={profile?.profit_target ?? null} busy={busy} onChoose={updateProfile} />
+    </details>}
 
     <details className={card} open={detailed || undefined}>
       <summary className="cursor-pointer text-sm font-medium text-purple-300">How we worked it out</summary>
@@ -172,15 +195,23 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
     </details>
 
     <details className={card} open={detailed || undefined}>
-      <summary className="cursor-pointer text-sm font-medium text-purple-300">What you&apos;ve already paid</summary>
+      <summary className="cursor-pointer text-sm font-medium text-purple-300">What you&apos;ve already saved and paid</summary>
+      <table className="mt-3 w-full text-sm"><tbody>
+        <Row label="Recommended to set aside" value={usd(o.recommended)} />
+        <Row label="In your tax savings" value={usd(o.reserveBalance)} />
+        <Row label="Estimated payments made" value={usd(o.estimatedPaid)} />
+        <Row strong label={o.stillToSetAside > 0 ? 'Still to set aside' : 'Covered'} hint={o.coverage !== null ? `${Math.min(100, Math.round(o.coverage * 100))}% of the recommendation is covered` : undefined} value={usd(o.stillToSetAside)} />
+      </tbody></table>
       {o.impact ? <table className="mt-3 w-full text-sm"><tbody>
+        <tr><td colSpan={2} className="pt-2 text-xs font-medium text-gray-400">Your whole return</td></tr>
         <Row label="Federal tax withheld from paychecks" value={usd(o.impact.withBusiness.federal.withholding)} />
         <Row label="Federal estimated payments" value={usd(o.impact.withBusiness.federal.estimatedPayments)} />
         {profile.state && <Row label={`${STATE_NAMES[profile.state]} withheld`} value={usd(o.impact.withBusiness.state.withholding)} />}
         {profile.state && <Row label={`${STATE_NAMES[profile.state]} estimated payments`} value={usd(o.impact.withBusiness.state.estimatedPayments)} />}
         <Row strong label="Left to pay on your whole return" hint="Your total estimated tax minus everything above" value={usd(Math.max(0, o.impact.withBusiness.remainingBalance))} />
       </tbody></table> : <p className="mt-3 text-sm text-gray-400">Add your details to include withholding and payments.</p>}
-      <p className="mt-2 text-xs text-gray-500">Tracking money you set aside, and each payment you make, comes in a later update. For now, enter totals in your tax details.</p>
+      <TaxReserve year={year} ledger={loaded.ledger || { entries: [], balance: '0.00' }} onChanged={setLedger} />
+      <p className="mt-2 text-xs text-gray-500">Recording each tax payment comes in a later update. For now, enter payment totals in your tax details.</p>
     </details>
 
     {o.impact && <details className={card} open={detailed || undefined}>

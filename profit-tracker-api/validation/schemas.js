@@ -580,14 +580,25 @@ const taxProfileBody = z.object({
   reserve_mode: z.enum(['personalized', 'flat', 'conservative']).optional(),
   flat_rate: rate,
   buffer_rate: rate,
+  forecast_method: z.preprocess((v) => (v === '' ? null : v), z.enum(['actual', 'run_rate', 'recent', 'seasonal', 'target']).nullable().optional()),
+  profit_target: nullableDecimalAmount(),
 }).strict().superRefine((p, ctx) => {
   if (p.wages != null && p.non_business_income != null && p.wages > p.non_business_income) {
     ctx.addIssue({ code: 'custom', path: ['wages'], message: 'W-2 wages are part of your income outside the business, so they can\'t be more than it.' });
   }
 });
 
+// POST /api/tax/reserves/:year: money moved aside for taxes, or taken back.
+const taxReserveEntryBody = z.object({
+  kind: z.enum(['set_aside', 'released']),
+  amount: decimalAmount(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a date like 2026-11-21.').refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v, 'Enter a real calendar date.'),
+  note: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(200).nullable().optional()),
+}).strict().refine((b) => b.amount > 0, { message: 'Enter an amount above $0.', path: ['amount'] });
+
 module.exports = {
   taxProfileBody,
+  taxReserveEntryBody,
   createForm1099K,
   updateForm1099K,
   taxYearSettingBody,

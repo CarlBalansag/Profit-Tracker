@@ -5,7 +5,7 @@
 const router = require('express').Router();
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
-const { taxProfileBody } = require('../validation/schemas');
+const { taxProfileBody, taxReserveEntryBody } = require('../validation/schemas');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -25,7 +25,8 @@ const guard = async (req, res) => {
 
 const FIELDS = ['state', 'filing_status', 'non_business_income', 'wages', 'other_se_income', 'federal_withholding', 'state_withholding',
   'federal_estimated_paid', 'state_estimated_paid', 'qualifying_children', 'other_dependents', 'age65', 'spouse_age65',
-  'adjustments', 'itemized_deductions', 'prior_year_tax', 'prior_year_agi', 'reserve_mode', 'flat_rate', 'buffer_rate'];
+  'adjustments', 'itemized_deductions', 'prior_year_tax', 'prior_year_agi', 'reserve_mode', 'flat_rate', 'buffer_rate',
+  'forecast_method', 'profit_target'];
 // Decimals as strings, the rest as stored.
 const publicProfile = (row) => {
   if (!row) return null;
@@ -71,6 +72,75 @@ router.delete('/profile/:year', isAuthenticated, async (req, res, next) => {
     const result = await prisma.taxProfile.deleteMany({ where: { user_id: req.user.id, year: Number(req.params.year) } });
     res.json({ deleted: result.count });
   } catch (error) { next(error); }
+});
+
+// Tax reserve ledger: money the user set aside for a year's taxes, or took
+// back. Their own savings record; it never touches profit or expenses.
+const cents = (v) => Math.round(Number(v) * 100);
+const publicEntry = (e) => ({ id: e.id, year: e.year, kind: e.kind, amount: String(e.amount), date: new Date(e.date).toISOString().slice(0, 10), note: e.note ?? null });
+const ledger = async (client, userId, year) => {
+  const entries = await client.taxReserveEntry.findMany({ where: { user_id: userId, year }, orderBy: [{ date: 'desc' }, { created_at: 'desc' }] });
+  const set = entries.filter((e) => e.kind === 'set_aside').reduce((s, e) => s + cents(e.amount), 0);
+  const released = entries.filter((e) => e.kind === 'released').reduce((s, e) => s + cents(e.amount), 0);
+  return { entries: entries.map(publicEntry), setAside: (set / 100).toFixed(2), released: (released / 100).toFixed(2), balance: ((set - released) / 100).toFixed(2) };
+};
+
+router.get('/reserves/:year', isAuthenticated, async (req, res, next) => {
+  try {
+    if (!await guard(req, res)) return;
+    res.json(await ledger(prisma, req.user.id, Number(req.params.year)));
+  } catch (error) { next(error); }
+});
+
+router.post('/reserves/:year', isAuthenticated, validateBody(taxReserveEntryBody), async (req, res, next) => {
+  try {
+    if (!await guard(req, res)) return;
+    const year = Number(req.params.year);
+    const result = await prisma.$transaction(async (tx) => {
+      // One writer per user at a time, so two releases can't both pass the
+      // balance check.
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${req.user.id} FOR UPDATE`;
+      if (req.body.kind === 'released') {
+        const { balance } = await ledger(tx, req.user.id, year);
+        if (cents(req.body.amount) > cents(balance)) {
+          throw Object.assign(new Error(`You can't take back more than the $${balance} set aside for ${year}.`), { status: 400 });
+        }
+      }
+      await tx.taxReserveEntry.create({ data: {
+        user_id: req.user.id, year, kind: req.body.kind, amount: req.body.amount,
+        date: new Date(`${req.body.date}T12:00:00Z`), note: req.body.note ?? null,
+      } });
+      return ledger(tx, req.user.id, year);
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    if (error.status === 400) return res.status(400).json({ error: error.message });
+    next(error);
+  }
+});
+
+router.delete('/reserves/entry/:id', isAuthenticated, async (req, res, next) => {
+  try {
+    if (!await scheduleCEnabled(req.user.id)) return res.status(403).json({ error: 'Enable Schedule C in Settings first' });
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${req.user.id} FOR UPDATE`;
+      const entry = await tx.taxReserveEntry.findFirst({ where: { id: req.params.id, user_id: req.user.id } });
+      if (!entry) throw Object.assign(new Error('Entry not found'), { status: 404 });
+      // Removing money set aside can't leave more taken back than put in.
+      if (entry.kind === 'set_aside') {
+        const { balance } = await ledger(tx, req.user.id, entry.year);
+        if (cents(balance) - cents(entry.amount) < 0) {
+          throw Object.assign(new Error('Delete the money you took back first; otherwise more would be taken back than was set aside.'), { status: 400 });
+        }
+      }
+      await tx.taxReserveEntry.deleteMany({ where: { id: entry.id, user_id: req.user.id } });
+      return ledger(tx, req.user.id, entry.year);
+    });
+    res.json(result);
+  } catch (error) {
+    if (error.status === 400 || error.status === 404) return res.status(error.status).json({ error: error.message });
+    next(error);
+  }
 });
 
 module.exports = router;

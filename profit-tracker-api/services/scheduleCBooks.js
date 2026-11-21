@@ -273,4 +273,4 @@ function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = []
   };
 }
 
-module.exports = { scheduleCBooks, untrackedInventory, heldAtYearEnd, unitsOut };
+module.exports = { scheduleCBooks, untrackedInventory, heldAtYearEnd, unitsOut, isCancelledPurchase, batchFactsForForecast: batchFacts };
