@@ -76,7 +76,7 @@ const FIELD_LABELS = {
   unit_price: ['Price', 'money'], unit_purchase_cost: ['Unit cost', 'money'], amount: ['Amount', 'money'],
   quantity: ['Qty', 'int'], qty_purchased: ['Qty bought', 'int'],
   sales_tax: ['Tax', 'money'], shipping_cost_inbound: ['Shipping', 'money'], sale_shipping: ['Shipping', 'money'],
-  fees: ['Fees', 'money'], commission_fee: ['Fees', 'money'], gift_card_amount: ['Gift card', 'money'],
+  fees: ['Fees', 'money'], commission_fee: ['Fees', 'money'], gift_card_amount: ['Gift card', 'money'], gift_card_cost: ['Gift card cost', 'money'],
   sale_tax_collected: ['Tax collected', 'money'], cashback_earned: ['Cashback', 'money'],
   purchase_date: ['Date', 'date'], sale_date: ['Date', 'date'], date: ['Date', 'date'],
   payout_date: ['Payout date', 'date'], return_by_date: ['Return by', 'date'],

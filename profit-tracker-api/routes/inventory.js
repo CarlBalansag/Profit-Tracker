@@ -113,6 +113,7 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
       shipping_cost_inbound,
       fees,
       gift_card_amount,
+      gift_card_cost,
       cashback_rate,
       cashback_earned,
       order_number,
@@ -205,6 +206,8 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
         shipping_cost_inbound: parseFloat(shipping_cost_inbound) || 0,
         fees: parseFloat(fees) || 0,
         gift_card_amount: parseFloat(gift_card_amount) || 0,
+        // Only meaningful alongside a gift card amount; NULL means not entered.
+        gift_card_cost: (parseFloat(gift_card_amount) || 0) > 0 && gift_card_cost != null ? gift_card_cost : null,
         order_number: order_number || null,
         tracking_number: tracking_number || null,
         // A non-null rate marks this purchase as a snapshotted/overridden
@@ -284,7 +287,7 @@ router.get('/recent-by-name', isAuthenticated, async (req, res, next) => {
       select: {
         unit_purchase_cost: true, qty_purchased: true,
         sales_tax: true, shipping_cost_inbound: true, fees: true,
-        gift_card_amount: true, cashback_rate: true, cashback_earned: true, tax_exempt: true, category: true,
+        gift_card_amount: true, gift_card_cost: true, cashback_rate: true, cashback_earned: true, tax_exempt: true, category: true,
         vendor_id: true, account_id: true, payment_method_id: true,
         unit_purchase_cost_decimal: true, sales_tax_decimal: true, shipping_cost_inbound_decimal: true,
         fees_decimal: true, gift_card_amount_decimal: true, cashback_rate_decimal: true, cashback_earned_decimal: true,
@@ -410,6 +413,7 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
       shipping_cost_inbound,
       fees,
       gift_card_amount,
+      gift_card_cost,
       order_number,
       tracking_number,
       cashback_rate,
@@ -454,6 +458,9 @@ router.put('/:id', isAuthenticated, validateBody(updateInventory), async (req, r
     if (shipping_cost_inbound !== undefined) data.shipping_cost_inbound = parseFloat(shipping_cost_inbound) || 0;
     if (fees !== undefined)                  data.fees = parseFloat(fees) || 0;
     if (gift_card_amount !== undefined)      data.gift_card_amount = parseFloat(gift_card_amount) || 0;
+    if (gift_card_cost !== undefined)        data.gift_card_cost = gift_card_cost;
+    // No gift card used means there is nothing for a gift card cost to describe.
+    if (data.gift_card_amount === 0)         data.gift_card_cost = null;
     if (order_number !== undefined)          data.order_number = order_number || null;
     if (tracking_number !== undefined)       data.tracking_number = tracking_number || null;
     // Adding a tracking number for the FIRST time *is* the add_tracking business

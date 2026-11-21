@@ -102,12 +102,34 @@ describe('Schedule C books', () => {
     const inv = { ...batchB([sale({ id: 't', unit_price: 25, sale_tax_collected: 2, sale_date: '2026-03-01T12:00:00Z' })]), gift_card_amount: 5 };
     const y = scheduleCBooks({ inventories: [inv], year: 2026, worksheet: worksheet({ rows: [{ status: 'pending' }] }) });
     const text = y.notes.join(' ');
-    expect(text).toMatch(/Gift cards paid \$5\.00/);
+    expect(text).toMatch(/1 purchase was paid partly with gift cards \(\$5\.00\) with no gift card cost entered/);
     expect(text).toMatch(/Sales tax you recorded collecting \(\$2\.00\)/);
     expect(text).toMatch(/Card rewards on this year's purchases/);
     expect(text).toMatch(/no purchases from before 2026/);
     expect(text).toMatch(/1 expense is waiting for review/);
     expect(line(y, '1')).toBe('25.00'); // tax collected stays out of gross receipts
+  });
+
+  it('counts what a gift card cost you in inventory cost', () => {
+    // $20 of cable less a $5 gift card that cost $4.50, less $1 of rewards:
+    // 15 + 4.50 - 1 = $18.50 tax cost, $9.25 a unit.
+    const inv = { ...batchB(salesB()), gift_card_amount: 5, gift_card_cost: '4.50' };
+    const y = scheduleCBooks({ inventories: [inv], year: 2026, worksheet: worksheet({ total: '7.00', automatic: { total: '7.00' } }) });
+    expect([part3(y, '36'), part3(y, '41'), part3(y, '42')]).toEqual(['18.50', '9.25', '9.25']);
+    expect(y.netProfit).toBe('8.75'); // 25 - 9.25 - 7
+    expect(y.notes.join(' ')).toMatch(/Gift cards paid \$5\.00 of this year's purchases\. They cost you \$4\.50/);
+    expect(y.notes.join(' ')).not.toMatch(/no gift card cost entered/);
+    const sum = Number(y.reconciliation.appProfitAfterExpenses) + y.reconciliation.differences.reduce((t, d) => t + Number(d.amount), 0);
+    expect(sum).toBeCloseTo(Number(y.netProfit), 2);
+  });
+
+  it('treats a gift card cost of $0 as free on purpose, and ignores a cost with no gift card', () => {
+    const free = scheduleCBooks({ inventories: [{ ...batchB(salesB()), gift_card_amount: 5, gift_card_cost: 0 }], year: 2026, worksheet: worksheet() });
+    expect(part3(free, '36')).toBe('14.00'); // 20 - 5 - 1
+    expect(free.notes.join(' ')).not.toMatch(/no gift card cost entered/);
+    const stray = scheduleCBooks({ inventories: [{ ...batchB(salesB()), gift_card_amount: 0, gift_card_cost: 30 }], year: 2026, worksheet: worksheet() });
+    expect(part3(stray, '36')).toBe('19.00');
+    expect(stray.notes.join(' ')).not.toMatch(/Gift card/);
   });
 
   it('is all zeros with no records', () => {

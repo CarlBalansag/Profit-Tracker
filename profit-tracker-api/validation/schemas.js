@@ -95,6 +95,19 @@ function decimalAmount({ scale = 2, optional = false, defaultValue, round = fals
   return optional ? schema.optional() : schema;
 }
 
+// Like decimalAmount({ optional: true }), but an explicit null or '' clears
+// the stored value (for nullable columns a person can blank out on edit).
+function nullableDecimalAmount(options = {}) {
+  const inner = decimalAmount({ ...options, optional: true });
+  return z.any().transform((val, ctx) => {
+    if (val === '' || val === null) return null;
+    const parsed = inner.safeParse(val);
+    if (parsed.success) return parsed.data;
+    for (const issue of parsed.error.issues) ctx.addIssue({ code: z.ZodIssueCode.custom, message: issue.message });
+    return z.NEVER;
+  }).optional();
+}
+
 const positiveInt = z.preprocess(
   emptyToUndefined,
   z.coerce.number().int().min(1)
@@ -154,6 +167,7 @@ const createInventory = z.object({
   shipping_cost_inbound: decimalAmount({ defaultValue: 0 }),
   fees: decimalAmount({ defaultValue: 0 }),
   gift_card_amount: decimalAmount({ defaultValue: 0 }),
+  gift_card_cost: nullableDecimalAmount(),
   cashback_rate: decimalAmount({ scale: 6, optional: true }),
   cashback_earned: decimalAmount({ optional: true, round: true }),
   order_number: optionalString,
@@ -193,6 +207,7 @@ const updateInventory = z.object({
   shipping_cost_inbound: decimalAmount({ optional: true }),
   fees: decimalAmount({ optional: true }),
   gift_card_amount: decimalAmount({ optional: true }),
+  gift_card_cost: nullableDecimalAmount(),
   cashback_rate: decimalAmount({ scale: 6, optional: true }),
   order_number: optionalString,
   tracking_number: optionalString,

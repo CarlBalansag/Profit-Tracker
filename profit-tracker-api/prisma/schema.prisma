@@ -338,6 +338,10 @@ model Inventory {
   cashback_rate_decimal Decimal?       @db.Decimal(9, 6)
   gift_card_amount      Float          @default(0)
   gift_card_amount_decimal Decimal?    @db.Decimal(19, 2)
+  // What the gift card amount above cost the user (bought at a discount, or
+  // with a fee). NULL = not entered. Only the Schedule C books use it; the rest
+  // of the app still treats gift cards as free.
+  gift_card_cost        Decimal?       @db.Decimal(19, 2)
   order_number          String?
   tracking_number       String?
   // Manual/MCP-set carrier override. Falls back to tracking_info.carrier (the

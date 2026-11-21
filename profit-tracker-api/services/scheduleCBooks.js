@@ -8,9 +8,11 @@
 // - Returns and allowances (line 2): refunds to buyers, in the year the money
 //   went back (from the Part II worksheet, which already reports them).
 // - Inventory cost per unit: the purchase's batch cost (price, tax, inbound
-//   shipping and fees, less gift cards and store refunds) less the card
-//   rewards earned on it -- rewards are treated as a discount on the purchase,
-//   not income -- spread over the units kept.
+//   shipping and fees, less gift cards and store refunds) plus what the gift
+//   card amount cost the user when they entered it, less the card rewards
+//   earned on it -- rewards are treated as a discount on the purchase, not
+//   income -- spread over the units kept. A gift card with no cost entered is
+//   counted as free (as the rest of the app does), and a note says so.
 // - Units leave inventory on the sale date; a sale's units are the ones it
 //   still keeps out of stock (quantity less units refunded or put back).
 // - Cancelled purchases are not inventory.
@@ -37,11 +39,15 @@ function batchFacts(raw) {
   // Card rewards at the rate in effect on the purchase date, not today's.
   const rate = effectiveCashbackRate(inv, new Date(inv.purchase_date));
   const cashback = kept > 0 ? inventoryCashback(inv, rate) : ZERO;
+  const giftCardAmount = decimal(inv.gift_card_amount || 0);
+  const hasGiftCard = giftCardAmount.greaterThan(0);
+  const giftCardCost = hasGiftCard && inv.gift_card_cost !== null && inv.gift_card_cost !== undefined
+    ? decimal(inv.gift_card_cost) : null;
   const cost = batchCost(inv);
-  const taxCost = cost.minus(cashback);
+  const taxCost = cost.plus(giftCardCost ?? ZERO).minus(cashback);
   const unit = kept > 0 ? taxCost.div(kept) : ZERO;
   const sales = (inv.sales || []).map((s) => withExactFields(s, MAPPINGS.sales)).filter(isRealizedSale);
-  return { inv, kept, cost, cashback, taxCost, unit, sales, rate, purchaseYear: yearOf(inv.purchase_date) };
+  return { inv, kept, cost, cashback, taxCost, unit, sales, rate, giftCardAmount, hasGiftCard, giftCardCost, purchaseYear: yearOf(inv.purchase_date) };
 }
 
 // Units of a batch still on hand at the end of `year` (0 if bought later).
@@ -59,7 +65,9 @@ function heldAtYearEnd(b, year) {
 function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = [] }) {
   const batches = inventories.filter((inv) => !isCancelledPurchase(inv)).map(batchFacts);
   let gross = ZERO; let purchases = ZERO; let beginning = ZERO; let ending = ZERO;
-  let cashbackOnPurchases = ZERO; let giftCards = ZERO; let salesTaxCollected = ZERO;
+  let cashbackOnPurchases = ZERO; let salesTaxCollected = ZERO;
+  // Gift cards on this year's purchases: with a cost entered, and without one.
+  const giftCards = { costed: ZERO, cost: ZERO, uncosted: ZERO, uncostedCount: 0 };
   let appRevenue = ZERO; let appCost = ZERO; let appCashback = ZERO; let directCogs = ZERO;
   const byPlatform = new Map();
   const issues = { oversold: [], soldBeforePurchase: [], restoredOnRealized: 0 };
@@ -72,7 +80,8 @@ function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = []
     if (b.purchaseYear === year) {
       purchases = purchases.plus(b.taxCost);
       cashbackOnPurchases = cashbackOnPurchases.plus(b.cashback);
-      giftCards = giftCards.plus(decimal(b.inv.gift_card_amount || 0));
+      if (b.giftCardCost) { giftCards.costed = giftCards.costed.plus(b.giftCardAmount); giftCards.cost = giftCards.cost.plus(b.giftCardCost); }
+      else if (b.hasGiftCard) { giftCards.uncosted = giftCards.uncosted.plus(b.giftCardAmount); giftCards.uncostedCount++; }
     }
     beginning = beginning.plus(b.unit.times(heldAtYearEnd(b, year - 1)));
     ending = ending.plus(b.unit.times(heldAtYearEnd(b, year)));
@@ -153,7 +162,8 @@ function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = []
   if (earliestPurchaseYear === null || earliestPurchaseYear >= year) {
     notes.push(`Beginning inventory is $${money(beginning)} because ProfitTracker has no purchases from before ${year}. If you had stock before you started tracking, your beginning inventory is higher.`);
   }
-  if (giftCards.greaterThan(0)) notes.push(`Gift cards paid $${money(giftCards)} of this year's purchases and are counted as free. If you bought those gift cards, what you paid for them is part of your inventory cost.`);
+  if (giftCards.costed.greaterThan(0)) notes.push(`Gift cards paid $${money(giftCards.costed)} of this year's purchases. They cost you $${money(giftCards.cost)}, and that is what counts in your inventory cost.`);
+  if (giftCards.uncostedCount > 0) notes.push(`${giftCards.uncostedCount} ${giftCards.uncostedCount === 1 ? 'purchase was' : 'purchases were'} paid partly with gift cards ($${money(giftCards.uncosted)}) with no gift card cost entered, so those gift cards count as free. If you bought them, add what they cost you on the purchase so your inventory cost is right.`);
   if (salesTaxCollected.greaterThan(0)) notes.push(`Sales tax you recorded collecting ($${money(salesTaxCollected)}) is not in gross receipts. If you collected and paid it to the state yourself, you may instead include it in gross receipts and deduct it as a tax on line 23; the result is the same.`);
   if (cashbackOnPurchases.greaterThan(0)) notes.push(`Card rewards on this year's purchases ($${money(cashbackOnPurchases)}) lower your inventory cost instead of counting as income, so they are not taxed twice.`);
   const pending = (worksheet?.rows || []).filter((r) => r.status === 'pending');
