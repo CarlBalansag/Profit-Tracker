@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.47',
+    date: '2026-11-21',
+    notes: "New To-Do page: it lists what needs you, worked out from your records (sales to ship, late payouts, cash-out tracking, card bills, stock sitting unlisted), plus reminders you write, and the Dashboard shows the most urgent ones and who still owes you money. You can turn on phone notifications in Settings, and your AI assistant can read the list too.",
+  },
+  {
     version: '1.46',
     date: '2026-11-20',
     notes: "Settings > AI Assistant can now keep your AI up to date: an AI connected with your key catches up on new tools by itself, only reading what changed, and each key shows which version its AI knows. For other AIs, copy the full guide once and then just the updates.",

@@ -18,6 +18,14 @@
 
 export const AI_GUIDE_UPDATES = [
   {
+    version: '1.47',
+    date: '2026-11-21',
+    notes: [
+      'New read-only tool get_todos: the To-Do list (what needs them now, worked out from their records, plus their reminders), with money owed by each payer (waiting_payments) and what got done in the last 7 days (cleared_week).',
+      'A to-do clears on its own once its record is fixed, so act on one by changing the record with the usual tools, after the user confirms. Snoozing or dismissing to-dos is only done in the app.',
+    ],
+  },
+  {
     version: '1.46',
     date: '2026-11-20',
     notes: [
@@ -85,6 +93,7 @@ RECONCILING A STATEMENT
 
 TOOLS -- READ ONLY
 - get_ai_guide: this guide, or only what changed since you last read it.
+- get_todos: the user's To-Do list -- what needs them now (unshipped sales, late payouts, cash-out tracking, card bills, unlisted stock, their reminders), by urgency, plus money owed by each payer and what got done this week. A to-do clears on its own once its record is fixed; to act on one, change the record with the usual tools after the user confirms. Snoozing and dismissing happen only in the app. Good for "what should I do today?".
 - list_sales: sales by date range, platform (buyer) or payout_status, with net, fees, cost and payout fields.
 - list_inventory: purchases, paged; filter by receiving status, availability, or return window closing soon.
 - list_expenses: manual expenses, with notes and external_id.
