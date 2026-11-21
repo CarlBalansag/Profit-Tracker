@@ -64,10 +64,10 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <NavMarker marker={marker} className="rounded-xl bg-[#d8a65a]/10" />
 
             <GlassNavItem icon={LayoutDashboard} label="Dashboard" to="/" />
-            <GlassNavItem icon={ListChecks} label="To-Do" to="/todos" badge={todoCount} />
             <GlassNavItem icon={ShoppingCart} label="Add Transaction" to="/add-transaction" />
             <GlassNavItem icon={BadgeDollarSign} label="Record Sale" to="/add-sale" />
             <GlassNavItem icon={ArrowLeftRight} label="Transactions" to="/transactions" />
+            <GlassNavItem icon={ListChecks} label="To-Do" to="/todos" badge={todoCount} />
             <GlassNavItem icon={Boxes} label="Inventory" to="/inventory" />
             <GlassNavItem icon={Truck} label="Shipping" to="/shipping" />
             <GlassNavItem icon={ClipboardList} label="Statuses" to="/statuses" />
@@ -147,10 +147,10 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
           <NavMarker marker={marker} className="!mt-0 rounded-md bg-[var(--dp-accent-bg)]" />
           <SidebarSection title="Core" isCollapsed={isCollapsed} tutorialId="sidebar-section-core">
             <NavItem icon={LayoutDashboard} label="Dashboard" to="/" isCollapsed={isCollapsed} />
-            <NavItem icon={ListChecks} label="To-Do" to="/todos" isCollapsed={isCollapsed} badge={todoCount} />
             <NavItem icon={ShoppingCart} label="Add Transaction" to="/add-transaction" isCollapsed={isCollapsed} tutorialId="sidebar-add-transaction" />
             <NavItem icon={BadgeDollarSign} label="Record Sale" to="/add-sale" isCollapsed={isCollapsed} tutorialId="sidebar-record-sale" />
             <NavItem icon={ArrowLeftRight} label="Transactions" to="/transactions" isCollapsed={isCollapsed} tutorialId="sidebar-transactions" />
+            <NavItem icon={ListChecks} label="To-Do" to="/todos" isCollapsed={isCollapsed} badge={todoCount} />
           </SidebarSection>
 
           <SidebarSection title="Operations" isCollapsed={isCollapsed} tutorialId="sidebar-section-operations">

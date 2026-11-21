@@ -74,8 +74,9 @@ describe('To-Do page', () => {
       entry({ key: 'aging:1', type: 'aging_stock', group: 'purchases', urgency: 'info', title: 'Sitting 40 days, not listed' }),
     ]);
     mount();
-    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
-    expect(headings).toEqual(['Overdue 1', 'Today 1', 'For your info 1']);
+    const sections = screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'))
+      .filter((label) => ['Overdue', 'Today', 'This week', 'For your info'].includes(label));
+    expect(sections).toEqual(['Overdue', 'Today', 'For your info']);
     expect(within(screen.getByRole('region', { name: 'Overdue' })).getByText('Amex was due 2 days ago')).toBeInTheDocument();
   });
 
@@ -86,8 +87,8 @@ describe('To-Do page', () => {
     ]);
     mount();
     const chips = within(screen.getByRole('group', { name: 'Show' })).getAllByRole('button').map((b) => b.textContent);
-    expect(chips).toEqual(['All 2', 'Cash-outs 1', 'Sales 1']);
-    fireEvent.click(screen.getByRole('button', { name: 'Cash-outs 1' }));
+    expect(chips).toEqual(['All2', 'Cash-outs1', 'Sales1']);
+    fireEvent.click(screen.getByRole('button', { name: /^Cash-outs/ }));
     expect(screen.getByText('Send tracking')).toBeInTheDocument();
     expect(screen.queryByText('Ship it')).not.toBeInTheDocument();
   });
@@ -131,8 +132,11 @@ describe('To-Do page', () => {
     expect(screen.queryByRole('button', { name: 'Tomorrow' })).not.toBeInTheDocument();
     fireEvent.click(later);
     expect(later).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.click(screen.getByRole('button', { name: '3 days' }));
+    fireEvent.click(screen.getByRole('button', { name: 'In 3 days' }));
     expect(mutate).toHaveBeenLastCalledWith({ key: 'ship:1', action: 'snooze', until: addDays(localToday(), 3) }, expect.any(Object));
+    // Picking closes the menu; open it again to dismiss.
+    expect(screen.queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Later/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(mutate).toHaveBeenLastCalledWith({ key: 'ship:1', action: 'dismiss', until: undefined }, expect.any(Object));
   });
@@ -264,10 +268,47 @@ describe('Reminders on the To-Do page', () => {
     todos = response([]);
     openReminders = [{ id: 'rem-9', title: 'Renew resale certificate', due_date: '2027-03-01', due_time: null, repeat: 'yearly', notes: null, payment_method_id: null }];
     mount();
-    fireEvent.click(screen.getByRole('button', { name: /All reminders \(1\)/ }));
-    expect(screen.getByText('Renew resale certificate', { selector: 'p' })).toBeInTheDocument();
-    expect(screen.getByText(/Mar 1, every year/)).toBeInTheDocument();
+    const panel = screen.getByRole('region', { name: /Reminders/ });
+    expect(within(panel).getByText('Renew resale certificate')).toBeInTheDocument();
+    expect(within(panel).getByText('Mar')).toBeInTheDocument();
+    expect(within(panel).getByText(/every year/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Edit Renew resale certificate/ }));
     expect(screen.getByRole('dialog', { name: 'Edit reminder' })).toBeInTheDocument();
+  });
+});
+
+describe('To-Do filters', () => {
+  const mixed = () => response([
+    entry({ key: 'dispute:1', type: 'open_dispute', urgency: 'today', title: 'Open dispute' }),
+    entry({ key: 'aging:1', type: 'aging_stock', group: 'purchases', urgency: 'info', title: 'Sitting 40 days, not listed' }),
+  ]);
+
+  it('filters by an urgency tile, and tapping it again shows everything', () => {
+    todos = mixed();
+    mount();
+    const tile = within(screen.getByRole('group', { name: 'Filter by urgency' })).getByRole('button', { name: /Today/ });
+    fireEvent.click(tile);
+    expect(tile).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Open dispute')).toBeInTheDocument();
+    expect(screen.queryByText('Sitting 40 days, not listed')).not.toBeInTheDocument();
+    fireEvent.click(tile);
+    expect(screen.getByText('Sitting 40 days, not listed')).toBeInTheDocument();
+  });
+
+  it('offers to show everything when the filters leave nothing', () => {
+    todos = mixed();
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /^Purchases/ }));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Filter by urgency' })).getByRole('button', { name: /Overdue/ }));
+    expect(screen.getByText('Nothing here with these filters.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show everything' }));
+    expect(screen.getByText('Open dispute')).toBeInTheDocument();
+  });
+
+  it('links to phone notification settings', () => {
+    todos = response([]);
+    mount();
+    fireEvent.click(screen.getByRole('link', { name: /Get these on your phone/ }));
+    expect(screen.getByTestId('where').textContent).toBe('/settings {"tab":"notifications"}');
   });
 });
