@@ -351,6 +351,13 @@ async function updateSaleShipment(tx, userId, existing, { tracking_number, carri
     if (statusTransitions.reopensRestoredSale(existing, { workflow_status: normalized })) {
       throw Object.assign(new Error(statusTransitions.REOPEN_REFUSED_MESSAGE), { toolError: true });
     }
+    // Moving a sale to PAID here would only flip the status, leaving paid_at,
+    // paid_amount and payout_account empty -- a "paid" sale with no record of
+    // the money. mark_sale_paid is the one MCP path that writes the payment.
+    // Re-sending PAID for a sale already PAID stays a harmless no-op.
+    if (normalized === 'PAID' && existing.workflow_status !== 'PAID') {
+      throw Object.assign(new Error('update_shipment cannot mark a sale PAID because it records no payment. Use mark_sale_paid with the payout date and amount instead.'), { toolError: true });
+    }
     if (normalized !== existing.workflow_status) {
       data.workflow_status = normalized;
       data.workflow_status_changed_at = new Date();
@@ -378,12 +385,18 @@ function buildServer(userId, apiKeyId) {
   // ------------------------------------------------------------------ reads
 
   server.registerTool('list_sales', {
-    description: 'List sales with optional filters. Dates are YYYY-MM-DD. "buyer" is the marketplace/cashout the sale went through (e.g. eBay, Windy City) -- the same platform picked when the sale was recorded, not a separate contact.',
+    description: 'List sales with optional filters. Dates are YYYY-MM-DD. "buyer" is the marketplace/cashout the sale went through (e.g. eBay, Windy City) -- the same platform picked when the sale was recorded, not a separate contact. '
+      + 'To tell whether a sale was paid, read payout_status, not status: status is the workflow step, and a sale can be paid before it reaches PAID. '
+      + 'payout_status is "unpaid" (no payment recorded), "partial" (paid, but payout_short_amount says it came in short) or "paid". '
+      + 'payout_date is the day the money actually arrived, not an expected date; payout_amount is this sale\'s share of that deposit. '
+      + 'One deposit covering several sales shows as the same payout_date, payout_account and payout_reference on each of them -- there is no separate deposit record. '
+      + 'A "paid" sale with an empty payout_date and payout_amount was marked paid by a status change alone, so no payment details were recorded for it. '
+      + 'net (sale_amount minus fees and buyer refunds) is what the sale should pay out, and is what profit is based on -- not payout_amount.',
     inputSchema: {
       start_date: z.string().optional().describe('YYYY-MM-DD, inclusive'),
       end_date: z.string().optional().describe('YYYY-MM-DD, inclusive'),
       buyer: z.string().optional().describe('Filter by the sale\'s marketplace/cashout name (case-insensitive, partial match)'),
-      payout_status: z.enum(['unpaid', 'partial', 'paid']).optional(),
+      payout_status: z.enum(['unpaid', 'partial', 'paid']).optional().describe('Payment state, worked out from the recorded payment -- the field to use for "was I paid".'),
       limit: z.number().int().min(1).max(500).optional().describe('Omit to return every matching sale.'),
     },
   }, async ({ start_date, end_date, buyer, payout_status: payoutFilter, limit }) => {
@@ -578,7 +591,8 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('get_unpaid_by_buyer', {
-    description: 'Totals of sold-but-unpaid (and short-paid) sales, grouped by buyer (the sale\'s marketplace/cashout).',
+    description: 'Totals of sold-but-unpaid (and short-paid) sales, grouped by buyer -- the sale\'s marketplace/cashout (e.g. eBay), not a person. '
+      + 'An unpaid sale counts its full net; a partial one counts only its payout_short_amount. Cancelled, returned and disputed sales are left out.',
     inputSchema: {},
   }, async () => {
     const sales = await prisma.sales.findMany({ where: { inventory: { user_id: userId } }, include: { inventory: true, platform: true } });
@@ -617,13 +631,18 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('mark_sale_paid', {
-    description: 'Mark one or more sales as paid from a single deposit. If payout_amount is less than the combined expected revenue of the given sales, the shortfall is split across them proportionally and recorded, rather than silently absorbed.',
+    description: 'Record a payout you received: marks one or more sales paid from a single deposit, and is the only tool that records payment details. Call it once per deposit with every sale it covers. '
+      + 'If payout_amount is less than the combined net of the given sales, the shortfall is split across them in proportion and recorded as payout_short_amount (those sales show as "partial"), rather than silently absorbed. '
+      + 'Paying more than the combined net is not recorded: each sale\'s payout_amount is capped at its own net. '
+      + 'A sale can be marked paid only while it is OUTBOUND, AWAITING_HANDOFF, HANDED_OVER or WAITING_FOR_PAYMENT; a sale already PAID, or not yet shipped, is refused. '
+      + 'To add payout details to a sale that was set to PAID without them, first move it back to WAITING_FOR_PAYMENT with update_shipment, then call this. '
+      + 'Not shown in the Activity log, and cannot be undone with undo_activity.',
     inputSchema: {
-      sale_ids: z.array(z.string().uuid()).min(1),
-      payout_date: z.string().describe('YYYY-MM-DD'),
-      payout_amount: z.number().nonnegative(),
-      payout_account: z.string().optional().describe('e.g. "Chase College", "PayPal", "eBay"'),
-      payout_reference: z.string().optional(),
+      sale_ids: z.array(z.string().uuid()).min(1).describe('Every sale the deposit covers.'),
+      payout_date: z.string().describe('YYYY-MM-DD -- the day the money arrived.'),
+      payout_amount: z.number().nonnegative().describe('The total of the deposit, not a per-sale amount.'),
+      payout_account: z.string().optional().describe('Where the money landed, e.g. "Chase College", "PayPal", "eBay"'),
+      payout_reference: z.string().optional().describe('A note that identifies the deposit (e.g. a transfer id). Use the same one for every sale it covers.'),
     },
   }, async ({ sale_ids, payout_date, payout_amount, payout_account, payout_reference }) => {
     try {
@@ -1130,12 +1149,12 @@ function buildServer(userId, apiKeyId) {
   });
 
   server.registerTool('update_shipment', {
-    description: 'Set or correct the tracking number, carrier, or shipping status on one inbound purchase or outbound sale, looked up by id -- works the same way for either, no need to say which. Adding a tracking number for the first time is rejected if the item is already past the shipping stage, same as the website. Every change is recorded and reviewable via list_changes.',
+    description: 'Set or correct the tracking number, carrier, or shipping status on one inbound purchase or outbound sale, looked up by id -- works the same way for either, no need to say which. Adding a tracking number for the first time is rejected if the item is already past the shipping stage, same as the website. A sale cannot be moved to PAID here, because a status change records no payment -- use mark_sale_paid. Every change is recorded and reviewable via list_changes.',
     inputSchema: z.object({
       item_id: z.string().uuid().describe('An id from list_shipments (or list_inventory/list_sales).'),
       tracking_number: z.string().optional().describe('Empty string clears it.'),
       carrier: z.string().optional().describe('Empty string clears it. Auto-detected from the tracking number when not set.'),
-      status: z.string().optional().describe('Receiving status for an inbound item (PRE_ORDER, PURCHASED, INBOUND, ON_HAND) or workflow status for an outbound sale -- see list_shipments for the item\'s current value and workflow.'),
+      status: z.string().optional().describe('Receiving status for an inbound item (PRE_ORDER, PURCHASED, INBOUND, ON_HAND) or workflow status for an outbound sale -- see list_shipments for the item\'s current value and workflow. PAID is refused for a sale; use mark_sale_paid.'),
     }).strict(),
   }, async ({ item_id, tracking_number, carrier, status }) => {
     try {

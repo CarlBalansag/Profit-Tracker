@@ -193,6 +193,48 @@ describe('update_shipment', () => {
     expect(data).toContain('Invalid status for this sale');
   });
 
+  it('refuses to move a sale to PAID, since that would record no payment', async () => {
+    harness.db.sales[0].workflow_status = 'WAITING_FOR_PAYMENT';
+    const { isError, data } = await callTool('update_shipment', { item_id: harness.ids.sale, status: 'paid' });
+    expect(isError).toBe(true);
+    expect(data).toContain('mark_sale_paid');
+    expect(harness.db.sales[0].workflow_status).toBe('WAITING_FOR_PAYMENT');
+    expect(harness.db.sales[0].paid_at ?? null).toBeNull();
+    const { data: changes } = await callTool('list_changes', { record_id: harness.ids.sale });
+    expect(changes).toHaveLength(0);
+  });
+
+  it('refuses PAID even when tracking is sent in the same call, and saves nothing', async () => {
+    harness.db.sales[0].workflow_status = 'OUTBOUND';
+    harness.db.sales[0].tracking_number = null;
+    const { isError } = await callTool('update_shipment', { item_id: harness.ids.sale, status: 'PAID', carrier: 'UPS' });
+    expect(isError).toBe(true);
+    expect(harness.db.sales[0].workflow_status).toBe('OUTBOUND');
+    expect(harness.db.sales[0].carrier ?? null).toBeNull();
+  });
+
+  it('still accepts PAID for a sale already PAID, as a no-op', async () => {
+    harness.db.sales[0].workflow_status = 'PAID';
+    const { isError, data } = await callTool('update_shipment', { item_id: harness.ids.sale, status: 'PAID' });
+    expect(isError).toBe(false);
+    expect(data.status).toBe('PAID');
+  });
+
+  it('lets a PAID sale with no payment details be moved back and then paid properly', async () => {
+    harness.db.sales[0].workflow_status = 'PAID';
+    harness.db.sales[0].paid_at = null;
+    const back = await callTool('update_shipment', { item_id: harness.ids.sale, status: 'WAITING_FOR_PAYMENT' });
+    expect(back.isError).toBe(false);
+    const { isError, data } = await callTool('mark_sale_paid', {
+      sale_ids: [harness.ids.sale], payout_date: '2026-10-08', payout_amount: 273, payout_account: 'PayPal',
+    });
+    expect(isError).toBe(false);
+    expect(data[0].payout_status).toBe('paid');
+    expect(data[0].payout_date).toBe('2026-10-08');
+    expect(data[0].payout_account).toBe('PayPal');
+    expect(harness.db.sales[0].workflow_status).toBe('PAID');
+  });
+
   it('errors on an id that is neither an owned purchase nor an owned sale', async () => {
     const { isError, data } = await callTool('update_shipment', { item_id: '99999999-9999-4999-8999-999999999999', tracking_number: 'X' });
     expect(isError).toBe(true);
