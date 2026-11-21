@@ -390,7 +390,7 @@ function buildServer(userId, apiKeyId) {
       + 'payout_status is "unpaid" (no payment recorded), "partial" (paid, but payout_short_amount says it came in short) or "paid". '
       + 'payout_date is the day the money actually arrived, not an expected date; payout_amount is this sale\'s share of that deposit. '
       + 'One deposit covering several sales shows as the same payout_date, payout_account and payout_reference on each of them -- there is no separate deposit record. '
-      + 'A "paid" sale with an empty payout_date and payout_amount was marked paid by a status change alone, so no payment details were recorded for it. '
+      + 'A "paid" sale with an empty payout_date and payout_amount was marked paid by a status change alone, so no payment details were recorded for it; mark_sale_paid can add them. '
       + 'net (sale_amount minus fees and buyer refunds) is what the sale should pay out, and is what profit is based on -- not payout_amount.',
     inputSchema: {
       start_date: z.string().optional().describe('YYYY-MM-DD, inclusive'),
@@ -618,8 +618,9 @@ function buildServer(userId, apiKeyId) {
   // Activity log: every add/edit the assistant makes is logged in the same
   // transaction, exactly like the website's routes, so it shows on the
   // Activity page (marked "AI assistant") and can be undone there or with
-  // undo_activity. mark_sale_paid and log_cashout_purchase are not logged,
-  // same as their website counterparts.
+  // undo_activity. mark_sale_paid logs one entry per deposit inside
+  // services/markSalesPaid.js; log_cashout_purchase is not logged, same as
+  // its website counterpart.
   const track = (tx, meta, work) => activityLog.trackChange(tx, userId, { source: 'assistant', ...meta }, work);
   const saleRefs = async (t, saleId) => {
     const sale = await t.sales.findUnique({ where: { id: saleId }, select: { inventory_id: true } });
@@ -634,9 +635,10 @@ function buildServer(userId, apiKeyId) {
     description: 'Record a payout you received: marks one or more sales paid from a single deposit, and is the only tool that records payment details. Call it once per deposit with every sale it covers. '
       + 'If payout_amount is less than the combined net of the given sales, the shortfall is split across them in proportion and recorded as payout_short_amount (those sales show as "partial"), rather than silently absorbed. '
       + 'Paying more than the combined net is not recorded: each sale\'s payout_amount is capped at its own net. '
-      + 'A sale can be marked paid only while it is OUTBOUND, AWAITING_HANDOFF, HANDED_OVER or WAITING_FOR_PAYMENT; a sale already PAID, or not yet shipped, is refused. '
-      + 'To add payout details to a sale that was set to PAID without them, first move it back to WAITING_FOR_PAYMENT with update_shipment, then call this. '
-      + 'Not shown in the Activity log, and cannot be undone with undo_activity.',
+      + 'A sale can be marked paid while it is OUTBOUND, AWAITING_HANDOFF, HANDED_OVER or WAITING_FOR_PAYMENT. '
+      + 'It also backfills a sale that is already PAID but has no payment recorded (payout_date empty): the payout details are added and its status stays PAID. '
+      + 'A sale already PAID with a payment recorded, or not yet shipped, is refused. '
+      + 'Each call is one Activity log entry covering every sale in it (activity_id in the result), and undo_activity reverses the whole deposit.',
     inputSchema: {
       sale_ids: z.array(z.string().uuid()).min(1).describe('Every sale the deposit covers.'),
       payout_date: z.string().describe('YYYY-MM-DD -- the day the money arrived.'),
@@ -646,17 +648,19 @@ function buildServer(userId, apiKeyId) {
     },
   }, async ({ sale_ids, payout_date, payout_amount, payout_account, payout_reference }) => {
     try {
-      const updated = await markSalesPaid({
+      const { sales: updated, activity } = await markSalesPaid({
         userId,
         saleIds: sale_ids,
         payoutDate: localNoon(payout_date),
         payoutAmount: payout_amount,
         payoutAccount: payout_account || null,
         payoutReference: payout_reference || null,
+        source: 'assistant',
       });
       await logWrite(userId, apiKeyId, 'mark_sale_paid', { sale_ids, payout_date, payout_amount, payout_account, payout_reference });
       return jsonResult(updated.map((s) => ({
         id: s.id,
+        activity_id: activity?.id ?? null,
         payout_status: payoutStatus(s),
         payout_amount: toNum(s.paid_amount),
         payout_short_amount: s.payout_short_amount !== null ? toNum(s.payout_short_amount) : 0,
