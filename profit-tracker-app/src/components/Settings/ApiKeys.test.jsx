@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiKeys } from './ApiKeys';
+import { AI_GUIDE_VERSION } from '../../../../shared/aiGuide.mjs';
 
 const mocks = vi.hoisted(() => ({ apiFetch: vi.fn() }));
 vi.mock('../../hooks/useApi', () => ({ apiFetch: mocks.apiFetch }));
@@ -64,5 +65,38 @@ describe('ApiKeys cashout writes switch', () => {
     render(<ApiKeys />);
     await screen.findByText('Revoked');
     expect(screen.queryByRole('checkbox', { name: /Allow cashout writes/ })).toBeNull();
+  });
+});
+
+describe('ApiKeys: AI guide version per key', () => {
+  const keyRow = (fields) => ({ id: 'k1', name: 'Grok', key_prefix: 'pt_abc', created_at: '2026-11-01T00:00:00Z', last_used_at: null, revoked_at: null, allow_cashout_writes: false, ai_guide_version: null, ...fields });
+  const show = async (rows) => {
+    mocks.apiFetch.mockResolvedValue(new Response(JSON.stringify(rows), { status: 200 }));
+    render(<ApiKeys />);
+    return screen.findAllByTestId('key-guide-status');
+  };
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it('says when a key has never pulled the guide', async () => {
+    const [status] = await show([keyRow({})]);
+    expect(status.textContent).toBe('AI guide: not pulled yet');
+  });
+
+  it('says up to date on the current version', async () => {
+    const [status] = await show([keyRow({ ai_guide_version: AI_GUIDE_VERSION })]);
+    expect(status.textContent).toBe(`AI guide: up to date (${AI_GUIDE_VERSION})`);
+  });
+
+  it('says how far behind an older version is', async () => {
+    const [status] = await show([keyRow({ ai_guide_version: '1.01' })]);
+    expect(status.textContent).toContain(`read 1.01, now ${AI_GUIDE_VERSION}`);
+  });
+
+  it('shows nothing for a revoked key', async () => {
+    mocks.apiFetch.mockResolvedValue(new Response(JSON.stringify([keyRow({ revoked_at: '2026-11-02T00:00:00Z' })]), { status: 200 }));
+    render(<ApiKeys />);
+    await screen.findByText('Revoked');
+    expect(screen.queryByTestId('key-guide-status')).toBeNull();
   });
 });

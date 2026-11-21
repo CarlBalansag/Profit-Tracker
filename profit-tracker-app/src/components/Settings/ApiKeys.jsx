@@ -4,6 +4,7 @@ import { apiFetch } from '../../hooks/useApi';
 import { requireSuccessfulResponse } from '../../hooks/apiResponse';
 import { toast } from 'sonner';
 import AiGuideCopy from './AiGuideCopy';
+import { AI_GUIDE_VERSION } from '../../../../shared/aiGuide.mjs';
 
 // Kept in sync with the tool list in profit-tracker-api/routes/mcp.js and README.md's
 // "MCP Server" section -- this is the same set, just in plain-English form for
@@ -102,6 +103,13 @@ function ToolsGuide() {
 }
 
 const fmtDate = (value) => (value ? new Date(value).toLocaleString() : '—');
+
+// Which AI guide version the AI using this key last pulled with get_ai_guide.
+function guideStatus(version) {
+  if (!version) return { text: 'AI guide: not pulled yet', tone: 'text-gray-600' };
+  if (Number.parseFloat(version) >= Number.parseFloat(AI_GUIDE_VERSION)) return { text: `AI guide: up to date (${version})`, tone: 'text-emerald-400' };
+  return { text: `AI guide: read ${version}, now ${AI_GUIDE_VERSION} — it catches up next time it calls get_ai_guide`, tone: 'text-amber-400' };
+}
 
 // The raw token is only ever available in the response of create/rotate --
 // the server stores only its hash and will never return it again. This
@@ -251,7 +259,9 @@ export const ApiKeys = () => {
           <div className="divide-y divide-gray-800 border border-gray-800 rounded-lg overflow-hidden">
             {keys.map((key) => (
               <div key={key.id} className="p-3 flex items-center justify-between gap-3">
-                <div>
+                {/* min-w-0 lets this column shrink on a phone so the rotate and
+                    revoke buttons beside it stay inside the row. */}
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-200 font-medium">{key.name || 'Unnamed key'}</span>
                     {key.revoked_at && (
@@ -260,6 +270,10 @@ export const ApiKeys = () => {
                   </div>
                   <p className="text-[11px] text-gray-600 font-mono">{key.key_prefix}…</p>
                   <p className="text-[11px] text-gray-600">Created {fmtDate(key.created_at)} · Last used {fmtDate(key.last_used_at)}</p>
+                  {!key.revoked_at && (() => {
+                    const status = guideStatus(key.ai_guide_version);
+                    return <p className={`text-[11px] ${status.tone}`} data-testid="key-guide-status">{status.text}</p>;
+                  })()}
                   {!key.revoked_at && (
                     <label className="mt-2 flex items-start gap-2 text-[11px] text-gray-400 cursor-pointer">
                       <input
@@ -282,6 +296,7 @@ export const ApiKeys = () => {
                       onClick={() => rotate(key.id)}
                       disabled={busyId === key.id}
                       title="Issue a new key and invalidate this one"
+                      aria-label="Rotate key"
                       className="p-2 rounded-lg border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 disabled:opacity-50"
                     >
                       <RotateCw size={14} />
@@ -290,6 +305,7 @@ export const ApiKeys = () => {
                       onClick={() => revoke(key.id)}
                       disabled={busyId === key.id}
                       title="Revoke this key"
+                      aria-label="Revoke key"
                       className="p-2 rounded-lg border border-white/10 text-gray-400 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-50"
                     >
                       <Ban size={14} />

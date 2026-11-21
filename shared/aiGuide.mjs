@@ -1,5 +1,7 @@
-// The guide a person pastes into their AI assistant so it knows how to use the
-// Profit Tracker MCP tools (Settings > AI Assistant > Keep your AI up to date).
+// The guide that teaches a person's AI assistant how to use the Profit Tracker
+// MCP tools. People copy it from Settings > AI Assistant > Keep your AI up to
+// date, and a connected AI pulls it with the get_ai_guide MCP tool, which
+// remembers per API key the version that AI last read.
 //
 // Two parts, kept up to date together:
 //   AI_GUIDE_BODY     how everything works *now* -- the full guide for someone
@@ -33,6 +35,7 @@ export const AI_GUIDE_BODY = `WHAT THIS IS
 Profit Tracker records a reseller's purchases (inventory), sales, payouts, expenses, credit cards and cashout deals. You reach it through MCP tools. This guide covers how the data works, the rules for changing it, and every tool.
 
 GROUND RULES
+- At the start of each session, call get_ai_guide with no arguments. It returns only what changed since you last read this guide, or that you are up to date.
 - Before any tool that changes data, tell the user exactly what you will record and wait for their OK. Read-only tools are always fine.
 - Every add/edit returns an activity_id. Keep it: undo_activity can reverse that change for 30 days.
 - Never invent ids. Get them from list_*, search or find_records.
@@ -73,6 +76,7 @@ RECONCILING A STATEMENT
 - reconcile_transactions takes bank/card lines {id, date, amount, merchant, account}. Amount signs don't matter. Match tiers, best first: external_id, amount_date (same amount, date within tolerance), amount (same amount, further off), merchant (similar merchant, amount within 10% -- a guess; confirm it). It also lists lines that matched nothing and tracker records with no bank line.
 
 TOOLS -- READ ONLY
+- get_ai_guide: this guide, or only what changed since you last read it.
 - list_sales: sales by date range, platform (buyer) or payout_status, with net, fees, cost and payout fields.
 - list_inventory: purchases, paged; filter by receiving status, availability, or return window closing soon.
 - list_expenses: manual expenses, with notes and external_id.
@@ -118,7 +122,7 @@ const header = (version) => `PROFIT TRACKER AI GUIDE -- version ${version}`;
 export function fullGuideText() {
   return [
     header(AI_GUIDE_VERSION),
-    `Remember that you have read version ${AI_GUIDE_VERSION}. Later the user will paste only the updates after it.`,
+    `Remember that you have read version ${AI_GUIDE_VERSION}. To catch up later, call get_ai_guide (it returns only what changed), or the user will paste just the updates.`,
     '',
     AI_GUIDE_BODY,
   ].join('\n');

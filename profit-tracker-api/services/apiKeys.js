@@ -37,8 +37,12 @@ async function rotateApiKey(userId, existingId) {
     }
     const token = generateRawToken();
     const record = await tx.apiKey.create({
-      // The new key keeps the old one's cashout write permission.
-      data: { user_id: userId, name: existing.name, key_hash: hashToken(token), key_prefix: prefixOf(token), allow_cashout_writes: Boolean(existing.allow_cashout_writes) },
+      // The new key keeps the old one's cashout write permission, and the
+      // guide version its AI has already read (same AI, new token).
+      data: {
+        user_id: userId, name: existing.name, key_hash: hashToken(token), key_prefix: prefixOf(token),
+        allow_cashout_writes: Boolean(existing.allow_cashout_writes), ai_guide_version: existing.ai_guide_version ?? null,
+      },
     });
     return { record, token };
   });

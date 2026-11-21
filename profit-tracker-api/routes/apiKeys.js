@@ -23,6 +23,7 @@ const publicKey = (key) => ({
   last_used_at: key.last_used_at,
   revoked_at: key.revoked_at,
   allow_cashout_writes: Boolean(key.allow_cashout_writes),
+  ai_guide_version: key.ai_guide_version ?? null,
 });
 
 // GET /api/api-keys — never returns key_hash or a raw token, only metadata.

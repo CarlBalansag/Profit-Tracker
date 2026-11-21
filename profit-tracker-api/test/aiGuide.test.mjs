@@ -1,4 +1,4 @@
-// Keeps the AI guide (profit-tracker-app/src/data/aiGuide.js, copied from
+// Keeps the AI guide (shared/aiGuide.mjs, copied from
 // Settings > AI Assistant) in step with the MCP server. If this fails after
 // adding, renaming or removing a tool, update the guide body and add an
 // AI_GUIDE_UPDATES entry -- see AGENTS.md "AI guide".
@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const guide = await import('../../profit-tracker-app/src/data/aiGuide.js');
+const guide = await import('../../shared/aiGuide.mjs');
 const { CHANGELOG } = await import('../../profit-tracker-app/src/data/changelog.js');
 const mcpSource = readFileSync(join(here, '../routes/mcp.js'), 'utf8');
 const registered = [...mcpSource.matchAll(/registerTool\('([a-z_]+)'/g)].map((m) => m[1]);

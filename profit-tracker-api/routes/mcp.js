@@ -33,6 +33,12 @@ const { presentDeal } = require('../services/cashouts/dealPresenter');
 const cashoutCommits = require('../services/cashouts/commits');
 const { logPurchase } = require('../services/cashouts/logPurchase');
 
+// The AI guide (shared/aiGuide.mjs) is an ES module shared with the website,
+// so it loads asynchronously once; every request waits for it before building
+// its server (it is needed for the server instructions and get_ai_guide).
+let aiGuide = null;
+const aiGuideReady = import('../../shared/aiGuide.mjs').then((mod) => { aiGuide = mod; return mod; });
+
 const toDateOnly = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 const toNum = (d) => (d === null || d === undefined ? 0 : (typeof d.toNumber === 'function' ? d.toNumber() : Number(d)));
 const localNoon = (dateStr) => new Date(`${dateStr}T12:00:00.000Z`);
@@ -383,9 +389,52 @@ async function updateSaleShipment(tx, userId, existing, { tracking_number, carri
 }
 
 function buildServer(userId, apiKeyId) {
-  const server = new McpServer({ name: 'profit-tracker', version: '1.0.0' }, { capabilities: {} });
+  // Sent once when an AI connects. Clients that pass server instructions to
+  // the model get told to catch up on the guide; get_ai_guide works either way.
+  const instructions = `Profit Tracker records a reseller's purchases, sales, payouts, expenses and cards. `
+    + `Its AI guide (how the data works, the rules, and every tool) is at version ${aiGuide.AI_GUIDE_VERSION}. `
+    + 'At the start of a session, before other tools, call get_ai_guide with no arguments: it returns the full guide the first time, '
+    + 'and after that only what changed since this connection last read it (or that you are up to date).';
+  const server = new McpServer({ name: 'profit-tracker', version: '1.0.0' }, { capabilities: {}, instructions });
 
   // ------------------------------------------------------------------ reads
+
+  server.registerTool('get_ai_guide', {
+    description: 'How to use these tools: the Profit Tracker AI guide. Call it at the start of a session with no arguments. '
+      + 'The first time, it returns the full guide. After that it remembers (per API key) which version you last read and returns only what changed since, '
+      + 'or kind "up_to_date" with nothing to read -- so calling it every session is cheap. '
+      + 'Pass full: true for the whole guide again (e.g. in a new chat that has forgotten it), or since to say which version you already know.',
+    inputSchema: z.object({
+      full: z.boolean().optional().describe('Return the whole guide, whatever you have read before.'),
+      since: z.string().regex(/^\d+\.\d+$/, 'since must look like 1.45').optional().describe('The guide version you already know, instead of the one remembered for this key.'),
+    }).strict(),
+  }, async ({ full, since }) => {
+    try {
+      const current = aiGuide.AI_GUIDE_VERSION;
+      const oldest = aiGuide.AI_GUIDE_UPDATES[aiGuide.AI_GUIDE_UPDATES.length - 1].version;
+      const key = apiKeyId ? await prisma.apiKey.findFirst({ where: { id: apiKeyId, user_id: userId } }) : null;
+      const remembered = key?.ai_guide_version ?? null;
+      const known = since ?? remembered;
+      let kind;
+      let text;
+      if (full || !known || Number.parseFloat(known) < Number.parseFloat(oldest)) {
+        kind = 'full';
+        text = aiGuide.fullGuideText();
+      } else {
+        text = aiGuide.updatesSinceText(known);
+        kind = text ? 'updates' : 'up_to_date';
+        if (!text) text = `You already know the current guide (version ${current}). Nothing new.`;
+      }
+      // Remember what this key's AI now knows. Metadata on the key, like
+      // last_used_at -- not the user's records, so not an Activity entry.
+      if (key && remembered !== current) {
+        await prisma.apiKey.update({ where: { id: key.id }, data: { ai_guide_version: current } });
+      }
+      return jsonResult({ kind, current_version: current, you_had: known ?? null, text });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to load the AI guide');
+    }
+  });
 
   server.registerTool('list_sales', {
     description: 'List sales with optional filters. Dates are YYYY-MM-DD. "buyer" is the marketplace/cashout the sale went through (e.g. eBay, Windy City) -- the same platform picked when the sale was recorded, not a separate contact. '
@@ -2885,6 +2934,7 @@ function buildServer(userId, apiKeyId) {
 }
 
 router.post('/', async (req, res) => {
+  await aiGuideReady;
   const server = buildServer(req.user.id, req.apiKeyId);
   try {
     // enableJsonResponse: none of these tools stream partial results or

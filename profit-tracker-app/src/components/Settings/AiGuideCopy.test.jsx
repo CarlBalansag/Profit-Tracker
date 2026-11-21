@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AiGuideCopy, { LAST_COPIED_KEY } from './AiGuideCopy';
 import {
   AI_GUIDE_BODY, AI_GUIDE_UPDATES, AI_GUIDE_VERSION, fullGuideText, updatesAfter, updatesSinceText, wordCount,
-} from '../../data/aiGuide';
+} from '../../../../shared/aiGuide.mjs';
 
 const mocks = vi.hoisted(() => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock('sonner', () => ({ toast: mocks.toast }));

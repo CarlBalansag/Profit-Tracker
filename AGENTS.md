@@ -16,10 +16,10 @@ Do not fix unrelated issues discovered during QA. Record them with reproduction 
 
 ## AI guide (for people's AI assistants)
 
-`profit-tracker-app/src/data/aiGuide.js` is the guide people copy from Settings > AI Assistant into their own AI, so it knows how to use the MCP tools. Any push that changes what an AI can do over MCP (a tool added, removed or renamed, new inputs, or changed behavior or rules) must, in the same push:
+`shared/aiGuide.mjs` is the guide that teaches people's AI assistants how to use the MCP tools. People copy it from Settings > AI Assistant, and a connected AI pulls it with the `get_ai_guide` MCP tool, which remembers per API key which version that AI last read. Any push that changes what an AI can do over MCP (a tool added, removed or renamed, new inputs, or changed behavior or rules) must, in the same push:
 
 1. Rewrite the affected parts of `AI_GUIDE_BODY` so it describes how things work **now** — it's the full guide for new people, not a history.
-2. Add one entry at the top of `AI_GUIDE_UPDATES` with that push's What's New version and date, and a few short notes saying only what changed and what the AI should do differently. Someone whose AI already knows the previous version copies just these notes, so keep them short and complete on their own.
+2. Add one entry at the top of `AI_GUIDE_UPDATES` with that push's What's New version and date, and a few short notes saying only what changed and what the AI should do differently. An AI that already knows the previous version gets just these notes (copied, or from `get_ai_guide`), so keep them short and complete on their own.
 
 One entry per push, like What's New; pushes with no MCP-facing change get none. `profit-tracker-api/test/aiGuide.test.mjs` fails if a tool is missing from the guide, a removed tool is still named, or a guide version isn't in `changelog.js`.
 

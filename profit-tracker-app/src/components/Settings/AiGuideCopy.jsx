@@ -3,7 +3,7 @@ import { Copy, RefreshCw, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   AI_GUIDE_UPDATES, AI_GUIDE_VERSION, fullGuideText, updatesSinceText, wordCount,
-} from '../../data/aiGuide';
+} from '../../../../shared/aiGuide.mjs';
 
 // Settings > AI Assistant: copy the AI guide into an assistant. Someone new
 // copies the whole guide once; someone whose AI already knows an older version
@@ -57,7 +57,8 @@ export default function AiGuideCopy() {
       <div>
         <h2 className="text-sm font-bold text-white flex items-center gap-2"><Sparkles size={16} /> Keep your AI up to date</h2>
         <p className="text-xs text-gray-500 mt-1 max-w-lg">
-          Paste this guide into your AI so it knows every tool and how to use it. When we add tools, copy only the updates.
+          An AI connected with one of your keys catches up by itself: it calls <code className="font-mono text-[11px] text-gray-300">get_ai_guide</code> and gets only what&apos;s new (each key shows the version it last read).
+          For an AI that doesn&apos;t, paste the guide into it, then copy only the updates when we add tools.
           The guide is on version <span className="text-gray-300 font-medium" data-testid="ai-guide-version">{AI_GUIDE_VERSION}</span>
           {lastCopied ? <>; you last copied <span className="text-gray-300 font-medium">{lastCopied}</span> on this device.</> : '.'}
         </p>

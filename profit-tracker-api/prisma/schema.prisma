@@ -72,6 +72,10 @@ model ApiKey {
   // Off by default: a key can only make binding cashout writes (commit,
   // change, withdraw, send tracking) through MCP once the owner turns this on.
   allow_cashout_writes Boolean @default(false)
+  // The AI guide version (shared/aiGuide.mjs) the AI using this key last
+  // pulled with the get_ai_guide MCP tool, so the next call returns only what
+  // is new. NULL = it has never pulled the guide.
+  ai_guide_version String?
 
   @@index([user_id])
 }
