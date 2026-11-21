@@ -14,7 +14,7 @@ function GuideText({ text }) {
   const blocks = [];
   for (const line of text.split('\n')) {
     if (!line.trim()) continue;
-    if (/^[A-Z][A-Z0-9 ,'()\-]+$/.test(line.trim())) blocks.push({ type: 'h', text: line.trim() });
+    if (/^[A-Z][A-Z0-9 ,'()-]+$/.test(line.trim())) blocks.push({ type: 'h', text: line.trim() });
     else if (/^- /.test(line)) blocks.push({ type: 'li', text: line.slice(2) });
     else if (/^\d+\. /.test(line)) blocks.push({ type: 'li', text: line.replace(/^\d+\. /, ''), step: line.match(/^\d+/)[0] });
     else blocks.push({ type: 'p', text: line });
