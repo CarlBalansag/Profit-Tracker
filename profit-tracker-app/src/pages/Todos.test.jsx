@@ -177,16 +177,50 @@ describe('Dashboard Needs attention card', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('shows the three most urgent items and links to the full list', () => {
-    todos = response([1, 2, 3, 4].map((n) => entry({ key: `ship:${n}`, title: `Item ${n}`, urgency: n === 1 ? 'overdue' : 'soon' })));
-    todos.counts.urgent = 1;
+  it('shows counts by urgency, the four most urgent rows, and links to the full list', () => {
+    todos = response([1, 2, 3, 4, 5].map((n) => entry({ key: `ship:${n}`, title: `Item ${n}`, urgency: n === 1 ? 'overdue' : 'soon' })));
     mount(<TodoSummary />);
     const card = screen.getByRole('region', { name: 'Needs attention' });
-    expect(within(card).getByText('4 · 1 urgent')).toBeInTheDocument();
-    expect(within(card).getAllByRole('listitem')).toHaveLength(3);
+    const byUrgency = within(card).getByRole('list', { name: 'By urgency' });
+    expect(within(byUrgency).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['1 overdue', '4 this week']);
+    expect(within(card).getAllByRole('button')).toHaveLength(4);
     expect(within(card).getByRole('link', { name: /View all/ })).toHaveAttribute('href', '/todos');
     fireEvent.click(within(card).getByText('Item 1'));
     expect(screen.getByTestId('where').textContent).toContain('/transactions');
+  });
+
+  it('folds repeats of the same thing into one row with their total, which opens the list', () => {
+    todos = response(['4K', '4K Select', 'HD'].map((name) => entry({
+      key: `commit-pending:${name}`, type: 'commit_pending', group: 'cashout', title: 'Add tracking to commit', detail: `2× Fire TV Stick ${name} · EB`, amount: 100,
+    })));
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<TodoSummary />} />
+          <Route path="*" element={<Where />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const row = screen.getByRole('button', { name: /Add tracking to commit/ });
+    expect(row).toHaveTextContent('×3');
+    expect(row).toHaveTextContent('2× Fire TV Stick 4K, 2× Fire TV Stick 4K Select, 2× Fire TV Stick HD');
+    expect(row).toHaveTextContent('$300.00');
+    fireEvent.click(row);
+    expect(screen.getByTestId('where').textContent).toContain('/todos');
+  });
+
+  it('shows who owes money, even with nothing else on the list', () => {
+    todos = { ...response([]), waiting_payments: [
+      { platform_id: 'p1', name: 'TradePost', cashout: true, total: 5414.6, sales: 2, oldest_days: 14 },
+      { platform_id: 'p2', name: 'EB', cashout: true, total: 649, sales: 1, oldest_days: 0 },
+    ] };
+    mount(<TodoSummary />);
+    const owed = screen.getByRole('region', { name: 'Waiting on payment' });
+    expect(owed).toHaveTextContent('$6,063.60');
+    expect(within(owed).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'TradePost2 sales · oldest 14 days$5,414.60',
+      'EB1 sale · oldest today$649.00',
+    ]);
   });
 });
 

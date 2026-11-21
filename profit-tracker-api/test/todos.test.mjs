@@ -524,3 +524,27 @@ describe('cash-out deals ending', () => {
     expect(body.items[0].detail).toMatch(/ · deal ends in 2 days$/);
   });
 });
+
+describe('waiting on payment', () => {
+  it('adds up money owed by each payer, late or not, biggest first', async () => {
+    addSale({ platform_id: CASHOUT, workflow_status: 'WAITING_FOR_PAYMENT', workflow_status_changed_at: day(-14), unit_price: 541.46, quantity: 5 });
+    addSale({ platform_id: CASHOUT, workflow_status: 'SCANNED_IN', workflow_status_changed_at: day(-2), unit_price: 100 });
+    addSale({ workflow_status: 'WAITING_FOR_PAYMENT', workflow_status_changed_at: day(-1), unit_price: 80 });
+    addSale({ workflow_status: 'AWAITING_SHIPMENT' }); // not owed yet
+    addSale({ workflow_status: 'PAID', paid_at: day(-1) }); // paid
+    addSale({ workflow_status: 'WAITING_FOR_PAYMENT', voided_at: day(-1) }); // voided
+    const { body } = await list();
+    expect(body.waiting_payments).toEqual([
+      { platform_id: CASHOUT, name: 'QA Cashout', cashout: true, total: 2807.3, sales: 2, oldest_days: 14 },
+      expect.objectContaining({ platform_id: ids.platform, cashout: false, total: 80, sales: 1, oldest_days: 1 }),
+    ]);
+  });
+
+  it('keeps counting a payout the user snoozed on the list', async () => {
+    const sale = addSale({ workflow_status: 'WAITING_FOR_PAYMENT', workflow_status_changed_at: day(-10) });
+    await request('POST', '/api/todos/state', { key: `payout:${sale.id}`, action: 'snooze', until: dayStr(3), today: TODAY });
+    const { body } = await list();
+    expect(byType(body.items, 'payout_late')).toEqual([]);
+    expect(body.waiting_payments).toEqual([expect.objectContaining({ total: 150, sales: 1 })]);
+  });
+});

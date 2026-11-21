@@ -660,6 +660,37 @@ function buildTodos(data, today) {
     || a.title.localeCompare(b.title));
 }
 
+// Statuses where the item has reached the buyer and the money is owed.
+const OWED = ['HANDED_OVER', 'SCANNED_IN', 'ACCEPTED', 'WAITING_FOR_PAYMENT'];
+
+// Every unpaid sale that's owed money, late or not, added up by who owes it:
+// "TradePost: $5,414.60 from 2 sales, oldest 14 days". Biggest first. Not a
+// to-do (nothing to do until it's late), so snoozes don't touch it.
+function waitingPayments(sales, today) {
+  const byPayer = new Map();
+  for (const sale of sales) {
+    if (sale.voided_at || sale.cancelled_at || payoutStatus(sale) !== 'unpaid') continue;
+    if (!OWED.includes(saleStatus(sale))) continue;
+    const id = sale.platform_id || 'none';
+    const row = byPayer.get(id) || {
+      platform_id: sale.platform_id || null,
+      name: sale.platform?.name || 'No platform',
+      cashout: isCashoutSale(sale),
+      total: decimal(0),
+      sales: 0,
+      oldest_days: 0,
+    };
+    const since = dateStr(sale.workflow_status_changed_at) || dateStr(sale.sale_date);
+    row.total = row.total.plus(saleValue(sale));
+    row.sales += 1;
+    row.oldest_days = Math.max(row.oldest_days, since ? daysBetween(since, today) : 0);
+    byPayer.set(id, row);
+  }
+  return [...byPayer.values()]
+    .map((row) => ({ ...row, total: row.total.toDecimalPlaces(2).toNumber() }))
+    .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+}
+
 // Hidden: dismissed, done, or snoozed until a day after today.
 function isHidden(state, today) {
   if (!state) return false;
@@ -724,7 +755,14 @@ async function listTodos(prisma, userId, today) {
   for (const group of GROUPS) counts[group] = items.filter((entry) => entry.group === group).length;
   // Hidden items still in play (the record still needs it), so the page can
   // offer "Bring back". A card bill marked paid is done, not listed.
-  return { today, items, counts, hidden: hiddenItems.length, hidden_items: hiddenItems.filter((entry) => entry.state !== 'done') };
+  return {
+    today,
+    items,
+    counts,
+    hidden: hiddenItems.length,
+    hidden_items: hiddenItems.filter((entry) => entry.state !== 'done'),
+    waiting_payments: waitingPayments(data.sales || [], today),
+  };
 }
 
 module.exports = {

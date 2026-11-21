@@ -9,6 +9,7 @@ import ReminderModal from '../components/Reminders/ReminderModal';
 import TodoStats from '../components/Todos/TodoStats';
 import TodoGroupTabs from '../components/Todos/TodoGroupTabs';
 import MoneyWaiting from '../components/Todos/MoneyWaiting';
+import WaitingPayments from '../components/Todos/WaitingPayments';
 import TodoSection from '../components/Todos/TodoSection';
 import RemindersPanel from '../components/Todos/RemindersPanel';
 import HiddenPanel from '../components/Todos/HiddenPanel';
@@ -151,6 +152,7 @@ export default function Todos() {
 
           {/* ── Side column (below the list on phones) ── */}
           <aside aria-label="Reminders and more" className="min-w-0 space-y-4 lg:sticky lg:top-0">
+            <WaitingPayments payers={data?.waiting_payments ?? []} className={`${PANEL} px-4 py-3`} />
             <RemindersPanel reminders={reminders} onNew={() => setEditing({})} onEdit={setEditing} />
             <HiddenPanel items={data?.hidden_items ?? []} busy={busy} onRestore={restore} />
             <PhoneAlertsCard />
