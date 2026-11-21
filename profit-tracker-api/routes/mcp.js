@@ -17,6 +17,8 @@ const { saleEconomics, allocatedCost, batchCost, isRealizedSale, keptQuantity, k
 const { payoutStatus } = require('../services/payoutStatus');
 const { markSalesPaid } = require('../services/markSalesPaid');
 const bookkeeping = require('../services/bookkeeping');
+const { normalizeExternalId, findExpenseByExternalId, duplicateError, isExternalIdConflict } = require('../services/expenseExternalId');
+const { MANUAL_EXPENSE_CATEGORIES, normalizeExpenseCategory } = require('../services/expenseCategories');
 const statusTransitions = require('../services/statusTransitions');
 const { detectCarrier } = require('../services/tracking');
 const { computeCardDashboard, nextDueDate } = require('../services/cardNetToPay');
@@ -534,6 +536,8 @@ function buildServer(userId, apiKeyId) {
       date: toDateOnly(e.date),
       category: e.category,
       paid_from_account: e.payment_method?.name || null,
+      notes: e.notes || null,
+      external_id: e.external_id || null,
     })));
   });
 
@@ -739,17 +743,43 @@ function buildServer(userId, apiKeyId) {
     }
   });
 
+  const CATEGORY_HELP = `One of ${MANUAL_EXPENSE_CATEGORIES.map((c) => c.value).join(', ')} (a label such as "Proxies" or "Software / Tools" is turned into its code). Any other text is stored as given.`;
+  const expenseJson = (e, paymentMethodName, extra = {}) => ({
+    id: e.id,
+    ...extra,
+    description: e.name,
+    amount: toNum(decimal(e.amount)),
+    date: toDateOnly(e.date),
+    category: e.category,
+    paid_from_account: paymentMethodName,
+    notes: e.notes || null,
+    external_id: e.external_id || null,
+  });
+
   server.registerTool('add_expense', {
-    description: 'Log a general business expense (shipping supplies, tools, subscriptions, etc.). Do NOT use this for a cost that belongs to one purchase or sale -- purchase tax/shipping/fees and a sale\'s shipping label or platform fee are entered on that purchase or sale (update_purchase / update_sale) and already appear on the Expenses tab automatically. The account must already exist.',
+    description: 'Log a general business expense (shipping supplies, tools, subscriptions, proxies, etc.). Do NOT use this for a cost that belongs to one purchase or sale -- purchase tax/shipping/fees and a sale\'s shipping label or platform fee are entered on that purchase or sale (update_purchase / update_sale) and already appear on the Expenses tab automatically. The account must already exist. '
+      + 'Pass external_id (the bank/card/Copilot transaction id) when importing from a statement: if an expense with that id is already recorded, nothing is added and that expense comes back with already_recorded: true, so importing the same line twice is safe.',
     inputSchema: {
       description: z.string().min(1),
       amount: z.number().nonnegative(),
-      date: z.string().describe('YYYY-MM-DD'),
-      category: z.string().optional(),
+      date: strictDate,
+      category: z.string().optional().describe(CATEGORY_HELP),
       paid_from_account: z.string().min(1).describe('Existing payment method name.'),
+      notes: z.string().max(2000).optional(),
+      external_id: z.string().max(200).optional().describe('Transaction id from your bank, card or Copilot. Unique per expense.'),
     },
-  }, async ({ description, amount, date, category, paid_from_account }) => {
+  }, async ({ description, amount, date, category, paid_from_account, notes, external_id }) => {
+    const alreadyRecorded = async (externalId) => {
+      const existing = await findExpenseByExternalId(prisma, userId, externalId);
+      if (!existing) return null;
+      const pm = existing.payment_method_id ? await prisma.paymentMethod.findUnique({ where: { id: existing.payment_method_id } }) : null;
+      return jsonResult(expenseJson(existing, pm?.name || null, { already_recorded: true, activity_id: null }));
+    };
+    let externalId = null;
     try {
+      externalId = normalizeExternalId(external_id) ?? null;
+      const duplicate = await alreadyRecorded(externalId);
+      if (duplicate) return duplicate;
       const paymentMethod = await findPaymentMethod(userId, paid_from_account);
       const { result: created, activity } = await prisma.$transaction((tx) => track(tx, {
         action: 'create', recordType: 'expense',
@@ -760,23 +790,85 @@ function buildServer(userId, apiKeyId) {
           user_id: userId,
           name: description.trim(),
           amount,
-          category: category || null,
+          category: normalizeExpenseCategory(category) ?? null,
           date: localNoon(date),
           payment_method_id: paymentMethod.id,
+          notes: notes?.trim() || null,
+          external_id: externalId,
         },
       })));
-      await logWrite(userId, apiKeyId, 'add_expense', { description, amount, date, category, paid_from_account });
-      return jsonResult({
-        id: created.id,
-        activity_id: activity?.id ?? null,
-        description: created.name,
-        amount: toNum(decimal(created.amount)),
-        date: toDateOnly(created.date),
-        category: created.category,
-        paid_from_account: paymentMethod.name,
-      });
+      await logWrite(userId, apiKeyId, 'add_expense', { description, amount, date, category, paid_from_account, notes, external_id });
+      return jsonResult(expenseJson(created, paymentMethod.name, { already_recorded: false, activity_id: activity?.id ?? null }));
     } catch (err) {
+      // Two imports of the same line at once: the unique index stops the
+      // second, which then reports the first as already recorded.
+      if (isExternalIdConflict(err)) {
+        const duplicate = await alreadyRecorded(externalId);
+        if (duplicate) return duplicate;
+      }
       return errorResult(err.message || 'Failed to add expense');
+    }
+  });
+
+  server.registerTool('update_expense', {
+    description: 'Edit a manual expense (from list_expenses): description, amount, date, category, the account it was paid from, notes, or external_id. Only the fields you pass change; an empty string clears notes, category or external_id. '
+      + 'Costs shown on the Expenses tab from a purchase or sale are not expenses -- edit them with update_purchase / update_sale. Logged in Activity and can be undone.',
+    inputSchema: z.object({
+      expense_id: z.string().uuid(),
+      description: z.string().min(1).optional(),
+      amount: z.number().nonnegative().optional(),
+      date: strictDate.optional(),
+      category: z.string().optional().describe(`${CATEGORY_HELP} Empty string clears it.`),
+      paid_from_account: z.string().min(1).optional().describe('Existing payment method name.'),
+      notes: z.string().max(2000).optional(),
+      external_id: z.string().max(200).optional(),
+    }).strict(),
+  }, async ({ expense_id, description, amount, date, category, paid_from_account, notes, external_id }) => {
+    try {
+      const existing = await prisma.expense.findUnique({ where: { id: expense_id } });
+      if (!existing || existing.user_id !== userId) throw toolError('Expense not found or access denied');
+      const data = {};
+      if (description !== undefined) data.name = description.trim();
+      if (amount !== undefined) data.amount = amount;
+      if (date !== undefined) data.date = localNoon(date);
+      if (category !== undefined) data.category = normalizeExpenseCategory(category);
+      if (notes !== undefined) data.notes = notes.trim() || null;
+      let paymentMethodName = null;
+      if (paid_from_account !== undefined) {
+        const pm = await findPaymentMethod(userId, paid_from_account);
+        data.payment_method_id = pm.id;
+        paymentMethodName = pm.name;
+      }
+      const externalId = normalizeExternalId(external_id);
+      if (externalId !== undefined) {
+        const duplicate = await findExpenseByExternalId(prisma, userId, externalId, expense_id);
+        if (duplicate) throw toolError(duplicateError(duplicate).message);
+        data.external_id = externalId;
+      }
+      // Same rule as the website: changing what an expense is undoes its tax review.
+      if (existing.tax_details?.reviewed && ['name', 'amount', 'date', 'category'].some((k) => data[k] !== undefined)) {
+        data.tax_details = { ...existing.tax_details, reviewed: false };
+      }
+      const { result: updated, activity } = await prisma.$transaction((tx) => track(tx, {
+        action: 'edit', recordType: 'expense', recordId: expense_id,
+        refs: async () => ({ expense: [expense_id] }),
+      }, async () => {
+        if (!Object.keys(data).length) return existing;
+        const claim = await tx.expense.updateMany({
+          where: { id: expense_id, user_id: userId, tax_version: existing.tax_version ?? 0 },
+          data: { ...data, tax_version: { increment: 1 } },
+        });
+        if (claim.count !== 1) throw toolError('Expense changed while saving. Reload and retry.');
+        return tx.expense.findUnique({ where: { id: expense_id } });
+      }));
+      if (!paymentMethodName && updated.payment_method_id) {
+        paymentMethodName = (await prisma.paymentMethod.findUnique({ where: { id: updated.payment_method_id } }))?.name || null;
+      }
+      await logWrite(userId, apiKeyId, 'update_expense', { expense_id, description, amount, date, category, paid_from_account, notes, external_id });
+      return jsonResult(expenseJson(updated, paymentMethodName, { activity_id: activity?.id ?? null }));
+    } catch (err) {
+      if (isExternalIdConflict(err)) return errorResult('An expense with this external_id is already recorded.');
+      return errorResult(err.message || 'Failed to update expense');
     }
   });
 

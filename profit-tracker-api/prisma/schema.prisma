@@ -579,6 +579,10 @@ model Expense {
   category             String?
   date                 DateTime
   notes                String?
+  // An id from outside the tracker -- a bank, card or Copilot transaction id
+  // -- so the same statement line can't be imported twice. Unique per user;
+  // NULL for expenses entered by hand.
+  external_id          String?
   receipt_url          String?
   recurring_expense_id String?
   recurring_expense    RecurringExpense? @relation(fields: [recurring_expense_id], references: [id], onDelete: SetNull)
@@ -590,6 +594,7 @@ model Expense {
   @@index([user_id])
   @@index([user_id, date])
   @@unique([recurring_expense_id, date])
+  @@unique([user_id, external_id])
 }
 
 model RecurringExpense {

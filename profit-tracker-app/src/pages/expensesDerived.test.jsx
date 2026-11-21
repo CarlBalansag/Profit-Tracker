@@ -120,7 +120,7 @@ describe('Expenses tab: costs from transactions', () => {
     const dialog = (await screen.findByRole('heading', { name: 'Add Expense' })).closest('div.relative');
     const categorySelect = within(dialog).getAllByRole('combobox')[0];
     const labels = Array.from(categorySelect.options).map((o) => o.textContent);
-    expect(labels).toEqual(['Uncategorized', 'Credit Card Fee', 'Membership', 'Shipping Supplies', 'Software / Tools', 'Other']);
+    expect(labels).toEqual(['Uncategorized', 'Credit Card Fee', 'Membership', 'Shipping Supplies', 'Software / Tools', 'Proxies', 'Other']);
     expect(within(dialog).getByText(/Enter it on that transaction instead/)).toBeInTheDocument();
   });
 

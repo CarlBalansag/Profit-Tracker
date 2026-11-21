@@ -7,6 +7,10 @@ const { createExpense, updateExpense } = require('../validation/schemas');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 const { requireOwned } = require('../services/ownership');
 const { derivedExpenseLines } = require('../services/derivedExpenses');
+const { normalizeExternalId, findExpenseByExternalId, isExternalIdConflict } = require('../services/expenseExternalId');
+
+// Shown in the expense form, where the field is called "Transaction ID".
+const DUPLICATE_MESSAGE = 'This transaction ID is already recorded on another expense.';
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -68,6 +72,9 @@ router.post('/', isAuthenticated, validateBody(createExpense), async (req, res, 
       return res.status(400).json({ error: 'name, amount, and date are required' });
     }
     await requireOwned('paymentMethod', payment_method_id, req.user.id, 'Payment method');
+    const externalId = normalizeExternalId(req.body.external_id) ?? null;
+    const duplicate = await findExpenseByExternalId(prisma, req.user.id, externalId);
+    if (duplicate) return res.status(409).json({ error: DUPLICATE_MESSAGE, existing_id: duplicate.id });
     const { result: expense, activity } = await prisma.$transaction((tx) => activityLog.trackChange(tx, req.user.id, {
       action: 'create',
       recordType: 'expense',
@@ -81,6 +88,7 @@ router.post('/', isAuthenticated, validateBody(createExpense), async (req, res, 
         category: category || null,
         date: parseLocalDate(date),
         notes: notes || null,
+        external_id: externalId,
         receipt_url: receipt_url || null,
         payment_method_id: payment_method_id || null,
         ...(tax_details !== undefined ? { tax_details } : {}),
@@ -89,6 +97,7 @@ router.post('/', isAuthenticated, validateBody(createExpense), async (req, res, 
     })));
     res.json({ ...exactExpense(expense), activity_id: activity?.id ?? null });
   } catch (err) {
+    if (isExternalIdConflict(err)) return res.status(409).json({ error: DUPLICATE_MESSAGE });
     next(err);
   }
 });
@@ -111,6 +120,12 @@ router.put('/:id', isAuthenticated, validateBody(updateExpense), async (req, res
     if (category !== undefined)    data.category = category || null;
     if (date !== undefined)        data.date = parseLocalDate(date);
     if (notes !== undefined)       data.notes = notes || null;
+    const externalId = normalizeExternalId(req.body.external_id);
+    if (externalId !== undefined) {
+      const duplicate = await findExpenseByExternalId(prisma, req.user.id, externalId, req.params.id);
+      if (duplicate) return res.status(409).json({ error: DUPLICATE_MESSAGE, existing_id: duplicate.id });
+      data.external_id = externalId;
+    }
     if (receipt_url !== undefined) data.receipt_url = receipt_url || null;
     if (payment_method_id !== undefined) data.payment_method_id = payment_method_id || null;
 
@@ -129,6 +144,7 @@ router.put('/:id', isAuthenticated, validateBody(updateExpense), async (req, res
     }));
     res.json({ ...exactExpense(updated), activity_id: activity?.id ?? null });
   } catch (err) {
+    if (isExternalIdConflict(err)) return res.status(409).json({ error: DUPLICATE_MESSAGE });
     next(err);
   }
 });
