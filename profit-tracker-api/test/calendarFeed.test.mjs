@@ -19,6 +19,7 @@ function loadFeedService() {
           .mockResolvedValueOnce([{ id: 'inventory-1', product_name: 'Sneaker', purchase_date: new Date('2026-09-10'), qty_purchased: 1, unit_purchase_cost: 100, sales_tax: 5, shipping_cost_inbound: 0, payment_method: { due_day: 15 } }]),
       },
       sales: { findMany: vi.fn().mockResolvedValue([{ id: 'sale-1', sale_date: new Date('2026-09-11'), payout_date: null, inventory: { product_name: 'Sneaker' } }]) },
+      reminder: { findMany: vi.fn().mockResolvedValue([]) },
     },
   };
   require.cache[cloudinaryPath] = { exports: { v2: { config: vi.fn(), uploader: { upload } } } };

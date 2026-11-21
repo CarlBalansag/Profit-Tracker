@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { randomUUID } = require('crypto');
 const { getCalendarFeedUrl, publishCalendarFeed } = require('../services/calendarFeed');
+const { occurrences } = require('../services/reminders');
 const { validateBody } = require('../middleware/validate');
 const { calendarEvent, updateCalendarEvent } = require('../validation/schemas');
 
@@ -177,6 +178,21 @@ router.get('/auto', isAuthenticated, async (req, res, next) => {
             notes: null,
           });
         }
+      }
+    }
+
+    // Open reminders, each occurrence of a repeating one in this month.
+    const reminders = await prisma.reminder.findMany({ where: { user_id: req.user.id, done_at: null, due_date: { lte: end } } });
+    for (const rem of reminders) {
+      for (const date of occurrences(rem, start, end)) {
+        events.push({
+          id: `reminder_${rem.id}_${date}`,
+          title: rem.due_time ? `${rem.title} (${rem.due_time})` : rem.title,
+          date,
+          type: 'reminder',
+          color: null,
+          notes: rem.notes || null,
+        });
       }
     }
 

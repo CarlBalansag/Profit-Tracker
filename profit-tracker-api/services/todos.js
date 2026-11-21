@@ -11,6 +11,7 @@ const { decimal } = require('./money');
 const { payoutStatus } = require('./payoutStatus');
 const { LEGACY_TO_RECEIVING_STATUS, legacyWorkflowStatus } = require('./statusTransitions');
 const { computeCardDashboard } = require('./cardNetToPay');
+const { REPEAT_LABEL } = require('./reminders');
 
 // How long something may sit before it becomes a to-do, in days.
 const THRESHOLDS = {
@@ -29,10 +30,11 @@ const THRESHOLDS = {
   payDownAhead: 5,
   payDownPct: 30,
   recurringAhead: 3,
+  reminderAhead: 3, // a reminder joins the list this many days before it's due
 };
 
 const URGENCY_ORDER = { overdue: 0, today: 1, soon: 2, info: 3 };
-const GROUPS = ['cashout', 'cards', 'sales', 'purchases', 'bookkeeping'];
+const GROUPS = ['reminders', 'cashout', 'cards', 'sales', 'purchases', 'bookkeeping'];
 const DELIVERED = 'Delivered';
 
 // ─── Local-date helpers ──────────────────────────────────────────────────────
@@ -477,6 +479,45 @@ function recurringItems(recurring, today) {
   return items;
 }
 
+// "3:30 PM" from "15:30".
+function clockTime(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+function reminderItems(reminders, today) {
+  const items = [];
+  for (const rem of reminders) {
+    if (rem.done_at || !rem.due_date) continue;
+    const ahead = daysBetween(today, rem.due_date);
+    if (ahead > THRESHOLDS.reminderAhead) continue;
+    const when = ahead < 0 ? `Was due ${daysAgo(-ahead)}` : `Due ${inDays(ahead)}`;
+    const card = rem.payment_method ? (rem.payment_method.last4 ? `${rem.payment_method.name} ••${rem.payment_method.last4}` : rem.payment_method.name) : null;
+    const detail = [
+      `${when}${rem.due_time ? ` at ${clockTime(rem.due_time)}` : ''}`,
+      REPEAT_LABEL[rem.repeat],
+      card,
+      rem.notes,
+    ].filter(Boolean).join(' · ');
+    items.push(item({
+      key: `reminder:${rem.id}:${rem.due_date}`,
+      type: 'reminder',
+      group: 'reminders',
+      urgency: ahead < 0 ? 'overdue' : ahead === 0 ? 'today' : 'soon',
+      title: rem.title,
+      detail,
+      due_date: rem.due_date,
+      link: card ? { kind: 'page', to: '/creditcard' } : null,
+      actions: ['complete', 'snooze', 'edit'],
+      reminder: {
+        id: rem.id, title: rem.title, notes: rem.notes, due_date: rem.due_date, due_time: rem.due_time,
+        repeat: rem.repeat, payment_method_id: rem.payment_method_id,
+      },
+    }));
+  }
+  return items;
+}
+
 // ─── Putting it together ─────────────────────────────────────────────────────
 function buildTodos(data, today) {
   const items = [
@@ -486,6 +527,7 @@ function buildTodos(data, today) {
     ...purchaseItems(data.inventories || [], today),
     ...cardItems(data.cards || [], today, data.spendByCard || new Map()),
     ...recurringItems(data.recurring || [], today),
+    ...reminderItems(data.reminders || [], today),
   ];
   return items.sort((a, b) =>
     URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency]
@@ -502,7 +544,7 @@ function isHidden(state, today) {
 
 async function loadTodoData(prisma, userId, today) {
   const lookback = new Date(toUtc(addDays(today, -365)));
-  const [commitments, connections, sales, inventories, cards, recurring] = await Promise.all([
+  const [commitments, connections, sales, inventories, cards, recurring, reminders] = await Promise.all([
     prisma.cashoutCommitment.findMany({
       where: { user_id: userId, status: { in: ['pending', 'active', 'expired', 'closed'] } },
       include: {
@@ -521,6 +563,10 @@ async function loadTodoData(prisma, userId, today) {
     }),
     prisma.paymentMethod.findMany({ where: { user_id: userId, type: 'Credit' } }),
     prisma.recurringExpense.findMany({ where: { user_id: userId, active: true } }),
+    prisma.reminder.findMany({
+      where: { user_id: userId, done_at: null, due_date: { lte: addDays(today, THRESHOLDS.reminderAhead) } },
+      include: { payment_method: { select: { name: true, last4: true } } },
+    }),
   ]);
 
   // Tracked spend this month, only needed when a card's statement is close.
@@ -532,7 +578,7 @@ async function loadTodoData(prisma, userId, today) {
     for (const card of dashboard.cards) spendByCard.set(card.id, card.totalSpend);
   }
 
-  return { commitments, connections, sales, inventories, cards, recurring, spendByCard };
+  return { commitments, connections, sales, inventories, cards, recurring, reminders, spendByCard };
 }
 
 async function listTodos(prisma, userId, today) {

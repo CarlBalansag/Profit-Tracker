@@ -51,6 +51,7 @@ model User {
   cashout_commitments    CashoutCommitment[]
   cashout_write_logs     CashoutWriteLog[]
   todo_states            TodoState[]
+  reminders              Reminder[]
   invites                Invite[]
 }
 
@@ -545,6 +546,7 @@ model PaymentMethod {
   expenses              Expense[]
   recurring_expenses    RecurringExpense[]
   sale_shipping_sales   Sales[]     @relation("SaleShippingCard")
+  reminders             Reminder[]
 }
 
 // Money back on a purchase (inventory_id set) or to a buyer on a sale (sale_id
@@ -812,6 +814,36 @@ model TodoState {
 
   @@unique([user_id, key])
   @@index([user_id])
+}
+
+// A reminder the user wrote themselves (To-Do page). Shown on the To-Do list
+// from a few days before it's due, on the Calendar, and in the subscribed
+// phone calendar feed with an alert. A repeating reminder keeps one row:
+// completing it moves due_date to the next occurrence.
+model Reminder {
+  id                String         @id @default(uuid())
+  user_id           String
+  user              User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  title             String
+  notes             String?
+  // Local calendar date (YYYY-MM-DD) and optional local time (HH:MM).
+  due_date          String
+  due_time          String?
+  // "none" | "weekly" | "biweekly" | "monthly" | "yearly"
+  repeat            String         @default("none")
+  // The date the repeat counts from (the due date as the user last set it),
+  // so a monthly reminder on the 31st comes back to the 31st after February.
+  repeat_from       String?
+  // Optional card the reminder is about (e.g. "call Amex about the credit").
+  payment_method_id String?
+  payment_method    PaymentMethod? @relation(fields: [payment_method_id], references: [id], onDelete: SetNull)
+  // Set when a one-off reminder is done. A repeating one never gets it.
+  done_at           DateTime?
+  created_at        DateTime       @default(now())
+  updated_at        DateTime       @updatedAt
+
+  @@index([user_id, due_date])
+  @@index([payment_method_id])
 }
 
 /// Managed by connect-pg-simple — Prisma should not touch this table

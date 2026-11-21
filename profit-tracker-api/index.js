@@ -185,6 +185,7 @@ app.use('/api/data-reset', dataResetRouter);
 app.use('/api/invites', invitesRouter);
 app.use('/api/activity', require('./routes/activity'));
 app.use('/api/todos', require('./routes/todos'));
+app.use('/api/reminders', require('./routes/reminders'));
 
 // Health Check
 app.get('/health', (req, res) => {

@@ -1,5 +1,6 @@
 const cloudinary = require('cloudinary').v2;
 const prisma = require('../prisma');
+const { occurrences } = require('./reminders');
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -17,6 +18,13 @@ function escapeIcs(value) {
   return String(value).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 }
 
+// YYYYMMDD of a YYYY-MM-DD date plus n days.
+function addIcsDays(date, n) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10).replace(/-/g, '');
+}
+
 function getCalendarFeedUrl(token) {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
   if (!cloudName || !token) return null;
@@ -24,7 +32,7 @@ function getCalendarFeedUrl(token) {
 }
 
 async function buildCalendarFeed(userId) {
-  const [manualEvents, inventories, sales, creditPurchases] = await Promise.all([
+  const [manualEvents, inventories, sales, creditPurchases, reminders] = await Promise.all([
     prisma.calendarEvent.findMany({ where: { user_id: userId }, orderBy: { date: 'asc' } }),
     prisma.inventory.findMany({
       where: { user_id: userId, purchase_date: { gte: new Date(new Date().getFullYear() - 1, 0, 1) } },
@@ -41,6 +49,7 @@ async function buildCalendarFeed(userId) {
         sales_tax: true, shipping_cost_inbound: true, payment_method: { select: { due_day: true } },
       },
     }),
+    prisma.reminder.findMany({ where: { user_id: userId, done_at: null } }),
   ]);
 
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ProfitTracker//Reselling Calendar//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
@@ -54,7 +63,32 @@ async function buildCalendarFeed(userId) {
     lines.push('END:VEVENT');
   };
 
+  // A reminder, with an alert: at its time, or 9 AM on the day when it has no
+  // time. Local "floating" times, so the phone shows them in its own zone.
+  // (Some calendar apps, Google Calendar among them, drop alerts from
+  // subscribed feeds; the event itself still shows.)
+  const addReminder = (rem, date) => {
+    const uid = `reminder_${rem.id}_${date}@profittracker`;
+    const day = date.replace(/-/g, '');
+    lines.push('BEGIN:VEVENT', `UID:${uid}`);
+    if (rem.due_time) {
+      const [h, m] = rem.due_time.split(':').map(Number);
+      const end = h * 60 + m + 30;
+      const endDay = end >= 24 * 60 ? addIcsDays(date, 1) : day;
+      const endTime = `${String(Math.floor((end % 1440) / 60)).padStart(2, '0')}${String(end % 60).padStart(2, '0')}00`;
+      lines.push(`DTSTART:${day}T${rem.due_time.replace(':', '')}00`, `DTEND:${endDay}T${endTime}`);
+    } else {
+      lines.push(`DTSTART;VALUE=DATE:${day}`, `DTEND;VALUE=DATE:${addIcsDays(date, 1)}`);
+    }
+    lines.push(`SUMMARY:${escapeIcs(`Reminder: ${rem.title}`)}`);
+    if (rem.notes) lines.push(`DESCRIPTION:${escapeIcs(rem.notes)}`);
+    lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${escapeIcs(rem.title)}`, `TRIGGER:${rem.due_time ? 'PT0M' : 'PT9H'}`, 'END:VALARM', 'END:VEVENT');
+  };
+
   manualEvents.forEach((event) => addEvent(event.id, event.date, event.title, event.notes));
+  const feedStart = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const feedEnd = new Date(Date.now() + 366 * 86400000).toISOString().slice(0, 10);
+  reminders.forEach((rem) => occurrences(rem, feedStart, feedEnd).forEach((date) => addReminder(rem, date)));
   inventories.forEach((item) => addEvent(`purchase_${item.id}`, toDateStr(item.purchase_date), `Purchase: ${item.product_name}`));
   sales.forEach((sale) => {
     addEvent(`sale_${sale.id}`, toDateStr(sale.sale_date), `Sale: ${sale.inventory.product_name}`);
