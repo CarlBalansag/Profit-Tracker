@@ -180,3 +180,19 @@ describe('PATCH /api/api-keys/:id reset_ai_guide', () => {
     expect(harness.db.activityLog).toHaveLength(before);
   });
 });
+
+describe('catching up from an older version', () => {
+  it('a key on the previous version gets only the newer notes, then is current', async () => {
+    const previous = guide.AI_GUIDE_UPDATES[1]?.version;
+    if (!previous) return; // only meaningful once the guide has two versions
+    addKey({ ai_guide_version: previous });
+    const { data } = await callTool('get_ai_guide');
+    expect(data).toMatchObject({ kind: 'updates', you_had: previous, current_version: guide.AI_GUIDE_VERSION });
+    expect(data.text).toBe(guide.updatesSinceText(previous));
+    for (const note of guide.AI_GUIDE_UPDATES[0].notes) expect(data.text).toContain(note);
+    expect(data.text).not.toContain(guide.AI_GUIDE_UPDATES[1].notes[0]);
+    expect(data.text.split(/\s+/).length).toBeLessThan(guide.fullGuideText().split(/\s+/).length / 5);
+    expect(key().ai_guide_version).toBe(guide.AI_GUIDE_VERSION);
+    expect((await callTool('get_ai_guide')).data.kind).toBe('up_to_date');
+  });
+});

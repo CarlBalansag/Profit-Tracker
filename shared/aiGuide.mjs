@@ -18,6 +18,14 @@
 
 export const AI_GUIDE_UPDATES = [
   {
+    version: '1.46',
+    date: '2026-11-20',
+    notes: [
+      'New tool get_ai_guide: call it with no arguments at the start of each session. It returns only what changed since this API key last read the guide, or that you are up to date; full: true returns the whole guide.',
+      'While you are behind on the guide, tool results end with a short note telling you to call get_ai_guide. It stops once you do.',
+    ],
+  },
+  {
     version: '1.45',
     date: '2026-11-20',
     notes: [

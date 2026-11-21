@@ -70,7 +70,11 @@ describe('Keep your AI up to date (Settings > AI Assistant)', () => {
     render(<AiGuideCopy />);
     expect(screen.getByRole('button', { name: /Copy full guide/ })).toHaveClass('page-btn-primary');
     expect(screen.getByRole('button', { name: /Copy updates/ })).toHaveClass('page-btn-secondary');
-    expect(screen.getByTestId('ai-guide-updates-summary')).toHaveTextContent(`If your AI already has the ${AI_GUIDE_VERSION} guide`);
+    // Nothing remembered: the picker starts at the oldest version.
+    const oldest = AI_GUIDE_UPDATES.at(-1).version;
+    expect(screen.getByTestId('ai-guide-updates-summary')).toHaveTextContent(
+      oldest === AI_GUIDE_VERSION ? `If your AI already has the ${oldest} guide` : `Only the changes since ${oldest}`,
+    );
   });
 
   it('"Copy updates" on the current version copies nothing and says so', async () => {
