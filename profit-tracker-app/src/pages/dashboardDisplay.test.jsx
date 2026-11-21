@@ -34,6 +34,8 @@ let placeholder = false;
 vi.mock('../hooks/useApi', () => ({
   useDashboard: () => ({ data, isLoading: false, isError: false, refetch: vi.fn(), isPlaceholderData: placeholder }),
   useGoals: () => ({ data: [] }),
+  useTodos: () => ({ data: undefined }),
+  useTodoCount: () => 0,
 }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'u1', username: 'Test' } }) }));
 vi.mock('../hooks/useUiPreferences', () => ({ useUiPreferences: () => ({ preferences: { style: uiStyle } }) }));

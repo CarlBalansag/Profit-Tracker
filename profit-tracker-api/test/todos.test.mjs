@@ -269,6 +269,7 @@ describe('card items', () => {
     const after = await list();
     expect(after.body.items).toEqual([]);
     expect(after.body.hidden).toBe(1);
+    expect(after.body.hidden_items).toEqual([]); // paid is done, not "bring back"
   });
 
   it('asks to finish setting up a card missing its dates or limit', async () => {
@@ -311,7 +312,9 @@ describe('snooze, dismiss and undo', () => {
     const key = `dispute:${sale.id}`;
     const snoozed = await request('POST', '/api/todos/state', { key, action: 'snooze', until: dayStr(3), today: TODAY });
     expect(snoozed).toMatchObject({ status: 200, body: { state: 'snoozed', until: dayStr(3) } });
-    expect((await list()).body.items).toEqual([]);
+    const hidden = await list();
+    expect(hidden.body.items).toEqual([]);
+    expect(hidden.body.hidden_items).toEqual([expect.objectContaining({ key, state: 'snoozed', until: dayStr(3) })]);
 
     // Snoozing again updates the same row rather than adding one.
     await request('POST', '/api/todos/state', { key, action: 'snooze', until: dayStr(1), today: TODAY });

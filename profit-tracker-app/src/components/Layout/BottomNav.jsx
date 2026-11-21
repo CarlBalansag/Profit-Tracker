@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import { ArrowLeftRight, CirclePlus, DollarSign, LayoutDashboard, Menu, Package, Plus } from 'lucide-react';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 import { usePrefetchProps } from '../../hooks/usePrefetchPage';
+import { useTodoCount } from '../../hooks/useApi';
 
 const ITEM = 'flex flex-1 flex-col items-center justify-center gap-0.5 h-14 min-w-0 text-[11px] font-medium';
 
@@ -44,6 +45,8 @@ const QuickAddLink = ({ to, label, icon, onClick, isGlass }) => {
 
 // Phone navigation: the places used most, one tap away, with the full menu under More.
 const BottomNav = ({ onMoreClick, isGlass }) => {
+  // The To-Do list lives in the menu, so its count shows on More.
+  const todoCount = useTodoCount();
   const [addOpen, setAddOpen] = useState(false);
   const close = () => setAddOpen(false);
   const menuRef = useModalKeyboard(addOpen, close);
@@ -97,8 +100,27 @@ const BottomNav = ({ onMoreClick, isGlass }) => {
           </span>
         </button>
         <Tab to="/inventory" label="Inventory" icon={Package} colors={colors} />
-        <button type="button" aria-haspopup="dialog" onClick={onMoreClick} className={clsx(ITEM, colors.idle)}>
-          <Menu size={20} aria-hidden="true" />
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          aria-label={todoCount ? `More, ${todoCount} to do` : undefined}
+          onClick={onMoreClick}
+          className={clsx(ITEM, colors.idle)}
+        >
+          <span className="relative">
+            <Menu size={20} aria-hidden="true" />
+            {todoCount > 0 && (
+              <span
+                aria-hidden="true"
+                className={clsx(
+                  'absolute -right-2.5 -top-1.5 min-w-[16px] rounded-full px-1 text-center text-[10px] font-semibold leading-4 tabular-nums',
+                  isGlass ? 'bg-[#d8a65a] text-[#111315]' : 'bg-[var(--dp-accent-solid)] text-white',
+                )}
+              >
+                {todoCount > 99 ? '99+' : todoCount}
+              </span>
+            )}
+          </span>
           <span>More</span>
         </button>
       </nav>

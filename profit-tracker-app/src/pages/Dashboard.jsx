@@ -23,6 +23,7 @@ import { SwipeArea } from '../components/Analytics/SectionPager';
 import HScrollbar from '../components/UI/HScrollbar';
 import CountUp from '../components/UI/CountUp';
 import WorkflowPipeline from '../components/Dashboard/WorkflowPipeline';
+import TodoSummary from '../components/Dashboard/TodoSummary';
 
 // Status Pipeline views: every step, stock through paid ("All", the default),
 // or one sale workflow's own steps.
@@ -882,6 +883,8 @@ const Dashboard = () => {
           </div>
         </div>
 
+        <TodoSummary isGlass />
+
         <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-12">
           {glassLayoutOrder.map((itemId, index) => {
             const node = renderGlassLayoutItem(itemId);
@@ -992,6 +995,8 @@ const Dashboard = () => {
 
         </div>
       </div>
+
+      <TodoSummary />
 
       {dashboardSections.map(section => renderDashboardSection(section.id))}
 

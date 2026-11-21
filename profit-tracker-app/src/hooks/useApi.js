@@ -1,7 +1,8 @@
-import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { EXPENSES_PAGE_KEY, RECEIPTS_PAGE_KEY } from './usePageCache';
+import { QueryClient, useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { EXPENSES_PAGE_KEY, RECEIPTS_PAGE_KEY, useOptionalQueryClient } from './usePageCache';
 import { toast } from 'sonner';
 import { offerPendingCommit, offerTrackingSend, offerCommitLower } from '../utils/pendingCashoutCommit';
+import { localToday } from '../utils/returnWindow';
 
 // Leave VITE_API_URL empty in production when Netlify redirects proxy /api and /auth (see netlify.toml).
 // Set it locally to the API dev server, e.g. http://localhost:3000.
@@ -394,6 +395,72 @@ export const useActivity = () =>
     getNextPageParam: (last) => last.next_before ?? undefined,
   });
 
+// ─── To-Do ────────────────────────────────────────────────────────────────────
+// Worked out from the records on every read (api services/todos.js), with the
+// device's own date so "due tomorrow" means the user's tomorrow. Shared by the
+// To-Do page, the sidebar badge and the Dashboard card.
+export const todosQuery = () => ({
+  queryKey: ['todos'],
+  queryFn: () => fetcher(`/api/todos?today=${localToday()}`),
+  staleTime: 1000 * 30,
+  refetchInterval: 1000 * 60 * 5,
+});
+export const useTodos = () => useQuery(todosQuery());
+
+// The open to-do count for the nav badges. The sidebar and bottom bar also
+// render without a QueryClientProvider (their unit tests), where this is 0.
+let inertClient = null;
+export function useTodoCount() {
+  const client = useOptionalQueryClient();
+  inertClient ??= client ? null : new QueryClient();
+  const { data } = useQuery({ ...todosQuery(), enabled: Boolean(client) }, client || inertClient);
+  return data?.counts?.total || 0;
+}
+
+// Snooze / dismiss / mark done one item, or (action 'restore') undo that.
+export const saveTodoState = async ({ key, action, until }) => {
+  const response = action === 'restore'
+    ? await apiFetch(`/api/todos/state?key=${encodeURIComponent(key)}`, { method: 'DELETE' })
+    : await apiFetch('/api/todos/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, action, ...(until ? { until } : {}), today: localToday() }),
+    });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || `API error ${response.status}`);
+  return body;
+};
+
+export const useTodoState = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: saveTodoState,
+    // Hide (or bring back) the item right away; a failure puts the list back.
+    onMutate: async ({ key, action }) => {
+      await qc.cancelQueries({ queryKey: ['todos'] });
+      const previous = qc.getQueryData(['todos']);
+      if (previous && action !== 'restore') {
+        const items = previous.items.filter((entry) => entry.key !== key);
+        qc.setQueryData(['todos'], { ...previous, items, counts: countTodos(items), hidden: (previous.hidden || 0) + 1 });
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) qc.setQueryData(['todos'], context.previous);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['todos'] }),
+  });
+};
+
+export function countTodos(items) {
+  const counts = { total: items.length, urgent: 0 };
+  for (const entry of items) {
+    if (entry.urgency === 'overdue' || entry.urgency === 'today') counts.urgent += 1;
+    counts[entry.group] = (counts[entry.group] || 0) + 1;
+  }
+  return counts;
+}
+
 // ─── Calendar Events ──────────────────────────────────────────────────────────
 export const calendarEventsQuery = (month) => ({
   queryKey: ['calendar-events', month],
@@ -467,6 +534,7 @@ export const useInvalidate = () => {
     calendarEvents:  () => qc.invalidateQueries({ queryKey: ['calendar-events'] }),
     apiKeys:         () => qc.invalidateQueries({ queryKey: ['api-keys'] }),
     cashouts:        () => qc.invalidateQueries({ queryKey: ['cashout'] }),
+    todos:           () => qc.invalidateQueries({ queryKey: ['todos'] }),
     all:             () => qc.invalidateQueries(),
   };
 };

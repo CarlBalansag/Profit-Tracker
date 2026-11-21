@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, ArrowLeftRight, Boxes,
   ReceiptText, FileText, ChartLine, Wallet, CreditCard as CreditCardIcon,
-  Settings, History, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins
+  Settings, History, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins, ListChecks
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -17,6 +17,7 @@ import ThemeSwitch from '../UI/ThemeSwitch';
 import AnimatedLogo from '../UI/AnimatedLogo';
 import { useCashoutProviders } from '../../hooks/useCashoutProviders';
 import { usePrefetchProps } from '../../hooks/usePrefetchPage';
+import { useTodoCount } from '../../hooks/useApi';
 
 const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'neon-dark' }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -25,6 +26,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
   const { logout, user } = useAuth();
   const { data: cashoutProviders = [] } = useCashoutProviders();
   const hasCashoutAccess = Array.isArray(cashoutProviders) && cashoutProviders.length > 0;
+  const todoCount = useTodoCount();
   const isGlass = uiStyle === 'glassmorphism-brown';
   const navRef = useRef(null);
   const marker = useNavMarker(navRef, [isCollapsed, isGlass, hasCashoutAccess]);
@@ -62,6 +64,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <NavMarker marker={marker} className="rounded-xl bg-[#d8a65a]/10" />
 
             <GlassNavItem icon={LayoutDashboard} label="Dashboard" to="/" />
+            <GlassNavItem icon={ListChecks} label="To-Do" to="/todos" badge={todoCount} />
             <GlassNavItem icon={ShoppingCart} label="Add Transaction" to="/add-transaction" />
             <GlassNavItem icon={BadgeDollarSign} label="Record Sale" to="/add-sale" />
             <GlassNavItem icon={ArrowLeftRight} label="Transactions" to="/transactions" />
@@ -144,6 +147,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
           <NavMarker marker={marker} className="!mt-0 rounded-md bg-[var(--dp-accent-bg)]" />
           <SidebarSection title="Core" isCollapsed={isCollapsed} tutorialId="sidebar-section-core">
             <NavItem icon={LayoutDashboard} label="Dashboard" to="/" isCollapsed={isCollapsed} />
+            <NavItem icon={ListChecks} label="To-Do" to="/todos" isCollapsed={isCollapsed} badge={todoCount} />
             <NavItem icon={ShoppingCart} label="Add Transaction" to="/add-transaction" isCollapsed={isCollapsed} tutorialId="sidebar-add-transaction" />
             <NavItem icon={BadgeDollarSign} label="Record Sale" to="/add-sale" isCollapsed={isCollapsed} tutorialId="sidebar-record-sale" />
             <NavItem icon={ArrowLeftRight} label="Transactions" to="/transactions" isCollapsed={isCollapsed} tutorialId="sidebar-transactions" />
@@ -364,10 +368,14 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId }) => {
   );
 };
 
-const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId }) => (
+// A count on a nav item (the To-Do list). Hidden at zero; 99+ past that.
+const badgeText = (count) => (count > 99 ? '99+' : String(count));
+
+const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, badge = 0 }) => (
   <NavLink
     to={to}
-    title={isCollapsed ? label : undefined}
+    title={isCollapsed ? (badge ? `${label} (${badge})` : label) : undefined}
+    aria-label={badge ? `${label}, ${badge} to do` : undefined}
     data-tutorial-id={tutorialId}
     {...usePrefetchProps(to)}
     className={({ isActive }) =>
@@ -382,13 +390,17 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId }) => (
   >
     <Icon size={16} className="flex-shrink-0" />
     {!isCollapsed && <span className="truncate flex-1 disabled-link">{label}</span>}
+    {badge > 0 && (isCollapsed
+      ? <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[var(--dp-accent-solid)]" />
+      : <span aria-hidden="true" className="min-w-[20px] rounded-full bg-[var(--dp-accent-solid)] px-1.5 text-center text-[11px] font-semibold leading-5 text-white tabular-nums">{badgeText(badge)}</span>)}
   </NavLink>
 );
 
-const GlassNavItem = ({ icon: Icon, label, to }) => (
+const GlassNavItem = ({ icon: Icon, label, to, badge = 0 }) => (
   <NavLink
     to={to}
-    title={label}
+    title={badge ? `${label} (${badge})` : label}
+    aria-label={badge ? `${label}, ${badge} to do` : label}
     {...usePrefetchProps(to)}
     className={({ isActive }) =>
       clsx(
@@ -400,6 +412,7 @@ const GlassNavItem = ({ icon: Icon, label, to }) => (
     }
   >
     <Icon size={18} />
+    {badge > 0 && <span aria-hidden="true" className="absolute right-1 top-0.5 min-w-[16px] rounded-full bg-[#d8a65a] px-1 text-center text-[10px] font-semibold leading-4 text-[#111315] tabular-nums">{badgeText(badge)}</span>}
     <GlassBranchLabel label={label} />
   </NavLink>
 );

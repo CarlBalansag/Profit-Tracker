@@ -26,6 +26,8 @@ const inventory = [
 vi.mock('../hooks/useApi', () => ({
   useInventory: () => ({ data: inventory, isLoading: false, refetch: vi.fn() }),
   useInvalidate: () => ({}),
+  useTodos: () => ({ data: undefined }),
+  useTodoCount: () => 0,
   apiFetch: vi.fn(),
 }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { username: 'tester' }, logout: vi.fn() }) }));

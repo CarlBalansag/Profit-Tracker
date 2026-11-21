@@ -17,6 +17,7 @@ import {
   productNamesQuery,
   receiptsPageQuery,
   salesQuery,
+  todosQuery,
 } from '../hooks/useApi';
 import * as Pages from '../pages/lazyPages';
 
@@ -49,6 +50,7 @@ const PAGES = {
   '/inventory': { code: Pages.Inventory.preload, data: () => [inventoryQuery()] },
   '/shipping': { code: Pages.Shipping.preload, data: () => [inventoryQuery(), salesQuery()] },
   '/statuses': { code: Pages.Statuses.preload, data: () => [inventoryQuery(), salesQuery()] },
+  '/todos': { code: Pages.Todos.preload, data: () => [todosQuery()] },
   '/expenses': { code: Pages.Expenses.preload, data: () => [expensesPageQuery(), paymentMethodsQuery()] },
   '/schedule-c': { code: Pages.ScheduleC.preload, data: () => [] },
   '/receipts': { code: Pages.Receipts.preload, data: () => [receiptsPageQuery()] },

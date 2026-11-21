@@ -542,10 +542,18 @@ async function listTodos(prisma, userId, today) {
   ]);
   const byKey = new Map(states.map((s) => [s.key, s]));
   const all = buildTodos(data, today);
-  const items = all.filter((entry) => !isHidden(byKey.get(entry.key), today));
+  const items = [];
+  const hiddenItems = [];
+  for (const entry of all) {
+    const state = byKey.get(entry.key);
+    if (isHidden(state, today)) hiddenItems.push({ ...entry, state: state.state, until: state.until });
+    else items.push(entry);
+  }
   const counts = { total: items.length, urgent: items.filter((entry) => entry.urgency === 'overdue' || entry.urgency === 'today').length };
   for (const group of GROUPS) counts[group] = items.filter((entry) => entry.group === group).length;
-  return { today, items, counts, hidden: all.length - items.length };
+  // Hidden items still in play (the record still needs it), so the page can
+  // offer "Bring back". A card bill marked paid is done, not listed.
+  return { today, items, counts, hidden: hiddenItems.length, hidden_items: hiddenItems.filter((entry) => entry.state !== 'done') };
 }
 
 module.exports = {

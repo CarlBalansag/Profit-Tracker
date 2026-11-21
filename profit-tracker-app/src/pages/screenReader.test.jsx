@@ -29,6 +29,8 @@ const dashboard = {
 vi.mock('../hooks/useApi', () => ({
   apiFetch: vi.fn(async () => ({ ok: true, status: 200, json: async () => [] })),
   useInvalidate: () => ({}),
+  useTodos: () => ({ data: undefined }),
+  useTodoCount: () => 0,
   useInventory: () => ({ data: inventory, isLoading: false, refetch: vi.fn() }),
   useSales: () => ({ data: [], isLoading: false, refetch: vi.fn() }),
   usePlatforms: () => ({ data: [] }),
