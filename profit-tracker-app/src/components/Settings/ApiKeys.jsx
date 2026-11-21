@@ -3,6 +3,7 @@ import { Key, Copy, RotateCw, Ban, Plus, ChevronDown, ChevronRight, Eye, Pencil,
 import { apiFetch } from '../../hooks/useApi';
 import { requireSuccessfulResponse } from '../../hooks/apiResponse';
 import { toast } from 'sonner';
+import AiGuideCopy from './AiGuideCopy';
 
 // Kept in sync with the tool list in profit-tracker-api/routes/mcp.js and README.md's
 // "MCP Server" section -- this is the same set, just in plain-English form for
@@ -300,6 +301,8 @@ export const ApiKeys = () => {
           </div>
         )}
       </div>
+
+      <AiGuideCopy />
 
       <ToolsGuide />
     </div>

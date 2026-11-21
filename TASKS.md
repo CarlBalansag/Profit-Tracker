@@ -4,3 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
+| feat-ai-guide | AI Assistant tab: copyable AI guide (full + updates since a version) | profit-tracker-app/src/data/aiGuide.js, profit-tracker-app/src/components/Settings/ApiKeys.jsx (+ new AiGuide component/test), profit-tracker-api/test/aiGuide.test.mjs, AGENTS.md | In progress | 2026-11-20 |

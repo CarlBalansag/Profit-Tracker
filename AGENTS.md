@@ -14,6 +14,15 @@ Use this workflow for every change in this repository.
 
 Do not fix unrelated issues discovered during QA. Record them with reproduction steps and affected files so they can become separate, focused tasks.
 
+## AI guide (for people's AI assistants)
+
+`profit-tracker-app/src/data/aiGuide.js` is the guide people copy from Settings > AI Assistant into their own AI, so it knows how to use the MCP tools. Any push that changes what an AI can do over MCP (a tool added, removed or renamed, new inputs, or changed behavior or rules) must, in the same push:
+
+1. Rewrite the affected parts of `AI_GUIDE_BODY` so it describes how things work **now** — it's the full guide for new people, not a history.
+2. Add one entry at the top of `AI_GUIDE_UPDATES` with that push's What's New version and date, and a few short notes saying only what changed and what the AI should do differently. Someone whose AI already knows the previous version copies just these notes, so keep them short and complete on their own.
+
+One entry per push, like What's New; pushes with no MCP-facing change get none. `profit-tracker-api/test/aiGuide.test.mjs` fails if a tool is missing from the guide, a removed tool is still named, or a guide version isn't in `changelog.js`.
+
 ## Mobile and responsive checks
 
 The app is used on a phone in a store as much as at a desk. Every change that adds or edits something the user sees (a page, component, dialog, menu, table, form, or a new field in one) is designed for the phone first and checked on a phone before it goes to `main`. Not checked on mobile means not done.
