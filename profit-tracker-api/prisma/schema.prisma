@@ -53,6 +53,7 @@ model User {
   invites                Invite[]
   tax_year_settings      TaxYearSetting[]
   tax_forms_1099k        TaxForm1099K[]
+  tax_profiles           TaxProfile[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -855,4 +856,40 @@ model TaxForm1099K {
   updated_at        DateTime  @updatedAt
 
   @@index([user_id, year])
+}
+
+// What a user chose to save about their own tax situation for one tax year,
+// for the Schedule C tax estimate. Only what the estimate needs: no names,
+// SSNs or birth dates (just "65 or older"). Every amount is optional; the
+// estimate says what it assumed for anything left blank. The user can delete
+// it, and can also estimate without saving anything (nothing is sent then).
+model TaxProfile {
+  id                     String   @id @default(uuid())
+  user_id                String
+  user                   User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year                   Int
+  state                  String?  // two-letter code, e.g. "TX"
+  filing_status          String   // single | mfj | mfs | hoh | qss
+  non_business_income    Decimal? @db.Decimal(19, 2) // expected for the year, all sources
+  wages                  Decimal? @db.Decimal(19, 2) // the part of it that is W-2 wages
+  other_se_income        Decimal? @db.Decimal(19, 2)
+  federal_withholding    Decimal? @db.Decimal(19, 2)
+  state_withholding      Decimal? @db.Decimal(19, 2)
+  federal_estimated_paid Decimal? @db.Decimal(19, 2)
+  state_estimated_paid   Decimal? @db.Decimal(19, 2)
+  qualifying_children    Int?
+  other_dependents       Int?
+  age65                  Boolean  @default(false)
+  spouse_age65           Boolean  @default(false)
+  adjustments            Decimal? @db.Decimal(19, 2) // e.g. IRA, HSA, student loan interest
+  itemized_deductions    Decimal? @db.Decimal(19, 2)
+  prior_year_tax         Decimal? @db.Decimal(19, 2)
+  prior_year_agi         Decimal? @db.Decimal(19, 2)
+  reserve_mode           String   @default("personalized") // personalized | flat | conservative
+  flat_rate              Decimal? @db.Decimal(6, 4)          // 0.25 = 25%
+  buffer_rate            Decimal? @db.Decimal(6, 4)          // 0.10 = 10% extra
+  created_at             DateTime @default(now())
+  updated_at             DateTime @updatedAt
+
+  @@unique([user_id, year])
 }

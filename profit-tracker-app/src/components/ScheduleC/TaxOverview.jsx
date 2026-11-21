@@ -1,0 +1,226 @@
+import { useEffect, useState } from 'react';
+import { apiFetch } from '../../hooks/useApi';
+import { requireSuccessfulResponse } from '../../hooks/apiResponse';
+import { buildTaxOverview, STATE_NAMES } from '../../../../shared/tax/index.mjs';
+import { localToday } from '../../utils/returnWindow';
+import { TaxProfileForm } from './TaxProfileForm';
+import { FILING_STATUS_LABELS } from '../../utils/taxProfile';
+
+const usd = (value) => {
+  const n = Number(value) || 0;
+  const text = `$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return n < 0 ? `-${text}` : text;
+};
+const pct = (rate) => (rate === null || rate === undefined ? 'n/a' : `${(Number(rate) * 100).toFixed(1)}%`);
+const day = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+const card = 'rounded-xl border border-white/10 p-4';
+const MODE_LABEL = { personalized: 'personalized', flat: 'flat percentage', conservative: 'conservative' };
+const IRS = {
+  estimated: { label: 'IRS: Estimated taxes', url: 'https://www.irs.gov/businesses/small-businesses-self-employed/estimated-taxes' },
+  se: { label: 'IRS: Self-employment tax', url: 'https://www.irs.gov/businesses/small-businesses-self-employed/self-employment-tax-social-security-and-medicare-taxes' },
+};
+
+function Row({ label, value, strong = false, hint }) {
+  return <tr className={`border-t border-white/5 ${strong ? 'font-semibold text-white' : 'text-gray-300'}`}>
+    <td className="py-2 pr-3 align-top">{label}{hint && <span className="block text-xs font-normal text-gray-500">{hint}</span>}</td>
+    <td className="whitespace-nowrap py-2 text-right align-top tabular-nums">{value}</td>
+  </tr>;
+}
+
+function SourceLinks({ sources }) {
+  if (!sources?.length) return null;
+  return <ul className="mt-2 space-y-1 text-xs">{sources.map((s) => <li key={s.url}><a className="text-gray-400 underline" href={s.url} target="_blank" rel="noreferrer">{s.label}</a></li>)}</ul>;
+}
+
+// "How we worked it out": a short version, or every line in Detailed.
+function TheMath({ o, detailed }) {
+  const i = o.impact;
+  if (!i) {
+    return <p className="mt-3 text-sm text-gray-400">{usd(o.businessProfit)} of profit × {pct(o.flatRate)} = {usd(o.reserves.flat)}. A flat percentage isn&apos;t tailored to you; add your filing status and state for a personalized estimate.</p>;
+  }
+  const w = i.withBusiness.federal; const wo = i.withoutBusiness.federal;
+  const ws = i.withBusiness.state; const wos = i.withoutBusiness.state;
+  return <div className="mt-3 space-y-4 text-sm">
+    <p className="text-gray-300">We work out your whole {o.year} tax twice, once with your business profit and once without it. The difference is the tax your business adds: {usd(i.withBusiness.totalTax)} − {usd(i.withoutBusiness.totalTax)} = <strong className="text-white">{usd(i.additionalTaxFromBusiness)}</strong>.</p>
+    <dl className="grid gap-3 sm:grid-cols-3">
+      <div className="rounded-lg border border-white/10 p-3"><dt className="text-xs text-gray-400">Effective business tax rate</dt><dd className="mt-1 text-lg tabular-nums text-white">{pct(i.effectiveBusinessTaxRate)}</dd><dd className="text-xs text-gray-500">Tax the business adds ÷ its profit</dd></div>
+      <div className="rounded-lg border border-white/10 p-3"><dt className="text-xs text-gray-400">Marginal rate</dt><dd className="mt-1 text-lg tabular-nums text-white">{pct(i.marginalRate)}</dd><dd className="text-xs text-gray-500">Tax on your next $100 of profit, all taxes combined</dd></div>
+      <div className="rounded-lg border border-white/10 p-3"><dt className="text-xs text-gray-400">Effective rate on all income</dt><dd className="mt-1 text-lg tabular-nums text-white">{pct(i.effectiveTaxRate)}</dd><dd className="text-xs text-gray-500">Total tax ÷ total income</dd></div>
+    </dl>
+    {detailed && <>
+      <div className="overflow-x-auto"><table className="w-full min-w-[20rem]">
+        <thead><tr className="text-left text-xs text-gray-500"><th className="pb-2 font-normal">Federal</th><th className="pb-2 text-right font-normal">Without business</th><th className="pb-2 text-right font-normal">With business</th></tr></thead>
+        <tbody>
+          {[['Total income', 'totalIncome'], ['Half of self-employment tax (deducted)', 'selfEmploymentTaxDeduction', true], ['Adjusted gross income', 'agi'],
+            [`${w.deductionType === 'itemized' ? 'Itemized' : 'Standard'} deduction`, 'deduction', true], ['Senior deduction', 'seniorDeduction', true],
+            ['Qualified business income deduction', 'qbiDeduction', true], ['Taxable income', 'taxableIncome'], ['Income tax', 'incomeTax'],
+            ['Credits', 'nonrefundableCredits', true]].map(([label, key, minus]) => (
+            <tr key={key} className="border-t border-white/5 text-gray-300"><td className="py-2 pr-3">{label}</td>
+              <td className="py-2 text-right tabular-nums">{minus && wo[key] ? '−' : ''}{usd(wo[key])}</td>
+              <td className="py-2 text-right tabular-nums">{minus && w[key] ? '−' : ''}{usd(w[key])}</td></tr>))}
+          <tr className="border-t border-white/5 text-gray-300"><td className="py-2 pr-3">Self-employment tax (Social Security {usd(w.selfEmployment.socialSecurity)} + Medicare {usd(w.selfEmployment.medicare)})</td><td className="py-2 text-right tabular-nums">{usd(wo.selfEmployment.total)}</td><td className="py-2 text-right tabular-nums">{usd(w.selfEmployment.total)}</td></tr>
+          <tr className="border-t border-white/5 text-gray-300"><td className="py-2 pr-3">Additional Medicare tax</td><td className="py-2 text-right tabular-nums">{usd(wo.additionalMedicareTax)}</td><td className="py-2 text-right tabular-nums">{usd(w.additionalMedicareTax)}</td></tr>
+          <tr className="border-t border-white/10 font-semibold text-white"><td className="py-2 pr-3">Federal tax</td><td className="py-2 text-right tabular-nums">{usd(wo.totalTax)}</td><td className="py-2 text-right tabular-nums">{usd(w.totalTax)}</td></tr>
+          <tr className="border-t border-white/5 text-gray-300"><td className="py-2 pr-3">{ws.name ? `${ws.name} tax` : 'State tax'}{!ws.supported && <span className="block text-xs text-amber-300">Not included</span>}</td><td className="py-2 text-right tabular-nums">{usd(wos.tax)}</td><td className="py-2 text-right tabular-nums">{usd(ws.tax)}</td></tr>
+          <tr className="border-t border-white/10 font-semibold text-white"><td className="py-2 pr-3">Total tax</td><td className="py-2 text-right tabular-nums">{usd(i.withoutBusiness.totalTax)}</td><td className="py-2 text-right tabular-nums">{usd(i.withBusiness.totalTax)}</td></tr>
+        </tbody>
+      </table></div>
+      {w.selfEmployment.belowMinimum && <p className="text-xs text-gray-500">Self-employment tax starts once net earnings reach $400, so none is due yet.</p>}
+      {ws.steps?.length > 0 && <div><p className="text-xs text-gray-400">{ws.name} steps (with business)</p><table className="w-full"><tbody>{ws.steps.map((s) => <Row key={s.label} label={s.label} value={usd(s.amount)} />)}</tbody></table></div>}
+      {i.withBusiness.notes?.length > 0 && <ul className="list-disc space-y-1 pl-5 text-xs text-gray-400">{i.withBusiness.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+      <div><p className="text-xs font-medium text-gray-400">Assumptions</p><ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-gray-500">{i.withBusiness.assumptions.map((a) => <li key={a}>{a}</li>)}</ul></div>
+      <div><p className="text-xs font-medium text-gray-400">Rules used: {i.withBusiness.ruleVersions.federal}{i.withBusiness.ruleVersions.state ? `, ${i.withBusiness.ruleVersions.state}` : ''}. Official sources:</p><SourceLinks sources={[...o.sources.federal, ...o.sources.state]} /></div>
+    </>}
+  </div>;
+}
+
+export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts = 0, onShowWorksheet }) {
+  const [loaded, setLoaded] = useState(null); // { saved, taxMath } | { error }
+  const [session, setSession] = useState(null); // unsaved profile, only in memory
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const [p, m] = await Promise.all([apiFetch(`/api/tax/profile/${year}`), apiFetch('/api/preferences/tax-math')]);
+        const { profile } = await (await requireSuccessfulResponse(p)).json();
+        const { taxMath } = await (await requireSuccessfulResponse(m)).json();
+        if (active) setLoaded({ saved: profile, taxMath });
+      } catch (err) { if (active) setLoaded({ error: err.message || 'Could not load your tax details.' }); }
+    })();
+    return () => { active = false; };
+  }, [year, attempt]);
+
+  if (!loaded) return <p role="status" className="text-sm text-gray-400">Loading your tax estimate…</p>;
+  if (loaded.error) return <div><p role="alert" className="text-red-400">{loaded.error}</p><button onClick={() => { setLoaded(null); setAttempt((n) => n + 1); }} className="mt-2 underline">Retry</button></div>;
+
+  const saved = loaded.saved;
+  const profile = session || saved;
+  const detailed = loaded.taxMath === 'detailed';
+  const setTaxMath = async (value) => {
+    setLoaded((l) => ({ ...l, taxMath: value }));
+    try { await requireSuccessfulResponse(await apiFetch('/api/preferences/tax-math', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taxMath: value }) })); } catch { /* the view still switches; it just won't be remembered */ }
+  };
+  const submit = async ({ profile: next, save }) => {
+    setError('');
+    if (!save) { setSession(next); setEditing(false); return; }
+    setBusy(true);
+    try {
+      const res = await requireSuccessfulResponse(await apiFetch(`/api/tax/profile/${year}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) }));
+      const { profile: stored } = await res.json();
+      setLoaded((l) => ({ ...l, saved: stored })); setSession(null); setEditing(false);
+    } catch (err) { setError(err.message || 'Could not save. Try again.'); }
+    finally { setBusy(false); }
+  };
+  const removeSaved = async () => {
+    setBusy(true); setError('');
+    try {
+      await requireSuccessfulResponse(await apiFetch(`/api/tax/profile/${year}`, { method: 'DELETE' }));
+      setLoaded((l) => ({ ...l, saved: null })); setSession(null); setConfirmDelete(false); setEditing(false);
+    } catch (err) { setError(err.message || 'Could not delete. Try again.'); }
+    finally { setBusy(false); }
+  };
+
+  const header = <div className="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 className="text-lg font-semibold">Your {year} tax estimate</h2>
+      <p className="mt-1 text-sm text-gray-400">An estimate to plan with, not a tax bill. Based on your profit recorded so far this year.</p>
+    </div>
+    <div role="group" aria-label="How much math to show" className="inline-flex rounded-lg border border-white/10 p-0.5 text-sm">
+      {['simple', 'detailed'].map((v) => <button key={v} type="button" aria-pressed={loaded.taxMath === v} onClick={() => setTaxMath(v)}
+        className={`rounded-md px-3 py-1 ${loaded.taxMath === v ? 'bg-purple-600 text-white' : 'text-gray-300'}`}>{v === 'simple' ? 'Simple' : 'Detailed'}</button>)}
+    </div>
+  </div>;
+
+  if (!profile && !editing) {
+    return <section aria-label="Tax estimate" className="space-y-4">{header}
+      <TaxProfileForm key="setup" year={year} mode="setup" busy={busy} error={error} onSubmit={submit}
+        onFlatOnly={() => setSession({ reserve_mode: 'flat', flat_rate: '0.25' })} />
+    </section>;
+  }
+
+  const o = buildTaxOverview({ profile, year, businessProfit: books.netProfit, today: localToday() });
+  const describe = profile?.filing_status
+    ? `${FILING_STATUS_LABELS[profile.filing_status]}${profile.state ? `, ${STATE_NAMES[profile.state]}` : ''}`
+    : 'Flat percentage only';
+  const next = o.nextDue[0];
+  const unsupportedYear = !o.supportedYear;
+
+  return <section aria-label="Tax estimate" className="space-y-4">
+    {header}
+    {session && <p className="rounded-xl border border-amber-500/30 p-3 text-sm text-amber-200">Not saved: these details are only in this browser tab and are gone when you leave.{session.filing_status && <> <button type="button" disabled={busy} onClick={() => submit({ profile: session, save: true })} className="underline">Save them</button></>}</p>}
+    {o.limitations.length > 0 && <ul role="note" className="space-y-1 rounded-xl border border-amber-500/30 p-3 text-sm text-amber-200">{o.limitations.map((l) => <li key={l}>{l}</li>)}</ul>}
+
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className={card}><p className="text-sm text-gray-400">Profit so far</p><p className="mt-2 text-2xl tabular-nums">{usd(o.businessProfit)}</p><p className="mt-1 text-xs text-gray-500">Schedule C line 31 · <button type="button" onClick={onShowWorksheet} className="underline">see how</button></p></div>
+      <div className={card}><p className="text-sm text-gray-400">Tax the business adds</p><p className="mt-2 text-2xl tabular-nums">{o.impact ? usd(Math.max(0, o.impact.additionalTaxFromBusiness)) : '—'}</p><p className="mt-1 text-xs text-gray-500">{o.impact ? (o.impact.effectiveBusinessTaxRate !== null ? `About ${pct(o.impact.effectiveBusinessTaxRate)} of your profit` : 'No profit yet, so no extra tax') : 'Add your filing status to see this'}</p></div>
+      <div className={`${card} border-purple-500/30`}><p className="text-sm text-gray-400">Set aside</p><p className="mt-2 text-2xl font-semibold tabular-nums text-white">{usd(o.recommended)}</p><p className="mt-1 text-xs text-gray-500">{MODE_LABEL[o.effectiveMode]} · {usd(o.stillToSetAside)} still to set aside</p></div>
+      <div className={card}><p className="text-sm text-gray-400">Next payment due</p>{next
+        ? <><p className="mt-2 text-2xl tabular-nums">{day(next.due)}</p>{o.nextDue.filter((d) => d.due === next.due).map((d) => <p key={d.who} className="mt-1 text-xs text-gray-500">{d.who} {d.period}: {usd(d.amount)}</p>)}</>
+        : <><p className="mt-2 text-lg">{o.impact ? 'Nothing scheduled' : '—'}</p><p className="mt-1 text-xs text-gray-500">{o.impact ? `Any balance is due when you file, by ${day(o.filingDue)}.` : unsupportedYear ? 'Not available for this year' : 'Add your details to see this'}</p></>}</div>
+    </div>
+
+    <details className={card} open={detailed || undefined}>
+      <summary className="cursor-pointer text-sm font-medium text-purple-300">How we worked it out</summary>
+      <TheMath o={o} detailed={detailed} />
+      {!detailed && o.impact && <p className="mt-3 text-xs text-gray-500">Switch to Detailed to see every line, the rules used and the official sources.</p>}
+    </details>
+
+    <details className={card} open={detailed || undefined}>
+      <summary className="cursor-pointer text-sm font-medium text-purple-300">What you&apos;ve already paid</summary>
+      {o.impact ? <table className="mt-3 w-full text-sm"><tbody>
+        <Row label="Federal tax withheld from paychecks" value={usd(o.impact.withBusiness.federal.withholding)} />
+        <Row label="Federal estimated payments" value={usd(o.impact.withBusiness.federal.estimatedPayments)} />
+        {profile.state && <Row label={`${STATE_NAMES[profile.state]} withheld`} value={usd(o.impact.withBusiness.state.withholding)} />}
+        {profile.state && <Row label={`${STATE_NAMES[profile.state]} estimated payments`} value={usd(o.impact.withBusiness.state.estimatedPayments)} />}
+        <Row strong label="Left to pay on your whole return" hint="Your total estimated tax minus everything above" value={usd(Math.max(0, o.impact.withBusiness.remainingBalance))} />
+      </tbody></table> : <p className="mt-3 text-sm text-gray-400">Add your details to include withholding and payments.</p>}
+      <p className="mt-2 text-xs text-gray-500">Tracking money you set aside, and each payment you make, comes in a later update. For now, enter totals in your tax details.</p>
+    </details>
+
+    {o.impact && <details className={card} open={detailed || undefined}>
+      <summary className="cursor-pointer text-sm font-medium text-purple-300">Payment plan</summary>
+      {[[o.federalPlan, 'Federal (IRS)'], [o.statePlan, profile.state ? STATE_NAMES[profile.state] : null]].filter(([p, who]) => p && who).map(([plan, who]) => <div key={who} className="mt-3 text-sm">
+        <p className="font-medium text-white">{who}</p>
+        {!plan.supported ? <p className="text-gray-400">{plan.limitations?.[0]}</p> : <>
+          {plan.requiredFromEstimatedPayments > 0 && <p className="text-gray-400">{usd(plan.requiredFromEstimatedPayments)} for the year from estimated payments{plan.basis?.startsWith('prior') ? ', based on last year\'s tax' : ''}. {usd(plan.remaining)} still to pay.</p>}
+          {plan.installments.length > 0 && plan.requiredFromEstimatedPayments > 0 && <table className="mt-2 w-full"><tbody>{plan.installments.map((inst) => <Row key={inst.period} label={`${inst.period} · due ${day(inst.due)}`} hint={inst.covers} value={usd(inst.amount)} />)}</tbody></table>}
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-gray-500">{plan.notes.map((n) => <li key={n}>{n}</li>)}</ul>
+        </>}
+      </div>)}
+      <p className="mt-3 text-xs text-gray-500"><a className="underline" href={IRS.estimated.url} target="_blank" rel="noreferrer">{IRS.estimated.label}</a> · <a className="underline" href={IRS.se.url} target="_blank" rel="noreferrer">{IRS.se.label}</a></p>
+    </details>}
+
+    <details className={card}>
+      <summary className="cursor-pointer text-sm font-medium text-purple-300">Deductions you might be missing</summary>
+      <ul className="mt-3 space-y-2 text-sm text-gray-300">
+        <li>{pendingExpenses > 0 ? <>{pendingExpenses} {pendingExpenses === 1 ? 'expense is' : 'expenses are'} waiting for review and not deducted yet. <button type="button" onClick={onShowWorksheet} className="underline">Review them</button></> : 'Every expense has been reviewed.'}</li>
+        <li>{missingReceipts > 0 ? `${missingReceipts} deducted ${missingReceipts === 1 ? 'expense has' : 'expenses have'} no receipt attached. Keep records for each deduction.` : 'Every deducted expense has a receipt.'}</li>
+        <li className="text-gray-500">Checks for mileage, a home office and equipment come in a later update.</li>
+      </ul>
+    </details>
+
+    {o.missing.length > 0 && profile.filing_status && <div className={card}>
+      <p className="text-sm font-medium text-white">Make this estimate sharper</p>
+      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-400">{o.missing.map((m) => <li key={m.field}>{m.text}</li>)}</ul>
+    </div>}
+
+    <div className={`${card} space-y-3`}>
+      {!editing ? <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-gray-400">Using: <span className="text-gray-200">{describe}</span>{saved && !session ? ' · saved' : ' · not saved'}</p>
+        <div className="flex flex-wrap gap-3 text-sm">
+          <button type="button" onClick={() => setEditing(true)} className="rounded-lg border border-white/10 px-3 py-1.5 text-purple-300">Edit my tax details</button>
+          {saved && !confirmDelete && <button type="button" onClick={() => setConfirmDelete(true)} className="text-gray-400 underline">Delete saved details</button>}
+          {saved && confirmDelete && <span className="flex flex-wrap items-center gap-2"><span className="text-gray-400">Delete your saved {year} details?</span><button type="button" disabled={busy} onClick={removeSaved} className="text-red-300 underline">Yes, delete</button><button type="button" onClick={() => setConfirmDelete(false)} className="text-gray-400 underline">Keep them</button></span>}
+          {session && <button type="button" onClick={() => setSession(null)} className="text-gray-400 underline">Clear unsaved details</button>}
+        </div>
+      </div> : <TaxProfileForm key={`edit-${saved?.updated_at || 'new'}`} year={year} initial={profile} saved={Boolean(saved) && !session} busy={busy} error={error} onSubmit={submit} onCancel={() => { setEditing(false); setError(''); }} />}
+      {!editing && error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+    </div>
+  </section>;
+}

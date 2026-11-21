@@ -4,6 +4,7 @@ import { apiFetch } from '../hooks/useApi';
 import { requireSuccessfulResponse } from '../hooks/apiResponse';
 import { ExpenseTaxFields } from '../components/ScheduleC/ExpenseTaxFields';
 import { ScheduleCBooks } from '../components/ScheduleC/ScheduleCBooks';
+import { TaxOverview } from '../components/ScheduleC/TaxOverview';
 import { emptyTaxDetails, taxReviewIssues } from '../../../shared/scheduleC.mjs';
 import { csvText, downloadFile, downloadJSON } from '../utils/downloads';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
@@ -43,6 +44,7 @@ export default function ScheduleC() {
   const [revision, setRevision] = useState(0);
   const [editing, setEditing] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [view, setView] = useState('overview');
   const validYear = /^\d{4}$/.test(year) && Number(year) >= 1900;
   useEffect(() => {
     if (!/^\d{4}$/.test(year) || Number(year) < 1900) return;
@@ -66,7 +68,11 @@ export default function ScheduleC() {
     <div className="flex flex-wrap items-center justify-between gap-4"><div><h1 className="text-2xl font-bold">Schedule C worksheet</h1><p className="mt-1 text-sm text-gray-400">Tax year is the year of the records, even if you file the return the following year.</p></div>
       <label className="schedule-c-actions text-sm">Tax year<input aria-label="Tax year" type="number" min="1900" max="9999" step="1" value={year} onChange={e => { setYear(e.target.value); setFilter('all'); }} className="ml-3 w-24 rounded-lg border border-white/10 bg-[#16181d] p-2" /></label></div>
     <p className="rounded-xl border border-white/10 p-4 text-sm text-gray-400">A preparation aid, not a filed tax return. Cash method only; accrual reporting is not supported. Income and cost of goods sold come from your purchases and sales; expenses are the paid, reviewed ones plus the shipping labels and platform fees from your sales. Equipment, vehicle and home-office deductions are not included yet. <a href="https://www.irs.gov/instructions/i1040sc" target="_blank" rel="noreferrer" className="underline">IRS instructions</a></p>
+    <div role="tablist" aria-label="Schedule C views" className="schedule-c-actions inline-flex rounded-lg border border-white/10 p-0.5 text-sm">
+      {[['overview', 'Tax estimate'], ['worksheet', 'Worksheet']].map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)} className={`rounded-md px-4 py-1.5 ${view === key ? 'bg-purple-600 text-white' : 'text-gray-300'}`}>{label}</button>)}
+    </div>
     {!validYear ? <p role="alert">Choose a four-digit tax year from 1900 to 9999.</p> : !current ? <p role="status">Loading worksheet…</p> : current.error ? <div><p role="alert" className="text-red-400">{current.error}</p><button onClick={() => setRevision(value => value + 1)} className="mt-3 underline">Retry loading</button></div> : !current.enabled ? <div className="rounded-xl border border-white/10 p-6"><p>Enable Schedule C preparation in Settings to use this worksheet.</p><Link to="/settings" state={{ tab: 'tax' }} className="mt-3 inline-block text-purple-300 underline">Open Schedule C settings</Link></div> : <>
+      {view === 'overview' ? <TaxOverview key={report.year} year={report.year} books={report.books} pendingExpenses={report.pending} missingReceipts={report.documentation_gaps} onShowWorksheet={() => setView('worksheet')} /> : <>
       <p className="font-medium">Tax year {report.year} · USD</p>
       {report.planning && <p className="rounded-xl border border-amber-500/30 p-4 text-sm text-amber-300">Planning worksheet for {year}. Line references use the verified 2025 form; mappings for {year} have not been verified. These figures are not filing-ready.</p>}
       <ScheduleCBooks books={report.books} year={report.year} onSettingsSaved={() => setRevision(value => value + 1)} />
@@ -85,6 +91,7 @@ export default function ScheduleC() {
           ? <article key={row.id} className="space-y-2 rounded-xl border border-white/10 p-4"><div className="flex flex-wrap justify-between gap-3"><h3 className="font-medium">{row.name}</h3><span>${row.amount} · worksheet ${row.eligible}</span></div><p className="text-sm text-gray-400">Automatic · from your sale · {row.tax_details.payee} · {row.tax_details.paid_date}</p><p className="break-words text-sm text-gray-400">{row.tax_details.purpose}</p><Link to="/transactions" state={{ openTransaction: { inventoryId: row.inventory_id, saleId: row.sale_id } }} className="text-sm text-purple-300 underline">Open sale</Link></article>
           : <article key={row.id} className="space-y-2 rounded-xl border border-white/10 p-4"><div className="flex flex-wrap justify-between gap-3"><h3 className="font-medium">{row.name}</h3><span>${row.amount} · worksheet ${row.eligible}</span></div><p className="text-sm text-gray-400">{row.status} · {row.tax_details.payee || 'Payee missing'} · {row.tax_details.paid_date || 'Payment date unknown'}{row.tax_details.business_use === 'mixed' ? ` · ${row.tax_details.business_percent}% business` : ''}</p><p className="break-words text-sm text-gray-400">{row.tax_details.purpose || 'Business purpose missing'}</p>{row.tax_details.payment_reference && <p className="break-words text-xs text-gray-400">Payment evidence: {row.tax_details.payment_reference}</p>}{row.possible_duplicate_of && <p className="text-sm text-amber-300">Possible duplicate of “{row.possible_duplicate_of}”, which is already included from the sale. If it&apos;s the same cost, delete this expense on the <Link to="/expenses" className="underline">Expenses</Link> tab.</p>}{row.issues.length > 0 && <p className="text-sm text-amber-300">{row.issues.join(' · ')}</p>}{row.documentation_missing ? <p className="text-xs text-amber-300">Receipt attachment missing — review supporting documentation.</p> : /^https:\/\//i.test(row.receipt_url) && <a href={row.receipt_url} target="_blank" rel="noreferrer" className="text-sm text-purple-300 underline">View receipt</a>}<button onClick={() => setEditing(row)} className="text-sm text-purple-300 underline">Review {row.name}</button></article>)}
       </section>
+      </>}
     </>}
     {editing && <TaxEditor key={editing.id} expense={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setRevision(value => value + 1); }} />}
   </div>;

@@ -12,17 +12,19 @@ const reviewed = { ...emptyTaxDetails(), business_use: 'business', payee: 'Packi
 const row = { id: 'expense-1', name: 'Packing tape', amount: '100.00', date: '2026-01-01', tax_details: reviewed, status: 'reviewed', eligible: '100.00', issues: [], documentation_missing: true };
 const report = (year = new Date().getFullYear()) => ({ year, mapping_year: 2025, planning: year !== 2025, total: '100.00', pending: 0, documentation_gaps: 1, groups: [{ id: 'SUPPLIES', label: 'Supplies / shipping supplies', line2025: '22', total: '100.00', count: 1 }], rows: [structuredClone(row)] });
 const mount = component => render(<MemoryRouter>{component}</MemoryRouter>);
+// The page opens on the tax estimate; these tests are about the worksheet.
+const mountWorksheet = () => { const view = mount(<ScheduleC />); fireEvent.click(screen.getByRole('tab', { name: 'Worksheet' })); return view; };
 beforeEach(() => { vi.clearAllMocks(); apiFetch.mockImplementation(async path => response(path.includes('/preferences/') ? { enabled: true } : report(Number(new URL(path, 'https://fixture.invalid').searchParams.get('year'))))); });
 afterEach(cleanup);
 describe('Schedule C workflow', () => {
   it('shows per-user opt-in rather than pretending disabled reports have totals', async () => {
-    apiFetch.mockResolvedValue(response({ enabled: false })); mount(<ScheduleC />);
+    apiFetch.mockResolvedValue(response({ enabled: false })); mountWorksheet();
     await screen.findByText('Enable Schedule C preparation in Settings to use this worksheet.');
     expect(apiFetch).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Worksheet total')).toBeNull();
   });
   it('shows reviewed totals, future-year caution, empty filters and exports all records with evidence and formula protection', async () => {
-    mount(<ScheduleC />); await screen.findByText('Worksheet total');
+    mountWorksheet(); await screen.findByText('Worksheet total');
     fireEvent.change(screen.getByLabelText('Tax year'), { target: { value: '2030' } });
     await screen.findByText(/Planning worksheet for 2030/);
     fireEvent.change(screen.getByLabelText('Show records'), { target: { value: 'pending' } });
@@ -37,7 +39,7 @@ describe('Schedule C workflow', () => {
       if (options?.method === 'PUT') { if (failed) return response({ error: 'Save rejected' }, false); savedTax = JSON.parse(options.body).tax_details; return response({}); }
       return response(path.includes('/preferences/') ? { enabled: true } : report());
     });
-    mount(<ScheduleC />); fireEvent.click(await screen.findByRole('button', { name: 'Review Packing tape' }));
+    mountWorksheet(); fireEvent.click(await screen.findByRole('button', { name: 'Review Packing tape' }));
     fireEvent.change(screen.getByLabelText('Business purpose'), { target: { value: 'Boxes for online orders' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save tax details' })); await screen.findByRole('alert');
     expect(screen.getByLabelText('Business purpose').value).toBe('Boxes for online orders');
@@ -50,7 +52,7 @@ describe('Schedule C workflow', () => {
   it('blocks false reviewed claims but permits incomplete drafts; guards duplicate save and pending cancellation', async () => {
     let release; const pending = new Promise(resolve => { release = resolve; });
     apiFetch.mockImplementation(async (path, options) => options?.method === 'PUT' ? pending : response(path.includes('/preferences/') ? { enabled: true } : report()));
-    mount(<ScheduleC />); fireEvent.click(await screen.findByRole('button', { name: 'Review Packing tape' }));
+    mountWorksheet(); fireEvent.click(await screen.findByRole('button', { name: 'Review Packing tape' }));
     fireEvent.change(screen.getByLabelText('Payee / vendor'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Save tax details' }));
     expect(screen.getByRole('alert').textContent).toContain('Complete business details'); expect(apiFetch.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(false);
@@ -68,7 +70,7 @@ describe('Schedule C workflow', () => {
     release(response({ enabled: true })); await waitFor(() => expect(screen.getByRole('checkbox').checked).toBe(true));
   });
   it('rejects malformed years and offers loading failure retry without showing stale totals', async () => {
-    apiFetch.mockResolvedValueOnce(response({ error: 'Load failed' }, false)); mount(<ScheduleC />);
+    apiFetch.mockResolvedValueOnce(response({ error: 'Load failed' }, false)); mountWorksheet();
     await screen.findByRole('alert'); fireEvent.click(screen.getByRole('button', { name: 'Retry loading' })); await screen.findByText('Worksheet total');
     fireEvent.change(screen.getByLabelText('Tax year'), { target: { value: '10000' } }); expect(screen.getByRole('alert').textContent).toContain('four-digit'); expect(screen.queryByText('Worksheet total')).toBeNull();
   });
@@ -84,7 +86,7 @@ describe('Schedule C: sale costs included automatically', () => {
   beforeEach(() => { apiFetch.mockImplementation(async path => response(path.includes('/preferences/') ? { enabled: true } : saleReport())); });
 
   it('shows sale costs as automatic rows with an Open sale link and no review button', async () => {
-    mount(<ScheduleC />);
+    mountWorksheet();
     await screen.findByText('Cup · Shipping label');
     expect(screen.getByText(/Includes \$10.04 from 1 sale cost/)).toBeTruthy();
     const article = screen.getByText('Cup · Shipping label').closest('article');
@@ -95,7 +97,7 @@ describe('Schedule C: sale costs included automatically', () => {
 
   it('shows refunds to buyers as returns and allowances, separate from expenses', async () => {
     apiFetch.mockImplementation(async path => response(path.includes('/preferences/') ? { enabled: true } : { ...saleReport(), returns_and_allowances: { line: '2', total: '150.00', count: 1 } }));
-    mount(<ScheduleC />);
+    mountWorksheet();
     const note = await screen.findByText(/are returns and allowances/);
     expect(note.textContent).toContain('$150.00 this year, 1 refund');
     expect(note.textContent).toContain('not in the worksheet total');
@@ -103,18 +105,18 @@ describe('Schedule C: sale costs included automatically', () => {
 
   it('hides the returns note when there are no refunds', async () => {
     apiFetch.mockImplementation(async path => response(path.includes('/preferences/') ? { enabled: true } : { ...saleReport(), returns_and_allowances: { line: '2', total: '0.00', count: 0 } }));
-    mount(<ScheduleC />);
+    mountWorksheet();
     await screen.findByText('Cup · Shipping label');
     expect(screen.queryByText(/are returns and allowances/)).toBeNull();
   });
 
   it('explains that purchase costs are left out on purpose', async () => {
-    mount(<ScheduleC />);
+    mountWorksheet();
     expect(await screen.findByText(/\$53.20 this year, net of gift cards/)).toBeTruthy();
   });
 
   it('warns about a manual expense that duplicates a sale cost, and filters to it', async () => {
-    mount(<ScheduleC />);
+    mountWorksheet();
     const banner = await screen.findByRole('button', { name: /1 manual expense looks like/ });
     expect(screen.getByText(/Possible duplicate of “Cup · Shipping label”/)).toBeTruthy();
     fireEvent.click(banner);
@@ -124,7 +126,7 @@ describe('Schedule C: sale costs included automatically', () => {
   });
 
   it('filters to only the automatic sale rows', async () => {
-    mount(<ScheduleC />);
+    mountWorksheet();
     await screen.findByText('Cup · Shipping label');
     fireEvent.change(screen.getByLabelText('Show records'), { target: { value: 'automatic' } });
     expect(screen.queryByText('Pirate Ship label')).toBeNull();
@@ -132,7 +134,7 @@ describe('Schedule C: sale costs included automatically', () => {
   });
 
   it('exports the source and duplicate flag in the supporting CSV', async () => {
-    mount(<ScheduleC />);
+    mountWorksheet();
     await screen.findByText('Cup · Shipping label');
     fireEvent.click(screen.getByRole('button', { name: 'Export supporting CSV' }));
     const csv = downloadFile.mock.calls[0][1];
@@ -166,7 +168,7 @@ describe('Schedule C profit (Parts I and III)', () => {
   });
 
   it('shows gross receipts, cost of goods sold, expenses and net profit with the lines behind them', async () => {
-    mount(<ScheduleC />);
+    mountWorksheet();
     expect(await screen.findByText('Net profit (line 31)')).toBeTruthy();
     expect(screen.getAllByText('$73.50').length).toBeGreaterThan(0);
     expect(screen.getAllByText('$205.00').length).toBeGreaterThan(0);
@@ -176,7 +178,7 @@ describe('Schedule C profit (Parts I and III)', () => {
   });
 
   it('reconciles to app profit, lists platforms, late-December sales, data problems and notes', async () => {
-    mount(<ScheduleC />);
+    mountWorksheet();
     await screen.findByText('Why this differs from your profit elsewhere in the app');
     expect(screen.getByText('$93.50')).toBeTruthy();
     expect(screen.getByText('-$20.00')).toBeTruthy();
@@ -190,7 +192,7 @@ describe('Schedule C profit (Parts I and III)', () => {
 
   it('says loss instead of profit when line 31 is negative', async () => {
     apiFetch.mockImplementation(async path => response(path.includes('/preferences/') ? { enabled: true } : { ...report(2026), books: { ...books, netProfit: '-40.00', checks: { ...books.checks, oversold: [] } } }));
-    mount(<ScheduleC />);
+    mountWorksheet();
     expect(await screen.findByText('Net loss (line 31)')).toBeTruthy();
     expect(screen.getByText('-$40.00')).toBeTruthy();
   });
@@ -214,7 +216,7 @@ describe('Schedule C: stock not in ProfitTracker', () => {
     });
   });
   const open = async () => {
-    mount(<ScheduleC />);
+    mountWorksheet();
     await screen.findAllByText(/Stock not in ProfitTracker/);
     fireEvent.change(screen.getByLabelText('Tax year'), { target: { value: '2026' } });
     return { start: await screen.findByLabelText('On hand January 1, 2026'), end: screen.getByLabelText('Still on hand December 31, 2026') };
@@ -284,7 +286,7 @@ describe('Schedule C: 1099-K forms', () => {
       return response(path.includes('/preferences/') ? { enabled: true } : { ...report(2026), books: books() });
     });
   });
-  const open = async () => { mount(<ScheduleC />); await screen.findByText(/Sales by platform and 1099-K forms \(1 form, \$350\.00\)/); };
+  const open = async () => { mountWorksheet(); await screen.findByText(/Sales by platform and 1099-K forms \(1 form, \$350\.00\)/); };
 
   it('shows each platform next to its 1099-K and the difference', async () => {
     await open();

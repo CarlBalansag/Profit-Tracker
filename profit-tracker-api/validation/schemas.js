@@ -554,7 +554,40 @@ const updateForm1099K = z.object({
   transaction_count: form1099KFields.transaction_count,
 }).strict();
 
+// PUT /api/tax/profile/:year. Amounts only: the schema is strict, so a name,
+// SSN or anything else not listed is refused rather than stored.
+const STATE_CODES = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'];
+const optionalCount = z.preprocess((v) => (v === '' ? null : v), z.coerce.number().int().min(0).max(30).nullable().optional());
+const rate = z.preprocess((v) => (v === '' ? null : v), z.coerce.number().finite().min(0).max(1).nullable().optional());
+const taxProfileBody = z.object({
+  state: z.preprocess((v) => (v === '' ? null : v), z.enum(STATE_CODES).nullable().optional()),
+  filing_status: z.enum(['single', 'mfj', 'mfs', 'hoh', 'qss']),
+  non_business_income: nullableDecimalAmount(),
+  wages: nullableDecimalAmount(),
+  other_se_income: nullableDecimalAmount(),
+  federal_withholding: nullableDecimalAmount(),
+  state_withholding: nullableDecimalAmount(),
+  federal_estimated_paid: nullableDecimalAmount(),
+  state_estimated_paid: nullableDecimalAmount(),
+  qualifying_children: optionalCount,
+  other_dependents: optionalCount,
+  age65: z.boolean().optional(),
+  spouse_age65: z.boolean().optional(),
+  adjustments: nullableDecimalAmount(),
+  itemized_deductions: nullableDecimalAmount(),
+  prior_year_tax: nullableDecimalAmount(),
+  prior_year_agi: nullableDecimalAmount(),
+  reserve_mode: z.enum(['personalized', 'flat', 'conservative']).optional(),
+  flat_rate: rate,
+  buffer_rate: rate,
+}).strict().superRefine((p, ctx) => {
+  if (p.wages != null && p.non_business_income != null && p.wages > p.non_business_income) {
+    ctx.addIssue({ code: 'custom', path: ['wages'], message: 'W-2 wages are part of your income outside the business, so they can\'t be more than it.' });
+  }
+});
+
 module.exports = {
+  taxProfileBody,
   createForm1099K,
   updateForm1099K,
   taxYearSettingBody,
