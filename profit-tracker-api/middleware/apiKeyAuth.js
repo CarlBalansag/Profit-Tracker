@@ -14,6 +14,9 @@ async function apiKeyAuth(req, res, next) {
 
   req.user = key.user;
   req.apiKeyId = key.id;
+  // Which AI guide version this key's AI has read (get_ai_guide), so the MCP
+  // server can nudge an AI that is behind without another lookup.
+  req.apiKeyGuideVersion = key.ai_guide_version ?? null;
   // Best-effort freshness marker for the Settings UI ("last used X ago") --
   // must never block or fail the actual MCP request.
   prisma.apiKey.update({ where: { id: key.id }, data: { last_used_at: new Date() } }).catch(() => {});

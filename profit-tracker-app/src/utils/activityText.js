@@ -256,6 +256,7 @@ function eventText(entry) {
     const titles = {
       create: 'Created an API key', rotate: 'Replaced an API key', revoke: 'Revoked an API key',
       cashout_writes: d.allowed ? 'Allowed cashout actions for an API key' : 'Stopped cashout actions for an API key',
+      ai_guide_reset: 'Set an API key to re-read the AI guide',
     };
     return { title: titles[d.action] || 'Changed an API key', change: '', product: d.product_name || 'API key' };
   }

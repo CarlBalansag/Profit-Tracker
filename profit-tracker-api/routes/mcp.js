@@ -388,7 +388,19 @@ async function updateSaleShipment(tx, userId, existing, { tracking_number, carri
   return shipmentResult('outbound', updated, existing.inventory.product_name);
 }
 
-function buildServer(userId, apiKeyId) {
+// One short line added to every tool result while this key's AI hasn't read
+// the current guide, for AIs that ignore the connect instructions. It stops
+// as soon as the AI calls get_ai_guide (the key's version is then current).
+function guideNotice(guideVersion) {
+  const current = aiGuide.AI_GUIDE_VERSION;
+  if (!guideVersion) return `Note: you haven't read the Profit Tracker AI guide yet. Call get_ai_guide (no arguments) to learn how these tools work.`;
+  if (Number.parseFloat(guideVersion) < Number.parseFloat(current)) {
+    return `Note: the Profit Tracker AI guide has updates (you have ${guideVersion}, current is ${current}). Call get_ai_guide (no arguments) for just the changes.`;
+  }
+  return null;
+}
+
+function buildServer(userId, apiKeyId, guideVersion = null) {
   // Sent once when an AI connects. Clients that pass server instructions to
   // the model get told to catch up on the guide; get_ai_guide works either way.
   const instructions = `Profit Tracker records a reseller's purchases, sales, payouts, expenses and cards. `
@@ -396,6 +408,17 @@ function buildServer(userId, apiKeyId) {
     + 'At the start of a session, before other tools, call get_ai_guide with no arguments: it returns the full guide the first time, '
     + 'and after that only what changed since this connection last read it (or that you are up to date).';
   const server = new McpServer({ name: 'profit-tracker', version: '1.0.0' }, { capabilities: {}, instructions });
+  const notice = guideNotice(guideVersion);
+  if (notice) {
+    // Every tool except get_ai_guide itself gets the notice as a separate
+    // trailing text block, so its JSON result (content[0]) is unchanged.
+    const register = server.registerTool.bind(server);
+    server.registerTool = (name, config, handler) => register(name, config, async (...args) => {
+      const result = await handler(...args);
+      if (name === 'get_ai_guide' || !result || !Array.isArray(result.content)) return result;
+      return { ...result, content: [...result.content, { type: 'text', text: notice }] };
+    });
+  }
 
   // ------------------------------------------------------------------ reads
 
@@ -2935,7 +2958,13 @@ function buildServer(userId, apiKeyId) {
 
 router.post('/', async (req, res) => {
   await aiGuideReady;
-  const server = buildServer(req.user.id, req.apiKeyId);
+  // The auth middleware already loaded the key; look it up only if it didn't.
+  let guideVersion = req.apiKeyGuideVersion;
+  if (guideVersion === undefined && req.apiKeyId) {
+    const key = await prisma.apiKey.findFirst({ where: { id: req.apiKeyId, user_id: req.user.id } }).catch(() => null);
+    guideVersion = key?.ai_guide_version ?? null;
+  }
+  const server = buildServer(req.user.id, req.apiKeyId, guideVersion ?? null);
   try {
     // enableJsonResponse: none of these tools stream partial results or
     // server notifications mid-call, so a single JSON response per request

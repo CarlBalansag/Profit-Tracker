@@ -114,3 +114,69 @@ describe('the key list and rotation', () => {
     expect(harness.db.apiKey.find((k) => k.id === rotated.id).ai_guide_version).toBe(guide.AI_GUIDE_VERSION);
   });
 });
+
+describe('catch-up note on tool results', () => {
+  const rawCall = async (name, args = {}) => (await rpc('tools/call', { name, arguments: args })).result;
+
+  it('reminds an AI that has never read the guide, without changing the result itself', async () => {
+    addKey();
+    const result = await rawCall('list_expenses');
+    expect(Array.isArray(JSON.parse(result.content[0].text))).toBe(true);
+    expect(result.content).toHaveLength(2);
+    expect(result.content[1].text).toContain("haven't read the Profit Tracker AI guide");
+    expect(result.content[1].text).toContain('get_ai_guide');
+  });
+
+  it('tells an AI that is behind which versions, and stops once it calls get_ai_guide', async () => {
+    addKey({ ai_guide_version: '1.01' });
+    const behind = await rawCall('list_expenses');
+    expect(behind.content[1].text).toContain(`you have 1.01, current is ${guide.AI_GUIDE_VERSION}`);
+    const pulled = await rawCall('get_ai_guide');
+    expect(pulled.content).toHaveLength(1);
+    const after = await rawCall('list_expenses');
+    expect(after.content).toHaveLength(1);
+  });
+
+  it('adds nothing for an AI on the current version', async () => {
+    addKey({ ai_guide_version: guide.AI_GUIDE_VERSION });
+    expect((await rawCall('list_expenses')).content).toHaveLength(1);
+  });
+});
+
+describe('PATCH /api/api-keys/:id reset_ai_guide', () => {
+  const patch = (id, body) => fetch(`${baseUrl}/api/api-keys/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+  it('clears the key\'s version so get_ai_guide sends the whole guide, and logs it', async () => {
+    addKey({ ai_guide_version: guide.AI_GUIDE_VERSION });
+    const res = await patch(KEY_ID, { reset_ai_guide: true });
+    expect(res.status).toBe(200);
+    expect((await res.json()).ai_guide_version).toBeNull();
+    expect(key().ai_guide_version).toBeNull();
+    expect(harness.db.activityLog.at(-1)).toMatchObject({ record_type: 'api_key', record_id: KEY_ID });
+    expect((await callTool('get_ai_guide')).data.kind).toBe('full');
+  });
+
+  it('can be sent with the cashout switch, keeps the switch rules, and refuses an empty change', async () => {
+    addKey({ ai_guide_version: guide.AI_GUIDE_VERSION });
+    expect((await patch(KEY_ID, { reset_ai_guide: true, allow_cashout_writes: true })).status).toBe(200);
+    expect(key()).toMatchObject({ ai_guide_version: null, allow_cashout_writes: true });
+    expect((await patch(KEY_ID, { allow_cashout_writes: 'yes' })).status).toBe(400);
+    expect((await patch(KEY_ID, {})).status).toBe(400);
+    expect((await patch(KEY_ID, { reset_ai_guide: false })).status).toBe(400);
+  });
+
+  it('refuses another user\'s key and a revoked key', async () => {
+    harness.db.apiKey.push({ id: 'k-other', user_id: harness.ids.other, ai_guide_version: '1.45', revoked_at: null });
+    expect((await patch('k-other', { reset_ai_guide: true })).status).toBe(404);
+    expect(harness.db.apiKey.find((k) => k.id === 'k-other').ai_guide_version).toBe('1.45');
+    addKey({ ai_guide_version: '1.45', revoked_at: new Date() });
+    expect((await patch(KEY_ID, { reset_ai_guide: true })).status).toBe(409);
+  });
+
+  it('does not log a reset for a key that had not read the guide', async () => {
+    addKey();
+    const before = harness.db.activityLog.length;
+    expect((await patch(KEY_ID, { reset_ai_guide: true })).status).toBe(200);
+    expect(harness.db.activityLog).toHaveLength(before);
+  });
+});
