@@ -26,8 +26,30 @@ const DEFAULTS = { timezone: 'America/New_York', digest_enabled: true, digest_ti
 // Items worth interrupting someone for, once they're overdue or due today.
 const URGENT_TYPES = new Set([
   'card_due', 'card_overdue', 'return_window', 'reconnect_cashout', 'tracking_failed',
-  'commit_pending', 'deal_closed_unshipped', 'open_dispute',
+  'commit_pending', 'deal_closed_unshipped', 'open_dispute', 'payout_late',
 ]);
+
+const usd = (value) => `$${Math.round(value).toLocaleString('en-US')}`;
+
+// The money behind the list, by kind: payouts still out, sales to ship or
+// send, and stock sitting unlisted. Zero kinds are left out.
+function moneyLines(items) {
+  const sum = (types) => items.filter((entry) => types.includes(entry.type)).reduce((total, entry) => total + (entry.amount || 0), 0);
+  return [
+    [sum(['payout_late', 'short_paid']), 'in late payouts'],
+    [sum(['ship', 'send_tracking', 'commit_pending']), 'to ship'],
+    [sum(['aging_stock']), 'in unlisted stock'],
+  ].filter(([value]) => value > 0).map(([value, label]) => `${usd(value)} ${label}`);
+}
+
+// Sunday's summary: the week's standing, money first.
+function weeklyBody(todos) {
+  const overdue = todos.items.filter((entry) => entry.urgency === 'overdue').length;
+  const parts = [...moneyLines(todos.items), overdue && `${overdue} overdue`].filter(Boolean);
+  return parts.length ? `${parts.join(' · ')}.` : summaryBody(todos);
+}
+
+const isSunday = (date) => new Date(`${date}T12:00:00Z`).getUTCDay() === 0;
 
 function isValidTimeZone(zone) {
   if (typeof zone !== 'string' || !zone || zone.length > 64) return false;
@@ -88,9 +110,12 @@ function planNotifications({ todos, settings, local }) {
   }
 
   if (settings.digest_enabled && awake && todos.items.length) {
+    const weekly = isSunday(local.date);
     plan.digest = {
       key: `digest:${local.date}`,
-      payload: { title: `To-Do: ${todos.items.length} ${todos.items.length === 1 ? 'thing needs' : 'things need'} you`, body: summaryBody(todos), url: '/todos', tag: 'digest', badge },
+      payload: weekly
+        ? { title: `Weekly review: ${todos.items.length} open`, body: weeklyBody(todos), url: '/todos', tag: 'digest', badge }
+        : { title: `To-Do: ${todos.items.length} ${todos.items.length === 1 ? 'thing needs' : 'things need'} you`, body: summaryBody(todos), url: '/todos', tag: 'digest', badge },
     };
   }
 

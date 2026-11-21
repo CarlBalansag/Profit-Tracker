@@ -8,6 +8,7 @@ import { PageLoader } from '../components/PageLoader';
 import ReminderModal from '../components/Reminders/ReminderModal';
 import TodoStats from '../components/Todos/TodoStats';
 import TodoGroupTabs from '../components/Todos/TodoGroupTabs';
+import MoneyWaiting from '../components/Todos/MoneyWaiting';
 import TodoSection from '../components/Todos/TodoSection';
 import RemindersPanel from '../components/Todos/RemindersPanel';
 import HiddenPanel from '../components/Todos/HiddenPanel';
@@ -114,6 +115,7 @@ export default function Todos() {
         {items.length > 0 && (
           <>
             <TodoStats items={inGroup} active={urgency} onPick={setUrgency} />
+            <MoneyWaiting items={items} />
             <TodoGroupTabs items={items} active={group} onPick={setGroup} />
           </>
         )}

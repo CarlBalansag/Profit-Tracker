@@ -273,3 +273,32 @@ describe('time zones', () => {
     expect(run.isValidTimeZone('Mars/Olympus')).toBe(false);
   });
 });
+
+describe('weekly review', () => {
+  const settings = { ...run.DEFAULTS };
+  const todos = {
+    items: [
+      { key: 'payout:1', type: 'payout_late', urgency: 'overdue', title: 'Payout late', amount: 2707.3 },
+      { key: 'payout:2', type: 'payout_late', urgency: 'soon', title: 'Payout late', amount: 2707.3 },
+      { key: 'ship:1', type: 'ship', urgency: 'soon', title: 'Ship it', amount: 540 },
+      { key: 'aging:1', type: 'aging_stock', urgency: 'info', title: 'Sitting 220 days, not listed', amount: 720 },
+    ],
+  };
+
+  it('turns Sunday\'s summary into a weekly review led by money', () => {
+    const plan = run.planNotifications({ todos, settings, local: { date: '2026-11-22', time: '09:00' } }); // a Sunday
+    expect(plan.digest.key).toBe('digest:2026-11-22');
+    expect(plan.digest.payload.title).toBe('Weekly review: 4 open');
+    expect(plan.digest.payload.body).toBe('$5,415 in late payouts · $540 to ship · $720 in unlisted stock · 1 overdue.');
+  });
+
+  it('keeps the normal summary on other days', () => {
+    const plan = run.planNotifications({ todos, settings, local: { date: '2026-11-23', time: '09:00' } }); // a Monday
+    expect(plan.digest.payload.title).toBe('To-Do: 4 things need you');
+  });
+
+  it('alerts for a payout once it is overdue', () => {
+    const plan = run.planNotifications({ todos, settings, local: { date: '2026-11-23', time: '09:00' } });
+    expect(plan.urgent.map((entry) => entry.key)).toEqual(['payout:1']);
+  });
+});

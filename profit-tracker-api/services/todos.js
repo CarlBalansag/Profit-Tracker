@@ -20,6 +20,7 @@ const THRESHOLDS = {
   shipOverdue: 7,
   scanIn: 5, // delivered to the cash-out, not scanned in
   payout: 7, // scanned in / accepted / waiting for payment, not paid
+  payoutOverdue: 21, // ...and with no expected date, overdue after this long
   purchaseTracking: 2, // purchased, no tracking number
   purchaseLookback: 60, // older purchases with no tracking or card are left alone
   preOrder: 30,
@@ -98,6 +99,8 @@ function purchaseStatus(inv) {
 
 const isCashoutSale = (sale) => sale.platform?.type === 'Cashout';
 const productOf = (sale) => sale.inventory?.product_name || 'Item';
+// What the sale brings in (price x quantity), shown on its items.
+const saleValue = (sale) => decimal(sale.unit_price_decimal ?? sale.unit_price ?? 0).times(sale.quantity || 0).toDecimalPlaces(2).toNumber();
 const saleLink = (sale) => ({ kind: 'transaction', inventoryId: sale.inventory_id, saleId: sale.id });
 const purchaseLink = (inv) => ({ kind: 'transaction', inventoryId: inv.id, saleId: null });
 const deliveredPerCarrier = (info) => Boolean(info && info.trackable !== false && info.status === DELIVERED);
@@ -154,6 +157,7 @@ function cashoutCommitmentItems(commitments) {
     const where = c.connection?.display_name || c.connection?.platform?.name || c.connection?.provider || 'the cash-out';
     const qty = `${c.quantity}×`;
     const link = sale ? saleLink(sale) : { kind: 'page', to: '/cashout' };
+    const amount = sale ? saleValue(sale) : null;
     const noTracking = !(c.tracking_codes && c.tracking_codes.length) && !c.tracking_submitted_at;
 
     if (c.status === 'pending') {
@@ -165,6 +169,7 @@ function cashoutCommitmentItems(commitments) {
         urgency: c.commit_error ? 'today' : 'soon',
         title: c.commit_error ? "Couldn't commit" : hasTracking ? 'Commit to the cash-out' : 'Add tracking to commit',
         detail: `${qty} ${name} · ${where}${c.commit_error ? ` · ${c.commit_error}` : ''}`,
+        amount,
         link,
       }));
     } else if (c.status === 'active' && !sale) {
@@ -195,6 +200,7 @@ function cashoutCommitmentItems(commitments) {
         urgency: 'soon',
         title: 'Send tracking',
         detail: `${qty} ${name} · ${where}`,
+        amount,
         link,
       }));
     } else if ((c.status === 'expired' || c.status === 'closed') && noTracking) {
@@ -253,6 +259,7 @@ function saleItems(sales, today) {
         urgency: age >= THRESHOLDS.shipOverdue ? 'overdue' : 'soon',
         title: handoff ? 'Hand it off' : 'Ship it',
         detail: `${qty}${name} · sold on ${where} ${daysAgo(age)}${stale ? ' · already done? Fix its status' : ''}`,
+        amount: saleValue(sale),
         lot: lotText(sale.inventory),
         stale,
         record: saleRecord(sale, {
@@ -272,6 +279,7 @@ function saleItems(sales, today) {
         urgency: 'soon',
         title: 'Delivered, update the status',
         detail: `${qty}${name} · ${where}`,
+        amount: saleValue(sale),
         link,
       }));
     }
@@ -284,6 +292,7 @@ function saleItems(sales, today) {
         urgency: 'soon',
         title: 'Not scanned in yet',
         detail: `${qty}${name} · at ${where} for ${age} days`,
+        amount: saleValue(sale),
         lot: lotText(sale.inventory),
         record: saleRecord(sale, { mark_scanned_in: 'Scanned in' }),
         link,
@@ -304,11 +313,13 @@ function saleItems(sales, today) {
           key: `payout:${sale.id}`,
           type: 'payout_late',
           group,
-          urgency: expected ? 'overdue' : 'soon',
+          // A known payout date that's passed is overdue at once; otherwise
+          // it becomes overdue once nothing has moved for three weeks.
+          urgency: expected || age >= THRESHOLDS.payoutOverdue ? 'overdue' : 'soon',
           title: cashout ? 'Cash-out payment late' : 'Payout late',
           detail: `${qty}${name} · ${where} · ${expected ? `expected ${shortDate(expected)}` : `no change in ${age} days`}${saleDay ? ` · sold ${shortDate(saleDay)}` : ''}`,
           due_date: expected,
-          amount: decimal(sale.unit_price || 0).times(sale.quantity || 0).toDecimalPlaces(2).toNumber(),
+          amount: saleValue(sale),
           lot: lotText(sale.inventory),
           record: saleRecord(sale, { mark_paid: 'Mark paid' }),
           link,
@@ -583,9 +594,21 @@ function reminderItems(reminders, today) {
   return items;
 }
 
+// A card bill coming due while payouts are still out: say how much is out,
+// since that's money the user may be counting on to pay it.
+function notePayoutsOnCardBills(items) {
+  const late = items.filter((entry) => entry.type === 'payout_late');
+  const out = late.reduce((sum, entry) => sum.plus(entry.amount || 0), decimal(0));
+  if (!late.length || out.lte(0)) return items;
+  const note = ` · ${usd(out)} in late payouts not in yet (${late.length})`;
+  return items.map((entry) => ((entry.type === 'card_due' || entry.type === 'card_overdue')
+    ? { ...entry, detail: `${entry.detail}${note}`, payouts_out: out.toDecimalPlaces(2).toNumber() }
+    : entry));
+}
+
 // ─── Putting it together ─────────────────────────────────────────────────────
 function buildTodos(data, today) {
-  const items = [
+  const items = notePayoutsOnCardBills([
     ...cashoutCommitmentItems(data.commitments || []),
     ...connectionItems(data.connections || []),
     ...saleItems(data.sales || [], today),
@@ -594,7 +617,7 @@ function buildTodos(data, today) {
     ...cardItems(data.cards || [], today, data.spendByCard || new Map()),
     ...recurringItems(data.recurring || [], today),
     ...reminderItems(data.reminders || [], today),
-  ];
+  ]);
   return items.sort((a, b) =>
     URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency]
     || (a.due_date || '9999').localeCompare(b.due_date || '9999')

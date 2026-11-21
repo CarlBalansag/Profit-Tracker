@@ -452,3 +452,36 @@ describe('date helpers', () => {
     expect(todos.nextRecurringDate({ frequency: 'weekly', start_date: '2026-12-01' }, '2026-11-20')).toBe('2026-12-01');
   });
 });
+
+describe('money and escalation', () => {
+  it('puts the sale value on items about a sale', async () => {
+    addSale({ workflow_status: 'AWAITING_SHIPMENT', workflow_status_changed_at: day(-4), unit_price: 120, quantity: 3 });
+    const { body } = await list();
+    expect(byType(body.items, 'ship')[0].amount).toBe(360);
+  });
+
+  it('moves a late payout with no expected date to overdue after three weeks', async () => {
+    addSale({ workflow_status: 'WAITING_FOR_PAYMENT', workflow_status_changed_at: day(-10) });
+    addSale({ workflow_status: 'WAITING_FOR_PAYMENT', workflow_status_changed_at: day(-21) });
+    const { body } = await list();
+    expect(byType(body.items, 'payout_late').map((entry) => entry.urgency).sort()).toEqual(['overdue', 'soon']);
+  });
+
+  it('notes late payouts on a card bill coming due', async () => {
+    harness.db.paymentMethod[0].due_day = dayOfMonth(2);
+    if (dayOfMonth(2) > 28) return;
+    addSale({ workflow_status: 'WAITING_FOR_PAYMENT', workflow_status_changed_at: day(-10), unit_price: 300 });
+    addSale({ workflow_status: 'WAITING_FOR_PAYMENT', workflow_status_changed_at: day(-12), unit_price: 150.5 });
+    const { body } = await list();
+    const [bill] = byType(body.items, 'card_due');
+    expect(bill.detail).toMatch(/ · \$450\.50 in late payouts not in yet \(2\)$/);
+    expect(bill.payouts_out).toBe(450.5);
+  });
+
+  it('leaves a card bill alone when no payout is late', async () => {
+    harness.db.paymentMethod[0].due_day = dayOfMonth(2);
+    if (dayOfMonth(2) > 28) return;
+    const { body } = await list();
+    expect(byType(body.items, 'card_due')[0].detail).not.toMatch(/late payouts/);
+  });
+});

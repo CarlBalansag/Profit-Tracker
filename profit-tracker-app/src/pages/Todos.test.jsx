@@ -378,3 +378,25 @@ describe('Cleaning up the list', () => {
     expect(runAction).toHaveBeenCalledWith('mark_handed_over', {}, expect.objectContaining({ action: 'mark_handed_over' }));
   });
 });
+
+describe('Money waiting', () => {
+  it('adds up the money behind the list by kind, leaving out kinds with none', () => {
+    todos = response([
+      entry({ key: 'payout:1', type: 'payout_late', amount: 2707.3 }),
+      entry({ key: 'payout:2', type: 'payout_late', amount: 2707.3 }),
+      entry({ key: 'ship:1', type: 'ship', amount: 540 }),
+      entry({ key: 'dispute:1', type: 'open_dispute', amount: null }),
+    ]);
+    mount();
+    const box = screen.getByRole('region', { name: 'Money waiting' });
+    expect(box).toHaveTextContent('$5,414.60in late payouts(2)');
+    expect(box).toHaveTextContent('$540.00waiting to ship(1)');
+    expect(box).not.toHaveTextContent('unlisted stock');
+  });
+
+  it('stays hidden when nothing on the list carries money', () => {
+    todos = response([entry({ key: 'dispute:1', type: 'open_dispute' })]);
+    mount();
+    expect(screen.queryByRole('region', { name: 'Money waiting' })).not.toBeInTheDocument();
+  });
+});
