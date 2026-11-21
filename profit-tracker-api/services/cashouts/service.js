@@ -1,3 +1,4 @@
+const { syncDealEnds } = require('./dealEnds');
 const prisma = require('../../prisma');
 const { requireOwned } = require('../ownership');
 const { encryptKey, decryptKey, maskKey } = require('./crypto');
@@ -301,6 +302,13 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
 
     // Record snapshot on successful pull
     await recordSnapshots(userId, connectionId, conn.provider, deals);
+    // Keep open commitments' deal end dates current for the To-Do list.
+    // Best effort: never fails the deal list.
+    try {
+      await syncDealEnds(userId, connectionId, deals);
+    } catch (err) {
+      console.warn('[cashouts] could not update deal end dates:', err.message);
+    }
 
     await prisma.cashoutConnection.update({
       where: { id: connectionId },

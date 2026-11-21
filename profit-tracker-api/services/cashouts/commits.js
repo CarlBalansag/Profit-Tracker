@@ -9,6 +9,7 @@
 //   - never retries on its own (a retried commit could pledge twice).
 // Inputs are checked here, before anything is sent, so the web routes, MCP
 // tools and Log Purchase all get the same rules.
+const { dealEndOf } = require('./dealEnds');
 const prisma = require('../../prisma');
 const { decryptKey } = require('./crypto');
 const { getAdapter } = require('./registry');
@@ -403,7 +404,7 @@ async function createCommitment(userId, connectionId, { dealId, itemId, quantity
       ? 'You already have a commitment for this item. Log Purchase adds more to it, or change a purchase\'s quantity from Commitments.'
       : 'This item is already logged and waiting to be committed. Add its tracking number to commit it.');
   }
-  await requireLiveItem(userId, ctx.conn.id, deal, item);
+  const live = await requireLiveItem(userId, ctx.conn.id, deal, item);
 
   const { preview, adopted } = await commitWithProvider(userId, ctx, { dealId: deal, itemId: item, quantity: qty });
   try {
@@ -418,6 +419,7 @@ async function createCommitment(userId, connectionId, { dealId, itemId, quantity
         external_commitment_id: preview.id,
         quantity: preview.quantity ?? qty,
         status: 'active',
+        deal_expires_at: dealEndOf(live.deal),
       },
     });
     return Object.assign(record, { adopted });

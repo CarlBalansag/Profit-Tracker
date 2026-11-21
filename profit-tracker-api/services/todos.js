@@ -33,6 +33,7 @@ const THRESHOLDS = {
   payDownPct: 30,
   recurringAhead: 3,
   reminderAhead: 3, // a reminder joins the list this many days before it's due
+  dealEndAhead: 3, // warn this many days before a cash-out deal ends
   stale: 60, // a sale stuck this long was probably finished; offer to fix its status
   cardInUse: 90, // card setup is only asked for cards used this recently
 };
@@ -149,7 +150,23 @@ function item(fields) {
 }
 
 // ─── Rules ───────────────────────────────────────────────────────────────────
-function cashoutCommitmentItems(commitments) {
+// How close the commitment's deal is to ending (saved by
+// services/cashouts/dealEnds.js): days left, or null when unknown or far off.
+function dealEnding(c, today) {
+  const end = dateStr(c.deal_expires_at);
+  if (!end) return null;
+  const left = daysBetween(today, end);
+  if (left > THRESHOLDS.dealEndAhead) return null;
+  return {
+    end,
+    left,
+    ended: left < 0,
+    text: left < 0 ? `deal ended ${shortDate(end)}` : left === 0 ? 'deal ends today' : `deal ends ${inDays(left)}`,
+    urgency: left <= 1 ? 'today' : 'soon',
+  };
+}
+
+function cashoutCommitmentItems(commitments, today) {
   const items = [];
   for (const c of commitments) {
     const sale = c.sale || null;
@@ -160,15 +177,31 @@ function cashoutCommitmentItems(commitments) {
     const amount = sale ? saleValue(sale) : null;
     const noTracking = !(c.tracking_codes && c.tracking_codes.length) && !c.tracking_submitted_at;
 
-    if (c.status === 'pending') {
+    const ending = dealEnding(c, today);
+
+    if (c.status === 'pending' && ending?.ended) {
+      // Logged but never committed, and the deal is over: the units need
+      // another home.
+      items.push(item({
+        key: `deal-closed:${c.id}`,
+        type: 'deal_closed_unshipped',
+        group: 'cashout',
+        urgency: 'today',
+        title: 'Deal ended before you committed',
+        detail: `${qty} ${name} · ${where} · ${ending.text} · sell, return or commit it elsewhere`,
+        amount,
+        link,
+      }));
+    } else if (c.status === 'pending') {
       const hasTracking = Boolean(sale?.tracking_number);
       items.push(item({
         key: `commit-pending:${c.id}`,
         type: 'commit_pending',
         group: 'cashout',
-        urgency: c.commit_error ? 'today' : 'soon',
+        urgency: c.commit_error ? 'today' : ending ? ending.urgency : 'soon',
         title: c.commit_error ? "Couldn't commit" : hasTracking ? 'Commit to the cash-out' : 'Add tracking to commit',
-        detail: `${qty} ${name} · ${where}${c.commit_error ? ` · ${c.commit_error}` : ''}`,
+        detail: `${qty} ${name} · ${where}${ending ? ` · ${ending.text}` : ''}${c.commit_error ? ` · ${c.commit_error}` : ''}`,
+        due_date: ending?.end || null,
         amount,
         link,
       }));
@@ -177,9 +210,10 @@ function cashoutCommitmentItems(commitments) {
         key: `commit-nosale:${c.id}`,
         type: 'commit_no_purchase',
         group: 'cashout',
-        urgency: 'soon',
+        urgency: ending ? (ending.ended ? 'today' : ending.urgency) : 'soon',
         title: 'Committed, no purchase logged',
-        detail: `${qty} ${name} · ${where}`,
+        detail: `${qty} ${name} · ${where}${ending ? ` · ${ending.text}` : ''}`,
+        due_date: ending?.end || null,
         link,
       }));
     } else if (c.status === 'active' && c.tracking_error) {
@@ -197,9 +231,10 @@ function cashoutCommitmentItems(commitments) {
         key: `send-tracking:${c.id}`,
         type: 'send_tracking',
         group: 'cashout',
-        urgency: 'soon',
+        urgency: ending ? (ending.ended ? 'today' : ending.urgency) : 'soon',
         title: 'Send tracking',
-        detail: `${qty} ${name} · ${where}`,
+        detail: `${qty} ${name} · ${where}${ending ? ` · ${ending.text}` : ''}`,
+        due_date: ending?.end || null,
         amount,
         link,
       }));
@@ -609,7 +644,7 @@ function notePayoutsOnCardBills(items) {
 // ─── Putting it together ─────────────────────────────────────────────────────
 function buildTodos(data, today) {
   const items = notePayoutsOnCardBills([
-    ...cashoutCommitmentItems(data.commitments || []),
+    ...cashoutCommitmentItems(data.commitments || [], today),
     ...connectionItems(data.connections || []),
     ...saleItems(data.sales || [], today),
     ...purchaseItems(data.inventories || [], today),

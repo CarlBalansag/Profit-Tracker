@@ -789,6 +789,9 @@ model CashoutCommitment {
   tracking_codes          String[]          @default([])
   tracking_submitted_at   DateTime?
   tracking_error          String?
+  // When the provider's deal ends (services/cashouts/dealEnds.js), so the
+  // To-Do list can warn first. Null when the provider gives no end date.
+  deal_expires_at         DateTime?
   created_at              DateTime          @default(now())
   updated_at              DateTime          @updatedAt
 

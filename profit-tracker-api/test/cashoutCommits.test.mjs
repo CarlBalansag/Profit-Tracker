@@ -357,3 +357,45 @@ describe('cashout commits and tracking', () => {
     });
   });
 });
+
+describe('deal end dates for the To-Do list', () => {
+  const ENDS = '2026-12-01T05:00:00.000Z';
+  const { syncDealEnds } = require('../services/cashouts/dealEnds');
+
+  beforeEach(() => {
+    harness.reset();
+    vi.restoreAllMocks();
+    dealsCache.clear();
+    process.env.CASHOUT_KEY_ENCRYPTION_KEY = TEST_ENCRYPTION_KEY;
+    vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([{ id: '2000', name: 'PS5 Pro', payout: 480, status: 'active', expiresAt: ENDS, items: [{ id: '101', name: 'PS5 Pro' }] }]);
+  });
+
+  it('saves when the deal ends on a commitment made now', async () => {
+    const conn = seed();
+    vi.spyOn(ebAdapter, 'createCommit').mockResolvedValue({ id: 'commit-uuid-1', item_id: 101, quantity: 2, created_at: 1732924800 });
+    const record = await commits.createCommitment(harness.ids.user, conn.id, { dealId: '2000', itemId: '101', quantity: 2 });
+    expect(record.deal_expires_at.toISOString()).toBe(ENDS);
+  });
+
+  it('saves it on a purchase logged to commit later', async () => {
+    const conn = seed();
+    const result = await logPurchase(harness.ids.user, { ...basePurchaseFields(), connectionId: conn.id, trackingCodes: [] });
+    expect(result.commitment.status).toBe('pending');
+    expect(harness.db.cashoutCommitment[0].deal_expires_at.toISOString()).toBe(ENDS);
+  });
+
+  it('refreshes open commitments from the deal list, leaving closed ones and other deals alone', async () => {
+    const conn = seed();
+    const row = (fields) => harness.db.cashoutCommitment.push({
+      id: `c-${harness.db.cashoutCommitment.length}`, user_id: harness.ids.user, connection_id: conn.id, external_deal_id: '2000',
+      external_item_id: '101', quantity: 1, status: 'active', deal_expires_at: null, ...fields,
+    });
+    row({});
+    row({ status: 'withdrawn' });
+    row({ external_deal_id: '9999' });
+    row({ status: 'pending', deal_expires_at: new Date(ENDS) });
+    const changed = await syncDealEnds(harness.ids.user, conn.id, [{ id: '2000', expiresAt: ENDS }, { id: '9999', expiresAt: null }]);
+    expect(changed).toBe(1);
+    expect(harness.db.cashoutCommitment.map((c) => c.deal_expires_at?.toISOString() ?? null)).toEqual([ENDS, null, null, ENDS]);
+  });
+});

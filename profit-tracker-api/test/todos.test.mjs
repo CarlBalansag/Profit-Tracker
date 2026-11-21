@@ -485,3 +485,42 @@ describe('money and escalation', () => {
     expect(byType(body.items, 'card_due')[0].detail).not.toMatch(/late payouts/);
   });
 });
+
+describe('cash-out deals ending', () => {
+  it('raises a purchase waiting to commit as its deal nears its end', async () => {
+    addCommitment({ status: 'pending', deal_expires_at: day(1) });
+    addCommitment({ status: 'pending', deal_expires_at: day(3) });
+    addCommitment({ status: 'pending', deal_expires_at: day(10) });
+    const { body } = await list();
+    const pending = byType(body.items, 'commit_pending');
+    expect(pending.map((entry) => [entry.urgency, entry.detail.split(' · ').pop(), entry.due_date])).toEqual([
+      ['today', 'deal ends tomorrow', dayStr(1)],
+      ['soon', 'deal ends in 3 days', dayStr(3)],
+      ['soon', 'EB', null],
+    ]);
+  });
+
+  it('says when a deal ended before the purchase was committed', async () => {
+    addCommitment({ status: 'pending', deal_expires_at: day(-1) });
+    const { body } = await list();
+    expect(body.items).toEqual([expect.objectContaining({
+      type: 'deal_closed_unshipped', urgency: 'today', title: 'Deal ended before you committed',
+    })]);
+    expect(body.items[0].detail).toMatch(/deal ended .* · sell, return or commit it elsewhere$/);
+  });
+
+  it('notes the deal end on a commitment still waiting for tracking', async () => {
+    const sale = addSale({ platform_id: CASHOUT, workflow_status: 'AWAITING_SHIPMENT' });
+    addCommitment({ status: 'active', sale_id: sale.id, deal_expires_at: day(0) });
+    const { body } = await list();
+    expect(body.items).toEqual([expect.objectContaining({ type: 'send_tracking', urgency: 'today', due_date: dayStr(0) })]);
+    expect(body.items[0].detail).toMatch(/ · deal ends today$/);
+  });
+
+  it('notes it on a commitment with no purchase logged yet', async () => {
+    addCommitment({ status: 'active', deal_expires_at: day(2) });
+    const { body } = await list();
+    expect(body.items).toEqual([expect.objectContaining({ type: 'commit_no_purchase', urgency: 'soon', due_date: dayStr(2) })]);
+    expect(body.items[0].detail).toMatch(/ · deal ends in 2 days$/);
+  });
+});

@@ -1,6 +1,7 @@
 // The Log Purchase action: commit to the cashout, submit tracking, then
 // record the purchase and its sale locally -- in that order, because the
 // first two are real calls to a third party and the last two are not.
+const { dealEndOf } = require('./dealEnds');
 const prisma = require('../../prisma');
 const { requireOwned, requireStoreAccount } = require('../ownership');
 const statusTransitions = require('../statusTransitions');
@@ -120,6 +121,8 @@ async function logPurchase(userId, {
   // same way adding a tracking number later does (it raises the provider's
   // one commitment for the item, or creates it if none is committed yet).
   let topUp = false;
+  // When the deal ends, saved on a pending row so To-Do can warn before it.
+  let dealEnd = null;
   if (!recordOnly) {
     // A withdrawn commitment doesn't count -- its open_item_id is null.
     const open = await prisma.cashoutCommitment.findMany({ where: { connection_id: conn.id, open_item_id: String(itemId) } });
@@ -139,7 +142,7 @@ async function logPurchase(userId, {
       topUp = true;
     }
     // The item has to be part of this deal, and the deal still open.
-    if (!attachTo) await commitsService.requireLiveItem(userId, conn.id, dealId, itemId);
+    if (!attachTo) dealEnd = dealEndOf((await commitsService.requireLiveItem(userId, conn.id, dealId, itemId)).deal);
   }
 
   let commitment = attachTo;
@@ -246,6 +249,7 @@ async function logPurchase(userId, {
           external_commitment_id: null,
           quantity: Number(qty),
           status: 'pending',
+          deal_expires_at: dealEnd,
         },
       });
       return { inventory: createdInventory, sale: createdSale, commitment: pending };
