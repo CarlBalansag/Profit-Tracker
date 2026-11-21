@@ -90,6 +90,20 @@ app.post('/internal/cashouts/sync', async (req, res) => {
   }
 });
 
+// Push notification scheduler -- NOTIFICATIONS_CRON_SECRET bearer token, called
+// every few minutes by an outside cron (services/notificationRun.js).
+app.post('/internal/notifications/run', async (req, res) => {
+  const { verifyRunSecret, runNotifications } = require('./services/notificationRun');
+  const verify = verifyRunSecret(req.get('Authorization'));
+  if (!verify.ok) return res.status(verify.status || 401).json({ error: verify.message });
+  try {
+    res.json(await runNotifications());
+  } catch (err) {
+    console.error('[notifications] run failed:', err.message);
+    res.status(500).json({ error: 'Notification run failed.' });
+  }
+});
+
 // CSRF protection: every state-changing request from the SPA must include this header.
 // Browsers never attach custom headers to cross-origin simple requests, so its presence
 // proves the request came from JavaScript running on our frontend, not a forged form.
@@ -186,6 +200,7 @@ app.use('/api/invites', invitesRouter);
 app.use('/api/activity', require('./routes/activity'));
 app.use('/api/todos', require('./routes/todos'));
 app.use('/api/reminders', require('./routes/reminders'));
+app.use('/api/push', require('./routes/push'));
 
 // Health Check
 app.get('/health', (req, res) => {

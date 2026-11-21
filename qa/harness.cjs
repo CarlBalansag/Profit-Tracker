@@ -15,7 +15,7 @@ function reset() {
     paymentMethod:[{id:ids.card,user_id:ids.user,name:'QA Credit Card',type:'Credit',default_cashback_rate:2,category_rates:'[]',statement_close_day:15,due_day:10,credit_limit:5000,min_payment_pct:2}],
     inventory:[{id:ids.inventory,user_id:ids.user,product_name:'QA Multi-unit Sneaker',vendor_id:ids.vendor,payment_method_id:ids.card,unit_purchase_cost:100,qty_purchased:5,qty_on_hand:3,sales_tax:40,shipping_cost_inbound:20,fees:10,gift_card_amount:50,cashback_earned:10.4,status:'PURCHASED',category:'Shoes',purchase_date:new Date('2026-09-01T12:00:00Z'),created_at:new Date(),tracking_number:'9400111899223856928499',receipt_url:null,tax_exempt:false,refunded_amount:0,refunded_qty:0}],
     sales:[{id:ids.sale,inventory_id:ids.inventory,platform_id:ids.platform,buyer_id:null,quantity:2,unit_price:150,commission_fee:15,sale_shipping:12,sale_tax_collected:8,taxable:true,customer_tax_exempt:false,status:'SOLD',sale_date:new Date('2026-09-03T12:00:00Z'),payout_date:null,paid_at:null,paid_amount:null,paid_reference:null,payout_account:null,payout_short_amount:null,refunded_amount:0,refunded_qty:0}],
-    expense:[{id:randomUUID(),user_id:ids.user,name:'QA Storage',amount:25,tax_version:0,date:new Date('2026-09-01T12:00:00Z'),category:'Storage'}],recurringExpense:[],cardCatalog:[],refund:[],account:[],goal:[],calendarEvent:[],productNote:[],authAttemptBucket:[],buyer:[],invoice:[],apiKey:[],mcpWriteLog:[],changeLog:[],activityLog:[],transactionNote:[],attachment:[],cashoutConnection:[],cashoutDealSnapshot:[],cashoutItemMatch:[],cashoutCommitment:[],cashoutWriteLog:[],todoState:[],reminder:[]};
+    expense:[{id:randomUUID(),user_id:ids.user,name:'QA Storage',amount:25,tax_version:0,date:new Date('2026-09-01T12:00:00Z'),category:'Storage'}],recurringExpense:[],cardCatalog:[],refund:[],account:[],goal:[],calendarEvent:[],productNote:[],authAttemptBucket:[],buyer:[],invoice:[],apiKey:[],mcpWriteLog:[],changeLog:[],activityLog:[],transactionNote:[],attachment:[],cashoutConnection:[],cashoutDealSnapshot:[],cashoutItemMatch:[],cashoutCommitment:[],cashoutWriteLog:[],todoState:[],reminder:[],pushSubscription:[],notificationSettings:[],notificationSent:[]};
 }
 reset();
 function relations(model,row,key) {
@@ -86,6 +86,8 @@ for(const model of Object.keys(db)) {
       return sliced.map(x=>project(model,x,args));
     }
     if(op==='findUnique'||op==='findFirst')return project(model,rows[0],args);
+    // The unique (user_id, key) on NotificationSent: a second claim fails like Postgres.
+    if(op==='create'&&model==='notificationSent'&&db.notificationSent.some(x=>x.user_id===args.data.user_id&&x.key===args.data.key))throw Object.assign(new Error('Unique constraint failed on the fields: (`user_id`,`key`)'),{code:'P2002'});
     if(op==='create'||op==='createMany'||(op==='upsert'&&!rows.length)) {
       const data=op==='upsert'?args.create:args.data;
       const created=(Array.isArray(data)?data:[data]).map(x=>({id:randomUUID(),...(model==='inventory'?{status:'PURCHASED',created_at:new Date(),refunded_amount:0,refunded_qty:0}:{}),...(model==='sales'?{refunded_amount:0,refunded_qty:0}:{}),...(model==='refund'?{quantity:0,created_at:new Date()}:{}),...(model==='activityLog'?{source:'web',reverts_id:null,undone_at:null,undone_by:null,created_at:new Date()}:{}),...(model==='authAttemptBucket'?{count:1}:{}),...(model==='expense'?{tax_version:0}:{}),...(model==='reminder'?{notes:null,due_time:null,repeat:'none',repeat_from:null,payment_method_id:null,done_at:null,created_at:new Date(),updated_at:new Date()}:{}),...(model==='attachment'?{label:null,kind:null,created_at:new Date()}:{}),...(model==='transactionNote'?{author:'carl',pinned:false,created_at:new Date(),updated_at:new Date(),deleted_at:null}:{}),...(model==='cashoutCommitment'?{status:'active',tracking_codes:[],sale_id:null,tracking_submitted_at:null,tracking_error:null,created_at:new Date(),updated_at:new Date()}:{}),...x}));
@@ -132,6 +134,12 @@ function app() {
   app.use('/api/schedule-c', requireApi('./routes/scheduleC'));
   app.use('/mcp', requireApi('./routes/mcp.js'));
   const { verifySyncSecret, runScheduledSync } = requireApi('./services/cashouts/syncScheduler');
+  app.post('/internal/notifications/run', async (req, res) => {
+    const { verifyRunSecret, runNotifications } = requireApi('./services/notificationRun');
+    const verify = verifyRunSecret(req.get('Authorization'));
+    if (!verify.ok) return res.status(verify.status || 401).json({ error: verify.message });
+    try { res.json(await runNotifications(req.body?.now ? { now: new Date(req.body.now) } : {})); } catch (err) { res.status(500).json({ error: err.message }); }
+  });
   app.post('/internal/cashouts/sync', async (req, res) => {
     const authHeader = req.get('Authorization');
     const verify = verifySyncSecret(authHeader);
@@ -144,7 +152,7 @@ function app() {
       res.status(500).json({ error: err.message });
     }
   });
-  for(const [url,file]of Object.entries({'inventory':'inventory','sales':'sales','platforms':'platforms','payment-methods':'paymentMethods','card-catalog':'cardCatalog','accounts':'accounts','analytics':'analytics','creditcard':'creditcard','expenses':'expenses','recurring-expenses':'recurringExpenses','receipts':'receipts','goals':'goals','calendar-events':'calendarEvents','product-notes':'productNotes','transaction-notes':'transactionNotes','refunds':'refunds','preferences':'preferences','buyers':'buyers','api-keys':'apiKeys','cashouts':'cashouts','data-reset':'dataReset','activity':'activity','todos':'todos','reminders':'reminders'}))app.use('/api/'+url,requireApi('./routes/'+file+'.js'));
+  for(const [url,file]of Object.entries({'inventory':'inventory','sales':'sales','platforms':'platforms','payment-methods':'paymentMethods','card-catalog':'cardCatalog','accounts':'accounts','analytics':'analytics','creditcard':'creditcard','expenses':'expenses','recurring-expenses':'recurringExpenses','receipts':'receipts','goals':'goals','calendar-events':'calendarEvents','product-notes':'productNotes','transaction-notes':'transactionNotes','refunds':'refunds','preferences':'preferences','buyers':'buyers','api-keys':'apiKeys','cashouts':'cashouts','data-reset':'dataReset','activity':'activity','todos':'todos','reminders':'reminders','push':'push'}))app.use('/api/'+url,requireApi('./routes/'+file+'.js'));
   app.use((err,req,res,next)=>res.status(err.status||500).json({error:err.message}));
   return app;
 }
