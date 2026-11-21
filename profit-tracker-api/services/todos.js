@@ -7,9 +7,10 @@
 //
 // Dates are local calendar dates (YYYY-MM-DD). `today` comes from the user's
 // device (routes/todos.js), so "due in 2 days" means their days, not UTC's.
+const crypto = require('node:crypto');
 const { decimal } = require('./money');
 const { payoutStatus } = require('./payoutStatus');
-const { LEGACY_TO_RECEIVING_STATUS, legacyWorkflowStatus } = require('./statusTransitions');
+const { LEGACY_TO_RECEIVING_STATUS, legacyWorkflowStatus, allowedActions } = require('./statusTransitions');
 const { computeCardDashboard } = require('./cardNetToPay');
 const { REPEAT_LABEL } = require('./reminders');
 
@@ -31,6 +32,8 @@ const THRESHOLDS = {
   payDownPct: 30,
   recurringAhead: 3,
   reminderAhead: 3, // a reminder joins the list this many days before it's due
+  stale: 60, // a sale stuck this long was probably finished; offer to fix its status
+  cardInUse: 90, // card setup is only asked for cards used this recently
 };
 
 const URGENCY_ORDER = { overdue: 0, today: 1, soon: 2, info: 3 };
@@ -98,6 +101,39 @@ const productOf = (sale) => sale.inventory?.product_name || 'Item';
 const saleLink = (sale) => ({ kind: 'transaction', inventoryId: sale.inventory_id, saleId: sale.id });
 const purchaseLink = (inv) => ({ kind: 'transaction', inventoryId: inv.id, saleId: null });
 const deliveredPerCarrier = (info) => Boolean(info && info.trackable !== false && info.status === DELIVERED);
+
+// The sale fields the page needs to run a status action right on the item
+// (the same forms as on Statuses), limited to the actions that clear it.
+// `wanted` maps an action to its button label. Rows from before the status
+// workflow have no stored status, so the action route would refuse them;
+// those keep Open only.
+function saleRecord(sale, wanted) {
+  if (!sale.workflow_status) return null;
+  const actions = allowedActions(sale, 'sale')
+    .filter((descriptor) => descriptor.action in wanted)
+    .map((descriptor) => ({ ...descriptor, secondary: false, label: wanted[descriptor.action] || descriptor.label }));
+  if (!actions.length) return null;
+  const num = (value) => (value == null ? 0 : decimal(value).toNumber());
+  return {
+    kind: 'sale',
+    id: sale.id,
+    quantity: sale.quantity,
+    unit_price: num(sale.unit_price_decimal ?? sale.unit_price),
+    commission_fee: num(sale.commission_fee_decimal ?? sale.commission_fee),
+    sale_shipping: num(sale.sale_shipping_decimal ?? sale.sale_shipping),
+    workflow_status: sale.workflow_status,
+    workflow_type: sale.workflow_type,
+    allowed_actions: actions,
+  };
+}
+
+// "Lot bought Mar 3 · Costco": tells look-alike sales of the same product
+// apart (they come from different purchase lots).
+function lotText(inv) {
+  const bought = dateStr(inv?.purchase_date);
+  if (!bought) return null;
+  return `Lot bought ${shortDate(bought)}${inv.vendor?.name ? ` · ${inv.vendor.name}` : ''}`;
+}
 
 function item(fields) {
   return {
@@ -208,13 +244,22 @@ function saleItems(sales, today) {
     // commitment's own item (send tracking / add tracking to commit).
     if ((status === 'AWAITING_SHIPMENT' || status === 'AWAITING_HANDOFF') && !sale.cashout_commitment && age >= THRESHOLDS.ship) {
       const handoff = status === 'AWAITING_HANDOFF';
+      // Months later it almost surely went out; offer to set the real step.
+      const stale = age >= THRESHOLDS.stale;
       items.push(item({
         key: `ship:${sale.id}`,
         type: 'ship',
         group,
         urgency: age >= THRESHOLDS.shipOverdue ? 'overdue' : 'soon',
         title: handoff ? 'Hand it off' : 'Ship it',
-        detail: `${qty}${name} · sold on ${where} ${daysAgo(age)}`,
+        detail: `${qty}${name} · sold on ${where} ${daysAgo(age)}${stale ? ' · already done? Fix its status' : ''}`,
+        lot: lotText(sale.inventory),
+        stale,
+        record: saleRecord(sale, {
+          add_outbound_tracking: 'Add tracking',
+          mark_handed_over: 'Handed over',
+          ...(stale ? { correct_status: 'Fix status' } : {}),
+        }),
         link,
       }));
     }
@@ -239,6 +284,8 @@ function saleItems(sales, today) {
         urgency: 'soon',
         title: 'Not scanned in yet',
         detail: `${qty}${name} · at ${where} for ${age} days`,
+        lot: lotText(sale.inventory),
+        record: saleRecord(sale, { mark_scanned_in: 'Scanned in' }),
         link,
       }));
     }
@@ -259,9 +306,11 @@ function saleItems(sales, today) {
           group,
           urgency: expected ? 'overdue' : 'soon',
           title: cashout ? 'Cash-out payment late' : 'Payout late',
-          detail: `${qty}${name} · ${where} · ${expected ? `expected ${shortDate(expected)}` : `waiting ${age} days`}`,
+          detail: `${qty}${name} · ${where} · ${expected ? `expected ${shortDate(expected)}` : `no change in ${age} days`}${saleDay ? ` · sold ${shortDate(saleDay)}` : ''}`,
           due_date: expected,
           amount: decimal(sale.unit_price || 0).times(sale.quantity || 0).toDecimalPlaces(2).toNumber(),
+          lot: lotText(sale.inventory),
+          record: saleRecord(sale, { mark_paid: 'Mark paid' }),
           link,
         }));
       }
@@ -358,9 +407,13 @@ function purchaseItems(inventories, today) {
       const since = dateStr(inv.received_date) || dateStr(inv.received_at) || bought;
       const held = since ? daysBetween(since, today) : 0;
       if (held >= THRESHOLDS.aging) {
+        const unitCost = inv.unit_purchase_cost_decimal ?? inv.unit_purchase_cost ?? 0;
         items.push(item({
           key: `aging:${inv.id}`, type: 'aging_stock', group: 'purchases', urgency: 'info',
-          title: `Sitting ${held} days, not listed`, detail: `${qty}${name}`, link,
+          title: `Sitting ${held} days, not listed`, detail: `${qty}${name}`,
+          amount: decimal(unitCost).times(inv.qty_on_hand).toDecimalPlaces(2).toNumber(),
+          actions: ['hold', 'snooze', 'dismiss'],
+          link,
         }));
       }
     }
@@ -375,25 +428,37 @@ function purchaseItems(inventories, today) {
   return items;
 }
 
+// One item for every card that's missing its bill dates, and only cards used
+// for a purchase lately: a card sitting in a drawer shouldn't nag. The key
+// changes with the set of cards, so dismissing it doesn't hide a card that
+// joins later.
+function cardSetupItem(cards, inventories, today) {
+  const since = addDays(today, -THRESHOLDS.cardInUse);
+  const used = new Set(inventories
+    .filter((inv) => inv.payment_method_id && (dateStr(inv.purchase_date) || '') >= since)
+    .map((inv) => inv.payment_method_id));
+  const unfinished = cards
+    .filter((card) => card.type === 'Credit' && used.has(card.id) && (!card.due_day || !card.statement_close_day))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (!unfinished.length) return [];
+  const ids = unfinished.map((card) => card.id).sort().join(',');
+  const hash = crypto.createHash('sha1').update(ids).digest('hex').slice(0, 12);
+  const names = unfinished.map((card) => card.name);
+  const listed = names.length > 3 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} more` : names.join(', ');
+  return [item({
+    key: `card-setup:${hash}`, type: 'card_setup', group: 'cards', urgency: 'info',
+    title: unfinished.length === 1 ? `Finish card setup: ${names[0]}` : `Finish setup on ${unfinished.length} cards`,
+    detail: `${listed} · add the due day and statement close day so bill reminders work`,
+    link: { kind: 'page', to: '/settings', state: { tab: 'datasetup', view: 'Payment Methods' } },
+  })];
+}
+
 function cardItems(cards, today, spendByCard) {
   const items = [];
   for (const card of cards) {
     if (card.type !== 'Credit') continue;
     const label = card.last4 ? `${card.name} ••${card.last4}` : card.name;
     const link = { kind: 'page', to: '/creditcard' };
-
-    const missing = [
-      !card.due_day && 'due day',
-      !card.statement_close_day && 'statement close day',
-      !card.credit_limit && 'credit limit',
-    ].filter(Boolean);
-    if (missing.length) {
-      items.push(item({
-        key: `card-setup:${card.id}`, type: 'card_setup', group: 'cards', urgency: 'info',
-        title: `Finish card setup: ${card.name}`, detail: `Add the ${missing.join(', ')} so reminders work`,
-        link: { kind: 'page', to: '/settings', state: { tab: 'datasetup', view: 'Payment Methods' } },
-      }));
-    }
 
     if (card.due_day) {
       const { next, previous } = monthlyDates(card.due_day, today);
@@ -525,6 +590,7 @@ function buildTodos(data, today) {
     ...connectionItems(data.connections || []),
     ...saleItems(data.sales || [], today),
     ...purchaseItems(data.inventories || [], today),
+    ...cardSetupItem(data.cards || [], data.inventories || [], today),
     ...cardItems(data.cards || [], today, data.spendByCard || new Map()),
     ...recurringItems(data.recurring || [], today),
     ...reminderItems(data.reminders || [], today),
@@ -532,6 +598,7 @@ function buildTodos(data, today) {
   return items.sort((a, b) =>
     URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency]
     || (a.due_date || '9999').localeCompare(b.due_date || '9999')
+    || (b.amount || 0) - (a.amount || 0)
     || a.title.localeCompare(b.title));
 }
 
@@ -555,7 +622,7 @@ async function loadTodoData(prisma, userId, today) {
     prisma.cashoutConnection.findMany({ where: { user_id: userId }, include: { platform: true } }),
     prisma.sales.findMany({
       where: { inventory: { user_id: userId }, sale_date: { gte: lookback } },
-      include: { inventory: true, platform: true, buyer: true, cashout_commitment: true },
+      include: { inventory: { include: { vendor: true } }, platform: true, buyer: true, cashout_commitment: true },
     }),
     prisma.inventory.findMany({
       where: { user_id: userId, OR: [{ qty_on_hand: { gt: 0 } }, { purchase_date: { gte: lookback } }] },

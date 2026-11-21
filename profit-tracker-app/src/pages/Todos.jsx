@@ -21,6 +21,8 @@ import { PANEL, URGENCIES, whenText } from '../components/Todos/todoMeta';
 // moves to its next date).
 
 const DONE_TEXT = { snooze: 'Snoozed.', dismiss: 'Dismissed.', done: 'Marked paid.' };
+// A month or more is "Holding" (todoMeta HOLDS), and says so.
+const doneText = (action, days) => (action === 'snooze' && days >= 30 ? 'On hold.' : DONE_TEXT[action]);
 
 // Phones skip these: the urgency tiles right below say the same.
 const PILL = 'hidden sm:inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.05em]';
@@ -56,11 +58,26 @@ export default function Todos() {
     });
   };
 
+  // A folded row: the same choice for each of its items, one toast for all.
+  const actOnAll = async (row, action, days) => {
+    const until = action === 'snooze' ? addDays(localToday(), days) : undefined;
+    const keys = row.items.map((entry) => entry.key);
+    try {
+      await Promise.all(keys.map((key) => mutation.mutateAsync({ key, action, until })));
+      toast.success(`${keys.length} ${doneText(action, days).toLowerCase()}`, {
+        action: { label: 'Undo', onClick: () => keys.forEach((key) => mutation.mutate({ key, action: 'restore' })) },
+      });
+    } catch (err) {
+      toast.error(`Could not save all of them: ${err.message}`);
+    }
+  };
+
   const act = (entry, action, days) => {
+    if (entry.fold) { actOnAll(entry, action, days); return; }
     if (action === 'complete') { completeReminder(entry); return; }
     const until = action === 'snooze' ? addDays(localToday(), days) : undefined;
     mutation.mutate({ key: entry.key, action, until }, {
-      onSuccess: () => toast.success(DONE_TEXT[action], {
+      onSuccess: () => toast.success(doneText(action, days), {
         action: { label: 'Undo', onClick: () => mutation.mutate({ key: entry.key, action: 'restore' }) },
       }),
       onError: (err) => toast.error(`Could not save: ${err.message}`),

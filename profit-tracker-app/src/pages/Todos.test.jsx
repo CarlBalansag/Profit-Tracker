@@ -9,6 +9,7 @@ import { addDays, localToday } from '../utils/returnWindow';
 let todos;
 let queryState;
 const mutate = vi.fn();
+const mutateAsync = vi.fn(async () => ({}));
 
 let openReminders = [];
 const reminderCalls = { create: vi.fn(), update: vi.fn(), remove: vi.fn(), complete: vi.fn(), undoComplete: vi.fn() };
@@ -16,12 +17,20 @@ const asyncMutation = (fn) => ({ mutateAsync: fn, mutate: fn, isPending: false }
 
 vi.mock('../hooks/useApi', () => ({
   useTodos: () => ({ data: todos, isLoading: false, isError: queryState.isError, refetch: vi.fn(), isRefetching: false }),
-  useTodoState: () => ({ mutate, isPending: false }),
+  useTodoState: () => ({ mutate, mutateAsync, isPending: false }),
   useReminders: () => ({ data: openReminders }),
   useReminderMutations: () => Object.fromEntries(Object.entries(reminderCalls).map(([name, fn]) => [name, asyncMutation(fn)])),
   usePaymentMethods: () => ({ data: [{ id: 'card-1', name: 'Amex Gold', last4: '1001' }] }),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+// The sale step on an item (Add tracking, Mark paid...) runs through the
+// shared status-action hook; here it only records what it was asked.
+const runAction = vi.fn(async () => ({ id: 'sale-1' }));
+vi.mock('../hooks/useRecordActions', () => ({ default: () => ({ runAction, pendingAction: null }) }));
+vi.mock('@tanstack/react-query', async (importOriginal) => ({
+  ...(await importOriginal()),
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+}));
 
 const entry = (fields) => ({
   key: `ship:${Math.random()}`, type: 'ship', group: 'sales', urgency: 'soon', title: 'Ship it', detail: 'PS5 · sold on eBay 4 days ago',
@@ -47,6 +56,8 @@ const mount = (element = <Todos />) => render(
 beforeEach(() => {
   queryState = { isError: false };
   mutate.mockReset();
+  mutateAsync.mockClear();
+  runAction.mockClear();
   openReminders = [];
   Object.values(reminderCalls).forEach((fn) => fn.mockReset());
 });
@@ -310,5 +321,60 @@ describe('To-Do filters', () => {
     mount();
     fireEvent.click(screen.getByRole('link', { name: /Get these on your phone/ }));
     expect(screen.getByTestId('where').textContent).toBe('/settings {"tab":"notifications"}');
+  });
+});
+
+describe('Cleaning up the list', () => {
+  const saleRecord = (actions) => ({
+    kind: 'sale', id: 'sale-1', quantity: 2, unit_price: 270, commission_fee: 0, sale_shipping: 0,
+    workflow_status: 'WAITING_FOR_PAYMENT', workflow_type: 'STANDARD_MARKETPLACE', allowed_actions: actions,
+  });
+
+  it('folds two items that read alike and tells them apart by purchase lot', () => {
+    todos = response([
+      entry({ key: 'ship:a', detail: '2× Quest 3S · sold on P4D 3 days ago', lot: 'Lot bought Nov 1 · Costco' }),
+      entry({ key: 'ship:b', detail: '2× Quest 3S · sold on P4D 3 days ago', lot: 'Lot bought Nov 9 · Target' }),
+    ]);
+    mount();
+    const fold = screen.getByRole('button', { name: /Ship it \(2\)/ });
+    expect(fold).toHaveTextContent('2 sales · 2× Quest 3S · sold on P4D 3 days ago');
+    fireEvent.click(fold);
+    expect(screen.getByText('Lot bought Nov 1 · Costco')).toBeInTheDocument();
+    expect(screen.getByText('Lot bought Nov 9 · Target')).toBeInTheDocument();
+  });
+
+  it('sums the money tied up in folded aging stock and offers to hold all of it', () => {
+    todos = response(['A', 'B', 'C'].map((name, index) => entry({
+      key: `aging:${name}`, type: 'aging_stock', group: 'purchases', urgency: 'info',
+      title: `Sitting ${40 + index} days, not listed`, detail: `${name} box`, amount: 100, actions: ['hold', 'snooze', 'dismiss'],
+    })));
+    mount();
+    expect(screen.getByRole('button', { name: /Not listed for 30\+ days \(3\)/ })).toHaveTextContent('$300.00 tied up');
+    fireEvent.click(screen.getByRole('button', { name: /All later/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Holding · 3 months' }));
+    const until = addDays(localToday(), 90);
+    expect(mutateAsync.mock.calls.map(([vars]) => vars)).toEqual(['A', 'B', 'C'].map((name) => ({ key: `aging:${name}`, action: 'snooze', until })));
+  });
+
+  it('runs the sale step that clears an item: Mark paid opens the payment form', () => {
+    todos = response([entry({
+      key: 'payout:1', type: 'payout_late', title: 'Payout late', detail: 'PS5 · eBay · no change in 9 days',
+      record: saleRecord([{ action: 'mark_paid', label: 'Mark paid', requiresForm: true, secondary: false }]),
+    })]);
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /^Mark paid: Payout late/ }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('540.00')).toBeInTheDocument();
+    expect(runAction).not.toHaveBeenCalled();
+  });
+
+  it('runs a step with nothing to fill in straight away', () => {
+    todos = response([entry({
+      key: 'ship:1', title: 'Hand it off',
+      record: saleRecord([{ action: 'mark_handed_over', label: 'Handed over', secondary: false }]),
+    })]);
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /^Handed over: Hand it off/ }));
+    expect(runAction).toHaveBeenCalledWith('mark_handed_over', {}, expect.objectContaining({ action: 'mark_handed_over' }));
   });
 });

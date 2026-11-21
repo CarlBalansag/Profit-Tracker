@@ -30,6 +30,13 @@ export const SNOOZES = [
   { label: 'Next week', days: 7 },
 ];
 
+// Stock kept on purpose (sealed product held for a price): hidden for longer.
+export const HOLDS = [
+  { label: 'Holding · 1 month', days: 30 },
+  { label: 'Holding · 3 months', days: 90 },
+  { label: 'Holding · 6 months', days: 180 },
+];
+
 // Panels pick up the app's card look (index.css remaps this background in
 // the default style; the glass style keeps it dark).
 export const PANEL = 'rounded-xl border border-gray-800 bg-[#12121A]';
@@ -52,30 +59,52 @@ export function whenText(reminder) {
 
 export const repeatText = (repeat) => REPEAT_TEXT[repeat] || null;
 
-// Three or more of one kind in one section fold into a single expandable
-// row. Reminders are each their own thing and never fold.
+// Items fold into one expandable row: three or more of one kind in a section
+// ("Ship it" x3), or two that read exactly alike (the same product sold the
+// same way from two purchase lots). Reminders are each their own thing and
+// never fold.
 const FOLD_AT = 3;
+const ALIKE_AT = 2;
+const alikeId = (entry) => `${entry.type}|${entry.title}|${entry.detail}`;
 export function foldByType(items) {
-  const counts = {};
-  for (const entry of items) counts[entry.type] = (counts[entry.type] || 0) + 1;
+  const byType = {};
+  const byAlike = {};
+  for (const entry of items) {
+    byType[entry.type] = (byType[entry.type] || 0) + 1;
+    byAlike[alikeId(entry)] = (byAlike[alikeId(entry)] || 0) + 1;
+  }
   const rows = [];
   const folded = {};
   for (const entry of items) {
-    if (counts[entry.type] >= FOLD_AT && entry.type !== 'reminder') {
-      if (!folded[entry.type]) {
-        folded[entry.type] = { fold: true, type: entry.type, group: entry.group, urgency: entry.urgency, items: [] };
-        rows.push(folded[entry.type]);
-      }
-      folded[entry.type].items.push(entry);
-    } else {
-      rows.push(entry);
+    let id = null;
+    if (entry.type !== 'reminder') {
+      if (byType[entry.type] >= FOLD_AT) id = `type:${entry.type}`;
+      else if (byAlike[alikeId(entry)] >= ALIKE_AT) id = `alike:${alikeId(entry)}`;
     }
+    if (!id) { rows.push(entry); continue; }
+    if (!folded[id]) {
+      folded[id] = { fold: true, id, alike: id.startsWith('alike:'), type: entry.type, group: entry.group, urgency: entry.urgency, items: [] };
+      rows.push(folded[id]);
+    }
+    folded[id].items.push(entry);
   }
   return rows;
 }
 
-// A folded row's title: the items' shared title ("Ship it"), or the first
-// one's without its number ("Sitting 41 days" -> "Sitting").
-export const foldTitle = (row) => (row.items.every((entry) => entry.title === row.items[0].title)
-  ? row.items[0].title
-  : row.items[0].title.replace(/\s+\d.*$/, ''));
+const FOLD_TITLES = { aging_stock: 'Not listed for 30+ days' };
+
+// A folded row's title: the items' shared title ("Ship it"), a set name for
+// some kinds, or the first one's without its number.
+export const foldTitle = (row) => {
+  if (row.items.every((entry) => entry.title === row.items[0].title)) return row.items[0].title;
+  return FOLD_TITLES[row.type] || row.items[0].title.replace(/\s+\d.*$/, '');
+};
+
+// "$1,234.50"
+export const money = (value) => `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+// The money across a folded row's items, or null when none carry any.
+export const foldAmount = (row) => {
+  const amounts = row.items.map((entry) => entry.amount).filter((value) => value != null);
+  return amounts.length ? amounts.reduce((sum, value) => sum + value, 0) : null;
+};

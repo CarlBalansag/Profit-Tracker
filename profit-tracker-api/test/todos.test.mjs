@@ -202,8 +202,40 @@ describe('sale items', () => {
     addSale({ workflow_status: 'DISPUTED' });
     addSale({ workflow_status: 'DISPUTED', voided_at: day(-1) });
     const { body } = await list();
-    expect(types(body.items)).toEqual(['open_dispute', 'open_return', 'short_paid']);
+    // Same urgency, no due date: the one with money on it comes first.
+    expect(types(body.items)).toEqual(['open_dispute', 'short_paid', 'open_return']);
     expect(byType(body.items, 'short_paid')[0]).toMatchObject({ title: 'Short-paid $40.00', amount: 40 });
+  });
+
+  it('carries the sale action that clears the item, so it can be done right there', async () => {
+    addSale({ workflow_status: 'AWAITING_SHIPMENT', workflow_status_changed_at: day(-4) });
+    addSale({ workflow_status: 'WAITING_FOR_PAYMENT', workflow_status_changed_at: day(-10), unit_price: 200, quantity: 2 });
+    const { body } = await list();
+    const ship = byType(body.items, 'ship')[0];
+    expect(ship.stale).toBe(false);
+    expect(ship.record).toMatchObject({ kind: 'sale', workflow_status: 'AWAITING_SHIPMENT' });
+    expect(ship.record.allowed_actions.map((a) => [a.action, a.label])).toEqual([['add_outbound_tracking', 'Add tracking']]);
+    expect(ship.lot).toMatch(/^Lot bought /);
+    const payout = byType(body.items, 'payout_late')[0];
+    expect(payout.record).toMatchObject({ unit_price: 200, quantity: 2 });
+    expect(payout.record.allowed_actions.map((a) => a.action)).toEqual(['mark_paid']);
+    expect(payout.detail).toMatch(/no change in 10 days · sold /);
+  });
+
+  it('offers to fix the status of a sale stuck unshipped for months', async () => {
+    addSale({ workflow_status: 'AWAITING_SHIPMENT', sale_date: day(-120), workflow_status_changed_at: day(-120) });
+    const { body } = await list();
+    const [ship] = byType(body.items, 'ship');
+    expect(ship).toMatchObject({ urgency: 'overdue', stale: true });
+    expect(ship.detail).toMatch(/already done\? Fix its status$/);
+    expect(ship.record.allowed_actions.map((a) => a.action)).toEqual(['add_outbound_tracking', 'correct_status']);
+    expect(ship.record.allowed_actions.every((a) => a.secondary === false)).toBe(true);
+  });
+
+  it('gives old rows from before the status workflow no inline action', async () => {
+    addSale({ workflow_status: null, status: 'SOLD', workflow_status_changed_at: day(-4) });
+    const { body } = await list();
+    expect(byType(body.items, 'ship')[0].record).toBeNull();
   });
 });
 
@@ -222,6 +254,7 @@ describe('purchase items', () => {
     const { body } = await list();
     expect(types(body.items).sort()).toEqual(['aging_stock', 'mark_received', 'pre_order', 'purchase_tracking']);
     expect(byType(body.items, 'aging_stock')[0].title).toBe('Sitting 35 days, not listed');
+    expect(byType(body.items, 'aging_stock')[0]).toMatchObject({ amount: 50, actions: ['hold', 'snooze', 'dismiss'] });
   });
 
   it('flags a closing return window only while units are unsold', async () => {
@@ -272,10 +305,42 @@ describe('card items', () => {
     expect(after.body.hidden_items).toEqual([]); // paid is done, not "bring back"
   });
 
-  it('asks to finish setting up a card missing its dates or limit', async () => {
+  it('asks once to finish setting up the cards in use that are missing their bill dates', async () => {
     Object.assign(harness.db.paymentMethod[0], { due_day: null, credit_limit: null });
     const { body } = await list();
-    expect(body.items).toEqual([expect.objectContaining({ type: 'card_setup', detail: 'Add the due day, credit limit so reminders work' })]);
+    expect(body.items).toEqual([expect.objectContaining({
+      type: 'card_setup',
+      title: 'Finish card setup: QA Credit Card',
+      detail: 'QA Credit Card · add the due day and statement close day so bill reminders work',
+    })]);
+  });
+
+  it('leaves alone a card missing only its limit, or one not used in 90 days', async () => {
+    harness.db.paymentMethod[0].credit_limit = null;
+    expect((await list()).body.items).toEqual([]);
+    Object.assign(harness.db.paymentMethod[0], { due_day: null });
+    harness.db.inventory[0].purchase_date = day(-100);
+    expect((await list()).body.items).toEqual([]);
+  });
+
+  it('folds several unfinished cards into one item whose key follows the set of cards', async () => {
+    harness.db.paymentMethod[0].due_day = null;
+    const second = { ...harness.db.paymentMethod[0], id: uuid(), name: 'Another Card', due_day: null };
+    harness.db.paymentMethod.push(second);
+    addPurchase({ payment_method_id: second.id, is_listed: true, receiving_status: 'ON_HAND' });
+    const first = (await list()).body.items.filter((entry) => entry.type === 'card_setup');
+    expect(first).toEqual([expect.objectContaining({ title: 'Finish setup on 2 cards' })]);
+    expect(first[0].detail).toMatch(/^Another Card, QA Credit Card · /);
+
+    await request('POST', '/api/todos/state', { key: first[0].key, action: 'dismiss', today: TODAY });
+    expect((await list()).body.items.filter((entry) => entry.type === 'card_setup')).toEqual([]);
+    // A third card joins: a new item, not hidden by the old dismiss.
+    const third = { ...harness.db.paymentMethod[0], id: uuid(), name: 'Third Card', due_day: null };
+    harness.db.paymentMethod.push(third);
+    addPurchase({ payment_method_id: third.id, is_listed: true, receiving_status: 'ON_HAND' });
+    const later = (await list()).body.items.filter((entry) => entry.type === 'card_setup');
+    expect(later).toEqual([expect.objectContaining({ title: 'Finish setup on 3 cards' })]);
+    expect(later[0].key).not.toBe(first[0].key);
   });
 
   it('warns about a statement closing soon, or to pay down a card over 30% before it closes', async () => {

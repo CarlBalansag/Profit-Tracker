@@ -2,10 +2,10 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CircleCheck, Pencil } from 'lucide-react';
 import { openTodoLink } from '../../utils/todoLink';
-import { GROUP_BY_ID, URGENCY_BY_ID } from './todoMeta';
+import { GROUP_BY_ID, URGENCY_BY_ID, money } from './todoMeta';
 import SnoozeMenu from './SnoozeMenu';
+import TodoRecordActions from './TodoRecordActions';
 
-const money = (value) => `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export function GroupIcon({ group, urgency }) {
   const { icon: Icon } = GROUP_BY_ID[group] || GROUP_BY_ID.bookkeeping;
@@ -17,13 +17,14 @@ export function GroupIcon({ group, urgency }) {
   );
 }
 
-// The buttons for one to-do: its main action first (Mark paid / Done), then
-// Open, Edit and Later.
+// The buttons for one to-do: its main action first (the sale step that
+// clears it, Mark paid, Done), then Open, Edit and Later.
 function TodoActions({ entry, busy, onAct, onEdit }) {
   const navigate = useNavigate();
   const has = (action) => entry.actions?.includes(action);
   return (
     <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end">
+      {entry.record && <TodoRecordActions entry={entry} />}
       {has('mark_paid') && (
         <button type="button" disabled={busy} onClick={() => onAct(entry, 'done')} className="page-btn page-btn-primary !h-9 !px-3 !text-xs">
           <CircleCheck className="h-3.5 w-3.5" aria-hidden="true" /> Mark paid
@@ -47,20 +48,27 @@ function TodoActions({ entry, busy, onAct, onEdit }) {
         </button>
       )}
       {(has('snooze') || has('dismiss')) && (
-        <SnoozeMenu entry={entry} canSnooze={has('snooze')} canDismiss={has('dismiss')} busy={busy} onAct={onAct} />
+        <SnoozeMenu entry={entry} canSnooze={has('snooze')} canDismiss={has('dismiss')} canHold={has('hold')} busy={busy} onAct={onAct} />
       )}
     </div>
   );
 }
 
 // One to-do. `nested` is a row inside a folded group: the group already shows
-// the title and icon, so the row leads with its own detail.
-export default function TodoItem({ entry, busy, onAct, onEdit, nested = false }) {
+// the title and icon, so the row leads with its own detail -- or, when the
+// group's items read alike, with what tells them apart (the purchase lot).
+export default function TodoItem({ entry, busy, onAct, onEdit, nested = false, alike = false }) {
   const tone = URGENCY_BY_ID[entry.urgency] || URGENCY_BY_ID.info;
   if (nested) {
     return (
       <li data-todo={entry.key} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-4">
-        <p className="min-w-0 flex-1 break-words text-sm text-gray-200">{entry.detail}</p>
+        <div className="min-w-0 flex-1">
+          <p className="break-words text-sm text-gray-200">
+            {alike ? (entry.lot || entry.detail) : entry.detail}
+            {entry.amount != null && <span className="ml-2 text-xs tabular-nums text-gray-400">{money(entry.amount)}</span>}
+          </p>
+          {!alike && entry.lot && <p className="mt-0.5 text-xs text-gray-500">{entry.lot}</p>}
+        </div>
         <TodoActions entry={entry} busy={busy} onAct={onAct} onEdit={onEdit} />
       </li>
     );

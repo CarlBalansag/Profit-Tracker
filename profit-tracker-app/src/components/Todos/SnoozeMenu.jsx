@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Clock } from 'lucide-react';
-import { SNOOZES } from './todoMeta';
+import { HOLDS, SNOOZES } from './todoMeta';
 
 // "Later" on a to-do: snooze it for a while, or dismiss it. Opens below the
 // button, or above when there isn't room (near the bottom of a phone screen).
-export default function SnoozeMenu({ entry, canSnooze, canDismiss, busy, onAct }) {
+export default function SnoozeMenu({ entry, canSnooze, canDismiss, canHold = false, busy, onAct, label }) {
   const [open, setOpen] = useState(false);
   const [up, setUp] = useState(false);
   const rootRef = useRef(null);
@@ -24,7 +24,7 @@ export default function SnoozeMenu({ entry, canSnooze, canDismiss, busy, onAct }
   const toggle = () => {
     if (!open && rootRef.current) {
       const rect = rootRef.current.getBoundingClientRect();
-      const height = 8 + 44 * ((canSnooze ? SNOOZES.length : 0) + (canDismiss ? 1 : 0));
+      const height = 8 + 44 * ((canHold ? HOLDS.length : 0) + (canSnooze ? SNOOZES.length : 0) + (canDismiss ? 1 : 0));
       setUp(window.innerHeight - rect.bottom < height + 16 && rect.top > height);
     }
     setOpen((value) => !value);
@@ -40,17 +40,21 @@ export default function SnoozeMenu({ entry, canSnooze, canDismiss, busy, onAct }
   return (
     <div ref={rootRef} className="relative">
       <button type="button" aria-expanded={open} aria-haspopup="true" onClick={toggle} className="page-btn page-btn-secondary !h-9 !px-3 !text-xs">
-        <Clock className="h-3.5 w-3.5" aria-hidden="true" /> {canSnooze ? 'Later' : 'Hide'}
+        <Clock className="h-3.5 w-3.5" aria-hidden="true" /> {label || (canSnooze ? 'Later' : 'Hide')}
         <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
       {open && (
         <div
           role="group"
           aria-label={`Hide ${entry.title}`}
-          className={`absolute right-0 z-30 w-44 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] p-1 shadow-xl ${up ? 'bottom-full mb-2' : 'top-full mt-2'}`}
+          className={`absolute right-0 z-30 w-48 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] p-1 shadow-xl ${up ? 'bottom-full mb-2' : 'top-full mt-2'}`}
         >
-          {canSnooze && SNOOZES.map(({ label, days }) => (
-            <button key={days} type="button" disabled={busy} onClick={() => pick('snooze', days)} className={item}>{label}</button>
+          {canHold && HOLDS.map((hold) => (
+            <button key={`hold-${hold.days}`} type="button" disabled={busy} onClick={() => pick('snooze', hold.days)} className={item}>{hold.label}</button>
+          ))}
+          {canHold && canSnooze && <div className="my-1 border-t border-white/[0.06]" aria-hidden="true" />}
+          {canSnooze && SNOOZES.map((snooze) => (
+            <button key={snooze.days} type="button" disabled={busy} onClick={() => pick('snooze', snooze.days)} className={item}>{snooze.label}</button>
           ))}
           {canDismiss && (
             <button type="button" disabled={busy} onClick={() => pick('dismiss')} className={`${item} text-gray-400`}>Dismiss</button>
