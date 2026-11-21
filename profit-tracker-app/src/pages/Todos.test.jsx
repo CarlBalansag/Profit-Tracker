@@ -10,9 +10,16 @@ let todos;
 let queryState;
 const mutate = vi.fn();
 
+let openReminders = [];
+const reminderCalls = { create: vi.fn(), update: vi.fn(), remove: vi.fn(), complete: vi.fn(), undoComplete: vi.fn() };
+const asyncMutation = (fn) => ({ mutateAsync: fn, mutate: fn, isPending: false });
+
 vi.mock('../hooks/useApi', () => ({
   useTodos: () => ({ data: todos, isLoading: false, isError: queryState.isError, refetch: vi.fn(), isRefetching: false }),
   useTodoState: () => ({ mutate, isPending: false }),
+  useReminders: () => ({ data: openReminders }),
+  useReminderMutations: () => Object.fromEntries(Object.entries(reminderCalls).map(([name, fn]) => [name, asyncMutation(fn)])),
+  usePaymentMethods: () => ({ data: [{ id: 'card-1', name: 'Amex Gold', last4: '1001' }] }),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -40,6 +47,8 @@ const mount = (element = <Todos />) => render(
 beforeEach(() => {
   queryState = { isError: false };
   mutate.mockReset();
+  openReminders = [];
+  Object.values(reminderCalls).forEach((fn) => fn.mockReset());
 });
 afterEach(cleanup);
 
@@ -163,5 +172,102 @@ describe('Dashboard Needs attention card', () => {
     expect(within(card).getByRole('link', { name: /View all/ })).toHaveAttribute('href', '/todos');
     fireEvent.click(within(card).getByText('Item 1'));
     expect(screen.getByTestId('where').textContent).toContain('/transactions');
+  });
+});
+
+const reminderEntry = (fields = {}) => entry({
+  key: 'reminder:rem-1:2026-11-21', type: 'reminder', group: 'reminders', urgency: 'today', title: 'Call Amex about the credit',
+  detail: 'Due today at 3:30 PM · Every month', link: null, actions: ['complete', 'snooze', 'edit'],
+  reminder: { id: 'rem-1', title: 'Call Amex about the credit', notes: 'Ask for $50', due_date: '2026-11-21', due_time: '15:30', repeat: 'monthly', payment_method_id: 'card-1' },
+  ...fields,
+});
+
+describe('Reminders on the To-Do page', () => {
+  it('marks a reminder done with the date the user saw', () => {
+    todos = response([reminderEntry()]);
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(reminderCalls.complete).toHaveBeenCalledWith({ id: 'rem-1', due_date: '2026-11-21' }, expect.any(Object));
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('never folds reminders, even three of them', () => {
+    todos = response([1, 2, 3].map((n) => reminderEntry({ key: `reminder:r${n}:2026-11-21`, title: `Reminder ${n}` })));
+    mount();
+    expect(screen.getAllByRole('button', { name: 'Done' })).toHaveLength(3);
+    expect(screen.queryByRole('button', { name: /\(3\)/ })).not.toBeInTheDocument();
+  });
+
+  it('adds a new reminder from the form', async () => {
+    todos = response([]);
+    reminderCalls.create.mockResolvedValue({});
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /New reminder/ }));
+    const dialog = screen.getByRole('dialog', { name: 'New reminder' });
+    expect(within(dialog).getByLabelText('Date')).toHaveValue(localToday());
+
+    // A title is required.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add reminder' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Give the reminder a title.');
+    expect(reminderCalls.create).not.toHaveBeenCalled();
+
+    fireEvent.change(within(dialog).getByLabelText('What'), { target: { value: '  Restock trip to Costco ' } });
+    fireEvent.change(within(dialog).getByLabelText(/Time/), { target: { value: '09:15' } });
+    fireEvent.change(within(dialog).getByLabelText('Repeat'), { target: { value: 'weekly' } });
+    fireEvent.change(within(dialog).getByLabelText(/About a card/), { target: { value: 'card-1' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add reminder' }));
+    await vi.waitFor(() => expect(reminderCalls.create).toHaveBeenCalledWith({
+      title: 'Restock trip to Costco', due_date: localToday(), due_time: '09:15', repeat: 'weekly', payment_method_id: 'card-1', notes: null,
+    }));
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('shows the server\'s error and keeps the form open when saving fails', async () => {
+    todos = response([]);
+    reminderCalls.create.mockRejectedValue(new Error('Card not found or access denied'));
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /New reminder/ }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('What'), { target: { value: 'Something' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add reminder' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Card not found or access denied');
+  });
+
+  it('edits a reminder from the list, prefilled, sending blanks as empty', async () => {
+    todos = response([reminderEntry()]);
+    reminderCalls.update.mockResolvedValue({});
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit reminder' });
+    expect(within(dialog).getByLabelText('What')).toHaveValue('Call Amex about the credit');
+    expect(within(dialog).getByLabelText(/Time/)).toHaveValue('15:30');
+    expect(within(dialog).getByLabelText('Repeat')).toHaveValue('monthly');
+    fireEvent.change(within(dialog).getByLabelText(/Notes/), { target: { value: '' } });
+    fireEvent.change(within(dialog).getByLabelText(/Time/), { target: { value: '' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await vi.waitFor(() => expect(reminderCalls.update).toHaveBeenCalledWith(expect.objectContaining({ id: 'rem-1', notes: null, due_time: null, repeat: 'monthly' })));
+  });
+
+  it('asks a second time before deleting', async () => {
+    todos = response([reminderEntry()]);
+    reminderCalls.remove.mockResolvedValue({});
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    expect(reminderCalls.remove).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete for good?' }));
+    await vi.waitFor(() => expect(reminderCalls.remove).toHaveBeenCalledWith('rem-1'));
+  });
+
+  it('lists every open reminder, including ones further out, to edit', () => {
+    todos = response([]);
+    openReminders = [{ id: 'rem-9', title: 'Renew resale certificate', due_date: '2027-03-01', due_time: null, repeat: 'yearly', notes: null, payment_method_id: null }];
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /All reminders \(1\)/ }));
+    expect(screen.getByText('Renew resale certificate', { selector: 'p' })).toBeInTheDocument();
+    expect(screen.getByText(/Mar 1, every year/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Edit Renew resale certificate/ }));
+    expect(screen.getByRole('dialog', { name: 'Edit reminder' })).toBeInTheDocument();
   });
 });

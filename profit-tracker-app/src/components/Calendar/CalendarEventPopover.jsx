@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { X, Plus, ShoppingBag, DollarSign, Banknote, Calendar, CreditCard } from 'lucide-react';
+import { X, Plus, ShoppingBag, DollarSign, Banknote, Calendar, CreditCard, Bell } from 'lucide-react';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 
 const TYPE_CONFIG = {
@@ -8,6 +8,7 @@ const TYPE_CONFIG = {
   payout:     { label: 'Payout',      color: '#10b981', icon: Banknote },
   manual:     { label: 'Event',       color: 'var(--dp-accent)', icon: Calendar },
   credit_due: { label: 'CC Due',      color: '#ef4444', icon: CreditCard },
+  reminder:   { label: 'Reminder',    color: '#f43f5e', icon: Bell },
 };
 
 const COLOR_HEX = {

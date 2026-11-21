@@ -463,6 +463,45 @@ export function countTodos(items) {
   return counts;
 }
 
+// ─── Reminders ────────────────────────────────────────────────────────────────
+export const remindersQuery = (status = 'open') => ({
+  queryKey: ['reminders', status],
+  queryFn: () => fetcher(`/api/reminders?status=${status}`),
+});
+export const useReminders = (status = 'open') => useQuery(remindersQuery(status));
+
+async function reminderRequest(path, method, body) {
+  const response = await apiFetch(path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = data.details?.[0]?.message;
+    throw new Error(detail || data.error || data.message || `API error ${response.status}`);
+  }
+  return data;
+}
+
+// Every change shows on the To-Do list and the Calendar too.
+export const useReminderMutations = () => {
+  const qc = useQueryClient();
+  const settle = () => {
+    qc.invalidateQueries({ queryKey: ['reminders'] });
+    qc.invalidateQueries({ queryKey: ['todos'] });
+    qc.invalidateQueries({ queryKey: ['calendar-auto-events'] });
+  };
+  const options = (mutationFn) => ({ mutationFn, onSettled: settle });
+  return {
+    create: useMutation(options((data) => reminderRequest('/api/reminders', 'POST', data))),
+    update: useMutation(options(({ id, ...data }) => reminderRequest(`/api/reminders/${id}`, 'PATCH', data))),
+    remove: useMutation(options((id) => reminderRequest(`/api/reminders/${id}`, 'DELETE'))),
+    complete: useMutation(options(({ id, due_date }) => reminderRequest(`/api/reminders/${id}/complete`, 'POST', { due_date, today: localToday() }))),
+    undoComplete: useMutation(options(({ id, due_date }) => reminderRequest(`/api/reminders/${id}/undo-complete`, 'POST', { due_date }))),
+  };
+};
+
 // ─── Calendar Events ──────────────────────────────────────────────────────────
 export const calendarEventsQuery = (month) => ({
   queryKey: ['calendar-events', month],
