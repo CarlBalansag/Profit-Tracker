@@ -121,7 +121,7 @@ prisma.$transaction=async fn=>{
   try{return await fn(prisma);}catch(error){db=snapshot;throw error;}finally{release();}
 };
 require.cache[requireApi.resolve('./prisma.js')]={id:requireApi.resolve('./prisma.js'),filename:requireApi.resolve('./prisma.js'),loaded:true,exports:prisma};
-requireApi('cloudinary').v2.uploader.upload=async(data,options)=>{calls.push({model:'cloudinary',op:'upload',options});if(faults['cloudinary.upload'])throw new Error('Injected cloudinary.upload failure');return {secure_url:'https://example.invalid/qa-receipt-'+options.public_id+'.png',public_id:options.public_id,resource_type:'image'};};
+requireApi('cloudinary').v2.uploader.upload=async(data,options)=>{calls.push({model:'cloudinary',op:'upload',options});if(faults['cloudinary.upload'])throw new Error('Injected cloudinary.upload failure');const publicId=options.folder?options.folder+'/'+options.public_id:options.public_id;return {secure_url:'https://example.invalid/qa-receipt-'+options.public_id+'.png',public_id:publicId,resource_type:'image',format:'png',type:options.type||'upload'};}; // Like Cloudinary: the folder is part of the public_id.
 requireApi('cloudinary').v2.uploader.destroy=async(publicId,options)=>{calls.push({model:'cloudinary',op:'destroy',publicId,options});};
 function app() {
   const app=express();app.use(express.json());

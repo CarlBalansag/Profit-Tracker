@@ -297,7 +297,8 @@ const createExpense = z.object({
   date: dateString,
   notes: optionalString,
   external_id: z.string().max(200).nullable().optional(),
-  receipt_url: optionalString,
+  // Private receipts are only ever set by POST /api/receipts/attach.
+  receipt_url: optionalString.refine((v) => !v || !String(v).startsWith('private:'), 'Attach receipts with the receipt upload.'),
   payment_method_id: id,
   tax_details: taxDetails.optional(),
 }).passthrough();

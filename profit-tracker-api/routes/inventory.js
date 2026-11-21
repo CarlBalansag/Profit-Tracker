@@ -6,6 +6,7 @@ const { validateBody } = require('../middleware/validate');
 const { createInventory, updateInventory, updateSale, createSale, statusActionBody } = require('../validation/schemas');
 const { publishCalendarFeed } = require('../services/calendarFeed');
 const { requireOwned, requireStoreAccount, resolveStoreAccountUpdate } = require('../services/ownership');
+const { withReceiptLink } = require('../services/privateReceipts');
 const { checkTrackingRateLimit, refreshSharedTracking } = require('../services/tracking');
 const statusTransitions = require('../services/statusTransitions');
 const activityLog = require('../services/activityLog');
@@ -31,7 +32,8 @@ const parseLocalDate = (str) => {
 // `vendor` and a sale's `platform` are both the same Platform model, so both use MAPPINGS.platform.
 function exactInventory(item) {
   if (!item) return item;
-  const result = withExactFields(item, MAPPINGS.inventory);
+  // A private receipt is sent as a short-lived signed link (services/privateReceipts.js).
+  const result = withReceiptLink(withExactFields(item, MAPPINGS.inventory), 'inventory');
   if (result.vendor) result.vendor = withExactFields(result.vendor, MAPPINGS.platform);
   if (result.payment_method) result.payment_method = withExactFields(result.payment_method, MAPPINGS.paymentMethod);
   if (Array.isArray(result.sales)) result.sales = result.sales.map(sale => {

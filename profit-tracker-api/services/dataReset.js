@@ -9,6 +9,7 @@ const cloudinary = require('cloudinary').v2;
 const defaultPrisma = require('../prisma');
 const { dealsCache } = require('./cashouts/service');
 const { publishCalendarFeed } = require('./calendarFeed');
+const { parsePrivateRef } = require('./privateReceipts');
 
 const RESET_SCOPES = ['transactions', 'everything'];
 const RESET_CONFIRMATION = 'RESET';
@@ -27,6 +28,15 @@ const RECEIPT_NAME = /^(inventory|expense)_([^_/]+)(?:_[^/]*)?$/;
 // whose own name points at a row being deleted for this user is returned --
 // otherwise a pasted URL could destroy another user's receipt.
 function receiptFileFromUrl(url, ownedRows, cloudName = process.env.CLOUDINARY_CLOUD_NAME) {
+  // A private receipt reference (services/privateReceipts.js): the same
+  // ownership rule, on the file's own name.
+  const ref = parsePrivateRef(url);
+  if (ref) {
+    if (!ref.publicId.startsWith(RECEIPT_FOLDER)) return null;
+    const owner = ref.publicId.slice(RECEIPT_FOLDER.length).match(RECEIPT_NAME);
+    if (!owner || !ownedRows.has(`${owner[1]}:${owner[2]}`)) return null;
+    return { publicId: ref.publicId, resourceType: ref.resourceType, type: 'authenticated' };
+  }
   if (typeof url !== 'string' || !cloudName) return null;
   let parsed;
   try {
@@ -222,9 +232,9 @@ async function removeReceiptFiles(files) {
   let failed = 0;
   const worker = async () => {
     while (queue.length) {
-      const { publicId, resourceType } = queue.shift();
+      const { publicId, resourceType, type } = queue.shift();
       try {
-        await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+        await cloudinary.uploader.destroy(publicId, { resource_type: resourceType, ...(type ? { type } : {}) });
       } catch (error) {
         failed += 1;
         console.error('[data-reset] receipt file not removed:', publicId, error.message);

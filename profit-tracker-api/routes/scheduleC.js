@@ -57,7 +57,10 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       year, today: new Date(), events: profitEvents({ inventories, year, worksheet }),
       priorEvents, priorNetProfit: priorBooks ? priorBooks.netProfit : null,
     });
-    res.json({ ...worksheet, books });
+    // Private receipts go out as short-lived signed links.
+    const { withReceiptLink } = require('../services/privateReceipts');
+    const rows = worksheet.rows.map((row) => (row.source === 'manual' ? withReceiptLink(row, 'expense') : row));
+    res.json({ ...worksheet, rows, books });
   } catch (error) { next(error); }
 });
 
