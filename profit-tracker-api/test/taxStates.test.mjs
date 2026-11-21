@@ -111,12 +111,54 @@ describe('flat-tax states', () => {
     expect(st('KY', 2026, { wages: 60000 }).state.status).toBe('verified');
   });
 
-  it('keeps Idaho and Ohio unsupported until their rules are verified', () => {
-    for (const code of ['ID', 'OH']) for (const year of [2025, 2026]) expect(STATE_RULES[year][code].status).toBe('unsupported');
+  it('Ohio 2025: nonbusiness schedule after MAGI-tiered exemptions (IT 1040 page 18)', () => {
+    // $60,000 MAGI -> $2,150 exemption; $57,850 -> $342 + 2.75% of $31,800.
+    expect(tax('OH', 2025, { wages: 60000 })).toBe(1216.5);
+    expect(tax('OH', 2025, { wages: 20000 })).toBe(0); // under $26,050 after exemption
+    // $28,050 base: $342 + $55 = $397, less the $20 exemption credit (MAGI less exemptions under $30,000).
+    expect(tax('OH', 2025, { wages: 30450 })).toBe(377);
+    expect(tax('OH', 2025, { wages: 150000 })).toBe(Math.round((2394.32 + 0.03125 * (150000 - 1900 - 100000)) * 100) / 100);
+  });
+
+  it('Ohio: the first $250,000 of business income is deducted and the rest is taxed at 3%', () => {
+    // $100,000 Schedule C profit is fully deducted; only the half-SE-tax deduction is left (negative), so no tax.
+    const r = st('OH', 2025, { businessProfit: 100000 });
+    expect(r.state.tax).toBe(0);
+    expect(r.state.steps.find((s) => s.label === 'Business income deduction').amount).toBe(-100000);
+    // $60,000 wages + $300,000 profit: AGI $348,784.57, $1,900 exemption, $50,000 taxable business income.
+    const big = st('OH', 2025, { wages: 60000, businessProfit: 300000 });
+    expect(big.federal.agi).toBe(348784.57);
+    expect(big.state.steps.find((s) => s.label.startsWith('Taxable business')).amount).toBe(50000);
+    expect(big.state.tax).toBe(Math.round((342 + 572.95 + 1500) * 100) / 100);
+    // Married filing separately deducts only $125,000.
+    expect(st('OH', 2025, { filingStatus: 'mfs', businessProfit: 200000 }).state.steps.find((s) => s.label === 'Business income deduction').amount).toBe(-125000);
+    expect(st('OH', 2025, { wages: 60000 }).limitations.join(' ')).toMatch(/municipal income tax/);
+  });
+
+  it('Ohio 2026: $332 plus 2.75% over $26,050 (R.C. 5747.02), provisional exemptions', () => {
+    const r = st('OH', 2026, { wages: 60000 });
+    expect(r.state.tax).toBe(1206.5);
+    expect(r.state.status).toBe('provisional');
+  });
+
+  it('Idaho 2025: federal taxable income less $4,811 / $9,622 at 5.3%, $205 child credit', () => {
+    expect(tax('ID', 2025, { wages: 60000 })).toBe(2090.27); // (44,250 - 4,811) x 5.3%
+    expect(tax('ID', 2025, { filingStatus: 'mfj', wages: 100000, dependents: two })).toBe(3120.53 - 410);
+    // Uses 2025 federal taxable income after the QBI deduction: AGI $46,467.61 - $15,750
+    // - QBI $6,143.52 (capped at 20% of $30,717.61) = $24,574.09.
+    const biz = st('ID', 2025, { businessProfit: 50000 });
+    expect(biz.federal.taxableIncome).toBe(24574.09);
+    expect(biz.state.tax).toBe(1047.44); // (24,574.09 - 4,811) x 5.3%
+    expect(tax('ID', 2025, { wages: 18000 })).toBe(0);
+  });
+
+  it('keeps Idaho 2026 unsupported while its rate is still before the legislature', () => {
+    expect(STATE_RULES[2026].ID.status).toBe('unsupported');
+    expect(st('ID', 2026, { wages: 60000 }).limitations.join(' ')).toMatch(/Idaho income tax is not supported yet/);
   });
 
   it('never returns a negative state tax', () => {
-    for (const code of ['AZ', 'CO', 'GA', 'IL', 'IN', 'IA', 'KY', 'LA', 'MA', 'MI', 'MS', 'NC', 'PA']) {
+    for (const code of ['AZ', 'CO', 'GA', 'IL', 'IN', 'IA', 'KY', 'LA', 'MA', 'MI', 'MS', 'NC', 'OH', 'PA']) {
       expect(tax(code, 2026, { businessProfit: -20000 })).toBe(0);
     }
   });
@@ -146,5 +188,8 @@ describe('state estimated payments', () => {
   it('says when a state has no income tax or its schedule is not supported yet', () => {
     expect(stateEstimatedPayments({ taxYear: 2026, state: 'TX', filingStatus: 'single', currentYearTax: 0 })).toMatchObject({ supported: true, required: false });
     expect(stateEstimatedPayments({ taxYear: 2026, state: 'KY', filingStatus: 'single', currentYearTax: 3000 })).toMatchObject({ supported: false });
+    const idaho = stateEstimatedPayments({ taxYear: 2025, state: 'ID', filingStatus: 'single', currentYearTax: 3000 });
+    expect(idaho).toMatchObject({ supported: true, required: false });
+    expect(idaho.notes[0]).toMatch(/doesn't require estimated tax payments/);
   });
 });

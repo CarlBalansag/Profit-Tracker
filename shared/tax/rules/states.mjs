@@ -15,6 +15,8 @@
 //   'federal-ti'  federal taxable income (+ state addbacks), times a flat rate
 //   'pa-classes'  Pennsylvania: classes of income, no deductions, no cross-class losses
 //   'utah'        4.5% of AGI less the phased-out taxpayer tax credit
+//   'ohio'        business income deduction, 3% on remaining business income,
+//                 nonbusiness schedule, MAGI-tiered exemptions
 //
 // Amounts are whole dollars as published; rates are decimals.
 
@@ -90,9 +92,23 @@ const S = {
   PA_RATE: src('Pennsylvania personal income tax rates (3.07%, 2004 - present)', 'https://www.pa.gov/agencies/revenue/resources/tax-rates/personal-income-tax-rates'),
   PA_2025: src('Pennsylvania PA-40 instructions (2025): classes of income', 'https://www.pa.gov/content/dam/copapwp-pagov/en/revenue/documents/formsandpublications/formsforindividuals/pit/documents/2025/2025_pa-40in.pdf'),
   UT_2025: src('Utah TC-40 instructions (2025)', 'https://files.tax.utah.gov/tax/forms/current/tc-40inst.pdf'),
+  ID_2025: src('Idaho Form 40/43 instructions (2025, rev. 03-02-2026)', 'https://tax.idaho.gov/wp-content/uploads/forms/EIN00046/EIN00046_03-02-2026.pdf'),
+  OH_2025: src('Ohio IT 1040 instructions (2025)', 'https://dam.assets.ohio.gov/image/upload/tax.ohio.gov/forms/ohio_individual/individual/2025/it1040-booklet.pdf'),
+  OH_ORC: src('Ohio Revised Code §5747.02 (2026 rates)', 'https://codes.ohio.gov/ohio-revised-code/section-5747.02'),
+  OH_LSC: src('Ohio LSC analysis of H.B. 96 (indexing suspended for 2025 and 2026)', 'https://www.lsc.ohio.gov/assets/legislation/136/hb96/ps/files/hb96-tax-bill-analysis-as-passed-by-the-senate-136th-general-assembly.pdf'),
+};
+
+// Ohio: business income deduction, 3% on business income above it, and the
+// nonbusiness schedule ("over" amount, base tax, rate on the excess).
+const OHIO_EXEMPTION_TIERS = [[40000, 2400], [80000, 2150], [749999, 1900]];
+const OHIO = {
+  businessIncomeDeduction: { mfs: 125000, other: 250000 }, businessRate: 0.03,
+  exemptionTiers: OHIO_EXEMPTION_TIERS,
+  exemptionCredit: { perExemption: 20, belowIncome: 30000 },
 };
 
 const LOCAL = {
+  OH: 'Ohio municipal income tax and school district income tax are not included.',
   IN: 'Indiana county income tax (mandatory, set by your county) is not included.',
   IA: 'Iowa school district and EMS surtaxes are not included.',
   KY: 'Kentucky city and county occupational license taxes are not included.',
@@ -214,6 +230,25 @@ const DEFINED = {
       personalExemption: 2111, creditRate: 0.06, phaseOutRate: 0.013,
       phaseOutBase: { single: 18213, mfs: 18213, mfj: 36426, qss: 36426, hoh: 27320 },
       notes: ['The Utah child tax credit is not included.'] },
+  },
+  // Idaho starts from the same taxable income as the federal return (federal
+  // standard deduction, QBI and Schedule 1-A deductions). Its 2026 rate was
+  // still before the legislature (H.B. 589 / H.B. 782), so 2026 is unsupported.
+  ID: {
+    2025: { kind: 'federal-ti', status: 'verified', rate: 0.053, sources: [S.ID_2025],
+      zeroRateAmount: byStatus(4811, 9622, { hoh: 9622 }),
+      dependentCredit: { child: 205, other: 0 },
+      notes: ['The Idaho grocery credit is not included.'],
+      estimatedTax: { notRequired: 'Idaho doesn\'t require estimated tax payments (Form 40 instructions).' } },
+  },
+  OH: {
+    2025: { kind: 'ohio', status: 'verified', sources: [S.OH_2025], local: LOCAL.OH, ...OHIO,
+      nonbusinessSchedule: [[26050, 342, 0.0275], [100000, 2394.32, 0.03125]],
+      notes: ['The Ohio joint filing credit is not included (business income does not count toward it).'] },
+    2026: { kind: 'ohio', status: 'provisional', sources: [S.OH_ORC, S.OH_LSC, S.OH_2025], local: LOCAL.OH, ...OHIO,
+      provisional: 'Uses the 2025 Ohio exemption amounts and business income deduction (indexing is suspended for 2026); 2026 Ohio instructions are not posted yet.',
+      nonbusinessSchedule: [[26050, 332, 0.0275]],
+      notes: ['The Ohio joint filing credit is not included (business income does not count toward it).'] },
   },
 };
 

@@ -40,7 +40,7 @@ function credits(rule, ctx, n) {
   const dc = rule.dependentCredit;
   if (dc) {
     const gross = D(dc.child) * n.kids + D(dc.other) * n.others;
-    const over = ctx.agi - D(dc.phaseOutStart[ctx.filingStatus]);
+    const over = dc.phaseOutStart ? ctx.agi - D(dc.phaseOutStart[ctx.filingStatus]) : 0;
     const factor = over > 0 ? Math.max(0, 1 - dc.reductionPerStep * Math.ceil(over / D(dc.step))) : 1;
     total += Math.round(gross * factor);
   }
@@ -59,6 +59,42 @@ function lowIncomeExempt(rule, ctx, n) {
   if (!li) return false;
   const limit = n.age65 && li.age65 ? li.age65[ctx.filingStatus] : li[ctx.filingStatus];
   return ctx.agi <= D(limit);
+}
+
+/**
+ * Ohio IT 1040: Ohio AGI is federal AGI less the business income deduction;
+ * exemptions depend on MAGI (Ohio AGI plus that deduction); taxable business
+ * income is the business income left after the deduction, capped at the
+ * income tax base, taxed at 3%; the rest is nonbusiness income on the schedule.
+ */
+function ohio(rule, ctx, n) {
+  const business = pos(ctx.business + ctx.otherSE);
+  const bid = Math.min(business, D(ctx.filingStatus === 'mfs' ? rule.businessIncomeDeduction.mfs : rule.businessIncomeDeduction.other));
+  const ohioAgi = ctx.agi - bid;
+  const magi = ohioAgi + bid;
+  const tier = rule.exemptionTiers.find(([upTo]) => magi <= D(upTo));
+  const exemptionCount = n.people + n.dependents;
+  const exemptions = tier ? D(tier[1]) * exemptionCount : 0;
+  const base = pos(ohioAgi - exemptions);
+  const taxableBusiness = Math.min(pos(business - bid), base);
+  const nonbusiness = base - taxableBusiness;
+  let nonbusinessTax = 0;
+  for (const [over, baseTax, rate] of rule.nonbusinessSchedule) {
+    if (nonbusiness > D(over)) nonbusinessTax = D(baseTax) + times(nonbusiness - D(over), rate);
+  }
+  const businessTax = times(taxableBusiness, rule.businessRate);
+  const before = nonbusinessTax + businessTax;
+  const ec = rule.exemptionCredit;
+  const credit = magi - exemptions < D(ec.belowIncome) ? Math.min(before, D(ec.perExemption) * exemptionCount) : 0;
+  const steps = [
+    { label: 'Federal adjusted gross income', amount: ctx.agi },
+    { label: 'Business income deduction', amount: -bid },
+    { label: 'Personal and dependent exemptions', amount: -exemptions },
+    { label: 'Taxable business income (taxed at 3%)', amount: taxableBusiness },
+    { label: 'Taxable nonbusiness income', amount: nonbusiness },
+  ];
+  if (credit) steps.push({ label: 'Exemption credit', amount: -credit });
+  return { tax: before - credit, taxableIncome: base, steps };
 }
 
 /** Returns { tax, taxableIncome, steps } in cents, or null for an unknown kind. */
@@ -86,6 +122,7 @@ function compute(rule, ctx) {
     steps.push({ label: 'Tax before credit', amount: gross }, { label: 'Taxpayer tax credit', amount: -credit });
     return { tax: pos(gross - credit), taxableIncome: pos(ctx.agi), steps };
   }
+  if (rule.kind === 'ohio') return ohio(rule, ctx, n);
   let base;
   if (rule.kind === 'agi') {
     base = ctx.agi;
@@ -118,8 +155,9 @@ function compute(rule, ctx) {
     if (ctx.agi <= limit) return { tax: 0, taxableIncome: taxable, steps: [...steps, { label: 'No Tax Status', amount: 0 }] };
   }
   if (lowIncomeExempt(rule, ctx, n)) return { tax: 0, taxableIncome: taxable, steps: [...steps, { label: 'Low-income exemption', amount: 0 }] };
-  let tax = times(pos(taxable - D(rule.zeroRateAmount || 0)), rule.rate);
-  if (rule.zeroRateAmount) steps.push({ label: `First $${rule.zeroRateAmount.toLocaleString('en-US')} taxed at 0%`, amount: 0 });
+  const zero = typeof rule.zeroRateAmount === 'object' ? rule.zeroRateAmount[ctx.filingStatus] : rule.zeroRateAmount || 0;
+  let tax = times(pos(taxable - D(zero)), rule.rate);
+  if (zero) steps.push({ label: `First $${zero.toLocaleString('en-US')} taxed at 0%`, amount: 0 });
   if (rule.surtax) {
     const surtax = times(pos(taxable - D(rule.surtax.threshold)), rule.surtax.rate);
     if (surtax) { tax += surtax; steps.push({ label: 'Surtax', amount: surtax }); }
@@ -158,6 +196,7 @@ export function stateEstimatedPayments({ taxYear, state, filingStatus, currentYe
   const name = STATE_NAMES[code] || code;
   if (rule?.kind === 'none') return { supported: true, required: false, requiredAnnualPayment: 0, requiredFromEstimatedPayments: 0, remaining: 0, installments: [], notes: [`${name} has no income tax, so no state estimated payments are due.`] };
   const e = rule?.estimatedTax;
+  if (e?.notRequired) return { supported: true, required: false, requiredAnnualPayment: 0, requiredFromEstimatedPayments: 0, remaining: 0, installments: [], notes: [e.notRequired], sources: rule.sources };
   if (!e) return { supported: false, limitations: [`${name} estimated payment rules for ${taxYear} are not supported yet.`] };
   const c = (v) => Math.round((Number(v) || 0) * 100);
   const notes = [];
