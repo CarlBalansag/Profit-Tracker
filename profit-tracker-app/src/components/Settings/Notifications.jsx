@@ -26,6 +26,12 @@ async function readyWorker() {
   return Promise.race([navigator.serviceWorker.ready, timeout]);
 }
 
+// "Nov 21", or '' for a missing or bad date.
+const shortDay = (value) => {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+};
+
 const PANEL = 'rounded-xl border border-gray-800 bg-[#12121A] p-5 sm:p-6 space-y-4';
 const ROW = 'flex min-h-[44px] items-center justify-between gap-4';
 
@@ -171,7 +177,7 @@ export function Notifications() {
                   key={settings.digest_time}
                   disabled={busy}
                   onBlur={(e) => { if (e.target.value && e.target.value !== settings.digest_time) change({ digest_time: e.target.value }); }}
-                  className="w-32 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] px-3 py-2 text-base sm:text-sm text-[var(--dp-text-primary)]"
+                  className="w-40 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] px-3 py-2 text-base sm:text-sm text-[var(--dp-text-primary)]"
                 />
               </div>
             )}
@@ -201,8 +207,10 @@ export function Notifications() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-gray-200">{device.device || 'Device'}{device.endpoint === endpoint ? ' (this one)' : ''}</p>
                   <p className="text-xs text-gray-500">
-                    Added {new Date(device.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    {device.last_success_at ? ` · last sent ${new Date(device.last_success_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
+                    {[
+                      shortDay(device.created_at) && `Added ${shortDay(device.created_at)}`,
+                      shortDay(device.last_success_at) && `last sent ${shortDay(device.last_success_at)}`,
+                    ].filter(Boolean).join(' · ')}
                   </p>
                 </div>
                 <button
