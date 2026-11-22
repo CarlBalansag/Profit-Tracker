@@ -28,7 +28,8 @@ const fail = (status, message) => Object.assign(new Error(message), { status });
 async function loadPending(userId, commitmentId) {
   const record = await prisma.cashoutCommitment.findFirst({
     where: { id: commitmentId, user_id: userId },
-    include: { connection: true, sale: { include: { inventory: true } } },
+    // The store account the purchase was bought on, for the commit prompt.
+    include: { connection: true, sale: { include: { inventory: { include: { account: { select: { name: true } } } } } } },
   });
   if (!record) throw fail(404, 'Commitment not found or access denied');
   return record;
@@ -71,6 +72,7 @@ async function previewPending(userId, commitmentId) {
     // the purchase's product name, which can be edited.
     item_name: offer.item?.name || record.sale?.inventory?.product_name || null,
     quantity: record.quantity,
+    account: record.sale?.inventory?.account?.name || null,
     tracking_number: record.sale?.tracking_number || null,
     logged_payout: record.sale ? Number(record.sale.unit_price) : null,
     current_payout: offer.available ? offer.payout : null,

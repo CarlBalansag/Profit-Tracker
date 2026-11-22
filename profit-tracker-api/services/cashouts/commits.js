@@ -636,7 +636,7 @@ async function trackingChangedForSale(saleId, trackingNumber) {
   if (!value) return null;
   const record = await prisma.cashoutCommitment.findFirst({
     where: { sale_id: saleId, status: 'active' },
-    include: { connection: true },
+    include: { connection: true, sale: { include: { inventory: { include: { account: { select: { name: true } } } } } } },
   });
   if (!record) return null;
   if ((record.tracking_codes || []).some((c) => c.toUpperCase() === value.toUpperCase())) return null;
@@ -644,6 +644,7 @@ async function trackingChangedForSale(saleId, trackingNumber) {
     commitment_id: record.id,
     tracking_number: value,
     cashout: record.connection?.display_name || record.connection?.provider || 'the cashout',
+    account: record.sale?.inventory?.account?.name || null,
   };
 }
 
@@ -654,7 +655,7 @@ async function trackingChangedForSale(saleId, trackingNumber) {
 async function lowerOfferForSale(saleId) {
   const record = await prisma.cashoutCommitment.findFirst({
     where: { sale_id: saleId, status: 'active' },
-    include: { connection: true },
+    include: { connection: true, sale: { include: { inventory: { include: { account: { select: { name: true } } } } } } },
   });
   if (!record || !record.external_commitment_id) return null;
   const group = await activeGroupFor(record.connection_id, record.external_item_id);
@@ -663,6 +664,7 @@ async function lowerOfferForSale(saleId) {
     commitment_id: record.id,
     cashout: record.connection?.display_name || record.connection?.provider || 'the cashout',
     quantity: record.quantity,
+    account: record.sale?.inventory?.account?.name || null,
     total,
     remaining: Math.max(0, total - record.quantity),
   };

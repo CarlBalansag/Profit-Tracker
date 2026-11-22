@@ -454,7 +454,7 @@ describe('tracking changed after committing', () => {
     const { sale, commitment } = await purchase(conn, { trackingCodes: [TRACKING] });
 
     const edit = await call('PUT', `/api/sales/${sale.id}`, { tracking_number: '1ZNEWNUMBER0001' });
-    expect(edit.body.cashout_tracking_changed).toEqual({ commitment_id: commitment.id, tracking_number: '1ZNEWNUMBER0001', cashout: 'EB Primary' });
+    expect(edit.body.cashout_tracking_changed).toEqual({ commitment_id: commitment.id, tracking_number: '1ZNEWNUMBER0001', cashout: 'EB Primary', account: null });
 
     const send = await call('POST', `/api/cashouts/commitments/${commitment.id}/tracking`);
     const again = await call('POST', `/api/cashouts/commitments/${commitment.id}/tracking`);

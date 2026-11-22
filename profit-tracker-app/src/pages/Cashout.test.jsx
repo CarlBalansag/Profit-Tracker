@@ -1019,6 +1019,44 @@ describe('Cashout Page', () => {
         expect(sent.vendor_id).toBe('vendor-1');
         expect(sent.account_id).toBeUndefined();
       });
+
+      describe('with earlier purchases of this item', () => {
+        const bought = (id, quantity, accountId, name, vendorId = 'vendor-1') => ({
+          id, status: 'active', quantity, connection_id: 'conn-1', external_deal_id: '5213', external_item_id: '10001', open_item_id: '10001',
+          tracking_codes: ['1Z'], created_at: new Date().toISOString(), connection: { display_name: 'EB Primary' },
+          sale: { inventory: { vendor_id: vendorId, account_id: accountId, account: accountId ? { name } : null } },
+        });
+
+        it('preselects the last account used at the store, and lists what each account already bought', () => {
+          currentCommitments = [bought('n', 2, 'acct-biz', 'Business'), bought('o', 1, 'acct-main', 'Main'), bought('p', 1, null)];
+          open();
+          fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+          expect(screen.getByLabelText('Account (optional)')).toHaveValue('acct-biz');
+          expect(screen.getByText('Your last account at this store.')).toBeInTheDocument();
+          expect(screen.getByText('Already bought: Business 2 · Main 1')).toBeInTheDocument();
+          // Picking "No account" sticks, and the hint goes.
+          fireEvent.change(screen.getByLabelText('Account (optional)'), { target: { value: '' } });
+          expect(screen.getByLabelText('Account (optional)')).toHaveValue('');
+          expect(screen.queryByText('Your last account at this store.')).not.toBeInTheDocument();
+        });
+
+        it("doesn't preselect an account from another store", () => {
+          currentCommitments = [bought('n', 2, 'acct-other', 'Other', 'vendor-2')];
+          open();
+          fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+          expect(screen.getByLabelText('Account (optional)')).toHaveValue('');
+        });
+
+        it('shows the account on the commit confirmation', async () => {
+          currentCommitments = [bought('n', 2, 'acct-biz', 'Business')];
+          open();
+          fireEvent.change(screen.getByLabelText('Store'), { target: { value: 'vendor-1' } });
+          fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: '1Z999AA10123456784' } });
+          await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Commit & Log Purchase' })); });
+          expect(screen.getByText('Account')).toBeInTheDocument();
+          expect(screen.getByText('Business')).toBeInTheDocument();
+        });
+      });
     });
 
     describe('a deal with one item per color', () => {
@@ -1366,7 +1404,7 @@ describe('Cashout Page', () => {
       const buttons = screen.getAllByRole('button', { name: 'Send tracking' });
       expect(buttons).toHaveLength(2);
       fireEvent.click(buttons[0]);
-      expect(seen.mock.calls[0][0].detail).toEqual({ commitment_id: 'changed', tracking_number: '1ZNEW', cashout: 'EB Primary' });
+      expect(seen.mock.calls[0][0].detail).toEqual({ commitment_id: 'changed', tracking_number: '1ZNEW', cashout: 'EB Primary', account: null });
       window.removeEventListener('cashout-tracking-send', seen);
     });
 
@@ -1444,7 +1482,7 @@ describe('Cashout Page', () => {
         openPanel();
         fireEvent.click(screen.getByRole('button', { name: '2 purchases' }));
         await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'Take off' })[1]); });
-        expect(ask.mock.calls[0][0]).toMatch(/Take these 3 off your commitment\? It goes from 5 to 2/);
+        expect(ask.mock.calls[0][0]).toMatch(/Take these 3 \(bought on Acct b\) off your commitment\? It goes from 5 to 2/);
         expect(mockMutations.deleteCommitment.mutateAsync).toHaveBeenLastCalledWith({ id: 'b' });
 
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Withdraw all' })); });

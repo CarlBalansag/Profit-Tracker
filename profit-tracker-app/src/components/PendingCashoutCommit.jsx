@@ -95,7 +95,7 @@ function SendTrackingDialog({ detail, onClose }) {
           </button>
         </div>
         <p className="text-xs text-[var(--dp-text-secondary)]">
-          This purchase is already committed to {cashout}, but {cashout} doesn't have this tracking number yet.
+          This purchase{detail.account ? ` (bought on ${detail.account})` : ''} is already committed to {cashout}, but {cashout} doesn't have this tracking number yet.
         </p>
         {detail.tracking_number && <p className="text-xs font-mono break-all text-[var(--dp-text-primary)]">{detail.tracking_number}</p>}
         {error && <p role="alert" className="text-xs text-rose-400">{error}</p>}
@@ -126,6 +126,7 @@ function LowerCommitDialog({ detail, onClose }) {
   const modalRef = useModalKeyboard(true, () => !busy && onClose(), keepRef);
   const cashout = detail.cashout || 'the cashout';
   const withdrawAll = !detail.remaining;
+  const onAccount = detail.account ? ` (bought on ${detail.account})` : '';
   const title = withdrawAll ? `Withdraw your commitment with ${cashout}?` : `Lower your commitment with ${cashout}?`;
 
   const confirmLower = async () => {
@@ -155,8 +156,8 @@ function LowerCommitDialog({ detail, onClose }) {
         </div>
         <p className="text-xs text-[var(--dp-text-secondary)]">
           {withdrawAll
-            ? `These ${detail.quantity} were committed to ${cashout} and won't be sent now. Withdrawing frees them back to the deal.`
-            : `These ${detail.quantity} were committed to ${cashout} and won't be sent now. Your commitment goes from ${detail.total} to ${detail.remaining}; the other purchases on it stay committed.`}
+            ? `These ${detail.quantity}${onAccount} were committed to ${cashout} and won't be sent now. Withdrawing frees them back to the deal.`
+            : `These ${detail.quantity}${onAccount} were committed to ${cashout} and won't be sent now. Your commitment goes from ${detail.total} to ${detail.remaining}; the other purchases on it stay committed.`}
         </p>
         {error && <p role="alert" className="text-xs text-rose-400">{error}</p>}
         <div className="flex items-center justify-end gap-2 border-t border-[color:var(--dp-border)] pt-3">
@@ -357,6 +358,10 @@ function CommitDialog({ commitmentId, onClose }) {
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
               <dt className="text-[var(--dp-text-label)]">Quantity</dt>
               <dd className="text-[var(--dp-text-primary)] tabular-nums">{qty}</dd>
+              {preview.account && <>
+                <dt className="text-[var(--dp-text-label)]">Account</dt>
+                <dd className="text-[var(--dp-text-primary)]">{preview.account}</dd>
+              </>}
               <dt className="text-[var(--dp-text-label)]">Payout today</dt>
               <dd className="text-[var(--dp-text-primary)] tabular-nums">
                 {payout != null ? `$${formatMoney(payout)} each, $${formatMoney(Math.round(payout * qty * 100) / 100)} total` : '—'}

@@ -42,6 +42,14 @@ describe('PendingCashoutCommit', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('shows the store account the purchase was bought on', async () => {
+    fetchMock.mockResolvedValueOnce(json(preview({ account: 'Bizz' })));
+    renderPrompt();
+    act(() => offerPendingCommit('pc-1'));
+    expect(await screen.findByText('Bizz')).toBeInTheDocument();
+    expect(screen.getByText('Account')).toBeInTheDocument();
+  });
+
   it("asks first, at today's payout, and starts on Not now", async () => {
     fetchMock.mockResolvedValueOnce(json(preview()));
     renderPrompt();
@@ -227,6 +235,12 @@ describe('tracking added to the purchase', () => {
 describe('sending a changed tracking number', () => {
   const detail = { commitment_id: 'a1', tracking_number: '1ZNEW', cashout: 'EB Primary' };
 
+  it('names the store account the purchase was bought on', async () => {
+    renderPrompt();
+    act(() => offerTrackingSend({ ...detail, account: 'Bizz' }));
+    expect(await screen.findByText(/This purchase \(bought on Bizz\) is already committed/)).toBeInTheDocument();
+  });
+
   it('asks first, starting on Not now, and sends nothing until Send', async () => {
     renderPrompt();
     act(() => offerTrackingSend(detail));
@@ -294,6 +308,12 @@ describe('buying more of an item already committed', () => {
 });
 
 describe('a committed sale that was cancelled or returned', () => {
+  it('names the store account in the lower prompt', () => {
+    renderPrompt();
+    act(() => offerCommitLower({ commitment_id: 'c-2', cashout: 'EB Primary', quantity: 2, account: 'Bizz', total: 4, remaining: 2 }));
+    expect(screen.getByText(/These 2 \(bought on Bizz\) were committed to EB Primary/)).toBeInTheDocument();
+  });
+
   it('asks before lowering, and only sends when confirmed', async () => {
     fetchMock.mockResolvedValueOnce(json({ status: 'withdrawn' }));
     renderPrompt();

@@ -1060,11 +1060,14 @@ function CommitmentsPanel({ commitments, allDeals }) {
   // lowered by this purchase's units instead of withdrawn.
   const withdraw = async (commitment, group) => {
     const pending = commitment.status === 'pending';
+    // Names the account when the item has several purchases, so it's clear which one.
+    const account = commitment.sale?.inventory?.account?.name;
+    const which = account && group && group.rows.length > 1 ? ` (bought on ${account})` : '';
     const shared = !pending && group && group.committed > commitment.quantity;
     if (!confirm(pending
-      ? 'Remove this from Commitments? Nothing was committed to the cashout, so nothing is sent there. The purchase and sale stay.'
+      ? `Remove this${account ? ` ${account} purchase` : ''} from Commitments? Nothing was committed to the cashout, so nothing is sent there. The purchase and sale stay.`
       : shared
-        ? `Take these ${commitment.quantity} off your commitment? It goes from ${group.committed} to ${group.committed - commitment.quantity} with the cashout. The purchase and sale stay.`
+        ? `Take these ${commitment.quantity}${which} off your commitment? It goes from ${group.committed} to ${group.committed - commitment.quantity} with the cashout. The purchase and sale stay.`
         : 'Withdraw this commitment? The cashout frees the quantity back to the deal immediately.')) return;
     try {
       await deleteCommitment.mutateAsync({ id: commitment.id });
@@ -1154,7 +1157,7 @@ function CommitmentsPanel({ commitments, allDeals }) {
           {needsTrackingSend(c) && (
             <button
               type="button"
-              onClick={() => offerTrackingSend({ commitment_id: c.id, tracking_number: c.sale.tracking_number, cashout: c.connection?.display_name })}
+              onClick={() => offerTrackingSend({ commitment_id: c.id, tracking_number: c.sale.tracking_number, cashout: c.connection?.display_name, account: c.sale?.inventory?.account?.name || null })}
               className={PRIMARY_BTN}
             >
               Send tracking
@@ -1633,7 +1636,8 @@ function LogPurchaseModal({ product, onClose }) {
   };
   const [quantity, setQuantity] = useState(1);
   const [pickedVendor, setVendorId] = useState(null);
-  const [pickedAccountId, setAccountId] = useState('');
+  // null until picked: then the last account used at the store is preselected.
+  const [pickedAccountId, setAccountId] = useState(null);
   const vendorId = pickedVendor ?? (vendors.find((v) => dealStores.map(nameKey).includes(nameKey(v.name)))?.id || '');
   const [paymentMethodId, setPaymentMethodId] = useState('');
   const [unitCost, setUnitCost] = useState(product.retail || deal.retail || 0);
@@ -1647,7 +1651,13 @@ function LogPurchaseModal({ product, onClose }) {
   // Optional login at that store (Data Setup > Accounts). Only one of the
   // picked store's accounts is ever sent.
   const storeAccounts = useMemo(() => vendors.find((v) => v.id === vendorId)?.accounts || [], [vendors, vendorId]);
-  const accountId = storeAccounts.some((a) => a.id === pickedAccountId) ? pickedAccountId : '';
+  // The account on your latest cashout purchase at this store (the list comes
+  // newest first), so the usual login is already picked.
+  const lastAccountId = useMemo(() => allCommitments.find((c) => c.sale?.inventory?.vendor_id === vendorId
+    && c.sale?.inventory?.account_id)?.sale.inventory.account_id || '', [allCommitments, vendorId]);
+  const wantedAccountId = pickedAccountId ?? lastAccountId;
+  const accountId = storeAccounts.some((a) => a.id === wantedAccountId) ? wantedAccountId : '';
+  const autoPickedAccount = pickedAccountId === null && Boolean(accountId);
   const selectedPaymentMethod = paymentMethods.find((m) => m.id === paymentMethodId);
   const taxExempt = Boolean(selectedVendor?.tax_exempt_place);
   // Same rule as Add Transaction: the card's rate for this store when it has
@@ -1668,9 +1678,17 @@ function LogPurchaseModal({ product, onClose }) {
       && String(c.external_item_id) === String(itemId) && c.open_item_id
       && ['active', 'pending', 'committing'].includes(c.status)) : [];
     const sum = (list) => list.reduce((n, c) => n + (Number(c.quantity) || 0), 0);
+    // Units of this item already bought on each store account (stores cap
+    // how many one account can buy).
+    const byAccount = new Map();
+    for (const c of open) {
+      const name = c.sale?.inventory?.account?.name;
+      if (name) byAccount.set(name, (byAccount.get(name) || 0) + (Number(c.quantity) || 0));
+    }
     return {
       committed: sum(open.filter((c) => c.status === 'active')),
       waiting: sum(open.filter((c) => c.status !== 'active')),
+      byAccount: [...byAccount],
     };
   }, [allCommitments, deal.connectionId, itemId]);
   const addsToExisting = !recordOnly && (already.committed > 0 || already.waiting > 0);
@@ -1814,6 +1832,10 @@ function LogPurchaseModal({ product, onClose }) {
           </dd>
           <dt className="text-[var(--dp-text-label)]">Quantity</dt>
           <dd className="text-[var(--dp-text-primary)] tabular-nums">{quantity}</dd>
+          {accountId && <>
+            <dt className="text-[var(--dp-text-label)]">Account</dt>
+            <dd className="text-[var(--dp-text-primary)]">{storeAccounts.find((a) => a.id === accountId)?.name}</dd>
+          </>}
           <dt className="text-[var(--dp-text-label)]">Payout</dt>
           <dd className="text-[var(--dp-text-primary)] tabular-nums">${formatMoney(deal.payout)} each, ${formatMoney(totalPayout)} total</dd>
           <dt className="text-[var(--dp-text-label)]">Tracking</dt>
@@ -1951,7 +1973,7 @@ function LogPurchaseModal({ product, onClose }) {
           <LpSection icon={CreditCard} title="Store & Payment" tone="text-pink-400">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <LpField id="lp-store" label="Store">
-                <select id="lp-store" value={vendorId} onChange={(e) => { setVendorId(e.target.value); setAccountId(''); }} className={LP_INPUT}>
+                <select id="lp-store" value={vendorId} onChange={(e) => { setVendorId(e.target.value); setAccountId(null); }} className={LP_INPUT}>
                   <option value="">Select a store…</option>
                   {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
                 </select>
@@ -1963,6 +1985,12 @@ function LogPurchaseModal({ product, onClose }) {
                     <option value="">No account</option>
                     {storeAccounts.map((a) => <option key={a.id} value={a.id}>{accountLabel(a)}</option>)}
                   </select>
+                  {autoPickedAccount && <p className="mt-1 text-[11px] text-[var(--dp-text-label)]">Your last account at this store.</p>}
+                  {already.byAccount.length > 0 && (
+                    <p className="mt-1 text-[11px] text-[var(--dp-text-secondary)]">
+                      Already bought: {already.byAccount.map(([name, qty]) => `${name} ${qty}`).join(' · ')}
+                    </p>
+                  )}
                 </LpField>
               )}
               <LpField id="lp-pay" label="Payment method">

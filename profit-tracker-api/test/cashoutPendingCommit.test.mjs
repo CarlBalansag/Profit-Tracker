@@ -156,13 +156,16 @@ describe('committing a pending purchase', () => {
     const { sale, commitment } = await logWithoutTracking(conn);
     vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([liveDeal()]);
     await addTracking(sale.id);
+    // Bought on a store account: the prompt names it.
+    harness.db.account.push({ id: 'acct-bizz', user_id: harness.ids.user, platform_id: harness.ids.vendor, name: 'Bizz', status: 'Active' });
+    harness.db.inventory.find((i) => i.id === harness.db.sales.find((s) => s.id === sale.id).inventory_id).account_id = 'acct-bizz';
 
     const res = await call('GET', `/api/cashouts/commitments/${commitment.id}/pending`);
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
       available: true, quantity: 2, logged_payout: 480, current_payout: 495,
-      tracking_number: TRACKING, item_name: 'PS5 Pro', cashout: 'EB Primary',
+      tracking_number: TRACKING, item_name: 'PS5 Pro', cashout: 'EB Primary', account: 'Bizz',
     });
   });
 

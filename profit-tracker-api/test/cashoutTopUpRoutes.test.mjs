@@ -61,9 +61,12 @@ const callTool = async (name, args = {}) => {
 describe('cancelling a committed sale', () => {
   it('offers to lower the commitment by that sale, without sending anything', async () => {
     const update = vi.spyOn(ebAdapter, 'updateCommit');
+    // The purchase was bought on a store account: the prompt names it.
+    harness.db.account.push({ id: 'acct-bizz', user_id: ids.user, platform_id: ids.vendor, name: 'Bizz', status: 'Active' });
+    harness.db.inventory[0].account_id = 'acct-bizz';
     const res = await send('POST', `/api/sales/${SALE_B}/actions/cancel_sale`, {});
     expect(res.status).toBe(200);
-    expect(res.body.cashout_commit_lower).toEqual({ commitment_id: 'cm-b', cashout: 'EB Primary', quantity: 3, total: 5, remaining: 2 });
+    expect(res.body.cashout_commit_lower).toEqual({ commitment_id: 'cm-b', cashout: 'EB Primary', quantity: 3, account: 'Bizz', total: 5, remaining: 2 });
     expect(update).not.toHaveBeenCalled();
     expect(harness.db.cashoutCommitment.find((c) => c.id === 'cm-b').status).toBe('active');
   });

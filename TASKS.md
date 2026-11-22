@@ -4,4 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| feat-commitments-account-col | Account column on Cashout > Commitments (rolled up for groups; cards below 1280px) | `profit-tracker-app/src/pages/Cashout.jsx` (CommitmentsPanel), `profit-tracker-app/src/pages/Cashout.test.jsx`, `profit-tracker-app/src/utils/storeAccounts.js` | In progress | 2026-11-21 |
+| feat-commitments-account-col | Store account across Cashout: Commitments column, Log Purchase preselect + already-bought, account in commit/tracking/lower/withdraw prompts | `profit-tracker-app/src/pages/Cashout.jsx`, `profit-tracker-app/src/components/PendingCashoutCommit.jsx`, `profit-tracker-app/src/utils/storeAccounts.js`, `profit-tracker-api/services/cashouts/{commits,pendingCommit}.js` (+ their tests) | In progress | 2026-11-21 |
