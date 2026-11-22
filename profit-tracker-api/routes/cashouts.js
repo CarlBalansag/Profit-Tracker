@@ -21,6 +21,7 @@ const commitsService = require('../services/cashouts/commits');
 const { logPurchase } = require('../services/cashouts/logPurchase');
 const pendingCommit = require('../services/cashouts/pendingCommit');
 const importSold = require('../services/cashouts/importSold');
+const fillCosts = require('../services/storeOrders/fillCosts');
 const { pullReceivedItems } = require('../services/cashouts/service');
 
 // Errors from these routes. A message we wrote (it has a status) or the
@@ -367,6 +368,34 @@ router.post('/import/commit', isAuthenticated, async (req, res) => {
       groups: b.groups,
     });
     res.status(201).json(result);
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// POST /api/cashouts/import/costs/preview — read a store's order export
+// ({ source: 'amazon', csv }) and pair it with purchases the cashout import
+// saved without a cost. Writes nothing.
+router.post('/import/costs/preview', isAuthenticated, async (req, res) => {
+  try {
+    res.json(await fillCosts.preview(req.user.id, { source: req.body?.source, csv: req.body?.csv }));
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// POST /api/cashouts/import/costs/commit — fill in the costs the user kept:
+// { source, vendor_id?, payment_method_id?, use_order_date?, items: [...] }.
+router.post('/import/costs/commit', isAuthenticated, async (req, res) => {
+  try {
+    const b = req.body || {};
+    res.json(await fillCosts.commit(req.user.id, {
+      source: b.source,
+      vendorId: b.vendor_id || null,
+      paymentMethodId: b.payment_method_id || null,
+      useOrderDate: b.use_order_date === true,
+      items: b.items,
+    }));
   } catch (err) {
     sendCashoutError(res, err);
   }
