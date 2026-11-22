@@ -25,7 +25,7 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const group = (over) => ({
   key: over.name, name: over.name, date: '2026-11-19', invoice: '325963', tracking: ['TBA336581719552'],
-  unitPrice: 20, paid: false, qty: 2, newQty: 2, match: 'new', refs: [`eb:${over.name}`], serials: [], commission: 0, upc: null, ...over,
+  unitPrice: 20, paid: false, qty: 2, newQty: 2, match: 'new', refs: [`eb:${over.name}`], serials: [], fee: 0, upc: null, ...over,
 });
 const RESULT = {
   source: 'eb',
@@ -136,5 +136,20 @@ describe('CashoutImport', () => {
     render(<CashoutImport />);
     expect(screen.queryByText('Pull with saved login')).not.toBeInTheDocument();
     expect(screen.getByText('Choose EB CSV')).toBeInTheDocument();
+  });
+
+  it('saves unpaid items received on or before "Paid through" as paid', async () => {
+    preview.mutateAsync.mockResolvedValue({
+      ...RESULT,
+      groups: [group({ name: 'Old', date: '2025-12-03' }), group({ name: 'Recent', date: '2026-11-19' })],
+    });
+    render(<CashoutImport />);
+    await upload();
+    fireEvent.change(screen.getByLabelText('Paid through (optional)'), { target: { value: '2026-11-01' } });
+    expect(screen.getAllByText('Paid')).toHaveLength(1);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Import 2 purchases/ }));
+    });
+    expect(commit.mutateAsync.mock.calls[0][0].groups.map((g) => [g.name, g.paid])).toEqual([['Old', true], ['Recent', false]]);
   });
 });

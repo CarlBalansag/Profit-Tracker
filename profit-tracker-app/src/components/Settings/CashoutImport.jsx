@@ -75,6 +75,10 @@ export function CashoutImport() {
   const [platformId, setPlatformId] = useState('');
   const [vendorId, setVendorId] = useState('');
   const [paymentMethodId, setPaymentMethodId] = useState('');
+  // LA/P4D pay by payment request, not per item, so their reports never say
+  // an item was paid. Items received on or before this date count as paid.
+  const [paidThrough, setPaidThrough] = useState('');
+  const isPaid = (g) => g.paid || Boolean(paidThrough && g.date <= paidThrough);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(null);
 
@@ -171,7 +175,7 @@ export function CashoutImport() {
         platform_id: platformId,
         vendor_id: vendorId || null,
         payment_method_id: paymentMethodId || null,
-        groups: chosen.map((g) => ({ ...g, qty: g.newQty, unitCost: String(costs[g.key] ?? '').trim() || null })),
+        groups: chosen.map((g) => ({ ...g, qty: g.newQty, paid: isPaid(g), unitCost: String(costs[g.key] ?? '').trim() || null })),
       });
       setDone(res);
       toast.success(`Imported ${res.created} purchase${res.created === 1 ? '' : 's'} (${res.units} unit${res.units === 1 ? '' : 's'}).`);
@@ -275,6 +279,9 @@ export function CashoutImport() {
           setVendorId={setVendorId}
           paymentMethodId={paymentMethodId}
           setPaymentMethodId={setPaymentMethodId}
+          paidThrough={paidThrough}
+          setPaidThrough={setPaidThrough}
+          isPaid={isPaid}
           chosen={chosen}
           chosenUnits={chosenUnits}
           missingCost={missingCost}
@@ -291,6 +298,7 @@ export function CashoutImport() {
 function ImportPreview({
   result, isPhone, selected, setSelected, costs, setCost,
   cashouts, vendors, paymentMethods, platformId, setPlatformId, vendorId, setVendorId, paymentMethodId, setPaymentMethodId,
+  paidThrough, setPaidThrough, isPaid,
   chosen, chosenUnits, missingCost, busy, committing, onImport, onCancel,
 }) {
   const { summary, groups, problems } = result;
@@ -310,7 +318,7 @@ function ImportPreview({
         <p className="text-sm text-gray-500">No sold items in this report.</p>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
               <label htmlFor="cashout-import-platform" className={labelClass}>Sales go to</label>
               <select id="cashout-import-platform" className={inputClass} value={platformId} onChange={(e) => setPlatformId(e.target.value)}>
@@ -333,6 +341,11 @@ function ImportPreview({
                 {paymentMethods.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
+            <div>
+              <label htmlFor="cashout-import-paid-through" className={labelClass}>Paid through (optional)</label>
+              <input id="cashout-import-paid-through" type="date" className={inputClass} value={paidThrough} onChange={(e) => setPaidThrough(e.target.value)} />
+              <p className="text-xs text-gray-500 mt-1">Items received on or before this date are saved as paid.</p>
+            </div>
           </div>
 
           <p className="text-xs text-gray-500">
@@ -341,7 +354,7 @@ function ImportPreview({
 
           {isPhone ? (
             <ul className="space-y-2" aria-label="Purchases to import">
-              {groups.map((g) => <GroupCard key={g.key} group={g} checked={Boolean(selected[g.key])} onToggle={() => toggle(g.key)} cost={costs[g.key] ?? ''} onCost={(v) => setCost(g, v)} />)}
+              {groups.map((g) => <GroupCard key={g.key} group={g} paid={isPaid(g)} checked={Boolean(selected[g.key])} onToggle={() => toggle(g.key)} cost={costs[g.key] ?? ''} onCost={(v) => setCost(g, v)} />)}
             </ul>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-gray-800">
@@ -372,7 +385,7 @@ function ImportPreview({
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{importable && g.newQty !== g.qty ? `${g.newQty} of ${g.qty}` : g.qty}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{money(g.unitPrice)}</td>
-                        <td className="px-3 py-2"><StatusPills group={g} /></td>
+                        <td className="px-3 py-2"><StatusPills group={g} paid={isPaid(g)} /></td>
                         <td className="px-3 py-2">
                           {importable && (
                             <input
@@ -428,17 +441,17 @@ function ImportPreview({
   );
 }
 
-function StatusPills({ group }) {
+function StatusPills({ group, paid }) {
   const match = MATCH_LABELS[group.match] || MATCH_LABELS.new;
   return (
     <div className="flex flex-wrap gap-1">
       <span className={`inline-flex items-center px-2 py-0.5 rounded border text-xs whitespace-nowrap ${match.tone}`}>{match.text}</span>
-      <span className="inline-flex items-center px-2 py-0.5 rounded border border-gray-700 text-xs text-gray-400 whitespace-nowrap">{group.paid ? 'Paid' : 'Not paid yet'}</span>
+      <span className="inline-flex items-center px-2 py-0.5 rounded border border-gray-700 text-xs text-gray-400 whitespace-nowrap">{paid ? 'Paid' : 'Not paid yet'}</span>
     </div>
   );
 }
 
-function GroupCard({ group: g, checked, onToggle, cost, onCost }) {
+function GroupCard({ group: g, paid, checked, onToggle, cost, onCost }) {
   const importable = isNew(g);
   const id = `cashout-import-${g.key.replace(/[^a-z0-9]/gi, '').slice(-24)}-${g.refs[0]?.replace(/[^a-z0-9]/gi, '').slice(-12)}`;
   return (
@@ -452,7 +465,7 @@ function GroupCard({ group: g, checked, onToggle, cost, onCost }) {
           </span>
         </label>
       </div>
-      <StatusPills group={g} />
+      <StatusPills group={g} paid={paid} />
       {importable && (
         <div>
           <label htmlFor={`${id}-cost`} className={labelClass}>Cost per unit</label>

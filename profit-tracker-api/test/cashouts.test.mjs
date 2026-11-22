@@ -280,9 +280,9 @@ describe('Cashout Connection CRUD & Tenant Isolation', () => {
     const providersRes = await request('GET', '/api/cashouts/providers');
     expect(providersRes.status).toBe(200);
     expect(providersRes.body).toEqual([
-      { id: 'eb', name: 'ElectronicsBuyer', settingsName: 'ElectronicsBuyer', credentialType: 'api_key', supportsCommits: true },
-      { id: 'p4d', name: 'Points4Days', settingsName: 'Points4Days', credentialType: 'login', supportsCommits: false },
-      { id: 'la', name: 'LA', settingsName: 'EarnFromBuying (LA)', credentialType: 'login', supportsCommits: false },
+      { id: 'eb', name: 'ElectronicsBuyer', settingsName: 'ElectronicsBuyer', credentialType: 'api_key', supportsCommits: true, supportsImportPull: false },
+      { id: 'p4d', name: 'Points4Days', settingsName: 'Points4Days', credentialType: 'login', supportsCommits: false, supportsImportPull: true },
+      { id: 'la', name: 'LA', settingsName: 'EarnFromBuying (LA)', credentialType: 'login', supportsCommits: false, supportsImportPull: true },
     ]);
   });
 

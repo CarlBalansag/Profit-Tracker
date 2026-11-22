@@ -426,10 +426,10 @@ async function pullReceivedItems(userId, connectionId, { from, to } = {}) {
     throw Object.assign(new Error('Pick a start and end date.'), { status: 400 });
   }
   if (from > to) throw Object.assign(new Error('The start date is after the end date.'), { status: 400 });
-  const records = await adapter.fetchReceivedItems(decryptKey(conn.encrypted_key), { from, to });
+  const rows = await adapter.fetchReceivedItems(decryptKey(conn.encrypted_key));
   // Lazy: importSold pulls in prisma helpers this module doesn't otherwise need.
-  const { parseParsefileRecords } = require('./importSold');
-  return { source: conn.provider, rows: parseParsefileRecords(conn.provider, records) };
+  const { parseParsefileTableRows } = require('./importSold');
+  return { source: conn.provider, rows: parseParsefileTableRows(conn.provider, rows, { from, to }) };
 }
 
 module.exports = {

@@ -1,7 +1,7 @@
 // Settings > Data > Import from cashouts, against a real (throwaway) Postgres
 // with every migration applied: parsing EB / parsefile reports, matching rows
 // already in Profit Tracker, and writing purchases + sales exactly once.
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
@@ -31,7 +31,7 @@ const EB_CSV = [
 
 const PARSEFILE_CSV = [
   '"VERIFIED","VOID","ID","RECEIPT ID","CREATED DATE","USER","ITEM","WAREHOUSE","QTY","PRICE","TAX","COMMISSION","EXT TOTAL","STATUS","DELIVERY","TRACKING NUMBERS"',
-  '"Yes","No","9001","13","2026-11-02 10:15:00","8124","Apple AirPods Pro 2, USB-C","DE","2","$189.00","0","$2.00","$376.00","Paid","UPS","1Z3Y67380340447798"',
+  '"Yes","No","9001","13","2026-11-02 10:15:00","8124","Apple AirPods Pro 2, USB-C","DE","2","$189.00","0","$2.00","$382.00","Paid","UPS","1Z3Y67380340447798"',
   '"Yes","Yes","9002","13","2026-11-02 10:15:00","8124","iPad Air 11","DE","1","499","0","0","499","Pending","UPS","1Z3Y67387740617798"',
   '"No","No","9003","15","11/05/2026","8124","Nintendo Switch 2","DE","1","430","0","0","430","Pending","USPS","9400111899223817600000, 9400111899223817600017"',
 ].join('\n');
@@ -72,6 +72,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await db.sales.deleteMany({});
+  await db.cashoutConnection.deleteMany({});
   await db.inventory.deleteMany({});
   await db.paymentMethod.deleteMany({});
   await db.platform.deleteMany({});
@@ -110,7 +111,7 @@ describe('parsing reports', () => {
 
   it('reads the parsefile received items CSV, leaving voided lines out', () => {
     const rows = importSold.parseReport('la', PARSEFILE_CSV);
-    expect(rows[0]).toMatchObject({ ref: 'la:9001', name: 'Apple AirPods Pro 2, USB-C', qty: 2, unitPrice: 189, commission: 2, paid: true, date: '2026-11-02', problem: null });
+    expect(rows[0]).toMatchObject({ ref: 'la:9001', name: 'Apple AirPods Pro 2, USB-C', qty: 2, unitPrice: 191, fee: 0, paid: true, date: '2026-11-02', problem: null });
     expect(rows[1].problem).toMatch(/voided/i);
     expect(rows[2]).toMatchObject({ date: '2026-11-05', paid: false, tracking: ['9400111899223817600000', '9400111899223817600017'] });
   });
@@ -158,13 +159,13 @@ describe('preview and commit (real Postgres)', () => {
     expect(again.summary).toMatchObject({ new: 0, imported: 2, newUnits: 0 });
   });
 
-  it('marks a paid line paid, net of commission', async () => {
+  it('marks a paid line paid, with the commission bonus in the payout', async () => {
     const preview = await importSold.preview(ME, { source: 'p4d', csv: PARSEFILE_CSV });
     expect(preview.summary).toMatchObject({ rows: 3, problems: 1, groups: 2 });
     await importSold.commit(ME, { source: 'p4d', platformId: ids.eb, groups: kept(preview.groups) });
     const sale = await db.sales.findFirst({ where: { import_refs: { has: 'p4d:9001' } } });
-    expect(sale).toMatchObject({ status: 'PAID', workflow_status: 'PAID', quantity: 2, unit_price: 189, commission_fee: 2 });
-    expect(Number(sale.paid_amount)).toBe(376);
+    expect(sale).toMatchObject({ status: 'PAID', workflow_status: 'PAID', quantity: 2, unit_price: 191, commission_fee: 0 });
+    expect(Number(sale.paid_amount)).toBe(382);
     expect(sale.paid_at.toISOString()).toBe('2026-11-02T12:00:00.000Z');
   });
 
@@ -220,5 +221,60 @@ describe('preview and commit (real Postgres)', () => {
     await importSold.commit(ME, { source: 'eb', platformId: ids.eb, groups: kept(preview.groups) });
     const theirs = await importSold.preview(OTHER, { source: 'eb', csv: EB_CSV });
     expect(theirs.summary).toMatchObject({ new: 2, imported: 0 });
+  });
+});
+
+// Rows as the parsefile site's own Received items table returns them
+// (it@receipt-items-details, read with the saved login). Values made up.
+const tableRow = (over) => ({
+  f_id: 12140, f_receipt: 13905, f_item: 'AMZ-ECHO-DOT-5-CHARCOAL', f_upc: '840080503653', f_model: 'B09B8V1LZ3',
+  f_qty: 4, f_price: 39.99, f_commission: 2.51, f_total_price: 42.5, f_ext_total: 170, f_ext_expense: 0, f_net_total: 170,
+  f_created: 'Mon Oct 12 2026 12:51:21 -0700', f_tracking: 'TBA335237415475', f_paid: null, f_void: 0, f_verified: 1, f_status: 'RECEIVING',
+  ...over,
+});
+
+describe('received items read with the saved login', () => {
+  it('maps a table row: payout is price + commission, date as the site shows it', () => {
+    const [row] = importSold.parseParsefileTableRows('la', [tableRow()]);
+    expect(row).toMatchObject({
+      ref: 'la:12140', invoice: '13905', date: '2026-10-12', name: 'AMZ-ECHO-DOT-5-CHARCOAL', upc: '840080503653',
+      qty: 4, unitPrice: 42.5, fee: 0, paid: false, tracking: ['TBA335237415475'], problem: null,
+    });
+  });
+
+  it('keeps only rows created in the date range, and flags voided lines', () => {
+    const rows = importSold.parseParsefileTableRows('p4d', [
+      tableRow({ f_id: 1, f_created: 'Fri Nov 20 2026 16:52:45 -0800' }),
+      tableRow({ f_id: 2, f_created: 'Sat Oct 31 2026 09:00:00 -0700' }),
+      tableRow({ f_id: 3, f_created: 'Sun Nov 01 2026 09:00:00 -0800', f_void: 1 }),
+    ], { from: '2026-11-01', to: '2026-11-30' });
+    expect(rows.map((r) => r.ref)).toEqual(['p4d:1', 'p4d:3']);
+    expect(rows[1].problem).toMatch(/Voided/);
+  });
+
+  it('takes an expense the group charged out of the payout', () => {
+    const [row] = importSold.parseParsefileTableRows('la', [tableRow({ f_ext_expense: 5, f_net_total: 165, f_paid: '11/19/2026' })]);
+    expect(row).toMatchObject({ unitPrice: 42.5, fee: 5, paid: true });
+  });
+
+  it('pulls through the connection with a date range, and only for cashouts that support it', async () => {
+    const { encryptKey } = require('../services/cashouts/crypto');
+    const service = require('../services/cashouts/service');
+    const laAdapter = require('../services/cashouts/la');
+    process.env.CASHOUT_KEY_ENCRYPTION_KEY ||= '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    const la = await db.cashoutConnection.create({ data: { user_id: ME, provider: 'la', encrypted_key: encryptKey(JSON.stringify({ email: 'a@b.co', password: 'x' })), key_last4: 'b.co' } });
+    const eb = await db.cashoutConnection.create({ data: { user_id: ME, provider: 'eb', encrypted_key: encryptKey('key_1234'), key_last4: '1234' } });
+    const spy = vi.spyOn(laAdapter, 'fetchReceivedItems').mockResolvedValue([tableRow(), tableRow({ f_id: 9, f_created: 'Thu Jan 01 2026 09:00:00 -0800' })]);
+
+    const pulled = await service.pullReceivedItems(ME, la.id, { from: '2026-10-01', to: '2026-10-31' });
+    expect(spy).toHaveBeenCalledWith(JSON.stringify({ email: 'a@b.co', password: 'x' }));
+    expect(pulled.source).toBe('la');
+    expect(pulled.rows.map((r) => r.ref)).toEqual(['la:12140']);
+
+    await expect(service.pullReceivedItems(ME, eb.id, { from: '2026-10-01', to: '2026-10-31' })).rejects.toThrow(/Upload its CSV/);
+    await expect(service.pullReceivedItems(ME, la.id, { from: '2026-11-01', to: '2026-10-01' })).rejects.toThrow(/start date is after/);
+    await expect(service.pullReceivedItems(ME, la.id, { from: '', to: '2026-10-01' })).rejects.toThrow(/Pick a start and end date/);
+    await expect(service.pullReceivedItems(OTHER, la.id, { from: '2026-10-01', to: '2026-10-31' })).rejects.toBeTruthy();
+    spy.mockRestore();
   });
 });

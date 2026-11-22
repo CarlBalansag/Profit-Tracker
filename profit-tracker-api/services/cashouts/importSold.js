@@ -117,7 +117,9 @@ const cleanText = (value, max = 300) => {
 // ─── Report formats ──────────────────────────────────────────────────────────
 // Each parser returns normalised rows:
 // { ref, invoice, date, tracking[], name, upc, sku, serial, qty, unitPrice,
-//   commission, paid, status, problem }
+//   fee, paid, status, problem }
+// unitPrice is what the cashout pays per unit; fee is any amount it takes
+// back out of the line (saved as the sale's commission_fee).
 // `problem` set means the row can't be imported (shown, never written).
 
 // ElectronicsBuyer > Balance Summary > Items Sold export. One row per unit.
@@ -148,7 +150,7 @@ function parseEbRecords(records) {
       serial,
       qty: 1,
       unitPrice,
-      commission: 0,
+      fee: 0,
       paid: owed !== null ? owed <= 0 : false,
       status: owed !== null && owed <= 0 ? 'Paid' : 'Owed',
       problem: null,
@@ -177,8 +179,11 @@ function parseParsefileRecords(source, records) {
       sku: null,
       serial: null,
       qty: Number.isInteger(qty) ? qty : NaN,
-      unitPrice: money(r.price),
-      commission: Math.abs(money(r.commission) || 0),
+      // COMMISSION is the group's bonus on top of PRICE, and EXT TOTAL is
+      // QTY x (PRICE + COMMISSION): the payout. Per unit from EXT TOTAL when
+      // it divides evenly, else PRICE + COMMISSION.
+      unitPrice: parsefileUnitPrice(qty, money(r['ext total']), money(r.price), money(r.commission)),
+      fee: 0,
       paid: /\bpaid\b/i.test(status || '') && !/\bunpaid\b/i.test(status || ''),
       status,
       problem: null,
@@ -188,6 +193,62 @@ function parseParsefileRecords(source, records) {
     else row.problem = rowProblem(row);
     return row;
   });
+}
+
+function parsefileUnitPrice(qty, extTotal, price, bonus) {
+  if (Number.isInteger(qty) && qty > 0 && extTotal !== null) {
+    const unit = Math.round((extTotal / qty) * 100) / 100;
+    if (Math.abs(unit * qty - extTotal) < 0.005) return unit;
+  }
+  if (price === null) return null;
+  return Math.round((price + (bonus || 0)) * 100) / 100;
+}
+
+const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+// The site's own date, as it shows it: "Mon Oct 12 2026 12:51:21 -0700" -> "2026-10-12".
+function parsefileDate(value) {
+  const m = String(value ?? '').match(/^[A-Za-z]{3} ([A-Za-z]{3}) (\d{1,2}) (\d{4})\b/);
+  if (m && MONTHS[m[1].toLowerCase()]) return validDate(+m[3], MONTHS[m[1].toLowerCase()], +m[2]);
+  return isoDate(value);
+}
+
+const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : money(v));
+
+// Rows of the parsefile site's own Received items table (it@receipt-items-
+// details), read with the saved login. Kept when created within from..to.
+function parseParsefileTableRows(source, rows, { from, to } = {}) {
+  if (!Array.isArray(rows)) throw Object.assign(new Error(`${SOURCES[source]} returned received items in an unexpected format.`), { status: 502 });
+  const out = [];
+  for (const r of rows) {
+    if (!r || typeof r !== 'object') continue;
+    const date = parsefileDate(r.f_created);
+    if (date && ((from && date < from) || (to && date > to))) continue;
+    const qty = Number(r.f_qty);
+    const net = num(r.f_net_total);
+    const row = {
+      ref: `${source}:${cleanText(r.f_id, 60) || '-'}`,
+      invoice: cleanText(r.f_receipt, 60),
+      date,
+      tracking: trackingList(r.f_tracking),
+      name: cleanText(r.f_item),
+      upc: cleanText(r.f_upc, 40),
+      sku: cleanText(r.f_model, 120),
+      serial: null,
+      qty: Number.isInteger(qty) ? qty : NaN,
+      unitPrice: parsefileUnitPrice(qty, num(r.f_ext_total), num(r.f_price), num(r.f_commission)),
+      // Expenses the group charged on the line come out of the payout.
+      fee: Math.max(0, Math.round((num(r.f_ext_expense) || 0) * 100) / 100),
+      paid: Boolean(r.f_paid),
+      status: cleanText(r.f_status, 60),
+      problem: null,
+    };
+    if (!r.f_id) row.problem = 'No line ID in the report.';
+    else if (r.f_void === 1 || r.f_void === true) row.problem = 'Voided on the cashout.';
+    else if (net !== null && net < 0) row.problem = 'Payout is negative.';
+    else row.problem = rowProblem(row);
+    out.push(row);
+  }
+  return out;
 }
 
 function rowProblem(row) {
@@ -240,14 +301,14 @@ function groupRows(rows) {
         paid: row.paid,
         status: row.status,
         qty: 0,
-        commission: 0,
+        fee: 0,
         serials: [],
         refs: [],
       };
       groups.set(key, group);
     }
     group.qty += row.qty;
-    group.commission = Math.round((group.commission + row.commission) * 100) / 100;
+    group.fee = Math.round((group.fee + row.fee) * 100) / 100;
     if (row.serial) group.serials.push(row.serial);
     group.refs.push(row.ref);
   }
@@ -399,7 +460,7 @@ function cleanGroup(raw, index) {
     invoice: cleanText(raw.invoice, 60),
     tracking: trackingList(Array.isArray(raw.tracking) ? raw.tracking.join(' ') : raw.tracking),
     serials: Array.isArray(raw.serials) ? raw.serials.map((s) => cleanText(s, 120)).filter(Boolean).slice(0, 1000) : [],
-    commission: Math.abs(money(raw.commission) || 0),
+    fee: Math.abs(money(raw.fee) || 0),
     paid: raw.paid === true,
   };
 }
@@ -468,7 +529,7 @@ async function commit(userId, { source, platformId, vendorId, paymentMethodId, g
           platform_id: platform.id,
           quantity: g.qty,
           unit_price: g.unitPrice,
-          commission_fee: g.commission,
+          commission_fee: g.fee,
           sale_date: dateAtNoon(g.date),
           status: g.paid ? 'PAID' : 'SHIPPED_OUT',
           workflow_type: workflow,
@@ -476,7 +537,7 @@ async function commit(userId, { source, platformId, vendorId, paymentMethodId, g
           workflow_status_changed_at: now,
           delivered_at: dateAtNoon(g.date),
           paid_at: g.paid ? dateAtNoon(g.date) : null,
-          paid_amount: g.paid ? Math.round((g.unitPrice * g.qty - g.commission) * 100) / 100 : null,
+          paid_amount: g.paid ? Math.round((g.unitPrice * g.qty - g.fee) * 100) / 100 : null,
           tracking_number: g.tracking[0] || null,
           notes,
           import_refs: g.refs,
@@ -497,6 +558,7 @@ module.exports = {
   parseCsv,
   parseReport,
   parseParsefileRecords,
+  parseParsefileTableRows,
   groupRows,
   matchGroups,
   preview,
