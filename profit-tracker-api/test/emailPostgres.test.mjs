@@ -567,6 +567,31 @@ describe('email connections on Postgres', () => {
     await prisma.platform.deleteMany({ where: { id: { in: [p4d.id, ebay.id] } } });
   });
 
+  it('suggests a receipt for a cash-out sale already paid, and linking it never pays it again', async () => {
+    const pdf = makePdf(['1 ACME-ECHO-DOT CHARCOAL 1 $42.50 $0.00 $42.50', '2 TBA TRACKING #: TBA000999888777', 'TOTAL 1 $0.00 $42.50']);
+    const subject = 'Enclosed is your RECEIPT - ID 190506 from POINTS4DAYS.';
+    mail.INBOX.messages.push({ uid: nextUid++, from: 'support@points4days.com', subject, date: new Date('2026-09-29T12:00:00Z'), messageId: '<p4d2@points4days.com>',
+      raw: mimeWithPdf({ from: 'support@points4days.com', subject, html: '<p>Your balance has been updated.</p>', pdf, date: 'Tue, 29 Sep 2026 12:00:00 +0000', id: '<p4d2@points4days.com>' }) });
+    const p4d = await prisma.platform.create({ data: { user_id: user.id, name: 'POINTS4DAYS', type: 'Cashout' } });
+    const inv = await prisma.inventory.create({ data: { user_id: user.id, product_name: 'Acme Echo Dot (newest model)', purchase_date: new Date('2026-09-25'), unit_purchase_cost: 30, qty_purchased: 3, qty_on_hand: 0 } });
+    const sale = await prisma.sales.create({ data: { inventory_id: inv.id, platform_id: p4d.id, quantity: 3, unit_price: 43, unit_price_decimal: 43, sale_date: new Date('2026-09-29T12:00:00Z'),
+      workflow_type: 'CASHOUT', workflow_status: 'PAID', paid_at: new Date('2026-11-05T12:00:00Z'), paid_amount: 129, payout_account: 'Bank' } });
+
+    const { body } = await send('POST', '/api/email/accounts', connectBody());
+    await waitIdle(body.id);
+    const order = await prisma.emailOrder.findFirst({ where: { merchant: 'points4days' }, include: { matches: true } });
+    expect(order.match_state).toBe('review');
+    expect(order.matches[0].reasons.map((r) => r.text)).toEqual(expect.arrayContaining(['Sale already marked paid', '1 of the 3 sold']));
+    expect((await send('POST', `/api/email/matches/${order.matches[0].id}/accept`)).body).toEqual({ linked: true });
+    const after = await prisma.sales.findUnique({ where: { id: sale.id } });
+    expect([Number(after.paid_amount), after.payout_account, after.paid_at.toISOString(), after.tracking_number]).toEqual([129, 'Bank', '2026-11-05T12:00:00.000Z', 'TBA000999888777']);
+
+    await prisma.activityLog.deleteMany({ where: { user_id: user.id } });
+    await prisma.sales.deleteMany({ where: { id: sale.id } });
+    await prisma.inventory.deleteMany({ where: { id: inv.id } });
+    await prisma.platform.deleteMany({ where: { id: p4d.id } });
+  });
+
   it('protects the cron endpoint with its own secret', () => {
     expect(sync.verifySyncSecret('Bearer cron-secret-qa').ok).toBe(true);
     expect(sync.verifySyncSecret('Bearer wrong').ok).toBe(false);

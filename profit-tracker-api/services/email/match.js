@@ -113,7 +113,9 @@ function scoreSale(order, sale) {
 
 // Cash-out receipts: one line per item scanned in, each paid for one sale.
 // line: { name, quantity, unit_payout, total, tracking }.
-function scoreCashoutLine(order, line, sale) {
+// partial: the line may be part of the sale (a sale already paid, whose units
+// were scanned in over several receipts).
+function scoreCashoutLine(order, line, sale, { partial = false } = {}) {
   const reasons = [];
   const add = (code, text, points) => reasons.push({ code, text, points });
   const tracking = normOrder(line.tracking);
@@ -121,6 +123,7 @@ function scoreCashoutLine(order, line, sale) {
   if (tracking && saleTracking.includes(tracking)) add('tracking', 'Same tracking number', 50);
   const qty = Number(line.quantity) || null;
   if (qty && sale.quantity === qty) add('quantity', 'Same quantity', 10);
+  else if (qty && partial && qty < sale.quantity) add('quantity_part', `${qty} of the ${sale.quantity} sold`, 10);
   else if (qty) add('quantity_conflict', `${sale.quantity} sold, ${qty} paid`, -30);
   const unit = Number(line.unit_payout ?? line.unit_price) || null;
   const saleUnit = num(sale.unit_price_decimal, sale.unit_price);
@@ -180,18 +183,52 @@ async function cashoutCandidates(prisma, userId, order) {
     take: 300,
   });
   const lines = receiptLines(order);
+  let found = [];
   if (lines.length === 1) {
     // One item: the best few sales, each its own suggestion.
-    return sales.map((s) => ({ record_type: 'sale', rows: [s], ...scoreCashoutLine(order, lines[0], s) }));
+    found = sales.map((s) => ({ record_type: 'sale', rows: [s], ...scoreCashoutLine(order, lines[0], s) }));
+  } else if (lines.length) {
+    // Several items: one suggestion that pays a sale for every line.
+    const { pairs } = pairCashoutLines(order, sales);
+    if (pairs.length === lines.length) {
+      const weakest = pairs.reduce((low, p) => (p.score < low.score ? p : low));
+      found = [{
+        record_type: 'sale', rows: pairs.map((p) => p.sale), score: weakest.score,
+        reasons: [{ code: 'all_items', text: `All ${lines.length} items matched a sale`, points: 0 }, ...weakest.reasons],
+      }];
+    }
   }
-  // Several items: one suggestion that pays a sale for every line.
-  const { pairs } = pairCashoutLines(order, sales);
-  if (!lines.length || pairs.length !== lines.length) return [];
-  const weakest = pairs.reduce((low, p) => (p.score < low.score ? p : low));
-  return [{
-    record_type: 'sale', rows: pairs.map((p) => p.sale), score: weakest.score,
-    reasons: [{ code: 'all_items', text: `All ${lines.length} items matched a sale`, points: 0 }, ...weakest.reasons],
-  }];
+  if (found.some((c) => c.score >= MEDIUM)) return found;
+  return [...found, ...await paidSaleCandidates(prisma, userId, order, lines)];
+}
+
+// A receipt for a sale the user already marked paid (the money came some
+// other way, or before this email was read): linked to that sale so it
+// leaves "No match", and never paid again. All the receipt's items must be
+// part of the one sale.
+async function paidSaleCandidates(prisma, userId, order, lines) {
+  if (!lines.length) return [];
+  const center = order.first_seen || new Date();
+  const sales = await prisma.sales.findMany({
+    where: {
+      inventory: { user_id: userId }, paid_at: { not: null }, platform: { type: 'Cashout' },
+      sale_date: { gte: new Date(center.getTime() - 60 * DAY), lte: new Date(center.getTime() + 2 * DAY) },
+    },
+    include: { platform: { select: { name: true, type: true } }, inventory: { select: { product_name: true, tracking_number: true } } },
+    take: 300,
+  });
+  const out = [];
+  for (const sale of sales) {
+    if (lines.reduce((t, l) => t + Number(l.quantity), 0) > sale.quantity) continue;
+    const scored = lines.map((l) => scoreCashoutLine(order, l, sale, { partial: true }));
+    const weakest = scored.reduce((low, s) => (s.score < low.score ? s : low));
+    if (weakest.score < MEDIUM) continue;
+    out.push({
+      record_type: 'sale', rows: [sale], score: weakest.score,
+      reasons: [{ code: 'already_paid', text: 'Sale already marked paid', points: 0 }, ...weakest.reasons],
+    });
+  }
+  return out;
 }
 
 function scoreExpense(order, expense) {
