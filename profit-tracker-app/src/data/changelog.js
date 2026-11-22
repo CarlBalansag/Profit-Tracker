@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.48',
+    date: '2026-11-22',
+    notes: "Cashout now shows which store account you bought each item on: a new Account column in Commitments, and in the commit, tracking and withdraw prompts. Log Purchase picks your last account at that store and shows how many of the item each account already bought.",
+  },
+  {
     version: '1.47',
     date: '2026-11-21',
     notes: "New To-Do page: it lists what needs you, worked out from your records (sales to ship, late payouts, cash-out tracking, card bills, stock sitting unlisted), plus reminders you write, and the Dashboard shows the most urgent ones and who still owes you money. You can turn on phone notifications in Settings, and your AI assistant can read the list too.",
