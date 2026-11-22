@@ -449,7 +449,28 @@ function cleanGroup(raw, index) {
   if (unitCost !== null && unitCost < 0) throw badRequest(`${at}: cost can't be negative.`);
   if (raw.unitCost !== undefined && raw.unitCost !== null && raw.unitCost !== '' && unitCost === null) throw badRequest(`${at}: cost is not a valid amount.`);
   if (!refs.length || refs.length > 100000) throw badRequest(`${at} is missing its report reference. Preview the file again.`);
+  // Optional: the store order this purchase was matched to (Settings > Data,
+  // "Add store orders" in the review). Fills tax, shipping, order number,
+  // order date, store and card on the purchase.
+  const extra = (key, label) => {
+    const v = raw[key];
+    if (v === undefined || v === null || v === '') return 0;
+    const n = money(v);
+    if (n === null) throw badRequest(`${at}: ${label} is not a valid amount.`);
+    if (n < 0) throw badRequest(`${at}: ${label} can't be negative.`);
+    return n;
+  };
+  const orderDate = raw.orderDate ? isoDate(raw.orderDate) : null;
+  if (raw.orderDate && !orderDate) throw badRequest(`${at}: order date is not valid.`);
+  const id = (v) => (typeof v === 'string' && v ? v : null);
   return {
+    salesTax: extra('salesTax', 'tax'),
+    shipping: extra('shipping', 'shipping'),
+    orderNumber: cleanText(raw.orderNumber, 60),
+    orderDate,
+    orderStore: cleanText(raw.orderStore, 40),
+    vendorId: id(raw.vendorId),
+    paymentMethodId: id(raw.paymentMethodId),
     name,
     date,
     qty,
@@ -476,8 +497,12 @@ async function commit(userId, { source, platformId, vendorId, paymentMethodId, g
   if (!platformId) throw badRequest('Pick which cashout these sales go to.');
   const platform = await requireOwned('platform', platformId, userId, 'Cashout');
   if (platform.type !== 'Cashout') throw badRequest('Sales have to go to one of your cashouts.');
-  if (vendorId) await requireOwned('platform', vendorId, userId, 'Store');
-  if (paymentMethodId) await requireOwned('paymentMethod', paymentMethodId, userId, 'Payment method');
+  for (const id of new Set([vendorId, ...clean.map((g) => g.vendorId)].filter(Boolean))) {
+    await requireOwned('platform', id, userId, 'Store');
+  }
+  for (const id of new Set([paymentMethodId, ...clean.map((g) => g.paymentMethodId)].filter(Boolean))) {
+    await requireOwned('paymentMethod', id, userId, 'Payment method');
+  }
 
   const workflow = statusTransitions.resolveSaleWorkflow(platform.workflow_preset);
   const path = statusTransitions.SALE_STATUSES_BY_WORKFLOW?.[workflow] || [];
@@ -507,20 +532,28 @@ async function commit(userId, { source, platformId, vendorId, paymentMethodId, g
         g.serials.length ? `Serials: ${g.serials.join(', ')}.` : null,
       ].filter(Boolean).join(' ');
 
+      // A matched store order was placed before the cashout got the item.
+      const bought = g.orderDate && g.orderDate < g.date ? g.orderDate : g.date;
+      const costNote = g.unitCost === null
+        ? COST_NEEDED_NOTE
+        : (g.orderStore ? `Cost from ${g.orderStore}${g.orderNumber ? ` order ${g.orderNumber}` : ''}.` : null);
       const inventory = await tx.inventory.create({
         data: {
           user_id: userId,
           product_name: g.name,
-          vendor_id: vendorId || null,
-          payment_method_id: paymentMethodId || null,
-          purchase_date: dateAtNoon(g.date),
+          vendor_id: g.vendorId || vendorId || null,
+          payment_method_id: g.paymentMethodId || paymentMethodId || null,
+          purchase_date: dateAtNoon(bought),
+          sales_tax: g.salesTax,
+          shipping_cost_inbound: g.shipping,
+          order_number: g.orderNumber,
           unit_purchase_cost: g.unitCost ?? 0,
           qty_purchased: g.qty,
           qty_on_hand: 0,
           tracking_number: g.tracking[0] || null,
           status: 'PURCHASED',
           ...statusTransitions.legacyReceivingPatch('PURCHASED'),
-          notes: g.unitCost === null ? COST_NEEDED_NOTE : null,
+          notes: costNote,
         },
       });
       await tx.sales.create({

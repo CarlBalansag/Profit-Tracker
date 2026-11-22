@@ -297,3 +297,74 @@ describe('saving costs (real Postgres)', () => {
     expect((await fillCosts.preview(ME, { source: 'amazon', csv: AMAZON_CSV })).summary.costNeeded).toBe(3);
   });
 });
+
+describe('store orders in the cashout import review (real Postgres)', () => {
+  // What the cashout review sends back for one group, with its matched order.
+  function withOrder(group, match, lines) {
+    const l = lines.find((x) => x.index === match.lineIndex);
+    if (!l) return { ...group, qty: group.newQty, unitCost: null };
+    return {
+      ...group,
+      qty: group.newQty,
+      unitCost: l.perUnit.cost,
+      salesTax: Math.round(l.perUnit.tax * group.newQty * 100) / 100,
+      shipping: Math.round(l.perUnit.shipping * group.newQty * 100) / 100,
+      orderNumber: l.orderId,
+      orderDate: l.orderDate,
+      orderStore: 'Amazon',
+      vendorId: ids.amazon,
+      paymentMethodId: l.paymentMethodId,
+    };
+  }
+
+  it('matches the groups about to be imported and saves them with real costs', async () => {
+    const p = await importSold.preview(ME, { source: 'eb', csv: EB_CSV });
+    const groups = p.groups.filter((g) => g.newQty > 0);
+    const matched = await fillCosts.matchReport(ME, {
+      source: 'amazon', csv: AMAZON_CSV,
+      groups: groups.map((g) => ({ key: g.key, name: g.name, date: g.date, qty: g.newQty, tracking: g.tracking })),
+    });
+    expect(matched.summary).toMatchObject({ byTracking: 2, byName: 1, unmatched: 0 });
+    const byKey = new Map(matched.matches.map((m) => [m.key, m]));
+    const result = await importSold.commit(ME, {
+      source: 'eb', platformId: ids.eb,
+      groups: groups.map((g) => withOrder(g, byKey.get(g.key), matched.lines)),
+    });
+    expect(result).toMatchObject({ created: 3, costNeeded: 0 });
+
+    const rows = Object.fromEntries((await db.inventory.findMany({ where: { user_id: ME } })).map((r) => [r.product_name, r]));
+    const fourK = rows['Fire TV Stick 4K (Newest Model)'];
+    expect(fourK).toMatchObject({ unit_purchase_cost: 44.99, sales_tax: 7, order_number: '112-1111111-1111111', vendor_id: ids.amazon, payment_method_id: ids.visa, notes: 'Cost from Amazon order 112-1111111-1111111.' });
+    expect(fourK.purchase_date.toISOString()).toBe('2026-11-16T12:00:00.000Z');
+    expect(rows['Nintendo Switch 2']).toMatchObject({ unit_purchase_cost: 449.99, shipping_cost_inbound: 5.99, payment_method_id: ids.mc });
+    // Nothing is left for the later "fill in costs" step.
+    expect((await fillCosts.preview(ME, { source: 'amazon', csv: AMAZON_CSV })).summary.costNeeded).toBe(0);
+  });
+
+  it('keeps the cashout date when the order date is later, and "Cost needed" for rows left without a cost', async () => {
+    const p = await importSold.preview(ME, { source: 'eb', csv: EB_CSV });
+    const [first, ...rest] = p.groups.filter((g) => g.newQty > 0);
+    await importSold.commit(ME, {
+      source: 'eb', platformId: ids.eb,
+      groups: [
+        { ...first, qty: first.newQty, unitCost: 10, orderDate: '2026-12-01', orderNumber: 'X', orderStore: 'Amazon' },
+        ...rest.map((g) => ({ ...g, qty: g.newQty, unitCost: null })),
+      ],
+    });
+    const rows = await db.inventory.findMany({ where: { user_id: ME }, orderBy: { product_name: 'asc' } });
+    expect(rows[0].purchase_date.toISOString()).toBe(`${first.date}T12:00:00.000Z`);
+    expect(rows.filter((r) => r.notes === importSold.COST_NEEDED_NOTE)).toHaveLength(rest.length);
+  });
+
+  it('refuses another user\'s store or card on a row, and bad match requests', async () => {
+    const p = await importSold.preview(ME, { source: 'eb', csv: EB_CSV });
+    const g = p.groups[0];
+    const base = { source: 'eb', platformId: ids.eb };
+    await expect(importSold.commit(ME, { ...base, groups: [{ ...g, qty: g.newQty, unitCost: 5, paymentMethodId: ids.theirCard }] })).rejects.toMatchObject({ status: 404 });
+    await expect(importSold.commit(ME, { ...base, groups: [{ ...g, qty: g.newQty, unitCost: 5, vendorId: ids.theirEb }] })).rejects.toMatchObject({ status: 404 });
+    await expect(importSold.commit(ME, { ...base, groups: [{ ...g, qty: g.newQty, unitCost: 5, salesTax: -1 }] })).rejects.toThrow(/negative/);
+    expect(await db.inventory.count()).toBe(0);
+    await expect(fillCosts.matchReport(ME, { source: 'amazon', csv: AMAZON_CSV, groups: [] })).rejects.toThrow(/report first/);
+    await expect(fillCosts.matchReport(ME, { source: 'amazon', csv: AMAZON_CSV, groups: [{ key: 'k', name: 'X', date: 'nope', qty: 1 }] })).rejects.toThrow(/invalid/);
+  });
+});

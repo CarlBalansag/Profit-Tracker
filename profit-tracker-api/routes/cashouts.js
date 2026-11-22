@@ -384,6 +384,17 @@ router.post('/import/costs/preview', isAuthenticated, async (req, res) => {
   }
 });
 
+// POST /api/cashouts/import/costs/match — pair the purchases a cashout import
+// is about to create with a store's order export ({ source, csv, groups }),
+// so the review can fill in their costs before importing. Writes nothing.
+router.post('/import/costs/match', isAuthenticated, async (req, res) => {
+  try {
+    res.json(await fillCosts.matchReport(req.user.id, { source: req.body?.source, csv: req.body?.csv, groups: req.body?.groups }));
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
 // POST /api/cashouts/import/costs/commit — fill in the costs the user kept:
 // { source, vendor_id?, payment_method_id?, use_order_date?, items: [...] }.
 router.post('/import/costs/commit', isAuthenticated, async (req, res) => {

@@ -234,16 +234,11 @@ async function cardsByLast4(userId, client = prisma) {
   return map;
 }
 
-async function preview(userId, { source, csv }) {
-  const lines = parseOrders(source, csv);
-  const purchases = await costNeededPurchases(userId);
-  if (purchases.length > MAX_ITEMS) throw badRequest(`You have ${purchases.length} purchases waiting for a cost. Fill in at most ${MAX_ITEMS} at a time.`);
-  const results = matchPurchases(purchases, lines);
+// Only the lines a purchase can pick from, with the card each was paid with.
+async function linesFor(userId, lines, results) {
   const cards = await cardsByLast4(userId);
-
-  // Send only the lines a purchase can pick from.
   const used = new Set(results.flatMap((r) => r.candidates));
-  const sentLines = lines.filter((l) => used.has(l.index)).map((l) => ({
+  return lines.filter((l) => used.has(l.index)).map((l) => ({
     index: l.index,
     orderId: l.orderId,
     orderDate: l.orderDate,
@@ -254,6 +249,14 @@ async function preview(userId, { source, csv }) {
     payment: l.payment,
     paymentMethodId: l.last4 ? cards.get(l.last4) || null : null,
   }));
+}
+
+async function preview(userId, { source, csv }) {
+  const lines = parseOrders(source, csv);
+  const purchases = await costNeededPurchases(userId);
+  if (purchases.length > MAX_ITEMS) throw badRequest(`You have ${purchases.length} purchases waiting for a cost. Fill in at most ${MAX_ITEMS} at a time.`);
+  const results = matchPurchases(purchases, lines);
+  const sentLines = await linesFor(userId, lines, results);
 
   const count = (m) => results.filter((r) => r.match === m).length;
   return {
@@ -269,6 +272,39 @@ async function preview(userId, { source, csv }) {
     },
     purchases: results,
     lines: sentLines,
+  };
+}
+
+// ─── Matching a cashout report before it's imported ─────────────────────────
+// The cashout import's review sends the purchases it is about to create
+// ({ key, name, date, qty, tracking }); each gets its store order, so the
+// import saves real costs instead of "Cost needed". Writes nothing.
+async function matchReport(userId, { source, csv, groups }) {
+  const lines = parseOrders(source, csv);
+  if (!Array.isArray(groups) || groups.length === 0) throw badRequest('Read the cashout report first.');
+  if (groups.length > MAX_ITEMS) throw badRequest(`Match at most ${MAX_ITEMS} purchases at a time.`);
+  const purchases = groups.map((g, i) => {
+    const date = isoDate(g?.date);
+    const qty = Number(g?.qty);
+    const name = cleanText(g?.name);
+    if (!g || typeof g.key !== 'string' || !name || !date || !Number.isInteger(qty) || qty < 1) throw badRequest(`Row ${i + 1} is invalid. Read the report again.`);
+    const tracking = (Array.isArray(g.tracking) ? g.tracking : []).map((t) => String(t).toUpperCase()).filter((t) => /^[A-Z0-9-]{6,60}$/.test(t));
+    return { id: g.key, name, date, qty, tracking };
+  });
+  const results = matchPurchases(purchases, lines);
+  const count = (m) => results.filter((r) => r.match === m).length;
+  return {
+    source,
+    sourceName: SOURCES[source],
+    summary: {
+      lines: lines.length,
+      problems: lines.filter((l) => l.problem).length,
+      byTracking: count('tracking'),
+      byName: count('name'),
+      unmatched: count('none'),
+    },
+    matches: results.map((r) => ({ key: r.id, lineIndex: r.lineIndex, match: r.match, candidates: r.candidates, review: r.review })),
+    lines: await linesFor(userId, lines, results),
   };
 }
 
@@ -376,5 +412,6 @@ module.exports = {
   matchPurchases,
   costNeededPurchases,
   preview,
+  matchReport,
   commit,
 };
