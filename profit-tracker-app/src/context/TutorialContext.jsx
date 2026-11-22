@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
+import { SCHEDULE_C_STEPS } from '../data/scheduleCTour';
 
 const TutorialContext = createContext();
 export const useTutorial = () => useContext(TutorialContext);
@@ -179,29 +180,62 @@ export const TUTORIAL_STEPS = [
   },
 ];
 
+// Other tours a page can start with start('<id>'). Each is a list of steps like
+// the ones above, plus optional fields:
+//   view:     a page view the step needs (the page subscribes with onStep)
+//   optional: skip the step when its target isn't on the page
+const TOURS = { app: TUTORIAL_STEPS, scheduleC: SCHEDULE_C_STEPS };
+const present = (step) => !step.target || Boolean(document.querySelector(`[data-tutorial-id="${step.target}"]`));
+
 export const TutorialProvider = ({ children }) => {
   const [active, setActive] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  const [tourId, setTourId] = useState('app');
+  const indexRef = useRef(0);
+  const tourRef = useRef('app');
+  const listeners = useRef(new Set());
+  const steps = TOURS[tourId] || TUTORIAL_STEPS;
 
-  const start = useCallback(() => {
-    setStepIndex(0);
+  const go = useCallback((index) => {
+    indexRef.current = index;
+    setStepIndex(index);
+    const step = (TOURS[tourRef.current] || TUTORIAL_STEPS)[index];
+    for (const fn of listeners.current) fn(step, tourRef.current);
+  }, []);
+
+  // A page hears about each step (to switch to the view the step needs).
+  const onStep = useCallback((fn) => {
+    listeners.current.add(fn);
+    return () => listeners.current.delete(fn);
+  }, []);
+
+  const start = useCallback((id = 'app') => {
+    tourRef.current = TOURS[id] ? id : 'app';
+    setTourId(tourRef.current);
     setActive(true);
-  }, []);
+    go(0);
+  }, [go]);
 
-  const next = useCallback(() => {
-    setStepIndex(i => {
-      if (i >= TUTORIAL_STEPS.length - 1) return i;
-      return i + 1;
-    });
-  }, []);
+  // Moves by `dir`, skipping optional steps whose part isn't on the page.
+  // Only steps on the current view can be checked; later views are shown.
+  const move = useCallback((dir) => {
+    const list = TOURS[tourRef.current] || TUTORIAL_STEPS;
+    const from = list[indexRef.current];
+    let i = indexRef.current + dir;
+    while (i > 0 && i < list.length - 1 && list[i].optional && list[i].view === from?.view && !present(list[i])) i += dir;
+    go(Math.max(0, Math.min(list.length - 1, i)));
+  }, [go]);
 
-  const back = useCallback(() => {
-    setStepIndex(i => Math.max(0, i - 1));
-  }, []);
+  const next = useCallback(() => move(1), [move]);
+  const back = useCallback(() => move(-1), [move]);
 
   const finish = useCallback(async () => {
+    const wasApp = tourRef.current === 'app';
     setActive(false);
+    indexRef.current = 0;
     setStepIndex(0);
+    // Only the first-run app tour is remembered on the account.
+    if (!wasApp) return;
     try {
       await apiFetch('/auth/me', {
         method: 'PATCH',
@@ -215,10 +249,10 @@ export const TutorialProvider = ({ children }) => {
 
   const skip = finish;
 
-  const currentStep = TUTORIAL_STEPS[stepIndex];
+  const currentStep = steps[stepIndex];
 
   return (
-    <TutorialContext.Provider value={{ active, start, next, back, finish, skip, stepIndex, currentStep, totalSteps: TUTORIAL_STEPS.length }}>
+    <TutorialContext.Provider value={{ active, start, next, back, finish, skip, stepIndex, currentStep, totalSteps: steps.length, tourId, onStep }}>
       {children}
     </TutorialContext.Provider>
   );

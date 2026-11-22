@@ -26,7 +26,8 @@ function TooltipCard({ rect, placement, step, onNext, onBack, onSkip, stepIndex,
 
   // Compute tooltip position
   let style = {};
-  const TIP_W = 340;
+  // Narrower on small phones so the card never runs off the screen.
+  const TIP_W = Math.min(340, window.innerWidth - 32);
   const TIP_H = 300; // approx — generous upper bound; actual height varies with body text length
   const vw = window.innerWidth;
   const vh = window.innerHeight;

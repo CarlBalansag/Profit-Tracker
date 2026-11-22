@@ -4,6 +4,8 @@ import { MemoryRouter } from 'react-router-dom';
 import ScheduleC from './ScheduleC';
 import { ScheduleCSettings } from '../components/Settings/ScheduleCSettings';
 import { emptyTaxDetails } from '../../../shared/scheduleC.mjs';
+import { TutorialProvider } from '../context/TutorialContext';
+import { SpotlightOverlay } from '../components/Tutorial/SpotlightOverlay';
 const { apiFetch, downloadFile, downloadJSON } = vi.hoisted(() => ({ apiFetch: vi.fn(), downloadFile: vi.fn(), downloadJSON: vi.fn() }));
 vi.mock('../hooks/useApi', () => ({ apiFetch }));
 vi.mock('../utils/downloads', async importOriginal => ({ ...await importOriginal(), downloadFile, downloadJSON }));
@@ -17,6 +19,28 @@ const mountWorksheet = () => { const view = mount(<ScheduleC />); fireEvent.clic
 beforeEach(() => { vi.clearAllMocks(); apiFetch.mockImplementation(async path => response(path.includes('/preferences/') ? { enabled: true } : report(Number(new URL(path, 'https://fixture.invalid').searchParams.get('year'))))); });
 afterEach(cleanup);
 describe('Schedule C workflow', () => {
+  it('runs a beginner tour from the ? button that switches to the tab each step explains', async () => {
+    mount(<TutorialProvider><ScheduleC /><SpotlightOverlay /></TutorialProvider>);
+    fireEvent.click(screen.getByRole('tab', { name: 'Worksheet' }));
+    await screen.findByText('Worksheet total');
+    fireEvent.click(screen.getByRole('button', { name: 'How this page works' }));
+    // Starts on the Tax estimate tab.
+    expect(screen.getByText('Taxes for your reselling, step by step')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Tax estimate' }).getAttribute('aria-selected')).toBe('true');
+    const next = () => fireEvent.click(screen.getByRole('button', { name: /^(Next|Finish)/ }));
+    next(); expect(screen.getByText('Pick the tax year')).toBeTruthy();
+    next(); expect(screen.getByText('Three views')).toBeTruthy();
+    // Keep going until the worksheet steps: the tab follows the tour.
+    for (let i = 0; i < 12 && !screen.queryByText('Your profit in four numbers'); i++) next();
+    expect(screen.getByText('Your profit in four numbers')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Worksheet' }).getAttribute('aria-selected')).toBe('true');
+    // No warnings in this fixture, so that optional step is skipped.
+    next(); expect(screen.getByText('The actual form lines')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Skip tutorial' }));
+    expect(screen.queryByText('The actual form lines')).toBeNull();
+    // The Schedule C tour never marks the first-run app tour as seen.
+    expect(apiFetch.mock.calls.some(([path]) => path === '/auth/me')).toBe(false);
+  });
   it('moves between the views with the arrow keys and links each tab to the panel', async () => {
     mountWorksheet(); await screen.findByText('Worksheet total');
     const worksheet = screen.getByRole('tab', { name: 'Worksheet' });

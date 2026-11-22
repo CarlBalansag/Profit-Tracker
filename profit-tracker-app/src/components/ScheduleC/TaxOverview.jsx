@@ -160,8 +160,8 @@ export function TaxOverview({ year, books, worksheet = null, pendingExpenses = 0
 
   if (!profile && !editing) {
     return <section aria-label="Tax estimate" className="space-y-4">{header}
-      <TaxProfileForm key="setup" year={year} mode="setup" busy={busy} error={error} onSubmit={submit}
-        onFlatOnly={() => setSession({ reserve_mode: 'flat', flat_rate: '0.25' })} />
+      <div data-tutorial-id="sc-setup"><TaxProfileForm key="setup" year={year} mode="setup" busy={busy} error={error} onSubmit={submit}
+        onFlatOnly={() => setSession({ reserve_mode: 'flat', flat_rate: '0.25' })} /></div>
     </section>;
   }
 
@@ -183,7 +183,7 @@ export function TaxOverview({ year, books, worksheet = null, pendingExpenses = 0
     </div>}
     {o.limitations.length > 0 && <ul role="note" className="space-y-1 rounded-xl border border-amber-500/30 p-3 text-sm text-amber-200">{o.limitations.map((l) => <li key={l}>{l}</li>)}</ul>}
 
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div data-tutorial-id="sc-estimate-cards" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <div className={card}><p className="text-sm text-gray-400">Profit so far</p><p className="mt-2 text-2xl tabular-nums">{usd(o.actualProfit)}</p><p className="mt-1 text-xs text-gray-500">{projected ? <>Projected for {year}: <span className="text-gray-300">{usd(o.businessProfit)}</span> · </> : null}Schedule C line 31 · <button type="button" onClick={onShowWorksheet} className="underline">see how</button></p></div>
       <div className={card}><p className="text-sm text-gray-400">Tax the business adds</p><p className="mt-2 text-2xl tabular-nums">{o.impact ? usd(Math.max(0, o.impact.additionalTaxFromBusiness)) : '—'}</p><p className="mt-1 text-xs text-gray-500">{o.impact ? (o.impact.effectiveBusinessTaxRate !== null ? `About ${pct(o.impact.effectiveBusinessTaxRate)} of ${projected ? 'projected' : 'your'} profit` : 'No profit yet, so no extra tax') : 'Add your filing status to see this'}</p></div>
       <div className={`${card} border-purple-500/30`}><p className="text-sm text-gray-400">Set aside</p><p className="mt-2 text-2xl font-semibold tabular-nums text-white">{usd(o.recommended)}</p><p className="mt-1 text-xs text-gray-500">{MODE_LABEL[o.effectiveMode]} · {usd(o.stillToSetAside)} still to set aside{o.coverage !== null && o.covered > 0 ? ` · ${Math.min(100, Math.round(o.coverage * 100))}% covered` : ''}</p></div>
@@ -192,23 +192,23 @@ export function TaxOverview({ year, books, worksheet = null, pendingExpenses = 0
         : <><p className="mt-2 text-lg">{o.impact ? 'Nothing scheduled' : '—'}</p><p className="mt-1 text-xs text-gray-500">{o.impact ? `Any balance is due when you file, by ${day(o.filingDue)}.` : unsupportedYear ? 'Not available for this year' : 'Add your details to see this'}</p></>}</div>
     </div>
 
-    {o.projection && <details className={card} open={detailed || undefined}>
+    {o.projection && <details data-tutorial-id="sc-projection" className={card} open={detailed || undefined}>
       <summary className="cursor-pointer text-sm font-medium text-purple-300">Projection for {year}: {o.forecastChoice.label.toLowerCase()} ({usd(o.businessProfit)})</summary>
       <TaxProjection key={`${o.forecastChoice.key}-${profile?.profit_target ?? ''}`} o={o} target={profile?.profit_target ?? null} busy={busy} onChoose={updateProfile} />
     </details>}
 
-    <details className={card} open={detailed || undefined}>
+    <details data-tutorial-id="sc-math" className={card} open={detailed || undefined}>
       <summary className="cursor-pointer text-sm font-medium text-purple-300">How we worked it out</summary>
       <TheMath o={o} detailed={detailed} />
       {!detailed && o.impact && <p className="mt-3 text-xs text-gray-500">Switch to Detailed to see every line, the rules used and the official sources.</p>}
     </details>
 
-    {o.impact && <details className={card}>
+    {o.impact && <details data-tutorial-id="sc-whatif" className={card}>
       <summary className="cursor-pointer text-sm font-medium text-purple-300">What if…</summary>
       <WhatIf year={year} profile={profile} baseProfit={o.businessProfit} marginalRate={o.impact.marginalRate} today={localToday()} />
     </details>}
 
-    <details className={card} open={detailed || undefined}>
+    <details data-tutorial-id="sc-saved" className={card} open={detailed || undefined}>
       <summary className="cursor-pointer text-sm font-medium text-purple-300">What you&apos;ve already saved and paid</summary>
       <table className="mt-3 w-full text-sm"><tbody>
         <Row label="Recommended to set aside" value={usd(o.recommended)} />
@@ -228,13 +228,13 @@ export function TaxOverview({ year, books, worksheet = null, pendingExpenses = 0
 
     </details>
 
-    <details className={card} open={detailed || o.overdue.length > 0 || undefined}>
+    <details data-tutorial-id="sc-payments" className={card} open={detailed || o.overdue.length > 0 || undefined}>
       <summary className="cursor-pointer text-sm font-medium text-purple-300">Tax payments{o.estimatedPaid > 0 ? ` (${usd(o.estimatedPaid)} paid)` : ''}</summary>
       <TaxPayments year={year} o={o} profile={profile} payments={loaded.payments || []} onChanged={setPayments} />
       <p className="mt-3 text-xs text-gray-500"><a className="underline" href={IRS.estimated.url} target="_blank" rel="noreferrer">{IRS.estimated.label}</a> · <a className="underline" href={IRS.se.url} target="_blank" rel="noreferrer">{IRS.se.label}</a></p>
     </details>
 
-    <details className={card}>
+    <details data-tutorial-id="sc-deductions" className={card}>
       <summary className="cursor-pointer text-sm font-medium text-purple-300">Deductions you might be missing</summary>
       <DeductionChecks year={year} worksheet={worksheet} saleCount={books.sales?.count || 0} profit={o.businessProfit} records={books.records || null} pendingExpenses={pendingExpenses} missingReceipts={missingReceipts} onShowWorksheet={onShowWorksheet} />
     </details>

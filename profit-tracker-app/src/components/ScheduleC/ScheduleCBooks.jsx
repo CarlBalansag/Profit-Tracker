@@ -41,16 +41,16 @@ export function ScheduleCBooks({ books, year, onSettingsSaved }) {
       <p className="mt-1 text-sm text-gray-400">Built from your purchases and sales. {books.basis}</p>
     </div>
 
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div data-tutorial-id="sc-profit" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <div className={card}><p className="text-sm text-gray-400">Gross receipts (line 1)</p><p className="mt-2 text-2xl tabular-nums">{usd(line('1'))}</p><p className="mt-1 text-xs text-gray-500">{books.sales.count} {books.sales.count === 1 ? 'sale' : 'sales'}{Number(line('2')) ? ` · ${usd(line('2'))} refunded` : ''}</p></div>
       <div className={card}><p className="text-sm text-gray-400">Cost of goods sold (line 4)</p><p className="mt-2 text-2xl tabular-nums">{usd(line('4'))}</p><p className="mt-1 text-xs text-gray-500">What the items you sold cost you</p></div>
       <div className={card}><p className="text-sm text-gray-400">Expenses (line 28)</p><p className="mt-2 text-2xl tabular-nums">{usd(line('28'))}</p><p className="mt-1 text-xs text-gray-500">{books.records && Number(books.records.total) ? `Reviewed expenses, sale fees and labels, plus ${usd(books.records.total)} from driving and equipment` : 'Reviewed expenses plus sale fees and labels'}</p></div>
       <div className={`${card} border-purple-500/30`}><p className="text-sm text-gray-400">Net {net < 0 ? 'loss' : 'profit'} (line 31)</p><p className={`mt-2 text-2xl font-semibold tabular-nums ${net < 0 ? 'text-red-300' : 'text-white'}`}>{usd(books.netProfit)}</p><p className="mt-1 text-xs text-gray-500">Before income and self-employment tax</p></div>
     </div>
 
-    {problems.map((text) => <p key={text} role="alert" className="rounded-xl border border-amber-500/40 p-4 text-sm text-amber-300">{text}</p>)}
+    {problems.length > 0 && <div data-tutorial-id="sc-warnings" className="space-y-4">{problems.map((text) => <p key={text} role="alert" className="rounded-xl border border-amber-500/40 p-4 text-sm text-amber-300">{text}</p>)}</div>}
 
-    <details className={card}>
+    <details data-tutorial-id="sc-lines" className={card}>
       <summary className="cursor-pointer text-sm font-medium text-purple-300">Show the Schedule C lines</summary>
       <div className="mt-4 grid gap-6 lg:grid-cols-2">
         <LineTable caption="Part I: Income, and the result" rows={books.lines} />
@@ -60,7 +60,7 @@ export function ScheduleCBooks({ books, year, onSettingsSaved }) {
       <p className="mt-3 text-xs text-gray-500">Line 4 comes from Part III: what your inventory was worth on January 1, plus what you bought, minus what was still on hand on December 31. Money spent on stock you still hold isn&apos;t deducted until you sell it.</p>
     </details>
 
-    {books.records && <div id="schedule-c-logs" className="scroll-mt-4 space-y-3">
+    {books.records && <div id="schedule-c-logs" data-tutorial-id="sc-logs" className="scroll-mt-4 space-y-3">
       <h3 className="pt-2 font-medium">Driving, equipment and home office</h3>
       <p className="text-sm text-gray-400">Deductions that come from your own records rather than from expenses. Each one is added only when you enter it.</p>
       <MileageLog year={Number(year)} mileage={books.records.mileage} vehicle={books.records.vehicle} onSaved={onSettingsSaved || (() => {})} />
@@ -68,6 +68,7 @@ export function ScheduleCBooks({ books, year, onSettingsSaved }) {
       <HomeOffice key={year} year={Number(year)} homeOffice={books.records.homeOffice} onSaved={onSettingsSaved || (() => {})} />
     </div>}
 
+    <div data-tutorial-id="sc-extras" className="space-y-4">
     {books.untracked && <UntrackedStock key={`${year}-${books.untracked.startEntered}-${books.untracked.endEntered}`} year={Number(year)} untracked={books.untracked} onSaved={onSettingsSaved || (() => {})} />}
 
     <details className={card}>
@@ -88,6 +89,8 @@ export function ScheduleCBooks({ books, year, onSettingsSaved }) {
       <ul className="mt-2 space-y-1 text-sm text-gray-300">{cutoff.sales.map((s) => <li key={s.sale_id} className="flex flex-wrap justify-between gap-2"><Link className="underline" to="/transactions" state={{ openTransaction: { inventoryId: s.inventory_id, saleId: s.sale_id } }}>{s.product_name}</Link><span className="text-gray-500">sold {s.sale_date} · {s.paid_at ? `paid ${s.paid_at}` : 'not paid yet'} · {usd(s.amount)}</span></li>)}</ul>
     </details>}
 
-    {books.notes.length > 0 && <ul className="space-y-2 text-sm text-gray-400">{books.notes.map((note) => <li key={note} className="rounded-xl border border-white/10 p-3">{note}</li>)}</ul>}
+    </div>
+
+    {books.notes.length > 0 && <ul data-tutorial-id="sc-notes" className="space-y-2 text-sm text-gray-400">{books.notes.map((note) => <li key={note} className="rounded-xl border border-white/10 p-3">{note}</li>)}</ul>}
   </section>;
 }

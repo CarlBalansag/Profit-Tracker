@@ -137,8 +137,8 @@ export function TaxReports({ year, onDrill }) {
 
   return <section aria-label="Year-end report" className="space-y-4">
     <div className="no-print space-y-4">
-      <Status year={year} data={data} onDone={reload} />
-      <div className="flex flex-wrap gap-3 text-sm">
+      <div data-tutorial-id="sc-report-status"><Status year={year} data={data} onDone={reload} /></div>
+      <div data-tutorial-id="sc-report-downloads" className="flex flex-wrap gap-3 text-sm">
         <button type="button" onClick={() => window.print()} className="rounded-lg border border-white/10 px-3 py-2">Print / save PDF</button>
         <button type="button" onClick={() => downloadFile(`schedule-c-${year}-${label}.csv`, reportCsv(shown), 'text/csv;charset=utf-8')} className="rounded-lg border border-white/10 px-3 py-2">Download lines (CSV)</button>
         <button type="button" onClick={() => downloadJSON(`schedule-c-${year}-${label}.json`, viewing ? { revision: viewing.revision, finalized: viewing.created_at, reason: viewing.reason, rules: viewing.rules, report: viewing.report } : { rules: data.rules, report: data.report })} className="rounded-lg border border-white/10 px-3 py-2">Download everything (JSON)</button>
