@@ -771,7 +771,7 @@ export const useEmailAccounts = () => useQuery({
   queryKey: ['email', 'accounts'],
   queryFn: () => fetcher('/api/email/accounts'),
   // While a sync runs, check back every few seconds so the count updates.
-  refetchInterval: (query) => (Array.isArray(query.state.data) && query.state.data.some((a) => a.syncing) ? 3000 : false),
+  refetchInterval: (query) => (Array.isArray(query.state.data) && query.state.data.some((a) => a.syncing || a.catching_up) ? 3000 : false),
 });
 // `found` (the total count) is part of the key, so the list reloads when a
 // background sync finds more.

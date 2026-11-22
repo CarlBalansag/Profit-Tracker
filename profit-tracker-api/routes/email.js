@@ -7,7 +7,11 @@ const { validateBody } = require('../middleware/validate');
 const { PRESETS, SENDERS, normalizeHost, merchantFor } = require('../services/email/config');
 const { encryptSecret, configured } = require('../services/email/crypto');
 const { friendlyError } = require('../services/email/imap');
-const { syncAccount, testConnection, openAccount } = require('../services/email/sync');
+const { syncAccount, testConnection, openAccount, catchUp, catchingUp } = require('../services/email/sync');
+
+// Keeps reading a big inbox until it is caught up, in the background.
+// deps.catchUpRuns limits the runs (tests use 1).
+const keepSyncing = (accountId) => catchUp(accountId, deps, { maxRuns: deps.catchUpRuns ?? 30 }).catch(() => {});
 const { linkMatch, rejectMatch } = require('../services/email/match');
 const { getSettings, saveSettings, DEFAULTS } = require('../services/email/settings');
 const { createExpenseFromOrder, suggestRules, normalizeDomain, labelFor } = require('../services/email/rules');
@@ -78,12 +82,19 @@ router.get('/setup', isAuthenticated, (req, res) => {
 
 router.get('/accounts', isAuthenticated, async (req, res, next) => {
   try {
-    const [accounts, counts] = await Promise.all([
+    const [accounts, counts, unread] = await Promise.all([
       prisma.emailAccount.findMany({ where: { user_id: req.user.id }, select: PUBLIC_FIELDS, orderBy: { created_at: 'asc' } }),
       prisma.emailMessage.groupBy({ by: ['account_id'], where: { user_id: req.user.id }, _count: { _all: true } }),
+      prisma.emailMessage.groupBy({ by: ['account_id'], where: { user_id: req.user.id, status: 'new' }, _count: { _all: true } }),
     ]);
     const byAccount = new Map(counts.map((c) => [c.account_id, c._count._all]));
-    res.json(accounts.map((a) => ({ ...a, message_count: byAccount.get(a.id) || 0, syncing: Boolean(a.sync_started_at) })));
+    const pending = new Map(unread.map((c) => [c.account_id, c._count._all]));
+    // pending: emails found but not read yet. catching_up: still going through
+    // the inbox (more may be found), so the card shows progress, not "Synced".
+    res.json(accounts.map((a) => ({
+      ...a, message_count: byAccount.get(a.id) || 0, pending: pending.get(a.id) || 0,
+      syncing: Boolean(a.sync_started_at), catching_up: catchingUp.has(a.id),
+    })));
   } catch (err) { next(err); }
 });
 
@@ -168,8 +179,8 @@ router.post('/accounts', isAuthenticated, validateBody(createBody), async (req, 
       throw err;
     }
     // First sync runs in the background; the list shows it as syncing.
-    Promise.resolve().then(() => syncAccount(account.id, deps)).catch(() => {});
-    res.status(201).json({ ...account, message_count: 0, syncing: true });
+    Promise.resolve().then(() => keepSyncing(account.id));
+    res.status(201).json({ ...account, message_count: 0, pending: 0, syncing: true, catching_up: true });
   } catch (err) { next(err); }
 });
 
@@ -221,8 +232,11 @@ router.post('/accounts/:id/sync', isAuthenticated, async (req, res, next) => {
     if (account.last_synced_at && Date.now() - account.last_synced_at.getTime() < SYNC_COOLDOWN_MS) {
       return res.status(429).json({ error: 'This account just synced. Try again in a minute.' });
     }
+    if (catchingUp.has(account.id)) return res.status(409).json({ error: 'This account is already syncing.' });
     const result = await syncAccount(account.id, { ...deps, budgetMs: 25000 });
     if (result.status === 'busy') return res.status(409).json({ error: 'This account is already syncing.' });
+    // A big inbox keeps going in the background until it is caught up.
+    if (result.status === 'ok' && result.more) Promise.resolve().then(() => keepSyncing(account.id));
     res.json(result);
   } catch (err) { next(err); }
 });

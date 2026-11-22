@@ -27,8 +27,36 @@ function ago(iso) {
   return `Synced ${day(iso)}`;
 }
 
+const isBusy = (account) => Boolean(account.syncing || account.catching_up);
+
+// How far the first read of an inbox (or a big Sync now) has got: emails found
+// so far and how many of them are read. More may still be found while it runs.
+function SyncProgress({ account }) {
+  const busy = isBusy(account);
+  const total = account.message_count || 0;
+  const pending = account.pending || 0;
+  if (!busy && !pending) return null;
+  const read = total - pending;
+  const known = total > 0 && pending > 0;
+  const text = !total ? 'Looking through your email…'
+    : pending ? `Reading your emails · ${read.toLocaleString()} of ${total.toLocaleString()}`
+      : `Looking for more emails · ${total.toLocaleString()} found`;
+  return (
+    <div role="status" className="mt-2 max-w-md pl-7">
+      <p className="text-xs text-gray-300">{text}</p>
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+        <div
+          className={`h-full rounded-full bg-[var(--accent)] transition-[width] duration-700 ease-out ${known ? '' : 'w-1/3 animate-pulse'}`}
+          style={known ? { width: `${Math.max(4, Math.round((read / total) * 100))}%` } : undefined}
+        />
+      </div>
+      {!busy && <p className="mt-1 text-xs text-gray-500">{pending.toLocaleString()} left to read. The next sync reads them, or press Sync now.</p>}
+    </div>
+  );
+}
+
 function StatusPill({ account }) {
-  const [text, tone] = account.syncing ? ['Syncing…', 'text-[var(--accent)] bg-[var(--accent-bg)]']
+  const [text, tone] = isBusy(account) ? ['Syncing…', 'text-[var(--accent)] bg-[var(--accent-bg)]']
     : account.status === 'error' ? ['Needs attention', 'text-[var(--dp-warning-text)] bg-[var(--dp-warning-bg)]']
       : account.status === 'disconnected' ? ['Disconnected', 'text-gray-400 bg-white/5']
         : ['Connected', 'text-[var(--dp-green-text)] bg-[var(--dp-green-bg)]'];
@@ -97,14 +125,15 @@ function AccountRow({ account, presets }) {
         <StatusPill account={account} />
       </div>
       <p className="mt-1 pl-7 text-xs text-gray-500">
-        {preset?.label || 'IMAP'} · {account.message_count} email{account.message_count === 1 ? '' : 's'} found · {ago(account.last_synced_at)}
+        {preset?.label || 'IMAP'} · {account.message_count} email{account.message_count === 1 ? '' : 's'} found · {isBusy(account) ? 'Syncing now' : ago(account.last_synced_at)}
       </p>
       {account.last_error && <p className="mt-1 pl-7 text-xs text-[var(--dp-warning-text)]">{account.last_error}</p>}
+      <SyncProgress account={account} />
 
       <div className="mt-2 flex flex-wrap gap-2 pl-7">
         {connected && account.status !== 'error' && (
-          <button type="button" onClick={syncNow} disabled={sync.isPending || account.syncing} className="page-btn page-btn-secondary">
-            <RefreshCw size={14} aria-hidden="true" className={sync.isPending || account.syncing ? 'animate-spin' : ''} /> Sync now
+          <button type="button" onClick={syncNow} disabled={sync.isPending || isBusy(account)} className="page-btn page-btn-secondary">
+            <RefreshCw size={14} aria-hidden="true" className={sync.isPending || isBusy(account) ? 'animate-spin' : ''} /> Sync now
           </button>
         )}
         <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="page-btn page-btn-secondary">{open ? 'Close' : 'Options'}</button>

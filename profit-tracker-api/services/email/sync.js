@@ -336,6 +336,27 @@ const markFailed = (prisma, id, message) => prisma.emailMessage.update({
   where: { id }, data: { status: 'failed', extract_error: message, extracted_at: new Date() },
 });
 
+// Keeps syncing one account until it is caught up (a new connection, or Sync
+// now on a big inbox), instead of leaving the rest for the cron's next runs.
+// Accounts being caught up are listed in `catchingUp` (this server only), so
+// the Settings card can show that more is coming.
+const catchingUp = new Set();
+async function catchUp(accountId, deps = {}, { maxRuns = 30, maxMs = 15 * 60 * 1000 } = {}) {
+  if (catchingUp.has(accountId)) return { status: 'busy' };
+  catchingUp.add(accountId);
+  const started = Date.now();
+  let result = { status: 'ok', more: true };
+  try {
+    for (let run = 0; run < maxRuns && result.more && Date.now() - started < maxMs; run += 1) {
+      result = await syncAccount(accountId, deps);
+      if (result.status !== 'ok') break;
+    }
+  } finally {
+    catchingUp.delete(accountId);
+  }
+  return result;
+}
+
 // Called by the outside cron. Oldest-synced accounts go first; whatever doesn't
 // fit in the time budget goes first next time.
 async function runScheduledEmailSync(deps = {}) {
@@ -373,4 +394,4 @@ function verifySyncSecret(authHeader) {
   return { ok: true };
 }
 
-module.exports = { openAccount, organize, extractPending, syncAccount, runScheduledEmailSync, testConnection, verifySyncSecret, dedupeKey, foldersToRead, MAX_PER_RUN };
+module.exports = { openAccount, organize, extractPending, syncAccount, catchUp, catchingUp, runScheduledEmailSync, testConnection, verifySyncSecret, dedupeKey, foldersToRead, MAX_PER_RUN };

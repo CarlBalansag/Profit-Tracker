@@ -109,7 +109,7 @@ describe('email connections on Postgres', () => {
 
     require.cache[require.resolve('../prisma.js')] = { id: 'prisma', filename: require.resolve('../prisma.js'), loaded: true, exports: prisma };
     router = require('../routes/email.js');
-    Object.assign(router._deps, { open: fakeOpen, resolve });
+    Object.assign(router._deps, { open: fakeOpen, resolve, catchUpRuns: 1 });
     sync = require('../services/email/sync.js');
     const express = require('express');
     const app = express();
@@ -604,5 +604,11 @@ describe('email connections on Postgres', () => {
     await waitIdle(body.id);
     expect(await prisma.emailMessage.count()).toBe(sync.MAX_PER_RUN);
     expect(await sync.syncAccount(body.id, { open: fakeOpen, resolve })).toMatchObject({ status: 'ok', found: 20, more: true }); // bodies still waiting to be read
+    // The card shows what's left to read, then catching up reads it all.
+    const left = (await send('GET', '/api/email/accounts')).body[0];
+    expect([left.message_count, left.pending > 0, left.catching_up]).toEqual([sync.MAX_PER_RUN + 20, true, false]);
+    expect(await sync.catchUp(body.id, { open: fakeOpen, resolve })).toMatchObject({ status: 'ok', more: false });
+    const done = (await send('GET', '/api/email/accounts')).body[0];
+    expect([done.pending, done.catching_up]).toEqual([0, false]);
   });
 });
