@@ -6,6 +6,7 @@ import { CashoutImport } from './CashoutImport';
 
 const preview = { mutateAsync: vi.fn(), reset: vi.fn(), isPending: false };
 const commit = { mutateAsync: vi.fn(), isPending: false };
+const matchOrders = { mutateAsync: vi.fn(), isPending: false };
 let connections;
 let providers;
 
@@ -19,6 +20,7 @@ vi.mock('../../hooks/useApi', () => ({
   ] }),
   usePaymentMethods: () => ({ data: [{ id: 'card', name: 'Chase Prime' }] }),
   useCashoutImport: () => ({ preview, commit }),
+  useStoreOrderCosts: () => ({ preview: { mutateAsync: vi.fn(), reset: vi.fn(), isPending: false }, commit: { mutateAsync: vi.fn(), isPending: false }, match: matchOrders }),
 }));
 vi.mock('../../hooks/useMatchMedia', () => ({ useMatchMedia: () => false }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -87,6 +89,71 @@ describe('CashoutImport', () => {
       ['Fire TV Stick 4K Select', 2, '12.50'],
     ]);
     expect(screen.getByRole('status')).toHaveTextContent(/Imported 2 purchases \(3 units\).*1 has no cost yet/);
+  });
+
+  it('fills costs from an Amazon export added in the review, and imports them with the order', async () => {
+    const line = (index, over) => ({ index, orderId: `112-${index}`, orderDate: '2026-11-16', name: `Amazon line ${index}`, qty: 2, tracking: ['TBA336581719552'], perUnit: { cost: 44.99, tax: 3.5, shipping: 0 }, payment: 'Visa - 4242', paymentMethodId: 'card', ...over });
+    matchOrders.mutateAsync.mockResolvedValue({
+      source: 'amazon',
+      sourceName: 'Amazon',
+      summary: { lines: 3, problems: 0, byTracking: 1, byName: 0, unmatched: 1 },
+      matches: [
+        { key: 'Fire TV Stick 4K', lineIndex: 0, match: 'tracking', candidates: [0, 1], review: null },
+        { key: 'Fire TV Stick 4K Select', lineIndex: null, match: 'none', candidates: [], review: null },
+      ],
+      lines: [line(0), line(1, { perUnit: { cost: 24.99, tax: 1.75, shipping: 0 } })],
+    });
+    render(<CashoutImport />);
+    await upload();
+    const file = new File(['"Order ID","Shipping Address","Product Name"\n1,secret,X'], 'Retail.OrderHistory.1.csv', { type: 'text/csv' });
+    fireEvent.change(document.getElementById('cashout-import-orders-file'), { target: { files: [file] } });
+    await waitFor(() => expect(matchOrders.mutateAsync).toHaveBeenCalled());
+    await act(async () => {});
+    // Only the needed columns go up, with the rows about to be imported.
+    expect(matchOrders.mutateAsync.mock.calls[0][0]).toEqual({
+      source: 'amazon',
+      csv: 'Order ID,Product Name\n1,X',
+      groups: [
+        { key: 'Fire TV Stick 4K', name: 'Fire TV Stick 4K', date: '2026-11-19', qty: 1, tracking: ['TBA336581719552'] },
+        { key: 'Fire TV Stick 4K Select', name: 'Fire TV Stick 4K Select', date: '2026-11-19', qty: 2, tracking: ['TBA336581719552'] },
+      ],
+    });
+    expect(screen.getByText(/1 matched by tracking/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Cost per unit for Fire TV Stick 4K')).toHaveValue('44.99');
+    expect(screen.getByLabelText('Cost per unit for Fire TV Stick 4K Select')).toHaveValue('');
+
+    // Switching to the other order line takes its cost.
+    fireEvent.change(screen.getByLabelText('Order for Fire TV Stick 4K'), { target: { value: '1' } });
+    expect(screen.getByLabelText('Cost per unit for Fire TV Stick 4K')).toHaveValue('24.99');
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Import 2 purchases/ }));
+    });
+    const [first, second] = commit.mutateAsync.mock.calls[0][0].groups;
+    expect(first).toMatchObject({ unitCost: '24.99', salesTax: 1.75, shipping: 0, orderNumber: '112-1', orderDate: '2026-11-16', orderStore: 'Amazon', vendorId: 'amazon', paymentMethodId: 'card' });
+    expect(second.orderNumber).toBeUndefined();
+    expect(second.unitCost).toBeNull();
+  });
+
+  it('removing the Amazon file drops the costs it filled but keeps typed ones', async () => {
+    matchOrders.mutateAsync.mockResolvedValue({
+      source: 'amazon', sourceName: 'Amazon',
+      summary: { lines: 1, problems: 0, byTracking: 2, byName: 0, unmatched: 0 },
+      matches: [
+        { key: 'Fire TV Stick 4K', lineIndex: 0, match: 'tracking', candidates: [0], review: null },
+        { key: 'Fire TV Stick 4K Select', lineIndex: 0, match: 'tracking', candidates: [0], review: null },
+      ],
+      lines: [{ index: 0, orderId: '112-0', orderDate: '2026-11-16', name: 'X', qty: 3, tracking: [], perUnit: { cost: 30, tax: 0, shipping: 0 }, payment: null, paymentMethodId: null }],
+    });
+    render(<CashoutImport />);
+    await upload();
+    fireEvent.change(screen.getByLabelText('Cost per unit for Fire TV Stick 4K Select'), { target: { value: '12' } });
+    fireEvent.change(document.getElementById('cashout-import-orders-file'), { target: { files: [new File(['Order ID\n1'], 'a.csv')] } });
+    await waitFor(() => expect(screen.getByLabelText('Cost per unit for Fire TV Stick 4K')).toHaveValue('30'));
+    expect(screen.getByLabelText('Cost per unit for Fire TV Stick 4K Select')).toHaveValue('12');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    expect(screen.getByLabelText('Cost per unit for Fire TV Stick 4K')).toHaveValue('');
+    expect(screen.getByLabelText('Cost per unit for Fire TV Stick 4K Select')).toHaveValue('12');
+    expect(screen.queryByLabelText('Order for Fire TV Stick 4K')).not.toBeInTheDocument();
   });
 
   it('leaves out rows the user unticks', async () => {

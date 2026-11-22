@@ -8,7 +8,6 @@ import { ApiKeys } from '../components/Settings/ApiKeys';
 import { AdminInvites } from '../components/Settings/AdminInvites';
 import { DataReset } from '../components/Settings/DataReset';
 import { CashoutImport } from '../components/Settings/CashoutImport';
-import { StoreOrderImport } from '../components/Settings/StoreOrderImport';
 import { Vendors } from '../components/Settings/Vendors';
 import { Cashouts } from '../components/Settings/Cashouts';
 import { Marketplaces } from '../components/Settings/Marketplaces';
@@ -174,7 +173,6 @@ function Settings() {
           {activeTab === 'data' && (
             <div className="space-y-6">
               <CashoutImport />
-              <StoreOrderImport />
               <DataReset />
             </div>
           )}

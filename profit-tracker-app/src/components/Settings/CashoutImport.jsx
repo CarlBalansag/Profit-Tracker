@@ -2,9 +2,12 @@ import React, { useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Download, FileUp, RefreshCw, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { useCashoutConnections, useCashoutImport, useCashoutProviders, usePaymentMethods, usePlatforms } from '../../hooks/useApi';
+import { useCashoutConnections, useCashoutImport, useCashoutProviders, usePaymentMethods, usePlatforms, useStoreOrderCosts } from '../../hooks/useApi';
 import { useMatchMedia } from '../../hooks/useMatchMedia';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
+import { AMAZON_HOW_TO, readOrderFile } from '../../utils/orderCsv';
+import { OrderPicker } from './StoreOrderPicker';
+import { StoreOrderImport } from './StoreOrderImport';
 
 // Settings > Data > Import from cashouts. Brings items already sold to a
 // cashout into Profit Tracker as purchases + sales: preview first (nothing is
@@ -63,6 +66,7 @@ export function CashoutImport() {
   const { data: platforms = [] } = usePlatforms();
   const { data: paymentMethods = [] } = usePaymentMethods();
   const { preview, commit } = useCashoutImport();
+  const { match: matchOrders } = useStoreOrderCosts();
   const isPhone = useMatchMedia('(max-width: 767px)');
   const fileRef = useRef(null);
 
@@ -83,6 +87,11 @@ export function CashoutImport() {
   const isPaid = (g) => g.paid || Boolean(paidThrough && g.date <= paidThrough);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(null);
+  // Store orders added in the review: the server's matches and, per group key,
+  // the order line in use (null = none). A matched line fills that row's cost
+  // and, on import, its tax, shipping, order number, date, store and card.
+  const [orders, setOrders] = useState(null);
+  const [orderPick, setOrderPick] = useState({});
 
   const sourceInfo = SOURCES.find((s) => s.id === source);
   const connection = connections.find((c) => c.provider === source) || null;
@@ -98,7 +107,71 @@ export function CashoutImport() {
     setSelected({});
     setCosts({});
     setError(null);
+    setOrders(null);
+    setOrderPick({});
     preview.reset();
+  };
+
+  const amazonVendorId = vendors.find((v) => /amazon/i.test(v.name))?.id || null;
+  const orderLines = useMemo(() => new Map((orders?.lines || []).map((l) => [l.index, l])), [orders]);
+  const cardNames = useMemo(() => new Map(paymentMethods.map((p) => [p.id, p.name])), [paymentMethods]);
+
+  const addOrders = async (file) => {
+    if (!file || !result) return;
+    setError(null);
+    try {
+      const csv = await readOrderFile(file);
+      const groups = result.groups.filter(isNew).map((g) => ({ key: g.key, name: g.name, date: g.date, qty: g.newQty, tracking: g.tracking }));
+      const res = await matchOrders.mutateAsync({ source: 'amazon', csv, groups });
+      const lines = new Map(res.lines.map((l) => [l.index, l]));
+      setOrders(res);
+      setOrderPick(Object.fromEntries(res.matches.map((m) => [m.key, m.lineIndex])));
+      // Matched rows take the order's cost unless one was typed already.
+      setCosts((current) => {
+        const next = { ...current };
+        for (const m of res.matches) {
+          if (m.lineIndex !== null && !String(current[m.key] ?? '').trim()) next[m.key] = String(lines.get(m.lineIndex).perUnit.cost);
+        }
+        return next;
+      });
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const removeOrders = () => {
+    // Costs that came from an order go too; typed ones stay.
+    setCosts((current) => {
+      const next = { ...current };
+      for (const [key, index] of Object.entries(orderPick)) {
+        if (index !== null && next[key] === String(orderLines.get(index)?.perUnit.cost)) delete next[key];
+      }
+      return next;
+    });
+    setOrders(null);
+    setOrderPick({});
+  };
+
+  const pickOrder = (key, index) => {
+    setOrderPick((current) => ({ ...current, [key]: index }));
+    const line = index === null ? null : orderLines.get(index);
+    setCosts((current) => ({ ...current, [key]: line ? String(line.perUnit.cost) : '' }));
+  };
+
+  // What the import sends for a row's matched order.
+  const orderFields = (g) => {
+    const line = orderPick[g.key] !== null && orderPick[g.key] !== undefined ? orderLines.get(orderPick[g.key]) : null;
+    if (!line) return {};
+    const r2 = (n) => Math.round(n * 100) / 100;
+    return {
+      salesTax: r2(line.perUnit.tax * g.newQty),
+      shipping: r2(line.perUnit.shipping * g.newQty),
+      orderNumber: line.orderId,
+      orderDate: line.orderDate,
+      orderStore: orders.sourceName,
+      vendorId: amazonVendorId,
+      paymentMethodId: line.paymentMethodId,
+    };
   };
 
   const pickSource = (id) => {
@@ -177,7 +250,7 @@ export function CashoutImport() {
         platform_id: platformId,
         vendor_id: vendorId || null,
         payment_method_id: paymentMethodId || null,
-        groups: chosen.map((g) => ({ ...g, qty: g.newQty, paid: isPaid(g), unitCost: String(costs[g.key] ?? '').trim() || null })),
+        groups: chosen.map((g) => ({ ...g, qty: g.newQty, paid: isPaid(g), unitCost: String(costs[g.key] ?? '').trim() || null, ...orderFields(g) })),
       });
       setDone(res);
       toast.success(`Imported ${res.created} purchase${res.created === 1 ? '' : 's'} (${res.units} unit${res.units === 1 ? '' : 's'}).`);
@@ -187,7 +260,7 @@ export function CashoutImport() {
     }
   };
 
-  const busy = preview.isPending || commit.isPending;
+  const busy = preview.isPending || commit.isPending || matchOrders.isPending;
 
   return (
     <div className="rounded-xl border border-gray-800 bg-[#12121A] p-4 sm:p-6 space-y-5">
@@ -292,8 +365,25 @@ export function CashoutImport() {
           error={error}
           onImport={runImport}
           onCancel={reset}
+          orders={orders}
+          orderPick={orderPick}
+          orderLines={orderLines}
+          cardNames={cardNames}
+          matching={matchOrders.isPending}
+          onAddOrders={addOrders}
+          onRemoveOrders={removeOrders}
+          onPickOrder={pickOrder}
         />
       )}
+
+      <details className="rounded-lg border border-gray-800 group">
+        <summary className="cursor-pointer min-h-11 flex items-center px-3 text-sm font-semibold text-white">
+          Fill in missing costs from Amazon orders
+        </summary>
+        <div className="border-t border-gray-800 p-3 sm:p-4">
+          <StoreOrderImport embedded />
+        </div>
+      </details>
     </div>
   );
 }
@@ -305,7 +395,23 @@ function ImportReview({
   cashouts, vendors, paymentMethods, platformId, setPlatformId, vendorId, setVendorId, paymentMethodId, setPaymentMethodId,
   paidThrough, setPaidThrough, isPaid,
   chosen, chosenUnits, missingCost, busy, committing, error, onImport, onCancel,
+  orders, orderPick, orderLines, cardNames, matching, onAddOrders, onRemoveOrders, onPickOrder,
 }) {
+  const ordersFileRef = useRef(null);
+  const orderMatch = useMemo(() => new Map((orders?.matches || []).map((m) => [m.key, m])), [orders]);
+  const pickerFor = (g, id) => (orders && orderMatch.get(g.key) ? (
+    <OrderPicker
+      id={id}
+      name={g.name}
+      qty={g.newQty}
+      match={orderMatch.get(g.key)}
+      picked={orderPick[g.key] ?? null}
+      lines={orderLines}
+      cardName={cardNames}
+      onPick={(index) => onPickOrder(g.key, index)}
+      disabled={!selected[g.key]}
+    />
+  ) : null);
   const close = () => { if (!committing) onCancel(); };
   const modalRef = useModalKeyboard(true, close);
   const { summary, groups, problems } = result;
@@ -383,13 +489,42 @@ function ImportReview({
             </section>
           )}
 
+          {adding.length > 0 && (
+            <section className="space-y-3 rounded-lg border border-gray-800 p-3 sm:p-4" aria-labelledby="cashout-import-orders">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 id="cashout-import-orders" className="text-sm font-semibold text-white">Costs from Amazon orders <span className="font-normal text-gray-500">(optional)</span></h3>
+                  {orders ? (
+                    <p className="text-xs text-gray-400 mt-1">
+                      {orders.summary.byTracking} matched by tracking{orders.summary.byName > 0 && <>, <span className="text-amber-300">{orders.summary.byName} by name and date (check these)</span></>}
+                      {orders.summary.unmatched > 0 && <>, {orders.summary.unmatched} not found</>}. Matched rows get the order&apos;s cost, tax, shipping, order number, date and card.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500 mt-1">Bought these on Amazon? Add your Amazon order history and each item gets its real cost, tax, order number, order date and card, matched by tracking number, then by name and date. {AMAZON_HOW_TO}</p>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                  <input ref={ordersFileRef} id="cashout-import-orders-file" type="file" accept=".csv,text/csv" className="sr-only" onChange={(e) => { onAddOrders(e.target.files?.[0]); e.target.value = ''; }} disabled={busy} />
+                  <label htmlFor="cashout-import-orders-file" className={`page-btn inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-3 h-9 rounded-lg border border-gray-700 text-sm text-gray-200 hover:bg-white/5 cursor-pointer ${busy ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <FileUp size={14} /> {matching ? 'Matching…' : orders ? 'Use another file' : 'Add Amazon orders CSV'}
+                  </label>
+                  {orders && (
+                    <button type="button" onClick={onRemoveOrders} disabled={busy} className="page-btn flex-1 sm:flex-none px-3 h-9 rounded-lg border border-gray-700 text-sm text-gray-300 hover:bg-white/5 disabled:opacity-50">
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+
           <section className="space-y-3" aria-labelledby="cashout-import-adding">
             <h3 id="cashout-import-adding" className="text-sm font-semibold text-white">Will be added ({adding.length})</h3>
             {adding.length === 0 ? (
               <p className="text-sm text-gray-500">Nothing new in this report: everything in it is already in Profit Tracker.</p>
             ) : isPhone ? (
               <ul className="space-y-2" aria-label="Purchases to import">
-                {adding.map((g) => <GroupCard key={g.key} group={g} paid={isPaid(g)} checked={Boolean(selected[g.key])} onToggle={() => toggle(g.key)} cost={costs[g.key] ?? ''} onCost={(v) => setCost(g, v)} />)}
+                {adding.map((g) => <GroupCard key={g.key} group={g} paid={isPaid(g)} checked={Boolean(selected[g.key])} onToggle={() => toggle(g.key)} cost={costs[g.key] ?? ''} onCost={(v) => setCost(g, v)} picker={(id) => pickerFor(g, id)} />)}
               </ul>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-gray-800">
@@ -402,6 +537,7 @@ function ImportReview({
                       <th className="px-3 py-2 text-right font-medium">Qty</th>
                       <th className="px-3 py-2 text-right font-medium whitespace-nowrap">Payout / unit</th>
                       <th className="px-3 py-2 text-left font-medium">Sale status</th>
+                      {orders && <th className="px-3 py-2 text-left font-medium">Amazon order</th>}
                       <th className="px-3 py-2 text-left font-medium w-32 whitespace-nowrap">Cost / unit</th>
                     </tr>
                   </thead>
@@ -419,6 +555,7 @@ function ImportReview({
                         <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{g.newQty !== g.qty ? `${g.newQty} of ${g.qty}` : g.qty}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{money(g.unitPrice)}</td>
                         <td className="px-3 py-2"><StatusPills group={g} paid={isPaid(g)} /></td>
+                        {orders && <td className="px-3 py-2 min-w-[14rem] max-w-[18rem]">{pickerFor(g)}</td>}
                         <td className="px-3 py-2">
                           <input
                             type="text"
@@ -521,7 +658,7 @@ function StatusPills({ group, paid }) {
   );
 }
 
-function GroupCard({ group: g, paid, checked, onToggle, cost, onCost }) {
+function GroupCard({ group: g, paid, checked, onToggle, cost, onCost, picker }) {
   const id = `cashout-import-${g.key.replace(/[^a-z0-9]/gi, '').slice(-24)}-${g.refs[0]?.replace(/[^a-z0-9]/gi, '').slice(-12)}`;
   return (
     <li className={`rounded-lg border border-gray-800 bg-[#16161E] p-3 space-y-2 ${checked ? '' : 'opacity-60'}`}>
@@ -535,6 +672,7 @@ function GroupCard({ group: g, paid, checked, onToggle, cost, onCost }) {
         </label>
       </div>
       <StatusPills group={g} paid={paid} />
+      {picker(`${id}-order`)}
       <div>
         <label htmlFor={`${id}-cost`} className={labelClass}>Cost per unit</label>
         <input id={`${id}-cost`} type="text" inputMode="decimal" placeholder="$0.00" value={cost} onChange={(e) => onCost(e.target.value)} disabled={!checked} className={inputClass} />

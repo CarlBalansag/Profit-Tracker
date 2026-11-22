@@ -542,7 +542,11 @@ export const useStoreOrderCosts = () => {
     mutationFn: (body) => postJson('/api/cashouts/import/costs/commit', body, 'Saving failed. Nothing was changed.'),
     onSuccess: () => qc.invalidateQueries(),
   });
-  return { preview, commit };
+  // Pairs a cashout report's rows, before they're imported, with store orders.
+  const match = useMutation({
+    mutationFn: (body) => postJson('/api/cashouts/import/costs/match', body, 'Could not read the order export.'),
+  });
+  return { preview, commit, match };
 };
 
 export const useCashoutMutations = () => {

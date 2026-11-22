@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import { usePaymentMethods, usePlatforms, useStoreOrderCosts } from '../../hooks/useApi';
 import { useMatchMedia } from '../../hooks/useMatchMedia';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
-import { trimOrderCsv } from '../../utils/orderCsv';
+import { AMAZON_HOW_TO, readOrderFile } from '../../utils/orderCsv';
+import { OrderPicker } from './StoreOrderPicker';
 
 // Settings > Data > Fill in costs from store orders. The cashout import saves
 // purchases at $0 ("Cost needed") because cashout reports have no purchase
@@ -13,41 +14,16 @@ import { trimOrderCsv } from '../../utils/orderCsv';
 // review first in a modal like the cashout import's (nothing is saved), then
 // save the pairs that look right. The server does the parsing and matching
 // (profit-tracker-api/services/storeOrders/fillCosts.js).
-const STORES = [
-  {
-    id: 'amazon',
-    label: 'Amazon',
-    match: /amazon/i,
-    howTo: 'On Amazon, open Account > Request Your Data, choose "Your Orders" and submit. Amazon emails a download link (usually within a few hours). Unzip it and choose Retail.OrderHistory.1.csv.',
-  },
-];
-
-const MATCH_LABELS = {
-  tracking: { text: 'Same tracking', tone: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
-  name: { text: 'Name + date', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
-  none: { text: 'No match', tone: 'text-gray-400 border-gray-700 bg-white/5' },
-};
+const STORES = [{ id: 'amazon', label: 'Amazon', match: /amazon/i, howTo: AMAZON_HOW_TO }];
 
 const money = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const round2 = (n) => Math.round(n * 100) / 100;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const costNumber = (text) => Number(String(text ?? '').replace(/[$,\s]/g, ''));
-const MAX_FILE_BYTES = 60 * 1024 * 1024;
-const MAX_UPLOAD_BYTES = 6 * 1024 * 1024;
-const readText = (file) => (typeof file.text === 'function'
-  ? file.text()
-  : new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('Could not read that file.'));
-    reader.readAsText(file);
-  }));
-
 const inputClass = 'w-full bg-[#0A0A0F] border border-gray-800 rounded-lg px-3 h-9 text-sm text-gray-200 focus:outline-none focus:border-[var(--accent)]';
 const labelClass = 'block text-xs text-gray-400 mb-1';
-const lineLabel = (l) => `${l.orderId} · ${l.orderDate || 'no date'} · ${l.qty} × ${money(l.perUnit.cost)} · ${l.name.length > 48 ? `${l.name.slice(0, 47)}…` : l.name}`;
 
-export function StoreOrderImport() {
+export function StoreOrderImport({ embedded = false } = {}) {
   const { data: platforms = [] } = usePlatforms();
   const { data: paymentMethods = [] } = usePaymentMethods();
   const { preview, commit } = useStoreOrderCosts();
@@ -91,16 +67,8 @@ export function StoreOrderImport() {
     setDone(null);
     reset();
     if (!file) return;
-    if (file.size > MAX_FILE_BYTES) {
-      setError('That file is too big to read here.');
-      return;
-    }
     try {
-      const csv = trimOrderCsv(await readText(file));
-      if (new Blob([csv]).size > MAX_UPLOAD_BYTES) {
-        setError('That order history is too long to read at once. Split the CSV into smaller files (by year) and import each one.');
-        return;
-      }
+      const csv = await readOrderFile(file);
       showPreview(await preview.mutateAsync({ source: store, csv }));
     } catch (err) {
       setError(err.message);
@@ -110,8 +78,7 @@ export function StoreOrderImport() {
   };
 
   const update = (id, patch) => setRows((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
-  const pickLine = (id, value) => {
-    const index = value === '' ? null : Number(value);
+  const pickLine = (id, index) => {
     const line = index === null ? null : lines.get(index);
     update(id, { lineIndex: index, checked: Boolean(line), cost: line ? String(line.perUnit.cost) : '' });
   };
@@ -158,13 +125,19 @@ export function StoreOrderImport() {
   const busy = preview.isPending || commit.isPending;
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-[#12121A] p-4 sm:p-6 space-y-5">
-      <div>
-        <h2 className="text-sm font-bold text-white mb-2">Fill in costs from store orders</h2>
+    <div className={embedded ? 'space-y-4' : 'rounded-xl border border-gray-800 bg-[#12121A] p-4 sm:p-6 space-y-5'}>
+      {embedded ? (
         <p className="text-xs text-gray-500">
-          Purchases imported from a cashout have no cost yet. Upload your store&apos;s order history to fill them in. Orders are matched by tracking number first, then by item name and date. Nothing is saved until you confirm.
+          Imported before without costs? Upload your Amazon order history and the purchases still marked &quot;Cost needed&quot; get their cost, tax, order number and card. Orders are matched by tracking number first, then by item name and date.
         </p>
-      </div>
+      ) : (
+        <div>
+          <h2 className="text-sm font-bold text-white mb-2">Fill in costs from store orders</h2>
+          <p className="text-xs text-gray-500">
+            Purchases imported from a cashout have no cost yet. Upload your store&apos;s order history to fill them in. Orders are matched by tracking number first, then by item name and date. Nothing is saved until you confirm.
+          </p>
+        </div>
+      )}
 
       <div className="space-y-2">
         <p className="text-xs text-gray-500">{storeInfo.howTo}</p>
@@ -378,35 +351,6 @@ function SummaryTile({ label, value, note, tone }) {
   );
 }
 
-function MatchPill({ match }) {
-  const m = MATCH_LABELS[match] || MATCH_LABELS.none;
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded border text-xs whitespace-nowrap ${m.tone}`}>{m.text}</span>;
-}
-
-function OrderPicker({ purchase: p, row, lines, cardName, onLine, id }) {
-  const line = row.lineIndex !== null ? lines.get(row.lineIndex) : null;
-  // A line the user picked over the server's own pick needs no pill.
-  const match = line ? (row.lineIndex === p.lineIndex ? p.match : 'picked') : 'none';
-  return (
-    <div className="space-y-1">
-      <select id={id} aria-label={`Order for ${p.name}`} className={`${inputClass} h-8 text-xs`} value={row.lineIndex ?? ''} onChange={(e) => onLine(e.target.value)}>
-        <option value="">Don&apos;t fill this one</option>
-        {p.candidates.map((i) => lines.get(i)).filter(Boolean).map((l) => <option key={l.index} value={l.index}>{lineLabel(l)}</option>)}
-      </select>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
-        {match !== 'picked' && <MatchPill match={match} />}
-        {line && (
-          <span>
-            Tax {money(line.perUnit.tax * p.qty)}{line.perUnit.shipping > 0 && ` · shipping ${money(line.perUnit.shipping * p.qty)}`}
-            {' · '}{line.paymentMethodId ? cardName.get(line.paymentMethodId) || 'card' : line.payment || 'card not listed'}
-          </span>
-        )}
-      </div>
-      {p.review && row.lineIndex === p.lineIndex && <p className="text-xs text-amber-300">{p.review}</p>}
-    </div>
-  );
-}
-
 function PurchaseRow({ purchase: p, row, lines, cardName, onToggle, onLine, onCost }) {
   const line = row.lineIndex !== null ? lines.get(row.lineIndex) : null;
   return (
@@ -419,7 +363,7 @@ function PurchaseRow({ purchase: p, row, lines, cardName, onToggle, onLine, onCo
         <div className="text-xs text-gray-500">{p.date} · {plural(p.qty, 'unit')}{p.cashout ? ` · ${p.cashout}` : ''}</div>
       </td>
       <td className="px-3 py-2 min-w-[16rem]">
-        <OrderPicker purchase={p} row={row} lines={lines} cardName={cardName} onLine={onLine} />
+        <OrderPicker name={p.name} qty={p.qty} match={p} picked={row.lineIndex} lines={lines} cardName={cardName} onPick={onLine} />
       </td>
       <td className="px-3 py-2">
         {line && (
@@ -442,7 +386,7 @@ function PurchaseCard({ purchase: p, row, lines, cardName, onToggle, onLine, onC
           <span className="block text-xs text-gray-500">{p.date} · {plural(p.qty, 'unit')}{p.cashout ? ` · ${p.cashout}` : ''}</span>
         </label>
       </div>
-      <OrderPicker purchase={p} row={row} lines={lines} cardName={cardName} onLine={onLine} id={`${id}-order`} />
+      <OrderPicker name={p.name} qty={p.qty} match={p} picked={row.lineIndex} lines={lines} cardName={cardName} onPick={onLine} id={`${id}-order`} />
       {line && (
         <div>
           <label htmlFor={`${id}-cost`} className={labelClass}>Cost per unit</label>

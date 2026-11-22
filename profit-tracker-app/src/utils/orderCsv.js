@@ -46,3 +46,27 @@ export function trimOrderCsv(text) {
   if (!keep.length) return text;
   return rows.map((r) => keep.map((i) => csvCell(r[i] ?? '')).join(',')).join('\n');
 }
+
+export const AMAZON_HOW_TO = 'On Amazon, open Account > Request Your Data, choose "Your Orders" and submit. Amazon emails a download link (usually within a few hours). Unzip it and choose Retail.OrderHistory.1.csv.';
+
+const MAX_FILE_BYTES = 60 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 6 * 1024 * 1024;
+const readText = (file) => (typeof file.text === 'function'
+  ? file.text()
+  : new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Could not read that file.'));
+    reader.readAsText(file);
+  }));
+
+// Reads a chosen order export and trims it for upload. Throws with a message
+// the user can act on.
+export async function readOrderFile(file) {
+  if (file.size > MAX_FILE_BYTES) throw new Error('That file is too big to read here.');
+  const csv = trimOrderCsv(await readText(file));
+  if (new Blob([csv]).size > MAX_UPLOAD_BYTES) {
+    throw new Error('That order history is too long to read at once. Split the CSV into smaller files (by year) and import each one.');
+  }
+  return csv;
+}
