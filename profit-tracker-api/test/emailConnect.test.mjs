@@ -152,3 +152,14 @@ describe('To-Do items from email', () => {
     expect(items[1].link).toEqual({ kind: 'page', to: '/settings', state: { tab: 'email' } });
   });
 });
+
+describe('documentation status', () => {
+  it('is worked out from receipts and linked emails, and the user can say kept elsewhere or not enough', () => {
+    const { documentationStatus } = require('../services/scheduleC.js');
+    expect(documentationStatus({ receipt_url: 'https://x' })).toBe('attached');
+    expect(documentationStatus({ email_linked: true })).toBe('email');
+    expect(documentationStatus({ documentation: 'external' })).toBe('external');
+    expect(documentationStatus({ documentation: 'insufficient', receipt_url: 'https://x' })).toBe('insufficient');
+    expect(documentationStatus({})).toBe('missing');
+  });
+});

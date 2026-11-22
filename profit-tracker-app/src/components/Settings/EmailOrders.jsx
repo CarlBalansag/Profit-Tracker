@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { useEmailAutomation, useEmailOrderMutations, useEmailOrders } from '../../hooks/useApi';
+import { useEmailAutomation, useEmailOrderMutations, useEmailOrders, useEmailRuleMutations } from '../../hooks/useApi';
 
 const PANEL = 'rounded-xl border border-gray-800 bg-[#12121A] p-5 sm:p-6 space-y-4';
 const TABS = [['review', 'To check'], ['linked', 'Linked'], ['unmatched', 'No match'], ['dismissed', 'Not business']];
@@ -29,6 +29,7 @@ function Records({ match }) {
 
 function OrderRow({ order, tab }) {
   const { accept, reject, dismiss } = useEmailOrderMutations();
+  const { addExpense } = useEmailRuleMutations();
   const match = order.matches.find((m) => (tab === 'linked' ? m.state === 'linked' : m.state === 'suggested'));
   const run = async (fn, arg, done) => {
     try { await fn.mutateAsync(arg); if (done) toast.success(done); } catch (err) { toast.error(err.message); }
@@ -63,6 +64,9 @@ function OrderRow({ order, tab }) {
             {match.auto && <span className="self-center text-xs text-gray-500">Linked automatically</span>}
             <button type="button" onClick={() => run(reject, match.id, 'Unlinked')} className="page-btn page-btn-secondary">Unlink</button>
           </>
+        )}
+        {tab === 'unmatched' && order.type === 'receipt' && order.total != null && (
+          <button type="button" onClick={() => run(addExpense, order.id, 'Added as an expense')} className="page-btn page-btn-primary">Add as expense</button>
         )}
         {(tab === 'unmatched' || tab === 'review') && (
           <button type="button" onClick={() => run(dismiss, { id: order.id }, 'Marked not business')} className="page-btn page-btn-secondary">Not business</button>

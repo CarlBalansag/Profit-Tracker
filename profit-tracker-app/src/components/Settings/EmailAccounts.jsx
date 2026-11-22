@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useEmailAccounts, useEmailMutations, useEmailSetup } from '../../hooks/useApi';
 import { FoundInEmail } from './FoundInEmail';
 import { EmailOrders } from './EmailOrders';
+import { EmailRules } from './EmailRules';
 
 const PANEL = 'rounded-xl border border-gray-800 bg-[#12121A] p-5 sm:p-6 space-y-4';
 const INPUT = 'w-full rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] px-3 py-2 text-base sm:text-sm text-[var(--dp-text-primary)] placeholder-gray-600 focus:outline-none focus:border-[var(--accent)]';
@@ -245,6 +246,7 @@ export function EmailAccounts() {
       </section>
 
       <EmailOrders found={found} />
+      {accounts.length > 0 && <EmailRules />}
       <FoundInEmail found={found} />
     </div>
   );

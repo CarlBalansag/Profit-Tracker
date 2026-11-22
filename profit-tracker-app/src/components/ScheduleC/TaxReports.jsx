@@ -48,6 +48,7 @@ function Status({ year, data, onDone }) {
       <p className="text-gray-400">Finalizing saves a copy of these numbers as revision 1: what you hand to your preparer or file from. Your records stay editable, and this page will tell you if anything changes afterwards.</p>
       {yearNotOver && <p className="text-amber-300">{year} isn&apos;t over yet. Most people finalize after December 31, once every expense is reviewed.</p>}
       {data.report.expenses.pending > 0 && <p className="text-amber-300">{data.report.expenses.pending} {data.report.expenses.pending === 1 ? 'expense is' : 'expenses are'} still waiting for review and won&apos;t be included.</p>}
+      {data.report.expenses.missing_receipts > 0 && <p className="text-gray-400">{data.report.expenses.missing_receipts} counted {data.report.expenses.missing_receipts === 1 ? 'expense has' : 'expenses have'} no receipt yet. They still count; attach a receipt or mark it as kept elsewhere when you can.</p>}
       <Finalize year={year} data={data} onDone={onDone} />
     </div>;
   }

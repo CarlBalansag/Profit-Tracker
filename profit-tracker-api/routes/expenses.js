@@ -150,6 +150,31 @@ router.put('/:id', isAuthenticated, validateBody(updateExpense), async (req, res
   }
 });
 
+// Mark many expenses' documentation at once: "external" (kept elsewhere),
+// "insufficient", or null to clear. Owner-only; one Activity entry with Undo.
+const { z } = require('zod');
+const documentationBody = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(500),
+  documentation: z.enum(['external', 'insufficient']).nullable(),
+  note: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(200).nullable().optional()),
+}).strict();
+router.patch('/documentation', isAuthenticated, validateBody(documentationBody), async (req, res, next) => {
+  try {
+    const ids = [...new Set(req.body.ids)];
+    const owned = await prisma.expense.findMany({ where: { id: { in: ids }, user_id: req.user.id }, select: { id: true } });
+    if (owned.length !== ids.length) return res.status(404).json({ error: 'Some of these expenses were not found.' });
+    const { activity } = await prisma.$transaction((tx) => activityLog.trackChange(tx, req.user.id, {
+      action: 'edit', recordType: 'expense', recordId: ids[0],
+      productName: ids.length > 1 ? `${ids.length} expenses` : undefined,
+      refs: async () => ({ expense: ids }),
+    }, () => tx.expense.updateMany({
+      where: { id: { in: ids }, user_id: req.user.id },
+      data: { documentation: req.body.documentation, documentation_note: req.body.documentation ? req.body.note ?? null : null },
+    })));
+    res.json({ updated: ids.length, activity_id: activity?.id ?? null });
+  } catch (err) { next(err); }
+});
+
 // DELETE expense
 router.delete('/:id', isAuthenticated, async (req, res, next) => {
   try {

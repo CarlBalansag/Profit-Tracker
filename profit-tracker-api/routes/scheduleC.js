@@ -26,7 +26,7 @@ const scheduleCEnabled = async (userId) => {
 // built from, for one user and tax year. `forecast: false` skips last year's
 // books (the report doesn't need the projection).
 async function loadScheduleC(userId, year, { forecast = true } = {}) {
-  const [expenses, inventories, saleRefunds, settings, forms1099K, platforms, trips, assets, profile] = await Promise.all([
+  const [expenseRows, inventories, saleRefunds, settings, forms1099K, platforms, trips, assets, profile, emailLinks] = await Promise.all([
     prisma.expense.findMany({ where: { user_id: userId }, include: { payment_method: { select: { name: true } } } }),
     // Same source the Expenses tab's computed lines use, so the two never disagree.
     prisma.inventory.findMany({
@@ -46,7 +46,11 @@ async function loadScheduleC(userId, year, { forecast = true } = {}) {
     prisma.taxMileageTrip.findMany({ where: { user_id: userId, date: { gte: new Date(Date.UTC(year - 1, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) } } }),
     prisma.taxAsset.findMany({ where: { user_id: userId } }),
     prisma.taxProfile.findFirst({ where: { user_id: userId, year }, select: { wages: true } }),
+    // Expenses with a linked order or receipt email count as documented.
+    prisma.emailMatch.findMany({ where: { user_id: userId, state: 'linked', record_type: 'expense' }, select: { record_ids: true } }),
   ]);
+  const emailLinked = new Set(emailLinks.flatMap((m) => m.record_ids));
+  const expenses = expenseRows.map((e) => (emailLinked.has(e.id) ? { ...e, email_linked: true } : e));
   const { MILEAGE_RATES } = await deductionRules;
   const recordsFor = (y) => ({
     trips, assets, mileageRates: MILEAGE_RATES,

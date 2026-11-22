@@ -24,6 +24,8 @@ vi.mock('../../hooks/useApi', () => ({
   useEmailOrders: () => ({ data: { orders: [], counts: {}, total: 0 } }),
   useEmailAutomation: () => ({ data: { linkMatches: true } }),
   useEmailOrderMutations: () => ({ accept: mutation(), reject: mutation(), acceptAll: mutation(), dismiss: mutation(), automation: mutation() }),
+  useEmailRules: () => ({ data: { rules: [], suggestions: [], stores: [] } }),
+  useEmailRuleMutations: () => ({ save: mutation(), remove: mutation(), addExpense: mutation() }),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 

@@ -43,6 +43,21 @@ function flagDuplicateExpenses(rows) {
   }
 }
 
+// Documentation is separate from eligibility: an expense counts whether or not
+// it has a receipt; a missing or weak one is only flagged.
+//   attached     a receipt file
+//   email        an order or receipt email is linked to it
+//   external     the user keeps it elsewhere
+//   insufficient the user says what they have isn't enough
+//   missing      none of the above
+function documentationStatus(expense) {
+  if (expense.documentation === 'insufficient') return 'insufficient';
+  if (expense.receipt_url) return 'attached';
+  if (expense.email_linked) return 'email';
+  if (expense.documentation === 'external') return 'external';
+  return 'missing';
+}
+
 async function expenseWorksheet(expenses, year, derivedLines = [], saleRefunds = []) {
   const { taxCategories, taxReviewIssues, suggestTaxDetails } = await contract;
   const groups = taxCategories.map(category => ({ ...category, total: '0.00', count: 0 }));
@@ -71,9 +86,10 @@ async function expenseWorksheet(expenses, year, derivedLines = [], saleRefunds =
       && Math.abs(new Date(line.date).getTime() - expenseTime) <= DUPLICATE_WINDOW_DAYS * DAY_MS);
     // Waiting for review: what the review form can prefill (blank fields only).
     const suggestion = status === 'pending' ? suggestTaxDetails(expense, { paymentMethodName: expense.payment_method?.name || null }) : null;
-    const { payment_method: paymentMethod, ...plain } = expense;
+    const { payment_method: paymentMethod, email_linked: _linked, ...plain } = expense;
+    const documentation = documentationStatus(expense);
     rows.push({ ...plain, payment_method_name: paymentMethod?.name || null, source: 'manual', amount, tax_details: tax, status, eligible, issues: excluded ? [] : issues,
-      documentation_missing: !expense.receipt_url, suggestion,
+      documentation, documentation_missing: documentation === 'missing' || documentation === 'insufficient', suggestion,
       possible_duplicate_of: duplicate ? duplicate.name : null, possible_duplicate_source: duplicate ? 'sale' : null, possible_duplicate_id: null });
   }
 
@@ -94,7 +110,7 @@ async function expenseWorksheet(expenses, year, derivedLines = [], saleRefunds =
       id: line.id, source: 'sale', name: line.name, inventory_id: line.inventory_id, sale_id: line.sale_id,
       amount: money(cents), eligible: money(cents), status: 'automatic', issues: [],
       // The sale record is the supporting document; there is no separate receipt to attach.
-      documentation_missing: false, receipt_url: null, possible_duplicate_of: null,
+      documentation: 'sale', documentation_missing: false, receipt_url: null, possible_duplicate_of: null,
       tax_details: {
         business_use: 'business', business_percent: '100', tax_category: categoryId, payment_status: 'paid', reviewed: true,
         payee: isLabel ? (line.payment_method?.name ? `Shipping label (${line.payment_method.name})` : 'Shipping label (from payout)') : (line.platform_name || 'Selling platform'),
@@ -129,4 +145,4 @@ async function expenseWorksheet(expenses, year, derivedLines = [], saleRefunds =
     possible_duplicates_of_expenses: rows.filter(row => row.possible_duplicate_source === 'expense').length,
     documentation_gaps: rows.filter(row => row.status !== 'excluded' && row.documentation_missing).length };
 }
-module.exports = { expenseWorksheet, SALE_LINE_CATEGORIES };
+module.exports = { expenseWorksheet, documentationStatus, SALE_LINE_CATEGORIES };

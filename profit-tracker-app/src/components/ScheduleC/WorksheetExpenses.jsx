@@ -13,6 +13,13 @@ const STATUS = {
   pending: ['warn', 'To review'],
   excluded: ['muted', 'Not counted'],
 };
+// Documentation is a flag, never a reason to leave an expense out.
+const DOC_PILL = {
+  missing: ['muted', 'No receipt'],
+  insufficient: ['warn', 'Receipt not enough'],
+  external: ['muted', 'Kept elsewhere'],
+  email: ['good', 'Email receipt'],
+};
 const FILTERS = [['all', 'All records'], ['pending', 'Needs review'], ['reviewed', 'Reviewed'], ['excluded', 'Excluded'], ['automatic', 'From sales (automatic)'], ['duplicates', 'Possible duplicates'], ['receipts', 'Missing receipts']];
 
 function Stat({ label, value, sub, onClick }) {
@@ -38,7 +45,7 @@ function ExpenseRow({ row, onReview }) {
           <h3 className="break-words text-sm font-medium text-[var(--dp-text-primary)]">{row.name}</h3>
           <Pill tone={tone}>{label}</Pill>
           {row.status === 'pending' && row.suggestion?.fields.tax_category && <Pill tone="accent">Suggested: {categoryLabel(row.suggestion.fields.tax_category)}</Pill>}
-          {row.documentation_missing && row.status !== 'excluded' && !fromSale && <Pill>No receipt</Pill>}
+          {row.status !== 'excluded' && !fromSale && DOC_PILL[row.documentation] && <Pill tone={DOC_PILL[row.documentation][0]}>{DOC_PILL[row.documentation][1]}</Pill>}
         </div>
         <p className="mt-0.5 break-words text-xs text-[var(--dp-text-muted)]">{meta}</p>
         {row.possible_duplicate_of && <p className="mt-1 text-xs text-[var(--dp-warning-text)]">
@@ -67,7 +74,7 @@ function ExpenseRow({ row, onReview }) {
  * Part II on the worksheet: what counts, the IRS categories in use, and every
  * expense with its status. The fine print sits under "How expenses are counted".
  */
-export function WorksheetExpenses({ report, rows, filter, setFilter, onReview, actions }) {
+export function WorksheetExpenses({ report, rows, filter, setFilter, onReview, actions, onMarkDocumentation }) {
   const [allCategories, setAllCategories] = useState(false);
   const used = report.groups.filter((g) => g.count > 0 || Number(g.total) !== 0);
   const categories = allCategories ? report.groups : used;
@@ -101,6 +108,15 @@ export function WorksheetExpenses({ report, rows, filter, setFilter, onReview, a
             </select>
           </label>
         </div>
+        {filter === 'receipts' && onMarkDocumentation && rows.some((r) => r.source !== 'sale' && r.documentation === 'missing') && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--dp-text-secondary)]">
+            <span>Have the receipts somewhere else, like paper or another app?</span>
+            <button type="button" className="page-btn page-btn-secondary !h-9 !px-3 !text-xs"
+              onClick={() => onMarkDocumentation(rows.filter((r) => r.source !== 'sale' && r.documentation === 'missing').map((r) => r.id))}>
+              Mark these as kept elsewhere
+            </button>
+          </div>
+        )}
         {rows.length
           ? <ul className="mt-1 divide-y divide-[color:var(--dp-border)]">{rows.map((row) => <ExpenseRow key={row.id} row={row} onReview={onReview} />)}</ul>
           : <p className="py-6 text-center text-sm text-[var(--dp-text-muted)]">No expenses match this view.</p>}

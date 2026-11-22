@@ -825,3 +825,20 @@ export const useEmailOrderMutations = () => {
     }),
   };
 };
+
+// ---- Trusted store rules (E4) ----
+export const useEmailRules = () => useQuery({ queryKey: ['email', 'rules'], queryFn: () => fetcher('/api/email/rules') });
+export const useEmailRuleMutations = () => {
+  const qc = useQueryClient();
+  const invalidate = () => { qc.invalidateQueries({ queryKey: ['email'] }); qc.invalidateQueries({ queryKey: ['expenses'] }); };
+  const send = (method, path, body) => apiFetch(path, {
+    method,
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }).then((r) => emailJson(r, 'Could not save.'));
+  return {
+    save: useMutation({ mutationFn: (rule) => send('POST', '/api/email/rules', rule), onSuccess: invalidate }),
+    remove: useMutation({ mutationFn: (id) => send('DELETE', `/api/email/rules/${id}`), onSuccess: invalidate }),
+    addExpense: useMutation({ mutationFn: (orderId) => send('POST', `/api/email/orders/${orderId}/expense`), onSuccess: invalidate }),
+  };
+};

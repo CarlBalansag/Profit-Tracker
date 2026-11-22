@@ -10,6 +10,7 @@ const { friendlyError } = require('../services/email/imap');
 const { syncAccount, testConnection } = require('../services/email/sync');
 const { linkMatch, rejectMatch } = require('../services/email/match');
 const { getSettings, saveSettings, DEFAULTS } = require('../services/email/settings');
+const { createExpenseFromOrder, suggestRules, normalizeDomain, labelFor } = require('../services/email/rules');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -344,6 +345,88 @@ router.get('/automation', isAuthenticated, async (req, res, next) => {
 const automationBody = z.object(Object.fromEntries(Object.keys(DEFAULTS).map((k) => [k, z.boolean().optional()]))).strict();
 router.put('/automation', isAuthenticated, validateBody(automationBody), async (req, res, next) => {
   try { res.json(await saveSettings(prisma, req.user.id, req.body)); } catch (err) { next(err); }
+});
+
+// ---- Trusted store rules and expenses from email (E4) ----
+const ruleBody = z.object({
+  merchant: z.string().trim().max(80).optional(),
+  domain: z.string().trim().max(253).optional(),
+  label: z.string().trim().min(1).max(80).optional(),
+  action: z.enum(['create_expense', 'ignore']).optional(),
+  auto: z.boolean().optional(),
+  category: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(80).nullable().optional()),
+  tax_category: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(60).nullable().optional()),
+  business_use: z.enum(['business', 'mixed']).optional(),
+  business_percent: z.coerce.number().min(1).max(100).optional(),
+  purpose: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(200).nullable().optional()),
+  payment_method_id: z.preprocess((v) => (v === '' ? null : v), z.string().uuid().nullable().optional()),
+}).strict();
+
+async function ownedCard(userId, id) {
+  if (!id) return true;
+  return Boolean(await prisma.paymentMethod.findFirst({ where: { id, user_id: userId }, select: { id: true } }));
+}
+
+router.get('/rules', isAuthenticated, async (req, res, next) => {
+  try {
+    const [rules, suggestions] = await Promise.all([
+      prisma.emailMerchantRule.findMany({ where: { user_id: req.user.id }, orderBy: { label: 'asc' } }),
+      suggestRules(prisma, req.user.id),
+    ]);
+    res.json({ rules, suggestions, stores: SENDERS.map((s) => ({ key: s.key, label: s.label })) });
+  } catch (err) { next(err); }
+});
+
+router.post('/rules', isAuthenticated, validateBody(ruleBody), async (req, res, next) => {
+  try {
+    const b = req.body;
+    let merchant = b.merchant;
+    let domain = null;
+    if (b.domain) {
+      domain = normalizeDomain(b.domain);
+      if (!domain) return res.status(400).json({ error: 'Enter the sender domain, like anthropic.com.' });
+      merchant = `custom:${domain}`;
+    } else if (!SENDERS.some((s) => s.key === merchant)) {
+      return res.status(400).json({ error: 'Choose a store or enter a sender domain.' });
+    }
+    if (!await ownedCard(req.user.id, b.payment_method_id)) return res.status(404).json({ error: 'Card not found.' });
+    const data = {
+      label: b.label || labelFor(merchant), action: b.action || 'create_expense', auto: b.auto ?? true,
+      category: b.category ?? null, tax_category: b.tax_category ?? null, business_use: b.business_use || 'business',
+      business_percent: b.business_use === 'mixed' ? b.business_percent ?? 100 : 100, purpose: b.purpose ?? null,
+      payment_method_id: b.payment_method_id ?? null,
+    };
+    const rule = await prisma.emailMerchantRule.upsert({
+      where: { user_id_merchant: { user_id: req.user.id, merchant } },
+      create: { user_id: req.user.id, merchant, domain, ...data },
+      update: data,
+    });
+    // A new sender: read the user's mailboxes again so its past emails are found.
+    if (domain) {
+      await prisma.emailFolderCursor.deleteMany({ where: { account: { user_id: req.user.id } } });
+    }
+    res.status(201).json(rule);
+  } catch (err) { next(err); }
+});
+
+router.delete('/rules/:id', isAuthenticated, async (req, res, next) => {
+  try {
+    const deleted = await prisma.emailMerchantRule.deleteMany({ where: { id: req.params.id, user_id: req.user.id } });
+    if (!deleted.count) return res.status(404).json({ error: 'Rule not found.' });
+    res.json({ deleted: true });
+  } catch (err) { next(err); }
+});
+
+// "Add as expense" for an order with no match; optionally remember it as a rule.
+router.post('/orders/:id/expense', isAuthenticated, async (req, res, next) => {
+  try {
+    const order = await prisma.emailOrder.findFirst({ where: { id: req.params.id, user_id: req.user.id } });
+    if (!order) return res.status(404).json({ error: 'Order not found.' });
+    if (order.total == null) return res.status(400).json({ error: 'This email has no total to record.' });
+    const rule = await prisma.emailMerchantRule.findUnique({ where: { user_id_merchant: { user_id: req.user.id, merchant: order.merchant } } });
+    const expense = await createExpenseFromOrder(prisma, req.user.id, order, rule);
+    res.status(201).json({ expense_id: expense.id });
+  } catch (err) { next(err); }
 });
 
 router._deps = deps;

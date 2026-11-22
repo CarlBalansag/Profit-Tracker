@@ -11,6 +11,7 @@ vi.mock('../../hooks/useApi', () => ({
   useEmailOrders: (opts) => { calls.push(opts); return { data }; },
   useEmailAutomation: () => ({ data: { linkMatches: true } }),
   useEmailOrderMutations: () => m,
+  useEmailRuleMutations: () => ({ addExpense: m.accept }),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 afterEach(cleanup);

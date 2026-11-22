@@ -15,6 +15,7 @@ const { parseSource, extractEmail, parserVersion } = require('./extract');
 const { groupMessages } = require('./orders');
 const { matchOrders } = require('./match');
 const { getSettings } = require('./settings');
+const { applyRules, customMerchant } = require('./rules');
 
 const DOMAINS = SENDERS.flatMap((s) => s.domains);
 const BATCH = 50;
@@ -95,6 +96,11 @@ async function syncAccount(accountId, deps = {}) {
     }
     client = await (deps.open || openImap)(await imapTarget(account, pass, deps.resolve));
 
+    // The user's own trusted senders (subscriptions, tools) join the search.
+    const customRules = await prisma.emailMerchantRule.findMany({ where: { user_id: account.user_id, domain: { not: null } }, select: { merchant: true, domain: true } });
+    const domains = [...DOMAINS, ...customRules.map((r) => r.domain)];
+    const merchantOf = (address) => merchantFor(address) || customMerchant(address, customRules);
+
     let listed = [];
     if (account.include_spam) {
       try { listed = await client.listFolders(); } catch { listed = []; }
@@ -113,7 +119,7 @@ async function syncAccount(accountId, deps = {}) {
       const renumbered = cursor?.uid_validity && box.uidValidity && cursor.uid_validity !== box.uidValidity;
       let lastUid = cursor && !renumbered ? cursor.last_uid : 0;
 
-      const uids = await client.searchUids({ domains: DOMAINS, since: account.sync_since, afterUid: lastUid });
+      const uids = await client.searchUids({ domains, since: account.sync_since, afterUid: lastUid });
       const take = uids.slice(0, remaining);
       if (uids.length > take.length) more = true;
       const saveCursor = () => prisma.emailFolderCursor.upsert({
@@ -127,7 +133,7 @@ async function syncAccount(accountId, deps = {}) {
         const batch = take.slice(i, i + BATCH);
         const headers = await client.fetchHeaders(batch);
         const rows = headers
-          .map((h) => ({ h, merchant: merchantFor(h.fromAddress) }))
+          .map((h) => ({ h, merchant: merchantOf(h.fromAddress) }))
           .filter(({ merchant }) => merchant)
           .map(({ h, merchant }) => ({
             user_id: account.user_id,
@@ -248,7 +254,9 @@ async function organize(prisma, userId) {
       select: { id: true }, orderBy: { last_seen: 'desc' }, take: 100,
     });
     const settings = await getSettings(prisma, userId);
-    return await matchOrders(prisma, userId, [...changed, ...open.map((o) => o.id)], { autoLink: settings.linkMatches });
+    const matched = await matchOrders(prisma, userId, [...changed, ...open.map((o) => o.id)], { autoLink: settings.linkMatches });
+    const ruled = await applyRules(prisma, userId, { createExpenses: settings.createExpenses });
+    return { ...matched, ...ruled };
   } catch (err) {
     console.error(`[email] matching failed for user ${userId}: ${err?.code || err?.name || 'error'}`);
     return null;

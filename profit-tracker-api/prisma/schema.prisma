@@ -68,6 +68,7 @@ model User {
   email_messages         EmailMessage[]
   email_orders           EmailOrder[]
   email_matches          EmailMatch[]
+  email_rules            EmailMerchantRule[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -622,6 +623,10 @@ model Expense {
   payment_method       PaymentMethod?    @relation(fields: [payment_method_id], references: [id], onDelete: SetNull)
   tax_details          Json?
   tax_version          Int               @default(0)
+  // Set only when the user says so: "external" (kept elsewhere) or
+  // "insufficient". Attached receipts and linked emails are worked out.
+  documentation        String?
+  documentation_note   String?
 
   @@unique([recurring_expense_id, date])
   @@unique([user_id, external_id])
@@ -1198,17 +1203,17 @@ model EmailMessage {
   uid_validity     String?
   kind             String? // order | shipped | delivered | pickup | cancelled | refund | return | receipt | sale | payout | other
   order_number     String?
-  currency         String    @default("USD")
-  total            Decimal?  @db.Decimal(12, 2)
-  subtotal         Decimal?  @db.Decimal(12, 2)
-  tax              Decimal?  @db.Decimal(12, 2)
-  shipping         Decimal?  @db.Decimal(12, 2)
-  discount         Decimal?  @db.Decimal(12, 2)
-  tracking_numbers String[]  @default([])
-  items            Json?     // [{ name, quantity, unit_price, total }]
-  payment_hint     String?   // "Visa 1234"
-  confidence       Json?     // { field: 0..1 }
-  parser           String?   // "amazon@1", "schema.org@1", "generic@1"
+  currency         String      @default("USD")
+  total            Decimal?    @db.Decimal(12, 2)
+  subtotal         Decimal?    @db.Decimal(12, 2)
+  tax              Decimal?    @db.Decimal(12, 2)
+  shipping         Decimal?    @db.Decimal(12, 2)
+  discount         Decimal?    @db.Decimal(12, 2)
+  tracking_numbers String[]    @default([])
+  items            Json? // [{ name, quantity, unit_price, total }]
+  payment_hint     String? // "Visa 1234"
+  confidence       Json? // { field: 0..1 }
+  parser           String? // "amazon@1", "schema.org@1", "generic@1"
   parser_version   Int?
   extracted_at     DateTime?
   extract_error    String?
@@ -1276,4 +1281,28 @@ model EmailMatch {
 
   @@unique([order_id, record_type, record_ids])
   @@index([user_id, state])
+}
+
+// "Trusted store" rules (E4): what to do with a store's receipts. A rule with
+// a sender domain also adds that sender to the email search (subscriptions
+// and tools that aren't on the built-in list).
+model EmailMerchantRule {
+  id                String   @id @default(uuid())
+  user_id           String
+  user              User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  merchant          String // built-in key ("pirateship") or "custom:<domain>"
+  domain            String? // custom sender domain
+  label             String
+  action            String   @default("create_expense") // create_expense | ignore
+  auto              Boolean  @default(true)
+  category          String?
+  tax_category      String?
+  business_use      String   @default("business") // business | mixed
+  business_percent  Decimal  @default(100) @db.Decimal(5, 2)
+  purpose           String?
+  payment_method_id String?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  @@unique([user_id, merchant])
 }

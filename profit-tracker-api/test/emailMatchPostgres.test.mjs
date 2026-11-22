@@ -54,6 +54,7 @@ describe('email orders and matching on Postgres', () => {
     app.use(express.json());
     app.use((req, _res, next) => { req.user = actingUser; next(); });
     app.use('/api/email', require('../routes/email.js'));
+    app.use('/api/expenses', require('../routes/expenses.js'));
     app.use((err, _req, res, _next) => res.status(500).json({ error: err.message }));
     server = app.listen(0, '127.0.0.1');
     await new Promise((r) => server.once('listening', r));
@@ -67,7 +68,7 @@ describe('email orders and matching on Postgres', () => {
   });
 
   beforeEach(async () => {
-    for (const t of ['emailMatch', 'emailMessage', 'emailOrder', 'emailAccount', 'activityLog', 'sales', 'inventory', 'expense', 'paymentMethod', 'platform']) await prisma[t].deleteMany({});
+    for (const t of ['emailMerchantRule', 'emailMatch', 'emailMessage', 'emailOrder', 'emailAccount', 'activityLog', 'sales', 'inventory', 'expense', 'paymentMethod', 'platform']) await prisma[t].deleteMany({});
     await prisma.user.deleteMany({});
     user = await prisma.user.create({ data: { email: 'match-qa@example.test' } });
     other = await prisma.user.create({ data: { email: 'match-qa-other@example.test' } });
@@ -179,5 +180,78 @@ describe('email orders and matching on Postgres', () => {
     expect((await prisma.emailOrder.findFirst()).match_state).toBe('dismissed');
     await send('DELETE', `/api/email/accounts/${account.id}?delete_data=true`);
     expect(await prisma.emailOrder.count()).toBe(0);
+  });
+
+  describe('trusted stores and documentation (E4)', () => {
+    const receipt = () => email({ merchant: 'pirateship', kind: 'receipt', total: '14.37', payment_hint: 'Visa 4242', sent_at: new Date('2026-03-03T09:01:00Z') });
+
+    it('a trusted store rule turns receipts into reviewed expenses once, with Undo', async () => {
+      await receipt();
+      const rule = await send('POST', '/api/email/rules', { merchant: 'pirateship', category: 'Shipping', tax_category: 'supplies', payment_method_id: card.id });
+      expect(rule.status).toBe(201);
+      await send('PUT', '/api/email/automation', { createExpenses: true });
+      expect(await sync.organize(prisma, user.id)).toMatchObject({ created: 1 });
+      await sync.organize(prisma, user.id);
+      const expenses = await prisma.expense.findMany();
+      expect(expenses).toHaveLength(1);
+      expect(expenses[0]).toMatchObject({ name: 'Pirate Ship', category: 'Shipping', payment_method_id: card.id, external_id: expect.stringMatching(/^email:/) });
+      expect(expenses[0].tax_details).toMatchObject({ tax_category: 'supplies', reviewed: true, payment_status: 'paid', paid_date: '2026-03-03' });
+      expect(await prisma.emailMatch.findFirst({ where: { record_type: 'expense' } })).toMatchObject({ state: 'linked', auto: true });
+
+      const entry = await prisma.activityLog.findFirst({ where: { source: 'email', record_type: 'expense' } });
+      await activity.undoActivity(user.id, entry.id);
+      expect(await prisma.expense.count()).toBe(0);
+    });
+
+    it('without automatic expenses the receipt waits, and Add as expense creates it for review', async () => {
+      await receipt();
+      await send('POST', '/api/email/rules', { merchant: 'pirateship' });
+      await sync.organize(prisma, user.id);
+      expect(await prisma.expense.count()).toBe(0);
+      const order = await prisma.emailOrder.findFirst();
+      const made = await send('POST', `/api/email/orders/${order.id}/expense`);
+      expect(made.status).toBe(201);
+      expect((await send('POST', `/api/email/orders/${order.id}/expense`)).status).toBe(201); // same expense, no copy
+      expect(await prisma.expense.count()).toBe(1);
+      actingUser = other;
+      expect((await send('POST', `/api/email/orders/${order.id}/expense`)).status).toBe(404);
+    });
+
+    it('custom senders: domains are cleaned, past mail is read again, ignore rules set orders aside', async () => {
+      const cursor = await prisma.emailFolderCursor.create({ data: { account_id: account.id, folder: 'INBOX', last_uid: 50 } });
+      expect((await send('POST', '/api/email/rules', { domain: 'not a domain' })).status).toBe(400);
+      const custom = await send('POST', '/api/email/rules', { domain: 'billing@mail.Anthropic.com', label: 'Claude subscription' });
+      expect(custom.body).toMatchObject({ merchant: 'custom:mail.anthropic.com', domain: 'mail.anthropic.com' });
+      expect(await prisma.emailFolderCursor.findUnique({ where: { id: cursor.id } })).toBe(null);
+
+      await email({ merchant: 'target', kind: 'order', order_number: '912000000002', total: '9.99', sent_at: new Date('2026-03-02') });
+      await send('POST', '/api/email/rules', { merchant: 'target', action: 'ignore' });
+      await sync.organize(prisma, user.id);
+      expect((await prisma.emailOrder.findFirst({ where: { merchant: 'target' } })).match_state).toBe('dismissed');
+      expect((await send('POST', '/api/email/rules', { merchant: 'nope' })).status).toBe(400);
+    });
+
+    it('suggests rules from expenses the user already entered', async () => {
+      await receipt();
+      await sync.organize(prisma, user.id);
+      for (const d of ['2026-01-05', '2026-02-05']) {
+        await prisma.expense.create({ data: { user_id: user.id, name: 'Pirate Ship labels', amount: 10, date: new Date(d), category: 'Shipping', tax_details: { tax_category: 'supplies', business_use: 'business' } } });
+      }
+      const { body } = await send('GET', '/api/email/rules');
+      expect(body.suggestions[0]).toMatchObject({ merchant: 'pirateship', label: 'Pirate Ship', past_expenses: 2, category: 'Shipping', tax_category: 'supplies' });
+    });
+
+    it('marks documentation in bulk for owned expenses only', async () => {
+      const a = await prisma.expense.create({ data: { user_id: user.id, name: 'Tape', amount: 5, date: new Date('2026-03-01') } });
+      const b = await prisma.expense.create({ data: { user_id: user.id, name: 'Boxes', amount: 7, date: new Date('2026-03-01') } });
+      const theirs = await prisma.expense.create({ data: { user_id: other.id, name: 'Theirs', amount: 1, date: new Date('2026-03-01') } });
+      expect((await send('PATCH', '/api/expenses/documentation', { ids: [a.id, theirs.id], documentation: 'external' })).status).toBe(404);
+      const ok = await send('PATCH', '/api/expenses/documentation', { ids: [a.id, b.id], documentation: 'external', note: 'Paper folder' });
+      expect(ok.body.updated).toBe(2);
+      expect((await prisma.expense.findUnique({ where: { id: b.id } })).documentation_note).toBe('Paper folder');
+      await activity.undoActivity(user.id, ok.body.activity_id);
+      expect((await prisma.expense.findUnique({ where: { id: a.id } })).documentation).toBe(null);
+      expect((await send('PATCH', '/api/expenses/documentation', { ids: [a.id], documentation: 'lost' })).status).toBe(400);
+    });
   });
 });

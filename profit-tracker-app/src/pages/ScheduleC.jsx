@@ -157,6 +157,11 @@ export default function ScheduleC() {
           <ProfitTiles books={report.books} />
           <NextSteps report={report} books={report.books} onReview={() => pendingRows[0] && setEditing(pendingRows[0])} onShow={showRecords} />
           <WorksheetExpenses report={report} rows={rows} filter={filter} setFilter={setFilter} onReview={setEditing}
+            onMarkDocumentation={async (ids) => {
+              if (!window.confirm(`Mark ${ids.length} ${ids.length === 1 ? 'expense' : 'expenses'} as "receipt kept elsewhere"? You can undo this in Activity.`)) return;
+              await requireSuccessfulResponse(await apiFetch('/api/expenses/documentation', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, documentation: 'external' }) }));
+              reload();
+            }}
             actions={<Link className="tap-box text-xs text-[var(--dp-text-secondary)] underline" to="/expenses">Manage expenses</Link>} />
           <LowerYourTax books={report.books} year={report.year} onSettingsSaved={reload} />
           <BooksDetails books={report.books} year={report.year} onSettingsSaved={reload} />
