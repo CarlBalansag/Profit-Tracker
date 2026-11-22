@@ -65,11 +65,14 @@ describe('StoreOrderImport', () => {
     render(<StoreOrderImport />);
     await upload('Order ID,Billing Address,Product Name\n1,secret,X');
     expect(preview.mutateAsync).toHaveBeenCalledWith({ source: 'amazon', csv: 'Order ID,Product Name\n1,X' });
-    expect(screen.getByText(/3 purchases need a cost/)).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog', { name: 'Review costs' });
+    expect(dialog).toHaveTextContent('Waiting for a cost3');
+    // $40 x 2 + $6 tax, and $449.99 + $31.50 tax + $5.99 shipping.
+    expect(dialog).toHaveTextContent('Will be saved$573.48');
     expect(screen.getByText(/Matched by name and date/)).toBeInTheDocument();
-    expect(screen.getByText(/No order with this tracking number/)).toBeInTheDocument();
+    expect(screen.getByText('No matching order (1)')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Save cost for Kindle')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Store, where none is set')).toHaveValue('amazon');
-    expect(screen.getByLabelText('Save cost for Kindle')).toBeDisabled();
   });
 
   it('saves the matched rows with tax and shipping for the purchase\'s quantity', async () => {
@@ -114,6 +117,17 @@ describe('StoreOrderImport', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Pick one of your stores.');
     // The preview stays, so the user can fix and retry.
     expect(screen.getByLabelText('Cost per unit for Fire TV Stick 4K')).toHaveValue('41');
+  });
+
+  it('closes without saving on Cancel or Escape', async () => {
+    render(<StoreOrderImport />);
+    await upload();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await upload();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(commit.mutateAsync).not.toHaveBeenCalled();
   });
 
   it('shows a file error from the server', async () => {
