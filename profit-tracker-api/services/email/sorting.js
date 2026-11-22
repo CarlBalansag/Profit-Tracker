@@ -5,7 +5,7 @@
 //   2. Amazon, shipped outside the user's home state         -> resale
 //      (cash-outs ship direct: "P4D - MIDDLETOWN, DE")
 //   3. An item the user has bought before (their purchases) -> resale
-//   4. 2 or more of one item                                -> resale
+//   4. 2 or more of one item -> resale (Amazon shipped home: ask)
 //   5. Amazon, shipped to the home state, none of the above -> personal
 //   6. Anything else                                         -> ask
 // "kept" (the user said it's business) is never changed. Cancelled and
@@ -29,8 +29,13 @@ function sortOrder(order, { homeState, personalWords = [], pastNames = [] }) {
   if (amazon && state && homeState && state !== homeState) return { leaning: 'resale', reason: `Ships to ${order.ship_to}` };
   const seen = named.find((i) => pastNames.some((name) => itemOverlap([i], [name]) >= 0.6));
   if (seen) return { leaning: 'resale', reason: 'You\'ve bought this before' };
-  if (named.some((i) => Number(i.quantity) >= 2)) return { leaning: 'resale', reason: `${Math.max(...named.map((i) => Number(i.quantity) || 1))} of the same item` };
-  if (amazon && state && homeState && state === homeState) return { leaning: 'personal', reason: `Ships to ${order.ship_to}` };
+  const home = amazon && state && homeState && state === homeState;
+  if (named.some((i) => Number(i.quantity) >= 2)) {
+    const most = Math.max(...named.map((i) => Number(i.quantity) || 1));
+    // Shipped home, 2 bottles of vitamins is as likely personal: ask.
+    return home ? { leaning: 'ask', reason: `${most} of the same item, shipped to ${order.ship_to}` } : { leaning: 'resale', reason: `${most} of the same item` };
+  }
+  if (home) return { leaning: 'personal', reason: `Ships to ${order.ship_to}` };
   return { leaning: 'ask', reason: null };
 }
 

@@ -131,9 +131,12 @@ function looksPrivate(subject) {
 // #1012317132", "Internet #331732584", "Model #: 910-007700"), a price on its
 // own, an email address (a digital gift's "sending to"), labels ending in ":",
 // FREE and divider lines.
-const ID_LINE = /^(?:store\s+)?(?:sku|internet|model|item|upc|asin|part|style|dpci|tcin|mfr|vendor)\s*(?:#|no\.?|number)?\s*:?\s*#?\s*[\w./-]+$/i;
-const notAName = (l) => ID_LINE.test(l) || new RegExp(`^\\(?-?${MONEY}\\)?$`).test(l) || /@/.test(l) || /:\s*$/.test(l)
-  || /^(?:free|gift with purchase|qty|quantity)\b/i.test(l) || /^[-=_*]{3,}$/.test(l);
+const ID_LINE = /^(?:store\s+)?(?:sku|internet|model|item|upc|asin|part|style|dpci|tcin|mfr|vendor)\s*(?:#|no\.?|number)?\s*:?\s*#?\s*[\w./-]+(?:[ -][\w./-]+){0,3}$/i;
+// A product's option lines: "Carrier: Connect on your own later" (Apple), "Color: Black".
+const OPTION_LINE = /^(?:carrier|colou?r|size|capacity|storage|engraving|condition|edition|platform|format|seller|sold by|band|case|finish|check-?in time|pick ?up(?: time| date| at)?|store|delivery|arriving|ships?(?: by| on| from)?)\s*:\s*\S/i;
+const notAName = (l) => ID_LINE.test(l) || OPTION_LINE.test(l) || new RegExp(`^\\(?-?${MONEY}\\)?$`).test(l) || /@/.test(l) || /:\s*$/.test(l)
+  || /^(?:free|gift with purchase|qty|quantity)\b/i.test(l) || /^[-=_*]{3,}$/.test(l)
+  || /\b(?:fee|recycl\w*|surcharge|deposit)\b/i.test(l); // "CA CBE Recycle Fee" (Apple)
 
 // The item's name and price above line i: walks up past ID, price and label
 // lines (at most 5) to the first line that reads like a product name.

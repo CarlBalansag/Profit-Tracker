@@ -148,6 +148,11 @@ describe('store layouts found in real inboxes (synthetic copies)', () => {
       { name: 'Discord- 1-Month of Discord Nitro free', quantity: 1, total: '0.00' },
     ]);
   });
+  it('skips option, fee and spaced model lines above a price (Apple, Best Buy)', () => {
+    expect(generic.items(['iPhone 18 Pro 256GB Burgundy', 'CA CBE Recycle Fee', '($15.00)', '$1,199.00', 'Qty 1'].join(String.fromCharCode(10)))).toEqual([{ name: 'iPhone 18 Pro 256GB Burgundy', quantity: 1, total: '1199.00' }]);
+    expect(generic.items(['iPhone Duo 256GB Night Sky', 'Carrier: Connect on your own later', '$1,999.00', 'Qty 1'].join(String.fromCharCode(10)))).toEqual([{ name: 'iPhone Duo 256GB Night Sky', quantity: 1, total: '1999.00' }]);
+    expect(generic.items(['HiBoy - MAX Pro Electric Scooter', '$0.01', 'Model #: MAX Pro-BLACK', 'Qty: 1'].join(String.fromCharCode(10)))).toEqual([{ name: 'HiBoy - MAX Pro Electric Scooter', quantity: 1, total: '0.01' }]);
+  });
   it('reads Amazon categories and the ship-to city and state, never the name', () => {
     const r = extractEmail({ merchant: 'amazon', subject: 'Ordered 5 items: Supplements, Skin Care, and more', text: ['Arriving Sunday', '4 items: 1 Supplements, 1 Crafts, and 2 others', 'Sam - SACRAMENTO, CA', 'Order # 113-3449308-9990666', 'Grand Total: $10.82'].join('\n') });
     expect([r.kind, r.order_number, r.total, r.ship_to]).toEqual(['order', '113-3449308-9990666', '10.82', 'SACRAMENTO, CA']);
@@ -175,7 +180,8 @@ describe('sorting orders with no matching purchase', () => {
   it('sorts by the rules, in order', () => {
     expect(sortOrder(order({ ship_to: 'MIDDLETOWN, DE', items: [{ name: 'Jewelry', category: true }] }), opts)).toEqual({ leaning: 'resale', reason: 'Ships to MIDDLETOWN, DE' });
     expect(sortOrder(order({ ship_to: 'SACRAMENTO, CA', items: [{ name: 'Apple Watch Series 11 [GPS 42mm]', quantity: 1 }] }), opts)).toEqual({ leaning: 'resale', reason: "You've bought this before" });
-    expect(sortOrder(order({ ship_to: 'SACRAMENTO, CA', items: [{ name: 'Echo Show 8', quantity: 2 }] }), opts)).toEqual({ leaning: 'resale', reason: '2 of the same item' });
+    expect(sortOrder(order({ ship_to: 'MIDDLETOWN, DE', items: [{ name: 'Echo Show 8', quantity: 2 }] }), { ...opts, homeState: null })).toEqual({ leaning: 'resale', reason: '2 of the same item' });
+    expect(sortOrder(order({ ship_to: 'SACRAMENTO, CA', items: [{ name: 'Vitamins', quantity: 2 }] }), opts)).toEqual({ leaning: 'ask', reason: '2 of the same item, shipped to SACRAMENTO, CA' });
     expect(sortOrder(order({ ship_to: 'SACRAMENTO, CA', items: [{ name: 'Pet Supplies', category: true }] }), opts)).toEqual({ leaning: 'personal', reason: 'Ships to SACRAMENTO, CA' });
     expect(sortOrder(order({ ship_to: 'MIDDLETOWN, DE', items: [{ name: 'Purina Tidy Cats', quantity: 1 }] }), opts)).toEqual({ leaning: 'personal', reason: 'Has "purina"' });
   });

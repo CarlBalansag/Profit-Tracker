@@ -104,7 +104,7 @@ const MERCHANTS = {
     normalizeOrder: (n) => (/^\d{15}$/.test(n) ? `${n.slice(0, 7)}-${n.slice(7)}` : n),
   },
   bestbuy: {
-    version: 1,
+    version: 2,
     orderNumber: [/\b(BBY01-\d{12})\b/i],
     kind: subjectKinds([
       ['cancelled', /cancel/i], ['refund', /refund/i], ['return', /return/i],
@@ -124,7 +124,7 @@ const MERCHANTS = {
     ]),
   },
   apple: {
-    version: 1,
+    version: 3,
     orderNumber: [/\b(W\d{9,10})\b/],
     kind: subjectKinds([
       ['cancelled', /cancel/i], ['refund', /refund/i], ['return', /return/i],
@@ -135,7 +135,7 @@ const MERCHANTS = {
   },
   costco: { version: 1, orderNumber: [/order\s*(?:number|#)\s*[:#]?\s*(\d{9,11})\b/i] },
   samsclub: { version: 1, orderNumber: [/order\s*(?:number|#)\s*[:#]?\s*(\d{9,13})\b/i] },
-  homedepot: { version: 1, orderNumber: [/order\s*(?:number|#)\s*[:#]?\s*([A-Z]{0,2}\d{8,12})\b/i] },
+  homedepot: { version: 2, orderNumber: [/order\s*(?:number|#)\s*[:#]?\s*([A-Z]{0,2}\d{8,12})\b/i] },
   lowes: { version: 1, orderNumber: [/order\s*(?:number|#)\s*[:#]?\s*(\d{9,12})\b/i] },
   gamestop: { version: 1, orderNumber: [/order\s*(?:number|#)\s*[:#]?\s*(\d{10,16})\b/i] },
   nike: { version: 1, orderNumber: [/order\s*(?:number|#)\s*[:#]?\s*(C\d{10,12})\b/i] },
