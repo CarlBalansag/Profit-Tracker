@@ -557,6 +557,13 @@ const taxYearSettingBody = z.object({
   }
 });
 
+// POST /api/schedule-c/years/:year/finalize. A reason is required for a
+// revision (checked in the route, which knows whether one exists).
+const finalizeBody = z.object({
+  expected_revision: z.number({ invalid_type_error: 'Reload and try again.', required_error: 'Reload and try again.' }).int().min(0),
+  reason: z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? null : v), z.string().trim().max(300, 'Keep the reason under 300 characters.').nullable().optional()),
+}).strict();
+
 // A business trip in the mileage log.
 const mileageTripBody = z.object({
   date: isoDay,
@@ -654,6 +661,7 @@ const taxPaymentBody = z.object({
 }).strict().refine((b) => b.amount > 0, { message: 'Enter an amount above $0.', path: ['amount'] });
 
 module.exports = {
+  finalizeBody,
   mileageTripBody,
   taxAssetBody,
   TAX_YEAR_SETTING_KEYS,

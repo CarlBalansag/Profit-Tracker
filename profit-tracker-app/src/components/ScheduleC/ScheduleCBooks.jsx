@@ -60,7 +60,7 @@ export function ScheduleCBooks({ books, year, onSettingsSaved }) {
       <p className="mt-3 text-xs text-gray-500">Line 4 comes from Part III: what your inventory was worth on January 1, plus what you bought, minus what was still on hand on December 31. Money spent on stock you still hold isn&apos;t deducted until you sell it.</p>
     </details>
 
-    {books.records && <div className="space-y-3">
+    {books.records && <div id="schedule-c-logs" className="scroll-mt-4 space-y-3">
       <h3 className="pt-2 font-medium">Driving, equipment and home office</h3>
       <p className="text-sm text-gray-400">Deductions that come from your own records rather than from expenses. Each one is added only when you enter it.</p>
       <MileageLog year={Number(year)} mileage={books.records.mileage} vehicle={books.records.vehicle} onSaved={onSettingsSaved || (() => {})} />

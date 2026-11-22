@@ -58,6 +58,7 @@ model User {
   tax_payments           TaxPayment[]
   tax_mileage_trips      TaxMileageTrip[]
   tax_assets             TaxAsset[]
+  tax_report_snapshots   TaxReportSnapshot[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -989,4 +990,24 @@ model TaxAsset {
   updated_at         DateTime  @updatedAt
 
   @@index([user_id])
+}
+
+// A finalized Schedule C report for a tax year. Never changed after it's
+// written: a revision is a new row with the next revision number and a reason.
+// `rules` records the rule versions it was built with, so a later rule change
+// can't silently change finalized history; `input_hash` tells whether the
+// records have changed since.
+model TaxReportSnapshot {
+  id         String   @id @default(uuid())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year       Int
+  revision   Int
+  reason     String?
+  report     Json
+  rules      Json
+  input_hash String
+  created_at DateTime @default(now())
+
+  @@unique([user_id, year, revision])
 }

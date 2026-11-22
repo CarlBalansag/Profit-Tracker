@@ -6,7 +6,7 @@ const { derivedExpenseLines } = require('../services/derivedExpenses');
 const { scheduleCBooks, untrackedInventory } = require('../services/scheduleCBooks');
 const { profitEvents, forecastInputs } = require('../services/taxForecast');
 const { validateBody } = require('../middleware/validate');
-const { taxYearSettingBody, createForm1099K, updateForm1099K, mileageTripBody, taxAssetBody, TAX_YEAR_SETTING_KEYS } = require('../validation/schemas');
+const { taxYearSettingBody, createForm1099K, updateForm1099K, mileageTripBody, taxAssetBody, finalizeBody, TAX_YEAR_SETTING_KEYS } = require('../validation/schemas');
 const deductionRules = import('../../shared/tax/deductions.mjs');
 const { requireOwned } = require('../services/ownership');
 
@@ -22,55 +22,63 @@ const scheduleCEnabled = async (userId) => {
   return Boolean(user?.schedule_c_enabled);
 };
 
+// Everything the worksheet, the tax estimate and the year-end report are
+// built from, for one user and tax year. `forecast: false` skips last year's
+// books (the report doesn't need the projection).
+async function loadScheduleC(userId, year, { forecast = true } = {}) {
+  const [expenses, inventories, saleRefunds, settings, forms1099K, platforms, trips, assets, profile] = await Promise.all([
+    prisma.expense.findMany({ where: { user_id: userId }, include: { payment_method: { select: { name: true } } } }),
+    // Same source the Expenses tab's computed lines use, so the two never disagree.
+    prisma.inventory.findMany({
+      where: { user_id: userId },
+      include: {
+        sales: { include: { platform: { select: { id: true, name: true } }, sale_shipping_payment_method: { select: { id: true, name: true, type: true } } } },
+        payment_method: { select: { id: true, name: true, type: true, default_cashback_rate: true, default_cashback_rate_decimal: true, category_rates: true } },
+        vendor: { select: { name: true } },
+      },
+    }),
+    prisma.refund.findMany({ where: { user_id: userId, sale_id: { not: null } }, include: { sale: true } }),
+    prisma.taxYearSetting.findMany({ where: { user_id: userId, year: { lte: year } } }),
+    prisma.taxForm1099K.findMany({ where: { user_id: userId, year }, orderBy: { created_at: 'asc' } }),
+    // Where 1099-K forms come from: the places the user sells or cashes out.
+    prisma.platform.findMany({ where: { user_id: userId, type: { in: ['Marketplace', 'Cashout'] } }, select: { id: true, name: true, type: true }, orderBy: { name: 'asc' } }),
+    // Last year's trips too, for last year's profit in the projection.
+    prisma.taxMileageTrip.findMany({ where: { user_id: userId, date: { gte: new Date(Date.UTC(year - 1, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) } } }),
+    prisma.taxAsset.findMany({ where: { user_id: userId } }),
+    prisma.taxProfile.findFirst({ where: { user_id: userId, year }, select: { wages: true } }),
+  ]);
+  const { MILEAGE_RATES } = await deductionRules;
+  const recordsFor = (y) => ({
+    trips, assets, mileageRates: MILEAGE_RATES,
+    setting: settings.find((row) => row.year === y) || null,
+    wages: y === year ? profile?.wages ?? 0 : 0,
+  });
+  const exactExpenses = withExactList(expenses, MAPPINGS.expense);
+  const worksheet = await expenseWorksheet(exactExpenses, year, derivedExpenseLines(inventories), saleRefunds);
+  const expensesInYear = exactExpenses.filter((e) => new Date(e.date).getUTCFullYear() === year);
+  const untracked = untrackedInventory(settings, year);
+  const books = scheduleCBooks({ inventories, year, worksheet, expensesInYear, untracked, forms1099K, platforms, records: recordsFor(year) });
+  if (!forecast) return { worksheet, books, trips, assets };
+  // Projection inputs: this year's dated profit and last year's pattern.
+  const derived = derivedExpenseLines(inventories);
+  const priorWorksheet = await expenseWorksheet(exactExpenses, year - 1, derived, saleRefunds);
+  const priorEvents = profitEvents({ inventories, year: year - 1, worksheet: priorWorksheet, trips, mileageRates: MILEAGE_RATES });
+  const priorBooks = priorEvents.length ? scheduleCBooks({ inventories, year: year - 1, worksheet: priorWorksheet, untracked: untrackedInventory(settings, year - 1), records: recordsFor(year - 1) }) : null;
+  books.forecast = forecastInputs({
+    year, today: new Date(), events: profitEvents({ inventories, year, worksheet, trips, mileageRates: MILEAGE_RATES }),
+    priorEvents, priorNetProfit: priorBooks ? priorBooks.netProfit : null,
+  });
+  // Equipment and home office are taken once for the year: projections add
+  // them back, project the rest, then take them off once.
+  books.forecast.yearlyDeductions = books.records.yearly;
+  return { worksheet, books, trips, assets };
+}
+
 router.get('/', isAuthenticated, async (req, res, next) => {
   try {
     if (!validYear(req.query.year)) return res.status(400).json({ error: YEAR_ERROR });
     if (!await scheduleCEnabled(req.user.id)) return res.status(403).json({ error: 'Enable Schedule C in Settings first' });
-    const year = Number(req.query.year);
-    const [expenses, inventories, saleRefunds, settings, forms1099K, platforms, trips, assets, profile] = await Promise.all([
-      prisma.expense.findMany({ where: { user_id: req.user.id }, include: { payment_method: { select: { name: true } } } }),
-      // Same source the Expenses tab's computed lines use, so the two never disagree.
-      prisma.inventory.findMany({
-        where: { user_id: req.user.id },
-        include: {
-          sales: { include: { platform: { select: { id: true, name: true } }, sale_shipping_payment_method: { select: { id: true, name: true, type: true } } } },
-          payment_method: { select: { id: true, name: true, type: true, default_cashback_rate: true, default_cashback_rate_decimal: true, category_rates: true } },
-          vendor: { select: { name: true } },
-        },
-      }),
-      prisma.refund.findMany({ where: { user_id: req.user.id, sale_id: { not: null } }, include: { sale: true } }),
-      prisma.taxYearSetting.findMany({ where: { user_id: req.user.id, year: { lte: year } } }),
-      prisma.taxForm1099K.findMany({ where: { user_id: req.user.id, year }, orderBy: { created_at: 'asc' } }),
-      // Where 1099-K forms come from: the places the user sells or cashes out.
-      prisma.platform.findMany({ where: { user_id: req.user.id, type: { in: ['Marketplace', 'Cashout'] } }, select: { id: true, name: true, type: true }, orderBy: { name: 'asc' } }),
-      // Last year's trips too, for last year's profit in the projection.
-      prisma.taxMileageTrip.findMany({ where: { user_id: req.user.id, date: { gte: new Date(Date.UTC(year - 1, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) } } }),
-      prisma.taxAsset.findMany({ where: { user_id: req.user.id } }),
-      prisma.taxProfile.findFirst({ where: { user_id: req.user.id, year }, select: { wages: true } }),
-    ]);
-    const { MILEAGE_RATES } = await deductionRules;
-    const recordsFor = (y) => ({
-      trips, assets, mileageRates: MILEAGE_RATES,
-      setting: settings.find((row) => row.year === y) || null,
-      wages: y === year ? profile?.wages ?? 0 : 0,
-    });
-    const exactExpenses = withExactList(expenses, MAPPINGS.expense);
-    const worksheet = await expenseWorksheet(exactExpenses, year, derivedExpenseLines(inventories), saleRefunds);
-    const expensesInYear = exactExpenses.filter((e) => new Date(e.date).getUTCFullYear() === year);
-    const untracked = untrackedInventory(settings, year);
-    const books = scheduleCBooks({ inventories, year, worksheet, expensesInYear, untracked, forms1099K, platforms, records: recordsFor(year) });
-    // Projection inputs: this year's dated profit and last year's pattern.
-    const derived = derivedExpenseLines(inventories);
-    const priorWorksheet = await expenseWorksheet(exactExpenses, year - 1, derived, saleRefunds);
-    const priorEvents = profitEvents({ inventories, year: year - 1, worksheet: priorWorksheet, trips, mileageRates: MILEAGE_RATES });
-    const priorBooks = priorEvents.length ? scheduleCBooks({ inventories, year: year - 1, worksheet: priorWorksheet, untracked: untrackedInventory(settings, year - 1), records: recordsFor(year - 1) }) : null;
-    books.forecast = forecastInputs({
-      year, today: new Date(), events: profitEvents({ inventories, year, worksheet, trips, mileageRates: MILEAGE_RATES }),
-      priorEvents, priorNetProfit: priorBooks ? priorBooks.netProfit : null,
-    });
-    // Equipment and home office are taken once for the year: projections add
-    // them back, project the rest, then take them off once.
-    books.forecast.yearlyDeductions = books.records.yearly;
+    const { worksheet, books } = await loadScheduleC(req.user.id, Number(req.query.year));
     // Private receipts go out as short-lived signed links.
     const { withReceiptLink } = require('../services/privateReceipts');
     const rows = worksheet.rows.map((row) => (row.source === 'manual' ? withReceiptLink(row, 'expense') : row));
@@ -256,6 +264,85 @@ router.delete('/assets/:id', isAuthenticated, async (req, res, next) => {
     const result = await prisma.taxAsset.deleteMany({ where: { id: req.params.id, user_id: req.user.id } });
     if (result.count !== 1) return res.status(404).json({ error: 'Equipment not found' });
     res.json(await assetList(req.user.id, listYear(req)));
+  } catch (error) { next(error); }
+});
+
+// ── Year-end report, finalize and revisions ────────────────────────────────
+const { buildReport, reportHash, compareReports, rulesInUse, compareRules } = require('../services/scheduleCReport');
+
+const snapshotMeta = (row) => ({
+  id: row.id, year: row.year, revision: row.revision, reason: row.reason ?? null,
+  created_at: new Date(row.created_at).toISOString(), hash: row.input_hash, rules: row.rules,
+  net_profit: row.report?.part1?.find((l) => l.line === '31')?.amount ?? null,
+});
+const liveReport = async (userId, year) => {
+  const { worksheet, books, trips, assets } = await loadScheduleC(userId, year, { forecast: false });
+  const payments = await prisma.taxPayment.findMany({ where: { user_id: userId, year }, orderBy: { paid_date: 'asc' } });
+  const { MILEAGE_RATES } = await deductionRules;
+  const report = buildReport({ year, worksheet, books, trips, assets, payments });
+  return { report, hash: reportHash(report), rules: rulesInUse({ year, worksheet, mileageRates: MILEAGE_RATES }) };
+};
+const latestSnapshot = async (userId, year) => (await prisma.taxReportSnapshot.findMany({ where: { user_id: userId, year }, orderBy: { revision: 'desc' }, take: 1 }))[0] || null;
+
+// The live report, and how it compares with the latest finalized revision.
+router.get('/years/:year/report', isAuthenticated, async (req, res, next) => {
+  try {
+    if (!validYear(req.params.year)) return res.status(400).json({ error: YEAR_ERROR });
+    if (!await enabledOr403(req, res)) return;
+    const year = Number(req.params.year);
+    const [live, latest] = await Promise.all([liveReport(req.user.id, year), latestSnapshot(req.user.id, year)]);
+    res.json({
+      ...live,
+      finalized: latest ? snapshotMeta(latest) : null,
+      changed: latest ? latest.input_hash !== live.hash : null,
+      changes: latest ? compareReports(latest.report, live.report) : [],
+      rulesChanged: latest ? compareRules(latest.rules, live.rules) : [],
+    });
+  } catch (error) { next(error); }
+});
+
+router.get('/years/:year/snapshots', isAuthenticated, async (req, res, next) => {
+  try {
+    if (!validYear(req.params.year)) return res.status(400).json({ error: YEAR_ERROR });
+    if (!await enabledOr403(req, res)) return;
+    const rows = await prisma.taxReportSnapshot.findMany({ where: { user_id: req.user.id, year: Number(req.params.year) }, orderBy: { revision: 'desc' } });
+    res.json({ snapshots: rows.map(snapshotMeta) });
+  } catch (error) { next(error); }
+});
+
+router.get('/snapshots/:id', isAuthenticated, async (req, res, next) => {
+  try {
+    if (!await enabledOr403(req, res)) return;
+    const row = await prisma.taxReportSnapshot.findFirst({ where: { id: req.params.id, user_id: req.user.id } });
+    if (!row) return res.status(404).json({ error: 'Report not found' });
+    res.json({ ...snapshotMeta(row), report: row.report });
+  } catch (error) { next(error); }
+});
+
+// Finalize the year (revision 1), or record a revision. Earlier revisions are
+// never changed. expected_revision: the latest revision the person saw (0 for
+// none), so two tabs can't both finalize over each other.
+router.post('/years/:year/finalize', isAuthenticated, validateBody(finalizeBody), async (req, res, next) => {
+  try {
+    if (!validYear(req.params.year)) return res.status(400).json({ error: YEAR_ERROR });
+    if (!await enabledOr403(req, res)) return;
+    const year = Number(req.params.year);
+    const [live, latest] = await Promise.all([liveReport(req.user.id, year), latestSnapshot(req.user.id, year)]);
+    const current = latest ? latest.revision : 0;
+    if (req.body.expected_revision !== current) return res.status(409).json({ error: 'This year was finalized or revised somewhere else. Reload to see the latest revision.' });
+    if (latest && !req.body.reason) return res.status(400).json({ error: 'Say what changed, so the history explains each revision.' });
+    if (latest && latest.input_hash === live.hash) return res.status(409).json({ error: `Nothing has changed since revision ${latest.revision}.` });
+    let row;
+    try {
+      row = await prisma.taxReportSnapshot.create({ data: {
+        user_id: req.user.id, year, revision: current + 1, reason: req.body.reason || null,
+        report: live.report, rules: live.rules, input_hash: live.hash, created_at: new Date(),
+      } });
+    } catch (error) {
+      if (error.code === 'P2002') return res.status(409).json({ error: 'This year was finalized or revised somewhere else. Reload to see the latest revision.' });
+      throw error;
+    }
+    res.status(201).json(snapshotMeta(row));
   } catch (error) { next(error); }
 });
 

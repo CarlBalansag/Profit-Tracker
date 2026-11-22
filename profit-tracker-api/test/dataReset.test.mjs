@@ -200,6 +200,7 @@ describe('resetUserData on a real database', () => {
     await db.taxPayment.create({ data: { user_id: id, year: 2026, jurisdiction: 'US', period: 'Q1', amount: 10, paid_date: new Date() } });
     await db.taxMileageTrip.create({ data: { user_id: id, date: new Date(), miles: 5, destination: 'Post office', purpose: 'Ship orders' } });
     await db.taxAsset.create({ data: { user_id: id, name: 'Scale', placed_in_service: new Date(), cost: 40, business_percent: 100, method: 'de_minimis' } });
+    await db.taxReportSnapshot.create({ data: { user_id: id, year: 2026, revision: 1, report: {}, rules: {}, input_hash: 'x' } });
     await db.taxReserveEntry.create({ data: { user_id: id, year: 2026, kind: 'set_aside', amount: 10, date: new Date() } });
     await db.taxProfile.create({ data: { user_id: id, year: 2026, filing_status: 'single', state: 'TX' } });
     await db.taxForm1099K.create({ data: { user_id: id, year: 2026, payer_name: 'Market', platform_id: marketplace.id, gross_amount: 100 } });
@@ -245,6 +246,7 @@ describe('resetUserData on a real database', () => {
       taxPayment: await db.taxPayment.count({ where }),
       taxMileageTrip: await db.taxMileageTrip.count({ where }),
       taxAsset: await db.taxAsset.count({ where }),
+      taxReportSnapshot: await db.taxReportSnapshot.count({ where }),
       mcpWriteLog: await db.mcpWriteLog.count({ where }),
     };
   }
@@ -252,7 +254,7 @@ describe('resetUserData on a real database', () => {
   const FULL = {
     inventory: 1, sales: 1, refund: 2, transactionNote: 2, attachment: 1, changeLog: 2, cashoutItemMatch: 1,
     cashoutDealSnapshot: 1, cashoutConnection: 1, platform: 3, account: 1, paymentMethod: 1, buyer: 1, invoice: 1,
-    expense: 1, recurringExpense: 1, goal: 1, productNote: 1, calendarEvent: 1, taxYearSetting: 1, taxForm1099K: 1, taxProfile: 1, taxReserveEntry: 1, taxPayment: 1, taxMileageTrip: 1, taxAsset: 1, mcpWriteLog: 1,
+    expense: 1, recurringExpense: 1, goal: 1, productNote: 1, calendarEvent: 1, taxYearSetting: 1, taxForm1099K: 1, taxProfile: 1, taxReserveEntry: 1, taxPayment: 1, taxMileageTrip: 1, taxAsset: 1, taxReportSnapshot: 1, mcpWriteLog: 1,
   };
 
   async function expectLoginIntact(id) {
@@ -315,7 +317,7 @@ describe('resetUserData on a real database', () => {
 
     expect(Object.values(await counts(ME)).every((count) => count === 0)).toBe(true);
     await expectLoginIntact(ME);
-    expect(result.deleted).toMatchObject({ platforms: 3, paymentMethods: 1, accounts: 1, cashoutConnections: 1, changeLogs: 2, taxYearSettings: 1, taxForms1099K: 1, taxProfiles: 1, taxReserveEntries: 1, taxPayments: 1, taxMileageTrips: 1, taxAssets: 1 });
+    expect(result.deleted).toMatchObject({ platforms: 3, paymentMethods: 1, accounts: 1, cashoutConnections: 1, changeLogs: 2, taxYearSettings: 1, taxForms1099K: 1, taxProfiles: 1, taxReserveEntries: 1, taxPayments: 1, taxMileageTrips: 1, taxAssets: 1, taxReportSnapshots: 1 });
     expect(result.connectionIds).toHaveLength(1);
   });
 

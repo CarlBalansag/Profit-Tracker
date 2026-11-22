@@ -75,7 +75,7 @@ export function discoverDeductions({ year, categoryCounts = {}, expenseNames = [
   }
   if (!hasWord(names, ['phone', 'cell', 'wireless', 'internet', 'wifi', 'verizon', 'att', 't-mobile', 'tmobile', 'comcast', 'xfinity', 'spectrum'])) {
     out.push({
-      id: 'phone_internet', where: 'Schedule C line 25 or 27a',
+      id: 'phone_internet', where: 'Schedule C line 25 or 27b',
       title: 'Phone and internet, business share',
       why: 'If you use your phone or internet to list, message buyers or buy stock, the business share of the bill is deductible.',
       docs: 'Your bills and a reasonable way you worked out the business percentage.',

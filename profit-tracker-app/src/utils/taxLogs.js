@@ -1,3 +1,5 @@
+import { csvText } from './downloads';
+
 // Shared bits for the mileage log, equipment list and home office forms on
 // the Schedule C worksheet.
 export const usd = (value) => {
@@ -21,3 +23,15 @@ export const ASSET_METHODS = {
   section_179: { label: 'Deduct in full (Section 179)', short: 'Section 179', line: '13' },
   macrs: { label: 'Depreciate over several years', short: 'Depreciation', line: '13' },
 };
+
+/** CSV of every line in a report, one row per line. */
+export function reportCsv(r) {
+  const rows = [
+    ...r.part1.map((l) => ({ part: 'I', line: l.line, label: l.label, amount: l.amount })),
+    ...r.part2.map((l) => ({ part: 'II', line: l.line, label: l.label, amount: l.amount })),
+    { part: 'II', line: '28', label: 'Total expenses', amount: r.part2_total },
+    ...r.part3.map((l) => ({ part: 'III', line: l.line, label: l.label, amount: l.amount ?? l.value })),
+    ...r.part5.map((l) => ({ part: 'V', line: '48', label: l.label, amount: l.amount })),
+  ];
+  return csvText(rows.map((x) => ({ tax_year: r.year, ...x })));
+}
