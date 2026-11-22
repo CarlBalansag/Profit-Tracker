@@ -61,9 +61,18 @@ describe('CashoutImport', () => {
     render(<CashoutImport />);
     await upload('Date,Invoice #');
     expect(preview.mutateAsync).toHaveBeenCalledWith({ source: 'eb', csv: 'Date,Invoice #' });
-    expect(screen.getByText(/6 rows from ElectronicsBuyer/)).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog', { name: 'Review import' });
+    expect(dialog).toHaveTextContent(/6 rows read/);
+    const summary = screen.getByLabelText('Import summary');
+    expect(summary).toHaveTextContent(/Will be added\s*2 purchases\s*3 units/);
+    expect(summary).toHaveTextContent(/Payout\s*\$56\.00/);
+    expect(summary).toHaveTextContent(/Skipped\s*2/);
     expect(screen.getByLabelText('Sales go to')).toHaveValue('eb-group');
-    expect(screen.getByLabelText('Import Echo Dot')).toBeDisabled();
+    // Already-recorded rows are listed as skipped, not offered for import.
+    expect(screen.queryByLabelText('Import Echo Dot')).not.toBeInTheDocument();
+    const skipped = screen.getByLabelText('Skipped items');
+    expect(skipped).toHaveTextContent(/Echo Dot.*2 of 2 · imported before/);
+    expect(skipped).toHaveTextContent(/Fire TV Stick 4K.*1 of 2 · already logged with the same tracking number/);
     expect(screen.getByText('1 of 2')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Cost per unit for Fire TV Stick 4K Select'), { target: { value: '12.50' } });
@@ -98,7 +107,18 @@ describe('CashoutImport', () => {
       fireEvent.click(screen.getByRole('button', { name: /Import 2 purchases/ }));
     });
     expect(screen.getByRole('alert')).toHaveTextContent('Sales have to go to one of your cashouts.');
-    expect(screen.getByText(/6 rows from ElectronicsBuyer/)).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Review import' })).toBeInTheDocument();
+  });
+
+  it('closes the review with Cancel or Escape without saving anything', async () => {
+    render(<CashoutImport />);
+    await upload();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await upload();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(commit.mutateAsync).not.toHaveBeenCalled();
   });
 
   it('shows why a file was refused', async () => {
