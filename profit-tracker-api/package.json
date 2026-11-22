@@ -30,6 +30,7 @@
     "html-to-text": "10.0.1",
     "imapflow": "2.11.0",
     "mailparser": "3.14.2",
+    "pdfjs-dist": "6.4.299",
     "web-push": "3.6.7",
     "zod": "^4.6.5"
   },

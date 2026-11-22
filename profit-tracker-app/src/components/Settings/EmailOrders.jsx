@@ -37,7 +37,7 @@ function Records({ match }) {
 
 function OrderRow({ order, tab }) {
   const { accept, reject, dismiss } = useEmailOrderMutations();
-  const { addExpense, addPurchase, handled } = useEmailRuleMutations();
+  const { addExpense, addPurchase, handled, saveInvoice } = useEmailRuleMutations();
   const match = order.matches.find((m) => (tab === 'linked' ? m.state === 'linked' : m.state === 'suggested'));
   const run = async (fn, arg, done) => {
     try { await fn.mutateAsync(arg); if (done) toast.success(done); } catch (err) { toast.error(err.message); }
@@ -76,6 +76,9 @@ function OrderRow({ order, tab }) {
         {tab === 'linked' && match && (
           <>
             {match.auto && <span className="self-center text-xs text-gray-500">Linked automatically</span>}
+            {order.has_invoice && ['purchase', 'expense'].includes(match.record_type) && (
+              <button type="button" onClick={() => run(saveInvoice, order.id, 'Invoice saved as the receipt')} className="page-btn page-btn-secondary">Save invoice as receipt</button>
+            )}
             <button type="button" onClick={() => run(reject, match.id, 'Unlinked')} className="page-btn page-btn-secondary">Unlink</button>
           </>
         )}

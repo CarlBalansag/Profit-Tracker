@@ -17,6 +17,7 @@ const { matchOrders } = require('./match');
 const { getSettings } = require('./settings');
 const { applyRules, customMerchant } = require('./rules');
 const { applyOrderUpdates, createMissingPurchases } = require('./automations');
+const { pdfText, mergePdfDetails, firstPdf } = require('./attachments');
 
 const DOMAINS = SENDERS.flatMap((s) => s.domains);
 const BATCH = 50;
@@ -40,6 +41,14 @@ function foldersToRead(preset, includeSpam, listed) {
     ? listed.filter((f) => f.path !== inbox && (f.specialUse === '\\Junk' || SPAM_NAME.test(f.path))).map((f) => f.path)
     : (PRESETS[preset] || PRESETS.other).spamFolders;
   return [inbox, ...new Set(spam)];
+}
+
+// Opens a connected account's mailbox (read-only reader), e.g. to fetch an
+// invoice again.
+async function openAccount(account, deps = {}) {
+  let pass;
+  try { pass = decryptSecret(account.encrypted_secret); } catch { throw Object.assign(new Error('Enter the app password for this account again.'), { userFacing: true }); }
+  return (deps.open || openImap)(await imapTarget(account, pass, deps.resolve));
 }
 
 async function imapTarget(account, pass, resolve = resolvePublicHost) {
@@ -227,7 +236,15 @@ async function extractPending(prisma, client, account, { started, budgetMs, onRe
         if (!source) { await markFailed(prisma, m.id, 'This email is no longer in the mailbox.'); continue; }
         try {
           const parsed = await parseSource(source);
-          const details = extractEmail({ merchant: m.merchant, ...parsed });
+          let details = extractEmail({ merchant: m.merchant, ...parsed });
+          const pdf = firstPdf(parsed.attachments);
+          if (pdf) {
+            try {
+              const text = await pdfText(pdf.content);
+              details = mergePdfDetails(details, extractEmail({ merchant: m.merchant, subject: parsed.subject, text }));
+            } catch { /* an unreadable PDF leaves the body's details as they are */ }
+            details.attachment_name = String(pdf.filename || 'invoice.pdf').slice(0, 200);
+          }
           await prisma.emailMessage.update({
             where: { id: m.id },
             data: { ...details, uid, uid_validity: box.uidValidity, extracted_at: new Date(), extract_error: null },
@@ -307,4 +324,4 @@ function verifySyncSecret(authHeader) {
   return { ok: true };
 }
 
-module.exports = { organize, extractPending, syncAccount, runScheduledEmailSync, testConnection, verifySyncSecret, dedupeKey, foldersToRead, MAX_PER_RUN };
+module.exports = { openAccount, organize, extractPending, syncAccount, runScheduledEmailSync, testConnection, verifySyncSecret, dedupeKey, foldersToRead, MAX_PER_RUN };

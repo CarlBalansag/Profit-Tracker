@@ -131,3 +131,37 @@ export const FIXTURES = {
     expect: { kind: 'receipt', total: '14.37', payment_hint: 'Visa 4242' },
   },
 };
+
+// A minimal one-page PDF with the given lines of text (Helvetica), for the
+// PDF invoice tests. Built byte by byte so no PDF library is needed.
+export function makePdf(lines) {
+  const esc = (s) => s.replace(/[\\()]/g, (c) => `\\${c}`);
+  const text = `BT /F1 12 Tf 14 TL 72 720 Td ${lines.map((l, i) => (i === 0 ? `(${esc(l)}) Tj` : `T* (${esc(l)}) Tj`)).join(' ')} ET`;
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${Buffer.byteLength(text)} >>\nstream\n${text}\nendstream`,
+  ];
+  let body = '%PDF-1.4\n';
+  const offsets = [];
+  objects.forEach((o, i) => { offsets.push(Buffer.byteLength(body)); body += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xref = Buffer.byteLength(body);
+  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`;
+  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(body, 'latin1');
+}
+
+// An email with an HTML body and a PDF attached.
+export function mimeWithPdf({ from, subject, html, pdf, filename = 'invoice.pdf', date = 'Tue, 03 Mar 2026 09:01:00 +0000', id = `<${Math.random().toString(36).slice(2)}@example.test>` }) {
+  const b = 'mixed_qa';
+  const pdfB64 = pdf.toString('base64').replace(/.{76}/g, '$&\r\n');
+  return Buffer.from([
+    `From: ${from}`, 'To: buyer@example.test', `Subject: ${subject}`, `Date: ${date}`, `Message-ID: ${id}`,
+    'MIME-Version: 1.0', `Content-Type: multipart/mixed; boundary="${b}"`, '',
+    `--${b}`, 'Content-Type: text/html; charset=utf-8', '', html, '',
+    `--${b}`, `Content-Type: application/pdf; name="${filename}"`, 'Content-Transfer-Encoding: base64', `Content-Disposition: attachment; filename="${filename}"`, '', pdfB64, '',
+    `--${b}--`, '',
+  ].join('\r\n'));
+}

@@ -82,10 +82,10 @@ async function openImap(target, { ImapClass = ImapFlow } = {}) {
     },
     // Raw source for reading order details, capped at 512 KB per email.
     // BODY.PEEK: reading the body never marks the email as read.
-    async fetchSources(uids) {
+    async fetchSources(uids, { maxLength = 512 * 1024 } = {}) {
       if (!uids.length) return [];
       const out = [];
-      for await (const msg of client.fetch(uids.join(','), { uid: true, source: { maxLength: 512 * 1024 } }, { uid: true })) {
+      for await (const msg of client.fetch(uids.join(','), { uid: true, source: { maxLength } }, { uid: true })) {
         if (msg.source) out.push({ uid: msg.uid, source: msg.source });
       }
       return out;

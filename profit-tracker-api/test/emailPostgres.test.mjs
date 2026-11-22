@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import EmbeddedPostgres from 'embedded-postgres';
-import { mime } from './fixtures/emails.mjs';
+import { mime, makePdf, mimeWithPdf } from './fixtures/emails.mjs';
 
 const require = createRequire(import.meta.url);
 const { PrismaClient } = require('@prisma/client');
@@ -133,7 +133,9 @@ describe('email connections on Postgres', () => {
     goodPassword = 'app-pass-1234';
     router._resetLimits();
     resetMail();
+    await prisma.emailMatch.deleteMany({});
     await prisma.emailMessage.deleteMany({});
+    await prisma.emailOrder.deleteMany({});
     await prisma.emailAccount.deleteMany({});
   });
 
@@ -324,6 +326,41 @@ describe('email connections on Postgres', () => {
     mail.INBOX.messages.length = 0;
     await sync.syncAccount(body.id, { open: fakeOpen, resolve });
     expect(new Set((await prisma.emailMessage.findMany()).map((r) => r.status))).toEqual(new Set(['failed']));
+  });
+
+  it('reads a PDF invoice, then saves it privately as the expense receipt (E6)', async () => {
+    const pdf = makePdf(['Pirate Ship Invoice', 'Order Total: $14.37', 'Paid with Visa ending in 4242']);
+    mail.INBOX.messages.push({ uid: nextUid++, from: 'support@pirateship.com', subject: 'Your Pirate Ship receipt', date: new Date('2026-03-03'), messageId: '<ps1@pirateship.com>',
+      raw: mimeWithPdf({ from: 'support@pirateship.com', subject: 'Your Pirate Ship receipt', html: '<p>Your receipt is attached.</p>', pdf, id: '<ps1@pirateship.com>' }) });
+    await prisma.emailMerchantRule.create({ data: { user_id: user.id, merchant: 'pirateship', label: 'Pirate Ship', category: 'Shipping' } });
+    await prisma.user.update({ where: { id: user.id }, data: { accounting_preferences: JSON.stringify({ emailAutomation: { createExpenses: true } }) } });
+    const { body } = await send('POST', '/api/email/accounts', connectBody());
+    await waitIdle(body.id);
+
+    const message = await prisma.emailMessage.findFirst({ where: { message_id: '<ps1@pirateship.com>' } });
+    expect([message.status, message.kind, message.total?.toString(), message.attachment_name]).toEqual(['extracted', 'receipt', '14.37', 'invoice.pdf']);
+    const expense = await prisma.expense.findFirst();
+    expect(Number(expense.amount)).toBe(14.37);
+
+    const uploads = [];
+    router._deps.cloudinary = { uploader: {
+      upload: async (data, opts) => { uploads.push({ data, opts }); return { resource_type: 'image', format: 'pdf', public_id: `${opts.folder}/${opts.public_id}` }; },
+      destroy: async () => {},
+    } };
+    const order = await prisma.emailOrder.findFirst();
+    const list = await send('GET', '/api/email/orders?state=linked');
+    expect(list.body.orders[0].has_invoice).toBe(true);
+    const saved = await send('POST', `/api/email/orders/${order.id}/save-invoice`);
+    expect(saved.body).toMatchObject({ saved: true, record_type: 'expense', record_id: expense.id });
+    expect(uploads[0].opts).toMatchObject({ type: 'authenticated', resource_type: 'auto' });
+    expect(uploads[0].opts.public_id.startsWith(`expense_${expense.id}_`)).toBe(true);
+    expect(uploads[0].data.startsWith('data:application/pdf;base64,')).toBe(true);
+    expect((await prisma.expense.findUnique({ where: { id: expense.id } })).receipt_url).toMatch(/^private:image:pdf:profittracker\/receipts\/expense_/);
+    expect((await send('POST', `/api/email/orders/${order.id}/save-invoice`)).status).toBe(409);
+    delete router._deps.cloudinary;
+    await prisma.emailMerchantRule.deleteMany({});
+    await prisma.expense.deleteMany({});
+    await prisma.user.update({ where: { id: user.id }, data: { accounting_preferences: null } });
   });
 
   it('protects the cron endpoint with its own secret', () => {

@@ -37,9 +37,9 @@ function cleanText(text) {
     .replace(/\n{3,}/g, '\n\n');
 }
 
-async function parseSource(source) {
+async function parseSource(source, { maxBytes = MAX_SOURCE } = {}) {
   const buf = Buffer.isBuffer(source) ? source : Buffer.from(String(source || ''));
-  const mail = await simpleParser(buf.subarray(0, MAX_SOURCE), { skipImageLinks: true, skipTextLinks: true, skipTextToHtml: true });
+  const mail = await simpleParser(buf.subarray(0, maxBytes), { skipImageLinks: true, skipTextLinks: true, skipTextToHtml: true });
   const html = typeof mail.html === 'string' ? mail.html : '';
   const text = cleanText(html ? convert(html, TEXT_OPTIONS) : mail.text || '');
   return {

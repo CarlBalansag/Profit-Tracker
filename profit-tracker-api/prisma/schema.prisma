@@ -1217,6 +1217,7 @@ model EmailMessage {
   parser_version   Int?
   extracted_at     DateTime?
   extract_error    String?
+  attachment_name  String? // a PDF invoice was attached (name only; E6)
   order_id         String?
   order            EmailOrder? @relation(fields: [order_id], references: [id], onDelete: SetNull)
 

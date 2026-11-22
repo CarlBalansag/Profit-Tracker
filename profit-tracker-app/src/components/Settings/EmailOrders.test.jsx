@@ -6,7 +6,7 @@ import { EmailOrders } from './EmailOrders';
 const mutation = () => ({ mutateAsync: vi.fn().mockResolvedValue({ linked: 2 }), mutate: vi.fn(), isPending: false });
 const m = { accept: mutation(), reject: mutation(), acceptAll: mutation(), dismiss: mutation(), automation: mutation() };
 let data;
-const r = { addExpense: mutation(), addPurchase: mutation(), handled: mutation() };
+const r = { addExpense: mutation(), addPurchase: mutation(), handled: mutation(), saveInvoice: mutation() };
 const calls = [];
 vi.mock('../../hooks/useApi', () => ({
   useEmailOrders: (opts) => { calls.push(opts); return { data }; },
@@ -75,5 +75,13 @@ describe('EmailOrders', () => {
     }
     fireEvent.click(screen.getByLabelText(/Create purchases from order emails/));
     expect(m.automation.mutate).toHaveBeenCalledWith({ createPurchases: true });
+  });
+
+  it('saves a PDF invoice from a linked order as the receipt', async () => {
+    data = { orders: [{ ...order, id: 'o3', has_invoice: true, matches: [{ ...order.matches[0], state: 'linked', auto: true }] }], counts: { linked: 1 }, total: 1 };
+    render(<EmailOrders found={1} />);
+    fireEvent.click(screen.getByRole('button', { name: /Linked/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice as receipt' }));
+    await waitFor(() => expect(r.saveInvoice.mutateAsync).toHaveBeenCalledWith('o3'));
   });
 });

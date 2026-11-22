@@ -7,11 +7,12 @@ const { validateBody } = require('../middleware/validate');
 const { PRESETS, SENDERS, normalizeHost } = require('../services/email/config');
 const { encryptSecret, configured } = require('../services/email/crypto');
 const { friendlyError } = require('../services/email/imap');
-const { syncAccount, testConnection } = require('../services/email/sync');
+const { syncAccount, testConnection, openAccount } = require('../services/email/sync');
 const { linkMatch, rejectMatch } = require('../services/email/match');
 const { getSettings, saveSettings, DEFAULTS } = require('../services/email/settings');
 const { createExpenseFromOrder, suggestRules, normalizeDomain, labelFor } = require('../services/email/rules');
 const { createPurchasesFromOrder } = require('../services/email/automations');
+const { saveInvoice } = require('../services/email/attachments');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -283,12 +284,17 @@ router.get('/orders', isAuthenticated, async (req, res, next) => {
       prisma.emailOrder.groupBy({ by: ['match_state'], where: { user_id: req.user.id, type: { not: 'shipment' } }, _count: { _all: true } }),
     ]);
     const records = await recordSummaries(req.user.id, orders.flatMap((o) => o.matches));
+    const withPdf = new Set((await prisma.emailMessage.findMany({
+      where: { user_id: req.user.id, order_id: { in: orders.map((o) => o.id) }, attachment_name: { not: null } },
+      select: { order_id: true },
+    })).map((m) => m.order_id));
     res.json({
       total,
       counts: Object.fromEntries(counts.map((c) => [c.match_state, c._count._all])),
       orders: orders.map(({ _count, matches, user_id: _u, key: _k, ...o }) => ({
         ...o,
         email_count: _count.messages,
+        has_invoice: withPdf.has(o.id),
         matches: matches.map((m) => ({
           id: m.id, record_type: m.record_type, score: m.score, band: m.band, reasons: m.reasons, state: m.state, auto: m.auto,
           records: m.record_ids.map((id) => records.get(`${m.record_type}:${id}`)).filter(Boolean),
@@ -450,6 +456,22 @@ router.post('/orders/:id/handled', isAuthenticated, async (req, res, next) => {
     if (!done.count) return res.status(404).json({ error: 'Order not found.' });
     res.json({ handled: true });
   } catch (err) { next(err); }
+});
+
+// Saves the order's PDF invoice as the linked record's private receipt.
+router.post('/orders/:id/save-invoice', isAuthenticated, async (req, res, next) => {
+  try {
+    if (!configured()) return notConfigured(res);
+    const result = await saveInvoice(prisma, req.user.id, req.params.id, {
+      openClient: (account) => openAccount(account, deps),
+      cloudinary: deps.cloudinary || require('cloudinary').v2,
+    });
+    if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+    res.json(result);
+  } catch (err) {
+    if (err?.userFacing || err?.authenticationFailed) return res.status(409).json({ error: friendlyError(err) });
+    next(err);
+  }
 });
 
 router._deps = deps;
