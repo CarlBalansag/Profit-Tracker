@@ -29,7 +29,7 @@ export function ReportPacket({ report: r, heading, onDrill }) {
   const ho = r.home_office;
   const mi = r.mileage;
   const eq = r.equipment;
-  return <article aria-label={heading} className="tax-packet space-y-6 rounded-xl border border-white/10 p-4 text-sm sm:p-5">
+  return <article aria-label={heading} className="tax-packet card space-y-6 p-4 text-sm sm:p-5">
     <header className="space-y-1">
       <h2 className="text-lg font-semibold text-white">{heading}</h2>
       <p className="text-gray-400">Schedule C (Form 1040) preparation aid, not a filed return. {r.basis}</p>

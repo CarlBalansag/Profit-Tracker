@@ -11,6 +11,9 @@ import { WhatIf } from './WhatIf';
 import { DeductionChecks } from './DeductionChecks';
 import { FILING_STATUS_LABELS } from '../../utils/taxProfile';
 import { ResponsiveTable } from './ResponsiveTable';
+import { Panel, Rise } from '../Analytics/Motion';
+import { Tile } from './Tile';
+import { CalendarClock, PiggyBank, Receipt, TrendingUp } from 'lucide-react';
 
 const usd = (value) => {
   const n = Number(value) || 0;
@@ -19,7 +22,7 @@ const usd = (value) => {
 };
 const pct = (rate) => (rate === null || rate === undefined ? 'n/a' : `${(Number(rate) * 100).toFixed(1)}%`);
 const day = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-const card = 'rounded-xl border border-white/10 p-4';
+const card = 'card p-4';
 const MODE_LABEL = { personalized: 'personalized', flat: 'flat percentage', conservative: 'conservative' };
 const IRS = {
   estimated: { label: 'IRS: Estimated taxes', url: 'https://www.irs.gov/businesses/small-businesses-self-employed/estimated-taxes' },
@@ -149,12 +152,12 @@ export function TaxOverview({ year, books, worksheet = null, pendingExpenses = 0
 
   const header = <div className="flex flex-wrap items-center justify-between gap-3">
     <div>
-      <h2 className="text-lg font-semibold">Your {year} tax estimate</h2>
-      <p className="mt-1 text-sm text-gray-400">An estimate to plan with, not a tax bill. Based on your records and a projection of the rest of the year.</p>
+      <h2 className="text-lg font-semibold text-[var(--dp-text-primary)]">Your {year} tax estimate</h2>
+      <p className="mt-1 text-sm text-[var(--dp-text-secondary)]">A plan to save for, not a tax bill.</p>
     </div>
-    <div role="group" aria-label="How much math to show" className="inline-flex rounded-lg border border-white/10 p-0.5 text-sm">
+    <div role="group" aria-label="How much math to show" className="inline-flex gap-1 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] p-1 text-xs">
       {['simple', 'detailed'].map((v) => <button key={v} type="button" aria-pressed={loaded.taxMath === v} onClick={() => setTaxMath(v)}
-        className={`rounded-md px-3 py-1 ${loaded.taxMath === v ? 'bg-purple-600 text-white' : 'text-gray-300'}`}>{v === 'simple' ? 'Simple' : 'Detailed'}</button>)}
+        className={`rounded-lg border px-3 py-1.5 font-medium ${loaded.taxMath === v ? 'border-[color:var(--accent)] bg-[var(--accent-bg)] text-[var(--dp-text-primary)]' : 'border-transparent text-[var(--dp-text-secondary)]'}`}>{v === 'simple' ? 'Simple' : 'Detailed'}</button>)}
     </div>
   </div>;
 
@@ -175,7 +178,7 @@ export function TaxOverview({ year, books, worksheet = null, pendingExpenses = 0
 
   return <section aria-label="Tax estimate" className="space-y-4">
     {header}
-    {session && <p className="rounded-xl border border-amber-500/30 p-3 text-sm text-amber-200">Not saved: these details are only in this browser tab and are gone when you leave.{session.filing_status && <> <button type="button" disabled={busy} onClick={() => submit({ profile: session, save: true })} className="underline">Save them</button></>}</p>}
+    {session && <p className="rounded-xl bg-[var(--dp-warning-bg)] px-4 py-3 text-sm text-[var(--dp-warning-text)]">Not saved: these details are only in this browser tab and are gone when you leave.{session.filing_status && <> <button type="button" disabled={busy} onClick={() => submit({ profile: session, save: true })} className="underline">Save them</button></>}</p>}
     {o.overdue.length > 0 && <div role="alert" className="rounded-xl border border-red-500/40 p-3 text-sm text-red-200">
       <p className="font-medium">{o.overdue.length === 1 ? 'An estimated tax payment looks unpaid' : `${o.overdue.length} estimated tax payments look unpaid`}</p>
       <ul className="mt-1 space-y-0.5">{o.overdue.map((d) => <li key={`${d.code}-${d.period}`}>{d.who} {d.period}, due {day(d.due)}: <span className="tabular-nums">{usd(d.amount)}</span></li>)}</ul>
@@ -183,15 +186,26 @@ export function TaxOverview({ year, books, worksheet = null, pendingExpenses = 0
     </div>}
     {o.limitations.length > 0 && <ul role="note" className="space-y-1 rounded-xl border border-amber-500/30 p-3 text-sm text-amber-200">{o.limitations.map((l) => <li key={l}>{l}</li>)}</ul>}
 
-    <div data-tutorial-id="sc-estimate-cards" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <div className={card}><p className="text-sm text-gray-400">Profit so far</p><p className="mt-2 text-2xl tabular-nums">{usd(o.actualProfit)}</p><p className="mt-1 text-xs text-gray-500">{projected ? <>Projected for {year}: <span className="text-gray-300">{usd(o.businessProfit)}</span> · </> : null}Schedule C line 31 · <button type="button" onClick={onShowWorksheet} className="underline">see how</button></p></div>
-      <div className={card}><p className="text-sm text-gray-400">Tax the business adds</p><p className="mt-2 text-2xl tabular-nums">{o.impact ? usd(Math.max(0, o.impact.additionalTaxFromBusiness)) : '—'}</p><p className="mt-1 text-xs text-gray-500">{o.impact ? (o.impact.effectiveBusinessTaxRate !== null ? `About ${pct(o.impact.effectiveBusinessTaxRate)} of ${projected ? 'projected' : 'your'} profit` : 'No profit yet, so no extra tax') : 'Add your filing status to see this'}</p></div>
-      <div className={`${card} border-purple-500/30`}><p className="text-sm text-gray-400">Set aside</p><p className="mt-2 text-2xl font-semibold tabular-nums text-white">{usd(o.recommended)}</p><p className="mt-1 text-xs text-gray-500">{MODE_LABEL[o.effectiveMode]} · {usd(o.stillToSetAside)} still to set aside{o.coverage !== null && o.covered > 0 ? ` · ${Math.min(100, Math.round(o.coverage * 100))}% covered` : ''}</p></div>
-      <div className={card}><p className="text-sm text-gray-400">Next payment due</p>{next
-        ? <><p className="mt-2 text-2xl tabular-nums">{day(next.due)}</p>{o.nextDue.filter((d) => d.due === next.due).map((d) => <p key={d.who} className="mt-1 text-xs text-gray-500">{d.who} {d.period}: {usd(d.amount)}{d.catchUp > 0 ? `, including ${usd(d.catchUp)} overdue` : ''}</p>)}</>
-        : <><p className="mt-2 text-lg">{o.impact ? 'Nothing scheduled' : '—'}</p><p className="mt-1 text-xs text-gray-500">{o.impact ? `Any balance is due when you file, by ${day(o.filingDue)}.` : unsupportedYear ? 'Not available for this year' : 'Add your details to see this'}</p></>}</div>
-    </div>
+    <Rise data-tutorial-id="sc-estimate-cards" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+      <Tile label="Profit so far" icon={TrendingUp} value={usd(o.actualProfit)}
+        tip="Your Schedule C profit (line 31) so far this year. The estimate uses the projected full-year number."
+        sub={<>{projected ? <>Projected for {year}: <span className="text-[var(--dp-text-secondary)]">{usd(o.businessProfit)}</span> · </> : null}<button type="button" onClick={onShowWorksheet} className="underline">see how</button></>} />
+      <Tile label="Tax the business adds" icon={Receipt} value={o.impact ? usd(Math.max(0, o.impact.additionalTaxFromBusiness)) : '—'}
+        tip="The extra federal, self-employment and state tax you owe because of this profit, on top of what you'd owe without the business."
+        sub={o.impact ? (o.impact.effectiveBusinessTaxRate !== null ? `About ${pct(o.impact.effectiveBusinessTaxRate)} of ${projected ? 'projected' : 'your'} profit` : 'No profit yet, so no extra tax') : 'Add your filing status to see this'} />
+      <Tile label="Set aside" icon={PiggyBank} value={usd(o.recommended)} highlight tipAlign="right"
+        tip="How much to keep in savings so the tax is covered when it's due. Money you've set aside or paid counts toward it."
+        sub={`${MODE_LABEL[o.effectiveMode]} · ${usd(o.stillToSetAside)} still to set aside${o.coverage !== null && o.covered > 0 ? ` · ${Math.min(100, Math.round(o.coverage * 100))}% covered` : ''}`} />
+      <Tile label="Next payment due" icon={CalendarClock} tipAlign="right"
+        tip="Self-employed people pay tax during the year in installments. This is the next one, with any amount still owed from earlier ones."
+        value={next ? day(next.due) : (o.impact ? 'Nothing scheduled' : '—')}
+        sub={next
+          ? o.nextDue.filter((d) => d.due === next.due).map((d) => <span key={d.who} className="block">{d.who} {d.period}: {usd(d.amount)}{d.catchUp > 0 ? `, including ${usd(d.catchUp)} overdue` : ''}</span>)
+          : (o.impact ? `Any balance is due when you file, by ${day(o.filingDue)}.` : unsupportedYear ? 'Not available for this year' : 'Add your details to see this')} />
+    </Rise>
 
+    <Panel title="Details" sub="Open any of these to see the math, plan payments or try a what-if.">
+    <div className="sc-rows">
     {o.projection && <details data-tutorial-id="sc-projection" className={card} open={detailed || undefined}>
       <summary className="cursor-pointer text-sm font-medium text-purple-300">Projection for {year}: {o.forecastChoice.label.toLowerCase()} ({usd(o.businessProfit)})</summary>
       <TaxProjection key={`${o.forecastChoice.key}-${profile?.profit_target ?? ''}`} o={o} target={profile?.profit_target ?? null} busy={busy} onChoose={updateProfile} />
@@ -238,6 +252,8 @@ export function TaxOverview({ year, books, worksheet = null, pendingExpenses = 0
       <summary className="cursor-pointer text-sm font-medium text-purple-300">Deductions you might be missing</summary>
       <DeductionChecks year={year} worksheet={worksheet} saleCount={books.sales?.count || 0} profit={o.businessProfit} records={books.records || null} pendingExpenses={pendingExpenses} missingReceipts={missingReceipts} onShowWorksheet={onShowWorksheet} />
     </details>
+    </div>
+    </Panel>
 
     {o.missing.length > 0 && profile.filing_status && <div className={card}>
       <p className="text-sm font-medium text-white">Make this estimate sharper</p>

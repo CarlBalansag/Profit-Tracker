@@ -1676,3 +1676,28 @@ body,
     padding-right: 0 !important;
   }
 }
+
+/* Schedule C: folded sections inside a panel read as rows with a divider,
+   not as boxes inside a box. Inside @layer components so it outranks the
+   theme's layered border and accent-text remaps. */
+@layer components {
+  .sc-rows > details,
+  .carbon-workspace .sc-rows > details,
+  .glass-workspace .sc-rows > details {
+    border-width: 0 0 1px 0 !important;
+    border-style: solid !important;
+    border-color: var(--dp-border) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 14px 2px !important;
+  }
+  .sc-rows > details:first-child { padding-top: 2px !important; }
+  .sc-rows > details:last-child { border-bottom-width: 0 !important; padding-bottom: 2px !important; }
+  .sc-rows > details > summary,
+  .carbon-workspace .sc-rows > details > summary,
+  .glass-workspace .sc-rows > details > summary {
+    color: var(--dp-text-primary) !important;
+    font-weight: 500;
+  }
+}

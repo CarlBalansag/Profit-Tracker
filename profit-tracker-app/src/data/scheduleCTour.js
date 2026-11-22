@@ -62,52 +62,37 @@ export const SCHEDULE_C_STEPS = [
   {
     id: 'sc-profit', view: 'worksheet', target: 'sc-profit', placement: 'bottom',
     title: 'Your profit in four numbers',
-    body: 'Gross receipts: what your sales brought in. Cost of goods sold: what the items you sold cost you. Expenses: your other business costs. Net profit: sales minus both, and the number you pay tax on.',
+    body: 'Sales: what your sales brought in. Cost of items: what the items you sold cost you. Expenses: your other business costs. Profit: sales minus both, and the number you pay tax on. Tap an (i) for more.',
   },
   {
-    id: 'sc-warnings', view: 'worksheet', target: 'sc-warnings', placement: 'bottom', optional: true,
-    title: 'Yellow boxes: fix these',
-    body: 'Something in your records looks off, like a sale dated before you bought the item. Fix it on that transaction and the numbers here update.',
-  },
-  {
-    id: 'sc-lines', view: 'worksheet', target: 'sc-lines', placement: 'bottom',
-    title: 'The actual form lines',
-    body: 'The same numbers laid out line by line as they go on the IRS form. Handy for you or a preparer; nothing to do here.',
-  },
-  {
-    id: 'sc-logs', view: 'worksheet', target: 'sc-logs', placement: 'top',
-    title: 'Extra deductions you add yourself',
-    body: 'Driving for the business (to stores, the post office), equipment like a label printer or shelves, and a space at home used only for the business. Each one lowers your profit. Skip any that don\'t apply.',
-  },
-  {
-    id: 'sc-extras', view: 'worksheet', target: 'sc-extras', placement: 'top',
-    title: 'Only if they apply',
-    body: 'Stock you owned before using ProfitTracker, 1099-K forms that eBay or PayPal send you, and why this profit differs from the Dashboard. Open one only if you need it.',
-  },
-  {
-    id: 'sc-notes', view: 'worksheet', target: 'sc-notes', placement: 'top', optional: true,
-    title: 'Notes',
-    body: 'Explanations of choices made for you, like card rewards lowering what your items cost instead of counting as income. Read them once; there\'s nothing to do.',
+    id: 'sc-todo', view: 'worksheet', target: 'sc-todo', placement: 'bottom',
+    title: 'What to do next',
+    body: 'Everything that needs you, one line each: expenses to review, records that look wrong, possible duplicates and missing receipts. Start at the top. When it says "All caught up", you\'re done.',
   },
   {
     id: 'sc-expense-cards', view: 'worksheet', target: 'sc-expense-cards', placement: 'bottom',
     title: 'Expenses at a glance',
-    body: 'Worksheet total: what counts right now. Needs review: expenses that don\'t count until you check them. Missing receipts: expenses without a photo or PDF of the receipt (keep receipts in case the IRS asks).',
-  },
-  {
-    id: 'sc-duplicates', view: 'worksheet', target: 'sc-duplicates', placement: 'bottom', optional: true,
-    title: 'Possible duplicates',
-    body: 'An expense looks like it was entered twice, or matches a shipping label already taken from a sale. Delete the extra one so it isn\'t counted twice.',
+    body: 'Counted so far: what lowers your profit right now. To review: expenses that don\'t count until you check them. No receipt: keep a photo or PDF in case the IRS asks.',
   },
   {
     id: 'sc-categories', view: 'worksheet', target: 'sc-categories', placement: 'top',
     title: 'IRS categories',
-    body: 'The IRS groups expenses into buckets like Supplies or Postage. Each reviewed expense goes in one. Tap a bucket to see its records.',
+    body: 'The IRS groups expenses into buckets like Supplies or Postage. Each reviewed expense lands in one. Tap a bucket to see its records.',
   },
   {
     id: 'sc-queue', view: 'worksheet', target: 'sc-queue', placement: 'bottom',
-    title: 'Your to-do list',
-    body: 'Each expense you typed in needs a quick check before it counts ("worksheet $0.00" means not yet). Tap Review, then "Use suggestions" to fill most of it in, check it, and use "Save and review next" to go through them all.',
+    title: 'Every expense',
+    body: 'Each one shows whether it counts. For one marked "To review", tap Review, then "Use suggestions" to fill most of it in, check it, and "Save and review next" to go through them all.',
+  },
+  {
+    id: 'sc-logs', view: 'worksheet', target: 'sc-logs', placement: 'top',
+    title: 'Lower your tax',
+    body: 'Driving for the business (to stores, the post office), equipment like a label printer or shelves, and a space at home used only for the business. Each one lowers your profit. Skip any that don\'t apply.',
+  },
+  {
+    id: 'sc-details', view: 'worksheet', target: 'sc-details', placement: 'top',
+    title: 'The actual form lines',
+    body: 'The same numbers line by line as they go on the IRS form, plus 1099-K forms, stock from before ProfitTracker and notes. For you or a tax preparer; open only what you need.',
   },
   {
     id: 'sc-report-status', view: 'reports', target: 'sc-report-status', placement: 'bottom',
@@ -122,6 +107,6 @@ export const SCHEDULE_C_STEPS = [
   {
     id: 'sc-done', view: 'worksheet', target: null, placement: 'center',
     title: 'Where to start',
-    body: '1. Review your expenses in the Worksheet\'s to-do list. 2. Fix any yellow warnings. 3. Add driving, equipment or a home office if they apply. 4. Check the Tax estimate and save what it says. Tap the ? button any time to see this again.',
+    body: '1. Work through the To do list on the Worksheet. 2. Add driving, equipment or a home office if they apply. 3. Check the Tax estimate and set aside what it says. Tap "How it works" any time to see this again.',
   },
 ];

@@ -22,7 +22,7 @@ describe('Schedule C workflow', () => {
   it('runs a beginner tour from the ? button that switches to the tab each step explains', async () => {
     mount(<TutorialProvider><ScheduleC /><SpotlightOverlay /></TutorialProvider>);
     fireEvent.click(screen.getByRole('tab', { name: 'Worksheet' }));
-    await screen.findByText('Worksheet total');
+    await screen.findByText('Counted so far');
     fireEvent.click(screen.getByRole('button', { name: 'How this page works' }));
     // Starts on the Tax estimate tab.
     expect(screen.getByText('Taxes for your reselling, step by step')).toBeTruthy();
@@ -34,15 +34,14 @@ describe('Schedule C workflow', () => {
     for (let i = 0; i < 12 && !screen.queryByText('Your profit in four numbers'); i++) next();
     expect(screen.getByText('Your profit in four numbers')).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Worksheet' }).getAttribute('aria-selected')).toBe('true');
-    // No warnings in this fixture, so that optional step is skipped.
-    next(); expect(screen.getByText('The actual form lines')).toBeTruthy();
+    next(); expect(screen.getByText('What to do next')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Skip tutorial' }));
-    expect(screen.queryByText('The actual form lines')).toBeNull();
+    expect(screen.queryByText('What to do next')).toBeNull();
     // The Schedule C tour never marks the first-run app tour as seen.
     expect(apiFetch.mock.calls.some(([path]) => path === '/auth/me')).toBe(false);
   });
   it('moves between the views with the arrow keys and links each tab to the panel', async () => {
-    mountWorksheet(); await screen.findByText('Worksheet total');
+    mountWorksheet(); await screen.findByText('Counted so far');
     const worksheet = screen.getByRole('tab', { name: 'Worksheet' });
     expect(worksheet.getAttribute('tabindex')).toBe('0');
     expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe(worksheet.id);
@@ -59,12 +58,12 @@ describe('Schedule C workflow', () => {
     apiFetch.mockResolvedValue(response({ enabled: false })); mountWorksheet();
     await screen.findByText('Enable Schedule C preparation in Settings to use this worksheet.');
     expect(apiFetch).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText('Worksheet total')).toBeNull();
+    expect(screen.queryByText('Counted so far')).toBeNull();
   });
   it('shows reviewed totals, future-year caution, empty filters and exports all records with evidence and formula protection', async () => {
-    mountWorksheet(); await screen.findByText('Worksheet total');
+    mountWorksheet(); await screen.findByText('Counted so far');
     fireEvent.change(screen.getByLabelText('Tax year'), { target: { value: '2030' } });
-    await screen.findByText(/Planning worksheet for 2030/);
+    await screen.findByText(/The 2030 form isn.t out yet/);
     fireEvent.change(screen.getByLabelText('Show records'), { target: { value: 'pending' } });
     expect(screen.getByText('No expenses match this view.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Export supporting CSV' }));
@@ -109,8 +108,8 @@ describe('Schedule C workflow', () => {
   });
   it('rejects malformed years and offers loading failure retry without showing stale totals', async () => {
     apiFetch.mockResolvedValueOnce(response({ error: 'Load failed' }, false)); mountWorksheet();
-    await screen.findByRole('alert'); fireEvent.click(screen.getByRole('button', { name: 'Retry loading' })); await screen.findByText('Worksheet total');
-    fireEvent.change(screen.getByLabelText('Tax year'), { target: { value: '10000' } }); expect(screen.getByRole('alert').textContent).toContain('four-digit'); expect(screen.queryByText('Worksheet total')).toBeNull();
+    await screen.findByRole('alert'); fireEvent.click(screen.getByRole('button', { name: 'Retry loading' })); await screen.findByText('Counted so far');
+    fireEvent.change(screen.getByLabelText('Tax year'), { target: { value: '10000' } }); expect(screen.getByRole('alert').textContent).toContain('four-digit'); expect(screen.queryByText('Counted so far')).toBeNull();
   });
 });
 
@@ -127,8 +126,9 @@ describe('Schedule C: sale costs included automatically', () => {
     mountWorksheet();
     await screen.findByText('Cup · Shipping label');
     expect(screen.getByText(/Includes \$10.04 from 1 sale cost/)).toBeTruthy();
-    const article = screen.getByText('Cup · Shipping label').closest('article');
-    expect(article.textContent).toContain('Automatic · from your sale · Shipping label (Wells Fargo Debit) · 2026-09-27');
+    const article = screen.getByText('Cup · Shipping label').closest('li');
+    expect(article.textContent).toContain('From a sale');
+    expect(article.textContent).toContain('2026-09-27 · Shipping label (Wells Fargo Debit)');
     expect(article.querySelector('a').getAttribute('href')).toBe('/transactions');
     expect(article.querySelector('button')).toBeNull();
   });
@@ -137,8 +137,8 @@ describe('Schedule C: sale costs included automatically', () => {
     apiFetch.mockImplementation(async path => response(path.includes('/preferences/') ? { enabled: true } : { ...saleReport(), returns_and_allowances: { line: '2', total: '150.00', count: 1 } }));
     mountWorksheet();
     const note = await screen.findByText(/are returns and allowances/);
-    expect(note.textContent).toContain('$150.00 this year, 1 refund');
-    expect(note.textContent).toContain('not in the worksheet total');
+    expect(note.textContent).toContain('$150.00, 1 refund');
+    expect(note.textContent).toContain('lower your sales instead');
   });
 
   it('hides the returns note when there are no refunds', async () => {
@@ -150,12 +150,12 @@ describe('Schedule C: sale costs included automatically', () => {
 
   it('explains that purchase costs are left out on purpose', async () => {
     mountWorksheet();
-    expect(await screen.findByText(/\$53.20 this year, net of gift cards/)).toBeTruthy();
+    expect(await screen.findByText(/\$53.20 this year\) are part of what your items cost/)).toBeTruthy();
   });
 
   it('warns about a manual expense that duplicates a sale cost, and filters to it', async () => {
     mountWorksheet();
-    const banner = await screen.findByRole('button', { name: /1 manual expense looks like/ });
+    const banner = within((await screen.findByText('1 possible duplicate')).closest('li')).getByRole('button', { name: 'Show' });
     expect(screen.getByText(/Possible duplicate of “Cup · Shipping label”/)).toBeTruthy();
     fireEvent.click(banner);
     await waitFor(() => expect(screen.queryByText('Packing tape')).toBeNull());
@@ -207,7 +207,7 @@ describe('Schedule C profit (Parts I and III)', () => {
 
   it('shows gross receipts, cost of goods sold, expenses and net profit with the lines behind them', async () => {
     mountWorksheet();
-    expect(await screen.findByText('Net profit (line 31)')).toBeTruthy();
+    expect(await screen.findByText('Profit')).toBeTruthy();
     expect(screen.getAllByText('$73.50').length).toBeGreaterThan(0);
     expect(screen.getAllByText('$205.00').length).toBeGreaterThan(0);
     expect(screen.getAllByText('$124.50').length).toBeGreaterThan(0);
@@ -231,7 +231,7 @@ describe('Schedule C profit (Parts I and III)', () => {
   it('says loss instead of profit when line 31 is negative', async () => {
     apiFetch.mockImplementation(async path => response(path.includes('/preferences/') ? { enabled: true } : { ...report(2026), books: { ...books, netProfit: '-40.00', checks: { ...books.checks, oversold: [] } } }));
     mountWorksheet();
-    expect(await screen.findByText('Net loss (line 31)')).toBeTruthy();
+    expect(await screen.findByText('Loss')).toBeTruthy();
     expect(screen.getByText('-$40.00')).toBeTruthy();
   });
 });
@@ -424,7 +424,7 @@ describe('Schedule C: reviewing expenses faster', () => {
 
   it('filters to missing receipts and explains an expense entered twice', async () => {
     mountWorksheet();
-    await screen.findByText(/1 expense looks like another expense entered twice/);
+    await screen.findByText('1 possible duplicate');
     expect(screen.getByText(/Possible duplicate of the expense “Canva Pro”/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Show records'), { target: { value: 'receipts' } });
     expect(screen.getByRole('button', { name: 'Review Pirate Ship labels' })).toBeTruthy();

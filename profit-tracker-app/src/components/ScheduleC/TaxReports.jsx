@@ -7,7 +7,7 @@ import { inputCls, reportCsv, usd } from '../../utils/taxLogs';
 import { ReportPacket } from './ReportPacket';
 import { ResponsiveTable } from './ResponsiveTable';
 
-const card = 'rounded-xl border border-white/10 p-4';
+const card = 'card p-4';
 const when = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 const getJson = async (path) => (await requireSuccessfulResponse(await apiFetch(path))).json();
 
