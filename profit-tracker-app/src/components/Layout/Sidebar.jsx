@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, ArrowLeftRight, Boxes,
   ReceiptText, FileText, ChartLine, Wallet, CreditCard as CreditCardIcon,
-  Settings, History, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins, ListChecks
+  Settings, History, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins, ListChecks, Zap
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -171,6 +171,10 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             <NavItem icon={Target} label="Goals" to="/goals" isCollapsed={isCollapsed} />
             <NavItem icon={CalendarDays} label="Calendar" to="/calendar" isCollapsed={isCollapsed} />
             {hasCashoutAccess && <NavItem icon={HandCoins} label="Cashout" to="/cashout" isCollapsed={isCollapsed} />}
+          </SidebarSection>
+
+          <SidebarSection title="Automation" isCollapsed={isCollapsed}>
+            <NavItem icon={Zap} label="Email automation" to="/automation" isCollapsed={isCollapsed} />
           </SidebarSection>
 
         </nav>

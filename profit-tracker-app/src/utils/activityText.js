@@ -2,6 +2,7 @@
 // profit-tracker-api/services/activityLog.js for what each kind stores).
 import { displayLabel } from '../data/statusWorkflow';
 import { formatMoney } from './money';
+import { orderRef } from './emailRefs';
 
 // Same wording as the buttons the user pressed (statusTransitions.js labels).
 const ACTION_LABELS = {
@@ -270,6 +271,17 @@ function eventText(entry) {
       title: d.action === 'everything' ? 'Reset all data' : 'Reset purchases and sales',
       change: counts.length ? `${counts.join(', ')} deleted` : '',
       product: d.product_name || 'Data',
+    };
+  }
+  if (type === 'email_link') {
+    const what = { purchase: 'purchase', sale: 'sale', expense: 'expense' }[d.linked_to] || 'record';
+    const email = { check: 'check', receipt: 'receipt', purchase: 'order' }[d.order_type] || 'email';
+    const many = Number(d.count) > 1;
+    const number = d.order_number ? orderRef(d.order_number) : '';
+    return {
+      title: `Linked a${/^[aeiou]/i.test(d.store || '') ? 'n' : ''} ${d.store || 'store'} ${email} to your ${many ? `${d.count} ${what}s` : what}`,
+      change: number,
+      product: d.product_name || 'Email',
     };
   }
   if (type === 'cashout_connection') return { title: 'Replaced a cashout key', change: '', product: d.product_name || 'Cashout connection' };

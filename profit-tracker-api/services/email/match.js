@@ -4,7 +4,7 @@
 //   receipts        -> expenses
 // Score 0-100 from weighted signals. 70+ is "sure" (linked automatically when
 // the user allows it), 40-69 goes to the review list, below 40 is not shown.
-const { trackChange } = require('../activityLog');
+const { trackChange, logEvent } = require('../activityLog');
 const { SENDERS } = require('./config');
 
 const CASHOUTS = new Set(SENDERS.filter((s) => s.cashout).map((s) => s.key));
@@ -346,7 +346,33 @@ async function linkMatch(prisma, userId, matchId, { auto = false } = {}) {
     prisma.emailOrder.update({ where: { id: match.order_id }, data: { match_state: 'linked' } }),
   ]);
   await fillBlanks(prisma, userId, match.order, match);
+  if (auto) await logAutoLink(prisma, userId, match);
   return match;
+}
+
+// An automatic link is logged on its own (Activity and the Automation page),
+// even when it filled nothing in. Undo doesn't apply: it only links.
+async function logAutoLink(prisma, userId, match) {
+  try {
+    const model = { purchase: 'inventory', sale: 'sales', expense: 'expense' }[match.record_type];
+    const rows = await prisma[model].findMany({
+      where: { id: { in: match.record_ids } },
+      select: match.record_type === 'expense' ? { name: true } : match.record_type === 'sale' ? { inventory: { select: { product_name: true } } } : { product_name: true },
+    });
+    const names = rows.map((r) => r.name || r.product_name || r.inventory?.product_name).filter(Boolean);
+    const order = match.order || {};
+    await logEvent(prisma, userId, {
+      recordType: 'email_link', recordId: match.order_id, action: 'link', source: 'email',
+      name: names.join(', ').slice(0, 200) || null,
+      detail: {
+        store: SENDERS.find((s) => s.key === order.merchant)?.label || String(order.merchant || '').replace(/^custom:/, ''),
+        order_number: order.order_number || null, order_type: order.type || null,
+        linked_to: match.record_type, count: match.record_ids.length, score: match.score,
+      },
+    });
+  } catch (err) {
+    console.error('[email] could not log a link:', err?.code || err?.message);
+  }
 }
 
 async function rejectMatch(prisma, userId, matchId) {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ExternalLink } from 'lucide-react';
 import { useEmailMessages } from '../../hooks/useApi';
-import { orderRef } from './emailRefs';
+import { orderRef } from '../../utils/emailRefs';
 
 const PANEL = 'rounded-xl border border-gray-800 bg-[#12121A] p-5 sm:p-6 space-y-4';
 

@@ -8,7 +8,7 @@ const isAuthenticated = (req, res, next) => {
   res.status(401).json({ message: 'Unauthorized' });
 };
 
-// GET /api/activity?before=<iso>&limit=50 -- newest first.
+// GET /api/activity?before=<iso>&limit=50[&group=records|setup][&source=email] -- newest first.
 router.get('/', isAuthenticated, async (req, res, next) => {
   try {
     res.json(await listActivity(req.user.id, req.query));

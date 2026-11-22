@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useEmailAutomation, useEmailOrderMutations, useEmailOrders, useEmailRuleMutations } from '../../hooks/useApi';
-import { orderRef } from './emailRefs';
+import { orderRef } from '../../utils/emailRefs';
 
 const PANEL = 'rounded-xl border border-gray-800 bg-[#12121A] p-5 sm:p-6 space-y-4';
 // Every automatic change is in Activity, with Undo.

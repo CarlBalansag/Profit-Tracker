@@ -464,6 +464,7 @@ describe('email connections on Postgres', () => {
   });
 
   it('marks cash-out sales paid from a Points4Days receipt, line by line, with Undo', async () => {
+    await prisma.activityLog.deleteMany({ where: { user_id: user.id } });
     // Synthetic receipt: two items, the first with its UPC, tracking and serials on their own rows.
     const pdf = makePdf([
       'POINTS4DAYS.COM', 'RECEIPT', 'TITLE  UPC  QTY  PRICE  COMMISION  TOTAL',
@@ -524,6 +525,14 @@ describe('email connections on Postgres', () => {
     await sync.syncAccount(body.id, { open: fakeOpen, resolve });
     const entries = await prisma.activityLog.findMany({ where: { user_id: user.id, source: 'email', record_type: 'sale' }, orderBy: { created_at: 'asc' } });
     expect(entries).toHaveLength(2);
+    // The automatic link is logged too, and the Automation page lists only email entries.
+    const link = await prisma.activityLog.findFirst({ where: { user_id: user.id, record_type: 'email_link' } });
+    expect([link.kind, link.source, link.detail.store, link.detail.order_number, link.detail.count]).toEqual(['event', 'email', 'Points4Days', '211338', 2]);
+    const { listActivity } = require('../services/activityLog.js');
+    const automatic = await listActivity(user.id, { source: 'email' });
+    expect(automatic.entries.map((e) => `${e.kind}:${e.record_type}`).sort()).toEqual(['change:sale', 'change:sale', 'event:email_link']);
+    expect(automatic.entries.every((e) => e.source === 'email')).toBe(true);
+    await expect(listActivity(user.id, { source: 'robot' })).rejects.toThrow(/source/);
 
     // The balance is paid out as a check: the two sales move to it, and a To-Do asks to deposit it.
     // A check for an amount no sales add up to is left unmatched.

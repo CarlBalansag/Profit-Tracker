@@ -608,15 +608,19 @@ const toJson = (entry, now) => entry && ({
 // expenses), 'records' (everything else: purchases, sales, expenses), or
 // omitted for all.
 const SETUP_TYPES = [...Object.keys(SETUP_MODEL), ...SETUP_EVENT_TYPES];
-async function listActivity(userId, { before, limit, group } = {}) {
+// source: only entries made by one actor ('email' = the email sync's automatic
+// changes, shown on the Automation page; 'assistant'; 'web').
+const SOURCES = ['web', 'assistant', 'email'];
+async function listActivity(userId, { before, limit, group, source } = {}) {
   const take = Math.min(Math.max(Number(limit) || 50, 1), 100);
   const beforeDate = before ? new Date(before) : null;
   if (beforeDate && Number.isNaN(beforeDate.getTime())) throw requestError(400, 'Invalid "before" date');
   if (group !== undefined && group !== 'setup' && group !== 'records') throw requestError(400, 'Invalid "group"');
+  if (source !== undefined && !SOURCES.includes(source)) throw requestError(400, 'Invalid "source"');
   const typeFilter = group === 'setup' ? { record_type: { in: SETUP_TYPES } }
     : group === 'records' ? { record_type: { notIn: SETUP_TYPES } } : {};
   const rows = await prisma.activityLog.findMany({
-    where: { user_id: userId, ...typeFilter, ...(beforeDate ? { created_at: { lt: beforeDate } } : {}) },
+    where: { user_id: userId, ...typeFilter, ...(source ? { source } : {}), ...(beforeDate ? { created_at: { lt: beforeDate } } : {}) },
     orderBy: { created_at: 'desc' },
     take: take + 1,
   });
