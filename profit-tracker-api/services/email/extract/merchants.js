@@ -17,16 +17,22 @@ function amazonItemFromSubject(subject) {
   return [{ name: m[1].replace(/\.\.\.$|…$/, '').trim(), quantity: null, total: null }];
 }
 
-const { readCashoutReceipt } = require('./cashoutReceipt');
+const { readCashoutReceipt, readCashoutCheck } = require('./cashoutReceipt');
 
 const MERCHANTS = {
   // Cash-out receipts ("Enclosed is your RECEIPT - ID 211338"): the PDF lists
-  // what was scanned in and what the balance was credited.
+  // what was scanned in and what the balance was credited. Check notices
+  // ("... has a check waiting for you for $1,478.25!"): the balance was paid
+  // out as check number N.
   points4days: {
-    version: 1,
+    version: 2,
     orderNumber: [/RECEIPT\s*-\s*ID\s*(\d{3,})/i, /receipts?\s*\(id\s*(\d{3,})\)/i],
-    kind: subjectKinds([['payout', /receipt/i]]),
-    read: (subject, text) => readCashoutReceipt(text),
+    kind: subjectKinds([['check', /check waiting/i], ['payout', /receipt/i]]),
+    read: (subject, text) => {
+      const check = readCashoutCheck(subject, text);
+      if (check) return { total: check.total, order_number: check.check_number ? `CHECK ${check.check_number}` : null };
+      return readCashoutReceipt(text);
+    },
   },
   amazon: {
     version: 1,

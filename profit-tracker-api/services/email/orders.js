@@ -5,12 +5,14 @@ const MARKETPLACES = new Set(['ebay', 'stockx', 'goat']);
 const RECEIPT_ONLY = new Set(['pirateship']);
 
 // Later steps win; a cancellation wins over everything.
-const RANK = { other: 0, order: 10, receipt: 10, sale: 10, delayed: 15, pickup: 30, shipped: 40, delivered: 50, return: 60, refund: 65, payout: 70, cancelled: 99 };
+const RANK = { other: 0, order: 10, receipt: 10, sale: 10, delayed: 15, pickup: 30, shipped: 40, delivered: 50, return: 60, refund: 65, payout: 70, check: 75, cancelled: 99 };
 const rank = (kind) => RANK[kind] ?? 0;
 
 function groupType(messages) {
   const kinds = new Set(messages.map((m) => m.kind));
   const merchants = new Set(messages.map((m) => m.merchant));
+  // A cash-out paying its balance out as a check: no record of its own.
+  if (kinds.has('check')) return 'check';
   if (kinds.has('sale') || kinds.has('payout')) return 'sale';
   if ([...merchants].every((m) => CARRIERS.has(m))) return 'shipment';
   if ([...merchants].every((m) => RECEIPT_ONLY.has(m)) || (kinds.size === 1 && kinds.has('receipt'))) return 'receipt';
@@ -22,7 +24,7 @@ function groupType(messages) {
 // email) with a total; status from the furthest step reached.
 function summarize(messages) {
   const sorted = [...messages].sort((a, b) => (a.sent_at?.getTime() || 0) - (b.sent_at?.getTime() || 0));
-  const primary = sorted.find((m) => ['order', 'receipt', 'sale'].includes(m.kind) && m.total != null)
+  const primary = sorted.find((m) => ['order', 'receipt', 'sale', 'check'].includes(m.kind) && m.total != null)
     || sorted.find((m) => m.total != null) || sorted[0];
   const status = sorted.reduce((best, m) => (rank(m.kind) > rank(best) ? m.kind : best), 'other');
   const storeMessage = sorted.find((m) => !CARRIERS.has(m.merchant)) || sorted[0];

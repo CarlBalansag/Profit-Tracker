@@ -16,7 +16,7 @@ const { groupMessages, recompute } = require('./orders');
 const { matchOrders } = require('./match');
 const { getSettings } = require('./settings');
 const { applyRules, customMerchant } = require('./rules');
-const { applyOrderUpdates, applyCashoutReceipts, createMissingPurchases } = require('./automations');
+const { applyOrderUpdates, applyCashoutReceipts, applyCashoutChecks, createMissingPurchases } = require('./automations');
 const { pdfText, mergePdfDetails, firstPdf } = require('./attachments');
 const { looksPrivate } = require('./extract/generic');
 
@@ -323,7 +323,9 @@ async function organize(prisma, userId) {
     const purchases = settings.createPurchases ? await createMissingPurchases(prisma, userId) : 0;
     const updates = await applyOrderUpdates(prisma, userId, settings);
     const cashoutsPaid = await applyCashoutReceipts(prisma, userId, settings);
-    return { ...matched, ...ruled, purchasesCreated: purchases, updates, cashoutsPaid };
+    // Checks after receipts, so a receipt and its check in one sync line up.
+    const checksMoved = await applyCashoutChecks(prisma, userId, settings);
+    return { ...matched, ...ruled, purchasesCreated: purchases, updates, cashoutsPaid, checksMoved };
   } catch (err) {
     console.error(`[email] matching failed for user ${userId}: ${err?.code || err?.name || 'error'}`);
     return null;

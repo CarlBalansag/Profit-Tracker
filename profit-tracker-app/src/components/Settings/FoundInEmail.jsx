@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { ChevronDown, ExternalLink } from 'lucide-react';
 import { useEmailMessages } from '../../hooks/useApi';
+import { orderRef } from './emailRefs';
 
 const PANEL = 'rounded-xl border border-gray-800 bg-[#12121A] p-5 sm:p-6 space-y-4';
 
 const FILTERS = [['all', 'All'], ['orders', 'Orders'], ['shipping', 'Shipping'], ['sales', 'Sales'], ['problems', 'Cancels & refunds']];
 const KIND_LABEL = {
   order: 'Order', receipt: 'Receipt', shipped: 'Shipped', delivered: 'Delivered', pickup: 'Ready for pickup',
-  cancelled: 'Cancelled', refund: 'Refund', return: 'Return', sale: 'Sale', payout: 'Payout', other: 'Other',
+  cancelled: 'Cancelled', refund: 'Refund', return: 'Return', sale: 'Sale', payout: 'Payout', check: 'Check', other: 'Other',
 };
 const MERCHANT = {
   amazon: 'Amazon', walmart: 'Walmart', bestbuy: 'Best Buy', target: 'Target', apple: 'Apple', costco: 'Costco',
@@ -35,7 +36,7 @@ function Detail({ label, value, confidence }) {
 function MessageRow({ m }) {
   const [open, setOpen] = useState(false);
   const c = m.confidence || {};
-  const facts = [m.order_number && `#${m.order_number}`, usd(m.total), m.tracking_numbers?.length ? `${m.tracking_numbers.length} tracking` : null].filter(Boolean);
+  const facts = [m.order_number && orderRef(m.order_number), usd(m.total), m.tracking_numbers?.length ? `${m.tracking_numbers.length} tracking` : null].filter(Boolean);
   return (
     <li className="py-2.5">
       <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="flex w-full items-start gap-3 text-left">

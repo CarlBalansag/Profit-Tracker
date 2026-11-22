@@ -104,6 +104,7 @@ function extractEmail({ merchant, subject = '', html = '', text = '' }) {
   if (own) {
     set('items', own.items, CONF.template);
     set('total', own.total, CONF.template);
+    set('order_number', own.order_number, CONF.template);
     sources.push(`${merchant}@${template.version}`);
   }
 

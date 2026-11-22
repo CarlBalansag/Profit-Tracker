@@ -276,6 +276,18 @@ const storeLabel = (key) => STORE_LABEL[key] || String(key || '').replace(/^cust
 function emailItems(review, accounts, extra = {}) {
   const out = [];
   for (const o of extra.attention || []) {
+    if (o.attention === 'deposit_check') {
+      const label = o.merchant === 'points4days' ? 'Points4Days' : storeLabel(o.merchant);
+      const number = String(o.order_number || '').replace(/^CHECK\s*/i, '');
+      out.push(item({
+        key: `email-deposit_check:${o.id}`, type: 'email_deposit_check', group: 'cashout', urgency: 'soon',
+        title: `Deposit your ${label} check${number ? ` #${number}` : ''}`,
+        detail: `Print it from ${label} when you're ready to deposit. It can only be printed once.`,
+        amount: o.total != null ? Number(o.total) : null,
+        link: { kind: 'page', to: '/settings', state: { tab: 'email' } },
+      }));
+      continue;
+    }
     const what = o.attention === 'cancelled' ? 'cancelled' : 'refunded or returned';
     out.push(item({
       key: `email-${o.attention}:${o.id}`, type: `email_${o.attention}`, group: 'purchases', urgency: 'soon',
@@ -885,6 +897,7 @@ module.exports = {
   isHidden,
   clearedThisWeek,
   // exported for tests
+  emailItems,
   monthlyDates,
   nextRecurringDate,
   daysBetween,

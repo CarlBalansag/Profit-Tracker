@@ -71,4 +71,14 @@ function readCashoutReceipt(text) {
   };
 }
 
-module.exports = { readCashoutReceipt };
+// "POINTS4DAYS has a check waiting for you for $1,478.25!" ... "view check
+// number 1185": the balance was paid out as a check.
+function readCashoutCheck(subject, text) {
+  const all = `${subject || ''}\n${text || ''}`;
+  const amountMatch = all.match(/check waiting for you for \$\s?([\d,]+\.\d{2})/i);
+  if (!amountMatch) return null;
+  const number = all.match(/check (?:number|#|no\.?)\s*:?\s*(\d{1,10})/i);
+  return { total: amount(amountMatch[1]).toFixed(2), check_number: number ? number[1] : null };
+}
+
+module.exports = { readCashoutReceipt, readCashoutCheck };

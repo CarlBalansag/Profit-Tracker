@@ -525,8 +525,29 @@ describe('email connections on Postgres', () => {
     const entries = await prisma.activityLog.findMany({ where: { user_id: user.id, source: 'email', record_type: 'sale' }, orderBy: { created_at: 'asc' } });
     expect(entries).toHaveLength(2);
 
-    // Undo the payment: both sales wait for payment again.
+    // The balance is paid out as a check: the two sales move to it, and a To-Do asks to deposit it.
+    // A check for an amount no sales add up to is left unmatched.
+    const recentDay = new Date(Date.now() - 2 * 86400000).toISOString();
+    const checkText = (amount, number) => `<p>POINTS4DAYS has a check waiting for you for $${amount}.</p><p>Please login and click on "MOBILE CHECKS" on the menu to view check number ${number}.</p>`;
+    addMail('INBOX', 'support@points4days.com', 'POINTS4DAYS has a check waiting for you for $99.99!', recentDay, '<chk9@points4days.com>', checkText('99.99', 9));
+    addMail('INBOX', 'support@points4days.com', 'POINTS4DAYS has a check waiting for you for $250.00!', recentDay, '<chk77@points4days.com>', checkText('250.00', 77));
+    await sync.syncAccount(body.id, { open: fakeOpen, resolve });
+    const checks = await prisma.emailOrder.findMany({ where: { type: 'check' }, include: { matches: true }, orderBy: { total: 'asc' } });
+    expect(checks.map((c) => [c.order_number, Number(c.total), c.match_state, c.attention])).toEqual([
+      ['CHECK 9', 99.99, 'unmatched', 'deposit_check'], ['CHECK 77', 250, 'linked', 'deposit_check'],
+    ]);
+    expect(checks[1].matches[0].record_ids).toEqual([widget.id, gadget.id].sort());
+    const cashed = await prisma.sales.findUnique({ where: { id: widget.id } });
+    expect([cashed.payout_account, cashed.paid_reference, cashed.workflow_status]).toEqual(['Points4Days check #77', 'Points4Days check #77, Points4Days receipt 211338', 'PAID']);
+    const { emailItems } = require('../services/todos.js');
+    const todo = emailItems({ count: 0 }, [], { attention: [checks[1]] })[0];
+    expect([todo.title, todo.group, todo.amount]).toEqual(['Deposit your Points4Days check #77', 'cashout', 250]);
+    const checkEntry = await prisma.activityLog.findFirst({ where: { user_id: user.id, source: 'email', record_type: 'sale' }, orderBy: { created_at: 'desc' } });
     const { undoActivity } = require('../services/activityLog.js');
+    await undoActivity(user.id, checkEntry.id);
+    expect((await prisma.sales.findUnique({ where: { id: widget.id } })).payout_account).toBe('Points4Days balance');
+
+    // Undo the payment: both sales wait for payment again.
     await undoActivity(user.id, entries[1].id);
     const undone = await prisma.sales.findMany({ where: { id: { in: [widget.id, gadget.id] } } });
     expect(undone.map((s) => [s.workflow_status, s.paid_at])).toEqual([['WAITING_FOR_PAYMENT', null], ['WAITING_FOR_PAYMENT', null]]);

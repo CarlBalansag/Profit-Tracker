@@ -303,7 +303,7 @@ async function matchOrders(prisma, userId, orderIds, { autoLink = true } = {}) {
   const summary = { linked: 0, review: 0, unmatched: 0 };
   for (const id of orderIds) {
     const order = await prisma.emailOrder.findFirst({ where: { id, user_id: userId } });
-    if (!order || order.match_state === 'linked' || order.match_state === 'dismissed' || order.type === 'shipment') continue;
+    if (!order || order.match_state === 'linked' || order.match_state === 'dismissed' || ['shipment', 'check'].includes(order.type)) continue;
     const scored = (await candidatesFor(prisma, userId, order)).filter((c) => band(c.score)).sort((a, b) => b.score - a.score).slice(0, 3);
     const rejected = await prisma.emailMatch.findMany({ where: { order_id: order.id, state: 'rejected' } });
     const isRejected = (c) => rejected.some((r) => r.record_type === c.record_type && r.record_ids.join() === c.rows.map((x) => x.id).sort().join());

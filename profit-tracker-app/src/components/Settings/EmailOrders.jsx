@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useEmailAutomation, useEmailOrderMutations, useEmailOrders, useEmailRuleMutations } from '../../hooks/useApi';
+import { orderRef } from './emailRefs';
 
 const PANEL = 'rounded-xl border border-gray-800 bg-[#12121A] p-5 sm:p-6 space-y-4';
 // Every automatic change is in Activity, with Undo.
@@ -19,8 +20,13 @@ const MERCHANT = {
   samsclub: "Sam's Club", homedepot: 'Home Depot', lowes: "Lowe's", gamestop: 'GameStop', nike: 'Nike', ebay: 'eBay',
   stockx: 'StockX', goat: 'GOAT', paypal: 'PayPal', pirateship: 'Pirate Ship', points4days: 'Points4Days',
 };
-const STATUS = { order: 'Ordered', receipt: 'Receipt', sale: 'Sold', shipped: 'Shipped', delivered: 'Delivered', pickup: 'Ready for pickup', cancelled: 'Cancelled', refund: 'Refunded', return: 'Returned', payout: 'Paid out' };
+const STATUS = { order: 'Ordered', receipt: 'Receipt', sale: 'Sold', shipped: 'Shipped', delivered: 'Delivered', pickup: 'Ready for pickup', cancelled: 'Cancelled', refund: 'Refunded', return: 'Returned', payout: 'Paid out', check: 'Check issued' };
 const RECORD = { purchase: 'purchase', sale: 'sale', expense: 'expense' };
+const ATTENTION = {
+  cancelled: 'The store cancelled this order. Cancel the purchase too, or change its quantity.',
+  refund: 'This order was refunded or returned. Record the refund on the purchase.',
+  deposit_check: 'Print this check and deposit it, then mark it done.',
+};
 const usd = (v) => (v == null ? null : Number(v).toLocaleString(undefined, { style: 'currency', currency: 'USD' }));
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '');
 
@@ -49,14 +55,14 @@ function OrderRow({ order, tab }) {
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className="text-sm font-medium text-gray-100">{label}</span>
         <span className="text-xs text-gray-500">
-          {[order.order_number && `#${order.order_number}`, usd(order.total), day(order.first_seen)].filter(Boolean).join(' · ')}
+          {[order.order_number && orderRef(order.order_number), usd(order.total), day(order.first_seen)].filter(Boolean).join(' · ')}
         </span>
         {STATUS[order.status] && <span className="rounded-md bg-white/5 px-1.5 py-0.5 text-[11px] font-semibold text-gray-300">{STATUS[order.status]}</span>}
       </div>
       {match && <Records match={match} />}
       {order.attention && (
         <p className="flex flex-wrap items-center gap-2 text-xs text-[var(--dp-warning-text)]">
-          {order.attention === 'cancelled' ? 'The store cancelled this order. Cancel the purchase too, or change its quantity.' : 'This order was refunded or returned. Record the refund on the purchase.'}
+          {ATTENTION[order.attention] || ATTENTION.refund}
           <button type="button" onClick={() => run(handled, order.id, 'Done')} className="underline">Done</button>
         </p>
       )}

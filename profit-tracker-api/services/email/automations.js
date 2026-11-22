@@ -159,6 +159,90 @@ async function applyCashoutReceipts(prisma, userId, settings) {
   return paid;
 }
 
+// Sales whose payments add up to `target` cents: all of them when they do,
+// else the fewest, oldest first. Small sets only (a check covers a few weeks).
+function salesForAmount(sales, target, { maxSales = 12, maxNodes = 200000 } = {}) {
+  const amounts = sales.map((s) => Math.round(Number(s.paid_amount) * 100));
+  if (amounts.reduce((t, a) => t + a, 0) === target) return sales;
+  const pool = sales.map((s, i) => ({ s, a: amounts[i] })).slice(-30);
+  let best = null;
+  let nodes = 0;
+  const walk = (start, picked, sum) => {
+    if (nodes++ > maxNodes || (best && picked.length >= best.length)) return;
+    if (sum === target) { best = [...picked]; return; }
+    if (picked.length >= maxSales) return;
+    for (let i = start; i < pool.length; i += 1) {
+      if (sum + pool[i].a > target) continue;
+      picked.push(pool[i].s);
+      walk(i + 1, picked, sum + pool[i].a);
+      picked.pop();
+    }
+  };
+  walk(0, [], 0);
+  return best;
+}
+
+// Check notices ("... has a check waiting for you for $1,478.25", check 1185):
+// the cash-out balance was paid out as a check. The sales its receipts paid
+// to the balance that add up to the check move to "<site> check #1185" (one
+// Activity entry with Undo), and a recent check becomes a To-Do to deposit.
+const CHECK_TODO_DAYS = 14;
+async function applyCashoutCheck(prisma, userId, order) {
+  const label = labelFor(order.merchant);
+  const number = String(order.order_number || '').replace(/^CHECK\s*/i, '');
+  const checkName = `${label} check${number ? ` #${number}` : ''}`;
+  const target = Math.round(Number(order.total || 0) * 100);
+  const issued = order.last_seen || order.first_seen || new Date();
+  const recent = Date.now() - issued.getTime() <= CHECK_TODO_DAYS * DAY;
+  let moved = [];
+  if (target > 0) {
+    const onBalance = await prisma.sales.findMany({
+      where: { inventory: { user_id: userId }, payout_account: `${label} balance`, paid_at: { lte: new Date(issued.getTime() + DAY) }, paid_amount: { not: null } },
+      orderBy: { paid_at: 'asc' },
+      take: 200,
+    });
+    moved = salesForAmount(onBalance, target) || [];
+  }
+  if (moved.length) {
+    await prisma.$transaction((tx) => trackChange(tx, userId, {
+      action: 'edit', recordType: 'sale', source: 'email', recordId: moved[0].id,
+      refs: async () => ({ sales: moved.map((s) => s.id) }),
+    }, async () => {
+      for (const s of moved) await tx.sales.update({ where: { id: s.id }, data: { payout_account: checkName, paid_reference: `${checkName}, ${s.paid_reference || 'paid to balance'}`.slice(0, 250) } });
+      return null;
+    }));
+    await prisma.emailMatch.create({ data: {
+      user_id: userId, order_id: order.id, record_type: 'sale', record_ids: moved.map((s) => s.id).sort(), score: 100, band: 'high',
+      reasons: [{ code: 'check', text: `Paid out ${moved.length} sale${moved.length === 1 ? '' : 's'} from your ${label} balance`, points: 100 }],
+      state: 'linked', auto: true, decided_at: new Date(),
+    } });
+  }
+  await prisma.emailOrder.update({
+    where: { id: order.id },
+    data: { applied_status: order.status, match_state: moved.length ? 'linked' : 'unmatched', attention: recent ? 'deposit_check' : null },
+  });
+  return { moved: moved.length };
+}
+
+async function applyCashoutChecks(prisma, userId, settings) {
+  if (!settings.cashoutPayouts) return 0;
+  const orders = await prisma.emailOrder.findMany({
+    where: { user_id: userId, type: 'check', merchant: { in: [...CASHOUTS] }, status: 'check' },
+    orderBy: { first_seen: 'asc' },
+    take: 100,
+  });
+  let moved = 0;
+  for (const order of orders.filter((o) => o.applied_status !== o.status)) {
+    try {
+      moved += (await applyCashoutCheck(prisma, userId, order)).moved;
+    } catch (err) {
+      console.error(`[email] cash-out check ${order.id} skipped: ${err?.status || err?.code || 'error'}`);
+      await prisma.emailOrder.update({ where: { id: order.id }, data: { applied_status: order.status } });
+    }
+  }
+  return moved;
+}
+
 const money = (v) => (v == null ? 0 : Number(v));
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -236,4 +320,4 @@ async function createMissingPurchases(prisma, userId) {
   return created;
 }
 
-module.exports = { applyOrderUpdates, applyCashoutReceipt, applyCashoutReceipts, createPurchasesFromOrder, createMissingPurchases, RETURN_DAYS };
+module.exports = { applyOrderUpdates, applyCashoutReceipt, applyCashoutReceipts, applyCashoutChecks, salesForAmount, createPurchasesFromOrder, createMissingPurchases, RETURN_DAYS };

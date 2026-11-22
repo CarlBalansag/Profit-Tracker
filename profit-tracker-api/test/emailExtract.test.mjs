@@ -117,6 +117,16 @@ describe('cash-out receipts', () => {
     expect(JSON.stringify(r)).not.toMatch(/Sample Name|Example St|9146/);
     expect(readCashoutReceipt('Thank you for your business.')).toBe(null);
   });
+  it('reads a check notice and finds the sales it pays out', () => {
+    const r = extractEmail({ merchant: 'points4days', subject: 'POINTS4DAYS has a check waiting for you for $1,478.25!', text: 'Please login and click on "MOBILE CHECKS" on the menu to view check number 1185.' });
+    expect([r.status, r.kind, r.order_number, r.total]).toEqual(['extracted', 'check', 'CHECK 1185', '1478.25']);
+    const { salesForAmount } = require('../services/email/automations.js');
+    const s = (id, paid) => ({ id, paid_amount: paid });
+    expect(salesForAmount([s('a', 10), s('b', 20.5)], 3050).map((x) => x.id)).toEqual(['a', 'b']);
+    expect(salesForAmount([s('a', 10), s('b', 20.5), s('c', 5), s('d', 15.5)], 2050).map((x) => x.id)).toEqual(['b']);
+    expect(salesForAmount([s('a', 10), s('b', 5), s('c', 15.5)], 2550).map((x) => x.id)).toEqual(['a', 'c']);
+    expect(salesForAmount([s('a', 10)], 999)).toBe(null);
+  });
   it('pairs each line with the sale it pays for, not a sale on another marketplace', () => {
     const { pairCashoutLines } = require('../services/email/match.js');
     const order = { merchant: 'points4days', first_seen: new Date('2026-11-20'), items: [{ name: 'SAMSUNG 990 EVO 1TB', quantity: 3, unit_payout: '161.00', total: '483.00' }] };
