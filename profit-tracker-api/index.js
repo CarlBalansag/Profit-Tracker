@@ -118,6 +118,20 @@ app.post('/internal/email/sync', async (req, res) => {
   }
 });
 
+// Stores users asked ProfitTracker to support, counted across users (no user
+// ids or addresses). Same secret as the sync; for planning which store to add next.
+app.get('/internal/email/store-requests', async (req, res) => {
+  const { verifySyncSecret } = require('./services/email/sync');
+  const verify = verifySyncSecret(req.get('Authorization'));
+  if (!verify.ok) return res.status(verify.status || 401).json({ error: verify.message });
+  try {
+    res.json({ stores: await require('./routes/email').storeRequests() });
+  } catch (err) {
+    console.error('[email] store requests failed:', err?.code || 'error');
+    res.status(500).json({ error: 'Could not list store requests.' });
+  }
+});
+
 // CSRF protection: every state-changing request from the SPA must include this header.
 // Browsers never attach custom headers to cross-origin simple requests, so its presence
 // proves the request came from JavaScript running on our frontend, not a forged form.

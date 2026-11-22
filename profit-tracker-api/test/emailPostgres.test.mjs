@@ -57,7 +57,7 @@ async function fakeOpen(target) {
     async searchUids({ domains, since, afterUid }) {
       log.push(['search', afterUid]);
       return current.messages
-        .filter((m) => m.uid > afterUid && m.date >= since && domains.some((d) => m.from.includes(d)))
+        .filter((m) => m.uid > (afterUid || 0) && m.date >= since && (!domains.length || domains.some((d) => m.from.includes(d))))
         .map((m) => m.uid).sort((a, b) => a - b);
     },
     async fetchHeaders(uids) {
@@ -137,6 +137,7 @@ describe('email connections on Postgres', () => {
     await prisma.emailMessage.deleteMany({});
     await prisma.emailOrder.deleteMany({});
     await prisma.emailAccount.deleteMany({});
+    await prisma.emailStoreCandidate.deleteMany({});
   });
 
   it('reports setup and refuses a bad password without saving anything', async () => {
@@ -407,6 +408,42 @@ describe('email connections on Postgres', () => {
     ]);
     expect(orders[1].id).toBe(walmart.id); // the unchanged order kept its id (and so its links)
     expect(await prisma.emailMessage.count({ where: { order_id: walmart.id } })).toBe(2);
+  });
+
+  it('finds stores in the email from senders and subjects only, and lets the user request one', async () => {
+    const recent = new Date(Date.now() - 5 * 86400000).toISOString();
+    addMail('INBOX', 'transaction@shop.etsy.com', 'Your Etsy order #1234 is confirmed', recent);
+    addMail('INBOX', 'transaction@etsy.com', 'Your order has shipped', recent);
+    addMail('INBOX', 'news@etsy.com', '50% off sale this weekend', recent); // an ad: not counted
+    addMail('INBOX', 'friend@gmail.com', 'Re: did you order the pizza?', recent); // a person: never a store
+    addMail('INBOX', 'once@onetime-shop.com', 'Your order receipt', recent); // one email: too few
+    addMail('INBOX', 'codes@pc-store.com', 'Your verification code for your order', recent); // sign-in mail
+    addMail('INBOX', 'auto-confirm@amazon.com', 'Your Amazon.com order', recent, '<am@amazon.com>', '<p>Order #112-1234567-7654321</p><p>Order Total: $10.00</p>');
+    const { body } = await send('POST', '/api/email/accounts', connectBody());
+    await waitIdle(body.id);
+    expect((await send('GET', '/api/email/stores')).body).toMatchObject({ candidates: [], scanned_at: null });
+
+    log.length = 0;
+    const scan = await send('POST', '/api/email/stores/scan');
+    expect(scan.status).toBe(200);
+    expect(log.some((e) => e[0] === 'body')).toBe(false); // headers only
+    expect(scan.body.supported).toEqual([{ key: 'amazon', label: 'Amazon', order_emails: 1 }]);
+    expect(scan.body.candidates).toEqual([expect.objectContaining({ domain: 'etsy.com', label: 'Etsy', order_emails: 2, requested: false })]);
+    expect((await send('POST', '/api/email/stores/scan')).status).toBe(429);
+    expect((await send('GET', '/api/email/stores')).body.scanned_at).toBeTruthy();
+    const saved = await prisma.emailStoreCandidate.findMany();
+    expect(Object.keys(saved[0])).not.toContain('subject');
+
+    const id = scan.body.candidates[0].id;
+    actingUser = other;
+    expect((await send('POST', `/api/email/stores/${id}/request`)).status).toBe(404);
+    actingUser = user;
+    expect((await send('POST', `/api/email/stores/${id}/request`)).body).toEqual({ requested: true });
+    expect((await send('GET', '/api/email/stores')).body.candidates[0].requested).toBe(true);
+    expect(await router.storeRequests()).toEqual([expect.objectContaining({ domain: 'etsy.com', label: 'Etsy', requests: 1, order_emails: 2 })]);
+    expect((await send('DELETE', `/api/email/stores/${id}/request`)).body).toEqual({ requested: false });
+    expect(await router.storeRequests()).toEqual([]);
+    router._resetLimits();
   });
 
   it('protects the cron endpoint with its own secret', () => {

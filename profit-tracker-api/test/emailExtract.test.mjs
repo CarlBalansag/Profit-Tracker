@@ -72,6 +72,33 @@ describe('generic reader', () => {
   });
 });
 
+describe('stores in your email', () => {
+  const { tally, baseDomain, sourceLabel } = require('../services/email/storeScan.js');
+  const h = (fromAddress, subject, fromName = null) => ({ fromAddress, fromName, subject, date: new Date('2026-11-01') });
+  it('counts order-like mail per store, apart from supported stores, people, ads and codes', () => {
+    const r = tally([
+      h('orders@mail.target-like.co.uk', 'Your order has shipped', 'Target Like'),
+      h('noreply@target-like.co.uk', 'Receipt for your purchase', 'Target Like'),
+      h('deals@target-like.co.uk', '20% off deals today'),
+      h('auto-confirm@amazon.com', 'Your Amazon.com order'),
+      h('friend@gmail.com', 'Re: your order'),
+      h('help@shop.com', 'Your verification code'),
+      h('store+topps@shopifyemail.com', 'Order #1001 confirmed', 'Topps'),
+      h('store+topps@shopifyemail.com', 'Your order is on the way', 'Topps'),
+      h('store+other@shopifyemail.com', 'Order #9 confirmed', 'Other Shop'),
+      h('store+other@shopifyemail.com', 'Your receipt', 'Other Shop'),
+      h('billing@anthropic.com', 'Your receipt from Anthropic'),
+      h('billing@anthropic.com', 'Your receipt from Anthropic'),
+    ], { trusted: new Set(['anthropic.com']) });
+    expect(r.supported).toEqual([{ key: 'amazon', label: 'Amazon', order_emails: 1 }]);
+    expect(r.candidates.map((c) => [c.domain, c.label, c.order_emails])).toEqual([
+      ['target-like.co.uk', 'Target Like', 2], ['shopify:topps', 'Topps', 2], ['shopify:other-shop', 'Other Shop', 2],
+    ]);
+    expect(sourceLabel('shopify:topps')).toBe('Shopify store');
+    expect(baseDomain('a@b.mail.example.com')).toBe('example.com');
+  });
+});
+
 describe('robustness', () => {
   it('handles a plain-text email, bad JSON-LD and a huge body', async () => {
     const plain = await read({ merchant: 'walmart', raw: mime({ from: 'help@walmart.com', subject: 'Your order has shipped', text: 'Order number: 2000123-45678901\nTracking number: 1Z999AA10123456784' }) });

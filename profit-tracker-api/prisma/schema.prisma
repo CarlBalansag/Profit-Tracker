@@ -69,6 +69,7 @@ model User {
   email_orders           EmailOrder[]
   email_matches          EmailMatch[]
   email_rules            EmailMerchantRule[]
+  email_store_candidates EmailStoreCandidate[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -1155,6 +1156,7 @@ model EmailAccount {
   sync_since       DateTime // first day to look back to
   include_spam     Boolean             @default(false)
   last_synced_at   DateTime?
+  stores_scanned_at DateTime? // last "Find stores in my email"
   sync_started_at  DateTime?
   created_at       DateTime            @default(now())
   updated_at       DateTime            @updatedAt
@@ -1310,4 +1312,23 @@ model EmailMerchantRule {
   updated_at        DateTime @updatedAt
 
   @@unique([user_id, merchant])
+}
+
+// Stores found in a user's email that ProfitTracker can't read yet. Found by
+// looking at sender and subject lines only (nothing else is kept): the sender
+// domain, a name, and how many order-like emails it sent. requested_at is set
+// when the user asks for the store to be supported.
+model EmailStoreCandidate {
+  id           String    @id @default(uuid())
+  user_id      String
+  user         User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  domain       String
+  label        String
+  order_emails Int       @default(0)
+  last_seen    DateTime?
+  scanned_at   DateTime  @default(now())
+  requested_at DateTime?
+
+  @@unique([user_id, domain])
+  @@index([requested_at])
 }

@@ -161,6 +161,7 @@ async function deleteSetupData(tx, userId) {
   const emailMessages = await tx.emailMessage.deleteMany({ where });
   await tx.emailOrder.deleteMany({ where });
   await tx.emailMerchantRule.deleteMany({ where });
+  await tx.emailStoreCandidate.deleteMany({ where });
   const emailAccounts = await tx.emailAccount.deleteMany({ where });
   const accounts = await tx.account.deleteMany({ where });
   const platforms = await tx.platform.deleteMany({ where });

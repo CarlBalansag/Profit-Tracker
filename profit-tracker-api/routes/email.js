@@ -13,6 +13,7 @@ const { getSettings, saveSettings, DEFAULTS } = require('../services/email/setti
 const { createExpenseFromOrder, suggestRules, normalizeDomain, labelFor } = require('../services/email/rules');
 const { createPurchasesFromOrder } = require('../services/email/automations');
 const { saveInvoice } = require('../services/email/attachments');
+const { scanStores, sourceLabel } = require('../services/email/storeScan');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -474,6 +475,81 @@ router.post('/orders/:id/save-invoice', isAuthenticated, async (req, res, next) 
   }
 });
 
+// ---- Stores in your email ---------------------------------------------------
+// Supported stores come from emails already found; other stores from a scan of
+// sender and subject lines that the user starts. A scan logs in to the mail
+// server, so it is limited to one per user every 10 minutes.
+const SCAN_COOLDOWN_MS = 10 * 60 * 1000;
+const lastScan = new Map();
+
+async function storeList(userId) {
+  const [found, candidates] = await Promise.all([
+    prisma.emailMessage.findMany({ where: { user_id: userId, status: 'extracted' }, select: { merchant: true } }),
+    prisma.emailStoreCandidate.findMany({ where: { user_id: userId }, orderBy: [{ order_emails: 'desc' }, { label: 'asc' }], take: 50 }),
+  ]);
+  const counts = new Map();
+  for (const { merchant } of found) counts.set(merchant, (counts.get(merchant) || 0) + 1);
+  const supported = [...counts.entries()]
+    .filter(([key]) => SENDERS.some((s) => s.key === key))
+    .map(([key, count]) => ({ key, label: SENDERS.find((s) => s.key === key).label, order_emails: count }))
+    .sort((a, b) => b.order_emails - a.order_emails);
+  const scannedAt = (await prisma.emailAccount.findMany({ where: { user_id: userId }, select: { stores_scanned_at: true } }))
+    .reduce((latest, x) => (x.stores_scanned_at && (!latest || x.stores_scanned_at > latest) ? x.stores_scanned_at : latest), null);
+  return {
+    supported,
+    candidates: candidates.map((c) => ({ id: c.id, domain: c.domain, source: sourceLabel(c.domain), label: c.label, order_emails: c.order_emails, last_seen: c.last_seen, requested: Boolean(c.requested_at) })),
+    scanned_at: scannedAt,
+    all_stores: SENDERS.map((s) => s.label),
+  };
+}
+
+router.get('/stores', isAuthenticated, async (req, res, next) => {
+  try { res.json(await storeList(req.user.id)); } catch (err) { next(err); }
+});
+
+router.post('/stores/scan', isAuthenticated, async (req, res, next) => {
+  try {
+    if (!configured()) return notConfigured(res);
+    const last = lastScan.get(req.user.id);
+    if (last && Date.now() - last < SCAN_COOLDOWN_MS) return res.status(429).json({ error: 'Your email was just checked. Try again in a few minutes.' });
+    const active = await prisma.emailAccount.count({ where: { user_id: req.user.id, status: 'active' } });
+    if (!active) return res.status(409).json({ error: 'Connect an email account first.' });
+    lastScan.set(req.user.id, Date.now());
+    const result = await scanStores(prisma, req.user.id, { ...deps, budgetMs: 25000 });
+    res.json({ ...(await storeList(req.user.id)), scanned: result.scanned, complete: result.complete });
+  } catch (err) { next(err); }
+});
+
+const setRequested = (requested) => async (req, res, next) => {
+  try {
+    const updated = await prisma.emailStoreCandidate.updateMany({
+      where: { id: req.params.id, user_id: req.user.id },
+      data: { requested_at: requested ? new Date() : null },
+    });
+    if (!updated.count) return res.status(404).json({ error: 'Store not found.' });
+    res.json({ requested });
+  } catch (err) { next(err); }
+};
+router.post('/stores/:id/request', isAuthenticated, setRequested(true));
+router.delete('/stores/:id/request', isAuthenticated, setRequested(false));
+
+// For the ProfitTracker team (cron secret): which stores users asked for,
+// counted across users. No user ids or addresses leave this endpoint.
+async function storeRequests() {
+  const rows = await prisma.emailStoreCandidate.groupBy({
+    by: ['domain'], where: { requested_at: { not: null } },
+    _count: { _all: true }, _sum: { order_emails: true }, _max: { requested_at: true },
+  });
+  const labels = await prisma.emailStoreCandidate.findMany({
+    where: { domain: { in: rows.map((r) => r.domain) }, requested_at: { not: null } }, select: { domain: true, label: true }, distinct: ['domain'],
+  });
+  return rows.map((r) => ({
+    domain: r.domain, source: sourceLabel(r.domain), label: labels.find((l) => l.domain === r.domain)?.label || r.domain,
+    requests: r._count._all, order_emails: r._sum.order_emails || 0, last_requested: r._max.requested_at,
+  })).sort((a, b) => b.requests - a.requests || b.order_emails - a.order_emails);
+}
+
 router._deps = deps;
-router._resetLimits = () => testAttempts.clear();
+router._resetLimits = () => { testAttempts.clear(); lastScan.clear(); };
+router.storeRequests = storeRequests;
 module.exports = router;

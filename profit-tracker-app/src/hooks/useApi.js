@@ -827,6 +827,16 @@ export const useEmailOrderMutations = () => {
 };
 
 // ---- Trusted store rules (E4) ----
+export const useEmailStores = () => useQuery({ queryKey: ['email', 'stores'], queryFn: () => fetcher('/api/email/stores') });
+export const useEmailStoreMutations = () => {
+  const qc = useQueryClient();
+  const send = (method, path) => apiFetch(path, { method }).then((r) => emailJson(r, 'Could not save.'));
+  const refresh = () => qc.invalidateQueries({ queryKey: ['email', 'stores'] });
+  return {
+    scan: useMutation({ mutationFn: () => send('POST', '/api/email/stores/scan'), onSuccess: (data) => qc.setQueryData(['email', 'stores'], data) }),
+    request: useMutation({ mutationFn: ({ id, on }) => send(on ? 'POST' : 'DELETE', `/api/email/stores/${id}/request`), onSuccess: refresh }),
+  };
+};
 export const useEmailRules = () => useQuery({ queryKey: ['email', 'rules'], queryFn: () => fetcher('/api/email/rules') });
 export const useEmailRuleMutations = () => {
   const qc = useQueryClient();

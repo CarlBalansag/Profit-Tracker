@@ -52,11 +52,12 @@ async function openImap(target, { ImapClass = ImapFlow } = {}) {
       const box = client.mailbox || {};
       return { uidValidity: box.uidValidity != null ? String(box.uidValidity) : null, exists: box.exists || 0 };
     },
-    // { domains: [...], since: Date, afterUid: n } -> ascending UIDs > afterUid
-    async searchUids({ domains, since, afterUid = 0 }) {
+    // { domains: [...], since: Date, afterUid: n } -> ascending UIDs > afterUid.
+    // No domains: every email since the date (the store scan, headers only).
+    async searchUids({ domains = [], since, afterUid = 0 }) {
       const query = { since };
       if (domains.length === 1) query.from = domains[0];
-      else query.or = domains.map((d) => ({ from: d }));
+      else if (domains.length) query.or = domains.map((d) => ({ from: d }));
       if (afterUid > 0) query.uid = `${afterUid + 1}:*`;
       const uids = await client.search(query, { uid: true });
       if (!Array.isArray(uids)) return [];
