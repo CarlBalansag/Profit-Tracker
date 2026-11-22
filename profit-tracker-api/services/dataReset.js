@@ -157,7 +157,9 @@ async function deleteSetupData(tx, userId) {
   const taxMileageTrips = await tx.taxMileageTrip.deleteMany({ where });
   const taxAssets = await tx.taxAsset.deleteMany({ where });
   const taxReportSnapshots = await tx.taxReportSnapshot.deleteMany({ where });
+  await tx.emailMatch.deleteMany({ where });
   const emailMessages = await tx.emailMessage.deleteMany({ where });
+  await tx.emailOrder.deleteMany({ where });
   const emailAccounts = await tx.emailAccount.deleteMany({ where });
   const accounts = await tx.account.deleteMany({ where });
   const platforms = await tx.platform.deleteMany({ where });

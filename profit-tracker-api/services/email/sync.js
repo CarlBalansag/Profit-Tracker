@@ -12,6 +12,9 @@ const { decryptSecret } = require('./crypto');
 const { resolvePublicHost } = require('./hostCheck');
 const { openImap, friendlyError } = require('./imap');
 const { parseSource, extractEmail, parserVersion } = require('./extract');
+const { groupMessages } = require('./orders');
+const { matchOrders } = require('./match');
+const { getSettings } = require('./settings');
 
 const DOMAINS = SENDERS.flatMap((s) => s.domains);
 const BATCH = 50;
@@ -155,13 +158,15 @@ async function syncAccount(accountId, deps = {}) {
       ? await extractPending(prisma, client, account, { started, budgetMs, onRead: deps.onRead })
       : { read: 0, more: true };
 
+    const matched = await organize(prisma, account.user_id);
+
     // Only while this run still holds the lease: a disconnect during the run
     // clears it, and must not be undone here.
     await prisma.emailAccount.updateMany({
       where: { id: account.id, sync_started_at: now },
       data: { status: 'active', last_error: null, last_synced_at: now, sync_started_at: null },
     });
-    return { status: 'ok', found, read: read.read, more: more || read.more };
+    return { status: 'ok', found, read: read.read, more: more || read.more, matched };
   } catch (err) {
     // A rejected password needs the user; anything else is retried next run.
     const needsUser = Boolean(err?.needsUser || err?.authenticationFailed);
@@ -232,6 +237,24 @@ async function extractPending(prisma, client, account, { started, budgetMs, onRe
   return { read, more: due.length >= READ_PER_RUN };
 }
 
+// Groups newly read emails into orders and matches orders to records. Open
+// orders from the last 60 days are matched again too, since a purchase may
+// be entered after its email arrived. A failure here never fails the sync.
+async function organize(prisma, userId) {
+  try {
+    const changed = await groupMessages(prisma, userId);
+    const open = await prisma.emailOrder.findMany({
+      where: { user_id: userId, match_state: { in: ['unmatched', 'review'] }, last_seen: { gte: new Date(Date.now() - 60 * 86400000) }, id: { notIn: changed } },
+      select: { id: true }, orderBy: { last_seen: 'desc' }, take: 100,
+    });
+    const settings = await getSettings(prisma, userId);
+    return await matchOrders(prisma, userId, [...changed, ...open.map((o) => o.id)], { autoLink: settings.linkMatches });
+  } catch (err) {
+    console.error(`[email] matching failed for user ${userId}: ${err?.code || err?.name || 'error'}`);
+    return null;
+  }
+}
+
 const markFailed = (prisma, id, message) => prisma.emailMessage.update({
   where: { id }, data: { status: 'failed', extract_error: message, extracted_at: new Date() },
 });
@@ -273,4 +296,4 @@ function verifySyncSecret(authHeader) {
   return { ok: true };
 }
 
-module.exports = { extractPending, syncAccount, runScheduledEmailSync, testConnection, verifySyncSecret, dedupeKey, foldersToRead, MAX_PER_RUN };
+module.exports = { organize, extractPending, syncAccount, runScheduledEmailSync, testConnection, verifySyncSecret, dedupeKey, foldersToRead, MAX_PER_RUN };

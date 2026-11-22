@@ -267,6 +267,30 @@ function connectionItems(connections) {
     }));
 }
 
+// Email: orders waiting for a yes/no on their match, and mailboxes whose
+// password stopped working. The review item's key follows the newest order,
+// so a dismissed reminder comes back when new orders arrive.
+function emailItems(review, accounts) {
+  const out = [];
+  if (review.count > 0) {
+    out.push(item({
+      key: `email-review:${review.newestId}`, type: 'email_review', group: 'purchases', urgency: 'info',
+      title: review.count === 1 ? '1 order from email to check' : `${review.count} orders from email to check`,
+      detail: 'Say yes or no to the purchase each one looks like.',
+      link: { kind: 'page', to: '/settings', state: { tab: 'email' } },
+    }));
+  }
+  for (const a of accounts.filter((x) => x.status === 'error')) {
+    out.push(item({
+      key: `email-reconnect:${a.id}`, type: 'email_reconnect', group: 'purchases', urgency: 'today',
+      title: `Reconnect ${a.email_address}`,
+      detail: a.last_error || 'The mail server stopped accepting the saved password.',
+      link: { kind: 'page', to: '/settings', state: { tab: 'email' } },
+    }));
+  }
+  return out;
+}
+
 function saleItems(sales, today) {
   const items = [];
   for (const sale of sales) {
@@ -655,6 +679,7 @@ function buildTodos(data, today) {
     ...cardItems(data.cards || [], today, data.spendByCard || new Map()),
     ...recurringItems(data.recurring || [], today),
     ...reminderItems(data.reminders || [], today),
+    ...emailItems(data.emailReview || { count: 0 }, data.emailAccounts || []),
   ]);
   return items.sort((a, b) =>
     URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency]
@@ -748,7 +773,7 @@ function clearedThisWeek(sales, states, today) {
 
 async function loadTodoData(prisma, userId, today) {
   const lookback = new Date(toUtc(addDays(today, -365)));
-  const [commitments, connections, sales, inventories, cards, recurring, reminders] = await Promise.all([
+  const [commitments, connections, sales, inventories, cards, recurring, reminders, emailReviewCount, emailNewest, emailAccounts] = await Promise.all([
     prisma.cashoutCommitment.findMany({
       where: { user_id: userId, status: { in: ['pending', 'active', 'expired', 'closed'] } },
       include: {
@@ -771,6 +796,9 @@ async function loadTodoData(prisma, userId, today) {
       where: { user_id: userId, done_at: null, due_date: { lte: addDays(today, THRESHOLDS.reminderAhead) } },
       include: { payment_method: { select: { name: true, last4: true } } },
     }),
+    prisma.emailOrder ? prisma.emailOrder.count({ where: { user_id: userId, match_state: 'review' } }) : 0,
+    prisma.emailOrder ? prisma.emailOrder.findFirst({ where: { user_id: userId, match_state: 'review' }, orderBy: { created_at: 'desc' }, select: { id: true } }) : null,
+    prisma.emailAccount ? prisma.emailAccount.findMany({ where: { user_id: userId }, select: { id: true, email_address: true, status: true, last_error: true } }) : [],
   ]);
 
   // Tracked spend this month, only needed when a card's statement is close.
@@ -782,7 +810,8 @@ async function loadTodoData(prisma, userId, today) {
     for (const card of dashboard.cards) spendByCard.set(card.id, card.totalSpend);
   }
 
-  return { commitments, connections, sales, inventories, cards, recurring, reminders, spendByCard };
+  return { commitments, connections, sales, inventories, cards, recurring, reminders, spendByCard,
+    emailReview: { count: emailReviewCount || 0, newestId: emailNewest?.id || null }, emailAccounts: emailAccounts || [] };
 }
 
 async function listTodos(prisma, userId, today) {

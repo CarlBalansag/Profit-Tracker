@@ -794,3 +794,34 @@ export const useEmailMutations = () => {
     remove: useMutation({ mutationFn: ({ id, deleteData }) => json('DELETE', `/api/email/accounts/${id}${deleteData ? '?delete_data=true' : ''}`).then((r) => emailJson(r, 'Could not disconnect.')), onSuccess: invalidate }),
   };
 };
+
+// ---- Orders from email and matches (E3) ----
+export const useEmailOrders = ({ state = 'review', limit = 20, found = 0 } = {}) => useQuery({
+  queryKey: ['email', 'orders', state, limit, found],
+  queryFn: () => fetcher(`/api/email/orders?state=${state}&limit=${limit}`),
+  placeholderData: keepPreviousData,
+});
+export const useEmailAutomation = () => useQuery({ queryKey: ['email', 'automation'], queryFn: () => fetcher('/api/email/automation') });
+export const useEmailOrderMutations = () => {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['email'] });
+    qc.invalidateQueries({ queryKey: ['todos'] });
+    qc.invalidateQueries({ queryKey: ['inventory'] });
+  };
+  const post = (path, body) => apiFetch(path, {
+    method: 'POST',
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }).then((r) => emailJson(r, 'Could not save.'));
+  return {
+    accept: useMutation({ mutationFn: (id) => post(`/api/email/matches/${id}/accept`), onSuccess: invalidate }),
+    reject: useMutation({ mutationFn: (id) => post(`/api/email/matches/${id}/reject`), onSuccess: invalidate }),
+    acceptAll: useMutation({ mutationFn: () => post('/api/email/matches/accept-all'), onSuccess: invalidate }),
+    dismiss: useMutation({ mutationFn: ({ id, restore = false }) => post(`/api/email/orders/${id}/dismiss`, { restore }), onSuccess: invalidate }),
+    automation: useMutation({
+      mutationFn: (changes) => apiFetch('/api/email/automation', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes) }).then((r) => emailJson(r, 'Could not save.')),
+      onSuccess: (data) => qc.setQueryData(['email', 'automation'], data),
+    }),
+  };
+};

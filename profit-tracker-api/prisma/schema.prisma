@@ -66,6 +66,8 @@ model User {
   tax_report_snapshots   TaxReportSnapshot[]
   email_accounts         EmailAccount[]
   email_messages         EmailMessage[]
+  email_orders           EmailOrder[]
+  email_matches          EmailMatch[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -1210,10 +1212,68 @@ model EmailMessage {
   parser_version   Int?
   extracted_at     DateTime?
   extract_error    String?
+  order_id         String?
+  order            EmailOrder? @relation(fields: [order_id], references: [id], onDelete: SetNull)
 
   @@unique([user_id, dedupe_key])
   @@index([user_id, sent_at])
   @@index([account_id])
   @@index([user_id, order_number])
   @@index([account_id, status])
+  @@index([order_id])
+}
+
+// Every email about one order (confirmation, shipped, delivered, refund...)
+// grouped together (E3), so matching and actions work on the order, not on
+// five separate emails. Key: "<merchant>:<order #>", or "track:<number>"
+// for carrier emails until an order with that tracking number shows up.
+model EmailOrder {
+  id               String         @id @default(uuid())
+  user_id          String
+  user             User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  key              String
+  merchant         String
+  order_number     String?
+  type             String // purchase | sale | receipt | shipment
+  status           String // latest by rank: order, shipped, delivered, cancelled...
+  first_seen       DateTime?
+  last_seen        DateTime?
+  currency         String         @default("USD")
+  total            Decimal?       @db.Decimal(12, 2)
+  subtotal         Decimal?       @db.Decimal(12, 2)
+  tax              Decimal?       @db.Decimal(12, 2)
+  shipping         Decimal?       @db.Decimal(12, 2)
+  discount         Decimal?       @db.Decimal(12, 2)
+  tracking_numbers String[]       @default([])
+  items            Json?
+  payment_hint     String?
+  match_state      String         @default("unmatched") // unmatched | review | linked | dismissed
+  updated_at       DateTime       @updatedAt
+  created_at       DateTime       @default(now())
+  messages         EmailMessage[]
+  matches          EmailMatch[]
+
+  @@unique([user_id, key])
+  @@index([user_id, match_state])
+}
+
+// A suggested or accepted link between an order from email and a record.
+model EmailMatch {
+  id          String     @id @default(uuid())
+  user_id     String
+  user        User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  order_id    String
+  order       EmailOrder @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  record_type String // purchase | sale | expense
+  record_ids  String[] // a multi-item order can be several purchase rows
+  score       Int
+  band        String // high | medium
+  reasons     Json // [{ code, text, points }]
+  state       String     @default("suggested") // suggested | linked | rejected
+  auto        Boolean    @default(false)
+  decided_at  DateTime?
+  created_at  DateTime   @default(now())
+
+  @@unique([order_id, record_type, record_ids])
+  @@index([user_id, state])
 }

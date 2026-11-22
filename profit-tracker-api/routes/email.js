@@ -8,6 +8,8 @@ const { PRESETS, SENDERS, normalizeHost } = require('../services/email/config');
 const { encryptSecret, configured } = require('../services/email/crypto');
 const { friendlyError } = require('../services/email/imap');
 const { syncAccount, testConnection } = require('../services/email/sync');
+const { linkMatch, rejectMatch } = require('../services/email/match');
+const { getSettings, saveSettings, DEFAULTS } = require('../services/email/settings');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -228,6 +230,8 @@ router.delete('/accounts/:id', isAuthenticated, async (req, res, next) => {
       const deleted = await prisma.$transaction(async (tx) => {
         const messages = await tx.emailMessage.deleteMany({ where: { account_id: account.id, user_id: req.user.id } });
         await tx.emailAccount.delete({ where: { id: account.id } });
+        // Orders made only from this account's emails go with them.
+        await tx.emailOrder.deleteMany({ where: { user_id: req.user.id, messages: { none: {} } } });
         return messages.count;
       });
       return res.json({ deleted: true, messages_deleted: deleted });
@@ -241,6 +245,105 @@ router.delete('/accounts/:id', isAuthenticated, async (req, res, next) => {
     ]);
     res.json({ disconnected: true });
   } catch (err) { next(err); }
+});
+
+// ---- Orders from email and their matches (E3) ----
+const ORDER_STATES = ['review', 'linked', 'unmatched', 'dismissed'];
+async function recordSummaries(userId, matches) {
+  const ids = (type) => [...new Set(matches.filter((m) => m.record_type === type).flatMap((m) => m.record_ids))];
+  const [purchases, sales, expenses] = await Promise.all([
+    prisma.inventory.findMany({ where: { id: { in: ids('purchase') }, user_id: userId }, select: { id: true, product_name: true, purchase_date: true, qty_purchased: true, unit_purchase_cost: true, unit_purchase_cost_decimal: true, order_number: true } }),
+    prisma.sales.findMany({ where: { id: { in: ids('sale') }, inventory: { user_id: userId } }, select: { id: true, sale_date: true, quantity: true, unit_price: true, unit_price_decimal: true, inventory: { select: { product_name: true } } } }),
+    prisma.expense.findMany({ where: { id: { in: ids('expense') }, user_id: userId }, select: { id: true, name: true, date: true, amount: true, amount_decimal: true } }),
+  ]);
+  const map = new Map();
+  for (const p of purchases) map.set(`purchase:${p.id}`, { id: p.id, name: p.product_name, date: p.purchase_date, amount: Number(p.unit_purchase_cost_decimal ?? p.unit_purchase_cost) * p.qty_purchased, quantity: p.qty_purchased });
+  for (const x of sales) map.set(`sale:${x.id}`, { id: x.id, name: x.inventory?.product_name, date: x.sale_date, amount: Number(x.unit_price_decimal ?? x.unit_price) * x.quantity, quantity: x.quantity });
+  for (const e of expenses) map.set(`expense:${e.id}`, { id: e.id, name: e.name, date: e.date, amount: Number(e.amount_decimal ?? e.amount) });
+  return map;
+}
+
+router.get('/orders', isAuthenticated, async (req, res, next) => {
+  try {
+    const take = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 20, 1), 100);
+    const skip = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
+    const where = { user_id: req.user.id, type: { not: 'shipment' } };
+    if (ORDER_STATES.includes(req.query.state)) where.match_state = req.query.state;
+    const [orders, total, counts] = await Promise.all([
+      prisma.emailOrder.findMany({
+        where, take, skip, orderBy: { last_seen: { sort: 'desc', nulls: 'last' } },
+        include: {
+          matches: { where: { state: { in: ['suggested', 'linked'] } }, orderBy: { score: 'desc' } },
+          _count: { select: { messages: true } },
+        },
+      }),
+      prisma.emailOrder.count({ where }),
+      prisma.emailOrder.groupBy({ by: ['match_state'], where: { user_id: req.user.id, type: { not: 'shipment' } }, _count: { _all: true } }),
+    ]);
+    const records = await recordSummaries(req.user.id, orders.flatMap((o) => o.matches));
+    res.json({
+      total,
+      counts: Object.fromEntries(counts.map((c) => [c.match_state, c._count._all])),
+      orders: orders.map(({ _count, matches, user_id: _u, key: _k, ...o }) => ({
+        ...o,
+        email_count: _count.messages,
+        matches: matches.map((m) => ({
+          id: m.id, record_type: m.record_type, score: m.score, band: m.band, reasons: m.reasons, state: m.state, auto: m.auto,
+          records: m.record_ids.map((id) => records.get(`${m.record_type}:${id}`)).filter(Boolean),
+        })),
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+router.post('/matches/:id/accept', isAuthenticated, async (req, res, next) => {
+  try {
+    const match = await linkMatch(prisma, req.user.id, req.params.id);
+    if (!match) return res.status(404).json({ error: 'This match is no longer available.' });
+    res.json({ linked: true });
+  } catch (err) { next(err); }
+});
+
+router.post('/matches/:id/reject', isAuthenticated, async (req, res, next) => {
+  try {
+    const match = await rejectMatch(prisma, req.user.id, req.params.id);
+    if (!match) return res.status(404).json({ error: 'This match is no longer available.' });
+    res.json({ rejected: true });
+  } catch (err) { next(err); }
+});
+
+// Accepts the top suggestion of every order waiting for review.
+router.post('/matches/accept-all', isAuthenticated, async (req, res, next) => {
+  try {
+    const orders = await prisma.emailOrder.findMany({
+      where: { user_id: req.user.id, match_state: 'review' },
+      include: { matches: { where: { state: 'suggested' }, orderBy: { score: 'desc' }, take: 1 } },
+      take: 500,
+    });
+    let linked = 0;
+    for (const o of orders) {
+      if (o.matches[0] && await linkMatch(prisma, req.user.id, o.matches[0].id)) linked += 1;
+    }
+    res.json({ linked });
+  } catch (err) { next(err); }
+});
+
+router.post('/orders/:id/dismiss', isAuthenticated, async (req, res, next) => {
+  try {
+    const order = await prisma.emailOrder.findFirst({ where: { id: req.params.id, user_id: req.user.id } });
+    if (!order) return res.status(404).json({ error: 'Order not found.' });
+    const restore = req.body?.restore === true;
+    await prisma.emailOrder.update({ where: { id: order.id }, data: { match_state: restore ? 'unmatched' : 'dismissed' } });
+    res.json({ match_state: restore ? 'unmatched' : 'dismissed' });
+  } catch (err) { next(err); }
+});
+
+router.get('/automation', isAuthenticated, async (req, res, next) => {
+  try { res.json(await getSettings(prisma, req.user.id)); } catch (err) { next(err); }
+});
+const automationBody = z.object(Object.fromEntries(Object.keys(DEFAULTS).map((k) => [k, z.boolean().optional()]))).strict();
+router.put('/automation', isAuthenticated, validateBody(automationBody), async (req, res, next) => {
+  try { res.json(await saveSettings(prisma, req.user.id, req.body)); } catch (err) { next(err); }
 });
 
 router._deps = deps;

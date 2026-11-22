@@ -140,3 +140,15 @@ describe('IMAP reader', () => {
     expect(fake.calls).toContain('logout');
   });
 });
+
+describe('To-Do items from email', () => {
+  it('asks to check matches and to reconnect a failing mailbox', () => {
+    const { buildTodos } = require('../services/todos.js');
+    const items = buildTodos({ emailReview: { count: 2, newestId: 'o9' }, emailAccounts: [{ id: 'a1', email_address: 'me@gmail.com', status: 'error', last_error: 'Needs an app password.' }, { id: 'a2', email_address: 'ok@gmail.com', status: 'active' }] }, '2026-03-01');
+    expect(items.map((i) => [i.key, i.title])).toEqual([
+      ['email-reconnect:a1', 'Reconnect me@gmail.com'],
+      ['email-review:o9', '2 orders from email to check'],
+    ]);
+    expect(items[1].link).toEqual({ kind: 'page', to: '/settings', state: { tab: 'email' } });
+  });
+});
