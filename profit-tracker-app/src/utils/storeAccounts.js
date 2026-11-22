@@ -21,3 +21,17 @@ export function validAccountId(platforms, storeId, accountId) {
   if (!accountId) return '';
   return accountsForStore(platforms, storeId).some(a => String(a.id) === String(accountId)) ? accountId : '';
 }
+
+// The store account(s) the purchases were bought on (Inventory.account).
+// One name when every purchase shares it, "N accounts" when they differ,
+// "Mixed" when one account plus purchases with none, and a quiet dash when
+// none has one.
+export function commitmentAccountSummary(rows) {
+  const names = rows.map((r) => r.sale?.inventory?.account?.name || null);
+  const distinct = [...new Set(names.filter(Boolean))];
+  if (distinct.length === 0) return { label: null, title: null, mixed: false };
+  const missing = names.some((n) => !n);
+  if (distinct.length === 1 && !missing) return { label: distinct[0], title: distinct[0], mixed: false };
+  const title = [...distinct, ...(missing ? ['No account'] : [])].join(', ');
+  return { label: distinct.length === 1 ? 'Mixed' : `${distinct.length} accounts`, title, mixed: true };
+}

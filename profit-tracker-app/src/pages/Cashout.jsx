@@ -36,7 +36,7 @@ import {
   apiFetch,
 } from '../hooks/useApi';
 import { formatMoney } from '../utils/money';
-import { accountLabel } from '../utils/storeAccounts';
+import { accountLabel, commitmentAccountSummary } from '../utils/storeAccounts';
 import { batchCost, effectiveCashbackRate } from '../../../shared/finance.mjs';
 import { displayLabel, statusVisual } from '../data/statusWorkflow';
 import { useMatchMedia } from '../hooks/useMatchMedia';
@@ -1032,8 +1032,9 @@ function TrackingEntry({ commitment }) {
 function CommitmentsPanel({ commitments, allDeals }) {
   const { deleteCommitment } = useCashoutMutations();
   const [openGroups, setOpenGroups] = useState(() => new Set());
-  // Phones get one card per commitment; the 7-column table can't fit 375px.
-  const isPhone = useMatchMedia('(max-width: 767px)');
+  // One card per commitment until the 8-column table fits beside the sidebar
+  // (the same breakpoint Live Deals switches to cards at).
+  const isPhone = useMatchMedia(DEAL_CARDS_QUERY);
 
   if (commitments.length === 0) {
     return (
@@ -1172,7 +1173,6 @@ function CommitmentsPanel({ commitments, allDeals }) {
     const { deal, itemName, upc } = itemInfo(c);
     const unitCost = c.sale?.inventory?.unit_purchase_cost;
     const unitPayout = c.sale?.unit_price;
-    const account = c.sale?.inventory?.account?.name;
     return (
       <tr key={c.id} className={`hover:bg-[var(--dp-hover-bg)] transition-colors ${c.status === 'withdrawn' ? 'opacity-60' : ''} ${nested ? 'bg-[var(--dp-hover-bg)]/40' : ''}`}>
         <td className={`py-3 ${nested ? 'pl-12 pr-4' : 'px-4'}`}>
@@ -1192,7 +1192,7 @@ function CommitmentsPanel({ commitments, allDeals }) {
               {!nested && <div className="font-semibold text-[var(--dp-text-primary)] truncate" title={itemName}>{itemName}</div>}
               {!nested && upc && <div className="text-[12px] text-[var(--dp-text-label)] font-mono truncate">UPC: {upc}</div>}
               <div className={`text-[12px] ${nested ? 'text-[var(--dp-text-secondary)]' : 'text-[var(--dp-text-label)] mt-0.5'}`}>
-                Qty {c.quantity} · {new Date(c.created_at).toLocaleDateString()}{account ? ` · ${account}` : ''}
+                Qty {c.quantity} · {new Date(c.created_at).toLocaleDateString()}
               </div>
               {c.status === 'pending' && group?.addsTo > 0 && (
                 <div className="text-[11px] text-sky-300 mt-0.5">Adds to your {group.addsTo} committed</div>
@@ -1203,6 +1203,7 @@ function CommitmentsPanel({ commitments, allDeals }) {
         <td className="py-3 px-3">
           {!nested && <CashoutName name={c.connection?.display_name || c.connection?.provider} />}
         </td>
+        <td className="py-3 px-3"><AccountName rows={[c]} /></td>
         <td className="py-3 px-3 tabular-nums text-[var(--dp-text-secondary)]">
           {unitCost != null ? `$${formatMoney(unitCost)}` : '—'}
         </td>
@@ -1256,6 +1257,7 @@ function CommitmentsPanel({ commitments, allDeals }) {
         <td className="py-3 px-3">
           <CashoutName name={first.connection?.display_name || first.connection?.provider} />
         </td>
+        <td className="py-3 px-3"><AccountName rows={group.rows} /></td>
         <td className="py-3 px-3 text-[var(--dp-text-label)]">—</td>
         <td className="py-3 px-3">
           <div className="font-semibold tabular-nums text-[var(--dp-text-primary)]">
@@ -1303,7 +1305,6 @@ function CommitmentsPanel({ commitments, allDeals }) {
     const { deal, itemName, upc } = itemInfo(c);
     const unitCost = c.sale?.inventory?.unit_purchase_cost;
     const unitPayout = c.sale?.unit_price;
-    const account = c.sale?.inventory?.account?.name;
     return (
       <li key={c.id} className={`px-4 py-3.5 ${c.status === 'withdrawn' ? 'opacity-60' : ''} ${nested ? 'bg-[var(--dp-hover-bg)]/40 pl-6' : ''}`}>
         <div className="flex items-start gap-3">
@@ -1312,15 +1313,16 @@ function CommitmentsPanel({ commitments, allDeals }) {
             {!nested && <div className="font-semibold text-sm leading-snug text-[var(--dp-text-primary)]">{itemName}</div>}
             {!nested && upc && <div className="text-[12px] text-[var(--dp-text-label)] font-mono">UPC: {upc}</div>}
             <div className={`text-[12px] ${nested ? 'text-[var(--dp-text-secondary)]' : 'text-[var(--dp-text-label)] mt-0.5'}`}>
-              Qty {c.quantity} · {new Date(c.created_at).toLocaleDateString()}{account ? ` · ${account}` : ''}
+              Qty {c.quantity} · {new Date(c.created_at).toLocaleDateString()}
             </div>
             {c.status === 'pending' && group?.addsTo > 0 && (
               <div className="text-[11px] text-sky-300 mt-0.5">Adds to your {group.addsTo} committed</div>
             )}
           </div>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5">
+        <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-x-4 gap-y-2.5">
           {!nested && phoneField('Cashout', <CashoutName name={c.connection?.display_name || c.connection?.provider} />)}
+          {phoneField('Account', <AccountName rows={[c]} />)}
           {phoneField('Status', statusCell(c))}
           {phoneField('Bought at', <span className="tabular-nums text-[var(--dp-text-secondary)]">{unitCost != null ? `$${formatMoney(unitCost)}` : '—'}</span>)}
           {phoneField('Committed at', <span className="font-semibold tabular-nums text-[var(--dp-text-primary)]">{unitPayout != null ? `$${formatMoney(unitPayout)}` : '—'}</span>)}
@@ -1351,8 +1353,9 @@ function CommitmentsPanel({ commitments, allDeals }) {
               </button>
             </div>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5">
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-x-4 gap-y-2.5">
             {phoneField('Cashout', <CashoutName name={first.connection?.display_name || first.connection?.provider} />)}
+            {phoneField('Account', <AccountName rows={group.rows} />)}
             {phoneField('Committed at', <span className="font-semibold tabular-nums text-[var(--dp-text-primary)]">{first.sale?.unit_price != null ? `$${formatMoney(first.sale.unit_price)}` : '—'}</span>)}
             {phoneField('Status', (
               <>
@@ -1403,17 +1406,19 @@ function CommitmentsPanel({ commitments, allDeals }) {
         <table className="w-full table-fixed text-left border-collapse text-xs">
           <colgroup>
             <col className="w-[26%]" />
+            <col className="w-[7%]" />
             <col className="w-[9%]" />
-            <col className="w-[10%]" />
-            <col className="w-[10%]" />
-            <col className="w-[13%]" />
-            <col className="w-[20%]" />
+            <col className="w-[9%]" />
+            <col className="w-[9%]" />
+            <col className="w-[12%]" />
+            <col className="w-[16%]" />
             <col className="w-[12%]" />
           </colgroup>
           <thead>
             <tr className="border-b border-[color:var(--dp-border)] text-[var(--dp-text-label)] uppercase font-semibold text-[12px] tracking-wider align-top">
               <th className="py-3 px-4">Item</th>
               <th className="py-3 px-3">Cashout</th>
+              <th className="py-3 px-3">Account</th>
               <th className="py-3 px-3">Bought At</th>
               <th className="py-3 px-3">Committed At</th>
               <th className="py-3 px-3">Status</th>
@@ -1436,11 +1441,21 @@ function CommitmentsPanel({ commitments, allDeals }) {
   );
 }
 
+function AccountName({ rows }) {
+  const { label, title, mixed } = commitmentAccountSummary(rows);
+  if (!label) return <span className="text-[var(--dp-text-label)]" title="No account">—</span>;
+  return (
+    <span className={`block truncate text-[12px] ${mixed ? 'text-[var(--dp-text-secondary)]' : 'text-[var(--dp-text-primary)]'}`} title={title}>
+      {label}
+    </span>
+  );
+}
+
 // A heading row inside the Commitments table.
 function SectionRow({ title, count, hint }) {
   return (
     <tr className="bg-[var(--dp-hover-bg)]">
-      <th colSpan={7} scope="rowgroup" className="py-2 px-4 text-left">
+      <th colSpan={8} scope="rowgroup" className="py-2 px-4 text-left">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--dp-text-secondary)]">{title}</span>
         <span className="ml-1.5 text-[11px] text-[var(--dp-text-label)] tabular-nums">{count}</span>
         {hint && <span className="block text-[11px] font-normal normal-case text-[var(--dp-text-label)] mt-0.5">{hint}</span>}

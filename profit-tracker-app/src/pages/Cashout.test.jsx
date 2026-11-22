@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { MemoryRouter } from 'react-router-dom';
 import { toast } from 'sonner';
 import Cashout from './Cashout';
+import { commitmentAccountSummary } from '../utils/storeAccounts';
 import {
   dealConditionLabels,
   dealLimitLabel,
@@ -1390,15 +1391,50 @@ describe('Cashout Page', () => {
         expect(headings[1]).toMatch(/^Committed1/);
         expect(headings[2]).toMatch(/^Withdrawn1/);
         // The waiting purchase is on its own, above, saying it adds to the 4.
-        expect(screen.getByText(/Qty 1 · .* · Acct c/)).toBeInTheDocument();
+        expect(screen.getByText('Acct c')).toBeInTheDocument();
         expect(screen.getByText('Adds to your 4 committed')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
         // The committed ones are one row with the total.
         expect(screen.getByText('4 committed')).toBeInTheDocument();
         expect(screen.queryByText(/Acct a/)).not.toBeInTheDocument();
+        expect(screen.getByText('2 accounts')).toHaveAttribute('title', 'Acct a, Acct b');
         fireEvent.click(screen.getByRole('button', { name: '2 purchases' }));
-        expect(screen.getByText(/Qty 2 · .* · Acct a/)).toBeInTheDocument();
+        expect(screen.getAllByText(/^Qty 2 · /)).toHaveLength(2);
+        expect(screen.getByText('Acct a')).toBeInTheDocument();
+        expect(screen.getByText('Acct b')).toBeInTheDocument();
         expect(screen.getAllByRole('button', { name: 'Take off' })).toHaveLength(2);
+      });
+
+      it('shows an Account column after Cashout, rolled up for a group', () => {
+        const acct = (name) => ({ sale: { tracking_number: null, unit_price: 119, inventory: { product_name: 'Airpod 5 ANC', unit_purchase_cost: 99, account: name ? { name } : null } } });
+        currentCommitments = [
+          row('a', 'active', 2, { sale: { tracking_number: '1Za', unit_price: 119, inventory: { product_name: 'Airpod 5 ANC', account: { name: 'Bizz' } } } }),
+          row('b', 'active', 1, { sale: { tracking_number: '1Zb', unit_price: 119, inventory: { product_name: 'Airpod 5 ANC', account: { name: 'Bizz' } } } }),
+          row('c', 'pending', 1, { connection_id: 'conn-2', ...acct(null) }),
+        ];
+        openPanel();
+        const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
+        expect(headers.slice(0, 3)).toEqual(['Item', 'Cashout', 'Account']);
+        // Every purchase in the group is on Bizz, so the group shows Bizz.
+        expect(screen.getByText('Bizz')).toHaveAttribute('title', 'Bizz');
+        // A purchase with no account shows a quiet dash, not text.
+        expect(screen.getAllByTitle('No account').length).toBeGreaterThan(0);
+        fireEvent.click(screen.getByRole('button', { name: '2 purchases' }));
+        expect(screen.getAllByText('Bizz')).toHaveLength(3);
+      });
+
+      it('shows the account on phone cards, with Mixed for one account plus none', () => {
+        window.matchMedia = (query) => ({ matches: query.includes('max-width'), addEventListener: vi.fn(), removeEventListener: vi.fn() });
+        currentCommitments = [
+          row('a', 'active', 2, { sale: { tracking_number: '1Za', unit_price: 119, inventory: { product_name: 'Airpod 5 ANC', account: { name: 'Bizz' } } } }),
+          row('b', 'active', 1, { sale: { tracking_number: '1Zb', unit_price: 119, inventory: { product_name: 'Airpod 5 ANC', account: null } } }),
+        ];
+        openPanel();
+        expect(screen.queryByRole('table')).not.toBeInTheDocument();
+        expect(screen.getByText('Account')).toBeInTheDocument();
+        expect(screen.getByText('Mixed')).toHaveAttribute('title', 'Bizz, No account');
+        fireEvent.click(screen.getByRole('button', { name: '2 purchases' }));
+        expect(screen.getByText('Bizz')).toBeInTheDocument();
       });
 
       it('takes one purchase off (lowering the total) or withdraws everything', async () => {
@@ -1683,5 +1719,22 @@ describe('Cashout Page', () => {
       expect(group.offers.map((o) => o.id)).toEqual(['p4d-1', 'eb-1']);
       expect(groupStoreLinks(group).map((l) => l.name)).toEqual(['Best Buy', 'Walmart']);
     });
+  });
+});
+
+describe('commitmentAccountSummary', () => {
+  const r = (name) => ({ sale: { inventory: { account: name ? { name } : null } } });
+  it('is empty when no purchase has an account (or no sale)', () => {
+    expect(commitmentAccountSummary([r(null), { sale: null }]).label).toBeNull();
+  });
+  it('names the one account every purchase shares', () => {
+    expect(commitmentAccountSummary([r('Bizz'), r('Bizz')])).toEqual({ label: 'Bizz', title: 'Bizz', mixed: false });
+  });
+  it('counts different accounts', () => {
+    expect(commitmentAccountSummary([r('Bizz'), r('CBAmazon'), r('Bizz')])).toEqual({ label: '2 accounts', title: 'Bizz, CBAmazon', mixed: true });
+    expect(commitmentAccountSummary([r('Bizz'), r('CBAmazon'), r(null)]).title).toBe('Bizz, CBAmazon, No account');
+  });
+  it('says Mixed for one account plus purchases with none', () => {
+    expect(commitmentAccountSummary([r('Bizz'), r(null)]).label).toBe('Mixed');
   });
 });
