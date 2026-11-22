@@ -11,7 +11,8 @@ const { PRESETS, SENDERS, merchantFor, normalizeHost, loginName } = require('./c
 const { decryptSecret } = require('./crypto');
 const { resolvePublicHost } = require('./hostCheck');
 const { openImap, friendlyError } = require('./imap');
-const { parseSource, extractEmail, parserVersion } = require('./extract');
+const { parseSource, extractEmail, parserVersion, GENERIC_VERSION } = require('./extract');
+const { MERCHANTS } = require('./extract/merchants');
 const { groupMessages, recompute } = require('./orders');
 const { matchOrders } = require('./match');
 const { getSettings } = require('./settings');
@@ -222,8 +223,20 @@ const READ_PER_RUN = 200;
 // an older version of a store's reader. Each body is fetched, read in memory
 // and dropped; only the details are saved.
 async function extractPending(prisma, client, account, { started, budgetMs, onRead }) {
+  // Only emails that still need reading: never read, or read by an older
+  // version of the shared reader or of their store's template. (Asking for the
+  // newest 2,000 of all emails left older ones in a big inbox unread forever.)
+  const read = { in: ['extracted', 'ignored'] };
   const candidates = await prisma.emailMessage.findMany({
-    where: { account_id: account.id, status: { in: ['new', 'extracted', 'ignored'] } },
+    where: {
+      account_id: account.id,
+      OR: [
+        { status: 'new' },
+        { status: read, parser_version: null },
+        { status: read, parser_version: { lt: GENERIC_VERSION * 1000 } },
+        ...Object.keys(MERCHANTS).map((merchant) => ({ status: read, merchant, parser_version: { lt: parserVersion(merchant) } })),
+      ],
+    },
     select: { id: true, folder: true, uid: true, uid_validity: true, message_id: true, merchant: true, status: true, parser_version: true, subject: true, order_id: true, order_number: true, tracking_numbers: true },
     orderBy: [{ sent_at: { sort: 'desc', nulls: 'last' } }],
     take: 2000,
