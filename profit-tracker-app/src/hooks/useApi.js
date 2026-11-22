@@ -502,6 +502,35 @@ export const cashoutCommitmentsQuery = () => ({
 });
 export const useCashoutCommitments = () => useQuery(cashoutCommitmentsQuery());
 
+// Settings > Data > Import from cashouts. Preview writes nothing; commit
+// writes purchases + sales, so every screen that shows them is refreshed.
+const postJson = (path, body, fallback) =>
+  apiFetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then(async (r) => {
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || fallback);
+    return data;
+  });
+
+export const useCashoutImport = () => {
+  const qc = useQueryClient();
+  const preview = useMutation({
+    mutationFn: ({ connectionId, ...body }) => postJson(
+      connectionId ? `/api/cashouts/connections/${encodeURIComponent(connectionId)}/import/preview` : '/api/cashouts/import/preview',
+      body,
+      'Could not read the report.',
+    ),
+  });
+  const commit = useMutation({
+    mutationFn: (body) => postJson('/api/cashouts/import/commit', body, 'Import failed. Nothing was saved.'),
+    onSuccess: () => qc.invalidateQueries(),
+  });
+  return { preview, commit };
+};
+
 export const useCashoutMutations = () => {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ['cashout'] });
