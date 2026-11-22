@@ -80,6 +80,22 @@ async function openImap(target, { ImapClass = ImapFlow } = {}) {
       }
       return out;
     },
+    // Raw source for reading order details, capped at 512 KB per email.
+    // BODY.PEEK: reading the body never marks the email as read.
+    async fetchSources(uids) {
+      if (!uids.length) return [];
+      const out = [];
+      for await (const msg of client.fetch(uids.join(','), { uid: true, source: { maxLength: 512 * 1024 } }, { uid: true })) {
+        if (msg.source) out.push({ uid: msg.uid, source: msg.source });
+      }
+      return out;
+    },
+    // After a folder is renumbered, find an email again by its Message-ID.
+    async findUidByMessageId(messageId) {
+      if (!messageId) return null;
+      const uids = await client.search({ header: { 'message-id': messageId } }, { uid: true });
+      return Array.isArray(uids) && uids.length ? Math.max(...uids) : null;
+    },
     async close() {
       try { if (lock) lock.release(); } catch { /* already gone */ }
       lock = null;

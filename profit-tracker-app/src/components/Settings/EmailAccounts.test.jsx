@@ -13,11 +13,13 @@ const presets = [
 let setup;
 let accounts;
 let messages;
+let extra = 0;
+const messageCalls = [];
 
 vi.mock('../../hooks/useApi', () => ({
   useEmailSetup: () => ({ data: setup, isLoading: false, error: null }),
   useEmailAccounts: () => ({ data: accounts, isLoading: false, error: null }),
-  useEmailMessages: () => ({ data: messages }),
+  useEmailMessages: (opts) => { messageCalls.push(opts); return { data: { messages, total: messages.length + extra } }; },
   useEmailMutations: () => mutations,
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -35,6 +37,8 @@ describe('EmailAccounts', () => {
     setup = { configured: true, presets, senders: ['Amazon', 'Walmart'] };
     accounts = [];
     messages = [];
+    extra = 0;
+    messageCalls.length = 0;
     vi.clearAllMocks();
     Object.values(mutations).forEach((m) => m.mutateAsync.mockResolvedValue({}));
   });
@@ -116,5 +120,27 @@ describe('EmailAccounts', () => {
     render(<EmailAccounts />);
     expect(screen.getByText('Disconnected')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reconnect' })).toBeInTheDocument();
+  });
+
+  it('shows what was read from each email, flags unsure values, and filters', () => {
+    accounts = [account()];
+    extra = 25;
+    messages = [{
+      id: 'm2', merchant: 'walmart', kind: 'order', status: 'extracted', subject: 'Thanks for your order', sent_at: '2026-03-02T12:00:00Z',
+      order_number: '2000123-45678901', total: '64.74', tax: '4.80', tracking_numbers: [], payment_hint: 'Mastercard 5555',
+      items: [{ name: 'Pokemon Booster Bundle', quantity: 2, total: '59.94' }], confidence: { order_number: 0.85, total: 0.4, items: 0.4 },
+      link: 'https://mail.google.com/mail/u/0/#search/rfc822msgid%3Ax',
+    }];
+    render(<EmailAccounts />);
+    expect(screen.getByText('Found in email')).toBeInTheDocument();
+    expect(screen.getByText('#2000123-45678901 · $64.74')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Walmart/ }));
+    expect(screen.getAllByText('check')).toHaveLength(2); // total and items are guesses
+    expect(screen.getByText('2 × Pokemon Booster Bundle')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Open in Gmail/ })).toHaveAttribute('href', expect.stringContaining('rfc822msgid'));
+    fireEvent.click(screen.getByRole('button', { name: 'Sales' }));
+    expect(messageCalls.at(-1)).toMatchObject({ kind: 'sales', limit: 10 });
+    fireEvent.click(screen.getByRole('button', { name: /Show more/ }));
+    expect(messageCalls.at(-1)).toMatchObject({ limit: 30 });
   });
 });

@@ -1189,10 +1189,31 @@ model EmailMessage {
   subject      String?
   sent_at      DateTime?
   merchant     String?
-  status       String       @default("new") // new | extracted | ignored | failed (E2)
+  status       String       @default("new") // new | extracted | ignored | failed
   created_at   DateTime     @default(now())
+
+  // Read out of the body during sync (E2); the body itself is never stored.
+  uid_validity     String?
+  kind             String? // order | shipped | delivered | pickup | cancelled | refund | return | receipt | sale | payout | other
+  order_number     String?
+  currency         String    @default("USD")
+  total            Decimal?  @db.Decimal(12, 2)
+  subtotal         Decimal?  @db.Decimal(12, 2)
+  tax              Decimal?  @db.Decimal(12, 2)
+  shipping         Decimal?  @db.Decimal(12, 2)
+  discount         Decimal?  @db.Decimal(12, 2)
+  tracking_numbers String[]  @default([])
+  items            Json?     // [{ name, quantity, unit_price, total }]
+  payment_hint     String?   // "Visa 1234"
+  confidence       Json?     // { field: 0..1 }
+  parser           String?   // "amazon@1", "schema.org@1", "generic@1"
+  parser_version   Int?
+  extracted_at     DateTime?
+  extract_error    String?
 
   @@unique([user_id, dedupe_key])
   @@index([user_id, sent_at])
   @@index([account_id])
+  @@index([user_id, order_number])
+  @@index([account_id, status])
 }

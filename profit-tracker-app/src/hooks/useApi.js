@@ -774,7 +774,11 @@ export const useEmailAccounts = () => useQuery({
 });
 // `found` (the total count) is part of the key, so the list reloads when a
 // background sync finds more.
-export const useEmailMessages = (limit = 10, found = 0) => useQuery({ queryKey: ['email', 'messages', limit, found], queryFn: () => fetcher(`/api/email/messages?limit=${limit}`), placeholderData: keepPreviousData });
+export const useEmailMessages = ({ limit = 10, kind = 'all', found = 0 } = {}) => useQuery({
+  queryKey: ['email', 'messages', limit, kind, found],
+  queryFn: () => fetcher(`/api/email/messages?limit=${limit}${kind !== 'all' ? `&kind=${kind}` : ''}`),
+  placeholderData: keepPreviousData,
+});
 export const useEmailMutations = () => {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ['email'] });

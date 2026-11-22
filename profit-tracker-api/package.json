@@ -27,7 +27,9 @@
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "firebase-admin": "14.4.0",
+    "html-to-text": "10.0.1",
     "imapflow": "2.11.0",
+    "mailparser": "3.14.2",
     "web-push": "3.6.7",
     "zod": "^4.6.5"
   },

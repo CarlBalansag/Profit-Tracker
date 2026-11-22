@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import EmbeddedPostgres from 'embedded-postgres';
+import { mime } from './fixtures/emails.mjs';
 
 const require = createRequire(import.meta.url);
 const { PrismaClient } = require('@prisma/client');
@@ -38,8 +39,8 @@ function resetMail() {
   mail['[Gmail]/Spam'] = { uidValidity: '200', messages: [], specialUse: '\\Junk' };
 }
 let nextUid = 1;
-function addMail(folder, from, subject, date, messageId = `<m${nextUid}@x>`) {
-  mail[folder].messages.push({ uid: nextUid++, from, subject, date: new Date(date), messageId });
+function addMail(folder, from, subject, date, messageId = `<m${nextUid}@x>`, html = '<p>Hello</p>') {
+  mail[folder].messages.push({ uid: nextUid++, from, subject, date: new Date(date), messageId, raw: mime({ from, subject, html, id: messageId }) });
 }
 async function fakeOpen(target) {
   log.push(['open', target]);
@@ -64,6 +65,11 @@ async function fakeOpen(target) {
         uid: m.uid, messageId: m.messageId, fromAddress: m.from, fromName: null, subject: m.subject, date: m.date,
       }));
     },
+    async fetchSources(uids) {
+      log.push(['body', uids.length]);
+      return current.messages.filter((m) => uids.includes(m.uid)).map((m) => ({ uid: m.uid, source: m.raw }));
+    },
+    async findUidByMessageId(id) { return current.messages.find((m) => m.messageId === id)?.uid || null; },
     async close() { log.push(['close']); },
   };
 }
@@ -71,7 +77,7 @@ const resolve = async (host) => { if (host.includes('internal')) throw Object.as
 
 const connectBody = (over = {}) => ({ preset: 'gmail', email_address: 'me@gmail.com', password: goodPassword, sync_since: '2026-01-01', ...over });
 const waitIdle = async (id) => {
-  for (let i = 0; i < 50; i += 1) {
+  for (let i = 0; i < 400; i += 1) {
     const a = await prisma.emailAccount.findUnique({ where: { id } });
     if (!a.sync_started_at && (a.last_synced_at || a.last_error)) return a;
     await new Promise((r) => setTimeout(r, 50));
@@ -167,9 +173,10 @@ describe('email connections on Postgres', () => {
     expect(row.status).toBe('active');
     expect(log.some((e) => e[0] === 'open' && e[1].servername === 'imap.gmail.com' && e[1].address === '93.184.216.34')).toBe(true);
 
-    const messages = await send('GET', '/api/email/messages');
-    expect(messages.body.map((m) => [m.merchant, m.subject])).toEqual([['walmart', 'Walmart order'], ['amazon', 'Your Amazon.com order']]);
-    expect(log.filter((e) => e[0] === 'examine').map((e) => e[1])).toEqual(['INBOX', 'INBOX']); // test + sync; spam off
+    const messages = await send('GET', '/api/email/messages?show=all');
+    expect(messages.body.total).toBe(2);
+    expect(messages.body.messages.map((m) => [m.merchant, m.subject, m.link?.startsWith('https://mail.google.com/')])).toEqual([['walmart', 'Walmart order', true], ['amazon', 'Your Amazon.com order', true]]);
+    expect(log.filter((e) => e[0] === 'examine').map((e) => e[1])).toEqual(['INBOX', 'INBOX', 'INBOX']); // test, find, read bodies; spam off
     const list = await send('GET', '/api/email/accounts');
     expect(list.body[0]).toMatchObject({ email_address: 'me@gmail.com', message_count: 2, status: 'active', syncing: false });
 
@@ -234,7 +241,7 @@ describe('email connections on Postgres', () => {
     await waitIdle(body.id);
     actingUser = other;
     expect((await send('GET', '/api/email/accounts')).body).toEqual([]);
-    expect((await send('GET', '/api/email/messages')).body).toEqual([]);
+    expect((await send('GET', '/api/email/messages?show=all')).body).toEqual({ total: 0, messages: [] });
     expect((await send('PATCH', `/api/email/accounts/${body.id}`, { include_spam: true })).status).toBe(404);
     expect((await send('POST', `/api/email/accounts/${body.id}/sync`)).status).toBe(404);
     expect((await send('DELETE', `/api/email/accounts/${body.id}?delete_data=true`)).status).toBe(404);
@@ -287,17 +294,49 @@ describe('email connections on Postgres', () => {
     expect([row.status, row.encrypted_secret]).toEqual(['disconnected', null]);
   });
 
+  it('reads order details from the body, keeps only the details, and re-finds renumbered emails', async () => {
+    addMail('INBOX', 'auto-confirm@amazon.com', 'Your Amazon.com order of "Switch"', '2026-03-01', '<o1@amazon.com>',
+      '<p>Order #112-1234567-7654321</p><table><tr><td>Order Total:</td><td>$449.99</td></tr></table><p>Visa ending in 4242</p>');
+    addMail('INBOX', 'store-news@amazon.com', 'Black Friday deals: 50% off', '2026-03-02', '<n1@amazon.com>', '<p>Shop now</p><p>Unsubscribe</p>');
+    const { body } = await send('POST', '/api/email/accounts', connectBody());
+    await waitIdle(body.id);
+    const rows = await prisma.emailMessage.findMany({ orderBy: { sent_at: 'asc' } });
+    expect(rows.map((r) => [r.status, r.kind, r.order_number, r.total?.toString(), r.payment_hint])).toEqual([
+      ['extracted', 'order', '112-1234567-7654321', '449.99', 'Visa 4242'],
+      ['ignored', 'other', null, undefined, null],
+    ]);
+    expect(Object.keys(rows[0])).not.toContain('body');
+    const listed = await send('GET', '/api/email/messages?kind=orders');
+    expect(listed.body.messages.map((m) => [m.kind, m.total, m.order_number])).toEqual([['order', '449.99', '112-1234567-7654321']]);
+    expect((await send('GET', '/api/email/messages')).body.total).toBe(1); // the newsletter is hidden
+    expect((await send('GET', '/api/email/messages?show=all')).body.total).toBe(2);
+
+    // A newer reader version re-reads; a renumbered folder is found again by Message-ID.
+    await prisma.emailMessage.updateMany({ data: { parser_version: 1 } });
+    mail.INBOX.uidValidity = '555';
+    mail.INBOX.messages.forEach((m) => { m.uid += 100; });
+    expect(await sync.syncAccount(body.id, { open: fakeOpen, resolve })).toMatchObject({ status: 'ok', read: 2 });
+    const again = await prisma.emailMessage.findFirst({ where: { message_id: '<o1@amazon.com>' } });
+    expect([again.uid_validity, again.status, again.parser_version > 1]).toEqual(['555', 'extracted', true]);
+
+    // An email deleted from the mailbox before it was read is marked, not retried forever.
+    await prisma.emailMessage.updateMany({ data: { status: 'new' } });
+    mail.INBOX.messages.length = 0;
+    await sync.syncAccount(body.id, { open: fakeOpen, resolve });
+    expect(new Set((await prisma.emailMessage.findMany()).map((r) => r.status))).toEqual(new Set(['failed']));
+  });
+
   it('protects the cron endpoint with its own secret', () => {
     expect(sync.verifySyncSecret('Bearer cron-secret-qa').ok).toBe(true);
     expect(sync.verifySyncSecret('Bearer wrong').ok).toBe(false);
     expect(sync.verifySyncSecret(undefined).ok).toBe(false);
   });
 
-  it('caps a run and continues where it stopped', async () => {
+  it('caps a run and continues where it stopped', { timeout: 60000 }, async () => {
     for (let i = 0; i < sync.MAX_PER_RUN + 20; i += 1) addMail('INBOX', 'a@amazon.com', `Order ${i}`, '2026-03-01');
     const { body } = await send('POST', '/api/email/accounts', connectBody());
     await waitIdle(body.id);
     expect(await prisma.emailMessage.count()).toBe(sync.MAX_PER_RUN);
-    expect(await sync.syncAccount(body.id, { open: fakeOpen, resolve })).toMatchObject({ status: 'ok', found: 20, more: false });
+    expect(await sync.syncAccount(body.id, { open: fakeOpen, resolve })).toMatchObject({ status: 'ok', found: 20, more: true }); // bodies still waiting to be read
   });
 });

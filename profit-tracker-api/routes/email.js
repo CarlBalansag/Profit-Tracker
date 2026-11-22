@@ -78,16 +78,47 @@ router.get('/accounts', isAuthenticated, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+const KIND_GROUPS = {
+  orders: ['order', 'receipt'],
+  shipping: ['shipped', 'delivered', 'pickup'],
+  sales: ['sale', 'payout'],
+  problems: ['cancelled', 'refund', 'return'],
+};
+// A link that opens the email in the user's mail app, where one exists.
+function emailLink(preset, messageId) {
+  const id = String(messageId || '').replace(/^<|>$/g, '');
+  if (!id) return null;
+  if (preset === 'gmail') return `https://mail.google.com/mail/u/0/#search/rfc822msgid%3A${encodeURIComponent(id)}`;
+  return null;
+}
+
 router.get('/messages', isAuthenticated, async (req, res, next) => {
   try {
     const take = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 20, 1), 100);
-    const rows = await prisma.emailMessage.findMany({
-      where: { user_id: req.user.id },
-      orderBy: [{ sent_at: { sort: 'desc', nulls: 'last' } }, { created_at: 'desc' }],
-      take,
-      select: { id: true, account_id: true, from_address: true, from_name: true, subject: true, sent_at: true, merchant: true, status: true },
+    const skip = Math.min(Math.max(Number.parseInt(req.query.offset, 10) || 0, 0), 100000);
+    const where = { user_id: req.user.id };
+    const group = KIND_GROUPS[req.query.kind];
+    if (group) where.kind = { in: group };
+    if (req.query.show !== 'all') where.status = { not: 'ignored' };
+    const [rows, total] = await Promise.all([
+      prisma.emailMessage.findMany({
+        where,
+        orderBy: [{ sent_at: { sort: 'desc', nulls: 'last' } }, { created_at: 'desc' }],
+        take,
+        skip,
+        select: {
+          id: true, account_id: true, from_address: true, from_name: true, subject: true, sent_at: true, merchant: true, status: true,
+          message_id: true, kind: true, order_number: true, currency: true, total: true, subtotal: true, tax: true, shipping: true,
+          discount: true, tracking_numbers: true, items: true, payment_hint: true, confidence: true, extract_error: true,
+          account: { select: { preset: true } },
+        },
+      }),
+      prisma.emailMessage.count({ where }),
+    ]);
+    res.json({
+      total,
+      messages: rows.map(({ account, message_id: messageId, ...m }) => ({ ...m, link: emailLink(account?.preset, messageId) })),
     });
-    res.json(rows);
   } catch (err) { next(err); }
 });
 

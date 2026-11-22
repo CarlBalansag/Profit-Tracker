@@ -11,6 +11,7 @@ const { PRESETS, SENDERS, merchantFor, normalizeHost, loginName } = require('./c
 const { decryptSecret } = require('./crypto');
 const { resolvePublicHost } = require('./hostCheck');
 const { openImap, friendlyError } = require('./imap');
+const { parseSource, extractEmail, parserVersion } = require('./extract');
 
 const DOMAINS = SENDERS.flatMap((s) => s.domains);
 const BATCH = 50;
@@ -137,6 +138,7 @@ async function syncAccount(accountId, deps = {}) {
             subject: clip(h.subject, 256),
             sent_at: h.date && !Number.isNaN(h.date.getTime()) ? h.date : null,
             merchant,
+            uid_validity: box.uidValidity,
           }));
         if (rows.length) {
           const saved = await prisma.emailMessage.createMany({ data: rows, skipDuplicates: true });
@@ -149,13 +151,17 @@ async function syncAccount(accountId, deps = {}) {
       if (!take.length) await saveCursor();
     }
 
+    const read = Date.now() - started < budgetMs
+      ? await extractPending(prisma, client, account, { started, budgetMs, onRead: deps.onRead })
+      : { read: 0, more: true };
+
     // Only while this run still holds the lease: a disconnect during the run
     // clears it, and must not be undone here.
     await prisma.emailAccount.updateMany({
       where: { id: account.id, sync_started_at: now },
       data: { status: 'active', last_error: null, last_synced_at: now, sync_started_at: null },
     });
-    return { status: 'ok', found, more };
+    return { status: 'ok', found, read: read.read, more: more || read.more };
   } catch (err) {
     // A rejected password needs the user; anything else is retried next run.
     const needsUser = Boolean(err?.needsUser || err?.authenticationFailed);
@@ -169,6 +175,66 @@ async function syncAccount(accountId, deps = {}) {
     if (client) await client.close();
   }
 }
+
+const READ_BATCH = 20;
+const READ_PER_RUN = 200;
+
+// Reads order details out of emails found earlier (status "new") or read by
+// an older version of a store's reader. Each body is fetched, read in memory
+// and dropped; only the details are saved.
+async function extractPending(prisma, client, account, { started, budgetMs, onRead }) {
+  const candidates = await prisma.emailMessage.findMany({
+    where: { account_id: account.id, status: { in: ['new', 'extracted', 'ignored'] } },
+    select: { id: true, folder: true, uid: true, uid_validity: true, message_id: true, merchant: true, status: true, parser_version: true },
+    orderBy: [{ sent_at: { sort: 'desc', nulls: 'last' } }],
+    take: 2000,
+  });
+  const due = candidates.filter((m) => m.status === 'new' || (m.parser_version || 0) < parserVersion(m.merchant)).slice(0, READ_PER_RUN);
+  let read = 0;
+  const byFolder = new Map();
+  for (const m of due) byFolder.set(m.folder, [...(byFolder.get(m.folder) || []), m]);
+
+  for (const [folder, messages] of byFolder) {
+    if (Date.now() - started > budgetMs) return { read, more: true };
+    let box;
+    try { box = await client.openReadOnly(folder); } catch { box = null; }
+    // Where the folder was renumbered, look each email up again by Message-ID.
+    const located = [];
+    for (const m of messages) {
+      if (box && m.uid_validity && m.uid_validity === box.uidValidity) { located.push({ m, uid: m.uid }); continue; }
+      const uid = box ? await client.findUidByMessageId(m.message_id) : null;
+      if (uid) located.push({ m, uid });
+      else await markFailed(prisma, m.id, 'This email is no longer in the mailbox.');
+    }
+    for (let i = 0; i < located.length; i += READ_BATCH) {
+      if (Date.now() - started > budgetMs) return { read, more: true };
+      const batch = located.slice(i, i + READ_BATCH);
+      const sources = new Map((await client.fetchSources(batch.map((b) => b.uid))).map((s) => [s.uid, s.source]));
+      for (const { m, uid } of batch) {
+        const source = sources.get(uid);
+        if (!source) { await markFailed(prisma, m.id, 'This email is no longer in the mailbox.'); continue; }
+        try {
+          const parsed = await parseSource(source);
+          const details = extractEmail({ merchant: m.merchant, ...parsed });
+          await prisma.emailMessage.update({
+            where: { id: m.id },
+            data: { ...details, uid, uid_validity: box.uidValidity, extracted_at: new Date(), extract_error: null },
+          });
+          if (onRead) await onRead({ message: m, parsed, details });
+          read += 1;
+        } catch (err) {
+          console.error(`[email] could not read message ${m.id}: ${err?.code || 'parse'}`);
+          await markFailed(prisma, m.id, 'This email could not be read.');
+        }
+      }
+    }
+  }
+  return { read, more: due.length >= READ_PER_RUN };
+}
+
+const markFailed = (prisma, id, message) => prisma.emailMessage.update({
+  where: { id }, data: { status: 'failed', extract_error: message, extracted_at: new Date() },
+});
 
 // Called by the outside cron. Oldest-synced accounts go first; whatever doesn't
 // fit in the time budget goes first next time.
@@ -207,4 +273,4 @@ function verifySyncSecret(authHeader) {
   return { ok: true };
 }
 
-module.exports = { syncAccount, runScheduledEmailSync, testConnection, verifySyncSecret, dedupeKey, foldersToRead, MAX_PER_RUN };
+module.exports = { extractPending, syncAccount, runScheduledEmailSync, testConnection, verifySyncSecret, dedupeKey, foldersToRead, MAX_PER_RUN };

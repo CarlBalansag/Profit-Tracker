@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { ExternalLink, Mail, Plus, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { useEmailAccounts, useEmailMessages, useEmailMutations, useEmailSetup } from '../../hooks/useApi';
+import { useEmailAccounts, useEmailMutations, useEmailSetup } from '../../hooks/useApi';
+import { FoundInEmail } from './FoundInEmail';
 
 const PANEL = 'rounded-xl border border-gray-800 bg-[#12121A] p-5 sm:p-6 space-y-4';
 const INPUT = 'w-full rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] px-3 py-2 text-base sm:text-sm text-[var(--dp-text-primary)] placeholder-gray-600 focus:outline-none focus:border-[var(--accent)]';
@@ -216,7 +217,6 @@ export function EmailAccounts() {
   const { data: setup, isLoading: setupLoading, error: setupError } = useEmailSetup();
   const { data: accounts = [], isLoading, error } = useEmailAccounts();
   const found = accounts.reduce((n, a) => n + (a.message_count || 0), 0);
-  const { data: messages = [] } = useEmailMessages(10, found);
   const [adding, setAdding] = useState(false);
 
   if (setupLoading || isLoading) return <div className={PANEL}><p className="text-sm text-gray-500">Loading…</p></div>;
@@ -243,20 +243,7 @@ export function EmailAccounts() {
           : <button type="button" onClick={() => setAdding(true)} className="page-btn page-btn-primary"><Plus size={14} aria-hidden="true" /> {accounts.length ? 'Connect another email' : 'Connect an email'}</button>)}
       </section>
 
-      {messages.length > 0 && (
-        <section aria-labelledby="email-found" className={PANEL}>
-          <h2 id="email-found" className="text-sm font-bold text-white">Recently found</h2>
-          <ul className="divide-y divide-white/[0.06]">
-            {messages.map((m) => (
-              <li key={m.id} className="flex flex-col gap-0.5 py-2 text-sm sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
-                <span className="min-w-0 truncate text-gray-200">{m.subject || '(no subject)'}</span>
-                <span className="shrink-0 text-xs text-gray-500">{m.from_name || m.from_address.split('@')[1]} · {day(m.sent_at)}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="text-xs text-gray-500">Reading the details out of these emails comes next.</p>
-        </section>
-      )}
+      <FoundInEmail found={found} />
     </div>
   );
 }
