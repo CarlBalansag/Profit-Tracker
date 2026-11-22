@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { runWhatIf } from '../../../../shared/tax/index.mjs';
+import { ResponsiveTable } from './ResponsiveTable';
 
 const usd = (value) => {
   const n = Number(value) || 0;
@@ -47,12 +48,12 @@ export function WhatIf({ year, profile, baseProfit, marginalRate, today }) {
     {bad && <p role="alert" className="text-red-400">Enter dollars and cents for &quot;{bad[1]}&quot;, like 1000 or 1000.50{bad[3] ? ' (minus for less)' : ''}.</p>}
 
     {result?.supported && <div aria-live="polite">
-      <div className="overflow-x-auto"><table className="w-full text-xs sm:text-sm">
-        <thead><tr className="text-left text-xs text-gray-500"><th className="pb-1 font-normal" /><th className="pb-1 text-right font-normal">Now</th><th className="pb-1 text-right font-normal">What if</th><th className="pb-1 text-right font-normal">Change</th></tr></thead>
-        <tbody>{result.rows.map(([label, a, b]) => <tr key={label} className="border-t border-white/5 text-gray-300">
-          <td className="py-2 pr-3">{label}</td><td className="whitespace-nowrap py-2 text-right tabular-nums" style={{ paddingLeft: 6 }}>{usd(a)}</td><td className="whitespace-nowrap py-2 text-right tabular-nums" style={{ paddingLeft: 6 }}>{usd(b)}</td><td className="whitespace-nowrap py-2 text-right tabular-nums" style={{ paddingLeft: 6 }}>{signed(Math.round((b - a) * 100) / 100)}</td>
-        </tr>)}</tbody>
-      </table></div>
+      <ResponsiveTable rows={result.rows} rowKey={([label]) => label} columns={[
+        { label: 'Amount', cell: ([label]) => label },
+        { label: 'Now', align: 'right', cell: ([, a]) => usd(a) },
+        { label: 'What if', align: 'right', cell: ([, , b]) => usd(b) },
+        { label: 'Change', align: 'right', cell: ([, a, b]) => signed(Math.round((b - a) * 100) / 100) },
+      ]} />
       <p className="mt-2 text-gray-200">{result.diffTax < 0 ? `Your total tax would go down by ${usd(-result.diffTax)}.` : result.diffTax > 0 ? `Your total tax would go up by ${usd(result.diffTax)}.` : 'Your total tax wouldn\'t change.'}
         {onlySpending && result.savedPerDollar != null && ` Spending ${usd(result.spent)} saves about ${pct(result.savedPerDollar)} of it in tax, so it still costs you about ${usd(result.netCost)}.`}</p>
       <p className="mt-1 text-xs text-gray-500">Uses the same details and projected profit as the estimate above. Just a calculation: nothing is saved and no records change.</p>

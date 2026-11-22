@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { apiFetch } from '../../hooks/useApi';
 import { requireSuccessfulResponse } from '../../hooks/apiResponse';
+import { ResponsiveTable } from './ResponsiveTable';
 
 const usd = (value) => {
   const n = Number(value) || 0;
@@ -125,17 +126,12 @@ export function Forms1099K({ year, data, onSaved }) {
   const done = () => { setEditing(null); onSaved(); };
   return <details className="rounded-xl border border-white/10 p-4" open={hasForms || undefined}>
     <summary className="cursor-pointer text-sm font-medium text-purple-300">Sales by platform and 1099-K forms{hasForms ? ` (${forms.length} ${forms.length === 1 ? 'form' : 'forms'}, ${usd(data.total)})` : ''}</summary>
-    {comparison.length > 0 && <div className="mt-4 overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead><tr className="text-left text-xs text-gray-500"><th className="pb-2 pr-2 font-normal">Platform</th><th className="pb-2 pr-2 text-right font-normal">Your sales</th><th className="pb-2 pr-2 text-right font-normal">1099-K</th><th className="pb-2 text-right font-normal">Difference</th></tr></thead>
-        <tbody>{comparison.map((r) => <tr key={r.platform_id || r.platform} className="border-t border-white/5 text-gray-300">
-          <td className="py-2 pr-2">{r.platform}<span className="block text-xs text-gray-500">{r.recordedCount} {r.recordedCount === 1 ? 'sale' : 'sales'}{r.formCount !== null ? ` · form: ${r.formCount}` : ''}</span></td>
-          <td className="py-2 pr-2 text-right tabular-nums">{usd(r.recordedGross)}</td>
-          <td className="py-2 pr-2 text-right tabular-nums">{r.formGross === null ? <span className="text-gray-500">None</span> : usd(r.formGross)}</td>
-          <td className={`py-2 text-right tabular-nums ${r.difference !== null && Number(r.difference) !== 0 ? 'text-amber-300' : ''}`}>{r.difference === null ? '' : signed(r.difference)}</td>
-        </tr>)}</tbody>
-      </table>
-    </div>}
+    {comparison.length > 0 && <ResponsiveTable className="mt-4" rows={comparison} rowKey={(r) => r.platform_id || r.platform} columns={[
+      { label: 'Platform', cell: (r) => <>{r.platform}<span className="block text-xs text-gray-500">{r.recordedCount} {r.recordedCount === 1 ? 'sale' : 'sales'}{r.formCount !== null ? ` · form: ${r.formCount}` : ''}</span></> },
+      { label: 'Your sales', align: 'right', cell: (r) => usd(r.recordedGross) },
+      { label: '1099-K', align: 'right', cell: (r) => (r.formGross === null ? <span className="text-gray-500">None</span> : usd(r.formGross)) },
+      { label: 'Difference', align: 'right', cell: (r) => <span className={r.difference !== null && Number(r.difference) !== 0 ? 'text-amber-300' : ''}>{r.difference === null ? '' : signed(r.difference)}</span> },
+    ]} />}
     {Number(data.unlinkedTotal) > 0 && <p className="mt-2 text-xs text-gray-500">{usd(data.unlinkedTotal)} on forms not tied to a platform isn&apos;t in the table.</p>}
     <p className="mt-3 text-xs text-gray-500">A 1099-K shows the gross the platform processed, which can include shipping the buyer paid and sales tax, before fees and refunds. Platforms send one when you have more than $20,000 and more than 200 sales; all sales count as income either way. Your gross receipts (line 1) always come from your sales records. <a className="underline" href="https://www.irs.gov/businesses/understanding-your-form-1099-k" target="_blank" rel="noreferrer">IRS: Understanding your 1099-K</a></p>
 

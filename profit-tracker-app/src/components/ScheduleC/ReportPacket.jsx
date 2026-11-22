@@ -1,4 +1,5 @@
 import { ASSET_METHODS, shortDate, usd } from '../../utils/taxLogs';
+import { ResponsiveTable } from './ResponsiveTable';
 
 const th = 'py-1.5 pr-3 text-left align-top font-normal text-gray-500';
 const td = 'py-1.5 pr-3 align-top';
@@ -61,22 +62,29 @@ export function ReportPacket({ report: r, heading, onDrill }) {
 
     {mi && mi.trips > 0 && <Section title={`Mileage log (line 9): ${usd(mi.total)}`}>
       <p className="text-gray-400">{mi.by_rate.map((x) => `${Number(x.miles).toLocaleString('en-US')} mi at ${x.cents}¢ = ${usd(x.amount)}`).join(' · ')}{Number(mi.parking_tolls) ? ` · parking and tolls ${usd(mi.parking_tolls)}` : ''}</p>
-      <div className="overflow-x-auto"><table className="w-full text-xs sm:text-sm"><thead><tr className="text-gray-500"><th className={th}>Date</th><th className={th}>Where</th><th className={th}>Why</th><th className={`${th} text-right`}>Miles</th></tr></thead><tbody>
-        {mi.log.map((t, i) => <tr key={`${t.date}-${i}`} className="border-t border-white/5 text-gray-300"><td className={`${td} whitespace-nowrap`}>{t.date}</td><td className={td}>{t.destination}</td><td className={td}>{t.purpose}{t.parking_tolls ? ` (+${usd(t.parking_tolls)})` : ''}</td><td className={num}>{t.miles}</td></tr>)}
-      </tbody></table></div>
+      <ResponsiveTable rows={mi.log} rowKey={(t, i) => `${t.date}-${i}`} columns={[
+        { label: 'Date', cell: (t) => <span className="whitespace-nowrap">{t.date}</span> },
+        { label: 'Where', cell: (t) => t.destination },
+        { label: 'Why', cell: (t) => `${t.purpose}${t.parking_tolls ? ` (+${usd(t.parking_tolls)})` : ''}` },
+        { label: 'Miles', align: 'right', cell: (t) => t.miles },
+      ]} />
     </Section>}
 
     {eq.items.length > 0 && <Section title="Equipment (Form 4562 and line 22)">
-      <div className="overflow-x-auto"><table className="w-full text-xs sm:text-sm"><thead><tr className="text-gray-500"><th className={th}>Item</th><th className={th}>In use</th><th className={`${th} text-right`}>Cost</th><th className={th}>Method</th><th className={`${th} text-right`}>{r.year}</th></tr></thead><tbody>
-        {eq.items.map((a, i) => <tr key={`${a.name}-${i}`} className="border-t border-white/5 text-gray-300"><td className={td}>{a.name}{a.business_percent < 100 ? ` (${a.business_percent}% business)` : ''}</td><td className={`${td} whitespace-nowrap`}>{a.placed_in_service}{a.disposed_date ? ` to ${a.disposed_date}` : ''}</td><td className={num}>{usd(a.cost)}</td><td className={td}>{ASSET_METHODS[a.method]?.short}{a.method === 'macrs' ? `, ${a.recovery_years}-year` : ''}</td><td className={num}>{usd(a.this_year)}</td></tr>)}
-      </tbody></table></div>
+      <ResponsiveTable rows={eq.items} rowKey={(a, i) => `${a.name}-${i}`} columns={[
+        { label: 'Item', cell: (a) => `${a.name}${a.business_percent < 100 ? ` (${a.business_percent}% business)` : ''}` },
+        { label: 'In use', cell: (a) => <span className="whitespace-nowrap">{a.placed_in_service}{a.disposed_date ? ` to ${a.disposed_date}` : ''}</span> },
+        { label: 'Cost', align: 'right', cell: (a) => usd(a.cost) },
+        { label: 'Method', cell: (a) => `${ASSET_METHODS[a.method]?.short}${a.method === 'macrs' ? `, ${a.recovery_years}-year` : ''}` },
+        { label: String(r.year), align: 'right', cell: (a) => usd(a.this_year) },
+      ]} />
       <p className="text-gray-400">Depreciation {usd(eq.depreciation)} · Section 179 {usd(eq.section_179)}{Number(eq.section_179_carryover) ? ` (${usd(eq.section_179_carryover)} carried to next year)` : ''} · de minimis {usd(eq.de_minimis)}. Half-year convention; no bonus depreciation.</p>
     </Section>}
 
     <Section title={`Sales: ${r.sales.count} ${r.sales.count === 1 ? 'sale' : 'sales'}`}>
       {r.sales.by_platform.length > 0 && <p className="text-gray-300">{r.sales.by_platform.map((p) => `${p.platform} ${usd(p.gross)} (${p.count})`).join(' · ')}</p>}
       {r.form_1099k.forms.length > 0 && <p className="text-gray-300">1099-K forms: {r.form_1099k.forms.map((f) => `${f.payer_name} ${usd(f.gross_amount)}`).join(' · ')} (total {usd(r.form_1099k.total)}).</p>}
-      {r.year_end_cutoff.count > 0 && <p className="text-gray-400">{r.year_end_cutoff.count} late-December {r.year_end_cutoff.count === 1 ? 'sale' : 'sales'} ({usd(r.year_end_cutoff.total)}) paid after the year ended are included, counted on the sale date.</p>}
+      {r.year_end_cutoff.count > 0 && <p className="text-gray-400">{r.year_end_cutoff.count} late-December {r.year_end_cutoff.count === 1 ? 'sale' : 'sales'} ({usd(r.year_end_cutoff.total)}) paid after the year ended {r.year_end_cutoff.count === 1 ? 'is' : 'are'} included, counted on the sale date.</p>}
     </Section>
 
     {r.payments.length > 0 && <Section title="Estimated and other tax payments recorded">

@@ -17,6 +17,20 @@ const mountWorksheet = () => { const view = mount(<ScheduleC />); fireEvent.clic
 beforeEach(() => { vi.clearAllMocks(); apiFetch.mockImplementation(async path => response(path.includes('/preferences/') ? { enabled: true } : report(Number(new URL(path, 'https://fixture.invalid').searchParams.get('year'))))); });
 afterEach(cleanup);
 describe('Schedule C workflow', () => {
+  it('moves between the views with the arrow keys and links each tab to the panel', async () => {
+    mountWorksheet(); await screen.findByText('Worksheet total');
+    const worksheet = screen.getByRole('tab', { name: 'Worksheet' });
+    expect(worksheet.getAttribute('tabindex')).toBe('0');
+    expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe(worksheet.id);
+    worksheet.focus();
+    fireEvent.keyDown(worksheet, { key: 'ArrowLeft' });
+    const overview = screen.getByRole('tab', { name: 'Tax estimate' });
+    expect(overview.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(overview);
+    expect(worksheet.getAttribute('tabindex')).toBe('-1');
+    fireEvent.keyDown(overview, { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: 'Worksheet' }).getAttribute('aria-selected')).toBe('true');
+  });
   it('shows per-user opt-in rather than pretending disabled reports have totals', async () => {
     apiFetch.mockResolvedValue(response({ enabled: false })); mountWorksheet();
     await screen.findByText('Enable Schedule C preparation in Settings to use this worksheet.');

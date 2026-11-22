@@ -10,6 +10,7 @@ import { TaxPayments } from './TaxPayments';
 import { WhatIf } from './WhatIf';
 import { DeductionChecks } from './DeductionChecks';
 import { FILING_STATUS_LABELS } from '../../utils/taxProfile';
+import { ResponsiveTable } from './ResponsiveTable';
 
 const usd = (value) => {
   const n = Number(value) || 0;
@@ -53,23 +54,21 @@ function TheMath({ o, detailed }) {
       <div className="rounded-lg border border-white/10 p-3"><dt className="text-xs text-gray-400">Effective rate on all income</dt><dd className="mt-1 text-lg tabular-nums text-white">{pct(i.effectiveTaxRate)}</dd><dd className="text-xs text-gray-500">Total tax ÷ total income</dd></div>
     </dl>
     {detailed && <>
-      <div className="overflow-x-auto"><table className="w-full min-w-[20rem]">
-        <thead><tr className="text-left text-xs text-gray-500"><th className="pb-2 font-normal">Federal</th><th className="pb-2 text-right font-normal">Without business</th><th className="pb-2 text-right font-normal">With business</th></tr></thead>
-        <tbody>
-          {[['Total income', 'totalIncome'], ['Half of self-employment tax (deducted)', 'selfEmploymentTaxDeduction', true], ['Adjusted gross income', 'agi'],
-            [`${w.deductionType === 'itemized' ? 'Itemized' : 'Standard'} deduction`, 'deduction', true], ['Senior deduction', 'seniorDeduction', true],
-            ['Qualified business income deduction', 'qbiDeduction', true], ['Taxable income', 'taxableIncome'], ['Income tax', 'incomeTax'],
-            ['Credits', 'nonrefundableCredits', true]].map(([label, key, minus]) => (
-            <tr key={key} className="border-t border-white/5 text-gray-300"><td className="py-2 pr-3">{label}</td>
-              <td className="py-2 text-right tabular-nums">{minus && wo[key] ? '−' : ''}{usd(wo[key])}</td>
-              <td className="py-2 text-right tabular-nums">{minus && w[key] ? '−' : ''}{usd(w[key])}</td></tr>))}
-          <tr className="border-t border-white/5 text-gray-300"><td className="py-2 pr-3">Self-employment tax (Social Security {usd(w.selfEmployment.socialSecurity)} + Medicare {usd(w.selfEmployment.medicare)})</td><td className="py-2 text-right tabular-nums">{usd(wo.selfEmployment.total)}</td><td className="py-2 text-right tabular-nums">{usd(w.selfEmployment.total)}</td></tr>
-          <tr className="border-t border-white/5 text-gray-300"><td className="py-2 pr-3">Additional Medicare tax</td><td className="py-2 text-right tabular-nums">{usd(wo.additionalMedicareTax)}</td><td className="py-2 text-right tabular-nums">{usd(w.additionalMedicareTax)}</td></tr>
-          <tr className="border-t border-white/10 font-semibold text-white"><td className="py-2 pr-3">Federal tax</td><td className="py-2 text-right tabular-nums">{usd(wo.totalTax)}</td><td className="py-2 text-right tabular-nums">{usd(w.totalTax)}</td></tr>
-          <tr className="border-t border-white/5 text-gray-300"><td className="py-2 pr-3">{ws.name ? `${ws.name} tax` : 'State tax'}{!ws.supported && <span className="block text-xs text-amber-300">Not included</span>}</td><td className="py-2 text-right tabular-nums">{usd(wos.tax)}</td><td className="py-2 text-right tabular-nums">{usd(ws.tax)}</td></tr>
-          <tr className="border-t border-white/10 font-semibold text-white"><td className="py-2 pr-3">Total tax</td><td className="py-2 text-right tabular-nums">{usd(i.withoutBusiness.totalTax)}</td><td className="py-2 text-right tabular-nums">{usd(i.withBusiness.totalTax)}</td></tr>
-        </tbody>
-      </table></div>
+      <ResponsiveTable caption="Federal" rowKey={(r) => r.key || r.label} strong={(r) => r.strong} columns={[
+        { label: 'Line', cell: (r) => r.label },
+        { label: 'Without business', align: 'right', cell: (r) => r.without },
+        { label: 'With business', align: 'right', cell: (r) => r.with },
+      ]} rows={[
+        ...[['Total income', 'totalIncome'], ['Half of self-employment tax (deducted)', 'selfEmploymentTaxDeduction', true], ['Adjusted gross income', 'agi'],
+          [`${w.deductionType === 'itemized' ? 'Itemized' : 'Standard'} deduction`, 'deduction', true], ['Senior deduction', 'seniorDeduction', true],
+          ['Qualified business income deduction', 'qbiDeduction', true], ['Taxable income', 'taxableIncome'], ['Income tax', 'incomeTax'],
+          ['Credits', 'nonrefundableCredits', true]].map(([label, key, minus]) => ({ label, without: `${minus && wo[key] ? '−' : ''}${usd(wo[key])}`, with: `${minus && w[key] ? '−' : ''}${usd(w[key])}` })),
+        { label: `Self-employment tax (Social Security ${usd(w.selfEmployment.socialSecurity)} + Medicare ${usd(w.selfEmployment.medicare)})`, without: usd(wo.selfEmployment.total), with: usd(w.selfEmployment.total) },
+        { label: 'Additional Medicare tax', without: usd(wo.additionalMedicareTax), with: usd(w.additionalMedicareTax) },
+        { label: 'Federal tax', without: usd(wo.totalTax), with: usd(w.totalTax), strong: true },
+        { label: <>{ws.name ? `${ws.name} tax` : 'State tax'}{!ws.supported && <span className="block text-xs font-normal text-amber-300">Not included</span>}</>, key: 'state', without: usd(wos.tax), with: usd(ws.tax) },
+        { label: 'Total tax', without: usd(i.withoutBusiness.totalTax), with: usd(i.withBusiness.totalTax), strong: true },
+      ]} />
       {w.selfEmployment.belowMinimum && <p className="text-xs text-gray-500">Self-employment tax starts once net earnings reach $400, so none is due yet.</p>}
       {ws.steps?.length > 0 && <div><p className="text-xs text-gray-400">{ws.name} steps (with business)</p><table className="w-full"><tbody>{ws.steps.map((s) => <Row key={s.label} label={s.label} value={usd(s.amount)} />)}</tbody></table></div>}
       {i.withBusiness.notes?.length > 0 && <ul className="list-disc space-y-1 pl-5 text-xs text-gray-400">{i.withBusiness.notes.map((n) => <li key={n}>{n}</li>)}</ul>}

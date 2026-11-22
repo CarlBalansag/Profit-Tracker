@@ -5,6 +5,7 @@ import { taxCategories } from '../../../../shared/scheduleC.mjs';
 import { downloadFile, downloadJSON } from '../../utils/downloads';
 import { inputCls, reportCsv, usd } from '../../utils/taxLogs';
 import { ReportPacket } from './ReportPacket';
+import { ResponsiveTable } from './ResponsiveTable';
 
 const card = 'rounded-xl border border-white/10 p-4';
 const when = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -81,18 +82,12 @@ function YearOverYear({ year, report, prior }) {
   return <details className={card}>
     <summary className="cursor-pointer text-sm font-medium text-purple-300">Compared with {year - 1}</summary>
     {empty ? <p className="mt-3 text-sm text-gray-400">ProfitTracker has no sales or expenses for {year - 1}.</p>
-      : <div className="mt-3 overflow-x-auto"><table className="w-full text-xs sm:text-sm">
-        <thead><tr className="text-left text-gray-500"><th className="pb-1 pr-2 font-normal">Line</th><th className="pb-1 pr-2 font-normal" /><th className="pb-1 text-right font-normal">{year - 1}</th><th className="pb-1 text-right font-normal">{year}</th><th className="pb-1 text-right font-normal">Change</th></tr></thead>
-        <tbody>{rows.map(([line, label, part]) => {
-          const a = Number(pick(prior, part, line) || 0); const b = Number(pick(report, part, line) || 0);
-          return <tr key={`${part}-${line}`} className={`border-t border-white/5 ${line === '31' ? 'font-semibold text-white' : 'text-gray-300'}`}>
-            <td className="py-1.5 pr-2 text-gray-500">{line}</td><td className="py-1.5 pr-2">{label}</td>
-            <td className="whitespace-nowrap py-1.5 text-right tabular-nums" style={{ paddingLeft: 6 }}>{usd(a)}</td>
-            <td className="whitespace-nowrap py-1.5 text-right tabular-nums" style={{ paddingLeft: 6 }}>{usd(b)}</td>
-            <td className="whitespace-nowrap py-1.5 text-right tabular-nums" style={{ paddingLeft: 6 }}>{b - a > 0 ? '+' : ''}{usd(Math.round((b - a) * 100) / 100)}</td>
-          </tr>;
-        })}</tbody>
-      </table></div>}
+      : <ResponsiveTable className="mt-3" rows={rows} rowKey={([line, , part]) => `${part}-${line}`} strong={([line]) => line === '31'} columns={[
+        { label: 'Line', cell: ([line, label]) => <><span className="text-gray-500">{line}</span> {label}</> },
+        { label: String(year - 1), align: 'right', cell: ([line, , part]) => usd(Number(pick(prior, part, line) || 0)) },
+        { label: String(year), align: 'right', cell: ([line, , part]) => usd(Number(pick(report, part, line) || 0)) },
+        { label: 'Change', align: 'right', cell: ([line, , part]) => { const d = Math.round((Number(pick(report, part, line) || 0) - Number(pick(prior, part, line) || 0)) * 100) / 100; return `${d > 0 ? '+' : ''}${usd(d)}`; } },
+      ]} />}
   </details>;
 }
 

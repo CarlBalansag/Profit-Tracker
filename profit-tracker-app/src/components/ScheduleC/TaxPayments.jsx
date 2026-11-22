@@ -3,6 +3,7 @@ import { apiFetch } from '../../hooks/useApi';
 import { requireSuccessfulResponse } from '../../hooks/apiResponse';
 import { STATE_NAMES } from '../../../../shared/tax/index.mjs';
 import { localToday } from '../../utils/returnWindow';
+import { ResponsiveTable } from './ResponsiveTable';
 
 const usd = (value) => {
   const n = Number(value) || 0;
@@ -29,15 +30,12 @@ function Installments({ plan, installments }) {
   if (!(plan.requiredFromEstimatedPayments > 0)) return <ul className="list-disc space-y-1 pl-5 text-xs text-gray-500">{plan.notes.map((n) => <li key={n}>{n}</li>)}</ul>;
   return <>
     <p className="text-gray-400">{usd(plan.requiredFromEstimatedPayments)} for the year from estimated payments{plan.basis?.startsWith('prior') ? ', based on last year\'s tax' : ''}. {usd(plan.remaining)} still to pay.</p>
-    <div className="mt-2 overflow-x-auto"><table className="w-full min-w-[18rem]">
-      <thead><tr className="text-left text-xs text-gray-500"><th className="pb-1 pr-2 font-normal">Quarter</th><th className="pb-1 pr-3 text-right font-normal">Due</th><th className="pb-1 pr-3 text-right font-normal">Left to pay</th><th className="pb-1 pl-2 text-right font-normal">Status</th></tr></thead>
-      <tbody>{installments.map((i) => <tr key={i.period} className="border-t border-white/5 text-gray-300">
-        <td className="py-2 pr-2">{i.period}<span className="block text-xs text-gray-500">{i.covers}</span></td>
-        <td className="py-2 pr-3 text-right">{day(i.due)}</td>
-        <td className="py-2 pr-3 text-right tabular-nums">{usd(i.remaining)}<span className="block text-xs text-gray-500">of {usd(i.amount)}</span></td>
-        <td className={`whitespace-nowrap py-2 pl-2 text-right ${STATUS[i.status][1]}`}>{STATUS[i.status][0]}</td>
-      </tr>)}</tbody>
-    </table></div>
+    <ResponsiveTable className="mt-2" rows={installments} rowKey={(i) => i.period} columns={[
+      { label: 'Quarter', cell: (i) => <>{i.period}<span className="block text-xs font-normal text-gray-500">{i.covers}</span></> },
+      { label: 'Due', align: 'right', cell: (i) => day(i.due) },
+      { label: 'Left to pay', align: 'right', cell: (i) => <>{usd(i.remaining)}<span className="block text-xs text-gray-500">of {usd(i.amount)}</span></> },
+      { label: 'Status', align: 'right', cell: (i) => <span className={STATUS[i.status][1]}>{STATUS[i.status][0]}</span> },
+    ]} />
     {plan.notes.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-gray-500">{plan.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
   </>;
 }

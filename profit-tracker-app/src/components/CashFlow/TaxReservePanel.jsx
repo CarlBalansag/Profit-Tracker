@@ -46,7 +46,7 @@ export function TaxReservePanel() {
     ['Shortfall', usd(o.stillToSetAside), o.stillToSetAside > 0 ? 'Still to set aside' : 'Fully covered'],
   ];
   return <Panel title={`Tax reserve, ${year}`} sub="Money to keep back for this year's taxes on your reselling profit. Moving it aside never counts as an expense."
-    right={<Link to="/schedule-c" className="text-xs text-[var(--dp-text-secondary)] underline">Open tax estimate</Link>}>
+    right={<Link to="/schedule-c" className="-my-3 inline-block py-3 text-xs text-[var(--dp-text-secondary)] underline">Open tax estimate</Link>}>
     <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {items.map(([label, value, sub]) => <div key={label} className="min-w-0">
         <dt className="text-[11px] font-semibold uppercase tracking-wider text-[var(--dp-text-label)]">{label}</dt>
