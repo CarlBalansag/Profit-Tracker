@@ -321,10 +321,52 @@ describe('email orders and matching on Postgres', () => {
     it('automatic purchases wait a day and skip cancelled orders', async () => {
       await send('PUT', '/api/email/automation', { createPurchases: true });
       await email({ merchant: 'target', kind: 'order', order_number: '912000000003', total: '20.00', sent_at: new Date() });
-      await email({ merchant: 'target', kind: 'order', order_number: '912000000004', total: '30.00', sent_at: new Date(Date.now() - 3 * 86400000) });
+      // Resale-looking (2 of one item): added. One plain item: a To-Do asks instead.
+      await email({ merchant: 'target', kind: 'order', order_number: '912000000004', total: '30.00', items: [{ name: 'Echo Show 8', quantity: 2 }], sent_at: new Date(Date.now() - 3 * 86400000) });
+      await email({ merchant: 'target', kind: 'order', order_number: '912000000006', total: '15.00', items: [{ name: 'Cat food', quantity: 1 }], sent_at: new Date(Date.now() - 3 * 86400000) });
       await email({ merchant: 'target', kind: 'cancelled', order_number: '912000000005', total: '40.00', sent_at: new Date(Date.now() - 3 * 86400000) });
       expect(await sync.organize(prisma, user.id)).toMatchObject({ purchasesCreated: 1 });
-      expect((await prisma.inventory.findMany()).map((r) => r.product_name)).toEqual(['Target order 912000000004']);
+      expect((await prisma.inventory.findMany()).map((r) => r.product_name)).toEqual(['Echo Show 8']);
+      expect((await prisma.emailOrder.findFirst({ where: { order_number: '912000000006' } })).leaning).toBe('ask');
+    });
+
+    it('sorts orders with no purchase: personal ones set aside and logged, resale ones asked about on the To-Do', async () => {
+      await send('PUT', '/api/email/automation', { homeState: 'ca', personalWords: [' Purina ', 'purina'] });
+      const recent = new Date(Date.now() - 2 * 86400000);
+      await email({ merchant: 'amazon', kind: 'order', order_number: '113-0000000-0000001', total: '24.99', ship_to: 'SACRAMENTO, CA', items: [{ name: 'Pet Supplies', quantity: 1, category: true }], sent_at: recent });
+      await email({ merchant: 'amazon', kind: 'order', order_number: '113-0000000-0000002', total: '558.00', ship_to: 'MIDDLETOWN, DE', items: [{ name: 'Jewelry', quantity: 1, category: true }], sent_at: recent });
+      await email({ merchant: 'amazon', kind: 'order', order_number: '113-0000000-0000003', total: '12.00', ship_to: 'MIDDLETOWN, DE', items: [{ name: 'Purina Friskies', quantity: 1 }], sent_at: recent });
+      const result = await sync.organize(prisma, user.id);
+      expect(result.sorted).toEqual({ resale: 1, personal: 2, ask: 0 });
+
+      const byNumber = async (n) => prisma.emailOrder.findFirst({ where: { order_number: n } });
+      expect([(await byNumber('113-0000000-0000001')).match_state, (await byNumber('113-0000000-0000001')).leaning_reason]).toEqual(['dismissed', 'Ships to SACRAMENTO, CA']);
+      expect((await byNumber('113-0000000-0000003')).leaning_reason).toBe('Has "Purina"');
+      const logged = await prisma.activityLog.findMany({ where: { user_id: user.id, record_type: 'email_sort' } });
+      expect(logged.map((e) => e.detail.reason).sort()).toEqual(['Has "Purina"', 'Ships to SACRAMENTO, CA']);
+      expect(logged.every((e) => e.source === 'email')).toBe(true);
+      // Sorting again changes nothing and logs nothing new.
+      await sync.organize(prisma, user.id);
+      expect(await prisma.activityLog.count({ where: { user_id: user.id, record_type: 'email_sort' } })).toBe(2);
+
+      const resale = await byNumber('113-0000000-0000002');
+      const today = new Date().toISOString().slice(0, 10);
+      let todos = await listTodos(prisma, user.id, today);
+      expect(todos.items.find((t) => t.key === `email-add:${resale.id}`)).toMatchObject({
+        title: 'Add this Amazon order as a purchase?', detail: 'Jewelry · Ships to MIDDLETOWN, DE', amount: 558, email_order: { id: resale.id },
+      });
+
+      // "It's business" brings a personal one back for good; "Personal" sets one aside.
+      const cat = await byNumber('113-0000000-0000001');
+      await send('POST', `/api/email/orders/${cat.id}/dismiss`, { restore: true });
+      await sync.organize(prisma, user.id);
+      expect([(await byNumber('113-0000000-0000001')).match_state, (await byNumber('113-0000000-0000001')).leaning]).toEqual(['unmatched', 'kept']);
+      await send('POST', `/api/email/orders/${resale.id}/dismiss`, {});
+      todos = await listTodos(prisma, user.id, today);
+      expect(todos.items.some((t) => t.key === `email-add:${resale.id}`)).toBe(false);
+      expect(todos.items.some((t) => t.key === `email-add:${cat.id}`)).toBe(true);
+      expect((await send('PUT', '/api/email/automation', { homeState: 'California' })).status).toBe(400);
+      await prisma.activityLog.deleteMany({ where: { user_id: user.id } });
     });
 
     it('tax form emails become To-Do items and stay out of orders', async () => {

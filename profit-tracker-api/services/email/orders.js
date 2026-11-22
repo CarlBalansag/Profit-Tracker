@@ -39,6 +39,7 @@ function summarize(messages) {
     total: primary.total, subtotal: primary.subtotal, tax: primary.tax, shipping: primary.shipping, discount: primary.discount,
     items: sorted.find((m) => Array.isArray(m.items) && m.items.length)?.items || null,
     payment_hint: sorted.find((m) => m.payment_hint)?.payment_hint || null,
+    ship_to: sorted.find((m) => m.ship_to)?.ship_to || null,
     tracking_numbers: [...new Set(sorted.flatMap((m) => m.tracking_numbers || []))].slice(0, 10),
   };
 }

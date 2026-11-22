@@ -1224,6 +1224,9 @@ model EmailMessage {
   extracted_at     DateTime?
   extract_error    String?
   attachment_name  String? // a PDF invoice was attached (name only; E6)
+  // Where the order ships, as "CITY, ST" only (never the name or street).
+  // Read from Amazon emails, where it tells resale (shipped out of state) from personal.
+  ship_to          String?
   order_id         String?
   order            EmailOrder? @relation(fields: [order_id], references: [id], onDelete: SetNull)
 
@@ -1264,6 +1267,12 @@ model EmailOrder {
   // the user (a cancellation or refund to record), shown on To-Do.
   applied_status   String?
   attention        String?
+  ship_to          String? // "CITY, ST" from the order's emails (Amazon)
+  // For a store order with no matching purchase: "resale" (add it), "ask"
+  // (a To-Do asks), "personal" (set aside as Not business), or "kept" (the
+  // user said it's business, so it's never set aside again). With why.
+  leaning          String?
+  leaning_reason   String?
   updated_at       DateTime       @updatedAt
   created_at       DateTime       @default(now())
   messages         EmailMessage[]

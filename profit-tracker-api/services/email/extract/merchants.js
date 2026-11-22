@@ -19,6 +19,44 @@ function amazonItemFromSubject(subject) {
 
 const { readCashoutReceipt, readCashoutCheck } = require('./cashoutReceipt');
 
+// Since July 2026 Amazon's emails name categories, not items: "4 items:
+// 1 Supplements, 1 Crafts, and 2 others", "1 Skin Care item", or in the
+// subject "Ordered 5 items: Supplements, Skin Care, and more". Read as
+// category items ({ name, quantity, category: true }) when no item is named.
+function amazonCategories(subject, text) {
+  const lines = String(text || '').split('\n').map((l) => l.trim());
+  const listed = lines.find((l) => /^\d+\s+items?:\s+.+/i.test(l));
+  if (listed) {
+    const parts = listed.replace(/^\d+\s+items?:\s+/i, '').split(/,\s*(?:and\s+)?|\s+and\s+/i).filter(Boolean);
+    return parts.map((p) => {
+      const m = p.match(/^(\d+)\s+(.+)$/);
+      if (!m) return { name: p.trim(), quantity: null, category: true };
+      return /^others?$/i.test(m[2].trim()) ? { name: 'Other items', quantity: Number(m[1]), category: true } : { name: m[2].trim(), quantity: Number(m[1]), category: true };
+    }).slice(0, 10);
+  }
+  const single = lines.find((l) => /^(\d+)\s+(.{2,40}?)\s+items?$/i.test(l)) || (String(subject).match(/(\d+)\s+(.{2,40}?)\s+items?\s*$/i) || [])[0];
+  if (single) {
+    const m = single.match(/(\d+)\s+(.{2,40}?)\s+items?$/i);
+    return [{ name: m[2].trim(), quantity: Number(m[1]), category: true }];
+  }
+  const fromSubject = String(subject).match(/(\d+)\s+items?:\s+(.+?)(?:,?\s+and more)?\s*$/i);
+  if (fromSubject) {
+    const parts = fromSubject[2].split(/,\s*/).filter(Boolean);
+    return parts.map((p) => ({ name: p.trim(), quantity: parts.length === 1 ? Number(fromSubject[1]) : null, category: true })).slice(0, 10);
+  }
+  return [];
+}
+
+// "Carl - SACRAMENTO, CA" / "P4D - MIDDLETOWN, DE" under "Arriving": only the
+// city and state are kept, never the name before the dash.
+function amazonShipTo(text) {
+  for (const line of String(text || '').split('\n')) {
+    const m = line.trim().match(/^.{1,60}?\s-\s([A-Z][A-Z .'-]{1,40}),\s([A-Z]{2})$/);
+    if (m) return `${m[1].trim()}, ${m[2]}`;
+  }
+  return null;
+}
+
 const MERCHANTS = {
   // Cash-out receipts ("Enclosed is your RECEIPT - ID 211338"): the PDF lists
   // what was scanned in and what the balance was credited. Check notices
@@ -35,15 +73,21 @@ const MERCHANTS = {
     },
   },
   amazon: {
-    version: 1,
+    version: 2,
     orderNumber: [/\b(\d{3}-\d{7}-\d{7})\b/],
     kind: subjectKinds([
       ['cancelled', /cancel/i], ['refund', /refund/i], ['return', /return/i],
-      ['delivered', /^delivered:|has been delivered|was delivered/i],
-      ['shipped', /^shipped:|has shipped|out for delivery|on the way|arriving/i],
-      ['order', /^ordered:|your amazon(\.com)? order of|order confirmation/i],
+      ['delivered', /^delivered\b|has been delivered|was delivered/i],
+      ['shipped', /^shipped\b|has shipped|out for delivery|on the way|arriving/i],
+      ['order', /^ordered\b|your amazon(\.com)? order of|order confirmation/i],
     ]),
     items: (subject) => amazonItemFromSubject(subject),
+    // Ship-to city/state always; categories only when no item is named.
+    read: (subject, text) => {
+      const categories = amazonCategories(subject, text);
+      const shipTo = amazonShipTo(text);
+      return shipTo || categories.length ? { ship_to: shipTo, items: categories, itemsIfMissing: true } : null;
+    },
   },
   walmart: {
     version: 2,

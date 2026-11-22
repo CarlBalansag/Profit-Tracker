@@ -10,6 +10,7 @@ export const AUTOMATION_KINDS = [
   { id: 'link', label: 'Links' },
   { id: 'created', label: 'New records' },
   { id: 'details', label: 'Details' },
+  { id: 'sorted', label: 'Set aside' },
 ];
 
 const STATUS_TITLES = { add_tracking: 'Added tracking', mark_delivered: 'Marked delivered', cancel: 'Cancelled the purchase' };
@@ -27,6 +28,13 @@ export function describeAutomation(entry) {
   const d = entry.detail || {};
   const subject = base.product;
 
+  if (entry.record_type === 'email_sort') {
+    const items = (d.items || []).filter(Boolean);
+    return {
+      kind: 'sorted', title: 'Set aside as personal', subject, amount: d.total != null ? Number(d.total) : null,
+      facts: [d.reason, items.length ? items.join(', ') : null].filter(Boolean), details: [],
+    };
+  }
   if (entry.record_type === 'email_link') {
     return { kind: 'link', title: base.title, subject, facts: [base.change].filter(Boolean), details: [] };
   }

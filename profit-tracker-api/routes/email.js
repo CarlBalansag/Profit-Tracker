@@ -361,7 +361,12 @@ router.post('/orders/:id/dismiss', isAuthenticated, async (req, res, next) => {
     const order = await prisma.emailOrder.findFirst({ where: { id: req.params.id, user_id: req.user.id } });
     if (!order) return res.status(404).json({ error: 'Order not found.' });
     const restore = req.body?.restore === true;
-    await prisma.emailOrder.update({ where: { id: order.id }, data: { match_state: restore ? 'unmatched' : 'dismissed' } });
+    // "Not business" / "Personal": set aside. Brought back: the user says it's
+    // business, so automatic sorting never sets it aside again.
+    await prisma.emailOrder.update({
+      where: { id: order.id },
+      data: restore ? { match_state: 'unmatched', leaning: 'kept', leaning_reason: "You said it's business" } : { match_state: 'dismissed', leaning: 'personal', leaning_reason: 'You said personal' },
+    });
     res.json({ match_state: restore ? 'unmatched' : 'dismissed' });
   } catch (err) { next(err); }
 });
@@ -369,7 +374,11 @@ router.post('/orders/:id/dismiss', isAuthenticated, async (req, res, next) => {
 router.get('/automation', isAuthenticated, async (req, res, next) => {
   try { res.json(await getSettings(prisma, req.user.id)); } catch (err) { next(err); }
 });
-const automationBody = z.object(Object.fromEntries(Object.keys(DEFAULTS).map((k) => [k, z.boolean().optional()]))).strict();
+const automationBody = z.object({
+  ...Object.fromEntries(Object.keys(DEFAULTS).filter((k) => typeof DEFAULTS[k] === 'boolean').map((k) => [k, z.boolean().optional()])),
+  homeState: z.string().trim().regex(/^[A-Za-z]{2}$/).nullable().optional(),
+  personalWords: z.array(z.string().trim().max(40)).max(50).optional(),
+}).strict();
 router.put('/automation', isAuthenticated, validateBody(automationBody), async (req, res, next) => {
   try { res.json(await saveSettings(prisma, req.user.id, req.body)); } catch (err) { next(err); }
 });

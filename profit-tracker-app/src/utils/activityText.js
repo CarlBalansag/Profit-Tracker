@@ -273,6 +273,9 @@ function eventText(entry) {
       product: d.product_name || 'Data',
     };
   }
+  if (type === 'email_sort') {
+    return { title: 'Set aside as personal', change: [d.reason, d.total != null ? `${formatMoney(d.total)}` : null].filter(Boolean).join(' · '), product: d.product_name || 'Order from email' };
+  }
   if (type === 'email_link') {
     const what = { purchase: 'purchase', sale: 'sale', expense: 'expense' }[d.linked_to] || 'record';
     const email = { check: 'check', receipt: 'receipt', purchase: 'order' }[d.order_type] || 'email';

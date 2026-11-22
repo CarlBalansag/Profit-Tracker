@@ -270,7 +270,7 @@ function connectionItems(connections) {
 // Email: orders waiting for a yes/no on their match, and mailboxes whose
 // password stopped working. The review item's key follows the newest order,
 // so a dismissed reminder comes back when new orders arrive.
-const STORE_LABEL = { amazon: 'Amazon', walmart: 'Walmart', bestbuy: 'Best Buy', target: 'Target', apple: 'Apple', costco: 'Costco', samsclub: "Sam's Club", homedepot: 'Home Depot', lowes: "Lowe's", gamestop: 'GameStop', nike: 'Nike', ebay: 'eBay', stockx: 'StockX', goat: 'GOAT', paypal: 'PayPal', points4days: 'Points4Days', pirateship: 'Pirate Ship' };
+const STORE_LABEL = { amazon: 'Amazon', walmart: 'Walmart', bestbuy: 'Best Buy', target: 'Target', apple: 'Apple', costco: 'Costco', samsclub: "Sam's Club", homedepot: 'Home Depot', lowes: "Lowe's", gamestop: 'GameStop', nike: 'Nike', ebay: 'eBay', stockx: 'StockX', goat: 'GOAT', paypal: 'PayPal', points4days: 'Points4Days', pirateship: 'Pirate Ship', homedepot: 'Home Depot' };
 const storeLabel = (key) => STORE_LABEL[key] || String(key || '').replace(/^custom:/, '');
 const CASHOUT_STORES = new Set(['points4days']);
 // "CHECK 1185" -> "check #1185 "; "211338" -> "#211338 " (with its space).
@@ -337,11 +337,25 @@ function emailItems(review, accounts, extra = {}) {
       link: { kind: 'page', to: '/settings', state: { tab: 'email' } },
     }));
   }
+  // Store orders with no matching purchase that look like resale or are
+  // unclear: Add purchase / Personal right on the To-Do (last 30 days).
+  for (const o of extra.toAdd || []) {
+    const items = Array.isArray(o.items) ? o.items.filter((i) => i && i.name) : [];
+    const what = items.map((i) => (Number(i.quantity) > 1 && !i.more ? `${i.quantity} × ${i.name}` : i.name)).join(', ');
+    out.push(item({
+      key: `email-add:${o.id}`, type: 'email_add_purchase', group: 'purchases', urgency: 'info',
+      title: `Add this ${storeLabel(o.merchant)} order as a purchase?`,
+      detail: [what || (o.order_number ? `Order #${o.order_number}` : 'No items listed'), o.leaning_reason].filter(Boolean).join(' · '),
+      amount: o.total != null ? Number(o.total) : null,
+      email_order: { id: o.id },
+      link: { kind: 'page', to: '/settings', state: { tab: 'email' } },
+    }));
+  }
   if (review.count > listed.length) {
     const rest = review.count - listed.length;
     out.push(item({
-      key: `email-review-rest:${review.newestId}`, type: 'email_review', group: 'purchases', urgency: 'info',
-      title: rest === 1 ? '1 more order from email to check' : `${rest} more orders from email to check`,
+      key: listed.length ? `email-review-rest:${review.newestId}` : `email-review:${review.newestId}`, type: 'email_review', group: 'purchases', urgency: 'info',
+      title: `${rest} ${listed.length ? 'more ' : ''}${rest === 1 ? 'order' : 'orders'} from email to check`,
       detail: 'Say yes or no to the record each one looks like.',
       link: { kind: 'page', to: '/settings', state: { tab: 'email' } },
     }));
@@ -855,7 +869,7 @@ async function reviewOrders(prisma, userId, orders) {
 
 async function loadTodoData(prisma, userId, today) {
   const lookback = new Date(toUtc(addDays(today, -365)));
-  const [commitments, connections, sales, inventories, cards, recurring, reminders, emailReviewCount, emailReviewOrders, emailAccounts, emailAttention, emailTaxForms, emailAutoToday] = await Promise.all([
+  const [commitments, connections, sales, inventories, cards, recurring, reminders, emailReviewCount, emailReviewOrders, emailAccounts, emailAttention, emailTaxForms, emailToAdd, emailAutoToday] = await Promise.all([
     prisma.cashoutCommitment.findMany({
       where: { user_id: userId, status: { in: ['pending', 'active', 'expired', 'closed'] } },
       include: {
@@ -886,6 +900,11 @@ async function loadTodoData(prisma, userId, today) {
     prisma.emailAccount ? prisma.emailAccount.findMany({ where: { user_id: userId }, select: { id: true, email_address: true, status: true, last_error: true } }) : [],
     prisma.emailOrder ? prisma.emailOrder.findMany({ where: { user_id: userId, attention: { not: null } }, select: { id: true, merchant: true, order_number: true, attention: true, total: true }, take: 50 }) : [],
     prisma.emailMessage ? prisma.emailMessage.findMany({ where: { user_id: userId, kind: 'tax_form', sent_at: { gte: lookback } }, select: { id: true, merchant: true }, take: 20 }) : [],
+    prisma.emailOrder ? prisma.emailOrder.findMany({
+      where: { user_id: userId, type: 'purchase', match_state: 'unmatched', leaning: { in: ['resale', 'ask', 'kept'] }, status: { notIn: ['cancelled', 'refund', 'return'] }, first_seen: { gte: new Date(Date.now() - 30 * 86400000) } },
+      orderBy: { first_seen: 'desc' }, take: 15,
+      select: { id: true, merchant: true, order_number: true, total: true, items: true, leaning_reason: true },
+    }) : [],
     prisma.activityLog ? prisma.activityLog.count({ where: { user_id: userId, source: 'email', created_at: { gte: new Date(Date.now() - 86400000) } } }) : 0,
   ]);
 
@@ -900,7 +919,7 @@ async function loadTodoData(prisma, userId, today) {
 
   return { commitments, connections, sales, inventories, cards, recurring, reminders, spendByCard,
     emailReview: { count: emailReviewCount || 0, newestId: emailReviewOrders?.[0]?.id || null, orders: await reviewOrders(prisma, userId, emailReviewOrders || []) }, emailAccounts: emailAccounts || [],
-    emailExtra: { attention: emailAttention || [], taxForms: emailTaxForms || [], autoToday: emailAutoToday || 0 } };
+    emailExtra: { attention: emailAttention || [], taxForms: emailTaxForms || [], toAdd: emailToAdd || [], autoToday: emailAutoToday || 0 } };
 }
 
 async function listTodos(prisma, userId, today) {

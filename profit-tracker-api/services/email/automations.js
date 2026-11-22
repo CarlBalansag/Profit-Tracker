@@ -257,7 +257,13 @@ async function createPurchasesFromOrder(prisma, userId, order, { auto = false } 
   const last4 = (String(order.payment_hint || '').match(/(\d{4})$/) || [])[1];
   const card = last4 ? await prisma.paymentMethod.findFirst({ where: { user_id: userId, last4 }, select: { id: true } }) : null;
 
-  const items = Array.isArray(order.items) ? order.items.filter((i) => i && i.name) : [];
+  const listed = Array.isArray(order.items) ? order.items.filter((i) => i && i.name) : [];
+  // Amazon categories ("Supplements") or a list the email says is incomplete
+  // ("+1 more item") without prices: one purchase for the whole order, named
+  // after what is known, so no single item takes the order's total.
+  const partial = listed.some((i) => i.category || i.more) && !listed.filter((i) => !i.more).every((i) => i.total != null);
+  const items = partial ? [] : listed;
+  const summary = listed.map((i) => (i.quantity > 1 && !i.more ? `${i.quantity} ${i.name}` : i.name)).join(', ');
   const tax = money(order.tax);
   const shipping = money(order.shipping);
   const lines = items.length
@@ -266,7 +272,7 @@ async function createPurchasesFromOrder(prisma, userId, order, { auto = false } 
       const lineTotal = i.total != null ? Number(i.total) : i.unit_price != null ? Number(i.unit_price) * quantity : null;
       return { name: String(i.name).slice(0, 200), quantity, lineTotal };
     })
-    : [{ name: `${labelFor(order.merchant)} order${order.order_number ? ` ${order.order_number}` : ''}`, quantity: 1, lineTotal: money(order.subtotal ?? order.total) - (order.subtotal != null ? 0 : tax + shipping) }];
+    : [{ name: `${labelFor(order.merchant)} order${order.order_number ? ` ${order.order_number}` : ''}${summary ? `: ${summary}` : ''}`.slice(0, 200), quantity: 1, lineTotal: money(order.subtotal ?? order.total) - (order.subtotal != null ? 0 : tax + shipping) }];
   // Lines without a price share what's left of the item cost evenly.
   const itemsCost = money(order.subtotal ?? (money(order.total) - tax - shipping + money(order.discount)));
   const known = lines.reduce((t, l) => t + (l.lineTotal || 0), 0);
@@ -312,7 +318,9 @@ async function createPurchasesFromOrder(prisma, userId, order, { auto = false } 
 // enters themselves gets matched instead of copied.
 async function createMissingPurchases(prisma, userId) {
   const orders = await prisma.emailOrder.findMany({
-    where: { user_id: userId, type: 'purchase', match_state: 'unmatched', status: { notIn: ['cancelled', 'refund', 'return'] }, total: { not: null }, first_seen: { lte: new Date(Date.now() - DAY) } },
+    // Only orders sorted as resale (or kept by the user): personal ones and
+    // ones still to ask about are never added on their own.
+    where: { user_id: userId, type: 'purchase', match_state: 'unmatched', leaning: { in: ['resale', 'kept'] }, status: { notIn: ['cancelled', 'refund', 'return'] }, total: { not: null }, first_seen: { lte: new Date(Date.now() - DAY) } },
     take: 50,
   });
   let created = 0;

@@ -127,21 +127,52 @@ function looksPrivate(subject) {
 
 // "2 x Widget  $19.98", "Qty: 2" next to a name and a price. Weak: shown as
 // "check this" (confidence 0.4) unless a store template or schema.org agrees.
+// Lines in an item block that aren't its name: store IDs ("Store SKU
+// #1012317132", "Internet #331732584", "Model #: 910-007700"), a price on its
+// own, an email address (a digital gift's "sending to"), labels ending in ":",
+// FREE and divider lines.
+const ID_LINE = /^(?:store\s+)?(?:sku|internet|model|item|upc|asin|part|style|dpci|tcin|mfr|vendor)\s*(?:#|no\.?|number)?\s*:?\s*#?\s*[\w./-]+$/i;
+const notAName = (l) => ID_LINE.test(l) || new RegExp(`^\\(?-?${MONEY}\\)?$`).test(l) || /@/.test(l) || /:\s*$/.test(l)
+  || /^(?:free|gift with purchase|qty|quantity)\b/i.test(l) || /^[-=_*]{3,}$/.test(l);
+
+// The item's name and price above line i: walks up past ID, price and label
+// lines (at most 5) to the first line that reads like a product name.
+function nameAbove(lines, i) {
+  let price = null;
+  for (let j = i - 1; j >= Math.max(0, i - 6); j -= 1) {
+    const l = lines[j];
+    if (!price) { const p = l.match(new RegExp(`^${MONEY}$`)); if (p) price = p[0]; else if (/^free$/i.test(l)) price = '0.00'; }
+    if (notAName(l)) continue;
+    if (/total|subtotal|order|items?\s*$/i.test(l) || l.length < 3) return { name: null, price };
+    return { name: l, price };
+  }
+  return { name: null, price };
+}
+
 function items(text) {
   const out = [];
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
   for (let i = 0; i < lines.length && out.length < 50; i += 1) {
     const line = lines[i];
     let m = line.match(/^(\d{1,3})\s*[x×]\s+(.{3,120}?)\s+\$\s?([\d,]+\.\d{2})$/i);
-    if (m) { out.push({ name: m[2].trim(), quantity: Number(m[1]), total: money(m[3]) }); continue; }
+    if (m) {
+      // "1 x $249.00 $249.00": the name is above, past the store IDs.
+      if (/^\$/.test(m[2])) {
+        const above = nameAbove(lines, i);
+        if (above.name) out.push({ name: above.name, quantity: Number(m[1]), total: money(m[3]) });
+      } else {
+        out.push({ name: m[2].trim(), quantity: Number(m[1]), total: money(m[3]) });
+      }
+      continue;
+    }
     m = line.match(/^(?:qty|quantity)\s*[:.]?\s*(\d{1,3})\b/i);
     if (m && i > 0) {
-      // The line before is the item: "Name" or "Name  $12.34".
+      // The item is above: "Name  $12.34", or "Name" with its price and IDs below it.
       const prev = lines[i - 1].match(/^(.{3,150}?)\s+\$\s?([\d,]+\.\d{2})$/);
-      const name = prev ? prev[1].trim() : lines[i - 1];
-      if (name.length >= 3 && !/\$|total|subtotal|order/i.test(name)) {
-        const price = prev ? prev[2] : (lines[i].match(new RegExp(MONEY)) || lines[i + 1]?.match(new RegExp(`^${MONEY}$`)) || [])[0];
-        out.push({ name, quantity: Number(m[1]), total: price ? money(price) : null });
+      const above = prev && !notAName(prev[1].trim()) ? { name: prev[1].trim(), price: prev[2] } : nameAbove(lines, i);
+      if (above.name && !/\$|total|subtotal|order/i.test(above.name)) {
+        const price = above.price || (lines[i].match(new RegExp(MONEY)) || lines[i + 1]?.match(new RegExp(`^${MONEY}$`)) || [])[0];
+        out.push({ name: above.name, quantity: Number(m[1]), total: price ? money(price) : null });
       }
     }
   }

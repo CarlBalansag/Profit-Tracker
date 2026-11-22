@@ -9,6 +9,7 @@ vi.mock('../hooks/useApi', () => ({
   useActivity: (group, source) => { mocks.calls.push([group, source]); return mocks.query; },
   useInvalidate: () => ({ all: mocks.invalidateAll }),
   useEmailAutomation: () => ({ data: { linkMatches: true, updateShipping: true, cashoutPayouts: true, returnReminders: true, createPurchases: false, cancellations: false } }),
+  useEmailOrderMutations: () => ({ dismiss: { mutateAsync: vi.fn() } }),
   useEmailAccounts: () => ({ data: [{ id: 'a1', status: 'active', last_synced_at: new Date(Date.now() - 5 * 60000).toISOString() }] }),
   apiFetch: mocks.apiFetch,
 }));
@@ -45,7 +46,7 @@ describe('Automation page', () => {
     expect(screen.getByText('Nothing changed on its own yet')).toBeInTheDocument();
     const running = screen.getByRole('region', { name: /Runs on its own/ });
     expect(within(running).getByText('Mark cash-out sales paid from receipts').nextSibling).toHaveTextContent('On');
-    expect(within(running).getByText('Create purchases from order emails').nextSibling).toHaveTextContent('Off');
+    expect(within(running).getByText('Add likely resale orders as purchases').nextSibling).toHaveTextContent('Off');
     expect(within(running).getByText('Email checked 5 min ago')).toBeInTheDocument();
   });
 

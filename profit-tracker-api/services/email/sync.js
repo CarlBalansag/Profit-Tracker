@@ -17,6 +17,7 @@ const { matchOrders } = require('./match');
 const { getSettings } = require('./settings');
 const { applyRules, customMerchant } = require('./rules');
 const { applyOrderUpdates, applyCashoutReceipts, applyCashoutChecks, createMissingPurchases } = require('./automations');
+const { sortOrders } = require('./sorting');
 const { pdfText, mergePdfDetails, firstPdf } = require('./attachments');
 const { looksPrivate } = require('./extract/generic');
 
@@ -320,12 +321,13 @@ async function organize(prisma, userId) {
     const settings = await getSettings(prisma, userId);
     const matched = await matchOrders(prisma, userId, [...changed, ...open.map((o) => o.id)], { autoLink: settings.linkMatches });
     const ruled = await applyRules(prisma, userId, { createExpenses: settings.createExpenses });
+    const sorted = await sortOrders(prisma, userId, settings);
     const purchases = settings.createPurchases ? await createMissingPurchases(prisma, userId) : 0;
     const updates = await applyOrderUpdates(prisma, userId, settings);
     const cashoutsPaid = await applyCashoutReceipts(prisma, userId, settings);
     // Checks after receipts, so a receipt and its check in one sync line up.
     const checksMoved = await applyCashoutChecks(prisma, userId, settings);
-    return { ...matched, ...ruled, purchasesCreated: purchases, updates, cashoutsPaid, checksMoved };
+    return { ...matched, ...ruled, sorted, purchasesCreated: purchases, updates, cashoutsPaid, checksMoved };
   } catch (err) {
     console.error(`[email] matching failed for user ${userId}: ${err?.code || err?.name || 'error'}`);
     return null;

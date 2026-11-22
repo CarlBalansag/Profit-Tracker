@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { BadgeDollarSign, ChevronDown, Link2, Mail, PenLine, Plus, Settings2, Truck, Zap } from 'lucide-react';
-import { useActivity, useEmailAccounts, useEmailAutomation, useInvalidate } from '../hooks/useApi';
+import { BadgeDollarSign, ChevronDown, Link2, Mail, PenLine, Plus, Settings2, Truck, UserRound, Zap } from 'lucide-react';
+import { useActivity, useEmailAccounts, useEmailAutomation, useEmailOrderMutations, useInvalidate } from '../hooks/useApi';
 import { undoActivity } from '../utils/undoToast';
 import { AUTOMATION_KINDS, describeAutomation } from '../utils/automationText';
 import { AUTOMATIONS } from '../data/emailAutomations';
@@ -20,6 +20,7 @@ const KIND_LOOK = {
   link: { icon: Link2, color: 'var(--dp-neutral-text)', bg: 'var(--dp-neutral-bg)' },
   created: { icon: Plus, color: 'var(--dp-accent-text)', bg: 'var(--dp-accent-bg)' },
   details: { icon: PenLine, color: 'var(--dp-neutral-text)', bg: 'var(--dp-neutral-bg)' },
+  sorted: { icon: UserRound, color: 'var(--dp-neutral-text)', bg: 'var(--dp-neutral-bg)' },
 };
 
 const dayKey = (iso) => new Date(iso).toDateString();
@@ -71,7 +72,7 @@ function KindTabs({ counts, total, active, onPick }) {
   );
 }
 
-function AutomationRow({ entry, change, busy, onUndo }) {
+function AutomationRow({ entry, change, busy, onUndo, onKeep }) {
   const [open, setOpen] = useState(false);
   const look = KIND_LOOK[change.kind] || KIND_LOOK.details;
   const Icon = look.icon;
@@ -98,7 +99,7 @@ function AutomationRow({ entry, change, busy, onUndo }) {
           </p>
         )}
         {open && change.details.map((line) => <p key={line} className="mt-1.5 break-words rounded-lg bg-white/[0.03] px-2.5 py-1.5 text-xs text-gray-400">{line}</p>)}
-        {(change.details.length > 0 || entry.undo_state !== 'not_undoable') && (
+        {(change.details.length > 0 || entry.undo_state !== 'not_undoable' || change.kind === 'sorted') && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
           {change.details.length > 0 && (
             <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="inline-flex h-7 items-center gap-1 rounded-md text-xs font-medium text-gray-400 hover:text-gray-200">
@@ -113,6 +114,11 @@ function AutomationRow({ entry, change, busy, onUndo }) {
               className="inline-flex h-7 items-center rounded-md px-2 -ml-2 text-xs font-medium text-gray-400 transition-colors hover:bg-white/[0.05] hover:text-gray-100 disabled:opacity-50"
             >
               <span aria-hidden="true">Undo</span><span className="sr-only">Undo {change.title}, {change.subject}</span>
+            </button>
+          )}
+          {change.kind === 'sorted' && (
+            <button type="button" disabled={busy} onClick={() => onKeep(entry)} className="inline-flex h-7 items-center rounded-md px-2 -ml-2 text-xs font-medium text-gray-400 transition-colors hover:bg-white/[0.05] hover:text-gray-100 disabled:opacity-50">
+              <span aria-hidden="true">It's business</span><span className="sr-only">It's business: {change.subject}</span>
             </button>
           )}
           {undone && <span className="text-xs text-gray-500">Undone</span>}
@@ -162,6 +168,19 @@ export default function Automation() {
   const invalidate = useInvalidate();
   const [pendingId, setPendingId] = useState(null);
   const [kind, setKind] = useState('all');
+  const { dismiss } = useEmailOrderMutations();
+  // A set-aside order brought back: it's business, and a To-Do asks to add it.
+  const handleKeep = async (entry) => {
+    setPendingId(entry.id);
+    try {
+      await dismiss.mutateAsync({ id: entry.record_id, restore: true });
+      toast.success('Brought back. Your To-Do asks whether to add it.');
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setPendingId(null);
+    }
+  };
 
   const rows = useMemo(() => (data?.pages.flatMap((page) => page.entries) ?? []).map((entry) => ({ entry, change: describeAutomation(entry) })), [data]);
   const counts = useMemo(() => rows.reduce((acc, r) => ({ ...acc, [r.change.kind]: (acc[r.change.kind] || 0) + 1 }), {}), [rows]);
@@ -222,7 +241,7 @@ export default function Automation() {
                   </h2>
                   <ul className={`${PANEL} divide-y divide-white/[0.06]`}>
                     {day.rows.map(({ entry, change }) => (
-                      <AutomationRow key={entry.id} entry={entry} change={change} busy={pendingId !== null} onUndo={handleUndo} />
+                      <AutomationRow key={entry.id} entry={entry} change={change} busy={pendingId !== null} onUndo={handleUndo} onKeep={handleKeep} />
                     ))}
                   </ul>
                 </section>

@@ -9,7 +9,7 @@ const generic = require('./generic');
 const { fromSchemaOrg } = require('./schemaOrg');
 const { MERCHANTS } = require('./merchants');
 
-const GENERIC_VERSION = 5;
+const GENERIC_VERSION = 6;
 const MAX_SOURCE = 512 * 1024;
 
 // One number per store, so a change to either the shared reader or a store's
@@ -52,6 +52,24 @@ async function parseSource(source, { maxBytes = MAX_SOURCE } = {}) {
 
 const CONF = { schema: 0.95, template: 0.85, generic: 0.6, weak: 0.4 };
 
+// Some stores' structured data names only the first product and gives it the
+// whole order's price (Walmart: "Mainstays Ice Tray Set", $113.73, while the
+// email says "+1 item"). When the email says there are more items than the
+// data lists, a price equal to the order total is dropped, and a "+N more
+// items" line says the list is incomplete.
+function partialSchemaItems(schema, subject, text) {
+  const all = `${subject}\n${text}`;
+  const listed = schema.items.reduce((t, i) => t + (Number(i.quantity) || 1), 0);
+  const plus = all.match(/\+\s?(\d{1,3})\s+(?:more\s+)?items?\b/i);
+  const counted = Math.max(0, ...[...all.matchAll(/\b(\d{1,3})\s+items?\b/gi)].map((m) => Number(m[1])));
+  const expected = plus ? schema.items.length + Number(plus[1]) : counted;
+  if (expected <= listed) return schema.items;
+  const total = Number(schema.fields.total);
+  const items = schema.items.map((i) => (Number(i.total) === total || Number(i.unit_price) === total ? { ...i, unit_price: null, total: null } : i));
+  const more = expected - listed;
+  return [...items, { name: `${more} more ${more === 1 ? 'item' : 'items'}`, quantity: more, more: true }];
+}
+
 function firstMatch(patterns, text) {
   for (const re of patterns || []) {
     const m = text.match(re);
@@ -92,7 +110,7 @@ function extractEmail({ merchant, subject = '', html = '', text = '' }) {
   set('currency', schema.fields.currency, CONF.schema);
 
   // Items
-  if (schema.items.length) set('items', schema.items, CONF.schema);
+  if (schema.items.length) set('items', partialSchemaItems(schema, subject, text), CONF.schema);
   // Item lines in the body beat the single item named in a subject line.
   const fromText = generic.items(text);
   set('items', fromText, CONF.weak);
@@ -102,9 +120,10 @@ function extractEmail({ merchant, subject = '', html = '', text = '' }) {
   // A store's own reader for its receipt layout (cash-out receipts).
   const own = template.read ? template.read(subject, text) : null;
   if (own) {
-    set('items', own.items, CONF.template);
+    if (!own.itemsIfMissing || !out.items?.length) set('items', own.items, CONF.template);
     set('total', own.total, CONF.template);
     set('order_number', own.order_number, CONF.template);
+    set('ship_to', own.ship_to, CONF.template);
     sources.push(`${merchant}@${template.version}`);
   }
 
@@ -129,6 +148,9 @@ function extractEmail({ merchant, subject = '', html = '', text = '' }) {
   if (generic.looksPrivate(subject)) out.kind = 'other';
 
   if (out.order_number && template.normalizeOrder) out.order_number = template.normalizeOrder(String(out.order_number));
+  // Refunds are written "($1,427.66)" or "-$15.00": kept as positive amounts
+  // (the email's kind says it's money back).
+  for (const f of ['total', 'subtotal', 'tax', 'shipping']) if (out[f] != null && Number(out[f]) < 0) out[f] = Math.abs(Number(out[f])).toFixed(2);
   // A $0.00 total ("Order Change" notices, gift-card balance lines) never helps.
   for (const f of ['total', 'subtotal']) if (out[f] != null && Number(out[f]) === 0) { delete out[f]; delete out.confidence[f]; }
   // Nothing to link by: no order number, tracking number or total (store
@@ -151,6 +173,7 @@ function extractEmail({ merchant, subject = '', html = '', text = '' }) {
     discount: out.discount ?? null,
     tracking_numbers: out.tracking_numbers || [],
     items: out.items ? out.items.slice(0, 50) : null,
+    ship_to: out.ship_to ? String(out.ship_to).slice(0, 80) : null,
     payment_hint: out.payment_hint || null,
     confidence: out.confidence,
     parser: [...new Set(sources)].join(' + '),

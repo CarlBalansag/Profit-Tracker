@@ -136,6 +136,56 @@ describe('cash-out receipts', () => {
   });
 });
 
+describe('store layouts found in real inboxes (synthetic copies)', () => {
+  it('names an item past its store IDs, prices and gift lines (Home Depot, Best Buy)', () => {
+    expect(generic.items(['Starlink Mini Kit', 'Store SKU #1012317132', 'Internet #331732584', '1 x $249.00 $249.00'].join('\n')))
+      .toEqual([{ name: 'Starlink Mini Kit', quantity: 1, total: '249.00' }]);
+    expect(generic.items([
+      'Logitech - PRO X2 Wireless Gaming Mouse', '$179.99', 'Model #: 910-007700', 'Qty: 1', '----------------------------------------',
+      'Gift with Purchase', 'Discord- 1-Month of Discord Nitro free', 'FREE', 'Digital delivery or service details sending to:', 'buyer@example.test', 'Qty: 1',
+    ].join('\n'))).toEqual([
+      { name: 'Logitech - PRO X2 Wireless Gaming Mouse', quantity: 1, total: '179.99' },
+      { name: 'Discord- 1-Month of Discord Nitro free', quantity: 1, total: '0.00' },
+    ]);
+  });
+  it('reads Amazon categories and the ship-to city and state, never the name', () => {
+    const r = extractEmail({ merchant: 'amazon', subject: 'Ordered 5 items: Supplements, Skin Care, and more', text: ['Arriving Sunday', '4 items: 1 Supplements, 1 Crafts, and 2 others', 'Sam - SACRAMENTO, CA', 'Order # 113-3449308-9990666', 'Grand Total: $10.82'].join('\n') });
+    expect([r.kind, r.order_number, r.total, r.ship_to]).toEqual(['order', '113-3449308-9990666', '10.82', 'SACRAMENTO, CA']);
+    expect(r.items).toEqual([{ name: 'Supplements', quantity: 1, category: true }, { name: 'Crafts', quantity: 1, category: true }, { name: 'Other items', quantity: 2, category: true }]);
+    expect(JSON.stringify(r)).not.toContain('Sam');
+    const p4d = extractEmail({ merchant: 'amazon', subject: 'Ordered: 1 Jewelry item', text: '1 Jewelry item\nP4D - MIDDLETOWN, DE\nOrder # 113-0633337-3945812\nGrand Total: $30.00' });
+    expect([p4d.ship_to, p4d.items]).toEqual(['MIDDLETOWN, DE', [{ name: 'Jewelry', quantity: 1, category: true }]]);
+  });
+  it('does not put the order total on the only item a store lists when the email says there are more (Walmart)', () => {
+    const html = '<script type="application/ld+json">{"@context":"http://schema.org","@type":"Order","orderNumber":"200014355865102","orderStatus":"OrderPickupAvailable","price":"$113.73","acceptedOffer":{"@type":"Offer","price":"$113.73","eligibleQuantity":{"value":"1"},"itemOffered":{"@type":"Product","name":"Mainstays Ice Tray Set"}}}</script>';
+    const r = extractEmail({ merchant: 'walmart', subject: 'Picked up at 6:04pm: Mainstays 2pack Silico... +1 item', html, text: '2 ITEMS PICKED UP' });
+    expect(r.total).toBe('113.73');
+    expect(r.items).toEqual([{ name: 'Mainstays Ice Tray Set', quantity: 1, unit_price: null, total: null }, { name: '1 more item', quantity: 1, more: true }]);
+  });
+  it('keeps a refund in brackets as a positive amount (Apple)', () => {
+    const r = extractEmail({ merchant: 'apple', subject: 'We received your items.', text: 'Order W1429583066\nSubtotal\n($1,314.00)\nTotal\n($1,427.66)' });
+    expect([r.total, r.subtotal]).toEqual(['1427.66', '1314.00']);
+  });
+});
+
+describe('sorting orders with no matching purchase', () => {
+  const { sortOrder } = require('../services/email/sorting.js');
+  const order = (over) => ({ merchant: 'amazon', ship_to: null, items: [], ...over });
+  const opts = { homeState: 'CA', personalWords: ['purina'], pastNames: ['Apple Watch Series 11 GPS 42mm'] };
+  it('sorts by the rules, in order', () => {
+    expect(sortOrder(order({ ship_to: 'MIDDLETOWN, DE', items: [{ name: 'Jewelry', category: true }] }), opts)).toEqual({ leaning: 'resale', reason: 'Ships to MIDDLETOWN, DE' });
+    expect(sortOrder(order({ ship_to: 'SACRAMENTO, CA', items: [{ name: 'Apple Watch Series 11 [GPS 42mm]', quantity: 1 }] }), opts)).toEqual({ leaning: 'resale', reason: "You've bought this before" });
+    expect(sortOrder(order({ ship_to: 'SACRAMENTO, CA', items: [{ name: 'Echo Show 8', quantity: 2 }] }), opts)).toEqual({ leaning: 'resale', reason: '2 of the same item' });
+    expect(sortOrder(order({ ship_to: 'SACRAMENTO, CA', items: [{ name: 'Pet Supplies', category: true }] }), opts)).toEqual({ leaning: 'personal', reason: 'Ships to SACRAMENTO, CA' });
+    expect(sortOrder(order({ ship_to: 'MIDDLETOWN, DE', items: [{ name: 'Purina Tidy Cats', quantity: 1 }] }), opts)).toEqual({ leaning: 'personal', reason: 'Has "purina"' });
+  });
+  it('asks when nothing decides it: other stores, no home state, no ship-to', () => {
+    expect(sortOrder(order({ merchant: 'bestbuy', ship_to: 'SACRAMENTO, CA', items: [{ name: 'Mouse', quantity: 1 }] }), opts).leaning).toBe('ask');
+    expect(sortOrder(order({ ship_to: 'MIDDLETOWN, DE' }), { ...opts, homeState: null }).leaning).toBe('ask');
+    expect(sortOrder(order({ items: [{ name: 'Lamp', quantity: 1 }] }), opts).leaning).toBe('ask');
+  });
+});
+
 describe('robustness', () => {
   it('handles a plain-text email, bad JSON-LD and a huge body', async () => {
     const plain = await read({ merchant: 'walmart', raw: mime({ from: 'help@walmart.com', subject: 'Your order has shipped', text: 'Order number: 2000123-45678901\nTracking number: 1Z999AA10123456784' }) });

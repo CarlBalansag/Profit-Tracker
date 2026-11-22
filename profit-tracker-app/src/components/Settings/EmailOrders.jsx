@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useEmailAutomation, useEmailOrderMutations, useEmailOrders, useEmailRuleMutations } from '../../hooks/useApi';
 import { orderRef } from '../../utils/emailRefs';
 import { AUTOMATIONS } from '../../data/emailAutomations';
+import OrderSorting from './OrderSorting';
 
 const PANEL = 'rounded-xl border border-gray-800 bg-[#12121A] p-5 sm:p-6 space-y-4';
 const TABS = [['review', 'To check'], ['linked', 'Linked'], ['unmatched', 'No match'], ['dismissed', 'Not business']];
@@ -128,6 +129,7 @@ export function EmailOrders({ found }) {
               <span>{label}<span className="block text-xs text-gray-500">{hint}</span></span>
             </label>
           ))}
+          {automation && <OrderSorting automation={automation} save={saveAutomation} />}
         </div>
       </details>
       <div role="group" aria-label="Show" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 dp-no-native-scrollbar">

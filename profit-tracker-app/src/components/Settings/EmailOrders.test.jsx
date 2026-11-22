@@ -70,10 +70,10 @@ describe('EmailOrders', () => {
 
   it('shows every automatic action with its current setting', () => {
     render(<EmailOrders found={1} />);
-    for (const label of [/Update purchases from shipping emails/, /Fill in return-by dates/, /Create purchases from order emails/, /Cancel purchases the store cancelled/]) {
+    for (const label of [/Update purchases from shipping emails/, /Fill in return-by dates/, /Add likely resale orders as purchases/, /Cancel purchases the store cancelled/]) {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
     }
-    fireEvent.click(screen.getByLabelText(/Create purchases from order emails/));
+    fireEvent.click(screen.getByLabelText(/Add likely resale orders as purchases/));
     expect(m.automation.mutate).toHaveBeenCalledWith({ createPurchases: true });
   });
 
