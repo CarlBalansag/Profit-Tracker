@@ -12,12 +12,15 @@ const { decryptSecret } = require('./crypto');
 const { resolvePublicHost } = require('./hostCheck');
 const { openImap, friendlyError } = require('./imap');
 const { parseSource, extractEmail, parserVersion } = require('./extract');
-const { groupMessages } = require('./orders');
+const { groupMessages, recompute } = require('./orders');
 const { matchOrders } = require('./match');
 const { getSettings } = require('./settings');
 const { applyRules, customMerchant } = require('./rules');
 const { applyOrderUpdates, createMissingPurchases } = require('./automations');
 const { pdfText, mergePdfDetails, firstPdf } = require('./attachments');
+const { looksPrivate } = require('./extract/generic');
+
+const PRIVATE_ROW = (merchant) => ({ subject: null, status: 'ignored', kind: 'other', parser_version: parserVersion(merchant), extracted_at: new Date() });
 
 const DOMAINS = SENDERS.flatMap((s) => s.domains);
 const BATCH = 50;
@@ -158,6 +161,8 @@ async function syncAccount(accountId, deps = {}) {
             sent_at: h.date && !Number.isNaN(h.date.getTime()) ? h.date : null,
             merchant,
             uid_validity: box.uidValidity,
+            // Sign-in codes and security notices: never read, subject not kept.
+            ...(looksPrivate(h.subject) ? PRIVATE_ROW(merchant) : {}),
           }));
         if (rows.length) {
           const saved = await prisma.emailMessage.createMany({ data: rows, skipDuplicates: true });
@@ -206,10 +211,37 @@ const READ_PER_RUN = 200;
 async function extractPending(prisma, client, account, { started, budgetMs, onRead }) {
   const candidates = await prisma.emailMessage.findMany({
     where: { account_id: account.id, status: { in: ['new', 'extracted', 'ignored'] } },
-    select: { id: true, folder: true, uid: true, uid_validity: true, message_id: true, merchant: true, status: true, parser_version: true },
+    select: { id: true, folder: true, uid: true, uid_validity: true, message_id: true, merchant: true, status: true, parser_version: true, subject: true, order_id: true, order_number: true, tracking_numbers: true },
     orderBy: [{ sent_at: { sort: 'desc', nulls: 'last' } }],
     take: 2000,
   });
+  // Orders whose emails were read again: their totals and status are worked
+  // out again at the end, and an order left with no emails goes away.
+  const stale = new Set();
+  try {
+    return await readDue(prisma, client, account, candidates, stale, { started, budgetMs, onRead });
+  } finally {
+    for (const id of stale) await recompute(prisma, id);
+  }
+}
+
+// An email read again stays in its order while its order number and tracking
+// numbers are the same (so links, "Not this" and "Not business" choices are
+// kept); otherwise it leaves the order and is grouped again.
+function leavesOrder(m, details) {
+  if (details.status !== 'extracted') return true;
+  const same = (a, b) => JSON.stringify([...(a || [])].sort()) === JSON.stringify([...(b || [])].sort());
+  return (m.order_number || null) !== (details.order_number || null) || !same(m.tracking_numbers, details.tracking_numbers);
+}
+
+async function readDue(prisma, client, account, candidates, stale, { started, budgetMs, onRead }) {
+  // Saved before this check existed: drop the subject without reading the email.
+  const hidden = candidates.filter((m) => m.subject && looksPrivate(m.subject));
+  for (const m of hidden) {
+    await prisma.emailMessage.update({ where: { id: m.id }, data: { ...PRIVATE_ROW(m.merchant), order_id: null } });
+    if (m.order_id) stale.add(m.order_id);
+  }
+  for (const m of hidden) { m.status = 'ignored'; m.parser_version = parserVersion(m.merchant); }
   const due = candidates.filter((m) => m.status === 'new' || (m.parser_version || 0) < parserVersion(m.merchant)).slice(0, READ_PER_RUN);
   let read = 0;
   const byFolder = new Map();
@@ -245,10 +277,12 @@ async function extractPending(prisma, client, account, { started, budgetMs, onRe
             } catch { /* an unreadable PDF leaves the body's details as they are */ }
             details.attachment_name = String(pdf.filename || 'invoice.pdf').slice(0, 200);
           }
+          const leaves = m.order_id && leavesOrder(m, details);
           await prisma.emailMessage.update({
             where: { id: m.id },
-            data: { ...details, uid, uid_validity: box.uidValidity, extracted_at: new Date(), extract_error: null },
+            data: { ...details, uid, uid_validity: box.uidValidity, extracted_at: new Date(), extract_error: null, ...(leaves ? { order_id: null } : {}) },
           });
+          if (m.order_id) stale.add(m.order_id);
           if (onRead) await onRead({ message: m, parsed, details });
           read += 1;
         } catch (err) {

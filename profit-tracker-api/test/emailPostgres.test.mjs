@@ -204,6 +204,19 @@ describe('email connections on Postgres', () => {
     expect(cursor.uid_validity).toBe('999');
   });
 
+  it('never keeps the subject of a sign-in code email or downloads it', async () => {
+    addMail('INBOX', 'help@walmart.com', 'Your verification code is 555000', '2026-03-01');
+    const { body } = await send('POST', '/api/email/accounts', connectBody());
+    await waitIdle(body.id);
+    const [row] = await prisma.emailMessage.findMany();
+    expect(row).toMatchObject({ subject: null, status: 'ignored', kind: 'other' });
+    expect(row.parser_version).toBeGreaterThan(0);
+    // Already ignored and up to date: a later sync doesn't fetch it.
+    log.length = 0;
+    await sync.syncAccount(body.id, { open: fakeOpen, resolve });
+    expect(log.some((e) => e[0] === 'body')).toBe(false);
+  });
+
   it('reads spam folders when turned on, and an earlier start date rescans', async () => {
     addMail('INBOX', 'a@amazon.com', 'Inbox order', '2026-03-01');
     addMail('[Gmail]/Spam', 'alerts@bestbuy.com', 'Spam order', '2026-03-02');
@@ -361,6 +374,39 @@ describe('email connections on Postgres', () => {
     await prisma.emailMerchantRule.deleteMany({});
     await prisma.expense.deleteMany({});
     await prisma.user.update({ where: { id: user.id }, data: { accounting_preferences: null } });
+  });
+
+  it('regroups emails a newer reader reads differently, and keeps links where nothing changed', async () => {
+    addMail('INBOX', 'auto-confirm@amazon.com', 'Your Amazon.com order', '2026-03-01', '<a1@amazon.com>',
+      '<p>Order #112-1234567-7654321</p><table><tr><td>Order Total:</td><td>$449.99</td></tr></table>');
+    addMail('INBOX', 'help@walmart.com', 'Thanks for your order', '2026-03-02', '<w1@walmart.com>',
+      '<p>Order number: 2000123-45678901</p><table><tr><td>Total</td><td>$64.74</td></tr></table>');
+    addMail('INBOX', 'help@walmart.com', 'Your order is on its way', '2026-03-03', '<w2@walmart.com>',
+      '<p>Order number: 2000123-45678901</p><p>Tracking number: 1Z999AA10123456784</p>');
+    const { body } = await send('POST', '/api/email/accounts', connectBody());
+    await waitIdle(body.id);
+    const amazon = await prisma.emailOrder.findFirst({ where: { merchant: 'amazon' } });
+    const walmart = await prisma.emailOrder.findFirst({ where: { merchant: 'walmart' } });
+    expect(await prisma.emailMessage.count({ where: { order_id: walmart.id } })).toBe(2);
+
+    // As an older reader left them: the Amazon email in its own wrong order,
+    // the Walmart shipping email under an undashed number, and an ad as a "shipment".
+    const ad = await prisma.emailOrder.create({ data: { user_id: user.id, key: 'msg:old', merchant: 'amazon', type: 'purchase', status: 'shipped' } });
+    await prisma.emailMessage.updateMany({ where: { message_id: '<a1@amazon.com>' }, data: { order_id: ad.id, order_number: 'OLD-NUMBER' } });
+    await prisma.emailOrder.delete({ where: { id: amazon.id } }).catch(() => {});
+    await prisma.emailMessage.updateMany({ where: { message_id: '<w2@walmart.com>' }, data: { order_number: '200012345678901' } });
+    await prisma.emailMessage.updateMany({ data: { parser_version: 1 } });
+    await prisma.emailAccount.update({ where: { id: body.id }, data: { last_synced_at: null } });
+
+    expect(await sync.syncAccount(body.id, { open: fakeOpen, resolve })).toMatchObject({ status: 'ok', read: 3 });
+    expect(await prisma.emailOrder.findUnique({ where: { id: ad.id } })).toBe(null); // left with no emails
+    const orders = await prisma.emailOrder.findMany({ orderBy: { merchant: 'asc' } });
+    expect(orders.map((o) => [o.merchant, o.order_number, o.total?.toString()])).toEqual([
+      ['amazon', '112-1234567-7654321', '449.99'],
+      ['walmart', '2000123-45678901', '64.74'],
+    ]);
+    expect(orders[1].id).toBe(walmart.id); // the unchanged order kept its id (and so its links)
+    expect(await prisma.emailMessage.count({ where: { order_id: walmart.id } })).toBe(2);
   });
 
   it('protects the cron endpoint with its own secret', () => {

@@ -30,15 +30,18 @@ const MERCHANTS = {
     items: (subject) => amazonItemFromSubject(subject),
   },
   walmart: {
-    version: 1,
+    version: 2,
     orderNumber: [/order\s*(?:number|#)?\s*[:#]?\s*(\d{7}-\d{8})\b/i, /\b(\d{7}-\d{8})\b/, /order\s*(?:number|#)\s*[:#]?\s*(\d{13,15})\b/i],
     kind: subjectKinds([
       ['cancelled', /cancel/i], ['refund', /refund/i], ['return', /return/i],
       ['pickup', /ready for pickup|ready to pick up/i],
       ['delivered', /delivered|has arrived/i],
       ['shipped', /shipped|on its way|out for delivery/i],
-      ['order', /thanks for your order|order (confirmation|received)|we got your order/i],
+      // "Thanks for your curbside pickup order", "... delivery order".
+      ['order', /thanks for your (?:[\w-]+ ){0,3}order|order (confirmation|received)|we got your order/i],
     ]),
+    // The same order is written 2000143-55865102 and 200014355865102.
+    normalizeOrder: (n) => (/^\d{15}$/.test(n) ? `${n.slice(0, 7)}-${n.slice(7)}` : n),
   },
   bestbuy: {
     version: 1,

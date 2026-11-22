@@ -56,6 +56,21 @@ async function recompute(prisma, orderId) {
 // Puts every read email of the user that has no order yet into one; returns
 // the ids of orders that changed (for matching).
 async function groupMessages(prisma, userId) {
+  // Repair first: an email that is no longer an order email, or whose store
+  // order number now points at another order, leaves its order.
+  const grouped = await prisma.emailMessage.findMany({
+    where: { user_id: userId, order_id: { not: null } },
+    select: { id: true, status: true, merchant: true, order_number: true, order_id: true },
+  });
+  const keys = new Map((await prisma.emailOrder.findMany({
+    where: { user_id: userId, id: { in: [...new Set(grouped.map((m) => m.order_id))] } },
+    select: { id: true, key: true },
+  })).map((o) => [o.id, o.key]));
+  const misplaced = grouped.filter((m) => m.status !== 'extracted'
+    || (m.order_number && !CARRIERS.has(m.merchant) && `${m.merchant}:${m.order_number}` !== keys.get(m.order_id)));
+  const emptied = new Set(misplaced.map((m) => m.order_id));
+  if (misplaced.length) await prisma.emailMessage.updateMany({ where: { id: { in: misplaced.map((m) => m.id) } }, data: { order_id: null } });
+
   const loose = await prisma.emailMessage.findMany({
     where: { user_id: userId, status: 'extracted', order_id: null, NOT: { kind: 'tax_form' } },
     orderBy: { sent_at: 'asc' },
@@ -81,6 +96,8 @@ async function groupMessages(prisma, userId) {
     await prisma.emailMessage.update({ where: { id: m.id }, data: { order_id: order.id } });
     touched.add(order.id);
   }
+  // Orders the repair took emails from: worked out again, or removed when empty.
+  for (const id of emptied) if (!touched.has(id) && await recompute(prisma, id)) touched.add(id);
 
   // A store order that now knows a tracking number takes over the carrier
   // emails grouped under that number.

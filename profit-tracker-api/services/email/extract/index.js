@@ -9,7 +9,7 @@ const generic = require('./generic');
 const { fromSchemaOrg } = require('./schemaOrg');
 const { MERCHANTS } = require('./merchants');
 
-const GENERIC_VERSION = 3;
+const GENERIC_VERSION = 5;
 const MAX_SOURCE = 512 * 1024;
 
 // One number per store, so a change to either the shared reader or a store's
@@ -78,9 +78,6 @@ function extractEmail({ merchant, subject = '', html = '', text = '' }) {
   const templateKind = template.kind ? template.kind(subject) : null;
   if (templateKind) set('kind', templateKind, CONF.template);
   set('kind', generic.kindOf(subject, text), CONF.generic);
-  if (template.carrier && !['shipped', 'delivered', 'pickup'].includes(out.kind)) {
-    out.kind = /deliver/i.test(subject) ? 'delivered' : 'shipped';
-  }
 
   // Order number
   set('order_number', schema.fields.order_number, CONF.schema);
@@ -113,7 +110,23 @@ function extractEmail({ merchant, subject = '', html = '', text = '' }) {
     if (Math.abs(parts - Number(out.total)) > 0.02 && out.confidence.total < CONF.schema) out.confidence.total = CONF.weak;
   }
 
-  const marketing = out.kind === 'other' || (generic.looksLikeMarketing(subject, text) && !out.order_number && !out.tracking_numbers);
+  // A carrier email only matters when it carries a tracking number; carriers
+  // also send ads, account notices and sign-in codes.
+  if (template.carrier) {
+    out.kind = !out.tracking_numbers ? 'other'
+      : ['shipped', 'delivered', 'pickup'].includes(out.kind) ? out.kind
+        : /deliver/i.test(subject) ? 'delivered' : 'shipped';
+  }
+  if (generic.looksPrivate(subject)) out.kind = 'other';
+
+  if (out.order_number && template.normalizeOrder) out.order_number = template.normalizeOrder(String(out.order_number));
+  // A $0.00 total ("Order Change" notices, gift-card balance lines) never helps.
+  for (const f of ['total', 'subtotal']) if (out[f] != null && Number(out[f]) === 0) { delete out[f]; delete out.confidence[f]; }
+  // Nothing to link by: no order number, tracking number or total (store
+  // ads that mention "delivered", "your account has been closed", ...).
+  const empty = !out.order_number && !out.tracking_numbers && out.total == null && out.kind !== 'tax_form';
+
+  const marketing = empty || out.kind === 'other' || (generic.looksLikeMarketing(subject, text) && !out.order_number && !out.tracking_numbers);
   if (templateOrder || templateKind) sources.push(`${merchant}@${template.version}`);
   sources.push(`generic@${GENERIC_VERSION}`);
 

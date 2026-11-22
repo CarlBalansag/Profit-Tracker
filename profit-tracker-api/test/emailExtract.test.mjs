@@ -56,6 +56,15 @@ describe('generic reader', () => {
   it('finds UPS and USPS tracking numbers once each', () => {
     expect(generic.trackingNumbers('1Z999AA10123456784 and again 1Z999AA10123456784; USPS 9400 1118 9922 3344 5566 77')).toEqual(['1Z999AA10123456784', '9400111899223344556677']);
   });
+  it('reads "Total" without mistaking Total Fee, Total Tax or a count for it', () => {
+    expect(generic.amounts('Total # of items purchased: 1\nTotal Fee $0.00\nTotal Tax $ 4.02\nTotal $ 50.00')).toMatchObject({ total: '50.00', tax: '4.02' });
+  });
+  it('spots sign-in codes and security notices', () => {
+    for (const s of ['Your verification code is 555203', 'USPS.com Multifactor Authentication', 'fedex.com Security Preference Change Confirmed', 'Verify Your Email Address to Complete Setup', 'Your Recovery Email Has Been Updated', 'Your FedEx user ID is ready', 'Reset your password']) {
+      expect(generic.looksPrivate(s), s).toBe(true);
+    }
+    for (const s of ['Thanks for your order', 'Your package is on its way', 'Your Lowe\'s Purchase Receipt']) expect(generic.looksPrivate(s), s).toBe(false);
+  });
   it('never treats a card number as more than its last four', () => {
     expect(generic.paymentHint('Visa ending in 4242')).toBe('Visa 4242');
     expect(generic.paymentHint('Discover ending in 0000')).toBe('Discover 0000');

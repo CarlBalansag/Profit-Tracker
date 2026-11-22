@@ -34,9 +34,10 @@ function labelledAmount(text, labels) {
 }
 
 const LABELS = {
-  total: 'order total|grand total|total charged|total paid|amount paid|payment total|total \\(usd\\)|total',
+  // A bare "Total" must not be "Total Fee", "Total Tax" or "Total # of items".
+  total: 'order total|grand total|total charged|total paid|amount paid|payment total|total \\(usd\\)|total(?!\\s*(?:fee|tax|#|of\\b|items?|savings|saved|discount|before|due later))',
   subtotal: 'item\\(?s\\)? subtotal|items subtotal|merchandise subtotal|subtotal',
-  tax: 'estimated tax|sales tax|tax collected|estimated sales tax|tax',
+  tax: 'total tax|estimated tax|sales tax|tax collected|estimated sales tax|tax',
   shipping: 'shipping & handling|shipping and handling|shipping|delivery fee|delivery',
   discount: 'promotion applied|promotions?|discounts?|savings|coupons?|you saved',
 };
@@ -101,7 +102,7 @@ const KINDS = [
   ['delivered', /\b(delivered|has arrived|was delivered)\b/i],
   ['pickup', /\b(ready for pick ?up|ready to pick up)\b/i],
   ['shipped', /\b(shipped|on (its|the) way|out for delivery|in transit|tracking number|label created)\b/i],
-  ['order', /\b(thanks for your order|thank you for your order|order (confirmation|confirmed|received|placed)|we('ve| have) received your order|your order of|ordered:|order #)\b/i],
+  ['order', /\b(thanks for your (?:[\w-]+ ){0,3}order|thank you for your (?:[\w-]+ ){0,3}order|order (confirmation|confirmed|received|placed)|we('ve| have) received your order|your order of|ordered:|order #)\b/i],
   ['receipt', /\b(receipt|invoice|payment (received|confirmation)|your purchase)\b/i],
 ];
 function kindOf(subject, text) {
@@ -116,6 +117,12 @@ function kindOf(subject, text) {
 function looksLikeMarketing(subject, text) {
   return /\b(% off|sale ends|deals?|shop now|new arrivals|limited time|black friday|cyber monday|top picks|recommended for you)\b/i.test(subject || '')
     || (/\bunsubscribe\b/i.test(text || '') && !/\border\b/i.test(subject || ''));
+}
+
+// Sign-in codes, password and account-security notices. Never order mail, and
+// not kept: the subject is dropped and the body is never downloaded.
+function looksPrivate(subject) {
+  return /\b(verification|security|one[- ]time|sign[- ]?in|login|access) code\b|\bpass ?code\b|\bpassword\b|\bmulti[- ]?factor\b|\btwo[- ](step|factor)\b|\b2fa\b|\bverify your (email|account|identity|phone)\b|\bvalidate your email\b|\brecovery (email|phone)\b|\buser ?id\b|\bsecurity (alert|preference|notice|settings?)\b|\bnew sign[- ]?in\b|\bunusual (activity|sign)/i.test(subject || '');
 }
 
 // "2 x Widget  $19.98", "Qty: 2" next to a name and a price. Weak: shown as
@@ -141,4 +148,4 @@ function items(text) {
   return out;
 }
 
-module.exports = { money, amounts, orderNumber, trackingNumbers, paymentHint, kindOf, looksLikeMarketing, items, labelledAmount, MONEY };
+module.exports = { money, amounts, orderNumber, trackingNumbers, paymentHint, kindOf, looksLikeMarketing, looksPrivate, items, labelledAmount, MONEY };

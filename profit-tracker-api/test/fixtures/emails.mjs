@@ -130,6 +130,46 @@ export const FIXTURES = {
     raw: mime({ from: 'Pirate Ship <support@pirateship.com>', subject: 'Your Pirate Ship receipt', html: `${rows([['3 USPS Ground Advantage labels', '$14.37'], ['Total', '$14.37']])}<p>Visa ending in 4242</p>` }),
     expect: { kind: 'receipt', total: '14.37', payment_hint: 'Visa 4242' },
   },
+  // "Total Fee" and "Total Tax" come before the real "Total".
+  lowesOrder: {
+    merchant: 'lowes',
+    raw: mime({ from: "Lowe's <orders@lowes.com>", subject: 'Thanks for Your Order! #300900000000000001', html: `<p>Order # 300900000000000001</p>${rows([['Subtotal (1 item)', '$45.98'], ['Savings', '($5.99)'], ['Delivery', '$0.00'], ['Total Fee', '$0.00'], ['Total Tax', '$4.02'], ['Total', '$50.00']])}` }),
+    expect: { kind: 'order', order_number: '300900000000000001', total: '50.00', subtotal: '45.98', tax: '4.02' },
+  },
+  // Carriers send ads and account mail too: without a tracking number it isn't a shipment.
+  fedexOffer: {
+    merchant: 'fedex',
+    raw: mime({ from: 'FedEx <fedex@fedex.com>', subject: 'Your November offers are here!', html: '<p>Save on your next shipment. Delivered right to your inbox.</p>' }),
+    expect: { kind: 'other', status: 'ignored', tracking_numbers: [] },
+  },
+  fedexCode: {
+    merchant: 'fedex',
+    raw: mime({ from: 'FedEx <noreply@fedex.com>', subject: 'Your FedEx verification code: 123456', text: 'Your code is 123456.' }),
+    expect: { kind: 'other', status: 'ignored' },
+  },
+  // The body offers "cancel your order"; the subject says what it is. The
+  // order number is written without its dash.
+  walmartCurbside: {
+    merchant: 'walmart',
+    raw: mime({ from: 'Walmart <help@walmart.com>', subject: 'Thanks for your curbside pickup order, Sam', html: `<p>Order number: 200012300000001</p><p>Need to make changes? You can cancel your order until 2pm.</p>${rows([['Total', '$113.73']])}` }),
+    expect: { kind: 'order', order_number: '2000123-00000001', total: '113.73', status: 'extracted' },
+  },
+  // A store ad that happens to say "Delivered": nothing to link by.
+  costcoAd: {
+    merchant: 'costco',
+    raw: mime({ from: 'Costco <online@costco.com>', subject: 'NEW Member-Only Savings Start Today!', html: '<p>$79.99 Delivered</p><p>After $20 OFF</p>' }),
+    expect: { status: 'ignored' },
+  },
+  lowesOrderChange: {
+    merchant: 'lowes',
+    raw: mime({ from: "Lowe's <orders@lowes.com>", subject: 'Order Change to Order #300900000000000001', html: `<p>Order # 300900000000000001</p>${rows([['Subtotal', '$0.00'], ['Total', '$0.00']])}` }),
+    expect: { order_number: '300900000000000001', total: null, subtotal: null },
+  },
+  walmartCode: {
+    merchant: 'walmart',
+    raw: mime({ from: 'Walmart <help@walmart.com>', subject: 'Your verification code is 555000', text: 'Use 555000 to sign in. Your order history is waiting.' }),
+    expect: { kind: 'other', status: 'ignored' },
+  },
 };
 
 // A minimal one-page PDF with the given lines of text (Helvetica), for the
