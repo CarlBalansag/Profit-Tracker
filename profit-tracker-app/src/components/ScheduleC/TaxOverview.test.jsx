@@ -256,4 +256,37 @@ describe('Tax estimate', () => {
       expect(calls.filter((c) => c.method === 'POST')).toEqual([]);
     });
   });
+
+  describe('what-if and deduction checks', () => {
+    beforeEach(() => { saved = { year: 2026, state: 'TX', filing_status: 'single', non_business_income: '0', reserve_mode: 'personalized' }; localStorage.clear(); });
+    const worksheet = { groups: [{ id: 'SUPPLIES', count: 2 }], rows: [{ id: 'x', name: 'Verizon Wireless', source: 'manual' }] };
+
+    it('runs a scenario through the engine and explains what a deduction really saves', async () => {
+      mountOverview();
+      fireEvent.click(await screen.findByText('What if…'));
+      expect(screen.getByText(/spending \$100 on a deductible expense would cut your tax by \$10/)).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('A deductible business expense'), { target: { value: '1000' } });
+      expect(await screen.findByText(/Your total tax would go down by \$230\.52\. Spending \$1,000\.00 saves about 23\.1% of it in tax, so it still costs you about \$769\.48\./)).toBeInTheDocument();
+      const row = screen.getByText('Total tax').closest('tr');
+      expect(within(row).getByText('$9,501.55')).toBeInTheDocument();
+      expect(calls).toEqual([]); // nothing saved
+      fireEvent.change(screen.getByLabelText('A deductible business expense'), { target: { value: '-5' } });
+      expect(screen.getAllByRole('alert').map((a) => a.textContent).join(' ')).toMatch(/A deductible business expense/);
+    });
+
+    it('lists deduction checks the records do not cover, and hides one on request', async () => {
+      mountOverview({ worksheet, books: { netProfit: '50000.00', sales: { count: 4 } } });
+      fireEvent.click(await screen.findByText('Deductions you might be missing'));
+      expect(screen.getByText('Driving for the business')).toBeInTheDocument();
+      expect(screen.queryByText('Packing and shipping supplies')).toBeNull(); // supplies recorded
+      expect(screen.queryByText('Phone and internet, business share')).toBeNull(); // Verizon recorded
+      fireEvent.click(screen.getByText('Driving for the business'));
+      expect(screen.getByRole('link', { name: 'IRS: Standard mileage rates' })).toHaveAttribute('href', 'https://www.irs.gov/tax-professionals/standard-mileage-rates');
+      fireEvent.click(screen.getAllByRole('button', { name: "Doesn't apply to me" })[0]);
+      expect(screen.queryByText('Driving for the business')).toBeNull();
+      expect(JSON.parse(localStorage.getItem('pt.taxDeductionChecks.hidden'))).toEqual(['mileage']);
+      fireEvent.click(screen.getByRole('button', { name: 'Show 1 hidden suggestion' }));
+      expect(screen.getByText('Driving for the business')).toBeInTheDocument();
+    });
+  });
 });

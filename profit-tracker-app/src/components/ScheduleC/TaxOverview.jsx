@@ -7,6 +7,8 @@ import { TaxProfileForm } from './TaxProfileForm';
 import { TaxProjection } from './TaxProjection';
 import { TaxReserve } from './TaxReserve';
 import { TaxPayments } from './TaxPayments';
+import { WhatIf } from './WhatIf';
+import { DeductionChecks } from './DeductionChecks';
 import { FILING_STATUS_LABELS } from '../../utils/taxProfile';
 
 const usd = (value) => {
@@ -77,7 +79,7 @@ function TheMath({ o, detailed }) {
   </div>;
 }
 
-export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts = 0, onShowWorksheet }) {
+export function TaxOverview({ year, books, worksheet = null, pendingExpenses = 0, missingReceipts = 0, onShowWorksheet }) {
   const [loaded, setLoaded] = useState(null); // { saved, taxMath } | { error }
   const [session, setSession] = useState(null); // unsaved profile, only in memory
   const [editing, setEditing] = useState(false);
@@ -202,6 +204,11 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
       {!detailed && o.impact && <p className="mt-3 text-xs text-gray-500">Switch to Detailed to see every line, the rules used and the official sources.</p>}
     </details>
 
+    {o.impact && <details className={card}>
+      <summary className="cursor-pointer text-sm font-medium text-purple-300">What if…</summary>
+      <WhatIf year={year} profile={profile} baseProfit={o.businessProfit} marginalRate={o.impact.marginalRate} today={localToday()} />
+    </details>}
+
     <details className={card} open={detailed || undefined}>
       <summary className="cursor-pointer text-sm font-medium text-purple-300">What you&apos;ve already saved and paid</summary>
       <table className="mt-3 w-full text-sm"><tbody>
@@ -230,11 +237,7 @@ export function TaxOverview({ year, books, pendingExpenses = 0, missingReceipts 
 
     <details className={card}>
       <summary className="cursor-pointer text-sm font-medium text-purple-300">Deductions you might be missing</summary>
-      <ul className="mt-3 space-y-2 text-sm text-gray-300">
-        <li>{pendingExpenses > 0 ? <>{pendingExpenses} {pendingExpenses === 1 ? 'expense is' : 'expenses are'} waiting for review and not deducted yet. <button type="button" onClick={onShowWorksheet} className="underline">Review them</button></> : 'Every expense has been reviewed.'}</li>
-        <li>{missingReceipts > 0 ? `${missingReceipts} deducted ${missingReceipts === 1 ? 'expense has' : 'expenses have'} no receipt attached. Keep records for each deduction.` : 'Every deducted expense has a receipt.'}</li>
-        <li className="text-gray-500">Checks for mileage, a home office and equipment come in a later update.</li>
-      </ul>
+      <DeductionChecks year={year} worksheet={worksheet} saleCount={books.sales?.count || 0} profit={o.businessProfit} pendingExpenses={pendingExpenses} missingReceipts={missingReceipts} onShowWorksheet={onShowWorksheet} />
     </details>
 
     {o.missing.length > 0 && profile.filing_status && <div className={card}>
