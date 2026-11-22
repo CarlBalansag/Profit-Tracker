@@ -3,17 +3,9 @@ import { Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useEmailAutomation, useEmailOrderMutations, useEmailOrders, useEmailRuleMutations } from '../../hooks/useApi';
 import { orderRef } from '../../utils/emailRefs';
+import { AUTOMATIONS } from '../../data/emailAutomations';
 
 const PANEL = 'rounded-xl border border-gray-800 bg-[#12121A] p-5 sm:p-6 space-y-4';
-// Every automatic change is in Activity, with Undo.
-const AUTOMATIONS = [
-  ['linkMatches', 'Link sure matches without asking', 'Fills blank order and tracking numbers.'],
-  ['updateShipping', 'Update purchases from shipping emails', 'Adds tracking and marks them delivered.'],
-  ['cashoutPayouts', 'Mark cash-out sales paid from receipts', 'Paid to your cash-out balance. Adds tracking and serial numbers.'],
-  ['returnReminders', 'Fill in return-by dates', "From the store's usual return window."],
-  ['createPurchases', 'Create purchases from order emails', 'For orders still unmatched a day later.'],
-  ['cancellations', 'Cancel purchases the store cancelled', 'Off: you get a To-Do instead.'],
-];
 const TABS = [['review', 'To check'], ['linked', 'Linked'], ['unmatched', 'No match'], ['dismissed', 'Not business']];
 const MERCHANT = {
   amazon: 'Amazon', walmart: 'Walmart', bestbuy: 'Best Buy', target: 'Target', apple: 'Apple', costco: 'Costco',
