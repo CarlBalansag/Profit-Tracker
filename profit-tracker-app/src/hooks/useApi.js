@@ -531,6 +531,20 @@ export const useCashoutImport = () => {
   return { preview, commit };
 };
 
+// Settings > Data > Fill in costs from store orders (purchases the cashout
+// import saved at $0).
+export const useStoreOrderCosts = () => {
+  const qc = useQueryClient();
+  const preview = useMutation({
+    mutationFn: (body) => postJson('/api/cashouts/import/costs/preview', body, 'Could not read the order export.'),
+  });
+  const commit = useMutation({
+    mutationFn: (body) => postJson('/api/cashouts/import/costs/commit', body, 'Saving failed. Nothing was changed.'),
+    onSuccess: () => qc.invalidateQueries(),
+  });
+  return { preview, commit };
+};
+
 export const useCashoutMutations = () => {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ['cashout'] });
