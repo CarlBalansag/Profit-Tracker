@@ -11,6 +11,7 @@ const { syncAccount, testConnection } = require('../services/email/sync');
 const { linkMatch, rejectMatch } = require('../services/email/match');
 const { getSettings, saveSettings, DEFAULTS } = require('../services/email/settings');
 const { createExpenseFromOrder, suggestRules, normalizeDomain, labelFor } = require('../services/email/rules');
+const { createPurchasesFromOrder } = require('../services/email/automations');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -426,6 +427,28 @@ router.post('/orders/:id/expense', isAuthenticated, async (req, res, next) => {
     const rule = await prisma.emailMerchantRule.findUnique({ where: { user_id_merchant: { user_id: req.user.id, merchant: order.merchant } } });
     const expense = await createExpenseFromOrder(prisma, req.user.id, order, rule);
     res.status(201).json({ expense_id: expense.id });
+  } catch (err) { next(err); }
+});
+
+// "Create purchase" for an order email with no matching purchase.
+router.post('/orders/:id/purchase', isAuthenticated, async (req, res, next) => {
+  try {
+    const order = await prisma.emailOrder.findFirst({ where: { id: req.params.id, user_id: req.user.id } });
+    if (!order) return res.status(404).json({ error: 'Order not found.' });
+    if (order.type !== 'purchase' || order.total == null) return res.status(400).json({ error: 'This email has no order total to record.' });
+    if (['cancelled', 'refund'].includes(order.status)) return res.status(400).json({ error: 'This order was cancelled or refunded.' });
+    const rows = await createPurchasesFromOrder(prisma, req.user.id, order);
+    if (!rows) return res.status(409).json({ error: 'This order is already linked to a purchase.' });
+    res.status(201).json({ purchase_ids: rows.map((r) => r.id) });
+  } catch (err) { next(err); }
+});
+
+// Clears a cancellation/refund reminder once the user has handled it.
+router.post('/orders/:id/handled', isAuthenticated, async (req, res, next) => {
+  try {
+    const done = await prisma.emailOrder.updateMany({ where: { id: req.params.id, user_id: req.user.id }, data: { attention: null } });
+    if (!done.count) return res.status(404).json({ error: 'Order not found.' });
+    res.json({ handled: true });
   } catch (err) { next(err); }
 });
 

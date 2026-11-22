@@ -4,6 +4,14 @@ import { toast } from 'sonner';
 import { useEmailAutomation, useEmailOrderMutations, useEmailOrders, useEmailRuleMutations } from '../../hooks/useApi';
 
 const PANEL = 'rounded-xl border border-gray-800 bg-[#12121A] p-5 sm:p-6 space-y-4';
+// Every automatic change is in Activity, with Undo.
+const AUTOMATIONS = [
+  ['linkMatches', 'Link sure matches without asking', 'Fills blank order and tracking numbers.'],
+  ['updateShipping', 'Update purchases from shipping emails', 'Adds tracking and marks them delivered.'],
+  ['returnReminders', 'Fill in return-by dates', "From the store's usual return window."],
+  ['createPurchases', 'Create purchases from order emails', 'For orders still unmatched a day later.'],
+  ['cancellations', 'Cancel purchases the store cancelled', 'Off: you get a To-Do instead.'],
+];
 const TABS = [['review', 'To check'], ['linked', 'Linked'], ['unmatched', 'No match'], ['dismissed', 'Not business']];
 const MERCHANT = {
   amazon: 'Amazon', walmart: 'Walmart', bestbuy: 'Best Buy', target: 'Target', apple: 'Apple', costco: 'Costco',
@@ -29,7 +37,7 @@ function Records({ match }) {
 
 function OrderRow({ order, tab }) {
   const { accept, reject, dismiss } = useEmailOrderMutations();
-  const { addExpense } = useEmailRuleMutations();
+  const { addExpense, addPurchase, handled } = useEmailRuleMutations();
   const match = order.matches.find((m) => (tab === 'linked' ? m.state === 'linked' : m.state === 'suggested'));
   const run = async (fn, arg, done) => {
     try { await fn.mutateAsync(arg); if (done) toast.success(done); } catch (err) { toast.error(err.message); }
@@ -45,6 +53,12 @@ function OrderRow({ order, tab }) {
         {STATUS[order.status] && <span className="rounded-md bg-white/5 px-1.5 py-0.5 text-[11px] font-semibold text-gray-300">{STATUS[order.status]}</span>}
       </div>
       {match && <Records match={match} />}
+      {order.attention && (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-[var(--dp-warning-text)]">
+          {order.attention === 'cancelled' ? 'The store cancelled this order. Cancel the purchase too, or change its quantity.' : 'This order was refunded or returned. Record the refund on the purchase.'}
+          <button type="button" onClick={() => run(handled, order.id, 'Done')} className="underline">Done</button>
+        </p>
+      )}
       {match && tab === 'review' && (
         <ul className="flex flex-wrap gap-1.5" aria-label="Why it looks like a match">
           {match.reasons.map((r) => (
@@ -64,6 +78,9 @@ function OrderRow({ order, tab }) {
             {match.auto && <span className="self-center text-xs text-gray-500">Linked automatically</span>}
             <button type="button" onClick={() => run(reject, match.id, 'Unlinked')} className="page-btn page-btn-secondary">Unlink</button>
           </>
+        )}
+        {tab === 'unmatched' && order.type === 'purchase' && order.total != null && !['cancelled', 'refund', 'return'].includes(order.status) && (
+          <button type="button" onClick={() => run(addPurchase, order.id, 'Purchase created')} className="page-btn page-btn-primary">Create purchase</button>
         )}
         {tab === 'unmatched' && order.type === 'receipt' && order.total != null && (
           <button type="button" onClick={() => run(addExpense, order.id, 'Added as an expense')} className="page-btn page-btn-primary">Add as expense</button>
@@ -100,10 +117,17 @@ export function EmailOrders({ found }) {
         <h2 id="email-orders" className="text-sm font-bold text-white">Orders from email</h2>
         <p className="mt-1 max-w-prose text-xs text-gray-500">Each order is matched to your purchases, sales or expenses. Linking fills in blank order and tracking numbers; Undo is in Activity.</p>
       </div>
-      <label className="flex min-h-[44px] items-center gap-3 text-sm text-gray-200">
-        <input type="checkbox" checked={automation?.linkMatches ?? true} onChange={(e) => saveAutomation.mutate({ linkMatches: e.target.checked })} className="h-5 w-5 accent-[var(--accent)]" />
-        Link sure matches without asking
-      </label>
+      <details className="text-sm">
+        <summary className="cursor-pointer text-xs text-gray-400">Automatic actions</summary>
+        <div className="mt-1">
+          {AUTOMATIONS.map(([key, label, hint]) => (
+            <label key={key} className="flex min-h-[44px] items-center gap-3 text-sm text-gray-200">
+              <input type="checkbox" checked={Boolean(automation?.[key])} onChange={(e) => saveAutomation.mutate({ [key]: e.target.checked })} className="h-5 w-5 shrink-0 accent-[var(--accent)]" />
+              <span>{label}<span className="block text-xs text-gray-500">{hint}</span></span>
+            </label>
+          ))}
+        </div>
+      </details>
       <div role="group" aria-label="Show" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 dp-no-native-scrollbar">
         {TABS.map(([key, label]) => (
           <button key={key} type="button" aria-pressed={tab === key} onClick={() => { setTab(key); setLimit(20); }}

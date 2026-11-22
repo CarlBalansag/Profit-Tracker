@@ -6,12 +6,13 @@ import { EmailOrders } from './EmailOrders';
 const mutation = () => ({ mutateAsync: vi.fn().mockResolvedValue({ linked: 2 }), mutate: vi.fn(), isPending: false });
 const m = { accept: mutation(), reject: mutation(), acceptAll: mutation(), dismiss: mutation(), automation: mutation() };
 let data;
+const r = { addExpense: mutation(), addPurchase: mutation(), handled: mutation() };
 const calls = [];
 vi.mock('../../hooks/useApi', () => ({
   useEmailOrders: (opts) => { calls.push(opts); return { data }; },
   useEmailAutomation: () => ({ data: { linkMatches: true } }),
   useEmailOrderMutations: () => m,
-  useEmailRuleMutations: () => ({ addExpense: m.accept }),
+  useEmailRuleMutations: () => r,
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 afterEach(cleanup);
@@ -47,12 +48,32 @@ describe('EmailOrders', () => {
     confirm.mockRestore();
     fireEvent.click(screen.getByRole('button', { name: 'Linked (5)' }));
     expect(calls.at(-1)).toMatchObject({ state: 'linked' });
-    fireEvent.click(screen.getByLabelText('Link sure matches without asking'));
+    fireEvent.click(screen.getByLabelText(/Link sure matches without asking/));
     expect(m.automation.mutate).toHaveBeenCalledWith({ linkMatches: false });
   });
 
   it('hides itself until emails are found', () => {
     const { container } = render(<EmailOrders found={0} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('creates a purchase for an order with no match, and clears a cancellation note', async () => {
+    data = { orders: [{ ...order, id: 'o2', type: 'purchase', status: 'order', attention: 'cancelled', matches: [] }], counts: { unmatched: 1 }, total: 1 };
+    render(<EmailOrders found={1} />);
+    fireEvent.click(screen.getByRole('button', { name: /No match/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create purchase' }));
+    await waitFor(() => expect(r.addPurchase.mutateAsync).toHaveBeenCalledWith('o2'));
+    expect(screen.getByText(/The store cancelled this order/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(r.handled.mutateAsync).toHaveBeenCalledWith('o2'));
+  });
+
+  it('shows every automatic action with its current setting', () => {
+    render(<EmailOrders found={1} />);
+    for (const label of [/Update purchases from shipping emails/, /Fill in return-by dates/, /Create purchases from order emails/, /Cancel purchases the store cancelled/]) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    }
+    fireEvent.click(screen.getByLabelText(/Create purchases from order emails/));
+    expect(m.automation.mutate).toHaveBeenCalledWith({ createPurchases: true });
   });
 });

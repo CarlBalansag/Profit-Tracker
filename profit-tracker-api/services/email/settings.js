@@ -6,8 +6,7 @@ const DEFAULTS = {
   createExpenses: false,    // trusted merchants (E4)
   createPurchases: false,   // order emails with no matching purchase (E5)
   updateShipping: true,     // shipped/delivered and tracking on purchases (E5)
-  updateSales: true,        // sold/paid from marketplace emails (E5)
-  cancellations: true,      // cancelled orders and refunds (E5)
+  cancellations: false,     // cancel purchases when the store cancels the whole order (E5); off: a To-Do asks
   returnReminders: true,    // return windows as To-Do items (E5)
 };
 

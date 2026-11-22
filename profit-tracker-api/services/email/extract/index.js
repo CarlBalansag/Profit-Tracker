@@ -9,7 +9,7 @@ const generic = require('./generic');
 const { fromSchemaOrg } = require('./schemaOrg');
 const { MERCHANTS } = require('./merchants');
 
-const GENERIC_VERSION = 2;
+const GENERIC_VERSION = 3;
 const MAX_SOURCE = 512 * 1024;
 
 // One number per store, so a change to either the shared reader or a store's

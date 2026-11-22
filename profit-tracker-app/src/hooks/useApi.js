@@ -840,5 +840,7 @@ export const useEmailRuleMutations = () => {
     save: useMutation({ mutationFn: (rule) => send('POST', '/api/email/rules', rule), onSuccess: invalidate }),
     remove: useMutation({ mutationFn: (id) => send('DELETE', `/api/email/rules/${id}`), onSuccess: invalidate }),
     addExpense: useMutation({ mutationFn: (orderId) => send('POST', `/api/email/orders/${orderId}/expense`), onSuccess: invalidate }),
+    addPurchase: useMutation({ mutationFn: (orderId) => send('POST', `/api/email/orders/${orderId}/purchase`), onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ['inventory'] }); } }),
+    handled: useMutation({ mutationFn: (orderId) => send('POST', `/api/email/orders/${orderId}/handled`), onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ['todos'] }); } }),
   };
 };

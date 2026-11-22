@@ -270,8 +270,38 @@ function connectionItems(connections) {
 // Email: orders waiting for a yes/no on their match, and mailboxes whose
 // password stopped working. The review item's key follows the newest order,
 // so a dismissed reminder comes back when new orders arrive.
-function emailItems(review, accounts) {
+const STORE_LABEL = { amazon: 'Amazon', walmart: 'Walmart', bestbuy: 'Best Buy', target: 'Target', apple: 'Apple', costco: 'Costco', samsclub: "Sam's Club", homedepot: 'Home Depot', lowes: "Lowe's", gamestop: 'GameStop', nike: 'Nike', ebay: 'eBay', stockx: 'StockX', goat: 'GOAT', paypal: 'PayPal' };
+const storeLabel = (key) => STORE_LABEL[key] || String(key || '').replace(/^custom:/, '');
+
+function emailItems(review, accounts, extra = {}) {
   const out = [];
+  for (const o of extra.attention || []) {
+    const what = o.attention === 'cancelled' ? 'cancelled' : 'refunded or returned';
+    out.push(item({
+      key: `email-${o.attention}:${o.id}`, type: `email_${o.attention}`, group: 'purchases', urgency: 'soon',
+      title: `${storeLabel(o.merchant)} order${o.order_number ? ` ${o.order_number}` : ''} was ${what}`,
+      detail: o.attention === 'cancelled' ? 'Cancel the purchase too, or change its quantity.' : 'Record the refund on the purchase.',
+      amount: o.total != null ? Number(o.total) : null,
+      link: { kind: 'page', to: '/settings', state: { tab: 'email' } },
+    }));
+  }
+  for (const m of extra.taxForms || []) {
+    out.push(item({
+      key: `email-taxform:${m.id}`, type: 'email_tax_form', group: 'bookkeeping', urgency: 'soon',
+      title: `Tax form from ${storeLabel(m.merchant)}`,
+      detail: 'Enter its numbers on Schedule C (1099-K forms).',
+      link: { kind: 'page', to: '/schedule-c' },
+    }));
+  }
+  if (extra.autoToday > 0) {
+    out.push(item({
+      key: `email-today:${extra.today}`, type: 'email_summary', group: 'purchases', urgency: 'info',
+      title: `Email made ${extra.autoToday} ${extra.autoToday === 1 ? 'change' : 'changes'} today`,
+      detail: 'See them, and undo any, in Activity.',
+      link: { kind: 'page', to: '/activity' },
+      actions: ['dismiss'],
+    }));
+  }
   if (review.count > 0) {
     out.push(item({
       key: `email-review:${review.newestId}`, type: 'email_review', group: 'purchases', urgency: 'info',
@@ -679,7 +709,7 @@ function buildTodos(data, today) {
     ...cardItems(data.cards || [], today, data.spendByCard || new Map()),
     ...recurringItems(data.recurring || [], today),
     ...reminderItems(data.reminders || [], today),
-    ...emailItems(data.emailReview || { count: 0 }, data.emailAccounts || []),
+    ...emailItems(data.emailReview || { count: 0 }, data.emailAccounts || [], { ...(data.emailExtra || {}), today }),
   ]);
   return items.sort((a, b) =>
     URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency]
@@ -773,7 +803,7 @@ function clearedThisWeek(sales, states, today) {
 
 async function loadTodoData(prisma, userId, today) {
   const lookback = new Date(toUtc(addDays(today, -365)));
-  const [commitments, connections, sales, inventories, cards, recurring, reminders, emailReviewCount, emailNewest, emailAccounts] = await Promise.all([
+  const [commitments, connections, sales, inventories, cards, recurring, reminders, emailReviewCount, emailNewest, emailAccounts, emailAttention, emailTaxForms, emailAutoToday] = await Promise.all([
     prisma.cashoutCommitment.findMany({
       where: { user_id: userId, status: { in: ['pending', 'active', 'expired', 'closed'] } },
       include: {
@@ -799,6 +829,9 @@ async function loadTodoData(prisma, userId, today) {
     prisma.emailOrder ? prisma.emailOrder.count({ where: { user_id: userId, match_state: 'review' } }) : 0,
     prisma.emailOrder ? prisma.emailOrder.findFirst({ where: { user_id: userId, match_state: 'review' }, orderBy: { created_at: 'desc' }, select: { id: true } }) : null,
     prisma.emailAccount ? prisma.emailAccount.findMany({ where: { user_id: userId }, select: { id: true, email_address: true, status: true, last_error: true } }) : [],
+    prisma.emailOrder ? prisma.emailOrder.findMany({ where: { user_id: userId, attention: { not: null } }, select: { id: true, merchant: true, order_number: true, attention: true, total: true }, take: 50 }) : [],
+    prisma.emailMessage ? prisma.emailMessage.findMany({ where: { user_id: userId, kind: 'tax_form', sent_at: { gte: lookback } }, select: { id: true, merchant: true }, take: 20 }) : [],
+    prisma.activityLog ? prisma.activityLog.count({ where: { user_id: userId, source: 'email', created_at: { gte: new Date(Date.now() - 86400000) } } }) : 0,
   ]);
 
   // Tracked spend this month, only needed when a card's statement is close.
@@ -811,7 +844,8 @@ async function loadTodoData(prisma, userId, today) {
   }
 
   return { commitments, connections, sales, inventories, cards, recurring, reminders, spendByCard,
-    emailReview: { count: emailReviewCount || 0, newestId: emailNewest?.id || null }, emailAccounts: emailAccounts || [] };
+    emailReview: { count: emailReviewCount || 0, newestId: emailNewest?.id || null }, emailAccounts: emailAccounts || [],
+    emailExtra: { attention: emailAttention || [], taxForms: emailTaxForms || [], autoToday: emailAutoToday || 0 } };
 }
 
 async function listTodos(prisma, userId, today) {

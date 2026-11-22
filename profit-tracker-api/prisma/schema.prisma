@@ -1253,6 +1253,10 @@ model EmailOrder {
   items            Json?
   payment_hint     String?
   match_state      String         @default("unmatched") // unmatched | review | linked | dismissed
+  // E5: the last status already applied to the linked records, and what needs
+  // the user (a cancellation or refund to record), shown on To-Do.
+  applied_status   String?
+  attention        String?
   updated_at       DateTime       @updatedAt
   created_at       DateTime       @default(now())
   messages         EmailMessage[]

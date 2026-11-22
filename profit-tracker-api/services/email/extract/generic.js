@@ -92,6 +92,7 @@ function paymentHint(text) {
 
 // Order of checks matters: a "cancelled" email often repeats "order placed".
 const KINDS = [
+  ['tax_form', /\b(1099-?K|1099-?NEC|1099-?MISC)\b|\btax (form|document)s? (is |are )?(now )?(ready|available)\b/i],
   ['cancelled', /\b(cancel+ed|cancel+ation|has been cancel+ed|order was cancel+ed)\b/i],
   ['refund', /\b(refund(ed)?|your refund|credit has been issued)\b/i],
   ['return', /\b(return (received|started|label|request)|we received your return|your return)\b/i],

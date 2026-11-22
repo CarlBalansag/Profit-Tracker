@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Bot, Undo2, History, Info, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Bot, Mail, Undo2, History, Info, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useActivity, useInvalidate } from '../hooks/useApi';
 import { undoActivity } from '../utils/undoToast';
 import { describeActivity } from '../utils/activityText';
@@ -90,6 +90,9 @@ function ActivityRow({ entry, busy, onUndo }) {
           )}
           {entry.source === 'assistant' && (
             <span className="inline-flex items-center gap-1"><span aria-hidden="true">·</span><Bot className="w-3 h-3" /> AI assistant</span>
+          )}
+          {entry.source === 'email' && (
+            <span className="inline-flex items-center gap-1"><span aria-hidden="true">·</span><Mail className="w-3 h-3" /> From email</span>
           )}
         </p>
       </div>

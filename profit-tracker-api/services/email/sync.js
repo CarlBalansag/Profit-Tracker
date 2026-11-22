@@ -16,6 +16,7 @@ const { groupMessages } = require('./orders');
 const { matchOrders } = require('./match');
 const { getSettings } = require('./settings');
 const { applyRules, customMerchant } = require('./rules');
+const { applyOrderUpdates, createMissingPurchases } = require('./automations');
 
 const DOMAINS = SENDERS.flatMap((s) => s.domains);
 const BATCH = 50;
@@ -256,7 +257,9 @@ async function organize(prisma, userId) {
     const settings = await getSettings(prisma, userId);
     const matched = await matchOrders(prisma, userId, [...changed, ...open.map((o) => o.id)], { autoLink: settings.linkMatches });
     const ruled = await applyRules(prisma, userId, { createExpenses: settings.createExpenses });
-    return { ...matched, ...ruled };
+    const purchases = settings.createPurchases ? await createMissingPurchases(prisma, userId) : 0;
+    const updates = await applyOrderUpdates(prisma, userId, settings);
+    return { ...matched, ...ruled, purchasesCreated: purchases, updates };
   } catch (err) {
     console.error(`[email] matching failed for user ${userId}: ${err?.code || err?.name || 'error'}`);
     return null;

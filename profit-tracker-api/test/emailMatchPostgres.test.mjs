@@ -254,4 +254,85 @@ describe('email orders and matching on Postgres', () => {
       expect((await send('PATCH', '/api/expenses/documentation', { ids: [a.id], documentation: 'lost' })).status).toBe(400);
     });
   });
+
+  describe('order updates and purchases from email (E5)', () => {
+    const { listTodos } = require('../services/todos.js');
+    const linkedWalmart = async (extra = {}) => {
+      const row = await purchase({ product_name: 'Pokemon Booster Bundle', order_number: '2000123-45678901', unit_purchase_cost: 29.97, qty_purchased: 2, qty_on_hand: 2, sales_tax: 4.8, receiving_status: 'PURCHASED', ...extra });
+      await email({ merchant: 'walmart', kind: 'order', order_number: '2000123-45678901', total: '64.74', sent_at: new Date('2026-03-02T16:00:00Z') });
+      await sync.organize(prisma, user.id);
+      return row;
+    };
+
+    it('shipping and delivery emails move a linked purchase along once, and fill a blank return-by date', async () => {
+      const row = await linkedWalmart();
+      await email({ merchant: 'walmart', kind: 'shipped', order_number: '2000123-45678901', tracking_numbers: ['1Z999AA10123456784'], sent_at: new Date('2026-03-03T10:00:00Z') });
+      await sync.organize(prisma, user.id);
+      let r = await prisma.inventory.findUnique({ where: { id: row.id } });
+      expect([r.receiving_status, r.tracking_number]).toEqual(['INBOUND', '1Z999AA10123456784']);
+
+      await email({ merchant: 'walmart', kind: 'delivered', order_number: '2000123-45678901', sent_at: new Date('2026-03-05T18:00:00Z') });
+      await sync.organize(prisma, user.id);
+      r = await prisma.inventory.findUnique({ where: { id: row.id } });
+      expect(r.receiving_status).toBe('ON_HAND');
+      expect(r.return_by_date.toISOString().slice(0, 10)).toBe('2026-06-03'); // Walmart: 90 days
+      const logged = await prisma.activityLog.count({ where: { source: 'email' } });
+      await sync.organize(prisma, user.id);
+      expect(await prisma.activityLog.count({ where: { source: 'email' } })).toBe(logged);
+    });
+
+    it('a cancellation asks first by default, and cancels the purchase when allowed', async () => {
+      const row = await linkedWalmart();
+      await email({ merchant: 'walmart', kind: 'cancelled', order_number: '2000123-45678901', sent_at: new Date('2026-03-03T10:00:00Z') });
+      await sync.organize(prisma, user.id);
+      expect((await prisma.inventory.findUnique({ where: { id: row.id } })).cancelled_at).toBe(null);
+      const order = await prisma.emailOrder.findFirst();
+      expect(order.attention).toBe('cancelled');
+      const todos = await listTodos(prisma, user.id, '2026-03-04');
+      expect(todos.items.find((t) => t.key === `email-cancelled:${order.id}`)).toMatchObject({ title: 'Walmart order 2000123-45678901 was cancelled', urgency: 'soon' });
+      expect((await send('POST', `/api/email/orders/${order.id}/handled`)).body).toEqual({ handled: true });
+
+      await prisma.emailOrder.update({ where: { id: order.id }, data: { applied_status: null } });
+      await send('PUT', '/api/email/automation', { cancellations: true });
+      await sync.organize(prisma, user.id);
+      expect((await prisma.inventory.findUnique({ where: { id: row.id } })).cancelled_at).not.toBe(null);
+    });
+
+    it('creates purchases from an order email, one per item with tax and shipping shared', async () => {
+      await prisma.platform.create({ data: { user_id: user.id, name: 'Best Buy', type: 'Vendor' } });
+      await email({ merchant: 'bestbuy', kind: 'order', order_number: 'BBY01-806123456789', total: '330.74', subtotal: '300.00', tax: '24.74', shipping: '6.00', payment_hint: 'Visa 4242',
+        items: [{ name: 'Headphones', quantity: 1, total: '200.00' }, { name: 'Cable', quantity: 2, total: '100.00' }], sent_at: new Date('2026-03-02T16:00:00Z') });
+      await sync.organize(prisma, user.id);
+      const order = await prisma.emailOrder.findFirst();
+      expect(order.match_state).toBe('unmatched');
+      const made = await send('POST', `/api/email/orders/${order.id}/purchase`);
+      expect(made.status).toBe(201);
+      const rows = await prisma.inventory.findMany({ where: { id: { in: made.body.purchase_ids } }, include: { vendor: true }, orderBy: { product_name: 'asc' } });
+      expect(rows.map((r) => [r.product_name, r.qty_purchased, Number(r.unit_purchase_cost_decimal), Number(r.sales_tax_decimal), Number(r.shipping_cost_inbound_decimal), r.vendor?.name, r.payment_method_id === card.id, r.order_number]))
+        .toEqual([['Cable', 2, 50, 8.25, 2, 'Best Buy', true, 'BBY01-806123456789'], ['Headphones', 1, 200, 16.49, 4, 'Best Buy', true, 'BBY01-806123456789']]);
+      expect((await send('POST', `/api/email/orders/${order.id}/purchase`)).status).toBe(409);
+      expect((await prisma.emailOrder.findFirst()).match_state).toBe('linked');
+      // Undo removes both.
+      const entry = await prisma.activityLog.findFirst({ where: { source: 'email', record_type: 'purchase' } });
+      await activity.undoActivity(user.id, entry.id);
+      expect(await prisma.inventory.count({ where: { id: { in: made.body.purchase_ids } } })).toBe(0);
+    });
+
+    it('automatic purchases wait a day and skip cancelled orders', async () => {
+      await send('PUT', '/api/email/automation', { createPurchases: true });
+      await email({ merchant: 'target', kind: 'order', order_number: '912000000003', total: '20.00', sent_at: new Date() });
+      await email({ merchant: 'target', kind: 'order', order_number: '912000000004', total: '30.00', sent_at: new Date(Date.now() - 3 * 86400000) });
+      await email({ merchant: 'target', kind: 'cancelled', order_number: '912000000005', total: '40.00', sent_at: new Date(Date.now() - 3 * 86400000) });
+      expect(await sync.organize(prisma, user.id)).toMatchObject({ purchasesCreated: 1 });
+      expect((await prisma.inventory.findMany()).map((r) => r.product_name)).toEqual(['Target order 912000000004']);
+    });
+
+    it('tax form emails become To-Do items and stay out of orders', async () => {
+      const m = await email({ merchant: 'paypal', kind: 'tax_form', sent_at: new Date('2026-01-31') });
+      await sync.organize(prisma, user.id);
+      expect(await prisma.emailOrder.count()).toBe(0);
+      const todos = await listTodos(prisma, user.id, '2026-02-01');
+      expect(todos.items.find((t) => t.key === `email-taxform:${m.id}`)).toMatchObject({ title: 'Tax form from PayPal', group: 'bookkeeping' });
+    });
+  });
 });

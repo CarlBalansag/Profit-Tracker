@@ -57,7 +57,7 @@ async function recompute(prisma, orderId) {
 // the ids of orders that changed (for matching).
 async function groupMessages(prisma, userId) {
   const loose = await prisma.emailMessage.findMany({
-    where: { user_id: userId, status: 'extracted', order_id: null },
+    where: { user_id: userId, status: 'extracted', order_id: null, NOT: { kind: 'tax_form' } },
     orderBy: { sent_at: 'asc' },
     take: 1000,
   });
