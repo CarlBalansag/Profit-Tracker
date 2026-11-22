@@ -7,9 +7,11 @@ import { CashoutImport } from './CashoutImport';
 const preview = { mutateAsync: vi.fn(), reset: vi.fn(), isPending: false };
 const commit = { mutateAsync: vi.fn(), isPending: false };
 let connections;
+let providers;
 
 vi.mock('../../hooks/useApi', () => ({
   useCashoutConnections: () => ({ data: connections }),
+  useCashoutProviders: () => ({ data: providers }),
   usePlatforms: () => ({ data: [
     { id: 'eb-group', name: 'ElectronicsBuyer', type: 'Cashout' },
     { id: 'p4d-group', name: 'Points4Days', type: 'Cashout' },
@@ -50,6 +52,7 @@ describe('CashoutImport', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     connections = [];
+    providers = [{ id: 'eb' }, { id: 'la', supportsImportPull: true }, { id: 'p4d', supportsImportPull: true }];
     preview.mutateAsync.mockResolvedValue(RESULT);
     commit.mutateAsync.mockResolvedValue({ created: 2, units: 3, costNeeded: 1, skipped: 0 });
   });
@@ -117,6 +120,15 @@ describe('CashoutImport', () => {
     });
     expect(preview.mutateAsync).toHaveBeenCalledWith({ connectionId: 'conn-p4d', from: '2026-10-01', to: '2026-11-01' });
     expect(screen.getByLabelText('Sales go to')).toHaveValue('p4d-group');
+  });
+
+  it('offers only file upload while the server cannot pull that cashout', () => {
+    connections = [{ id: 'conn-p4d', provider: 'p4d', platformId: 'p4d-group' }];
+    providers = [{ id: 'p4d', supportsImportPull: false }];
+    render(<CashoutImport />);
+    fireEvent.click(screen.getByRole('radio', { name: /P4D/ }));
+    expect(screen.queryByText('Pull with saved login')).not.toBeInTheDocument();
+    expect(screen.getByText('Choose P4D CSV')).toBeInTheDocument();
   });
 
   it('offers only file upload for EB, even when EB is connected', () => {

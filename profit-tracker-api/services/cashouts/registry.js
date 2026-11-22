@@ -21,6 +21,9 @@ function listAvailableCashouts() {
     credentialType: adapter.credentialType || 'api_key',
     // Whether Log Purchase can commit through this cashout.
     supportsCommits: typeof adapter.createCommit === 'function',
+    // Whether Settings > Data > Import from cashouts can pull its received
+    // items report with the saved login (otherwise: upload the CSV).
+    supportsImportPull: typeof adapter.fetchReceivedItems === 'function',
   }));
 }
 

@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Download, FileUp, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { useCashoutConnections, useCashoutImport, usePaymentMethods, usePlatforms } from '../../hooks/useApi';
+import { useCashoutConnections, useCashoutImport, useCashoutProviders, usePaymentMethods, usePlatforms } from '../../hooks/useApi';
 import { useMatchMedia } from '../../hooks/useMatchMedia';
 
 // Settings > Data > Import from cashouts. Brings items already sold to a
@@ -57,6 +57,7 @@ const labelClass = 'block text-xs text-gray-400 mb-1';
 
 export function CashoutImport() {
   const { data: connections = [] } = useCashoutConnections();
+  const { data: providers = [] } = useCashoutProviders();
   const { data: platforms = [] } = usePlatforms();
   const { data: paymentMethods = [] } = usePaymentMethods();
   const { preview, commit } = useCashoutImport();
@@ -79,8 +80,10 @@ export function CashoutImport() {
 
   const sourceInfo = SOURCES.find((s) => s.id === source);
   const connection = connections.find((c) => c.provider === source) || null;
-  // Only the parsefile cashouts can be pulled with the saved login.
-  const canPull = Boolean(connection) && source !== 'eb';
+  // Pulling with the saved login works only where the server says it can.
+  const pullable = (id) => connections.some((c) => c.provider === id)
+    && providers.some((p) => p.id === id && p.supportsImportPull);
+  const canPull = pullable(source);
   const cashouts = platforms.filter((p) => p.type === 'Cashout');
   const vendors = platforms.filter((p) => p.type === 'Vendor');
 
@@ -94,7 +97,7 @@ export function CashoutImport() {
 
   const pickSource = (id) => {
     setSource(id);
-    setMode(id !== 'eb' && connections.some((c) => c.provider === id) ? 'pull' : 'file');
+    setMode(pullable(id) ? 'pull' : 'file');
     setDone(null);
     reset();
   };
