@@ -8,6 +8,7 @@ const PANEL = 'rounded-xl border border-gray-800 bg-[#12121A] p-5 sm:p-6 space-y
 const AUTOMATIONS = [
   ['linkMatches', 'Link sure matches without asking', 'Fills blank order and tracking numbers.'],
   ['updateShipping', 'Update purchases from shipping emails', 'Adds tracking and marks them delivered.'],
+  ['cashoutPayouts', 'Mark cash-out sales paid from receipts', 'Paid to your cash-out balance. Adds tracking and serial numbers.'],
   ['returnReminders', 'Fill in return-by dates', "From the store's usual return window."],
   ['createPurchases', 'Create purchases from order emails', 'For orders still unmatched a day later.'],
   ['cancellations', 'Cancel purchases the store cancelled', 'Off: you get a To-Do instead.'],
@@ -16,7 +17,7 @@ const TABS = [['review', 'To check'], ['linked', 'Linked'], ['unmatched', 'No ma
 const MERCHANT = {
   amazon: 'Amazon', walmart: 'Walmart', bestbuy: 'Best Buy', target: 'Target', apple: 'Apple', costco: 'Costco',
   samsclub: "Sam's Club", homedepot: 'Home Depot', lowes: "Lowe's", gamestop: 'GameStop', nike: 'Nike', ebay: 'eBay',
-  stockx: 'StockX', goat: 'GOAT', paypal: 'PayPal', pirateship: 'Pirate Ship',
+  stockx: 'StockX', goat: 'GOAT', paypal: 'PayPal', pirateship: 'Pirate Ship', points4days: 'Points4Days',
 };
 const STATUS = { order: 'Ordered', receipt: 'Receipt', sale: 'Sold', shipped: 'Shipped', delivered: 'Delivered', pickup: 'Ready for pickup', cancelled: 'Cancelled', refund: 'Refunded', return: 'Returned', payout: 'Paid out' };
 const RECORD = { purchase: 'purchase', sale: 'sale', expense: 'expense' };

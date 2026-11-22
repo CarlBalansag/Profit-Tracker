@@ -8,6 +8,7 @@ const DEFAULTS = {
   updateShipping: true,     // shipped/delivered and tracking on purchases (E5)
   cancellations: false,     // cancel purchases when the store cancels the whole order (E5); off: a To-Do asks
   returnReminders: true,    // return windows as To-Do items (E5)
+  cashoutPayouts: true,     // cash-out receipts mark their sales paid (to the cash-out balance)
 };
 
 function parse(raw) {

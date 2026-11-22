@@ -99,6 +99,33 @@ describe('stores in your email', () => {
   });
 });
 
+describe('cash-out receipts', () => {
+  const { readCashoutReceipt } = require('../services/email/extract/cashoutReceipt.js');
+  it('reads each item with its UPC, tracking and serials, and skips the customer block', () => {
+    const r = readCashoutReceipt([
+      'CUSTOMER ID: 9146', 'Sample Name', '1 Example St', 'TITLE  UPC  QTY  PRICE  COMMISION  TOTAL',
+      '1  ACME-WIDGET [W-1]  3  $1,154.99  $6.01  $3,483.00', '887276843711', '2  UPS TRACKING #: 1Z999AA10123456784', '3  SERIALS: AB12; CD34, EF56',
+      '4  OTHER ITEM  012345678905  1  $10.00  $0.00  $10.00', 'TOTAL  4  $6.01  $3,493.00', 'Created: 1/5/2026 07:52pm',
+    ].join('\n'));
+    expect(r).toEqual({
+      items: [
+        { name: 'ACME-WIDGET [W-1]', upc: '887276843711', quantity: 3, unit_price: '1154.99', commission: '6.01', unit_payout: '1161.00', total: '3483.00', tracking: '1Z999AA10123456784', serials: ['AB12', 'CD34', 'EF56'] },
+        { name: 'OTHER ITEM', upc: '012345678905', quantity: 1, unit_price: '10.00', commission: '0.00', unit_payout: '10.00', total: '10.00', tracking: null, serials: [] },
+      ],
+      total: '3493.00', tracking_numbers: ['1Z999AA10123456784'], receipt_date: '2026-01-05',
+    });
+    expect(JSON.stringify(r)).not.toMatch(/Sample Name|Example St|9146/);
+    expect(readCashoutReceipt('Thank you for your business.')).toBe(null);
+  });
+  it('pairs each line with the sale it pays for, not a sale on another marketplace', () => {
+    const { pairCashoutLines } = require('../services/email/match.js');
+    const order = { merchant: 'points4days', first_seen: new Date('2026-11-20'), items: [{ name: 'SAMSUNG 990 EVO 1TB', quantity: 3, unit_payout: '161.00', total: '483.00' }] };
+    const sale = (id, platform, price, quantity = 3) => ({ id, quantity, unit_price: price, sale_date: new Date('2026-11-18'), platform: { name: platform }, inventory: { product_name: 'Samsung SSD 990 EVO Plus 1TB' } });
+    const { pairs } = pairCashoutLines(order, [sale('ebay', 'eBay', 161), sale('p4d', 'POINTS4DAYS', 161), sale('cheap', 'POINTS4DAYS', 120)]);
+    expect(pairs.map((p) => [p.sale.id, p.score])).toEqual([['p4d', 80]]);
+  });
+});
+
 describe('robustness', () => {
   it('handles a plain-text email, bad JSON-LD and a huge body', async () => {
     const plain = await read({ merchant: 'walmart', raw: mime({ from: 'help@walmart.com', subject: 'Your order has shipped', text: 'Order number: 2000123-45678901\nTracking number: 1Z999AA10123456784' }) });

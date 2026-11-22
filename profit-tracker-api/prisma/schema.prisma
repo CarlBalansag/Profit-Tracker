@@ -1176,6 +1176,10 @@ model EmailFolderCursor {
   folder       String
   uid_validity String?
   last_uid     Int          @default(0)
+  // Sender domains already searched up to last_uid. A sender added later
+  // (a new built-in store) is searched once over the whole window. Empty on
+  // cursors from before this was kept: every sender is searched once.
+  domains      String[]     @default([])
   updated_at   DateTime     @updatedAt
 
   @@unique([account_id, folder])

@@ -463,6 +463,80 @@ describe('email connections on Postgres', () => {
     router._resetLimits();
   });
 
+  it('marks cash-out sales paid from a Points4Days receipt, line by line, with Undo', async () => {
+    // Synthetic receipt: two items, the first with its UPC, tracking and serials on their own rows.
+    const pdf = makePdf([
+      'POINTS4DAYS.COM', 'RECEIPT', 'TITLE  UPC  QTY  PRICE  COMMISION  TOTAL',
+      '1  ACME-WIDGET-PRO---BLUE [WP-100]  2  $95.00  $5.00  $200.00', '012345678905',
+      '2  TBA TRACKING #: TBA000111222333', '3  SERIALS: SN100A; SN100B',
+      '4  GADGET-MAX 64GB  887276000001  1  $50.00  $0.00  $50.00',
+      'TOTAL  3  $5.00  $250.00', 'Created: 11/20/2026 07:52pm',
+    ]);
+    const subject = 'Enclosed is your RECEIPT - ID 211338 from POINTS4DAYS.';
+    const receipt = { uid: nextUid++, from: 'support@points4days.com', subject, date: new Date('2026-11-20T19:52:00Z'), messageId: '<p4d1@points4days.com>',
+      raw: mimeWithPdf({ from: 'POINTS4DAYS <support@points4days.com>', subject, html: '<p>Your balance has been updated in your account.</p>', pdf, filename: 'receipts (id 211338).pdf', date: 'Fri, 20 Nov 2026 19:52:00 +0000', id: '<p4d1@points4days.com>' }) };
+    addMail('INBOX', 'auto-confirm@amazon.com', 'Your Amazon.com order', '2026-11-10');
+
+    const p4d = await prisma.platform.create({ data: { user_id: user.id, name: 'POINTS4DAYS', type: 'Cashout' } });
+    const ebay = await prisma.platform.create({ data: { user_id: user.id, name: 'eBay', type: 'Marketplace' } });
+    const sell = async (name, quantity, price, platform, extra = {}) => {
+      const inv = await prisma.inventory.create({ data: { user_id: user.id, product_name: name, purchase_date: new Date('2026-11-12'), unit_purchase_cost: 80, qty_purchased: quantity, qty_on_hand: 0 } });
+      return prisma.sales.create({ data: { inventory_id: inv.id, platform_id: platform.id, quantity, unit_price: price, unit_price_decimal: price, sale_date: new Date('2026-11-15T12:00:00Z'), workflow_type: 'CASHOUT', workflow_status: 'WAITING_FOR_PAYMENT', ...extra } });
+    };
+    const widget = await sell('Acme Widget Pro Blue', 2, 100, p4d);
+    const gadget = await sell('Gadget Max 64GB', 1, 50, p4d, { notes: 'Committed on P4D' });
+    const elsewhere = await sell('Acme Widget Pro Blue', 2, 100, ebay, { workflow_type: 'STANDARD_MARKETPLACE' });
+
+    // Connected before Points4Days was on the list: its cursor knows older senders only.
+    const { body } = await send('POST', '/api/email/accounts', connectBody());
+    await waitIdle(body.id);
+    mail.INBOX.messages.push(receipt);
+    mail.INBOX.messages.sort((a, b) => a.uid - b.uid);
+    addMail('INBOX', 'auto-confirm@amazon.com', 'Your Amazon.com order', '2026-11-21');
+    const cursor = await prisma.emailFolderCursor.findFirst({ where: { account_id: body.id, folder: 'INBOX' } });
+    expect(cursor.domains).toContain('points4days.com');
+    await prisma.emailMessage.deleteMany({ where: { merchant: 'points4days' } });
+    await prisma.emailFolderCursor.update({ where: { id: cursor.id }, data: { last_uid: receipt.uid + 0, domains: cursor.domains.filter((d) => d !== 'points4days.com') } });
+    await sync.syncAccount(body.id, { open: fakeOpen, resolve });
+
+    const message = await prisma.emailMessage.findFirst({ where: { merchant: 'points4days' } });
+    expect([message.status, message.kind, message.order_number, Number(message.total)]).toEqual(['extracted', 'payout', '211338', 250]);
+    expect(message.items).toEqual([
+      expect.objectContaining({ name: 'ACME-WIDGET-PRO BLUE [WP-100]', upc: '012345678905', quantity: 2, unit_payout: '100.00', total: '200.00', tracking: 'TBA000111222333', serials: ['SN100A', 'SN100B'] }),
+      expect.objectContaining({ name: 'GADGET-MAX 64GB', upc: '887276000001', quantity: 1, unit_payout: '50.00', total: '50.00' }),
+    ]);
+    expect(JSON.stringify(message)).not.toMatch(/balance has been updated/); // the body itself is not kept
+    expect((await prisma.emailFolderCursor.findUnique({ where: { id: cursor.id } })).domains).toContain('points4days.com');
+
+    const order = await prisma.emailOrder.findFirst({ where: { merchant: 'points4days' }, include: { matches: true } });
+    expect([order.type, order.status, order.match_state]).toEqual(['sale', 'payout', 'linked']);
+    expect(order.matches[0].record_ids).toEqual([widget.id, gadget.id].sort());
+
+    const paid = await prisma.sales.findUnique({ where: { id: widget.id } });
+    expect([paid.workflow_status, Number(paid.paid_amount), paid.payout_account, paid.paid_reference, paid.tracking_number])
+      .toEqual(['PAID', 200, 'Points4Days balance', 'Points4Days receipt 211338', 'TBA000111222333']);
+    expect(paid.notes).toBe('Serials (Points4Days receipt 211338): SN100A, SN100B');
+    const second = await prisma.sales.findUnique({ where: { id: gadget.id } });
+    expect([second.workflow_status, Number(second.paid_amount), second.notes]).toEqual(['PAID', 50, 'Committed on P4D']);
+    expect((await prisma.sales.findUnique({ where: { id: elsewhere.id } })).workflow_status).toBe('WAITING_FOR_PAYMENT');
+
+    // Applied once: another sync changes nothing.
+    await sync.syncAccount(body.id, { open: fakeOpen, resolve });
+    const entries = await prisma.activityLog.findMany({ where: { user_id: user.id, source: 'email', record_type: 'sale' }, orderBy: { created_at: 'asc' } });
+    expect(entries).toHaveLength(2);
+
+    // Undo the payment: both sales wait for payment again.
+    const { undoActivity } = require('../services/activityLog.js');
+    await undoActivity(user.id, entries[1].id);
+    const undone = await prisma.sales.findMany({ where: { id: { in: [widget.id, gadget.id] } } });
+    expect(undone.map((s) => [s.workflow_status, s.paid_at])).toEqual([['WAITING_FOR_PAYMENT', null], ['WAITING_FOR_PAYMENT', null]]);
+
+    await prisma.activityLog.deleteMany({ where: { user_id: user.id } });
+    await prisma.sales.deleteMany({ where: { platform_id: { in: [p4d.id, ebay.id] } } });
+    await prisma.inventory.deleteMany({ where: { user_id: user.id } });
+    await prisma.platform.deleteMany({ where: { id: { in: [p4d.id, ebay.id] } } });
+  });
+
   it('protects the cron endpoint with its own secret', () => {
     expect(sync.verifySyncSecret('Bearer cron-secret-qa').ok).toBe(true);
     expect(sync.verifySyncSecret('Bearer wrong').ok).toBe(false);

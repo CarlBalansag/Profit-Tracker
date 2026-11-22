@@ -8,7 +8,8 @@
 const statusTransitions = require('../statusTransitions');
 const activityLog = require('../activityLog');
 const { trackChange } = activityLog;
-const { carrierFor, nameMatches } = require('./match');
+const { carrierFor, nameMatches, pairCashoutLines, CASHOUTS } = require('./match');
+const { markSalesPaid, needsPayoutBackfill } = require('../markSalesPaid');
 const { labelFor } = require('./rules');
 
 // Days a store usually allows for returns, when the user hasn't set one on
@@ -90,6 +91,74 @@ async function applyOrderUpdates(prisma, userId, settings) {
   return summary;
 }
 
+// Cash-out receipts (Points4Days): the items were scanned in and the user's
+// balance there was credited. Each linked sale gets the receipt's tracking
+// number and serials (blank fields only), then is marked paid to the
+// cash-out balance, as two Activity entries with Undo.
+async function applyCashoutReceipt(prisma, userId, order, saleIds) {
+  const sales = await prisma.sales.findMany({
+    where: { id: { in: saleIds }, inventory: { user_id: userId } },
+    include: { platform: { select: { name: true, type: true } }, inventory: { select: { product_name: true, tracking_number: true } } },
+  });
+  if (!sales.length) return { paid: 0 };
+  const label = labelFor(order.merchant);
+  const receipt = order.order_number ? `receipt ${order.order_number}` : 'receipt';
+  // Every linked sale pays one line; with no lines read, the receipt pays them all.
+  const { lines, pairs } = pairCashoutLines(order, sales, { minScore: -Infinity });
+  const paysFor = new Map(pairs.map((p) => [p.sale.id, p.line]));
+
+  const edits = sales.map((sale) => {
+    const line = paysFor.get(sale.id);
+    if (!line) return null;
+    const data = {};
+    if (!sale.tracking_number && line.tracking) { data.tracking_number = line.tracking; data.carrier = sale.carrier || carrierFor(line.tracking); }
+    const serials = (line.serials || []).filter((s) => !String(sale.notes || '').includes(s));
+    if (serials.length) data.notes = `${sale.notes ? `${sale.notes}\n` : ''}Serials (${label} ${receipt}): ${serials.join(', ')}`;
+    return Object.keys(data).length ? { id: sale.id, data } : null;
+  }).filter(Boolean);
+  if (edits.length) {
+    await prisma.$transaction((tx) => trackChange(tx, userId, {
+      action: 'edit', recordType: 'sale', source: 'email', recordId: edits[0].id,
+      refs: async () => ({ sales: edits.map((e) => e.id) }),
+    }, async () => {
+      for (const e of edits) await tx.sales.update({ where: { id: e.id }, data: e.data });
+      return null;
+    }));
+  }
+
+  const payable = sales.filter((s) => !s.paid_at && (statusTransitions.isActionAllowed(s, 'sale', 'mark_paid') || needsPayoutBackfill(s)));
+  if (!payable.length) return { paid: 0 };
+  const amount = lines.length
+    ? payable.reduce((t, s) => t + Number(paysFor.get(s.id)?.total || 0), 0)
+    : Number(order.total || 0);
+  if (!amount) return { paid: 0 };
+  await markSalesPaid({
+    client: prisma, userId, saleIds: payable.map((s) => s.id), source: 'email',
+    payoutDate: order.last_seen || new Date(), payoutAmount: amount.toFixed(2),
+    payoutAccount: `${label} balance`, payoutReference: `${label} ${receipt}`,
+  });
+  return { paid: payable.length };
+}
+
+async function applyCashoutReceipts(prisma, userId, settings) {
+  if (!settings.cashoutPayouts) return 0;
+  const orders = await prisma.emailOrder.findMany({
+    where: { user_id: userId, match_state: 'linked', type: 'sale', merchant: { in: [...CASHOUTS] }, status: 'payout' },
+    include: { matches: { where: { state: 'linked', record_type: 'sale' } } },
+    take: 200,
+  });
+  let paid = 0;
+  for (const order of orders.filter((o) => o.applied_status !== o.status)) {
+    try {
+      paid += (await applyCashoutReceipt(prisma, userId, order, order.matches.flatMap((m) => m.record_ids))).paid;
+    } catch (err) {
+      console.error(`[email] cash-out receipt ${order.id} skipped: ${err?.status || err?.code || 'error'}`);
+    }
+    await prisma.emailOrder.update({ where: { id: order.id }, data: { applied_status: order.status } });
+  }
+  return paid;
+}
+
 const money = (v) => (v == null ? 0 : Number(v));
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -167,4 +236,4 @@ async function createMissingPurchases(prisma, userId) {
   return created;
 }
 
-module.exports = { applyOrderUpdates, createPurchasesFromOrder, createMissingPurchases, RETURN_DAYS };
+module.exports = { applyOrderUpdates, applyCashoutReceipt, applyCashoutReceipts, createPurchasesFromOrder, createMissingPurchases, RETURN_DAYS };

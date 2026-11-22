@@ -13,6 +13,7 @@ const MERCHANT = {
   amazon: 'Amazon', walmart: 'Walmart', bestbuy: 'Best Buy', target: 'Target', apple: 'Apple', costco: 'Costco',
   samsclub: "Sam's Club", homedepot: 'Home Depot', lowes: "Lowe's", gamestop: 'GameStop', nike: 'Nike', ebay: 'eBay',
   stockx: 'StockX', goat: 'GOAT', paypal: 'PayPal', pirateship: 'Pirate Ship', ups: 'UPS', fedex: 'FedEx', usps: 'USPS',
+  points4days: 'Points4Days',
 };
 const usd = (v) => (v == null ? null : Number(v).toLocaleString(undefined, { style: 'currency', currency: 'USD' }));
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '');

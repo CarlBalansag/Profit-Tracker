@@ -99,6 +99,14 @@ function extractEmail({ merchant, subject = '', html = '', text = '' }) {
   const fromTemplate = !fromText.length && template.items ? template.items(subject, text) : [];
   set('items', fromTemplate, CONF.weak);
 
+  // A store's own reader for its receipt layout (cash-out receipts).
+  const own = template.read ? template.read(subject, text) : null;
+  if (own) {
+    set('items', own.items, CONF.template);
+    set('total', own.total, CONF.template);
+    sources.push(`${merchant}@${template.version}`);
+  }
+
   // Tracking and card
   const tracking = [...new Set([...schema.tracking, ...generic.trackingNumbers(`${subject}\n${text}`)])].slice(0, 5);
   set('tracking_numbers', tracking, schema.tracking.length ? CONF.schema : CONF.template);

@@ -43,16 +43,17 @@ function needsPayoutBackfill(sale) {
 const isPayable = (sale) => statusTransitions.isActionAllowed(sale, 'sale', 'mark_paid') || needsPayoutBackfill(sale);
 
 // payoutDate: Date. payoutAmount: string|number. payoutAccount/payoutReference: string|null.
-// source: who made the change, for the Activity log ('web' | 'assistant').
+// source: who made the change, for the Activity log ('web' | 'assistant' | 'email').
+// client: the Prisma client to use (the email sync passes its own).
 // Returns { sales, activity }: the updated rows and the one Activity entry
 // that covers the whole deposit (undoing it un-pays every sale it paid).
-async function markSalesPaid({ userId, saleIds, payoutDate, payoutAmount, payoutAccount, payoutReference, source = 'web' }) {
+async function markSalesPaid({ userId, saleIds, payoutDate, payoutAmount, payoutAccount, payoutReference, source = 'web', client = prisma }) {
   if (!Array.isArray(saleIds) || saleIds.length === 0) throw requestError(400, 'sale_ids must be a non-empty array');
   const uniqueIds = [...new Set(saleIds)];
   const deposit = decimal(payoutAmount);
   if (deposit.isNegative()) throw requestError(400, 'payout_amount cannot be negative');
 
-  return prisma.$transaction(async (tx) => {
+  return client.$transaction(async (tx) => {
     const sales = await tx.sales.findMany({
       where: { id: { in: uniqueIds } },
       include: { inventory: true },

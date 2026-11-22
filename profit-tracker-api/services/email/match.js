@@ -5,6 +5,9 @@
 // Score 0-100 from weighted signals. 70+ is "sure" (linked automatically when
 // the user allows it), 40-69 goes to the review list, below 40 is not shown.
 const { trackChange } = require('../activityLog');
+const { SENDERS } = require('./config');
+
+const CASHOUTS = new Set(SENDERS.filter((s) => s.cashout).map((s) => s.key));
 
 const HIGH = 70;
 const MEDIUM = 40;
@@ -14,7 +17,7 @@ const MERCHANT_NAMES = {
   amazon: ['amazon'], walmart: ['walmart'], bestbuy: ['best buy', 'bestbuy'], target: ['target'], apple: ['apple'],
   costco: ['costco'], samsclub: ["sam's club", 'sams club', 'samsclub'], homedepot: ['home depot', 'homedepot'],
   lowes: ["lowe's", 'lowes'], gamestop: ['gamestop'], nike: ['nike'], ebay: ['ebay'], stockx: ['stockx'], goat: ['goat'],
-  paypal: ['paypal'], pirateship: ['pirate ship', 'pirateship'],
+  paypal: ['paypal'], pirateship: ['pirate ship', 'pirateship'], points4days: ['points4days', 'points 4 days', 'p4d'],
 };
 const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9' ]/g, ' ').replace(/\s+/g, ' ').trim();
 const normOrder = (s) => String(s || '').toUpperCase().replace(/[\s#]/g, '');
@@ -108,6 +111,89 @@ function scoreSale(order, sale) {
   return finish(reasons);
 }
 
+// Cash-out receipts: one line per item scanned in, each paid for one sale.
+// line: { name, quantity, unit_payout, total, tracking }.
+function scoreCashoutLine(order, line, sale) {
+  const reasons = [];
+  const add = (code, text, points) => reasons.push({ code, text, points });
+  const tracking = normOrder(line.tracking);
+  const saleTracking = [sale.tracking_number, sale.inventory?.tracking_number].filter(Boolean).map(normOrder);
+  if (tracking && saleTracking.includes(tracking)) add('tracking', 'Same tracking number', 50);
+  const qty = Number(line.quantity) || null;
+  if (qty && sale.quantity === qty) add('quantity', 'Same quantity', 10);
+  else if (qty) add('quantity_conflict', `${sale.quantity} sold, ${qty} paid`, -30);
+  const unit = Number(line.unit_payout ?? line.unit_price) || null;
+  const saleUnit = num(sale.unit_price_decimal, sale.unit_price);
+  if (unit && Math.abs(cents(saleUnit) - cents(unit)) <= 1) add('price', 'Same price per unit', 30);
+  else if (unit && Math.abs(saleUnit - unit) <= unit * 0.03) add('price_close', 'Price within 3%', 10);
+  // Cash-out titles are SKU-like ("IPAD-11-128GB-SILVER"): one shared word counts a little.
+  const overlap = itemOverlap([line], [sale.inventory?.product_name]);
+  if (overlap >= 0.5) add('items', 'Item name matches', 15);
+  else if (overlap > 0) add('items_some', 'Item names share a word', 8);
+  const platform = nameMatches(order.merchant, sale.platform?.name);
+  if (platform === true) add('store', 'Same cash-out', 15);
+  if (platform === false) add('store_conflict', 'Sold somewhere else', -40);
+  if (order.first_seen && sale.sale_date) {
+    const days = (order.first_seen - sale.sale_date) / DAY;
+    if (days >= -1.5 && days <= 1.5) add('date', 'Same day', 10);
+    else if (days > 1.5 && days <= 45) add('date', `Sold ${Math.round(days)} days before`, 10);
+    else if (days < -1.5) add('date_far', 'Sold after the receipt', -30);
+    else add('date_far', `${Math.round(days)} days apart`, -10);
+  }
+  return finish(reasons);
+}
+
+const receiptLines = (order) => (Array.isArray(order.items) ? order.items.filter((i) => i && Number(i.quantity) > 0) : []);
+
+// Pairs each receipt line with one sale, best pairs first; a sale pays one line.
+function pairCashoutLines(order, sales, { minScore = MEDIUM } = {}) {
+  const lines = receiptLines(order);
+  const all = [];
+  lines.forEach((line, index) => {
+    for (const sale of sales) all.push({ index, line, sale, ...scoreCashoutLine(order, line, sale) });
+  });
+  all.sort((a, b) => b.score - a.score);
+  const usedLines = new Set();
+  const usedSales = new Set();
+  const pairs = [];
+  for (const p of all) {
+    if (p.score < minScore || usedLines.has(p.index) || usedSales.has(p.sale.id)) continue;
+    usedLines.add(p.index);
+    usedSales.add(p.sale.id);
+    pairs.push(p);
+  }
+  return { lines, pairs: pairs.sort((a, b) => a.index - b.index) };
+}
+
+async function cashoutCandidates(prisma, userId, order) {
+  const center = order.first_seen || new Date();
+  const sales = await prisma.sales.findMany({
+    where: {
+      inventory: { user_id: userId },
+      paid_at: null,
+      OR: [
+        { platform: { type: 'Cashout' }, sale_date: { gte: new Date(center.getTime() - 60 * DAY), lte: new Date(center.getTime() + 2 * DAY) } },
+        ...(order.tracking_numbers.length ? [{ tracking_number: { in: order.tracking_numbers } }, { inventory: { tracking_number: { in: order.tracking_numbers } } }] : []),
+      ],
+    },
+    include: { platform: { select: { name: true, type: true } }, inventory: { select: { product_name: true, tracking_number: true } } },
+    take: 300,
+  });
+  const lines = receiptLines(order);
+  if (lines.length === 1) {
+    // One item: the best few sales, each its own suggestion.
+    return sales.map((s) => ({ record_type: 'sale', rows: [s], ...scoreCashoutLine(order, lines[0], s) }));
+  }
+  // Several items: one suggestion that pays a sale for every line.
+  const { pairs } = pairCashoutLines(order, sales);
+  if (!lines.length || pairs.length !== lines.length) return [];
+  const weakest = pairs.reduce((low, p) => (p.score < low.score ? p : low));
+  return [{
+    record_type: 'sale', rows: pairs.map((p) => p.sale), score: weakest.score,
+    reasons: [{ code: 'all_items', text: `All ${lines.length} items matched a sale`, points: 0 }, ...weakest.reasons],
+  }];
+}
+
 function scoreExpense(order, expense) {
   const reasons = [];
   const add = (code, text, points) => reasons.push({ code, text, points });
@@ -153,6 +239,7 @@ async function candidatesFor(prisma, userId, order) {
     }
     return [...sets.values()].map((set) => ({ record_type: 'purchase', rows: set, ...scorePurchases(order, set) }));
   }
+  if (order.type === 'sale' && CASHOUTS.has(order.merchant)) return cashoutCandidates(prisma, userId, order);
   if (order.type === 'sale') {
     const sales = await prisma.sales.findMany({
       where: { inventory: { user_id: userId }, OR: [{ sale_date: { gte: from, lte: to } }, ...(order.tracking_numbers.length ? [{ tracking_number: { in: order.tracking_numbers } }] : [])] },
@@ -195,6 +282,8 @@ async function fillBlanks(prisma, userId, order, match) {
       return null;
     }));
   }
+  // Cash-out receipts fill their sales line by line when they are applied.
+  if (match.record_type === 'sale' && CASHOUTS.has(order.merchant)) return null;
   if (match.record_type === 'sale') {
     const tracking = order.tracking_numbers[0];
     if (!tracking) return null;
@@ -269,4 +358,4 @@ async function rejectMatch(prisma, userId, matchId) {
   return match;
 }
 
-module.exports = { matchOrders, linkMatch, rejectMatch, scorePurchases, scoreSale, scoreExpense, nameMatches, itemOverlap, HIGH, MEDIUM, carrierFor };
+module.exports = { matchOrders, linkMatch, rejectMatch, scorePurchases, scoreSale, scoreExpense, scoreCashoutLine, pairCashoutLines, CASHOUTS, nameMatches, itemOverlap, HIGH, MEDIUM, carrierFor };

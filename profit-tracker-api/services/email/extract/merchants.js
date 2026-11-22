@@ -17,7 +17,17 @@ function amazonItemFromSubject(subject) {
   return [{ name: m[1].replace(/\.\.\.$|…$/, '').trim(), quantity: null, total: null }];
 }
 
+const { readCashoutReceipt } = require('./cashoutReceipt');
+
 const MERCHANTS = {
+  // Cash-out receipts ("Enclosed is your RECEIPT - ID 211338"): the PDF lists
+  // what was scanned in and what the balance was credited.
+  points4days: {
+    version: 1,
+    orderNumber: [/RECEIPT\s*-\s*ID\s*(\d{3,})/i, /receipts?\s*\(id\s*(\d{3,})\)/i],
+    kind: subjectKinds([['payout', /receipt/i]]),
+    read: (subject, text) => readCashoutReceipt(text),
+  },
   amazon: {
     version: 1,
     orderNumber: [/\b(\d{3}-\d{7}-\d{7})\b/],

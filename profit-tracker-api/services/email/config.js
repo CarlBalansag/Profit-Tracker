@@ -59,6 +59,8 @@ const SENDERS = [
   { key: 'ups', label: 'UPS', domains: ['ups.com'] },
   { key: 'fedex', label: 'FedEx', domains: ['fedex.com'] },
   { key: 'usps', label: 'USPS', domains: ['usps.com'] },
+  // Cash-out sites: their receipts say an item was scanned in and paid.
+  { key: 'points4days', label: 'Points4Days', domains: ['points4days.com'], cashout: true },
 ];
 
 // The sender's address must be at the domain or a subdomain. IMAP's FROM

@@ -4,14 +4,17 @@ const router = require('express').Router();
 const { z } = require('zod');
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
-const { PRESETS, SENDERS, normalizeHost } = require('../services/email/config');
+const { PRESETS, SENDERS, normalizeHost, merchantFor } = require('../services/email/config');
 const { encryptSecret, configured } = require('../services/email/crypto');
 const { friendlyError } = require('../services/email/imap');
 const { syncAccount, testConnection, openAccount } = require('../services/email/sync');
 const { linkMatch, rejectMatch } = require('../services/email/match');
 const { getSettings, saveSettings, DEFAULTS } = require('../services/email/settings');
 const { createExpenseFromOrder, suggestRules, normalizeDomain, labelFor } = require('../services/email/rules');
-const { createPurchasesFromOrder } = require('../services/email/automations');
+const { createPurchasesFromOrder, applyCashoutReceipts } = require('../services/email/automations');
+
+// A cash-out receipt the user just linked marks its sales paid right away.
+const payLinkedReceipts = async (userId) => applyCashoutReceipts(prisma, userId, await getSettings(prisma, userId));
 const { saveInvoice } = require('../services/email/attachments');
 const { scanStores, sourceLabel } = require('../services/email/storeScan');
 
@@ -309,6 +312,7 @@ router.post('/matches/:id/accept', isAuthenticated, async (req, res, next) => {
   try {
     const match = await linkMatch(prisma, req.user.id, req.params.id);
     if (!match) return res.status(404).json({ error: 'This match is no longer available.' });
+    await payLinkedReceipts(req.user.id);
     res.json({ linked: true });
   } catch (err) { next(err); }
 });
@@ -333,6 +337,7 @@ router.post('/matches/accept-all', isAuthenticated, async (req, res, next) => {
     for (const o of orders) {
       if (o.matches[0] && await linkMatch(prisma, req.user.id, o.matches[0].id)) linked += 1;
     }
+    if (linked) await payLinkedReceipts(req.user.id);
     res.json({ linked });
   } catch (err) { next(err); }
 });
@@ -487,6 +492,8 @@ async function storeList(userId) {
     prisma.emailMessage.findMany({ where: { user_id: userId, status: 'extracted' }, select: { merchant: true } }),
     prisma.emailStoreCandidate.findMany({ where: { user_id: userId }, orderBy: [{ order_emails: 'desc' }, { label: 'asc' }], take: 50 }),
   ]);
+  // A store we've since learned to read leaves the "not supported" list.
+  const visible = candidates.filter((c) => !merchantFor(`x@${c.domain}`));
   const counts = new Map();
   for (const { merchant } of found) counts.set(merchant, (counts.get(merchant) || 0) + 1);
   const supported = [...counts.entries()]
@@ -497,8 +504,8 @@ async function storeList(userId) {
     .reduce((latest, x) => (x.stores_scanned_at && (!latest || x.stores_scanned_at > latest) ? x.stores_scanned_at : latest), null);
   return {
     supported,
-    candidates: candidates.filter((c) => !c.hidden_at).map((c) => ({ id: c.id, domain: c.domain, source: sourceLabel(c.domain), label: c.label, order_emails: c.order_emails, last_seen: c.last_seen, requested: Boolean(c.requested_at) })),
-    hidden: candidates.filter((c) => c.hidden_at).map((c) => ({ id: c.id, domain: c.domain, source: sourceLabel(c.domain), label: c.label })),
+    candidates: visible.filter((c) => !c.hidden_at).map((c) => ({ id: c.id, domain: c.domain, source: sourceLabel(c.domain), label: c.label, order_emails: c.order_emails, last_seen: c.last_seen, requested: Boolean(c.requested_at) })),
+    hidden: visible.filter((c) => c.hidden_at).map((c) => ({ id: c.id, domain: c.domain, source: sourceLabel(c.domain), label: c.label })),
     scanned_at: scannedAt,
     all_stores: SENDERS.map((s) => s.label),
   };

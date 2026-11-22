@@ -16,7 +16,7 @@ const { groupMessages, recompute } = require('./orders');
 const { matchOrders } = require('./match');
 const { getSettings } = require('./settings');
 const { applyRules, customMerchant } = require('./rules');
-const { applyOrderUpdates, createMissingPurchases } = require('./automations');
+const { applyOrderUpdates, applyCashoutReceipts, createMissingPurchases } = require('./automations');
 const { pdfText, mergePdfDetails, firstPdf } = require('./attachments');
 const { looksPrivate } = require('./extract/generic');
 
@@ -132,13 +132,25 @@ async function syncAccount(accountId, deps = {}) {
       const renumbered = cursor?.uid_validity && box.uidValidity && cursor.uid_validity !== box.uidValidity;
       let lastUid = cursor && !renumbered ? cursor.last_uid : 0;
 
-      const uids = await client.searchUids({ domains, since: account.sync_since, afterUid: lastUid });
+      let uids = await client.searchUids({ domains, since: account.sync_since, afterUid: lastUid });
+      // Senders added since this folder was last read (a new built-in store)
+      // are searched over the whole window once. Emails already saved are
+      // skipped by their dedupe key.
+      const known = lastUid > 0 && cursor?.domains?.length ? cursor.domains : null;
+      const added = lastUid > 0 ? domains.filter((d) => !known || !known.includes(d)) : [];
+      if (added.length) {
+        const earlier = (await client.searchUids({ domains: added, since: account.sync_since })).filter((u) => u <= lastUid);
+        uids = [...new Set([...earlier, ...uids])].sort((a, b) => a - b);
+      }
       const take = uids.slice(0, remaining);
       if (uids.length > take.length) more = true;
-      const saveCursor = () => prisma.emailFolderCursor.upsert({
+      // The cursor's sender list: senders whose emails up to last_uid have all
+      // been looked at. Added senders join it once their earlier emails are done.
+      const caughtUp = () => (!added.length || take.length === uids.length ? { domains } : {});
+      const saveCursor = (done = false) => prisma.emailFolderCursor.upsert({
         where: { account_id_folder: { account_id: account.id, folder } },
-        create: { account_id: account.id, folder, uid_validity: box.uidValidity, last_uid: lastUid },
-        update: { uid_validity: box.uidValidity, last_uid: lastUid },
+        create: { account_id: account.id, folder, uid_validity: box.uidValidity, last_uid: lastUid, ...(done ? caughtUp() : {}) },
+        update: { uid_validity: box.uidValidity, last_uid: lastUid, ...(done ? caughtUp() : {}) },
       });
 
       for (let i = 0; i < take.length; i += BATCH) {
@@ -170,9 +182,9 @@ async function syncAccount(accountId, deps = {}) {
         }
         lastUid = Math.max(lastUid, ...batch);
         remaining -= batch.length;
-        await saveCursor();
+        await saveCursor(i + BATCH >= take.length);
       }
-      if (!take.length) await saveCursor();
+      if (!take.length) await saveCursor(true);
     }
 
     const read = Date.now() - started < budgetMs
@@ -310,7 +322,8 @@ async function organize(prisma, userId) {
     const ruled = await applyRules(prisma, userId, { createExpenses: settings.createExpenses });
     const purchases = settings.createPurchases ? await createMissingPurchases(prisma, userId) : 0;
     const updates = await applyOrderUpdates(prisma, userId, settings);
-    return { ...matched, ...ruled, purchasesCreated: purchases, updates };
+    const cashoutsPaid = await applyCashoutReceipts(prisma, userId, settings);
+    return { ...matched, ...ruled, purchasesCreated: purchases, updates, cashoutsPaid };
   } catch (err) {
     console.error(`[email] matching failed for user ${userId}: ${err?.code || err?.name || 'error'}`);
     return null;
