@@ -270,8 +270,12 @@ function connectionItems(connections) {
 // Email: orders waiting for a yes/no on their match, and mailboxes whose
 // password stopped working. The review item's key follows the newest order,
 // so a dismissed reminder comes back when new orders arrive.
-const STORE_LABEL = { amazon: 'Amazon', walmart: 'Walmart', bestbuy: 'Best Buy', target: 'Target', apple: 'Apple', costco: 'Costco', samsclub: "Sam's Club", homedepot: 'Home Depot', lowes: "Lowe's", gamestop: 'GameStop', nike: 'Nike', ebay: 'eBay', stockx: 'StockX', goat: 'GOAT', paypal: 'PayPal' };
+const STORE_LABEL = { amazon: 'Amazon', walmart: 'Walmart', bestbuy: 'Best Buy', target: 'Target', apple: 'Apple', costco: 'Costco', samsclub: "Sam's Club", homedepot: 'Home Depot', lowes: "Lowe's", gamestop: 'GameStop', nike: 'Nike', ebay: 'eBay', stockx: 'StockX', goat: 'GOAT', paypal: 'PayPal', points4days: 'Points4Days', pirateship: 'Pirate Ship' };
 const storeLabel = (key) => STORE_LABEL[key] || String(key || '').replace(/^custom:/, '');
+const CASHOUT_STORES = new Set(['points4days']);
+// "CHECK 1185" -> "check #1185 "; "211338" -> "#211338 " (with its space).
+const orderRef = (n) => (!n ? '' : /^CHECK\s/i.test(n) ? `#${String(n).replace(/^CHECK\s*/i, '')} ` : `#${n} `);
+const REVIEW_ITEMS = 15;
 
 function emailItems(review, accounts, extra = {}) {
   const out = [];
@@ -309,16 +313,36 @@ function emailItems(review, accounts, extra = {}) {
     out.push(item({
       key: `email-today:${extra.today}`, type: 'email_summary', group: 'purchases', urgency: 'info',
       title: `Email made ${extra.autoToday} ${extra.autoToday === 1 ? 'change' : 'changes'} today`,
-      detail: 'See them, and undo any, in Activity.',
-      link: { kind: 'page', to: '/activity' },
+      detail: 'See them, and undo any, on the Automation page.',
+      link: { kind: 'page', to: '/automation' },
       actions: ['dismiss'],
     }));
   }
-  if (review.count > 0) {
+  // Each email order waiting for a yes or no on its best match, answered right
+  // on the To-Do (Yes, link / Not this). Past the first few, one item sums up the rest.
+  const listed = review.orders || [];
+  for (const o of listed) {
+    const match = o.match;
+    const what = { purchase: 'purchase', sale: 'sale', expense: 'expense' }[match.record_type] || 'record';
+    const records = match.names.length > 1 ? `Your ${match.names.length} ${what}s: ${match.names.join(', ')}` : `Your ${what}: ${match.names[0] || what}`;
+    const reasons = (match.reasons || []).filter((r) => r.points > 0 || r.code === 'already_paid').slice(0, 3).map((r) => r.text);
     out.push(item({
-      key: `email-review:${review.newestId}`, type: 'email_review', group: 'purchases', urgency: 'info',
-      title: review.count === 1 ? '1 order from email to check' : `${review.count} orders from email to check`,
-      detail: 'Say yes or no to the purchase each one looks like.',
+      key: `email-review:${o.id}:${match.id}`, type: 'email_review',
+      group: match.record_type === 'expense' ? 'bookkeeping' : match.record_type === 'sale' && CASHOUT_STORES.has(o.merchant) ? 'cashout' : 'purchases',
+      urgency: 'info',
+      title: `Is this ${storeLabel(o.merchant)} ${o.type === 'check' ? 'check' : o.type === 'sale' ? 'email' : o.type === 'receipt' ? 'receipt' : 'order'} ${orderRef(o.order_number)}your ${what}?`.replace(/\s+/g, ' '),
+      detail: [records, ...reasons].join(' · '),
+      amount: o.total != null ? Number(o.total) : null,
+      email_match: { id: match.id, order_id: o.id },
+      link: { kind: 'page', to: '/settings', state: { tab: 'email' } },
+    }));
+  }
+  if (review.count > listed.length) {
+    const rest = review.count - listed.length;
+    out.push(item({
+      key: `email-review-rest:${review.newestId}`, type: 'email_review', group: 'purchases', urgency: 'info',
+      title: rest === 1 ? '1 more order from email to check' : `${rest} more orders from email to check`,
+      detail: 'Say yes or no to the record each one looks like.',
       link: { kind: 'page', to: '/settings', state: { tab: 'email' } },
     }));
   }
@@ -813,9 +837,25 @@ function clearedThisWeek(sales, states, today) {
   };
 }
 
+// The names of the records each email order to check looks like (user's own only).
+async function reviewOrders(prisma, userId, orders) {
+  const withMatch = orders.filter((o) => o.matches?.[0]);
+  const ids = (type) => withMatch.filter((o) => o.matches[0].record_type === type).flatMap((o) => o.matches[0].record_ids);
+  const [purchases, sales, expenses] = await Promise.all([
+    ids('purchase').length ? prisma.inventory.findMany({ where: { user_id: userId, id: { in: ids('purchase') } }, select: { id: true, product_name: true } }) : [],
+    ids('sale').length ? prisma.sales.findMany({ where: { inventory: { user_id: userId }, id: { in: ids('sale') } }, select: { id: true, inventory: { select: { product_name: true } } } }) : [],
+    ids('expense').length ? prisma.expense.findMany({ where: { user_id: userId, id: { in: ids('expense') } }, select: { id: true, name: true } }) : [],
+  ]);
+  const name = new Map([...purchases.map((r) => [r.id, r.product_name]), ...sales.map((r) => [r.id, r.inventory?.product_name]), ...expenses.map((r) => [r.id, r.name])]);
+  return withMatch.map(({ matches, ...o }) => {
+    const m = matches[0];
+    return { ...o, match: { id: m.id, record_type: m.record_type, reasons: m.reasons, names: m.record_ids.map((id) => name.get(id)).filter(Boolean) } };
+  }).filter((o) => o.match.names.length);
+}
+
 async function loadTodoData(prisma, userId, today) {
   const lookback = new Date(toUtc(addDays(today, -365)));
-  const [commitments, connections, sales, inventories, cards, recurring, reminders, emailReviewCount, emailNewest, emailAccounts, emailAttention, emailTaxForms, emailAutoToday] = await Promise.all([
+  const [commitments, connections, sales, inventories, cards, recurring, reminders, emailReviewCount, emailReviewOrders, emailAccounts, emailAttention, emailTaxForms, emailAutoToday] = await Promise.all([
     prisma.cashoutCommitment.findMany({
       where: { user_id: userId, status: { in: ['pending', 'active', 'expired', 'closed'] } },
       include: {
@@ -839,7 +879,10 @@ async function loadTodoData(prisma, userId, today) {
       include: { payment_method: { select: { name: true, last4: true } } },
     }),
     prisma.emailOrder ? prisma.emailOrder.count({ where: { user_id: userId, match_state: 'review' } }) : 0,
-    prisma.emailOrder ? prisma.emailOrder.findFirst({ where: { user_id: userId, match_state: 'review' }, orderBy: { created_at: 'desc' }, select: { id: true } }) : null,
+    prisma.emailOrder ? prisma.emailOrder.findMany({
+      where: { user_id: userId, match_state: 'review' }, orderBy: { last_seen: 'desc' }, take: REVIEW_ITEMS,
+      select: { id: true, merchant: true, order_number: true, type: true, total: true, matches: { where: { state: 'suggested' }, orderBy: { score: 'desc' }, take: 1 } },
+    }) : [],
     prisma.emailAccount ? prisma.emailAccount.findMany({ where: { user_id: userId }, select: { id: true, email_address: true, status: true, last_error: true } }) : [],
     prisma.emailOrder ? prisma.emailOrder.findMany({ where: { user_id: userId, attention: { not: null } }, select: { id: true, merchant: true, order_number: true, attention: true, total: true }, take: 50 }) : [],
     prisma.emailMessage ? prisma.emailMessage.findMany({ where: { user_id: userId, kind: 'tax_form', sent_at: { gte: lookback } }, select: { id: true, merchant: true }, take: 20 }) : [],
@@ -856,7 +899,7 @@ async function loadTodoData(prisma, userId, today) {
   }
 
   return { commitments, connections, sales, inventories, cards, recurring, reminders, spendByCard,
-    emailReview: { count: emailReviewCount || 0, newestId: emailNewest?.id || null }, emailAccounts: emailAccounts || [],
+    emailReview: { count: emailReviewCount || 0, newestId: emailReviewOrders?.[0]?.id || null, orders: await reviewOrders(prisma, userId, emailReviewOrders || []) }, emailAccounts: emailAccounts || [],
     emailExtra: { attention: emailAttention || [], taxForms: emailTaxForms || [], autoToday: emailAutoToday || 0 } };
 }
 

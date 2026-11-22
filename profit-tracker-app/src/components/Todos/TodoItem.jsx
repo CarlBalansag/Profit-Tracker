@@ -5,6 +5,7 @@ import { openTodoLink } from '../../utils/todoLink';
 import { GROUP_BY_ID, URGENCY_BY_ID, money } from './todoMeta';
 import SnoozeMenu from './SnoozeMenu';
 import TodoRecordActions from './TodoRecordActions';
+import EmailMatchActions from './EmailMatchActions';
 
 
 export function GroupIcon({ group, urgency }) {
@@ -25,6 +26,7 @@ function TodoActions({ entry, busy, onAct, onEdit }) {
   return (
     <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end">
       {entry.record && <TodoRecordActions entry={entry} />}
+      {entry.email_match && <EmailMatchActions entry={entry} />}
       {has('mark_paid') && (
         <button type="button" disabled={busy} onClick={() => onAct(entry, 'done')} className="page-btn page-btn-primary !h-9 !px-3 !text-xs">
           <CircleCheck className="h-3.5 w-3.5" aria-hidden="true" /> Mark paid
