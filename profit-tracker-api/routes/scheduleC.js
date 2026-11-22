@@ -6,7 +6,8 @@ const { derivedExpenseLines } = require('../services/derivedExpenses');
 const { scheduleCBooks, untrackedInventory } = require('../services/scheduleCBooks');
 const { profitEvents, forecastInputs } = require('../services/taxForecast');
 const { validateBody } = require('../middleware/validate');
-const { taxYearSettingBody, createForm1099K, updateForm1099K } = require('../validation/schemas');
+const { taxYearSettingBody, createForm1099K, updateForm1099K, mileageTripBody, taxAssetBody, TAX_YEAR_SETTING_KEYS } = require('../validation/schemas');
+const deductionRules = import('../../shared/tax/deductions.mjs');
 const { requireOwned } = require('../services/ownership');
 
 const isAuthenticated = (req, res, next) => {
@@ -26,7 +27,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
     if (!validYear(req.query.year)) return res.status(400).json({ error: YEAR_ERROR });
     if (!await scheduleCEnabled(req.user.id)) return res.status(403).json({ error: 'Enable Schedule C in Settings first' });
     const year = Number(req.query.year);
-    const [expenses, inventories, saleRefunds, settings, forms1099K, platforms] = await Promise.all([
+    const [expenses, inventories, saleRefunds, settings, forms1099K, platforms, trips, assets, profile] = await Promise.all([
       prisma.expense.findMany({ where: { user_id: req.user.id }, include: { payment_method: { select: { name: true } } } }),
       // Same source the Expenses tab's computed lines use, so the two never disagree.
       prisma.inventory.findMany({
@@ -42,27 +43,50 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       prisma.taxForm1099K.findMany({ where: { user_id: req.user.id, year }, orderBy: { created_at: 'asc' } }),
       // Where 1099-K forms come from: the places the user sells or cashes out.
       prisma.platform.findMany({ where: { user_id: req.user.id, type: { in: ['Marketplace', 'Cashout'] } }, select: { id: true, name: true, type: true }, orderBy: { name: 'asc' } }),
+      // Last year's trips too, for last year's profit in the projection.
+      prisma.taxMileageTrip.findMany({ where: { user_id: req.user.id, date: { gte: new Date(Date.UTC(year - 1, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) } } }),
+      prisma.taxAsset.findMany({ where: { user_id: req.user.id } }),
+      prisma.taxProfile.findFirst({ where: { user_id: req.user.id, year }, select: { wages: true } }),
     ]);
+    const { MILEAGE_RATES } = await deductionRules;
+    const recordsFor = (y) => ({
+      trips, assets, mileageRates: MILEAGE_RATES,
+      setting: settings.find((row) => row.year === y) || null,
+      wages: y === year ? profile?.wages ?? 0 : 0,
+    });
     const exactExpenses = withExactList(expenses, MAPPINGS.expense);
     const worksheet = await expenseWorksheet(exactExpenses, year, derivedExpenseLines(inventories), saleRefunds);
     const expensesInYear = exactExpenses.filter((e) => new Date(e.date).getUTCFullYear() === year);
     const untracked = untrackedInventory(settings, year);
-    const books = scheduleCBooks({ inventories, year, worksheet, expensesInYear, untracked, forms1099K, platforms });
+    const books = scheduleCBooks({ inventories, year, worksheet, expensesInYear, untracked, forms1099K, platforms, records: recordsFor(year) });
     // Projection inputs: this year's dated profit and last year's pattern.
     const derived = derivedExpenseLines(inventories);
     const priorWorksheet = await expenseWorksheet(exactExpenses, year - 1, derived, saleRefunds);
-    const priorEvents = profitEvents({ inventories, year: year - 1, worksheet: priorWorksheet });
-    const priorBooks = priorEvents.length ? scheduleCBooks({ inventories, year: year - 1, worksheet: priorWorksheet, untracked: untrackedInventory(settings, year - 1) }) : null;
+    const priorEvents = profitEvents({ inventories, year: year - 1, worksheet: priorWorksheet, trips, mileageRates: MILEAGE_RATES });
+    const priorBooks = priorEvents.length ? scheduleCBooks({ inventories, year: year - 1, worksheet: priorWorksheet, untracked: untrackedInventory(settings, year - 1), records: recordsFor(year - 1) }) : null;
     books.forecast = forecastInputs({
-      year, today: new Date(), events: profitEvents({ inventories, year, worksheet }),
+      year, today: new Date(), events: profitEvents({ inventories, year, worksheet, trips, mileageRates: MILEAGE_RATES }),
       priorEvents, priorNetProfit: priorBooks ? priorBooks.netProfit : null,
     });
+    // Equipment and home office are taken once for the year: projections add
+    // them back, project the rest, then take them off once.
+    books.forecast.yearlyDeductions = books.records.yearly;
     // Private receipts go out as short-lived signed links.
     const { withReceiptLink } = require('../services/privateReceipts');
     const rows = worksheet.rows.map((row) => (row.source === 'manual' ? withReceiptLink(row, 'expense') : row));
     res.json({ ...worksheet, rows, books });
   } catch (error) { next(error); }
 });
+
+const DECIMAL_SETTINGS = new Set(['untracked_inventory_end', 'vehicle_commuting_miles', 'vehicle_other_miles']);
+const publicYearSetting = (row) => {
+  const out = { year: row.year };
+  for (const key of TAX_YEAR_SETTING_KEYS) {
+    const v = row[key];
+    out[key] = v === null || v === undefined ? null : v instanceof Date ? v.toISOString().slice(0, 10) : DECIMAL_SETTINGS.has(key) ? String(v) : v;
+  }
+  return out;
+};
 
 // Save one tax year's settings. Today that is the cost of stock on hand on
 // December 31 that isn't entered as purchases; null clears it (the earlier
@@ -72,13 +96,17 @@ router.put('/years/:year', isAuthenticated, validateBody(taxYearSettingBody), as
     if (!validYear(req.params.year)) return res.status(400).json({ error: YEAR_ERROR });
     if (!await scheduleCEnabled(req.user.id)) return res.status(403).json({ error: 'Enable Schedule C in Settings first' });
     const year = Number(req.params.year);
-    const data = { untracked_inventory_end: req.body.untracked_inventory_end ?? null };
+    const data = {};
+    for (const key of TAX_YEAR_SETTING_KEYS) {
+      if (req.body[key] === undefined) continue;
+      data[key] = key === 'vehicle_in_service' && req.body[key] ? new Date(`${req.body[key]}T12:00:00Z`) : req.body[key];
+    }
     const saved = await prisma.taxYearSetting.upsert({
       where: { user_id_year: { user_id: req.user.id, year } },
       create: { user_id: req.user.id, year, ...data },
       update: data,
     });
-    res.json({ year: saved.year, untracked_inventory_end: saved.untracked_inventory_end === null ? null : String(saved.untracked_inventory_end) });
+    res.json(publicYearSetting(saved));
   } catch (error) { next(error); }
 });
 // Form 1099-K amounts for a tax year, to compare with sales by platform.
@@ -124,6 +152,110 @@ router.delete('/1099-k/:id', isAuthenticated, async (req, res, next) => {
     const result = await prisma.taxForm1099K.deleteMany({ where: { id: req.params.id, user_id: req.user.id } });
     if (result.count !== 1) return res.status(404).json({ error: '1099-K not found' });
     res.json({ deleted: true });
+  } catch (error) { next(error); }
+});
+
+// ── Mileage log (line 9) ───────────────────────────────────────────────────
+const publicTrip = (t) => ({ id: t.id, date: new Date(t.date).toISOString().slice(0, 10), miles: String(t.miles), destination: t.destination, purpose: t.purpose, parking_tolls: t.parking_tolls === null || t.parking_tolls === undefined ? null : String(t.parking_tolls) });
+const tripData = (body) => ({ date: new Date(`${body.date}T12:00:00Z`), miles: body.miles, destination: body.destination, purpose: body.purpose, parking_tolls: body.parking_tolls ?? null });
+const tripList = async (userId, year) => {
+  const rows = await prisma.taxMileageTrip.findMany({
+    where: { user_id: userId, date: { gte: new Date(Date.UTC(year, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) } },
+    orderBy: [{ date: 'desc' }, { created_at: 'desc' }],
+  });
+  return { year, trips: rows.map(publicTrip) };
+};
+const enabledOr403 = async (req, res) => {
+  if (await scheduleCEnabled(req.user.id)) return true;
+  res.status(403).json({ error: 'Enable Schedule C in Settings first' });
+  return false;
+};
+
+router.get('/mileage', isAuthenticated, async (req, res, next) => {
+  try {
+    if (!validYear(req.query.year)) return res.status(400).json({ error: YEAR_ERROR });
+    if (!await enabledOr403(req, res)) return;
+    res.json(await tripList(req.user.id, Number(req.query.year)));
+  } catch (error) { next(error); }
+});
+
+router.post('/mileage', isAuthenticated, validateBody(mileageTripBody), async (req, res, next) => {
+  try {
+    if (!await enabledOr403(req, res)) return;
+    await prisma.taxMileageTrip.create({ data: { user_id: req.user.id, ...tripData(req.body) } });
+    res.status(201).json(await tripList(req.user.id, Number(req.body.date.slice(0, 4))));
+  } catch (error) { next(error); }
+});
+
+router.put('/mileage/:id', isAuthenticated, validateBody(mileageTripBody), async (req, res, next) => {
+  try {
+    if (!await enabledOr403(req, res)) return;
+    const result = await prisma.taxMileageTrip.updateMany({ where: { id: req.params.id, user_id: req.user.id }, data: tripData(req.body) });
+    if (result.count !== 1) return res.status(404).json({ error: 'Trip not found' });
+    res.json(await tripList(req.user.id, Number(req.body.date.slice(0, 4))));
+  } catch (error) { next(error); }
+});
+
+router.delete('/mileage/:id', isAuthenticated, async (req, res, next) => {
+  try {
+    if (!await enabledOr403(req, res)) return;
+    const row = await prisma.taxMileageTrip.findFirst({ where: { id: req.params.id, user_id: req.user.id } });
+    if (!row) return res.status(404).json({ error: 'Trip not found' });
+    await prisma.taxMileageTrip.deleteMany({ where: { id: row.id, user_id: req.user.id } });
+    res.json(await tripList(req.user.id, new Date(row.date).getUTCFullYear()));
+  } catch (error) { next(error); }
+});
+
+// ── Equipment (lines 13 and 22) ─────────────────────────────────────────────
+const { assetDeduction } = require('../services/scheduleCRecords');
+const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
+const publicAsset = (a, year) => ({
+  id: a.id, name: a.name, placed_in_service: day(a.placed_in_service), cost: String(a.cost), business_percent: a.business_percent,
+  method: a.method, recovery_years: a.recovery_years ?? null, disposed_date: day(a.disposed_date),
+  // This year's deduction before the Section 179 income limit.
+  this_year: year ? assetDeduction(a, year).amount.toDecimalPlaces(2).toFixed(2) : null,
+});
+const assetData = (b) => ({
+  name: b.name, placed_in_service: new Date(`${b.placed_in_service}T12:00:00Z`), cost: b.cost, business_percent: b.business_percent,
+  method: b.method, recovery_years: b.method === 'macrs' ? b.recovery_years : null,
+  disposed_date: b.disposed_date ? new Date(`${b.disposed_date}T12:00:00Z`) : null,
+});
+const assetList = async (userId, year) => {
+  const rows = await prisma.taxAsset.findMany({ where: { user_id: userId }, orderBy: [{ placed_in_service: 'desc' }, { created_at: 'desc' }] });
+  return { year, assets: rows.map((a) => publicAsset(a, year)) };
+};
+const listYear = (req) => (validYear(req.query.year) ? Number(req.query.year) : null);
+
+router.get('/assets', isAuthenticated, async (req, res, next) => {
+  try {
+    if (!await enabledOr403(req, res)) return;
+    res.json(await assetList(req.user.id, listYear(req)));
+  } catch (error) { next(error); }
+});
+
+router.post('/assets', isAuthenticated, validateBody(taxAssetBody), async (req, res, next) => {
+  try {
+    if (!await enabledOr403(req, res)) return;
+    await prisma.taxAsset.create({ data: { user_id: req.user.id, ...assetData(req.body) } });
+    res.status(201).json(await assetList(req.user.id, listYear(req)));
+  } catch (error) { next(error); }
+});
+
+router.put('/assets/:id', isAuthenticated, validateBody(taxAssetBody), async (req, res, next) => {
+  try {
+    if (!await enabledOr403(req, res)) return;
+    const result = await prisma.taxAsset.updateMany({ where: { id: req.params.id, user_id: req.user.id }, data: assetData(req.body) });
+    if (result.count !== 1) return res.status(404).json({ error: 'Equipment not found' });
+    res.json(await assetList(req.user.id, listYear(req)));
+  } catch (error) { next(error); }
+});
+
+router.delete('/assets/:id', isAuthenticated, async (req, res, next) => {
+  try {
+    if (!await enabledOr403(req, res)) return;
+    const result = await prisma.taxAsset.deleteMany({ where: { id: req.params.id, user_id: req.user.id } });
+    if (result.count !== 1) return res.status(404).json({ error: 'Equipment not found' });
+    res.json(await assetList(req.user.id, listYear(req)));
   } catch (error) { next(error); }
 });
 

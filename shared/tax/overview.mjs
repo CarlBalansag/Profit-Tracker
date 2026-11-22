@@ -93,12 +93,25 @@ export function trackInstallments(plan, paid, today) {
   });
 }
 
+function withoutYearly(projection, yearly) {
+  if (!yearly) return projection;
+  const methods = {};
+  for (const [key, m] of Object.entries(projection.methods)) {
+    // Your own estimate is already a full-year profit.
+    methods[key] = m.available && key !== 'target' ? { ...m, value: Math.round((m.value - yearly) * 100) / 100 } : m;
+  }
+  return { ...projection, methods };
+}
+
 export function buildTaxOverview({ profile, year, businessProfit, today, forecast = null, reserveBalance = 0, payments = [] }) {
   year = Number(year);
   const actualProfit = amount(businessProfit);
   // With the API's projection inputs, the estimate uses the chosen projection
   // of the full year's profit; without them, profit so far.
-  const projection = forecast ? projectProfit({ actual: actualProfit, inputs: forecast, target: num(profile?.profit_target) }) : null;
+  // Equipment and home office deductions are taken once for the year, so the
+  // pace is measured without them and they come off the projection once.
+  const yearly = Math.max(0, num(forecast?.yearlyDeductions) || 0);
+  const projection = forecast ? withoutYearly(projectProfit({ actual: actualProfit + yearly, inputs: forecast, target: num(profile?.profit_target) }), yearly) : null;
   const chosen = projection ? chooseForecast(projection, profile?.forecast_method) : { key: 'actual', value: actualProfit, label: 'Profit so far', usedFallback: false };
   const profit = chosen.value;
   const reserved = amount(reserveBalance);

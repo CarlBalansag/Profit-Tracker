@@ -87,7 +87,9 @@ export default function ScheduleC() {
     })();
     return () => { active = false; };
   }, [year, revision]);
-  const current = result?.year === year && result?.revision === revision ? result : null;
+  // After a save, keep showing the last result until the new one arrives so
+  // open sections and scroll position stay put.
+  const current = result?.year === year && (result.revision === revision || (!result.error && result.enabled)) ? result : null;
   const report = current?.data;
   const rows = report?.rows.filter(row => filter === 'all' || row.status === filter || row.tax_details.tax_category === filter || (filter === 'duplicates' && row.possible_duplicate_of) || (filter === 'receipts' && row.documentation_missing && row.status !== 'excluded')) || [];
   const pendingRows = report?.rows.filter(row => row.status === 'pending') || [];
@@ -96,7 +98,7 @@ export default function ScheduleC() {
     <style>{`@media print { aside, header, .schedule-c-actions, .schedule-c-page button { display:none!important; } .schedule-c-page section[aria-label="Schedule C categories"] button { display:block!important; } .schedule-c-page, .schedule-c-page * { color:#000!important; background:#fff!important; } main, main > div, .schedule-c-page { overflow:visible!important; height:auto!important; } body,#root {height:auto!important;} }`}</style>
     <div className="flex flex-wrap items-center justify-between gap-4"><div><h1 className="text-2xl font-bold">Schedule C worksheet</h1><p className="mt-1 text-sm text-gray-400">Tax year is the year of the records, even if you file the return the following year.</p></div>
       <label className="schedule-c-actions text-sm">Tax year<input aria-label="Tax year" type="number" min="1900" max="9999" step="1" value={year} onChange={e => { setYear(e.target.value); setFilter('all'); }} className="ml-3 w-24 rounded-lg border border-white/10 bg-[#16181d] p-2" /></label></div>
-    <p className="rounded-xl border border-white/10 p-4 text-sm text-gray-400">A preparation aid, not a filed tax return. Cash method only; accrual reporting is not supported. Income and cost of goods sold come from your purchases and sales; expenses are the paid, reviewed ones plus the shipping labels and platform fees from your sales. Equipment, vehicle and home-office deductions are not included yet. <a href="https://www.irs.gov/instructions/i1040sc" target="_blank" rel="noreferrer" className="underline">IRS instructions</a></p>
+    <p className="rounded-xl border border-white/10 p-4 text-sm text-gray-400">A preparation aid, not a filed tax return. Cash method only; accrual reporting is not supported. Income and cost of goods sold come from your purchases and sales; expenses are the paid, reviewed ones plus the shipping labels and platform fees from your sales. Driving, equipment and home office count once you enter them on the worksheet. <a href="https://www.irs.gov/instructions/i1040sc" target="_blank" rel="noreferrer" className="underline">IRS instructions</a></p>
     <div role="tablist" aria-label="Schedule C views" className="schedule-c-actions inline-flex rounded-lg border border-white/10 p-0.5 text-sm">
       {[['overview', 'Tax estimate'], ['worksheet', 'Worksheet']].map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)} className={`rounded-md px-4 py-1.5 ${view === key ? 'bg-purple-600 text-white' : 'text-gray-300'}`}>{label}</button>)}
     </div>

@@ -78,7 +78,7 @@ describe('PUT /api/schedule-c/years/:year', () => {
   const books = async (year) => (await (await fetch(`${base}/api/schedule-c?year=${year}`)).json()).books;
 
   it('saves, updates in place and clears one amount per year', async () => {
-    expect((await put(2025, { untracked_inventory_end: '500' })).body).toEqual({ year: 2025, untracked_inventory_end: '500' });
+    expect((await put(2025, { untracked_inventory_end: '500' })).body).toMatchObject({ year: 2025, untracked_inventory_end: '500', home_office_sq_ft: null });
     await put(2025, { untracked_inventory_end: 450.25 });
     expect(harness.db.taxYearSetting).toHaveLength(1);
     expect(harness.db.taxYearSetting[0]).toMatchObject({ user_id: harness.ids.user, year: 2025, untracked_inventory_end: 450.25 });

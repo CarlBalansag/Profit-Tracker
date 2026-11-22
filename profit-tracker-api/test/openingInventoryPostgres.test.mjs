@@ -67,7 +67,7 @@ describe('opening inventory on Postgres', () => {
 
   it('upserts one row per year and feeds Part III', async () => {
     expect((await send('PUT', '/api/schedule-c/years/2025', { untracked_inventory_end: '500.10' })).status).toBe(200);
-    expect((await send('PUT', '/api/schedule-c/years/2025', { untracked_inventory_end: '480' })).body).toEqual({ year: 2025, untracked_inventory_end: '480' });
+    expect((await send('PUT', '/api/schedule-c/years/2025', { untracked_inventory_end: '480' })).body).toMatchObject({ year: 2025, untracked_inventory_end: '480', home_office_sq_ft: null });
     const rows = await prisma.taxYearSetting.findMany({ where: { user_id: user.id } });
     expect(rows).toHaveLength(1);
     expect(rows[0].untracked_inventory_end.toFixed(2)).toBe('480.00');

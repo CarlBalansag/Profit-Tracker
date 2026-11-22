@@ -34,15 +34,18 @@ const hasWord = (names, words) => names.some((n) => words.some((w) => new RegExp
  * worksheet; expenseNames: names of the year's expenses; saleCount; profit
  * (line 31, or projected). Returns checks to show, most relevant first.
  */
-export function discoverDeductions({ year, categoryCounts = {}, expenseNames = [], saleCount = 0, profit = 0 }) {
+// recorded: what ProfitTracker's own logs already have this year
+// ({ mileage, homeOffice, equipment } booleans); a logged one isn't suggested.
+// Checks that can be recorded on the worksheet say so with `logOn`.
+export function discoverDeductions({ year, categoryCounts = {}, expenseNames = [], saleCount = 0, profit = 0, recorded = {} }) {
   const names = expenseNames.map((n) => String(n || '').toLowerCase());
   const has = (cat) => (categoryCounts[cat] || 0) > 0;
   const selling = saleCount > 0;
   const out = [];
 
-  if (selling && !hasWord(names, ['mileage', 'miles', 'gas', 'fuel'])) {
+  if (selling && !recorded.mileage && !hasWord(names, ['mileage', 'miles', 'gas', 'fuel'])) {
     out.push({
-      id: 'mileage', where: 'Schedule C line 9',
+      id: 'mileage', where: 'Schedule C line 9', logOn: 'Driving for the business',
       title: 'Driving for the business',
       why: `Trips to stores, the post office or a buyer can be deducted at ${mileageText(year)}, instead of what you spent on gas. Commuting doesn't count.`,
       docs: 'A mileage log: date, where you went, why, and the miles, kept as you go.',
@@ -50,9 +53,9 @@ export function discoverDeductions({ year, categoryCounts = {}, expenseNames = [
       source: SOURCES.mileage,
     });
   }
-  if (selling) {
+  if (selling && !recorded.homeOffice) {
     out.push({
-      id: 'home_office', where: 'Schedule C line 30',
+      id: 'home_office', where: 'Schedule C line 30', logOn: 'Home office',
       title: 'A space at home used for the business',
       why: `If part of your home is used regularly and only for the business, the simplified method gives $${HOME_OFFICE_SIMPLIFIED.perSquareFoot} a square foot, up to ${HOME_OFFICE_SIMPLIFIED.maxSquareFeet} square feet ($${(HOME_OFFICE_SIMPLIFIED.perSquareFoot * HOME_OFFICE_SIMPLIFIED.maxSquareFeet).toLocaleString('en-US')}). Space used regularly to store inventory can count even if it isn't used only for the business, when your home is the business's only fixed location.`,
       docs: 'The square footage, and photos or notes showing how the space is used.',
@@ -80,9 +83,9 @@ export function discoverDeductions({ year, categoryCounts = {}, expenseNames = [
       source: SOURCES.pub334,
     });
   }
-  if (selling && !hasWord(names, ['printer', 'scale', 'computer', 'laptop', 'camera', 'shelf', 'shelves', 'shelving', 'tablet'])) {
+  if (selling && !recorded.equipment && !hasWord(names, ['printer', 'scale', 'computer', 'laptop', 'camera', 'shelf', 'shelves', 'shelving', 'tablet'])) {
     out.push({
-      id: 'equipment', where: 'Schedule C line 13 or 22',
+      id: 'equipment', where: 'Schedule C line 13 or 22', logOn: 'Equipment',
       title: 'Equipment: label printer, scale, shelving, computer',
       why: `Equipment can usually be deducted in full the year you buy it: items up to $${DE_MINIMIS_PER_ITEM.toLocaleString('en-US')} each under the de minimis safe harbor, or more through Section 179 or bonus depreciation.`,
       docs: 'The receipt, and the date you started using it. Note the business-use percentage if you also use it personally.',

@@ -10,6 +10,7 @@
 // events here, so they only enter through line 31.
 const { decimal } = require('./decimalFinance');
 const { batchFactsForForecast, isCancelledPurchase, unitsOut } = require('./scheduleCBooks');
+const { mileageRate } = require('./scheduleCRecords');
 
 const DAY = 86400000;
 const iso = (d) => new Date(d).toISOString().slice(0, 10);
@@ -19,7 +20,7 @@ const dayOfYear = (date) => Math.floor((Date.UTC(date.getUTCFullYear(), date.get
 const round = (n) => Math.round(n * 100) / 100;
 
 /** [{ date: 'YYYY-MM-DD', amount }] for one tax year. */
-function profitEvents({ inventories = [], year, worksheet }) {
+function profitEvents({ inventories = [], year, worksheet, trips = [], mileageRates = {} }) {
   const events = [];
   for (const raw of inventories) {
     if (isCancelledPurchase(raw)) continue;
@@ -36,6 +37,13 @@ function profitEvents({ inventories = [], year, worksheet }) {
     if (!date || Number(date.slice(0, 4)) !== year) continue;
     const eligible = Number(row.eligible) || 0;
     if (eligible) events.push({ date: date.slice(0, 10), amount: -eligible });
+  }
+  // Business trips on their dates (line 9).
+  for (const t of trips) {
+    if (yearOf(t.date) !== year) continue;
+    const cents = mileageRate(mileageRates, t.date);
+    const amount = (cents === null ? 0 : Number(t.miles) * cents / 100) + (Number(t.parking_tolls) || 0);
+    if (amount) events.push({ date: iso(t.date), amount: -amount });
   }
   return events;
 }

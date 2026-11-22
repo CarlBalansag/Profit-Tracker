@@ -25,6 +25,7 @@
 // Everything is Decimal internally and rounded to cents once, on output.
 const { Decimal, decimal, isRealizedSale, batchCost, keptQuantity, keptSaleQuantity, effectiveCashbackRate, inventoryCashback, saleEconomics } = require('./decimalFinance');
 const { withExactFields, MAPPINGS } = require('./decimalRead');
+const { mileageForYear, assetsForYear, homeOfficeForYear, vehicleInfo, strip } = require('./scheduleCRecords');
 
 const ZERO = new Decimal(0);
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
@@ -117,8 +118,10 @@ function untrackedInventory(settings = [], year) {
  * untracked: untrackedInventory() for the year (stock not entered as purchases).
  * forms1099K: TaxForm1099K rows for the year; platforms: [{ id, name, type }]
  * the user can link a form to.
+ * records: the user's own logs for lines 9, 13, 22 and 30 -- { trips,
+ * assets, setting (this year's TaxYearSetting row), mileageRates, wages }.
  */
-function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = [], untracked = untrackedInventory([], year), forms1099K = [], platforms = [] }) {
+function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = [], untracked = untrackedInventory([], year), forms1099K = [], platforms = [], records = null }) {
   const batches = inventories.filter((inv) => !isCancelledPurchase(inv)).map(batchFacts);
   let gross = ZERO; let purchases = ZERO; let beginning = ZERO; let ending = ZERO;
   let cashbackOnPurchases = ZERO; let salesTaxCollected = ZERO;
@@ -181,8 +184,19 @@ function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = []
   const grossProfit = netReceipts.minus(cogs);
   const otherIncome = ZERO;
   const grossIncome = grossProfit.plus(otherIncome);
-  const expenses = decimal(worksheet?.total || 0);
-  const netProfit = grossIncome.minus(expenses);
+  const worksheetExpenses = decimal(worksheet?.total || 0);
+  // Lines 9, 13 and 22 from the mileage log and the equipment list.
+  const mileage = mileageForYear(records?.trips || [], year, records?.mileageRates || {});
+  const assetsBefore = assetsForYear(records?.assets || [], year);
+  const beforeSection179 = grossIncome.minus(worksheetExpenses).minus(mileage._total)
+    .minus(decimal(assetsBefore.depreciation)).minus(assetsBefore._line22);
+  // Section 179 can't be more than business income plus wages.
+  const assets = assetsForYear(records?.assets || [], year, { incomeLimit: beforeSection179.plus(decimal(records?.wages || 0)) });
+  const recordExpenses = mileage._total.plus(assets._line13).plus(assets._line22);
+  const expenses = worksheetExpenses.plus(recordExpenses);
+  const tentativeProfit = grossIncome.minus(expenses);
+  const homeOffice = homeOfficeForYear(records?.setting, tentativeProfit);
+  const netProfit = tentativeProfit.minus(homeOffice._total);
 
   // Reconciliation: the app's profit on this year's sales, after all expenses
   // dated this year, versus line 31. Each line is one reason they differ.
@@ -192,7 +206,8 @@ function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = []
   const appProfitAfterExpenses = appSalesProfit.minus(appExpenses);
   const refundTiming = appRevenue.minus(netReceipts); // app nets each sale's refunds; tax counts refunds when paid
   const inventoryTiming = cogs.minus(appCost.minus(appCashback));
-  const expenseDifference = expenses.minus(salesFees).minus(appExpenses);
+  const expenseDifference = worksheetExpenses.minus(salesFees).minus(appExpenses);
+  const fromRecords = recordExpenses.plus(homeOffice._total);
 
   const lines = [
     { line: '1', label: 'Gross receipts or sales', amount: money(gross) },
@@ -203,8 +218,8 @@ function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = []
     { line: '6', label: 'Other income', amount: money(otherIncome) },
     { line: '7', label: 'Gross income', amount: money(grossIncome) },
     { line: '28', label: 'Total expenses (Part II)', amount: money(expenses) },
-    { line: '29', label: 'Tentative profit or (loss)', amount: money(netProfit) },
-    { line: '30', label: 'Business use of home', amount: '0.00' },
+    { line: '29', label: 'Tentative profit or (loss)', amount: money(tentativeProfit) },
+    { line: '30', label: 'Business use of home', amount: homeOffice.total },
     { line: '31', label: 'Net profit or (loss)', amount: money(netProfit) },
   ];
   const partIII = [
@@ -238,6 +253,12 @@ function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = []
   const under = form1099K.comparison.filter((r) => r.difference !== null && Number(r.difference) < 0);
   if (over.length) notes.push(`Your 1099-K ${over.length === 1 ? 'form shows' : 'forms show'} more than the sales you recorded on ${over.map((r) => r.platform).join(', ')}. That is common: a 1099-K counts shipping and sales tax the buyer paid and is before fees and refunds. Your gross receipts come from your sales records; keep a note of why they differ in case you're asked.`);
   if (under.length) notes.push(`You recorded more sales on ${under.map((r) => r.platform).join(', ')} than ${under.length === 1 ? 'its 1099-K shows' : 'their 1099-K forms show'}. All sales are income either way, but check those sales are on the right platform and year.`);
+  if (mileage.rateMissing) notes.push(`ProfitTracker doesn't have the IRS mileage rate for ${year} yet, so those trips aren't counted. Parking and tolls still are.`);
+  const fuel = (worksheet?.rows || []).filter((r) => r.source === 'manual' && r.status === 'reviewed' && /(^|[^a-z])(gas|gasoline|fuel)([^a-z]|$)/i.test(String(r.name || '')));
+  if (mileage.trips > 0 && fuel.length) notes.push(`You're using the standard mileage rate and also deducting ${fuel.length === 1 ? 'an expense that looks' : `${fuel.length} expenses that look`} like gas (${fuel.map((r) => r.name).join(', ')}). The mileage rate already covers gas, so deduct one or the other, not both.`);
+  if (Number(assets.section179Carryover) > 0) notes.push(`Section 179 is limited to your business income plus wages, so $${assets.section179Carryover} of it can't be deducted this year. It carries forward to next year; ProfitTracker doesn't track carryovers yet, so keep a note of it.`);
+  if (assets.midQuarter) notes.push(`More than 40% of the equipment you're depreciating was put to use in October to December, so the IRS mid-quarter convention applies. The depreciation here uses the half-year convention, so ask a tax preparer to check it.`);
+  if (homeOffice.limited) notes.push(`The home office deduction is limited to your profit before it ($${money(Decimal.max(ZERO, tentativeProfit))}), so $${homeOffice.total} of the $${homeOffice.beforeLimit} counts. With the simplified method the rest doesn't carry forward.`);
   const pending = (worksheet?.rows || []).filter((r) => r.status === 'pending');
   if (pending.length) notes.push(`${pending.length} ${pending.length === 1 ? 'expense is' : 'expenses are'} waiting for review and not included in Part II yet.`);
 
@@ -257,10 +278,26 @@ function scheduleCBooks({ inventories = [], year, worksheet, expensesInYear = []
         { key: 'refund_timing', label: 'Refunds counted in the year they were paid, not against the sale', amount: money(refundTiming.negated()) },
         { key: 'inventory_cost', label: 'Cost of goods sold from beginning and ending inventory', amount: money(inventoryTiming.negated()) },
         { key: 'expenses', label: 'Expenses only count once reviewed and paid this year', amount: money(expenseDifference.negated()) },
+        ...(fromRecords.isZero() ? [] : [{ key: 'records', label: 'Mileage, equipment and home office (not on the Expenses tab)', amount: money(fromRecords.negated()) }]),
       ],
       scheduleCNetProfit: money(netProfit),
     },
     untracked: { ...untracked, trackedBeginning: money(trackedBeginning) },
+    // Part II lines from the user's logs (not on the Expenses tab).
+    records: {
+      lines: [
+        { line: '9', label: 'Car and truck expenses', amount: mileage.total },
+        { line: '13', label: 'Depreciation and Section 179', amount: assets.line13 },
+        { line: '22', label: 'Equipment deducted in full (de minimis)', amount: assets.deMinimis },
+      ],
+      total: money(recordExpenses),
+      mileage: strip(mileage),
+      assets: strip(assets),
+      homeOffice: strip(homeOffice),
+      vehicle: vehicleInfo(records?.setting, mileage),
+      // Taken once for the year, not earned over it: projections shouldn't scale them.
+      yearly: money(assets._line13.plus(assets._line22).plus(homeOffice._total)),
+    },
     checks: {
       negativeCogs: cogs.isNegative(),
       directCostOfUnitsSold: money(directCogs),

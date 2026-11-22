@@ -237,7 +237,7 @@ export function TaxOverview({ year, books, worksheet = null, pendingExpenses = 0
 
     <details className={card}>
       <summary className="cursor-pointer text-sm font-medium text-purple-300">Deductions you might be missing</summary>
-      <DeductionChecks year={year} worksheet={worksheet} saleCount={books.sales?.count || 0} profit={o.businessProfit} pendingExpenses={pendingExpenses} missingReceipts={missingReceipts} onShowWorksheet={onShowWorksheet} />
+      <DeductionChecks year={year} worksheet={worksheet} saleCount={books.sales?.count || 0} profit={o.businessProfit} records={books.records || null} pendingExpenses={pendingExpenses} missingReceipts={missingReceipts} onShowWorksheet={onShowWorksheet} />
     </details>
 
     {o.missing.length > 0 && profile.filing_status && <div className={card}>

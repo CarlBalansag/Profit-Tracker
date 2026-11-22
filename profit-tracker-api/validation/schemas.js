@@ -533,11 +533,58 @@ const dataReset = z.object({
   confirmation: z.literal('RESET'),
 }).strict();
 
-// PUT /api/schedule-c/years/:year. The key is required; '' or null clears it.
+// PUT /api/schedule-c/years/:year. Only the keys sent change; '' or null
+// clears one. At least one key is required.
+const blankToNull = (v) => (v === '' ? null : v);
+const nullableInt = (min, max, message) => z.preprocess(blankToNull, z.coerce.number({ invalid_type_error: message }).int(message).min(min, message).max(max, message).nullable().optional());
+const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a date like 2026-11-21.')
+  .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v, 'Enter a real calendar date.');
+const TAX_YEAR_SETTING_KEYS = ['untracked_inventory_end', 'home_office_sq_ft', 'home_office_months', 'home_total_sq_ft', 'vehicle_in_service', 'vehicle_commuting_miles', 'vehicle_other_miles'];
 const taxYearSettingBody = z.object({
   untracked_inventory_end: nullableDecimalAmount(),
-}).strict().refine((body) => body.untracked_inventory_end !== undefined, {
-  message: 'Enter an amount, or leave it blank to clear it.', path: ['untracked_inventory_end'],
+  home_office_sq_ft: nullableInt(1, 100000, 'Enter the square feet as a whole number.'),
+  home_office_months: nullableInt(1, 12, 'Enter the months used, from 1 to 12.'),
+  home_total_sq_ft: nullableInt(1, 1000000, 'Enter the square feet as a whole number.'),
+  vehicle_in_service: z.preprocess(blankToNull, isoDay.nullable().optional()),
+  vehicle_commuting_miles: nullableDecimalAmount({ scale: 1 }),
+  vehicle_other_miles: nullableDecimalAmount({ scale: 1 }),
+}).strict().superRefine((body, ctx) => {
+  if (!TAX_YEAR_SETTING_KEYS.some((key) => body[key] !== undefined)) {
+    ctx.addIssue({ code: 'custom', path: ['untracked_inventory_end'], message: 'Enter an amount, or leave it blank to clear it.' });
+  }
+  if (body.home_office_sq_ft != null && body.home_total_sq_ft != null && body.home_office_sq_ft > body.home_total_sq_ft) {
+    ctx.addIssue({ code: 'custom', path: ['home_office_sq_ft'], message: 'The office can\'t be bigger than the whole home.' });
+  }
+});
+
+// A business trip in the mileage log.
+const mileageTripBody = z.object({
+  date: isoDay,
+  miles: decimalAmount({ scale: 1 }),
+  destination: z.string().trim().min(1, 'Enter where you went.').max(200, 'Keep it under 200 characters.'),
+  purpose: z.string().trim().min(1, 'Enter why you went.').max(200, 'Keep it under 200 characters.'),
+  parking_tolls: nullableDecimalAmount(),
+}).strict().superRefine((b, ctx) => {
+  if (!(b.miles > 0)) ctx.addIssue({ code: 'custom', path: ['miles'], message: 'Enter the miles, above 0.' });
+  else if (b.miles > 5000) ctx.addIssue({ code: 'custom', path: ['miles'], message: 'One trip can\'t be more than 5,000 miles. Split a long trip into days.' });
+});
+
+// Equipment used in the business. Amounts and dates only.
+const DE_MINIMIS_LIMIT = 2500;
+const taxAssetBody = z.object({
+  name: z.string().trim().min(1, 'Enter what it is.').max(100, 'Keep the name under 100 characters.'),
+  placed_in_service: isoDay,
+  cost: decimalAmount(),
+  business_percent: z.coerce.number({ invalid_type_error: 'Enter the business-use percentage, from 1 to 100.' }).int('Enter a whole percentage.').min(1, 'Enter the business-use percentage, from 1 to 100.').max(100, 'Enter the business-use percentage, from 1 to 100.'),
+  method: z.enum(['de_minimis', 'section_179', 'macrs'], { errorMap: () => ({ message: 'Choose how to deduct it.' }) }),
+  recovery_years: z.preprocess(blankToNull, z.coerce.number().refine((v) => v === 5 || v === 7, 'Choose 5 or 7 years.').nullable().optional()),
+  disposed_date: z.preprocess(blankToNull, isoDay.nullable().optional()),
+}).strict().superRefine((b, ctx) => {
+  if (!(b.cost > 0)) ctx.addIssue({ code: 'custom', path: ['cost'], message: 'Enter what it cost, above $0.' });
+  if (b.method === 'de_minimis' && b.cost > DE_MINIMIS_LIMIT) ctx.addIssue({ code: 'custom', path: ['method'], message: 'The de minimis safe harbor is for items up to $2,500. Use Section 179 or depreciation instead.' });
+  if (b.method === 'section_179' && b.business_percent <= 50) ctx.addIssue({ code: 'custom', path: ['method'], message: 'Section 179 needs more than 50% business use. Use depreciation instead.' });
+  if (b.method === 'macrs' && b.recovery_years == null) ctx.addIssue({ code: 'custom', path: ['recovery_years'], message: 'Choose 5 years (computers, printers) or 7 years (furniture, shelving).' });
+  if (b.disposed_date && b.disposed_date < b.placed_in_service) ctx.addIssue({ code: 'custom', path: ['disposed_date'], message: 'It can\'t be gone before you started using it.' });
 });
 
 // A Form 1099-K entered by hand. Only amounts: never a TIN or account number.
@@ -607,6 +654,9 @@ const taxPaymentBody = z.object({
 }).strict().refine((b) => b.amount > 0, { message: 'Enter an amount above $0.', path: ['amount'] });
 
 module.exports = {
+  mileageTripBody,
+  taxAssetBody,
+  TAX_YEAR_SETTING_KEYS,
   taxProfileBody,
   taxPaymentBody,
   taxReserveEntryBody,

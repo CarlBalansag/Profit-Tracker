@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom';
 import { UntrackedStock } from './UntrackedStock';
 import { Forms1099K } from './Forms1099K';
+import { MileageLog } from './MileageLog';
+import { EquipmentList } from './EquipmentList';
+import { HomeOffice } from './HomeOffice';
 
 const usd = (value) => {
   const n = Number(value) || 0;
@@ -41,7 +44,7 @@ export function ScheduleCBooks({ books, year, onSettingsSaved }) {
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <div className={card}><p className="text-sm text-gray-400">Gross receipts (line 1)</p><p className="mt-2 text-2xl tabular-nums">{usd(line('1'))}</p><p className="mt-1 text-xs text-gray-500">{books.sales.count} {books.sales.count === 1 ? 'sale' : 'sales'}{Number(line('2')) ? ` · ${usd(line('2'))} refunded` : ''}</p></div>
       <div className={card}><p className="text-sm text-gray-400">Cost of goods sold (line 4)</p><p className="mt-2 text-2xl tabular-nums">{usd(line('4'))}</p><p className="mt-1 text-xs text-gray-500">What the items you sold cost you</p></div>
-      <div className={card}><p className="text-sm text-gray-400">Expenses (line 28)</p><p className="mt-2 text-2xl tabular-nums">{usd(line('28'))}</p><p className="mt-1 text-xs text-gray-500">Reviewed expenses plus sale fees and labels</p></div>
+      <div className={card}><p className="text-sm text-gray-400">Expenses (line 28)</p><p className="mt-2 text-2xl tabular-nums">{usd(line('28'))}</p><p className="mt-1 text-xs text-gray-500">{books.records && Number(books.records.total) ? `Reviewed expenses, sale fees and labels, plus ${usd(books.records.total)} from driving and equipment` : 'Reviewed expenses plus sale fees and labels'}</p></div>
       <div className={`${card} border-purple-500/30`}><p className="text-sm text-gray-400">Net {net < 0 ? 'loss' : 'profit'} (line 31)</p><p className={`mt-2 text-2xl font-semibold tabular-nums ${net < 0 ? 'text-red-300' : 'text-white'}`}>{usd(books.netProfit)}</p><p className="mt-1 text-xs text-gray-500">Before income and self-employment tax</p></div>
     </div>
 
@@ -52,9 +55,18 @@ export function ScheduleCBooks({ books, year, onSettingsSaved }) {
       <div className="mt-4 grid gap-6 lg:grid-cols-2">
         <LineTable caption="Part I: Income, and the result" rows={books.lines} />
         <LineTable caption="Part III: Cost of goods sold" rows={books.partIII} />
+        {books.records && <LineTable caption="Part II lines from your logs (included in line 28)" rows={books.records.lines} />}
       </div>
       <p className="mt-3 text-xs text-gray-500">Line 4 comes from Part III: what your inventory was worth on January 1, plus what you bought, minus what was still on hand on December 31. Money spent on stock you still hold isn&apos;t deducted until you sell it.</p>
     </details>
+
+    {books.records && <div className="space-y-3">
+      <h3 className="pt-2 font-medium">Driving, equipment and home office</h3>
+      <p className="text-sm text-gray-400">Deductions that come from your own records rather than from expenses. Each one is added only when you enter it.</p>
+      <MileageLog year={Number(year)} mileage={books.records.mileage} vehicle={books.records.vehicle} onSaved={onSettingsSaved || (() => {})} />
+      <EquipmentList year={Number(year)} assets={books.records.assets} onSaved={onSettingsSaved || (() => {})} />
+      <HomeOffice key={year} year={Number(year)} homeOffice={books.records.homeOffice} onSaved={onSettingsSaved || (() => {})} />
+    </div>}
 
     {books.untracked && <UntrackedStock key={`${year}-${books.untracked.startEntered}-${books.untracked.endEntered}`} year={Number(year)} untracked={books.untracked} onSaved={onSettingsSaved || (() => {})} />}
 

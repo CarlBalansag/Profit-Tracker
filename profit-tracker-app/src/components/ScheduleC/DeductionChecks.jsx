@@ -10,11 +10,12 @@ const writeHidden = (ids) => { try { localStorage.setItem(STORE_KEY, JSON.string
  * each says why, what to keep, the limits and where the IRS explains it. A
  * check can be hidden on this device.
  */
-export function DeductionChecks({ year, worksheet, saleCount, profit, pendingExpenses = 0, missingReceipts = 0, onShowWorksheet }) {
+export function DeductionChecks({ year, worksheet, saleCount, profit, records = null, pendingExpenses = 0, missingReceipts = 0, onShowWorksheet }) {
   const [hidden, setHidden] = useState(readHidden);
   const categoryCounts = Object.fromEntries((worksheet?.groups || []).map((g) => [g.id, g.count]));
   const expenseNames = (worksheet?.rows || []).filter((r) => r.source !== 'sale').map((r) => r.name);
-  const checks = discoverDeductions({ year, categoryCounts, expenseNames, saleCount, profit });
+  const recorded = { mileage: (records?.mileage?.trips || 0) > 0, homeOffice: Boolean(records?.homeOffice?.claimed), equipment: (records?.assets?.count || 0) > 0 };
+  const checks = discoverDeductions({ year, categoryCounts, expenseNames, saleCount, profit, recorded });
   const shown = checks.filter((c) => !hidden.includes(c.id));
   const hide = (id) => { const next = [...hidden, id]; setHidden(next); writeHidden(next); };
   const showAll = () => { setHidden([]); writeHidden([]); };
@@ -35,6 +36,7 @@ export function DeductionChecks({ year, worksheet, saleCount, profit, pendingExp
             <div><dt className="inline text-gray-500">Limits: </dt><dd className="inline">{c.limits}</dd></div>
           </dl>
           <div className="mt-2 flex flex-wrap gap-3 text-xs">
+            {c.logOn && onShowWorksheet && <button type="button" onClick={onShowWorksheet} className="text-purple-300 underline">Add it on the worksheet ({c.logOn})</button>}
             <a href={c.source.url} target="_blank" rel="noreferrer" className="text-purple-300 underline">{c.source.label}</a>
             <button type="button" onClick={() => hide(c.id)} className="text-gray-400 underline">Doesn&apos;t apply to me</button>
           </div>
@@ -43,6 +45,5 @@ export function DeductionChecks({ year, worksheet, saleCount, profit, pendingExp
     </ul>
     {shown.length === 0 && <p className="text-gray-500">Nothing else to suggest right now.</p>}
     {hidden.length > 0 && <button type="button" onClick={showAll} className="text-xs text-gray-400 underline">Show {hidden.length} hidden {hidden.length === 1 ? 'suggestion' : 'suggestions'}</button>}
-    <p className="text-xs text-gray-500">Tracking mileage, a home office and equipment in ProfitTracker is coming; for now, keep your own records.</p>
   </div>;
 }

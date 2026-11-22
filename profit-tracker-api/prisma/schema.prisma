@@ -56,6 +56,8 @@ model User {
   tax_profiles           TaxProfile[]
   tax_reserve_entries    TaxReserveEntry[]
   tax_payments           TaxPayment[]
+  tax_mileage_trips      TaxMileageTrip[]
+  tax_assets             TaxAsset[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -831,6 +833,18 @@ model TaxYearSetting {
   // NULL = not entered: the most recent earlier year's value carries forward.
   // January 1 of a year is the previous year's December 31 value.
   untracked_inventory_end Decimal? @db.Decimal(19, 2)
+  // Simplified home office (Schedule C line 30): square feet used regularly
+  // and only for the business, months used that year, and the home's total
+  // square footage (asked on line 30). NULL = not claimed.
+  home_office_sq_ft       Int?
+  home_office_months      Int?
+  home_total_sq_ft        Int?
+  // Schedule C Part IV (vehicle): when the vehicle was first used for the
+  // business, and the year's commuting and other personal miles. Business
+  // miles come from the mileage log.
+  vehicle_in_service      DateTime?
+  vehicle_commuting_miles Decimal? @db.Decimal(12, 1)
+  vehicle_other_miles     Decimal? @db.Decimal(12, 1)
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -935,4 +949,44 @@ model TaxPayment {
   created_at   DateTime @default(now())
 
   @@index([user_id, year])
+}
+
+// A business trip in the mileage log (standard mileage rate, Schedule C
+// line 9). Only what the IRS asks a log to show: date, where, why, miles.
+model TaxMileageTrip {
+  id           String   @id @default(uuid())
+  user_id      String
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  date         DateTime
+  miles        Decimal  @db.Decimal(10, 1)
+  destination  String
+  purpose      String
+  // Business parking fees and tolls, deductible on top of the mileage rate.
+  parking_tolls Decimal? @db.Decimal(19, 2)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  @@index([user_id, date])
+}
+
+// Equipment used in the business (label printer, scale, shelving, computer),
+// deducted in full (de minimis safe harbor or Section 179) or depreciated
+// over its MACRS recovery period. Not vehicles: those use the mileage log.
+model TaxAsset {
+  id                 String    @id @default(uuid())
+  user_id            String
+  user               User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  name               String
+  placed_in_service  DateTime
+  cost               Decimal   @db.Decimal(19, 2)
+  business_percent   Int       // 1-100
+  // de_minimis | section_179 | macrs
+  method             String
+  // 5 or 7 (MACRS recovery period); 5 for computers, 7 for furniture/shelving.
+  recovery_years     Int?
+  disposed_date      DateTime?
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+
+  @@index([user_id])
 }
