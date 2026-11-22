@@ -9,6 +9,7 @@ import { PageLoader } from '../components/PageLoader';
 import LoadError from '../components/UI/LoadError';
 import { Rise, RiseItem, SlidingTabs, GrowBar, FlashNumber, Expand, Panel, Empty, LateGlow } from '../components/Analytics/Motion';
 import MoneyMap from '../components/CashFlow/MoneyMap';
+import { TaxReservePanel } from '../components/CashFlow/TaxReservePanel';
 
 const fmt = (n) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const usd = (n) => `${n < 0 ? '−' : ''}$${fmt(Math.abs(n ?? 0))}`;
@@ -198,6 +199,8 @@ function CashFlow() {
           <Kpi label="Tied up now" icon={Package} value={usd(tiedNow)} number={tiedNow} pending={refreshing}
             sub={`${usd(s.inStock)} in stock + ${usd(s.owedTotal)} unpaid`} />
         </Rise>
+
+        <TaxReservePanel />
 
         {/* Owed vs due */}
         <Panel title="Owed vs due" sub="Who still owes you, next to the card bills coming up and whether payouts land before them.">

@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.48',
+    date: '2026-11-22',
+    notes: "Schedule C is now a tax planner: it estimates the tax your reselling adds (federal, self-employment and many states), how much to set aside and when to pay, and puts tax deadlines on your Calendar. It also keeps your mileage, equipment, home office, 1099-K forms and private receipts, suggests deductions worth checking, and builds a year-end report you can finalize and hand to a tax preparer.",
+  },
+  {
     version: '1.47',
     date: '2026-11-21',
     notes: "New To-Do page: it lists what needs you, worked out from your records (sales to ship, late payouts, cash-out tracking, card bills, stock sitting unlisted), plus reminders you write, and the Dashboard shows the most urgent ones and who still owes you money. You can turn on phone notifications in Settings, and your AI assistant can read the list too.",

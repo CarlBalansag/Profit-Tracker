@@ -16,8 +16,35 @@ const SALE_LINE_CATEGORIES = { SHIPPING_LABEL: 'POSTAGE', SALE_PLATFORM_FEE: 'FE
 // same label or fee entered twice. Flagged, never removed automatically.
 const DUPLICATE_WINDOW_DAYS = 7;
 
+// Two manual expenses that are probably the same charge entered twice: the
+// same amount within a day of each other, with matching names (one contains
+// the other). Two imported statement lines with different transaction ids are
+// different charges, so they never match. The later one is flagged, pointing
+// at the earlier; nothing is removed automatically.
+const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function flagDuplicateExpenses(rows) {
+  const manual = rows.filter(r => r.source === 'manual' && r.status !== 'excluded')
+    .map(r => ({ r, cents: toCents(r.amount), time: new Date(r.tax_details?.paid_date || r.date).getTime(), name: normName(r.name) }))
+    .sort((a, b) => a.time - b.time || String(a.r.id).localeCompare(String(b.r.id)));
+  for (let j = 0; j < manual.length; j++) {
+    const later = manual[j];
+    if (later.r.possible_duplicate_of || later.name.length < 3) continue;
+    for (let i = j - 1; i >= 0; i--) {
+      const earlier = manual[i];
+      if (later.time - earlier.time > DAY_MS) break;
+      if (earlier.cents !== later.cents || earlier.name.length < 3) continue;
+      if (!(earlier.name.includes(later.name) || later.name.includes(earlier.name))) continue;
+      if (earlier.r.external_id && later.r.external_id && earlier.r.external_id !== later.r.external_id) continue;
+      later.r.possible_duplicate_of = earlier.r.name;
+      later.r.possible_duplicate_source = 'expense';
+      later.r.possible_duplicate_id = earlier.r.id;
+      break;
+    }
+  }
+}
+
 async function expenseWorksheet(expenses, year, derivedLines = [], saleRefunds = []) {
-  const { taxCategories, taxReviewIssues } = await contract;
+  const { taxCategories, taxReviewIssues, suggestTaxDetails } = await contract;
   const groups = taxCategories.map(category => ({ ...category, total: '0.00', count: 0 }));
   const groupCents = Object.fromEntries(groups.map(group => [group.id, 0]));
   const saleLines = derivedLines.filter(line => line.source === 'sale' && SALE_LINE_CATEGORIES[line.category]);
@@ -42,9 +69,15 @@ async function expenseWorksheet(expenses, year, derivedLines = [], saleRefunds =
     const expenseTime = new Date(tax.paid_date || expense.date).getTime();
     const duplicate = excluded ? null : saleLines.find(line => toCents(line.amount) === amountCents
       && Math.abs(new Date(line.date).getTime() - expenseTime) <= DUPLICATE_WINDOW_DAYS * DAY_MS);
-    rows.push({ ...expense, source: 'manual', amount, tax_details: tax, status, eligible, issues: excluded ? [] : issues,
-      documentation_missing: !expense.receipt_url, possible_duplicate_of: duplicate ? duplicate.name : null });
+    // Waiting for review: what the review form can prefill (blank fields only).
+    const suggestion = status === 'pending' ? suggestTaxDetails(expense, { paymentMethodName: expense.payment_method?.name || null }) : null;
+    const { payment_method: paymentMethod, ...plain } = expense;
+    rows.push({ ...plain, payment_method_name: paymentMethod?.name || null, source: 'manual', amount, tax_details: tax, status, eligible, issues: excluded ? [] : issues,
+      documentation_missing: !expense.receipt_url, suggestion,
+      possible_duplicate_of: duplicate ? duplicate.name : null, possible_duplicate_source: duplicate ? 'sale' : null, possible_duplicate_id: null });
   }
+
+  flagDuplicateExpenses(rows);
 
   let automaticCents = 0;
   let automaticCount = 0;
@@ -92,6 +125,8 @@ async function expenseWorksheet(expenses, year, derivedLines = [], saleRefunds =
     inventory_costs_excluded: { total: money(inventoryCostLines.reduce((sum, line) => sum + toCents(line.amount), 0)), count: inventoryCostLines.length },
     pending: rows.filter(row => row.status === 'pending').length,
     possible_duplicates: rows.filter(row => row.possible_duplicate_of).length,
+    possible_duplicates_of_sales: rows.filter(row => row.possible_duplicate_source === 'sale').length,
+    possible_duplicates_of_expenses: rows.filter(row => row.possible_duplicate_source === 'expense').length,
     documentation_gaps: rows.filter(row => row.status !== 'excluded' && row.documentation_missing).length };
 }
 module.exports = { expenseWorksheet, SALE_LINE_CATEGORIES };

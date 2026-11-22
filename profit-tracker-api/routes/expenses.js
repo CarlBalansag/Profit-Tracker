@@ -1,4 +1,5 @@
 const express = require('express');
+const { withReceiptLink } = require('../services/privateReceipts');
 const activityLog = require('../services/activityLog');
 const router = express.Router();
 const prisma = require('../prisma');
@@ -27,7 +28,7 @@ const parseLocalDate = (str) => {
 // payment_method (same pattern as inventory.js/sales.js -- see QA-28).
 function exactExpense(expense) {
   if (!expense) return expense;
-  const result = withExactFields(expense, MAPPINGS.expense);
+  const result = withReceiptLink(withExactFields(expense, MAPPINGS.expense), 'expense');
   if (result.payment_method) result.payment_method = withExactFields(result.payment_method, MAPPINGS.paymentMethod);
   return result;
 }

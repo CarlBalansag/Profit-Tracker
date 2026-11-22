@@ -219,6 +219,8 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             shipping_cost_inbound:   d.shipping_cost_inbound ?? 0,
             fees:                    d.fees ?? 0,
             gift_card_amount:        d.gift_card_amount ?? 0,
+            // NULL (not entered) shows as blank; Decimal comes back as a string.
+            gift_card_cost:          d.gift_card_cost ?? '',
             payment_method_id:       d.payment_method_id ?? '',
             cashback_rate:           storedCashbackRate,
             cashback_earned:         storedCashbackAmount,
@@ -367,6 +369,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
             shipping_cost_inbound: Number(form.shipping_cost_inbound),
             fees:                  Number(form.fees),
             gift_card_amount:      Number(form.gift_card_amount),
+            gift_card_cost:        form.gift_card_cost === '' || form.gift_card_cost === null || form.gift_card_cost === undefined ? null : Number(form.gift_card_cost),
             cashback_rate:         Number(form.cashback_rate),
             cashback_earned:       cbEarned,
             category:              form.category || null,
@@ -628,8 +631,14 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                 <Field label="Gift Card Used">
-                  <DollarInput value={form.gift_card_amount} onChange={v => set('gift_card_amount', v)} accentClass="focus:border-blue-500/60" />
+                  <DollarInput value={form.gift_card_amount} onChange={v => set('gift_card_amount', v)} accentClass="focus:border-blue-500/60" ariaLabel="Gift card used" />
                 </Field>
+                {giftCardAmt > 0 && (
+                  <Field label="What the gift card cost you" className="sm:col-span-2">
+                    <DollarInput value={form.gift_card_cost} onChange={v => set('gift_card_cost', v)} placeholder="Optional" accentClass="focus:border-blue-500/60" ariaLabel="What the gift card cost you" />
+                    <p className="text-[11px] text-gray-600 mt-1">For the Schedule C worksheet: what you paid for this gift card amount. Blank or 0 if it was free.</p>
+                  </Field>
+                )}
               </div>
               <p className="text-xs text-gray-400 mt-3">Changing the payment method or store applies its default rate. You can override either field for this transaction.</p>
             </div>

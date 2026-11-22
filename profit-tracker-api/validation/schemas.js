@@ -95,6 +95,19 @@ function decimalAmount({ scale = 2, optional = false, defaultValue, round = fals
   return optional ? schema.optional() : schema;
 }
 
+// Like decimalAmount({ optional: true }), but an explicit null or '' clears
+// the stored value (for nullable columns a person can blank out on edit).
+function nullableDecimalAmount(options = {}) {
+  const inner = decimalAmount({ ...options, optional: true });
+  return z.any().transform((val, ctx) => {
+    if (val === '' || val === null) return null;
+    const parsed = inner.safeParse(val);
+    if (parsed.success) return parsed.data;
+    for (const issue of parsed.error.issues) ctx.addIssue({ code: z.ZodIssueCode.custom, message: issue.message });
+    return z.NEVER;
+  }).optional();
+}
+
 const positiveInt = z.preprocess(
   emptyToUndefined,
   z.coerce.number().int().min(1)
@@ -154,6 +167,7 @@ const createInventory = z.object({
   shipping_cost_inbound: decimalAmount({ defaultValue: 0 }),
   fees: decimalAmount({ defaultValue: 0 }),
   gift_card_amount: decimalAmount({ defaultValue: 0 }),
+  gift_card_cost: nullableDecimalAmount(),
   cashback_rate: decimalAmount({ scale: 6, optional: true }),
   cashback_earned: decimalAmount({ optional: true, round: true }),
   order_number: optionalString,
@@ -193,6 +207,7 @@ const updateInventory = z.object({
   shipping_cost_inbound: decimalAmount({ optional: true }),
   fees: decimalAmount({ optional: true }),
   gift_card_amount: decimalAmount({ optional: true }),
+  gift_card_cost: nullableDecimalAmount(),
   cashback_rate: decimalAmount({ scale: 6, optional: true }),
   order_number: optionalString,
   tracking_number: optionalString,
@@ -282,7 +297,8 @@ const createExpense = z.object({
   date: dateString,
   notes: optionalString,
   external_id: z.string().max(200).nullable().optional(),
-  receipt_url: optionalString,
+  // Private receipts are only ever set by POST /api/receipts/attach.
+  receipt_url: optionalString.refine((v) => !v || !String(v).startsWith('private:'), 'Attach receipts with the receipt upload.'),
   payment_method_id: id,
   tax_details: taxDetails.optional(),
 }).passthrough();
@@ -517,7 +533,144 @@ const dataReset = z.object({
   confirmation: z.literal('RESET'),
 }).strict();
 
+// PUT /api/schedule-c/years/:year. Only the keys sent change; '' or null
+// clears one. At least one key is required.
+const blankToNull = (v) => (v === '' ? null : v);
+const nullableInt = (min, max, message) => z.preprocess(blankToNull, z.coerce.number({ invalid_type_error: message }).int(message).min(min, message).max(max, message).nullable().optional());
+const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a date like 2026-11-21.')
+  .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v, 'Enter a real calendar date.');
+const TAX_YEAR_SETTING_KEYS = ['untracked_inventory_end', 'home_office_sq_ft', 'home_office_months', 'home_total_sq_ft', 'vehicle_in_service', 'vehicle_commuting_miles', 'vehicle_other_miles'];
+const taxYearSettingBody = z.object({
+  untracked_inventory_end: nullableDecimalAmount(),
+  home_office_sq_ft: nullableInt(1, 100000, 'Enter the square feet as a whole number.'),
+  home_office_months: nullableInt(1, 12, 'Enter the months used, from 1 to 12.'),
+  home_total_sq_ft: nullableInt(1, 1000000, 'Enter the square feet as a whole number.'),
+  vehicle_in_service: z.preprocess(blankToNull, isoDay.nullable().optional()),
+  vehicle_commuting_miles: nullableDecimalAmount({ scale: 1 }),
+  vehicle_other_miles: nullableDecimalAmount({ scale: 1 }),
+}).strict().superRefine((body, ctx) => {
+  if (!TAX_YEAR_SETTING_KEYS.some((key) => body[key] !== undefined)) {
+    ctx.addIssue({ code: 'custom', path: ['untracked_inventory_end'], message: 'Enter an amount, or leave it blank to clear it.' });
+  }
+  if (body.home_office_sq_ft != null && body.home_total_sq_ft != null && body.home_office_sq_ft > body.home_total_sq_ft) {
+    ctx.addIssue({ code: 'custom', path: ['home_office_sq_ft'], message: 'The office can\'t be bigger than the whole home.' });
+  }
+});
+
+// POST /api/schedule-c/years/:year/finalize. A reason is required for a
+// revision (checked in the route, which knows whether one exists).
+const finalizeBody = z.object({
+  expected_revision: z.number({ invalid_type_error: 'Reload and try again.', required_error: 'Reload and try again.' }).int().min(0),
+  reason: z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? null : v), z.string().trim().max(300, 'Keep the reason under 300 characters.').nullable().optional()),
+}).strict();
+
+// A business trip in the mileage log.
+const mileageTripBody = z.object({
+  date: isoDay,
+  miles: decimalAmount({ scale: 1 }),
+  destination: z.string().trim().min(1, 'Enter where you went.').max(200, 'Keep it under 200 characters.'),
+  purpose: z.string().trim().min(1, 'Enter why you went.').max(200, 'Keep it under 200 characters.'),
+  parking_tolls: nullableDecimalAmount(),
+}).strict().superRefine((b, ctx) => {
+  if (!(b.miles > 0)) ctx.addIssue({ code: 'custom', path: ['miles'], message: 'Enter the miles, above 0.' });
+  else if (b.miles > 5000) ctx.addIssue({ code: 'custom', path: ['miles'], message: 'One trip can\'t be more than 5,000 miles. Split a long trip into days.' });
+});
+
+// Equipment used in the business. Amounts and dates only.
+const DE_MINIMIS_LIMIT = 2500;
+const taxAssetBody = z.object({
+  name: z.string().trim().min(1, 'Enter what it is.').max(100, 'Keep the name under 100 characters.'),
+  placed_in_service: isoDay,
+  cost: decimalAmount(),
+  business_percent: z.coerce.number({ invalid_type_error: 'Enter the business-use percentage, from 1 to 100.' }).int('Enter a whole percentage.').min(1, 'Enter the business-use percentage, from 1 to 100.').max(100, 'Enter the business-use percentage, from 1 to 100.'),
+  method: z.enum(['de_minimis', 'section_179', 'macrs'], { errorMap: () => ({ message: 'Choose how to deduct it.' }) }),
+  recovery_years: z.preprocess(blankToNull, z.coerce.number().refine((v) => v === 5 || v === 7, 'Choose 5 or 7 years.').nullable().optional()),
+  disposed_date: z.preprocess(blankToNull, isoDay.nullable().optional()),
+}).strict().superRefine((b, ctx) => {
+  if (!(b.cost > 0)) ctx.addIssue({ code: 'custom', path: ['cost'], message: 'Enter what it cost, above $0.' });
+  if (b.method === 'de_minimis' && b.cost > DE_MINIMIS_LIMIT) ctx.addIssue({ code: 'custom', path: ['method'], message: 'The de minimis safe harbor is for items up to $2,500. Use Section 179 or depreciation instead.' });
+  if (b.method === 'section_179' && b.business_percent <= 50) ctx.addIssue({ code: 'custom', path: ['method'], message: 'Section 179 needs more than 50% business use. Use depreciation instead.' });
+  if (b.method === 'macrs' && b.recovery_years == null) ctx.addIssue({ code: 'custom', path: ['recovery_years'], message: 'Choose 5 years (computers, printers) or 7 years (furniture, shelving).' });
+  if (b.disposed_date && b.disposed_date < b.placed_in_service) ctx.addIssue({ code: 'custom', path: ['disposed_date'], message: 'It can\'t be gone before you started using it.' });
+});
+
+// A Form 1099-K entered by hand. Only amounts: never a TIN or account number.
+const form1099KFields = {
+  payer_name: z.string().trim().min(1, 'Enter who sent the form.').max(100, 'Keep the name under 100 characters.'),
+  platform_id: z.preprocess((v) => (v === '' ? null : v), z.string().uuid().nullable().optional()),
+  gross_amount: decimalAmount(),
+  transaction_count: z.preprocess((v) => (v === '' ? null : v), z.coerce.number().int().min(0).max(100000000).nullable().optional()),
+};
+const createForm1099K = z.object(form1099KFields).strict();
+const updateForm1099K = z.object({
+  payer_name: form1099KFields.payer_name.optional(),
+  platform_id: form1099KFields.platform_id,
+  gross_amount: decimalAmount({ optional: true }),
+  transaction_count: form1099KFields.transaction_count,
+}).strict();
+
+// PUT /api/tax/profile/:year. Amounts only: the schema is strict, so a name,
+// SSN or anything else not listed is refused rather than stored.
+const STATE_CODES = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'];
+const optionalCount = z.preprocess((v) => (v === '' ? null : v), z.coerce.number().int().min(0).max(30).nullable().optional());
+const rate = z.preprocess((v) => (v === '' ? null : v), z.coerce.number().finite().min(0).max(1).nullable().optional());
+const taxProfileBody = z.object({
+  state: z.preprocess((v) => (v === '' ? null : v), z.enum(STATE_CODES).nullable().optional()),
+  filing_status: z.enum(['single', 'mfj', 'mfs', 'hoh', 'qss']),
+  non_business_income: nullableDecimalAmount(),
+  wages: nullableDecimalAmount(),
+  other_se_income: nullableDecimalAmount(),
+  federal_withholding: nullableDecimalAmount(),
+  state_withholding: nullableDecimalAmount(),
+  qualifying_children: optionalCount,
+  other_dependents: optionalCount,
+  age65: z.boolean().optional(),
+  spouse_age65: z.boolean().optional(),
+  adjustments: nullableDecimalAmount(),
+  itemized_deductions: nullableDecimalAmount(),
+  prior_year_tax: nullableDecimalAmount(),
+  prior_year_agi: nullableDecimalAmount(),
+  reserve_mode: z.enum(['personalized', 'flat', 'conservative']).optional(),
+  flat_rate: rate,
+  buffer_rate: rate,
+  forecast_method: z.preprocess((v) => (v === '' ? null : v), z.enum(['actual', 'run_rate', 'recent', 'seasonal', 'target']).nullable().optional()),
+  profit_target: nullableDecimalAmount(),
+}).strict().superRefine((p, ctx) => {
+  if (p.wages != null && p.non_business_income != null && p.wages > p.non_business_income) {
+    ctx.addIssue({ code: 'custom', path: ['wages'], message: 'W-2 wages are part of your income outside the business, so they can\'t be more than it.' });
+  }
+});
+
+// POST /api/tax/reserves/:year: money moved aside for taxes, or taken back.
+const taxReserveEntryBody = z.object({
+  kind: z.enum(['set_aside', 'released']),
+  amount: decimalAmount(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a date like 2026-11-21.').refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v, 'Enter a real calendar date.'),
+  note: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(200).nullable().optional()),
+}).strict().refine((b) => b.amount > 0, { message: 'Enter an amount above $0.', path: ['amount'] });
+
+// POST /api/tax/payments/:year: a tax payment the user made.
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a date like 2026-11-21.')
+  .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v, 'Enter a real calendar date.');
+const taxPaymentBody = z.object({
+  jurisdiction: z.enum(['US', ...STATE_CODES]),
+  period: z.enum(['Q1', 'Q2', 'Q3', 'Q4', 'extension', 'other']),
+  amount: decimalAmount(),
+  paid_date: isoDate,
+  reference: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(100).nullable().optional()),
+}).strict().refine((b) => b.amount > 0, { message: 'Enter an amount above $0.', path: ['amount'] });
+
 module.exports = {
+  finalizeBody,
+  mileageTripBody,
+  taxAssetBody,
+  TAX_YEAR_SETTING_KEYS,
+  taxProfileBody,
+  taxPaymentBody,
+  taxReserveEntryBody,
+  createForm1099K,
+  updateForm1099K,
+  taxYearSettingBody,
   dataReset,
   createCashoutConnection,
   updateCashoutConnection,

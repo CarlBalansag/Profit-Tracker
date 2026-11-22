@@ -56,6 +56,14 @@ model User {
   notification_settings  NotificationSettings?
   notifications_sent     NotificationSent[]
   invites                Invite[]
+  tax_year_settings      TaxYearSetting[]
+  tax_forms_1099k        TaxForm1099K[]
+  tax_profiles           TaxProfile[]
+  tax_reserve_entries    TaxReserveEntry[]
+  tax_payments           TaxPayment[]
+  tax_mileage_trips      TaxMileageTrip[]
+  tax_assets             TaxAsset[]
+  tax_report_snapshots   TaxReportSnapshot[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -343,6 +351,10 @@ model Inventory {
   cashback_rate_decimal Decimal?       @db.Decimal(9, 6)
   gift_card_amount      Float          @default(0)
   gift_card_amount_decimal Decimal?    @db.Decimal(19, 2)
+  // What the gift card amount above cost the user (bought at a discount, or
+  // with a fee). NULL = not entered. Only the Schedule C books use it; the rest
+  // of the app still treats gift cards as free.
+  gift_card_cost        Decimal?       @db.Decimal(19, 2)
   order_number          String?
   tracking_number       String?
   // Manual/MCP-set carrier override. Falls back to tracking_info.carrier (the
@@ -476,6 +488,7 @@ model Platform {
   sales            Sales[]     // Platforms as marketplaces
   accounts         Account[]
   cashout_connections CashoutConnection[]
+  tax_forms_1099k  TaxForm1099K[]
 
   @@index([user_id])
 }
@@ -918,4 +931,193 @@ model user_sessions {
   expire DateTime @db.Timestamp(6)
 
   @@ignore
+}
+
+// Per-user, per-tax-year Schedule C settings.
+model TaxYearSetting {
+  id         String   @id @default(uuid())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year       Int
+  // Cost of stock on hand on December 31 of `year` that isn't entered as a
+  // purchase in ProfitTracker (for example, stock from before tracking began).
+  // NULL = not entered: the most recent earlier year's value carries forward.
+  // January 1 of a year is the previous year's December 31 value.
+  untracked_inventory_end Decimal? @db.Decimal(19, 2)
+  // Simplified home office (Schedule C line 30): square feet used regularly
+  // and only for the business, months used that year, and the home's total
+  // square footage (asked on line 30). NULL = not claimed.
+  home_office_sq_ft       Int?
+  home_office_months      Int?
+  home_total_sq_ft        Int?
+  // Schedule C Part IV (vehicle): when the vehicle was first used for the
+  // business, and the year's commuting and other personal miles. Business
+  // miles come from the mileage log.
+  vehicle_in_service      DateTime?
+  vehicle_commuting_miles Decimal? @db.Decimal(12, 1)
+  vehicle_other_miles     Decimal? @db.Decimal(12, 1)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([user_id, year])
+}
+
+// A Form 1099-K the user received, entered by hand to compare with their sales
+// on the Schedule C page. Only the amounts are stored: no TIN or account number.
+model TaxForm1099K {
+  id                String    @id @default(uuid())
+  user_id           String
+  user              User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year              Int
+  // Who sent the form, as printed on it (e.g. "eBay", "PayPal").
+  payer_name        String
+  // The user's marketplace this form covers, for the comparison. Optional:
+  // a payment app may cover sales from several places.
+  platform_id       String?
+  platform          Platform? @relation(fields: [platform_id], references: [id], onDelete: SetNull)
+  // Box 1a, gross amount of payment transactions.
+  gross_amount      Decimal   @db.Decimal(19, 2)
+  // Box 3, number of payment transactions (optional).
+  transaction_count Int?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  @@index([user_id, year])
+}
+
+// What a user chose to save about their own tax situation for one tax year,
+// for the Schedule C tax estimate. Only what the estimate needs: no names,
+// SSNs or birth dates (just "65 or older"). Every amount is optional; the
+// estimate says what it assumed for anything left blank. The user can delete
+// it, and can also estimate without saving anything (nothing is sent then).
+model TaxProfile {
+  id                     String   @id @default(uuid())
+  user_id                String
+  user                   User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year                   Int
+  state                  String?  // two-letter code, e.g. "TX"
+  filing_status          String   // single | mfj | mfs | hoh | qss
+  non_business_income    Decimal? @db.Decimal(19, 2) // expected for the year, all sources
+  wages                  Decimal? @db.Decimal(19, 2) // the part of it that is W-2 wages
+  other_se_income        Decimal? @db.Decimal(19, 2)
+  federal_withholding    Decimal? @db.Decimal(19, 2)
+  state_withholding      Decimal? @db.Decimal(19, 2)
+  // Superseded by TaxPayment (phase 7): no longer read or written. Kept so
+  // the migration stays additive.
+  federal_estimated_paid Decimal? @db.Decimal(19, 2)
+  state_estimated_paid   Decimal? @db.Decimal(19, 2)
+  qualifying_children    Int?
+  other_dependents       Int?
+  age65                  Boolean  @default(false)
+  spouse_age65           Boolean  @default(false)
+  adjustments            Decimal? @db.Decimal(19, 2) // e.g. IRA, HSA, student loan interest
+  itemized_deductions    Decimal? @db.Decimal(19, 2)
+  prior_year_tax         Decimal? @db.Decimal(19, 2)
+  prior_year_agi         Decimal? @db.Decimal(19, 2)
+  reserve_mode           String   @default("personalized") // personalized | flat | conservative
+  flat_rate              Decimal? @db.Decimal(6, 4)          // 0.25 = 25%
+  buffer_rate            Decimal? @db.Decimal(6, 4)          // 0.10 = 10% extra
+  // How to project the year's profit: actual | run_rate | recent | seasonal |
+  // target. NULL = the default (run_rate for the current year).
+  forecast_method        String?
+  profit_target          Decimal? @db.Decimal(19, 2) // the user's own full-year estimate
+  created_at             DateTime @default(now())
+  updated_at             DateTime @updatedAt
+
+  @@unique([user_id, year])
+}
+
+// Money the user moved aside for taxes (or took back), per tax year. A ledger
+// of their own savings: never an expense, never part of any profit total, and
+// separate from tax payments.
+model TaxReserveEntry {
+  id         String   @id @default(uuid())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year       Int
+  kind       String   // set_aside | released
+  amount     Decimal  @db.Decimal(19, 2)
+  date       DateTime
+  note       String?
+  created_at DateTime @default(now())
+
+  @@index([user_id, year])
+}
+
+// A tax payment the user made: an estimated payment for a quarter, an
+// extension payment, or another payment toward a year's tax. Kept apart from
+// the reserve (money set aside) and never part of any profit total.
+model TaxPayment {
+  id           String   @id @default(uuid())
+  user_id      String
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year         Int      // the tax year the payment is for
+  jurisdiction String   // "US" for the IRS, or a two-letter state code
+  period       String   // Q1 | Q2 | Q3 | Q4 | extension | other
+  amount       Decimal  @db.Decimal(19, 2)
+  paid_date    DateTime
+  reference    String?  // e.g. a confirmation number, if the user wants it
+  created_at   DateTime @default(now())
+
+  @@index([user_id, year])
+}
+
+// A business trip in the mileage log (standard mileage rate, Schedule C
+// line 9). Only what the IRS asks a log to show: date, where, why, miles.
+model TaxMileageTrip {
+  id           String   @id @default(uuid())
+  user_id      String
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  date         DateTime
+  miles        Decimal  @db.Decimal(10, 1)
+  destination  String
+  purpose      String
+  // Business parking fees and tolls, deductible on top of the mileage rate.
+  parking_tolls Decimal? @db.Decimal(19, 2)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  @@index([user_id, date])
+}
+
+// Equipment used in the business (label printer, scale, shelving, computer),
+// deducted in full (de minimis safe harbor or Section 179) or depreciated
+// over its MACRS recovery period. Not vehicles: those use the mileage log.
+model TaxAsset {
+  id                 String    @id @default(uuid())
+  user_id            String
+  user               User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  name               String
+  placed_in_service  DateTime
+  cost               Decimal   @db.Decimal(19, 2)
+  business_percent   Int       // 1-100
+  // de_minimis | section_179 | macrs
+  method             String
+  // 5 or 7 (MACRS recovery period); 5 for computers, 7 for furniture/shelving.
+  recovery_years     Int?
+  disposed_date      DateTime?
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+
+  @@index([user_id])
+}
+
+// A finalized Schedule C report for a tax year. Never changed after it's
+// written: a revision is a new row with the next revision number and a reason.
+// `rules` records the rule versions it was built with, so a later rule change
+// can't silently change finalized history; `input_hash` tells whether the
+// records have changed since.
+model TaxReportSnapshot {
+  id         String   @id @default(uuid())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year       Int
+  revision   Int
+  reason     String?
+  report     Json
+  rules      Json
+  input_hash String
+  created_at DateTime @default(now())
+
+  @@unique([user_id, year, revision])
 }

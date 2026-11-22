@@ -1607,6 +1607,16 @@ body,
   aside nav a {
     min-height: 44px;
   }
+  /* Schedule C: expandable section headers and standalone links get a 44px
+     tap area without moving anything (the padding is taken back by the
+     negative margin). */
+  .schedule-c-page summary,
+  .schedule-c-page a.tap-target {
+    padding-block: 13px;
+    margin-block: -13px;
+  }
+  .schedule-c-page a.tap-target { display: inline-block; }
+  .schedule-c-page a.tap-box { display: inline-flex; align-items: center; min-height: 44px; }
   main :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]), select),
   [role="dialog"] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]), select) {
     min-height: 44px;

@@ -11,6 +11,7 @@ import { addDays, localToday } from '../utils/returnWindow';
 import { usePaymentMethods, usePlatforms, useBuyers, useInvalidate, apiFetch, useProductNote, useProductNoteMutations, useProductNames, useRecentTransaction } from '../hooks/useApi';
 import { toastWithUndo } from '../utils/undoToast';
 import InfoTip from '../components/UI/InfoTip';
+import { GIFT_CARD_COST_TIP } from '../utils/giftCardCost';
 import { accountsForStore, accountLabel, validAccountId } from '../utils/storeAccounts';
 import { pointsFromDollars, pointsUnit, formatEarnRate } from '../utils/cardRewards';
 
@@ -27,7 +28,7 @@ const programOf = (card) => card?.rewards_label || 'points';
 import { MAX_RECEIPT_BYTES, RECEIPT_ACCEPT, saveInventoryWithReceipt, validateReceiptFile } from '../hooks/receiptUpload';
 
 // ── Stable module-level components (MUST be outside the component to avoid focus loss) ──
-const Field = ({ label, children, className, tip }) => {
+const Field = ({ label, children, className, tip, tipName, tipAlign, tipWidth = 'w-72' }) => {
   const generatedId = useId();
   const wrapperRef = useRef(null);
   const labelRef = useRef(null);
@@ -47,7 +48,7 @@ const Field = ({ label, children, className, tip }) => {
       {tip ? (
         <div className="flex items-center gap-1.5 mb-1.5">
           <label ref={labelRef} className="block text-xs font-medium text-gray-400">{label}</label>
-          <InfoTip name={label} text={tip} width="w-72" />
+          <InfoTip name={tipName || label} text={tip} align={tipAlign} width={tipWidth} />
         </div>
       ) : (
         <label ref={labelRef} className="block text-xs font-medium text-gray-400 mb-1.5">{label}</label>
@@ -101,6 +102,7 @@ const AddTransaction = () => {
     customer_tax_exempt: false,
     exemption_type: '',
     gift_card_amount: '',
+    gift_card_cost: '',
     cashback_rate: '',
     cashback_earned: '',
     cashback_include_tax: true,
@@ -193,6 +195,7 @@ const AddTransaction = () => {
       shipping_cost_inbound: recentTxn.shipping_cost_inbound ?? prev.shipping_cost_inbound,
       fees: recentTxn.fees ?? prev.fees,
       gift_card_amount: recentTxn.gift_card_amount ?? prev.gift_card_amount,
+      gift_card_cost: recentTxn.gift_card_cost ?? prev.gift_card_cost,
       tax_exempt: recentTxn.tax_exempt ?? prev.tax_exempt,
       category: recentTxn.category ?? prev.category,
       vendor_id: recentTxn.vendor_id ?? prev.vendor_id,
@@ -960,18 +963,33 @@ const AddTransaction = () => {
                 </button>
               )}
 
-              {/* Row 2: Gift Card */}
-              <Field label="Gift Card Used" className="phone-extra">
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
-                  <input
-                    type="number" step="0.01"
-                    name="gift_card_amount" value={formData.gift_card_amount} onChange={handleChange}
-                    className={`${inputCls('pink')} pl-7`}
-                    placeholder="0.00"
-                  />
-                </div>
-              </Field>
+              {/* Row 2: Gift Card, and what it cost (for the Schedule C books) */}
+              <div className="phone-extra grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Gift Card Used">
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                    <input
+                      type="number" step="0.01"
+                      name="gift_card_amount" value={formData.gift_card_amount} onChange={handleChange}
+                      className={`${inputCls('pink')} pl-7`}
+                      placeholder="0.00"
+                    />
+                  </div>
+                </Field>
+                {Number(formData.gift_card_amount) > 0 && (
+                  <Field label="What the gift card cost you" tip={GIFT_CARD_COST_TIP} tipName="gift card cost" tipAlign="right" tipWidth="w-56">
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                      <input
+                        type="number" step="0.01" min="0"
+                        name="gift_card_cost" value={formData.gift_card_cost ?? ''} onChange={handleChange}
+                        className={`${inputCls('pink')} pl-7`}
+                        placeholder="Optional"
+                      />
+                    </div>
+                  </Field>
+                )}
+              </div>
 
               <p className="phone-extra text-xs text-gray-400">Cashback uses purchase cost including tax, shipping and fees, less gift cards.</p>
             </div>

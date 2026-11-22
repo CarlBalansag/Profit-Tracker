@@ -11,14 +11,16 @@ import { cashFlowFixture } from '../test/cashFlowFixture';
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
 globalThis.IntersectionObserver ??= class { observe() {} unobserve() {} disconnect() {} };
 
-const mocks = vi.hoisted(() => ({ data: null }));
+const mocks = vi.hoisted(() => ({ data: null, apiFetch: null }));
 vi.mock('../hooks/useApi', () => ({
   useCashFlow: () => ({ data: mocks.data, isLoading: false, isFetching: false, isLoadingError: false, refetch: vi.fn() }),
+  apiFetch: (...args) => mocks.apiFetch(...args),
 }));
+const res = (body, ok = true) => ({ ok, json: async () => structuredClone(body) });
 
 const page = () => render(<MemoryRouter><CashFlow /></MemoryRouter>);
 
-beforeEach(() => { mocks.data = cashFlowFixture(); });
+beforeEach(() => { mocks.data = cashFlowFixture(); mocks.apiFetch = vi.fn(async () => res({ enabled: false })); });
 afterEach(cleanup);
 
 describe('Cash Flow page', () => {
@@ -71,5 +73,45 @@ describe('Cash Flow page', () => {
   it('describes the money map for screen readers', () => {
     page();
     expect(screen.getByRole('img', { name: /Put in \$1,040: \$312 in stock, \$296 sold and unpaid, \$400 paid back/ })).toBeInTheDocument();
+  });
+});
+
+describe('Cash Flow: tax reserve', () => {
+  const books = { netProfit: '10000.00', forecast: { status: 'current', daysElapsed: 182, daysInYear: 364, recent: { days: 90, profit: 0 }, prior: null } };
+  const api = (overrides = {}) => vi.fn(async (path) => {
+    if (path === '/api/preferences/schedule-c') return res({ enabled: true });
+    if (path.startsWith('/api/schedule-c')) return res({ books });
+    if (path.startsWith('/api/tax/profile/')) return res({ profile: overrides.profile ?? null });
+    if (path.startsWith('/api/tax/reserves/')) return res({ entries: [], balance: overrides.balance ?? '1000.00' });
+    if (path.startsWith('/api/tax/payments/')) return res({ payments: overrides.payments ?? [{ id: 'p1', year: 2026, jurisdiction: 'US', period: 'Q1', amount: '500.00', paid_date: '2026-04-10' }] });
+    throw new Error(path);
+  });
+
+  it('is hidden while Schedule C is off', async () => {
+    page();
+    await Promise.resolve();
+    expect(screen.queryByText(/Tax reserve,/)).toBeNull();
+  });
+
+  it('shows the recommendation, what is set aside, the shortfall and coverage', async () => {
+    // Without saved details: a flat 25% of the projected $20,000 = $5,000;
+    // $1,000 set aside and $500 paid leave $3,500.
+    mocks.apiFetch = api();
+    page();
+    expect(await screen.findByText(/Tax reserve,/)).toBeInTheDocument();
+    expect(screen.getByText('$5,000.00')).toBeInTheDocument();
+    expect(screen.getByText('$1,000.00')).toBeInTheDocument();
+    expect(screen.getByText('$500.00')).toBeInTheDocument(); // a recorded federal payment
+    expect(screen.getByText('$3,500.00')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Tax reserve covered' })).toHaveAttribute('aria-valuenow', '30');
+    expect(screen.getByRole('link', { name: 'Open tax estimate' })).toHaveAttribute('href', '/schedule-c');
+  });
+
+  it('stays out of the way when loading fails', async () => {
+    mocks.apiFetch = vi.fn(async () => res({ error: 'nope' }, false));
+    page();
+    await Promise.resolve(); await Promise.resolve();
+    expect(screen.queryByText(/Tax reserve,/)).toBeNull();
+    expect(screen.getByText('Cash Flow')).toBeInTheDocument();
   });
 });
