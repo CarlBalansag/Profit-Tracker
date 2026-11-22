@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-  User, Database, FileJson, Bell, Palette, ExternalLink, ArrowLeft, Bot, UserPlus
+  User, Database, FileJson, Bell, Palette, ExternalLink, ArrowLeft, Bot, UserPlus, Mail
 } from 'lucide-react';
 import { PaymentMethods } from '../components/Settings/PaymentMethods';
 import { ApiKeys } from '../components/Settings/ApiKeys';
@@ -14,6 +14,7 @@ import { Accounts } from '../components/Settings/Accounts';
 import { UiPreferences } from '../components/Settings/UiPreferences';
 import { Notifications } from '../components/Settings/Notifications';
 import { ScheduleCSettings } from '../components/Settings/ScheduleCSettings';
+import { EmailAccounts } from '../components/Settings/EmailAccounts';
 import { useAuth } from '../context/AuthContext';
 import FirebaseAccount from '../components/Auth/FirebaseAccount';
 import { SCHEDULE_C_ENABLED } from '../config/features';
@@ -36,6 +37,7 @@ function Settings() {
     { id: 'data', label: 'Data', icon: FileJson },
     { id: 'ai-assistant', label: 'AI Assistant', icon: Bot },
     ...(SCHEDULE_C_ENABLED ? [{ id: 'tax', label: 'Schedule C', icon: FileJson }] : []),
+    { id: 'email', label: 'Email', icon: Mail },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'appearance', label: 'Appearance', icon: Palette },
   ];
@@ -177,6 +179,8 @@ function Settings() {
 
           {/* TAX TAB */}
           {SCHEDULE_C_ENABLED && activeTab === 'tax' && <ScheduleCSettings />}
+
+          {activeTab === 'email' && <EmailAccounts />}
 
           {/* APPEARANCE TAB */}
           {activeTab === 'notifications' && <Notifications />}

@@ -2,10 +2,11 @@ const Sentry = require('@sentry/node');
 
 const enabled = Boolean(process.env.SENTRY_DSN);
 
-// Tax and Schedule C requests carry a user's own financial details. The SDK
+// Tax, Schedule C and email requests carry a user's own financial details
+// (and, for email, a mail password). The SDK
 // can attach request bodies, query strings and cookies to an error report on
 // its own, so they are dropped for those routes before anything is sent.
-const PRIVATE_PATHS = /^\/api\/(tax|schedule-c)(\/|\?|$)/;
+const PRIVATE_PATHS = /^\/(api\/(tax|schedule-c|email)|internal\/email)(\/|\?|$)/;
 function scrubEvent(event) {
   const req = event?.request;
   if (!req) return event;

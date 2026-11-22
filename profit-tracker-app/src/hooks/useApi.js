@@ -758,3 +758,35 @@ export const useCashoutMutations = () => {
     deleteCommitment,
   };
 };
+
+// ---- Email connections (E1) ----
+const emailJson = async (r, fallback) => {
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.error || fallback);
+  return body;
+};
+export const useEmailSetup = () => useQuery({ queryKey: ['email', 'setup'], queryFn: () => fetcher('/api/email/setup'), staleTime: 300_000 });
+export const useEmailAccounts = () => useQuery({
+  queryKey: ['email', 'accounts'],
+  queryFn: () => fetcher('/api/email/accounts'),
+  // While a sync runs, check back every few seconds so the count updates.
+  refetchInterval: (query) => (Array.isArray(query.state.data) && query.state.data.some((a) => a.syncing) ? 3000 : false),
+});
+// `found` (the total count) is part of the key, so the list reloads when a
+// background sync finds more.
+export const useEmailMessages = (limit = 10, found = 0) => useQuery({ queryKey: ['email', 'messages', limit, found], queryFn: () => fetcher(`/api/email/messages?limit=${limit}`), placeholderData: keepPreviousData });
+export const useEmailMutations = () => {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['email'] });
+  const json = (method, path, body) => apiFetch(path, {
+    method,
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return {
+    connect: useMutation({ mutationFn: (data) => json('POST', '/api/email/accounts', data).then((r) => emailJson(r, 'Could not connect this email.')), onSuccess: invalidate }),
+    update: useMutation({ mutationFn: ({ id, ...data }) => json('PATCH', `/api/email/accounts/${id}`, data).then((r) => emailJson(r, 'Could not save.')), onSuccess: invalidate }),
+    sync: useMutation({ mutationFn: (id) => json('POST', `/api/email/accounts/${id}/sync`).then((r) => emailJson(r, 'Could not sync.')), onSettled: invalidate }),
+    remove: useMutation({ mutationFn: ({ id, deleteData }) => json('DELETE', `/api/email/accounts/${id}${deleteData ? '?delete_data=true' : ''}`).then((r) => emailJson(r, 'Could not disconnect.')), onSuccess: invalidate }),
+  };
+};

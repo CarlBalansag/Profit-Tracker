@@ -1,0 +1,210 @@
+// Email sync: for each connected mailbox, search INBOX (and spam/junk when the
+// user turned that on) for mail FROM the sender allow-list since the chosen
+// date, and save each match's headers. Bodies are never downloaded here.
+//
+// Cursors: the last UID read per folder, with the folder's UIDVALIDITY. A new
+// UIDVALIDITY means the server renumbered the folder, so its cursor resets and
+// the window is scanned again; the dedupe key keeps that from adding copies.
+const crypto = require('node:crypto');
+const defaultPrisma = require('../../prisma');
+const { PRESETS, SENDERS, merchantFor, normalizeHost, loginName } = require('./config');
+const { decryptSecret } = require('./crypto');
+const { resolvePublicHost } = require('./hostCheck');
+const { openImap, friendlyError } = require('./imap');
+
+const DOMAINS = SENDERS.flatMap((s) => s.domains);
+const BATCH = 50;
+const MAX_PER_RUN = 500; // per account per run; the rest waits for the next run
+const LEASE_MS = 10 * 60 * 1000;
+const SPAM_NAME = /(^|[/.])(spam|junk|bulk(\s*mail)?)$/i;
+
+const sha = (text) => crypto.createHash('sha256').update(text).digest('hex').slice(0, 32);
+
+// The same email in two connected accounts (a forwarded copy) has the same
+// Message-ID, so it is kept once. Without one, the key is per account.
+function dedupeKey(accountId, h) {
+  if (h.messageId && h.messageId.trim()) return `mid:${sha(h.messageId.trim().toLowerCase())}`;
+  return `syn:${sha([accountId, h.fromAddress, h.date ? h.date.toISOString() : '', h.subject || ''].join('\n'))}`;
+}
+
+function foldersToRead(preset, includeSpam, listed) {
+  const inbox = listed.find((f) => f.path.toUpperCase() === 'INBOX')?.path || 'INBOX';
+  if (!includeSpam) return [inbox];
+  const spam = listed.length
+    ? listed.filter((f) => f.path !== inbox && (f.specialUse === '\\Junk' || SPAM_NAME.test(f.path))).map((f) => f.path)
+    : (PRESETS[preset] || PRESETS.other).spamFolders;
+  return [inbox, ...new Set(spam)];
+}
+
+async function imapTarget(account, pass, resolve = resolvePublicHost) {
+  const host = normalizeHost(account.imap_host);
+  return {
+    address: await resolve(host),
+    servername: host,
+    port: account.imap_port || 993,
+    user: loginName(account.preset, account.imap_username, account.email_address),
+    pass,
+  };
+}
+
+// Used before an account is saved, and when its password is replaced.
+async function testConnection(details, deps = {}) {
+  const client = await (deps.open || openImap)(await imapTarget(details, details.password, deps.resolve));
+  try {
+    await client.openReadOnly('INBOX');
+  } finally {
+    await client.close();
+  }
+}
+
+const clip = (value, max) => (value == null ? null : String(value).slice(0, max));
+
+async function syncAccount(accountId, deps = {}) {
+  const prisma = deps.prisma || defaultPrisma;
+  const now = deps.now ? deps.now() : new Date();
+  const budgetMs = deps.budgetMs ?? 40000;
+  const started = Date.now();
+
+  // One sync per account at a time. A lease older than LEASE_MS is a crashed
+  // run and can be taken over.
+  const claim = await prisma.emailAccount.updateMany({
+    where: {
+      id: accountId,
+      status: { not: 'disconnected' },
+      encrypted_secret: { not: null },
+      OR: [{ sync_started_at: null }, { sync_started_at: { lt: new Date(now.getTime() - LEASE_MS) } }],
+    },
+    data: { sync_started_at: now },
+  });
+  if (claim.count === 0) return { status: 'busy' };
+  const account = await prisma.emailAccount.findUnique({ where: { id: accountId } });
+
+  let client = null;
+  let found = 0;
+  let more = false;
+  try {
+    let pass;
+    try {
+      pass = decryptSecret(account.encrypted_secret);
+    } catch {
+      throw Object.assign(new Error('Enter the app password for this account again.'), { userFacing: true, needsUser: true });
+    }
+    client = await (deps.open || openImap)(await imapTarget(account, pass, deps.resolve));
+
+    let listed = [];
+    if (account.include_spam) {
+      try { listed = await client.listFolders(); } catch { listed = []; }
+    }
+    let remaining = MAX_PER_RUN;
+    for (const folder of foldersToRead(account.preset, account.include_spam, listed)) {
+      if (remaining <= 0 || Date.now() - started > budgetMs) { more = true; break; }
+      let box;
+      try {
+        box = await client.openReadOnly(folder);
+      } catch (err) {
+        if (folder.toUpperCase() === 'INBOX') throw err;
+        continue; // a guessed spam folder that doesn't exist
+      }
+      const cursor = await prisma.emailFolderCursor.findUnique({ where: { account_id_folder: { account_id: account.id, folder } } });
+      const renumbered = cursor?.uid_validity && box.uidValidity && cursor.uid_validity !== box.uidValidity;
+      let lastUid = cursor && !renumbered ? cursor.last_uid : 0;
+
+      const uids = await client.searchUids({ domains: DOMAINS, since: account.sync_since, afterUid: lastUid });
+      const take = uids.slice(0, remaining);
+      if (uids.length > take.length) more = true;
+      const saveCursor = () => prisma.emailFolderCursor.upsert({
+        where: { account_id_folder: { account_id: account.id, folder } },
+        create: { account_id: account.id, folder, uid_validity: box.uidValidity, last_uid: lastUid },
+        update: { uid_validity: box.uidValidity, last_uid: lastUid },
+      });
+
+      for (let i = 0; i < take.length; i += BATCH) {
+        if (Date.now() - started > budgetMs) { more = true; break; }
+        const batch = take.slice(i, i + BATCH);
+        const headers = await client.fetchHeaders(batch);
+        const rows = headers
+          .map((h) => ({ h, merchant: merchantFor(h.fromAddress) }))
+          .filter(({ merchant }) => merchant)
+          .map(({ h, merchant }) => ({
+            user_id: account.user_id,
+            account_id: account.id,
+            dedupe_key: dedupeKey(account.id, h),
+            message_id: clip(h.messageId, 500),
+            folder,
+            uid: h.uid,
+            from_address: clip(h.fromAddress, 320),
+            from_name: clip(h.fromName, 200),
+            subject: clip(h.subject, 256),
+            sent_at: h.date && !Number.isNaN(h.date.getTime()) ? h.date : null,
+            merchant,
+          }));
+        if (rows.length) {
+          const saved = await prisma.emailMessage.createMany({ data: rows, skipDuplicates: true });
+          found += saved.count;
+        }
+        lastUid = Math.max(lastUid, ...batch);
+        remaining -= batch.length;
+        await saveCursor();
+      }
+      if (!take.length) await saveCursor();
+    }
+
+    // Only while this run still holds the lease: a disconnect during the run
+    // clears it, and must not be undone here.
+    await prisma.emailAccount.updateMany({
+      where: { id: account.id, sync_started_at: now },
+      data: { status: 'active', last_error: null, last_synced_at: now, sync_started_at: null },
+    });
+    return { status: 'ok', found, more };
+  } catch (err) {
+    // A rejected password needs the user; anything else is retried next run.
+    const needsUser = Boolean(err?.needsUser || err?.authenticationFailed);
+    console.error(`[email] sync failed for account ${account.id}: ${err?.code || (needsUser ? 'auth' : 'error')}`);
+    await prisma.emailAccount.updateMany({
+      where: { id: account.id, sync_started_at: now },
+      data: { status: needsUser ? 'error' : 'active', last_error: friendlyError(err), sync_started_at: null },
+    });
+    return { status: 'error', found, error: friendlyError(err) };
+  } finally {
+    if (client) await client.close();
+  }
+}
+
+// Called by the outside cron. Oldest-synced accounts go first; whatever doesn't
+// fit in the time budget goes first next time.
+async function runScheduledEmailSync(deps = {}) {
+  const prisma = deps.prisma || defaultPrisma;
+  const totalBudget = deps.totalBudgetMs ?? 50000;
+  const started = Date.now();
+  const accounts = await prisma.emailAccount.findMany({
+    where: { status: 'active', encrypted_secret: { not: null } },
+    orderBy: [{ last_synced_at: { sort: 'asc', nulls: 'first' } }],
+    select: { id: true },
+    take: 50,
+  });
+  const summary = { accounts: accounts.length, synced: 0, found: 0, errors: 0, skipped: 0 };
+  for (const { id } of accounts) {
+    const left = totalBudget - (Date.now() - started);
+    if (left < 5000) { summary.skipped += 1; continue; }
+    const result = await syncAccount(id, { ...deps, budgetMs: Math.min(deps.budgetMs ?? 40000, left - 2000) });
+    if (result.status === 'ok') { summary.synced += 1; summary.found += result.found; }
+    else if (result.status === 'error') summary.errors += 1;
+    else summary.skipped += 1;
+  }
+  return summary;
+}
+
+function verifySyncSecret(authHeader) {
+  const secret = process.env.EMAIL_SYNC_SECRET?.trim();
+  if (!secret) return { ok: false, status: 401, message: 'Email sync secret is not configured on server.' };
+  const match = /^Bearer\s+(\S+)$/i.exec(String(authHeader || '').trim());
+  if (!match) return { ok: false, status: 401, message: 'Missing or invalid Authorization header.' };
+  const given = Buffer.from(match[1]);
+  const expected = Buffer.from(secret);
+  if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {
+    return { ok: false, status: 401, message: 'Invalid email sync secret.' };
+  }
+  return { ok: true };
+}
+
+module.exports = { syncAccount, runScheduledEmailSync, testConnection, verifySyncSecret, dedupeKey, foldersToRead, MAX_PER_RUN };

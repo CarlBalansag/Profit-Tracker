@@ -104,6 +104,20 @@ app.post('/internal/notifications/run', async (req, res) => {
   }
 });
 
+// Email sync -- EMAIL_SYNC_SECRET bearer token, called every 10-15 minutes by
+// an outside cron (services/email/sync.js). Reads only allow-listed senders.
+app.post('/internal/email/sync', async (req, res) => {
+  const { verifySyncSecret, runScheduledEmailSync } = require('./services/email/sync');
+  const verify = verifySyncSecret(req.get('Authorization'));
+  if (!verify.ok) return res.status(verify.status || 401).json({ error: verify.message });
+  try {
+    res.json(await runScheduledEmailSync());
+  } catch (err) {
+    console.error('[email] scheduled sync failed:', err?.code || 'error');
+    res.status(500).json({ error: 'Email sync failed.' });
+  }
+});
+
 // CSRF protection: every state-changing request from the SPA must include this header.
 // Browsers never attach custom headers to cross-origin simple requests, so its presence
 // proves the request came from JavaScript running on our frontend, not a forged form.
@@ -202,6 +216,7 @@ app.use('/api/activity', require('./routes/activity'));
 app.use('/api/todos', require('./routes/todos'));
 app.use('/api/reminders', require('./routes/reminders'));
 app.use('/api/push', require('./routes/push'));
+app.use('/api/email', require('./routes/email'));
 
 // Health Check
 app.get('/health', (req, res) => {

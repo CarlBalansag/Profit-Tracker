@@ -4,3 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
+| feat-email-connections | Email connections E1: IMAP + app password, read-only sync of allow-listed senders, Email settings tab | profit-tracker-api/services/email/, profit-tracker-api/routes/email.js, prisma (EmailAccount/EmailFolderCursor/EmailMessage), index.js email mounts, monitoring.js, services/dataReset.js, qa/harness.cjs, profit-tracker-app/src/components/Settings/EmailAccounts*, pages/Settings.jsx, hooks/useApi.js | In progress | 2026-11-22 |

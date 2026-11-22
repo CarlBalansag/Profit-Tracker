@@ -204,6 +204,9 @@ describe('resetUserData on a real database', () => {
     await db.taxReserveEntry.create({ data: { user_id: id, year: 2026, kind: 'set_aside', amount: 10, date: new Date() } });
     await db.taxProfile.create({ data: { user_id: id, year: 2026, filing_status: 'single', state: 'TX' } });
     await db.taxForm1099K.create({ data: { user_id: id, year: 2026, payer_name: 'Market', platform_id: marketplace.id, gross_amount: 100 } });
+    const mailbox = await db.emailAccount.create({ data: { user_id: id, provider: 'imap', preset: 'gmail', email_address: `${label}@gmail.test`, imap_host: 'imap.gmail.com', imap_port: 993, encrypted_secret: 'v1:x', sync_since: new Date() } });
+    await db.emailFolderCursor.create({ data: { account_id: mailbox.id, folder: 'INBOX', last_uid: 3 } });
+    await db.emailMessage.create({ data: { user_id: id, account_id: mailbox.id, dedupe_key: tag('mail'), folder: 'INBOX', uid: 3, from_address: 'a@amazon.com', merchant: 'amazon' } });
 
     const connection = await db.cashoutConnection.create({ data: {
       user_id: id, provider: 'eb', encrypted_key: 'x', key_last4: '1234', platform_id: cashout.id,
@@ -248,13 +251,15 @@ describe('resetUserData on a real database', () => {
       taxAsset: await db.taxAsset.count({ where }),
       taxReportSnapshot: await db.taxReportSnapshot.count({ where }),
       mcpWriteLog: await db.mcpWriteLog.count({ where }),
+      emailAccount: await db.emailAccount.count({ where }),
+      emailMessage: await db.emailMessage.count({ where }),
     };
   }
 
   const FULL = {
     inventory: 1, sales: 1, refund: 2, transactionNote: 2, attachment: 1, changeLog: 2, cashoutItemMatch: 1,
     cashoutDealSnapshot: 1, cashoutConnection: 1, platform: 3, account: 1, paymentMethod: 1, buyer: 1, invoice: 1,
-    expense: 1, recurringExpense: 1, goal: 1, productNote: 1, calendarEvent: 1, taxYearSetting: 1, taxForm1099K: 1, taxProfile: 1, taxReserveEntry: 1, taxPayment: 1, taxMileageTrip: 1, taxAsset: 1, taxReportSnapshot: 1, mcpWriteLog: 1,
+    expense: 1, recurringExpense: 1, goal: 1, productNote: 1, calendarEvent: 1, taxYearSetting: 1, taxForm1099K: 1, taxProfile: 1, taxReserveEntry: 1, taxPayment: 1, taxMileageTrip: 1, taxAsset: 1, taxReportSnapshot: 1, mcpWriteLog: 1, emailAccount: 1, emailMessage: 1,
   };
 
   async function expectLoginIntact(id) {
