@@ -497,7 +497,8 @@ async function storeList(userId) {
     .reduce((latest, x) => (x.stores_scanned_at && (!latest || x.stores_scanned_at > latest) ? x.stores_scanned_at : latest), null);
   return {
     supported,
-    candidates: candidates.map((c) => ({ id: c.id, domain: c.domain, source: sourceLabel(c.domain), label: c.label, order_emails: c.order_emails, last_seen: c.last_seen, requested: Boolean(c.requested_at) })),
+    candidates: candidates.filter((c) => !c.hidden_at).map((c) => ({ id: c.id, domain: c.domain, source: sourceLabel(c.domain), label: c.label, order_emails: c.order_emails, last_seen: c.last_seen, requested: Boolean(c.requested_at) })),
+    hidden: candidates.filter((c) => c.hidden_at).map((c) => ({ id: c.id, domain: c.domain, source: sourceLabel(c.domain), label: c.label })),
     scanned_at: scannedAt,
     all_stores: SENDERS.map((s) => s.label),
   };
@@ -532,6 +533,20 @@ const setRequested = (requested) => async (req, res, next) => {
 };
 router.post('/stores/:id/request', isAuthenticated, setRequested(true));
 router.delete('/stores/:id/request', isAuthenticated, setRequested(false));
+
+// "Not a store": hides the row (and drops any request for it); DELETE shows it again.
+const setHidden = (hidden) => async (req, res, next) => {
+  try {
+    const updated = await prisma.emailStoreCandidate.updateMany({
+      where: { id: req.params.id, user_id: req.user.id },
+      data: hidden ? { hidden_at: new Date(), requested_at: null } : { hidden_at: null },
+    });
+    if (!updated.count) return res.status(404).json({ error: 'Store not found.' });
+    res.json(await storeList(req.user.id));
+  } catch (err) { next(err); }
+};
+router.post('/stores/:id/hide', isAuthenticated, setHidden(true));
+router.delete('/stores/:id/hide', isAuthenticated, setHidden(false));
 
 // For the ProfitTracker team (cron secret): which stores users asked for,
 // counted across users. No user ids or addresses leave this endpoint.

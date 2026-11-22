@@ -835,6 +835,7 @@ export const useEmailStoreMutations = () => {
   return {
     scan: useMutation({ mutationFn: () => send('POST', '/api/email/stores/scan'), onSuccess: (data) => qc.setQueryData(['email', 'stores'], data) }),
     request: useMutation({ mutationFn: ({ id, on }) => send(on ? 'POST' : 'DELETE', `/api/email/stores/${id}/request`), onSuccess: refresh }),
+    hide: useMutation({ mutationFn: ({ id, on }) => send(on ? 'POST' : 'DELETE', `/api/email/stores/${id}/hide`), onSuccess: (data) => qc.setQueryData(['email', 'stores'], data) }),
   };
 };
 export const useEmailRules = () => useQuery({ queryKey: ['email', 'rules'], queryFn: () => fetcher('/api/email/rules') });

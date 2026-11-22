@@ -1328,6 +1328,8 @@ model EmailStoreCandidate {
   last_seen    DateTime?
   scanned_at   DateTime  @default(now())
   requested_at DateTime?
+  // "Not a store": hidden from the list and kept so a new check doesn't bring it back.
+  hidden_at    DateTime?
 
   @@unique([user_id, domain])
   @@index([requested_at])

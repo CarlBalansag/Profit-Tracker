@@ -13,9 +13,10 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
  */
 export function EmailStores() {
   const { data } = useEmailStores();
-  const { scan, request } = useEmailStoreMutations();
+  const { scan, request, hide } = useEmailStoreMutations();
   if (!data) return null;
-  const { supported, candidates, scanned_at: scannedAt, all_stores: allStores } = data;
+  const { supported, candidates, hidden = [], scanned_at: scannedAt, all_stores: allStores } = data;
+  const busy = request.isPending || hide.isPending;
 
   const runScan = async () => {
     try {
@@ -28,6 +29,12 @@ export function EmailStores() {
     try {
       await request.mutateAsync({ id: store.id, on: !store.requested });
       if (!store.requested) toast.success(`Requested ${store.label}. Thanks!`);
+    } catch (err) { toast.error(err.message); }
+  };
+  const setHidden = async (store, on) => {
+    try {
+      await hide.mutateAsync({ id: store.id, on });
+      if (on) toast.success(`Hid ${store.label}`, { action: { label: 'Undo', onClick: () => setHidden(store, false) } });
     } catch (err) { toast.error(err.message); }
   };
 
@@ -56,13 +63,16 @@ export function EmailStores() {
           <p className="text-xs font-semibold text-gray-400">Not supported yet</p>
           <ul className="divide-y divide-white/[0.06]">
             {candidates.map((c) => (
-              <li key={c.id} className="flex items-center justify-between gap-3 py-2">
+              <li key={c.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2">
                 <p className="min-w-0 text-sm text-gray-100">
                   {c.label} <span className="text-xs text-gray-500">· {c.source || c.domain} · {plural(c.order_emails, 'order email', 'order emails')}</span>
                 </p>
-                {c.requested
-                  ? <button type="button" onClick={() => toggle(c)} disabled={request.isPending} aria-label={`Cancel the request for ${c.label}`} className="page-btn page-btn-secondary !h-9 shrink-0 !px-3 !text-xs"><Check size={14} aria-hidden="true" className="text-emerald-400" /> Requested</button>
-                  : <button type="button" onClick={() => toggle(c)} disabled={request.isPending} aria-label={`Request ${c.label}`} className="page-btn page-btn-secondary !h-9 shrink-0 !px-3 !text-xs">Request</button>}
+                <div className="ml-auto flex shrink-0 items-center gap-1">
+                  <button type="button" onClick={() => setHidden(c, true)} disabled={busy} aria-label={`${c.label} is not a store`} className="h-9 rounded-lg px-2.5 text-xs text-gray-500 transition-colors hover:bg-white/[0.04] hover:text-gray-300 disabled:opacity-50">Not a store</button>
+                  {c.requested
+                    ? <button type="button" onClick={() => toggle(c)} disabled={busy} aria-label={`Cancel the request for ${c.label}`} className="page-btn page-btn-secondary !h-9 !px-3 !text-xs"><Check size={14} aria-hidden="true" className="text-emerald-400" /> Requested</button>
+                    : <button type="button" onClick={() => toggle(c)} disabled={busy} aria-label={`Request ${c.label}`} className="page-btn page-btn-secondary !h-9 !px-3 !text-xs">Request</button>}
+                </div>
               </li>
             ))}
           </ul>
@@ -77,6 +87,20 @@ export function EmailStores() {
         </button>
         <p className="text-xs text-gray-500">Looks at who sent each email and its subject line only.</p>
       </div>
+
+      {hidden.length > 0 && (
+        <details className="text-xs text-gray-500">
+          <summary className="cursor-pointer text-gray-400">Hidden ({hidden.length})</summary>
+          <ul className="mt-1 divide-y divide-white/[0.06]">
+            {hidden.map((c) => (
+              <li key={c.id} className="flex items-center justify-between gap-3 py-1.5">
+                <span className="min-w-0 text-gray-400">{c.label} · {c.source || c.domain}</span>
+                <button type="button" onClick={() => setHidden(c, false)} disabled={busy} aria-label={`Show ${c.label} again`} className="h-9 shrink-0 rounded-lg px-2.5 text-gray-400 transition-colors hover:bg-white/[0.04] hover:text-gray-200 disabled:opacity-50">Show</button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       <details className="text-xs text-gray-500">
         <summary className="cursor-pointer text-gray-400">Stores we read ({allStores.length})</summary>

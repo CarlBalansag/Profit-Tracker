@@ -115,9 +115,10 @@ async function scanStores(prisma, userId, deps = {}) {
   }
   const { supported, candidates } = tally(headers, { trusted });
   const now = new Date();
-  // Stores this check didn't find again drop off the list, unless requested.
+  // Stores this check didn't find again drop off the list, unless requested or
+  // hidden (a hidden store stays hidden if it turns up again).
   if (headers.length) {
-    await prisma.emailStoreCandidate.deleteMany({ where: { user_id: userId, requested_at: null, domain: { notIn: candidates.map((c) => c.domain) } } });
+    await prisma.emailStoreCandidate.deleteMany({ where: { user_id: userId, requested_at: null, hidden_at: null, domain: { notIn: candidates.map((c) => c.domain) } } });
   }
   for (const c of candidates) {
     await prisma.emailStoreCandidate.upsert({

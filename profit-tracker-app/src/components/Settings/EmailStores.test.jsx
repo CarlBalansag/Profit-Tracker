@@ -20,7 +20,7 @@ describe('EmailStores', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     data = { supported: [{ key: 'gamestop', label: 'GameStop', order_emails: 9 }], candidates: [], scanned_at: null, all_stores: ['Amazon', 'GameStop'] };
-    stores = { scan: mutation({ ...data, candidates: [etsy] }), request: mutation() };
+    stores = { scan: mutation({ ...data, candidates: [etsy] }), request: mutation(), hide: mutation() };
   });
 
   it('offers a first check, and says it reads senders and subjects only', async () => {
@@ -44,6 +44,23 @@ describe('EmailStores', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel the request for Etsy' }));
     await waitFor(() => expect(stores.request.mutateAsync).toHaveBeenCalledWith({ id: 'c1', on: false }));
     expect(screen.getByRole('button', { name: /Check again/ })).toBeInTheDocument();
+  });
+
+  it('hides a store that is not one, with Undo, and shows it again', async () => {
+    data = { ...data, candidates: [etsy], scanned_at: '2026-11-22T00:00:00Z' };
+    const { rerender } = render(<EmailStores />);
+    fireEvent.click(screen.getByRole('button', { name: 'Etsy is not a store' }));
+    await waitFor(() => expect(stores.hide.mutateAsync).toHaveBeenCalledWith({ id: 'c1', on: true }));
+    const [message, options] = toast.success.mock.calls[0];
+    expect(message).toBe('Hid Etsy');
+    options.action.onClick();
+    await waitFor(() => expect(stores.hide.mutateAsync).toHaveBeenCalledWith({ id: 'c1', on: false }));
+
+    data = { ...data, candidates: [], hidden: [{ id: 'c1', domain: 'etsy.com', label: 'Etsy' }] };
+    rerender(<EmailStores />);
+    expect(screen.getByText('Hidden (1)')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show Etsy again' }));
+    await waitFor(() => expect(stores.hide.mutateAsync).toHaveBeenCalledTimes(3));
   });
 
   it('shows a scan error', async () => {

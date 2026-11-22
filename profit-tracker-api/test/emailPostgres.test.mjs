@@ -443,6 +443,23 @@ describe('email connections on Postgres', () => {
     expect(await router.storeRequests()).toEqual([expect.objectContaining({ domain: 'etsy.com', label: 'Etsy', requests: 1, order_emails: 2 })]);
     expect((await send('DELETE', `/api/email/stores/${id}/request`)).body).toEqual({ requested: false });
     expect(await router.storeRequests()).toEqual([]);
+
+    // "Not a store": hidden (dropping a request), stays hidden after a new check, and comes back on Show.
+    await send('POST', `/api/email/stores/${id}/request`);
+    actingUser = other;
+    expect((await send('POST', `/api/email/stores/${id}/hide`)).status).toBe(404);
+    actingUser = user;
+    const hidden = await send('POST', `/api/email/stores/${id}/hide`);
+    expect(hidden.body.candidates).toEqual([]);
+    expect(hidden.body.hidden).toEqual([expect.objectContaining({ id, label: 'Etsy' })]);
+    expect(await router.storeRequests()).toEqual([]);
+    router._resetLimits();
+    const again = await send('POST', '/api/email/stores/scan');
+    expect(again.body.candidates).toEqual([]);
+    expect(again.body.hidden).toHaveLength(1);
+    const shown = await send('DELETE', `/api/email/stores/${id}/hide`);
+    expect(shown.body.candidates).toEqual([expect.objectContaining({ id, requested: false })]);
+    expect(shown.body.hidden).toEqual([]);
     router._resetLimits();
   });
 
