@@ -140,15 +140,15 @@ export function MileageLog({ year, mileage, vehicle, onSaved }) {
     <div className="mt-3 space-y-4 text-sm">
       <p className="text-gray-400">Log trips to stores, the post office or buyers as you go. Each one counts at the IRS standard mileage rate for its date, which covers gas, wear and insurance, so don&apos;t also deduct gas. Commuting doesn&apos;t count.</p>
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
-        <div className="min-w-0 rounded-lg border border-white/10 p-2 sm:p-3"><p className="text-xs text-gray-500">Trips</p><p className="mt-1 break-words text-base tabular-nums sm:text-lg">{mileage.trips}</p></div>
-        <div className="min-w-0 rounded-lg border border-white/10 p-2 sm:p-3"><p className="text-xs text-gray-500">Business miles</p><p className="mt-1 break-words text-base tabular-nums sm:text-lg">{Number(mileage.miles).toLocaleString('en-US')}</p></div>
-        <div className="min-w-0 rounded-lg border border-white/10 p-2 sm:p-3"><p className="text-xs text-gray-500">Deduction</p><p className="mt-1 break-words text-base tabular-nums sm:text-lg">{usd(mileage.total)}</p></div>
+        <div className="min-w-0"><p className="text-xs text-gray-500">Trips</p><p className="mt-1 break-words text-base tabular-nums sm:text-lg">{mileage.trips}</p></div>
+        <div className="min-w-0"><p className="text-xs text-gray-500">Business miles</p><p className="mt-1 break-words text-base tabular-nums sm:text-lg">{Number(mileage.miles).toLocaleString('en-US')}</p></div>
+        <div className="min-w-0"><p className="text-xs text-gray-500">Deduction</p><p className="mt-1 break-words text-base tabular-nums sm:text-lg">{usd(mileage.total)}</p></div>
       </div>
       {mileage.byRate.length > 0 && <p className="text-xs text-gray-500">{mileage.byRate.map((r) => `${Number(r.miles).toLocaleString('en-US')} mi at ${r.cents}¢ = ${usd(r.amount)}`).join(' · ')}{Number(mileage.parkingTolls) ? ` · parking and tolls ${usd(mileage.parkingTolls)}` : ''}</p>}
       {mileage.rateMissing && <p className="text-amber-300">The IRS rate for {year} isn&apos;t in ProfitTracker yet, so trips in {year} count $0 for now. Parking and tolls still count.</p>}
 
       {editing === 'new' ? <TripForm year={year} onDone={changed} onCancel={() => setEditing(null)} />
-        : <button type="button" onClick={() => setEditing('new')} className="rounded-lg bg-purple-600 px-4 py-2 text-white">Add a trip</button>}
+        : <button type="button" onClick={() => setEditing('new')} className="page-btn page-btn-primary">Add a trip</button>}
 
       {loadError ? <div><p role="alert" className="text-red-400">{loadError}</p><button type="button" onClick={() => { setLoadError(''); setAttempt((n) => n + 1); }} className="mt-1 underline">Try again</button></div>
         : trips === null ? <p role="status" className="text-gray-400">Loading trips…</p>

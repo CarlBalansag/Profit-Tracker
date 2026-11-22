@@ -143,7 +143,7 @@ export function Forms1099K({ year, data, onSaved }) {
         : <p className="text-sm text-gray-400">None entered. Add each 1099-K you received to see how it compares with your sales.</p>}
       {editing === 'new'
         ? <FormEditor year={year} form={null} platforms={platforms} onDone={done} onCancel={() => setEditing(null)} />
-        : <button type="button" onClick={() => setEditing('new')} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-purple-300">Add a 1099-K</button>}
+        : <button type="button" onClick={() => setEditing('new')} className="page-btn page-btn-secondary">Add a 1099-K</button>}
     </div>
   </details>;
 }

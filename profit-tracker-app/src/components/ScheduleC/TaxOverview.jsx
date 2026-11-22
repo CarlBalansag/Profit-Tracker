@@ -50,11 +50,11 @@ function TheMath({ o, detailed }) {
   const w = i.withBusiness.federal; const wo = i.withoutBusiness.federal;
   const ws = i.withBusiness.state; const wos = i.withoutBusiness.state;
   return <div className="mt-3 space-y-4 text-sm">
-    <p className="text-gray-300">We work out your whole {o.year} tax twice, once with your business profit and once without it. The difference is the tax your business adds: {usd(i.withBusiness.totalTax)} − {usd(i.withoutBusiness.totalTax)} = <strong className="text-white">{usd(i.additionalTaxFromBusiness)}</strong>.</p>
-    <dl className="grid gap-3 sm:grid-cols-3">
-      <div className="rounded-lg border border-white/10 p-3"><dt className="text-xs text-gray-400">Effective business tax rate</dt><dd className="mt-1 text-lg tabular-nums text-white">{pct(i.effectiveBusinessTaxRate)}</dd><dd className="text-xs text-gray-500">Tax the business adds ÷ its profit</dd></div>
-      <div className="rounded-lg border border-white/10 p-3"><dt className="text-xs text-gray-400">Marginal rate</dt><dd className="mt-1 text-lg tabular-nums text-white">{pct(i.marginalRate)}</dd><dd className="text-xs text-gray-500">Tax on your next $100 of profit, all taxes combined</dd></div>
-      <div className="rounded-lg border border-white/10 p-3"><dt className="text-xs text-gray-400">Effective rate on all income</dt><dd className="mt-1 text-lg tabular-nums text-white">{pct(i.effectiveTaxRate)}</dd><dd className="text-xs text-gray-500">Total tax ÷ total income</dd></div>
+    <p className="max-w-prose text-gray-300">We work out your whole {o.year} tax twice, once with your business profit and once without it. The difference is the tax your business adds: {usd(i.withBusiness.totalTax)} − {usd(i.withoutBusiness.totalTax)} = <strong className="text-white">{usd(i.additionalTaxFromBusiness)}</strong>.</p>
+    <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-3">
+      <div className="min-w-0"><dt className="text-xs text-[var(--dp-text-muted)]">Effective business tax rate</dt><dd className="mt-1 text-lg tabular-nums text-white">{pct(i.effectiveBusinessTaxRate)}</dd><dd className="text-xs text-gray-500">Tax the business adds ÷ its profit</dd></div>
+      <div className="min-w-0"><dt className="text-xs text-[var(--dp-text-muted)]">Marginal rate</dt><dd className="mt-1 text-lg tabular-nums text-white">{pct(i.marginalRate)}</dd><dd className="text-xs text-gray-500">Tax on your next $100 of profit, all taxes combined</dd></div>
+      <div className="min-w-0"><dt className="text-xs text-[var(--dp-text-muted)]">Effective rate on all income</dt><dd className="mt-1 text-lg tabular-nums text-white">{pct(i.effectiveTaxRate)}</dd><dd className="text-xs text-gray-500">Total tax ÷ total income</dd></div>
     </dl>
     {detailed && <>
       <ResponsiveTable caption="Federal" rowKey={(r) => r.key || r.label} strong={(r) => r.strong} columns={[
@@ -179,30 +179,36 @@ export function TaxOverview({ year, books, worksheet = null, pendingExpenses = 0
   return <section aria-label="Tax estimate" className="space-y-4">
     {header}
     {session && <p className="rounded-xl bg-[var(--dp-warning-bg)] px-4 py-3 text-sm text-[var(--dp-warning-text)]">Not saved: these details are only in this browser tab and are gone when you leave.{session.filing_status && <> <button type="button" disabled={busy} onClick={() => submit({ profile: session, save: true })} className="underline">Save them</button></>}</p>}
-    {o.overdue.length > 0 && <div role="alert" className="rounded-xl border border-red-500/40 p-3 text-sm text-red-200">
-      <p className="font-medium">{o.overdue.length === 1 ? 'An estimated tax payment looks unpaid' : `${o.overdue.length} estimated tax payments look unpaid`}</p>
-      <ul className="mt-1 space-y-0.5">{o.overdue.map((d) => <li key={`${d.code}-${d.period}`}>{d.who} {d.period}, due {day(d.due)}: <span className="tabular-nums">{usd(d.amount)}</span></li>)}</ul>
-      <p className="mt-1 text-xs text-red-200/80">If you've already paid, record it under Tax payments. If not, the IRS charges a penalty that grows the longer a payment is late, so paying soon keeps it small. <a className="underline" href="https://www.irs.gov/payments" target="_blank" rel="noreferrer">Ways to pay the IRS</a></p>
-    </div>}
-    {o.limitations.length > 0 && <ul role="note" className="space-y-1 rounded-xl border border-amber-500/30 p-3 text-sm text-amber-200">{o.limitations.map((l) => <li key={l}>{l}</li>)}</ul>}
 
     <Rise data-tutorial-id="sc-estimate-cards" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
       <Tile label="Profit so far" icon={TrendingUp} value={usd(o.actualProfit)}
         tip="Your Schedule C profit (line 31) so far this year. The estimate uses the projected full-year number."
-        sub={<>{projected ? <>Projected for {year}: <span className="text-[var(--dp-text-secondary)]">{usd(o.businessProfit)}</span> · </> : null}<button type="button" onClick={onShowWorksheet} className="underline">see how</button></>} />
-      <Tile label="Tax the business adds" icon={Receipt} value={o.impact ? usd(Math.max(0, o.impact.additionalTaxFromBusiness)) : '—'}
-        tip="The extra federal, self-employment and state tax you owe because of this profit, on top of what you'd owe without the business."
+        sub={<>{projected ? <>Projected for {year}: <span className="text-[var(--dp-text-secondary)]">{usd(o.businessProfit)}</span> · </> : null}<button type="button" aria-label="See how your profit is worked out" onClick={onShowWorksheet} className="underline">see how</button></>} />
+      <Tile label="Business tax" icon={Receipt} value={o.impact ? usd(Math.max(0, o.impact.additionalTaxFromBusiness)) : '—'}
+        tip="The extra federal, self-employment and state tax you owe because of this profit, on top of what you'd owe without the business. Set aside covers it."
         sub={o.impact ? (o.impact.effectiveBusinessTaxRate !== null ? `About ${pct(o.impact.effectiveBusinessTaxRate)} of ${projected ? 'projected' : 'your'} profit` : 'No profit yet, so no extra tax') : 'Add your filing status to see this'} />
       <Tile label="Set aside" icon={PiggyBank} value={usd(o.recommended)} highlight tipAlign="right"
-        tip="How much to keep in savings so the tax is covered when it's due. Money you've set aside or paid counts toward it."
-        sub={`${MODE_LABEL[o.effectiveMode]} · ${usd(o.stillToSetAside)} still to set aside${o.coverage !== null && o.covered > 0 ? ` · ${Math.min(100, Math.round(o.coverage * 100))}% covered` : ''}`} />
-      <Tile label="Next payment due" icon={CalendarClock} tipAlign="right"
+        tip={`How much to keep in savings so the tax is covered when it's due (${MODE_LABEL[o.effectiveMode]} method). Money you've set aside or paid counts toward it${o.coverage !== null ? `; ${Math.min(100, Math.round(o.coverage * 100))}% is covered now` : ''}.`}
+        sub={o.stillToSetAside > 0 ? `${usd(o.stillToSetAside)} still to go` : 'Fully covered'} />
+      <Tile label="Next payment" icon={CalendarClock} tipAlign="right"
         tip="Self-employed people pay tax during the year in installments. This is the next one, with any amount still owed from earlier ones."
         value={next ? day(next.due) : (o.impact ? 'Nothing scheduled' : '—')}
         sub={next
           ? o.nextDue.filter((d) => d.due === next.due).map((d) => <span key={d.who} className="block">{d.who} {d.period}: {usd(d.amount)}{d.catchUp > 0 ? `, including ${usd(d.catchUp)} overdue` : ''}</span>)
           : (o.impact ? `Any balance is due when you file, by ${day(o.filingDue)}.` : unsupportedYear ? 'Not available for this year' : 'Add your details to see this')} />
     </Rise>
+
+    {o.overdue.length > 0 && <div role="status" className="rounded-xl bg-[var(--dp-red-bg)] px-4 py-3 text-sm text-[var(--dp-red-text)]">
+      <p className="font-medium">{o.overdue.length === 1 ? 'An estimated tax payment looks unpaid' : `${o.overdue.length} estimated tax payments look unpaid`}</p>
+      <p className="mt-0.5 max-w-prose text-[var(--dp-text-secondary)]">Paid already? Record it under Tax payments. If not, paying soon keeps the IRS penalty small. <a className="underline" href="https://www.irs.gov/payments" target="_blank" rel="noreferrer">Ways to pay</a></p>
+      <details className="mt-1 text-[var(--dp-text-secondary)]"><summary className="cursor-pointer text-xs">Which ones</summary>
+        <ul className="mt-1 space-y-0.5 text-xs">{o.overdue.map((d) => <li key={`${d.code}-${d.period}`}>{d.who} {d.period}, due {day(d.due)}: <span className="tabular-nums">{usd(d.amount)}</span></li>)}</ul>
+      </details>
+    </div>}
+    {o.limitations.length > 0 && <details role="note" className="text-sm text-[var(--dp-text-secondary)]">
+      <summary className="cursor-pointer"><span className="font-medium text-[var(--dp-warning-text)]">{o.limitations.length === 1 ? '1 note' : `${o.limitations.length} notes`}</span> about this estimate</summary>
+      <ul className="mt-2 max-w-prose list-disc space-y-1 pl-5 text-xs">{o.limitations.map((l) => <li key={l}>{l}</li>)}</ul>
+    </details>}
 
     <Panel title="Details" sub="Open any of these to see the math, plan payments or try a what-if.">
     <div className="sc-rows">
@@ -224,13 +230,13 @@ export function TaxOverview({ year, books, worksheet = null, pendingExpenses = 0
 
     <details data-tutorial-id="sc-saved" className={card} open={detailed || undefined}>
       <summary className="cursor-pointer text-sm font-medium text-purple-300">What you&apos;ve already saved and paid</summary>
-      <table className="mt-3 w-full text-sm"><tbody>
+      <table className="mt-3 w-full max-w-md text-sm"><tbody>
         <Row label="Recommended to set aside" value={usd(o.recommended)} />
         <Row label="In your tax savings" value={usd(o.reserveBalance)} />
         <Row label="Tax payments made" hint="Recorded under Tax payments" value={usd(o.estimatedPaid)} />
         <Row strong label={o.stillToSetAside > 0 ? 'Still to set aside' : 'Covered'} hint={o.coverage !== null ? `${Math.min(100, Math.round(o.coverage * 100))}% of the recommendation is covered` : undefined} value={usd(o.stillToSetAside)} />
       </tbody></table>
-      {o.impact ? <table className="mt-3 w-full text-sm"><tbody>
+      {o.impact ? <table className="mt-3 w-full max-w-md text-sm"><tbody>
         <tr><td colSpan={2} className="pt-2 text-xs font-medium text-gray-400">Your whole return</td></tr>
         <Row label="Federal tax withheld from paychecks" value={usd(o.impact.withBusiness.federal.withholding)} />
         <Row label="Federal estimated payments" value={usd(o.impact.withBusiness.federal.estimatedPayments)} />
@@ -262,9 +268,9 @@ export function TaxOverview({ year, books, worksheet = null, pendingExpenses = 0
 
     <div className={`${card} space-y-3`}>
       {!editing ? <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-gray-400">Using: <span className="text-gray-200">{describe}</span>{saved && !session ? ' · saved' : ' · not saved'}</p>
+        <p className="text-sm text-gray-400">Using: <span className="text-gray-200">{describe}</span>{` · ${MODE_LABEL[o.effectiveMode]}`}{saved && !session ? ' · saved' : ' · not saved'}</p>
         <div className="flex flex-wrap gap-3 text-sm">
-          <button type="button" onClick={() => setEditing(true)} className="rounded-lg border border-white/10 px-3 py-1.5 text-purple-300">Edit my tax details</button>
+          <button type="button" onClick={() => setEditing(true)} className="page-btn page-btn-secondary">Edit my tax details</button>
           {saved && !confirmDelete && <button type="button" onClick={() => setConfirmDelete(true)} className="text-gray-400 underline">Delete saved details</button>}
           {saved && confirmDelete && <span className="flex flex-wrap items-center gap-2"><span className="text-gray-400">Delete your saved {year} details?</span><button type="button" disabled={busy} onClick={removeSaved} className="text-red-300 underline">Yes, delete</button><button type="button" onClick={() => setConfirmDelete(false)} className="text-gray-400 underline">Keep them</button></span>}
           {session && <button type="button" onClick={() => setSession(null)} className="text-gray-400 underline">Clear unsaved details</button>}

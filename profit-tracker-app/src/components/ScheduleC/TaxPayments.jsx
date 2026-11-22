@@ -4,6 +4,7 @@ import { requireSuccessfulResponse } from '../../hooks/apiResponse';
 import { STATE_NAMES } from '../../../../shared/tax/index.mjs';
 import { localToday } from '../../utils/returnWindow';
 import { ResponsiveTable } from './ResponsiveTable';
+import { Pill } from './Tile';
 
 const usd = (value) => {
   const n = Number(value) || 0;
@@ -13,10 +14,10 @@ const usd = (value) => {
 const day = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 const inputCls = 'w-full rounded-lg border border-white/10 bg-[#16181d] px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-purple-500/60 focus:outline-none disabled:opacity-60';
 const STATUS = {
-  paid: ['Paid', 'text-emerald-300'],
-  partly_paid: ['Partly paid', 'text-amber-300'],
-  overdue: ['Overdue', 'text-red-300'],
-  upcoming: ['Upcoming', 'text-gray-400'],
+  paid: ['Paid', 'good'],
+  partly_paid: ['Partly paid', 'warn'],
+  overdue: ['Overdue', 'bad'],
+  upcoming: ['Upcoming', 'muted'],
 };
 const PERIOD_LABEL = { Q1: 'Q1', Q2: 'Q2', Q3: 'Q3', Q4: 'Q4', extension: 'Extension', other: 'Other' };
 const PAY_LINKS = {
@@ -33,8 +34,8 @@ function Installments({ plan, installments }) {
     <ResponsiveTable className="mt-2" rows={installments} rowKey={(i) => i.period} columns={[
       { label: 'Quarter', cell: (i) => <>{i.period}<span className="block text-xs font-normal text-gray-500">{i.covers}</span></> },
       { label: 'Due', align: 'right', cell: (i) => day(i.due) },
-      { label: 'Left to pay', align: 'right', cell: (i) => <>{usd(i.remaining)}<span className="block text-xs text-gray-500">of {usd(i.amount)}</span></> },
-      { label: 'Status', align: 'right', cell: (i) => <span className={STATUS[i.status][1]}>{STATUS[i.status][0]}</span> },
+      { label: 'Left to pay', align: 'right', cell: (i) => <>{usd(i.remaining)}{i.remaining !== i.amount && <span className="block text-xs text-[var(--dp-text-muted)]">of {usd(i.amount)}</span>}</> },
+      { label: 'Status', cell: (i) => <Pill tone={STATUS[i.status][1]}>{STATUS[i.status][0]}</Pill> },
     ]} />
     {plan.notes.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-gray-500">{plan.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
   </>;
@@ -133,7 +134,7 @@ export function TaxPayments({ year, o, profile, payments, onChanged }) {
           <button type="submit" disabled={busy} className="rounded-lg bg-purple-600 px-4 py-2 text-white disabled:opacity-50">{busy ? 'Saving…' : 'Save payment'}</button>
           <button type="button" disabled={busy} onClick={() => { setAdding(false); setError(''); }} className="rounded-lg border border-white/10 px-4 py-2 text-gray-300">Cancel</button>
         </div>
-      </form> : <button type="button" onClick={() => { setValues(blank()); setAdding(true); }} className="rounded-lg border border-white/10 px-3 py-1.5 text-purple-300">Record a payment</button>}
+      </form> : <button type="button" onClick={() => { setValues(blank()); setAdding(true); }} className="page-btn page-btn-secondary">Record a payment</button>}
       <p className="text-xs text-gray-500">Recording a payment here doesn&apos;t send money anywhere. <a className="underline" href={PAY_LINKS.US.url} target="_blank" rel="noreferrer">{PAY_LINKS.US.label}</a></p>
     </div>
   </div>;

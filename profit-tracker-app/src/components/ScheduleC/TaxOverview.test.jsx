@@ -72,11 +72,11 @@ describe('Tax estimate', () => {
     expect(await screen.findByText(/Not saved: these details are only in this browser tab/)).toBeInTheDocument();
     expect(calls).toEqual([]);
     expect(within(cardValue('Profit so far')).getByText('$50,000.00')).toBeInTheDocument();
-    expect(within(cardValue('Tax the business adds')).getByText('$9,732.07')).toBeInTheDocument();
-    expect(within(cardValue('Tax the business adds')).getByText('About 19.5% of your profit')).toBeInTheDocument();
+    expect(within(cardValue('Business tax')).getByText('$9,732.07')).toBeInTheDocument();
+    expect(within(cardValue('Business tax')).getByText('About 19.5% of your profit')).toBeInTheDocument();
     expect(within(cardValue('Set aside')).getByText('$9,732.07')).toBeInTheDocument();
-    expect(within(cardValue('Next payment due')).getByText('Jan 15, 2027')).toBeInTheDocument();
-    expect(within(cardValue('Next payment due')).getByText('Federal (IRS) Q4: $8,758.86, including $6,569.16 overdue')).toBeInTheDocument();
+    expect(within(cardValue('Next payment')).getByText('Jan 15, 2027')).toBeInTheDocument();
+    expect(within(cardValue('Next payment')).getByText('Federal (IRS) Q4: $8,758.86, including $6,569.16 overdue')).toBeInTheDocument();
     expect(screen.getByText(/2 expenses are waiting for review/)).toBeInTheDocument();
     // Saving later sends exactly what was typed.
     fireEvent.click(screen.getByRole('button', { name: 'Save them' }));
@@ -182,7 +182,7 @@ describe('Tax estimate', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Use my estimate' }));
       await waitFor(() => expect(calls.at(-1).body).toMatchObject({ forecast_method: 'target', profit_target: '50000' }));
       // $50,000, single, Texas: the business adds $9,732.07 (the engine walk-through).
-      await waitFor(() => expect(within(cardValue('Tax the business adds')).getByText('$9,732.07')).toBeInTheDocument());
+      await waitFor(() => expect(within(cardValue('Business tax')).getByText('$9,732.07')).toBeInTheDocument());
     });
 
     it('records money set aside and counts it toward the recommendation', async () => {
@@ -221,10 +221,10 @@ describe('Tax estimate', () => {
 
     it('flags unpaid past quarters and folds them into the next payment', async () => {
       mountOverview();
-      const alert = await screen.findByRole('alert');
+      const alert = (await screen.findByText('3 estimated tax payments look unpaid')).closest('[role="status"]');
       expect(alert.textContent).toMatch(/^3 estimated tax payments look unpaid/);
       expect(within(alert).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Federal (IRS) Q1, due Apr 15, 2026: $2,189.72', 'Federal (IRS) Q2, due Jun 15, 2026: $2,189.72', 'Federal (IRS) Q3, due Sep 15, 2026: $2,189.72']);
-      expect(within(cardValue('Next payment due')).getByText(/Federal \(IRS\) Q4: \$8,758\.86, including \$6,569\.16 overdue/)).toBeInTheDocument();
+      expect(within(cardValue('Next payment')).getByText(/Federal \(IRS\) Q4: \$8,758\.86, including \$6,569\.16 overdue/)).toBeInTheDocument();
       expect(screen.getAllByText('Overdue')).toHaveLength(3);
     });
 

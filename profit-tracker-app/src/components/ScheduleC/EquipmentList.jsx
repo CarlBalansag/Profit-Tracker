@@ -129,14 +129,14 @@ export function EquipmentList({ year, assets: summary, onSaved }) {
     <div className="mt-3 space-y-4 text-sm">
       <p className="text-gray-400">Things the business uses for more than a year: a label printer, scale, shelving, camera or computer. Not stock you sell, and not your car (use the mileage log for that).</p>
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
-        <div className="min-w-0 rounded-lg border border-white/10 p-2 sm:p-3"><p className="text-xs text-gray-500">Depreciation (line 13)</p><p className="mt-1 break-words text-base tabular-nums sm:text-lg">{usd(summary.depreciation)}</p></div>
-        <div className="min-w-0 rounded-lg border border-white/10 p-2 sm:p-3"><p className="text-xs text-gray-500">Section 179 (line 13)</p><p className="mt-1 break-words text-base tabular-nums sm:text-lg">{usd(summary.section179)}</p>{Number(summary.section179Carryover) > 0 && <p className="mt-1 text-xs text-amber-300">{usd(summary.section179Carryover)} carries to next year</p>}</div>
-        <div className="min-w-0 rounded-lg border border-white/10 p-2 sm:p-3"><p className="text-xs text-gray-500">De minimis (line 22)</p><p className="mt-1 break-words text-base tabular-nums sm:text-lg">{usd(summary.deMinimis)}</p></div>
+        <div className="min-w-0"><p className="text-xs text-gray-500">Depreciation (line 13)</p><p className="mt-1 break-words text-base tabular-nums sm:text-lg">{usd(summary.depreciation)}</p></div>
+        <div className="min-w-0"><p className="text-xs text-gray-500">Section 179 (line 13)</p><p className="mt-1 break-words text-base tabular-nums sm:text-lg">{usd(summary.section179)}</p>{Number(summary.section179Carryover) > 0 && <p className="mt-1 text-xs text-amber-300">{usd(summary.section179Carryover)} carries to next year</p>}</div>
+        <div className="min-w-0"><p className="text-xs text-gray-500">De minimis (line 22)</p><p className="mt-1 break-words text-base tabular-nums sm:text-lg">{usd(summary.deMinimis)}</p></div>
       </div>
       {summary.midQuarter && <p className="text-amber-300">More than 40% of the equipment you&apos;re depreciating started in October to December, so a different IRS rule (mid-quarter) applies. These amounts use the usual half-year rule; ask a tax preparer to check them.</p>}
 
       {editing === 'new' ? <AssetForm year={year} onDone={changed} onCancel={() => setEditing(null)} />
-        : <button type="button" onClick={() => setEditing('new')} className="rounded-lg bg-purple-600 px-4 py-2 text-white">Add equipment</button>}
+        : <button type="button" onClick={() => setEditing('new')} className="page-btn page-btn-primary">Add equipment</button>}
 
       {loadError ? <div><p role="alert" className="text-red-400">{loadError}</p><button type="button" onClick={() => { setLoadError(''); setAttempt((n) => n + 1); }} className="mt-1 underline">Try again</button></div>
         : assets === null ? <p role="status" className="text-gray-400">Loading equipment…</p>

@@ -31,7 +31,7 @@ export function WhatIf({ year, profile, baseProfit, marginalRate, today }) {
   const onlySpending = !changes.extraProfit && !changes.otherIncomeChange && result?.spent > 0;
 
   return <div className="mt-3 space-y-4 text-sm">
-    <div className="rounded-lg border border-white/10 p-3">
+    <div className="max-w-prose">
       <p className="font-medium text-white">Why a deduction isn&apos;t free money</p>
       <p className="mt-1 text-gray-400">A simple example: if every dollar of profit were taxed at 10%, spending $100 on a deductible expense would cut your tax by $10. You&apos;d still be out $90. Deduct what the business really needs; don&apos;t buy things just for the deduction.</p>
       {marginalRate != null && <p className="mt-1 text-gray-300">For you, each extra $100 of business profit adds about {usd(marginalRate * 100)} of tax right now (all taxes together), so a $100 deductible expense saves about that much.</p>}

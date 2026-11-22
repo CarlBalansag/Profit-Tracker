@@ -19,7 +19,7 @@ function Stat({ label, value, sub, onClick }) {
   const inner = <>
     <dt className="text-[11px] font-semibold uppercase tracking-wider text-[var(--dp-text-label)]">{label}</dt>
     <dd className="mt-1 text-lg font-bold tabular-nums text-[var(--dp-text-primary)]">{value}</dd>
-    {sub && <dd className="text-[11px] text-[var(--dp-text-muted)]">{sub}</dd>}
+    {sub && <dd className="text-xs text-[var(--dp-text-muted)]">{sub}</dd>}
   </>;
   return onClick
     ? <div className="min-w-0"><button type="button" onClick={onClick} className="w-full rounded-lg text-left hover:bg-[var(--dp-hover-bg)]"><dl>{inner}</dl></button></div>

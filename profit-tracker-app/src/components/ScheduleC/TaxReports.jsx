@@ -80,7 +80,7 @@ function YearOverYear({ year, report, prior }) {
   ];
   const empty = prior.sales.count === 0 && Number(pick(prior, 'part1', '28')) === 0;
   return <details className={card}>
-    <summary className="cursor-pointer text-sm font-medium text-purple-300">Compared with {year - 1}</summary>
+    <summary className="cursor-pointer text-sm font-medium text-[var(--dp-text-primary)]">Compared with {year - 1}</summary>
     {empty ? <p className="mt-3 text-sm text-gray-400">ProfitTracker has no sales or expenses for {year - 1}.</p>
       : <ResponsiveTable className="mt-3" rows={rows} rowKey={([line, , part]) => `${part}-${line}`} strong={([line]) => line === '31'} columns={[
         { label: 'Line', cell: ([line, label]) => <><span className="text-gray-500">{line}</span> {label}</> },
@@ -146,7 +146,7 @@ export function TaxReports({ year, onDrill }) {
       <p className="text-xs text-gray-500">The CSV opens in Excel or Google Sheets. The PDF is the packet below: send it to your preparer with your receipts.</p>
       <YearOverYear year={year} report={data.report} prior={prior} />
       {snapshots.length > 0 && <details className={card}>
-        <summary className="cursor-pointer text-sm font-medium text-purple-300">Revision history ({snapshots.length})</summary>
+        <summary className="cursor-pointer text-sm font-medium text-[var(--dp-text-primary)]">Revision history ({snapshots.length})</summary>
         <ul className="mt-3 space-y-2 text-sm">{snapshots.map((s) => <li key={s.id} className="flex flex-wrap items-baseline justify-between gap-2 border-t border-white/5 pt-2">
           <span className="min-w-0 text-gray-300">Revision {s.revision} · {when(s.created_at)}{s.reason ? ` · ${s.reason}` : ''}</span>
           <span className="flex flex-wrap items-baseline gap-3"><span className="tabular-nums text-gray-400">Line 31 {usd(s.net_profit)}</span><button type="button" onClick={() => view(s.id)} className="text-purple-300 underline">View</button></span>

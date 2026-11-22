@@ -1701,3 +1701,20 @@ body,
     font-weight: 500;
   }
 }
+
+/* Schedule C reading comfort: prose stops at a readable line length, the
+   smallest text is 12.5px, and sentence-case labels keep normal spacing
+   (the app-wide label rule adds 0.7px tracking meant for uppercase). */
+/* Unlayered on purpose: these must outrank Tailwind's utility classes. */
+.schedule-c-page :is(p, dd, ul.list-disc > li) { max-width: 62ch; }
+.schedule-c-page .text-xs { font-size: 12.5px; line-height: 1.45; }
+@layer components {
+  .carbon-workspace .schedule-c-page label:not([class*="uppercase"]),
+  .glass-workspace .schedule-c-page label:not([class*="uppercase"]),
+  .schedule-c-page label:not([class*="uppercase"]) { letter-spacing: normal !important; }
+}
+/* The three Schedule C tabs fit a 320px phone without scrolling. */
+@media (max-width: 359px) {
+  .schedule-c-page [role="tablist"] { gap: 2px; }
+  .schedule-c-page [role="tablist"] > [role="tab"] { padding-left: 5px; padding-right: 5px; font-size: 12px; letter-spacing: normal; }
+}

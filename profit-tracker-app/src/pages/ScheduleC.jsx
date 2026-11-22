@@ -143,9 +143,10 @@ export default function ScheduleC() {
       </div>
       <div role="tablist" aria-label="Schedule C views" data-tutorial-id="sc-tabs" onKeyDown={moveTab} className="schedule-c-actions relative flex max-w-full gap-1 overflow-x-auto rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] p-1 sm:inline-flex">
         {VIEWS.map(([key, label]) => <button key={key} id={`schedule-c-tab-${key}`} type="button" role="tab" aria-selected={view === key} aria-controls="schedule-c-panel" tabIndex={view === key ? 0 : -1} onClick={() => setView(key)} style={{ flex: '1 0 auto' }}
-          className={`whitespace-nowrap rounded-lg border px-2.5 py-2 text-[13px] font-medium transition-colors sm:px-4 sm:text-sm ${view === key ? 'border-[color:var(--accent)] bg-[var(--accent-bg)] text-[var(--dp-text-primary)]' : 'border-transparent text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}>{label}</button>)}
+          className={`whitespace-nowrap rounded-lg border px-2 py-2 text-[12.5px] font-medium transition-colors min-[360px]:px-2.5 min-[360px]:text-[13px] sm:px-4 sm:text-sm ${view === key ? 'border-[color:var(--accent)] bg-[var(--accent-bg)] text-[var(--dp-text-primary)]' : 'border-transparent text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}>{label}</button>)}
       </div>
       {panel || <div id="schedule-c-panel" role="tabpanel" aria-labelledby={`schedule-c-tab-${view}`} className="space-y-6">
+        <h2 className="sr-only">{VIEWS.find(([key]) => key === view)?.[1]}</h2>
         {view === 'reports' ? <TaxReports key={report.year} year={Number(report.year)} onDrill={(f) => {
           setView('worksheet'); if (f !== 'logs') setFilter(f);
           // After the worksheet renders, bring the records into view.

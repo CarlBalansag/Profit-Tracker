@@ -26,8 +26,8 @@ export function DeductionChecks({ year, worksheet, saleCount, profit, records = 
       <li>{missingReceipts > 0 ? `${missingReceipts} deducted ${missingReceipts === 1 ? 'expense has' : 'expenses have'} no receipt attached. Keep records for each deduction.` : 'Every deducted expense has a receipt.'}</li>
     </ul>
     <p className="text-gray-400">Worth looking into. These are prompts, not claims: nothing is added to your return unless you record it.</p>
-    <ul className="space-y-2">
-      {shown.map((c) => <li key={c.id} className="rounded-lg border border-white/10 p-3">
+    <ul className="divide-y divide-[color:var(--dp-border)]">
+      {shown.map((c) => <li key={c.id} className="py-3">
         <details>
           <summary className="cursor-pointer text-white">{c.title} <span className="text-xs text-gray-500">· {c.where}</span></summary>
           <dl className="mt-2 space-y-1.5 text-gray-300">

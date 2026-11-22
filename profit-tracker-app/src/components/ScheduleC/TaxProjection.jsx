@@ -37,7 +37,7 @@ export function TaxProjection({ o, target, busy, onChoose }) {
       {ORDER.map((key) => {
         const m = p.methods[key];
         const disabled = busy || (key !== 'target' && !m.available);
-        return <div key={key} className={`rounded-lg border p-3 ${chosen.key === key ? 'border-purple-500/50' : 'border-white/10'}`}>
+        return <div key={key} className={`rounded-lg px-3 py-2.5 ${chosen.key === key ? 'bg-[var(--accent-bg)]' : ''}`}>
           <label className="flex items-start gap-2">
             <input type="radio" name="forecast" checked={chosen.key === key} disabled={disabled} onChange={() => choose(key)} className="mt-1" />
             <span className="min-w-0 flex-1">
