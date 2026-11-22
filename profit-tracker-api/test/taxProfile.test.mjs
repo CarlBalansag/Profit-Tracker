@@ -59,9 +59,9 @@ describe('buildTaxOverview', () => {
   });
 
   it('says so when the state is not supported, and sets aside nothing on a loss', () => {
-    const ca = buildTaxOverview({ profile: { ...single, state: 'CA' }, year: 2026, businessProfit: 20000, today: '2026-11-21' });
-    expect(ca.stateSupport).toBe('unsupported');
-    expect(ca.limitations.join(' ')).toMatch(/California/);
+    const ny = buildTaxOverview({ profile: { ...single, state: 'NY' }, year: 2026, businessProfit: 20000, today: '2026-11-21' });
+    expect(ny.stateSupport).toBe('unsupported');
+    expect(ny.limitations.join(' ')).toMatch(/New York/);
     const loss = buildTaxOverview({ profile: { ...single, non_business_income: '50000', wages: '50000' }, year: 2026, businessProfit: -5000, today: '2026-11-21' });
     expect(loss.impact.additionalTaxFromBusiness).toBeLessThan(0);
     expect([loss.recommended, loss.stillToSetAside]).toEqual([0, 0]);
@@ -70,7 +70,7 @@ describe('buildTaxOverview', () => {
 
   it('lists every state with its coverage', () => {
     expect(stateOptions(2026)).toHaveLength(51);
-    expect([stateSupport(2026, 'TX'), stateSupport(2026, 'CO'), stateSupport(2026, 'AZ'), stateSupport(2026, 'CA')]).toEqual(['none', 'verified', 'provisional', 'unsupported']);
+    expect([stateSupport(2026, 'TX'), stateSupport(2026, 'CO'), stateSupport(2026, 'AZ'), stateSupport(2026, 'NY'), stateSupport(2025, 'CA'), stateSupport(2026, 'CA')]).toEqual(['none', 'verified', 'provisional', 'unsupported', 'verified', 'provisional']);
   });
 });
 

@@ -97,6 +97,40 @@ function ohio(rule, ctx, n) {
   return { tax: before - credit, taxableIncome: base, steps };
 }
 
+// California: FTB Form 540 lines 13-19 (AGI less the standard deduction),
+// line 31 (rate schedule), line 32 (exemption credits with the AGI limitation
+// worksheet) and line 62 (Behavioral Health Services Tax, 1% over $1,000,000).
+function california(rule, ctx, n) {
+  const fs = ctx.filingStatus;
+  const std = D(rule.standardDeduction[fs]);
+  const taxable = pos(ctx.agi - std);
+  const rows = rule.brackets[rule.schedule[fs]];
+  const [over, baseTax, rate] = [...rows].reverse().find(([o]) => taxable > D(o)) || rows[0];
+  const scheduleTax = D(baseTax) + times(taxable - D(over), rate);
+  // Credit "boxes": you (and spouse), blind, 65 or older; plus dependents.
+  const ec = rule.exemptionCredits;
+  const boxes = (['mfj', 'qss'].includes(fs) ? 2 : 1) + n.blind + n.age65;
+  let personal = D(ec.personal) * boxes;
+  let dependents = D(ec.dependent) * n.dependents;
+  const over2 = ctx.agi - D(ec.phaseOut.threshold[fs]);
+  if (over2 > 0) {
+    const cut = Math.ceil(over2 / D(fs === 'mfs' ? ec.phaseOut.stepMfs : ec.phaseOut.step)) * D(ec.phaseOut.perStep);
+    personal = pos(personal - cut * boxes);
+    dependents = pos(dependents - cut * n.dependents);
+  }
+  const credit = Math.min(scheduleTax, personal + dependents);
+  const bh = rule.behavioralHealth;
+  const bhTax = times(pos(taxable - D(bh.threshold)), bh.rate);
+  const steps = [
+    { label: 'Federal adjusted gross income', amount: ctx.agi },
+    { label: 'California standard deduction', amount: -std },
+    { label: `Tax from schedule ${rule.schedule[fs]} (top rate ${(rate * 100).toFixed(1).replace(/\.0$/, '')}%)`, amount: scheduleTax },
+  ];
+  if (credit) steps.push({ label: 'Exemption credits', amount: -credit });
+  if (bhTax) steps.push({ label: 'Behavioral Health Services Tax (1% over $1,000,000)', amount: bhTax });
+  return { tax: scheduleTax - credit + bhTax, taxableIncome: taxable, steps, marginalRate: rate + (bhTax ? bh.rate : 0) };
+}
+
 /** Returns { tax, taxableIncome, steps } in cents, or null for an unknown kind. */
 function compute(rule, ctx) {
   const n = counts(ctx);
@@ -123,6 +157,7 @@ function compute(rule, ctx) {
     return { tax: pos(gross - credit), taxableIncome: pos(ctx.agi), steps };
   }
   if (rule.kind === 'ohio') return ohio(rule, ctx, n);
+  if (rule.kind === 'ca') return california(rule, ctx, n);
   let base;
   if (rule.kind === 'agi') {
     base = ctx.agi;
@@ -186,7 +221,8 @@ export function stateIncomeTax(stateCode, year, ctx) {
   if (rule.kind === 'none') return { ...base, tax: 0, taxableIncome: 0, rate: 0, steps: [] };
   const result = compute(rule, ctx);
   if (!result) return unsupported;
-  return { ...base, ...result, rate: rule.rate };
+  const { marginalRate, ...rest } = result;
+  return { ...base, ...rest, rate: rule.rate ?? marginalRate };
 }
 
 /** State estimated payments where the state's own schedule has been verified. */
@@ -204,16 +240,22 @@ export function stateEstimatedPayments({ taxYear, state, filingStatus, currentYe
   const withheld = pos(c(withholding));
   let required = times(current, e.currentYear);
   let basis = 'current-year';
-  if (priorYear && priorYear.totalTax != null) {
+  const onlyThisYear = e.currentYearOnlyAgi && agi != null && c(agi) >= D(filingStatus === 'mfs' ? e.currentYearOnlyAgi.mfs : e.currentYearOnlyAgi.other);
+  if (onlyThisYear) notes.push(`With income of $${(filingStatus === 'mfs' ? e.currentYearOnlyAgi.mfs : e.currentYearOnlyAgi.other).toLocaleString('en-US')} or more, ${name} estimated tax has to be based on this year's tax, not last year's.`);
+  if (e.scheduleNote) notes.push(e.scheduleNote);
+  if (priorYear && priorYear.totalTax != null && !onlyThisYear) {
     const high = e.priorYearHighIncome && priorYear.agi != null && c(priorYear.agi) > D(filingStatus === 'mfs' ? e.highIncomeAgi.mfs : e.highIncomeAgi.other);
     const target = times(pos(c(priorYear.totalTax)), high ? e.priorYearHighIncome : e.priorYear);
     if (target < required) { required = target; basis = high ? 'prior-year-high-income' : 'prior-year'; }
   }
   if (e.priorYearHighIncomeNote && priorYear?.agi != null && c(priorYear.agi) > D(filingStatus === 'mfs' ? e.highIncomeAgi.mfs : e.highIncomeAgi.other)) notes.push(e.priorYearHighIncomeNote);
   let mustPay = true;
-  if (e.requiredWhenOwedOver != null && current - withheld <= D(e.requiredWhenOwedOver)) {
+  const owedOver = typeof e.requiredWhenOwedOver === 'object' && e.requiredWhenOwedOver !== null ? e.requiredWhenOwedOver[filingStatus] : e.requiredWhenOwedOver;
+  if (owedOver != null && current - withheld < D(owedOver) + (typeof e.requiredWhenOwedOver === 'object' ? 0 : 1)) {
     mustPay = false;
-    notes.push(`You expect to owe $${e.requiredWhenOwedOver.toLocaleString('en-US')} or less after withholding, so ${name} estimated payments are generally not required.`);
+    notes.push(typeof e.requiredWhenOwedOver === 'object'
+      ? `You expect to owe less than $${owedOver.toLocaleString('en-US')} after withholding, so ${name} estimated payments are generally not required.`
+      : `You expect to owe $${owedOver.toLocaleString('en-US')} or less after withholding, so ${name} estimated payments are generally not required.`);
   }
   if (e.requiredWhenAgiOver) {
     const limit = D(e.requiredWhenAgiOver[filingStatus]);

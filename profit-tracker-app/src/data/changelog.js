@@ -6,7 +6,7 @@ export const CHANGELOG = [
   {
     version: '1.48',
     date: '2026-11-22',
-    notes: "Schedule C is now a tax planner: it estimates the tax your reselling adds (federal, self-employment and many states), how much to set aside and when to pay, and puts tax deadlines on your Calendar. It also keeps your mileage, equipment, home office, 1099-K forms and private receipts, suggests deductions worth checking, and builds a year-end report you can finalize and hand to a tax preparer.",
+    notes: "Schedule C is now a tax planner: it estimates the tax your reselling adds (federal, self-employment and many states, including California), how much to set aside and when to pay, and puts tax deadlines on your Calendar. It also keeps your mileage, equipment, home office, 1099-K forms and private receipts, suggests deductions worth checking, and builds a year-end report you can finalize and hand to a tax preparer.",
   },
   {
     version: '1.47',

@@ -59,7 +59,8 @@ describe('Tax estimate', () => {
     await screen.findByRole('form', { name: 'Set up your tax estimate' });
     const state = screen.getByLabelText('State you live in');
     expect(within(state).getByRole('option', { name: 'Texas (no state income tax)' })).toBeInTheDocument();
-    expect(within(state).getByRole('option', { name: 'California (not supported yet)' })).toBeInTheDocument();
+    expect(within(state).getByRole('option', { name: 'New York (not supported yet)' })).toBeInTheDocument();
+    expect(within(state).getByRole('option', { name: 'California (estimate)' })).toBeInTheDocument();
     expect(within(state).getByRole('option', { name: 'Colorado' })).toBeInTheDocument();
     expect(screen.getByText(/never ask for your Social Security number/)).toBeInTheDocument();
   });
@@ -141,9 +142,9 @@ describe('Tax estimate', () => {
   });
 
   it('says when the state is not included', async () => {
-    saved = { year: 2026, state: 'CA', filing_status: 'single', non_business_income: '0', reserve_mode: 'personalized' };
+    saved = { year: 2026, state: 'NY', filing_status: 'single', non_business_income: '0', reserve_mode: 'personalized' };
     mountOverview();
-    expect(await screen.findByText(/California income tax is not supported yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/New York income tax is not supported yet/)).toBeInTheDocument();
   });
 
   it('shows an error and a retry when loading fails', async () => {

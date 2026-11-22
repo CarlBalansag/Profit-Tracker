@@ -26,7 +26,7 @@ export function taxDeadlines({ year, state = null }) {
       out.push({
         id: `tax_${code}_${year}_${i.period}`, date: i.due, kind: 'estimated', jurisdiction: code, period: i.period,
         title: `${STATE_NAMES[code]} estimated tax due: ${i.period} ${year}`,
-        notes: `${STATE_NAMES[code]} quarterly estimated tax for ${year}, if you're required to pay it. See your Schedule C tax estimate.`,
+        notes: `${STATE_NAMES[code]} estimated tax for ${year}, if you're required to pay it. See your Schedule C tax estimate.`,
       });
     }
   }

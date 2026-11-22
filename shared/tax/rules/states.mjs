@@ -17,6 +17,9 @@
 //   'utah'        4.5% of AGI less the phased-out taxpayer tax credit
 //   'ohio'        business income deduction, 3% on remaining business income,
 //                 nonbusiness schedule, MAGI-tiered exemptions
+//   'ca'          California: federal AGI - CA standard deduction, graduated
+//                 schedules X/Y/Z, exemption credits phased out above an AGI
+//                 threshold, plus the 1% Behavioral Health Services Tax
 //
 // Amounts are whole dollars as published; rates are decimals.
 
@@ -51,6 +54,11 @@ const NO_INCOME_TAX = {
 
 // ---- Sources ---------------------------------------------------------------
 const S = {
+  CA_TN_2025: src('FTB Tax News, October 2025: 2025 indexing and rate schedules', 'https://www.ftb.ca.gov/about-ftb/newsroom/tax-news/2025/10.html'),
+  CA_TN_2026: src('FTB Tax News, October 2026: 2026 indexing and rate schedules', 'https://www.ftb.ca.gov/about-ftb/newsroom/tax-news/2026/10.html'),
+  CA_540_2025: src('FTB 2025 Form 540 booklet (exemption credits, AGI limitation worksheet, line 62)', 'https://www.ftb.ca.gov/forms/2025/2025-540-booklet.html'),
+  CA_ES_2025: src('FTB 2025 Form 540-ES instructions', 'https://www.ftb.ca.gov/forms/2025/2025-540-es-instructions.html'),
+  CA_ES_2026: src('FTB 2026 Form 540-ES instructions', 'https://www.ftb.ca.gov/forms/2026/2026-540-es-instructions.html'),
   AZ_2025: src('Arizona Form 140 resident booklet (2025)', 'https://azdor.gov/sites/default/files/document/FORMS_INDIVIDUAL_2025_140Booklet.pdf'),
   AZ_HIGHLIGHTS: src('ADOR individual income tax highlights', 'https://azdor.gov/forms/individual-income-tax-highlights'),
   AZ_FORMS: src('ADOR individual forms ("tax year 2023 and beyond ... flat tax rate of 2.5%")', 'https://azdor.gov/forms/individual'),
@@ -115,10 +123,56 @@ const LOCAL = {
   MI: 'Michigan city income taxes (Detroit, Grand Rapids and others) are not included.',
   PA: 'Pennsylvania local earned income tax and school district taxes are not included.',
 };
+// California rate schedules: [over, base tax, rate] rows, as printed by FTB.
+// X: single and married/RDP filing separately; Y: joint and surviving spouse;
+// Z: head of household.
+const CA_SCHEDULES = {
+  2025: {
+    X: [[0, 0, 0.01], [11079, 110.79, 0.02], [26264, 414.49, 0.04], [41452, 1022.01, 0.06], [57542, 1987.41, 0.08], [72724, 3201.97, 0.093], [371479, 30986.19, 0.103], [445771, 38638.27, 0.113], [742953, 72219.84, 0.123]],
+    Y: [[0, 0, 0.01], [22158, 221.58, 0.02], [52528, 828.98, 0.04], [82904, 2044.02, 0.06], [115084, 3974.82, 0.08], [145448, 6403.94, 0.093], [742958, 61972.37, 0.103], [891542, 77276.52, 0.113], [1485906, 144439.65, 0.123]],
+    Z: [[0, 0, 0.01], [22173, 221.73, 0.02], [52530, 828.87, 0.04], [67716, 1436.31, 0.06], [83805, 2401.65, 0.08], [98990, 3616.45, 0.093], [505208, 41394.72, 0.103], [606251, 51802.15, 0.113], [1010417, 97472.91, 0.123]],
+  },
+  2026: {
+    X: [[0, 0, 0.01], [11456, 114.56, 0.02], [27157, 428.58, 0.04], [42861, 1056.74, 0.06], [59498, 2054.96, 0.08], [75197, 3310.88, 0.093], [384109, 32039.70, 0.103], [460927, 39951.95, 0.113], [768213, 74675.27, 0.123]],
+    Y: [[0, 0, 0.01], [22912, 229.12, 0.02], [54314, 857.16, 0.04], [85722, 2113.48, 0.06], [118996, 4109.92, 0.08], [150394, 6621.76, 0.093], [768218, 64079.39, 0.103], [921854, 79903.90, 0.113], [1536426, 149350.54, 0.123]],
+    Z: [[0, 0, 0.01], [22927, 229.27, 0.02], [54316, 857.05, 0.04], [70018, 1485.13, 0.06], [86654, 2483.29, 0.08], [102356, 3739.45, 0.093], [522385, 42802.15, 0.103], [626864, 53563.49, 0.113], [1044771, 100786.98, 0.123]],
+  },
+};
+const CA_NOTES = [
+  'California AGI is taken to be your federal AGI. California adjustments (for example HSA contributions, which California doesn\'t allow) are not applied.',
+  'Uses the California standard deduction; California itemized deductions are not calculated.',
+  'The renter\'s credit, CalEITC, Young Child Tax Credit and other California credits are not included.',
+  'Below $100,000 of taxable income the FTB tax table rounds to $100 bands, so your return can differ by a few dollars.',
+];
+const CA_COMMON = {
+  kind: 'ca', schedule: { single: 'X', mfs: 'X', mfj: 'Y', qss: 'Y', hoh: 'Z' },
+  behavioralHealth: { threshold: 1000000, rate: 0.01 },
+  notes: CA_NOTES,
+};
+const caEstimates = (year, q2Due, sources) => ({
+  requiredWhenOwedOver: byStatus(500, 500, { mfs: 250 }), currentYear: 0.90, priorYear: 1.00, priorYearHighIncome: 1.10,
+  highIncomeAgi: { mfs: 75000, other: 150000 }, currentYearOnlyAgi: { mfs: 500000, other: 1000000 },
+  // 30% / 40% / none in September / 30%.
+  installments: [{ period: 'Q1', due: `${year}-04-15`, share: 0.30 }, { period: 'Q2', due: q2Due, share: 0.40 }, { period: 'Q4', due: `${year + 1}-01-15`, share: 0.30 }],
+  scheduleNote: 'California splits estimated tax 30% in April, 40% in June, nothing in September and 30% in January.',
+  sources,
+});
+
 const STATE_ADJUSTMENTS = 'State additions and subtractions to federal income (for example retirement exclusions or state depreciation addbacks) are not applied.';
 
 // ---- Per-state definitions ------------------------------------------------
 const DEFINED = {
+  CA: {
+    2025: { ...CA_COMMON, status: 'verified', brackets: CA_SCHEDULES[2025], sources: [S.CA_TN_2025, S.CA_540_2025, S.CA_ES_2025],
+      standardDeduction: byStatus(5706, 11412, { hoh: 11412 }),
+      exemptionCredits: { personal: 153, dependent: 475, phaseOut: { threshold: byStatus(252203, 504411, { hoh: 378310 }), step: 2500, stepMfs: 1250, perStep: 6 } },
+      estimatedTax: caEstimates(2025, '2025-06-16', [S.CA_ES_2025]) },
+    2026: { ...CA_COMMON, status: 'provisional', brackets: CA_SCHEDULES[2026], sources: [S.CA_TN_2026, S.CA_ES_2026, S.CA_540_2025],
+      provisional: 'Uses FTB\'s 2026 rate schedules, standard deduction and exemption credits (announced October 2026); the 2026 exemption credit phase-out thresholds aren\'t published yet, so 2025\'s are used (they only matter above $252,203 of AGI, or $504,411 joint).',
+      standardDeduction: byStatus(5900, 11800, { hoh: 11800 }),
+      exemptionCredits: { personal: 158, dependent: 491, phaseOut: { threshold: byStatus(252203, 504411, { hoh: 378310 }), step: 2500, stepMfs: 1250, perStep: 6 } },
+      estimatedTax: caEstimates(2026, '2026-06-15', [S.CA_ES_2026]) },
+  },
   AZ: {
     2025: { kind: 'agi', status: 'verified', rate: 0.025, sources: [S.AZ_2025, S.AZ_HIGHLIGHTS],
       standardDeduction: byStatus(15750, 31500, { hoh: 23625 }),
