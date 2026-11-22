@@ -20,6 +20,8 @@ const {
 const commitsService = require('../services/cashouts/commits');
 const { logPurchase } = require('../services/cashouts/logPurchase');
 const pendingCommit = require('../services/cashouts/pendingCommit');
+const importSold = require('../services/cashouts/importSold');
+const { pullReceivedItems } = require('../services/cashouts/service');
 
 // Errors from these routes. A message we wrote (it has a status) or the
 // provider's own refusal is shown as is. Anything else (a database error, a
@@ -325,6 +327,46 @@ router.get('/connections/:id/tracking', isAuthenticated, async (req, res, next) 
       offset: offset ? parseInt(offset, 10) : undefined,
     });
     res.json(result);
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// POST /api/cashouts/import/preview — parse an uploaded sold/received items
+// report ({ source: 'eb'|'la'|'p4d', csv }) and say which rows are new.
+// Writes nothing.
+router.post('/import/preview', isAuthenticated, async (req, res) => {
+  try {
+    res.json(await importSold.preview(req.user.id, { source: req.body?.source, csv: req.body?.csv }));
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// POST /api/cashouts/connections/:id/import/preview — the same, pulled from a
+// connected cashout's own report with its saved login ({ from, to } dates).
+router.post('/connections/:id/import/preview', isAuthenticated, async (req, res) => {
+  try {
+    const { source, rows } = await pullReceivedItems(req.user.id, req.params.id, { from: req.body?.from, to: req.body?.to });
+    res.json(await importSold.preview(req.user.id, { source, rows }));
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// POST /api/cashouts/import/commit — write the previewed purchases the user
+// kept: { source, platform_id, vendor_id?, payment_method_id?, groups: [...] }.
+router.post('/import/commit', isAuthenticated, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const result = await importSold.commit(req.user.id, {
+      source: b.source,
+      platformId: b.platform_id,
+      vendorId: b.vendor_id || null,
+      paymentMethodId: b.payment_method_id || null,
+      groups: b.groups,
+    });
+    res.status(201).json(result);
   } catch (err) {
     sendCashoutError(res, err);
   }

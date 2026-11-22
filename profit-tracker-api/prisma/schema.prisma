@@ -438,8 +438,14 @@ model Sales {
   tracking_info       Json?
   notes               String?
   cashout_commitment  CashoutCommitment?
+  // Rows of a cashout's sold/received items report this sale was imported from
+  // (Settings > Data > Import from cashouts, services/cashouts/importSold.js),
+  // e.g. "eb:<invoice>:<serial>" or "la:<line id>". Lets a later import of an
+  // overlapping date range skip them. Empty for sales entered any other way.
+  import_refs         String[]  @default([])
 
   @@index([inventory_id])
+  @@index([import_refs], type: Gin)
   @@index([sale_shipping_payment_method_id])
   @@index([platform_id])
   @@index([sale_date])
