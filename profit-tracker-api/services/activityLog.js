@@ -266,6 +266,24 @@ async function trackChange(tx, userId, meta, work) {
   return { result, activity };
 }
 
+// Logs rows the caller is about to delete, read in bulk beforehand (a whole
+// cashout import can be thousands of rows, too many to snapshot one by one).
+// rows: { inventory: [row], sales: [row], refund: [row], cashoutCommitment: [row] }.
+// Undo puts every one of them back.
+async function logRemoved(tx, userId, meta, rows) {
+  const before = new Map();
+  for (const model of MODELS) for (const row of rows[model] || []) before.set(`${model}:${row.id}`, row);
+  const changes = diffRows(before, new Map());
+  if (!changes.length) return null;
+  return write(tx, userId, {
+    kind: 'change',
+    recordType: meta.recordType,
+    recordId: meta.recordId,
+    detail: { action: meta.action, product_name: meta.productName ?? null, rows: changes },
+    source: meta.source,
+  });
+}
+
 // What the Activity page calls the record: the product (purchases and sales)
 // or the expense name.
 async function nameFor(tx, recordType, recordId, rows) {
@@ -561,6 +579,7 @@ module.exports = {
   logRefund,
   logStatus,
   trackChange,
+  logRemoved,
   listActivity,
   undoActivity,
   // exported for tests

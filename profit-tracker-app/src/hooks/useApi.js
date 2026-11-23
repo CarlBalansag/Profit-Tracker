@@ -531,6 +531,25 @@ export const useCashoutImport = () => {
   return { preview, commit };
 };
 
+// Settings > Data > Import from cashouts > Past imports: each import, what
+// it added, and an undo that removes everything it added that's still there.
+export const useCashoutImports = () => useQuery({
+  queryKey: ['cashout', 'imports'],
+  queryFn: () => fetcher('/api/cashouts/imports'),
+});
+export const useCashoutImportDetail = (id) => useQuery({
+  queryKey: ['cashout', 'imports', id],
+  queryFn: () => fetcher(`/api/cashouts/imports/${encodeURIComponent(id)}`),
+  enabled: Boolean(id),
+});
+export const useUndoCashoutImport = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => postJson(`/api/cashouts/imports/${encodeURIComponent(id)}/undo`, {}, 'Could not undo the import. Nothing was removed.'),
+    onSuccess: () => qc.invalidateQueries(),
+  });
+};
+
 // Settings > Data > Fill in costs from store orders (purchases the cashout
 // import saved at $0).
 export const useStoreOrderCosts = () => {

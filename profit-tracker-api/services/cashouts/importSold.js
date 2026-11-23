@@ -487,7 +487,7 @@ function cleanGroup(raw, index) {
   };
 }
 
-async function commit(userId, { source, platformId, vendorId, paymentMethodId, groups }) {
+async function commit(userId, { source, platformId, vendorId, paymentMethodId, groups, fileName }) {
   if (!SOURCES[source]) throw badRequest('Pick EB, LA or P4D.');
   if (!Array.isArray(groups) || groups.length === 0) throw badRequest('Nothing selected to import.');
   if (groups.length > MAX_GROUPS) throw badRequest(`Import at most ${MAX_GROUPS} purchases at a time.`);
@@ -528,13 +528,17 @@ async function commit(userId, { source, platformId, vendorId, paymentMethodId, g
       select: { import_refs: true },
     });
     const taken = new Set(already.flatMap((s) => s.import_refs));
+    // Past imports (Settings > Data) list this import and can view or undo it.
+    const batch = await tx.importBatch.create({
+      data: { user_id: userId, source, platform_id: platform.id, file_name: cleanText(fileName, 200) },
+    });
 
     let created = 0;
     let units = 0;
     let costNeeded = 0;
     let skipped = 0;
     for (const g of clean) {
-      if (g.refs.some((r) => taken.has(r))) { skipped += 1; continue; }
+      if (g.refs.some((r) => taken.has(r))) { skipped += 1; g.skipped = true; continue; }
       const notes = [
         `Imported from ${label}${g.invoice ? ` (${source === 'eb' ? 'invoice' : 'receipt'} ${g.invoice})` : ''}.`,
         g.upc ? `UPC ${g.upc}.` : null,
@@ -552,6 +556,7 @@ async function commit(userId, { source, platformId, vendorId, paymentMethodId, g
           product_name: g.name,
           vendor_id: (g.accountId && accounts.get(g.accountId).platform_id) || g.vendorId || vendorId || null,
           account_id: g.accountId || null,
+          import_batch_id: batch.id,
           payment_method_id: g.paymentMethodId || paymentMethodId || null,
           purchase_date: dateAtNoon(bought),
           sales_tax: g.salesTax,
@@ -591,7 +596,17 @@ async function commit(userId, { source, platformId, vendorId, paymentMethodId, g
       units += g.qty;
       if (g.unitCost === null) costNeeded += 1;
     }
-    return { created, units, costNeeded, skipped };
+    let payout = 0;
+    for (const g of clean) if (!g.skipped) payout += g.qty * g.unitPrice;
+    if (!created) {
+      await tx.importBatch.delete({ where: { id: batch.id } });
+      return { created, units, costNeeded, skipped, importId: null };
+    }
+    await tx.importBatch.update({
+      where: { id: batch.id },
+      data: { purchases: created, units, cost_needed: costNeeded, payout: Math.round(payout * 100) / 100 },
+    });
+    return { created, units, costNeeded, skipped, importId: batch.id };
   }, { timeout: 60000, maxWait: 10000 });
 }
 

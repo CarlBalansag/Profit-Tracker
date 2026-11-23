@@ -68,6 +68,19 @@ describe('describeActivity', () => {
       .toEqual({ title: 'Edited expense', change: '1 field updated', product: 'Expense' });
   });
 
+  it('counts the purchases when one entry deletes several (undoing a cashout import), and its undo', () => {
+    const inv = (op) => ({ model: 'inventory', op, row: { values: { qty_purchased: 1, unit_purchase_cost: 0 } } });
+    const sale = (op) => ({ model: 'sales', op, row: { values: { quantity: 1, unit_price: 20 } } });
+    const rows = (op) => [inv(op), inv(op), inv(op), sale(op), sale(op), sale(op)];
+    expect(describeActivity({ kind: 'change', record_type: 'purchase', detail: { action: 'delete', product_name: 'ElectronicsBuyer import (3 purchases)', rows: rows('delete') } }))
+      .toEqual({ title: 'Deleted 3 purchases', change: 'with 3 sales', product: 'ElectronicsBuyer import (3 purchases)' });
+    expect(describeActivity({ kind: 'change', record_type: 'purchase', detail: { action: 'delete', undo: true, product_name: 'X', rows: rows('create') } }))
+      .toMatchObject({ title: 'Undid: Deleted 3 purchases', change: 'with 3 sales' });
+    // One purchase still reads as before.
+    expect(describeActivity({ kind: 'change', record_type: 'purchase', detail: { action: 'delete', product_name: 'Drill', rows: [inv('delete'), sale('delete')] } }))
+      .toMatchObject({ title: 'Deleted a purchase', change: '1 × $0.00 · with 1 sale' });
+  });
+
   it('notes sales added in a detail-window save', () => {
     const entry = { kind: 'change', record_type: 'purchase', detail: { action: 'edit', rows: [
       { model: 'inventory', op: 'update', fields: { product_name: { before: 'Old', after: 'New' } } },

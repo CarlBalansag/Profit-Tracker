@@ -140,7 +140,7 @@ describe('preview and commit (real Postgres)', () => {
       source: 'eb', platformId: ids.eb, vendorId: ids.store,
       groups: kept(first.groups, { 'Fire TV Stick 4K Select': 12.5 }),
     });
-    expect(result).toEqual({ created: 2, units: 4, costNeeded: 1, skipped: 0 });
+    expect(result).toEqual({ created: 2, units: 4, costNeeded: 1, skipped: 0, importId: expect.any(String) });
 
     const purchases = await db.inventory.findMany({ where: { user_id: ME }, include: { sales: true }, orderBy: { product_name: 'asc' } });
     expect(purchases).toHaveLength(2);

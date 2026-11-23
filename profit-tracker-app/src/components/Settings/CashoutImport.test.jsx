@@ -24,6 +24,8 @@ vi.mock('../../hooks/useApi', () => ({
   useCashoutImport: () => ({ preview, commit }),
   useStoreOrderCosts: () => ({ preview: { mutateAsync: vi.fn(), reset: vi.fn(), isPending: false }, commit: { mutateAsync: vi.fn(), isPending: false }, match: matchOrders }),
 }));
+// Past imports has its own tests (PastImports.test.jsx).
+vi.mock('./PastImports', () => ({ PastImports: () => null }));
 vi.mock('../../hooks/useMatchMedia', () => ({ useMatchMedia: () => false }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -86,7 +88,7 @@ describe('CashoutImport', () => {
     });
 
     const body = commit.mutateAsync.mock.calls[0][0];
-    expect(body).toMatchObject({ source: 'eb', platform_id: 'eb-group', vendor_id: null, payment_method_id: null });
+    expect(body).toMatchObject({ source: 'eb', platform_id: 'eb-group', vendor_id: null, payment_method_id: null, file_name: 'items.csv' });
     expect(body.groups.map((g) => [g.name, g.qty, g.unitCost])).toEqual([
       ['Fire TV Stick 4K', 1, null],
       ['Fire TV Stick 4K Select', 2, '12.50'],

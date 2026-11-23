@@ -21,6 +21,8 @@ const commitsService = require('../services/cashouts/commits');
 const { logPurchase } = require('../services/cashouts/logPurchase');
 const pendingCommit = require('../services/cashouts/pendingCommit');
 const importSold = require('../services/cashouts/importSold');
+const importHistory = require('../services/cashouts/importHistory');
+const { publishCalendarFeed } = require('../services/calendarFeed');
 const fillCosts = require('../services/storeOrders/fillCosts');
 const { pullReceivedItems } = require('../services/cashouts/service');
 
@@ -366,8 +368,41 @@ router.post('/import/commit', isAuthenticated, async (req, res) => {
       vendorId: b.vendor_id || null,
       paymentMethodId: b.payment_method_id || null,
       groups: b.groups,
+      fileName: typeof b.file_name === 'string' ? b.file_name : null,
     });
     res.status(201).json(result);
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// GET /api/cashouts/imports — past cashout imports, newest first, each with
+// how many of its purchases are still there.
+router.get('/imports', isAuthenticated, async (req, res) => {
+  try {
+    res.json(await importHistory.list(req.user.id));
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// GET /api/cashouts/imports/:id — one import and the purchases (with their
+// sales) it added that are still there.
+router.get('/imports/:id', isAuthenticated, async (req, res) => {
+  try {
+    res.json(await importHistory.detail(req.user.id, req.params.id));
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// POST /api/cashouts/imports/:id/undo — delete everything that import added
+// that's still there, in one step. Logged in Activity, where Undo restores it.
+router.post('/imports/:id/undo', isAuthenticated, async (req, res) => {
+  try {
+    const result = await importHistory.undo(req.user.id, req.params.id);
+    await publishCalendarFeed(req.user.id);
+    res.json(result);
   } catch (err) {
     sendCashoutError(res, err);
   }

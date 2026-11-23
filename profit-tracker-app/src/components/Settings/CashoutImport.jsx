@@ -9,6 +9,7 @@ import { AMAZON_HOW_TO, MAX_ORDER_FILES, defaultFileAccount, fileAccountChoices,
 import { OrderFileList, OrderPicker } from './StoreOrderPicker';
 import { OrderColumnMap } from './StoreOrderColumnMap';
 import { StoreOrderImport } from './StoreOrderImport';
+import { PastImports } from './PastImports';
 
 // Settings > Data > Import from cashouts. Brings items already sold to a
 // cashout into Profit Tracker as purchases + sales: preview first (nothing is
@@ -289,7 +290,8 @@ export function CashoutImport() {
     }
     try {
       const csv = await readText(file);
-      showPreview(await preview.mutateAsync({ source, csv }));
+      // The file's name is kept with the import (Past imports).
+      showPreview({ ...(await preview.mutateAsync({ source, csv })), fileName: file.name });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -301,7 +303,7 @@ export function CashoutImport() {
     setDone(null);
     reset();
     try {
-      showPreview(await preview.mutateAsync({ connectionId: connection.id, ...range }));
+      showPreview({ ...(await preview.mutateAsync({ connectionId: connection.id, ...range })), fileName: `Pulled ${range.from} to ${range.to}` });
     } catch (err) {
       setError(err.message);
     }
@@ -337,6 +339,7 @@ export function CashoutImport() {
         platform_id: platformId,
         vendor_id: vendorId || null,
         payment_method_id: paymentMethodId || null,
+        file_name: result.fileName || null,
         groups: chosen.map((g) => ({ ...g, qty: g.newQty, paid: isPaid(g), unitCost: String(costs[g.key] ?? '').trim() || null, ...orderFields(g) })),
       });
       setDone(res);
@@ -477,6 +480,8 @@ export function CashoutImport() {
           onDone={(csv, storeId) => { const { name } = columnMap; setColumnMap(null); addOrderCsv(name, csv, storeId); }}
         />
       )}
+
+      <PastImports platforms={platforms} paymentMethods={paymentMethods} />
 
       <details className="rounded-lg border border-gray-800 group">
         <summary className="cursor-pointer min-h-11 flex items-center px-3 text-sm font-semibold text-white">
