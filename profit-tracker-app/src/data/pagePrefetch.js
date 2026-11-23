@@ -89,6 +89,7 @@ const PAGES = {
   },
   '/settings': { code: Pages.Settings.preload, data: () => [] },
   '/activity': { code: Pages.Activity.preload, data: () => [] },
+  '/automation': { code: Pages.Automation.preload, data: () => [] },
   '/guide': { code: Pages.Guide.preload, data: () => [] },
 };
 

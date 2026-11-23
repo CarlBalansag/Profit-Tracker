@@ -44,7 +44,9 @@ describe('receipt upload safety', () => {
     expect(response.status).toBe(500);
     expect(harness.db.inventory[0].receipt_url).toBe('https://example.invalid/previous-receipt.png');
     const destroy = harness.calls.find((call) => call.op === 'destroy');
-    expect(destroy.publicId).toBe(harness.calls.find((call) => call.op === 'upload').options.public_id);
+    const upload = harness.calls.find((call) => call.op === 'upload').options;
+    expect(destroy.publicId).toBe(`${upload.folder}/${upload.public_id}`);
+    expect(destroy.options).toMatchObject({ type: 'authenticated' });
   });
   it.each([
     ['empty', 'data:image/png;base64,'],

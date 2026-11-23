@@ -180,6 +180,7 @@ const PARENT_FIRST = {
   platform: 0, account: 1, paymentMethod: 2, buyer: 3, goal: 4, recurringExpense: 5,
   cashoutConnection: 6, calendarEvent: 7, productNote: 8,
   inventory: 9, sales: 10, refund: 11, cashoutCommitment: 12, cashoutItemMatch: 13, expense: 14, transactionNote: 15,
+  taxForm1099K: 16,
 };
 const MODELS = Object.keys(PARENT_FIRST);
 // Background refreshes (carrier tracking, market price checks, the card
@@ -203,6 +204,7 @@ const TABLE = {
   paymentMethod: 'PaymentMethod', account: 'Account', platform: 'Platform', buyer: 'Buyer', goal: 'Goal',
   recurringExpense: 'RecurringExpense', cashoutConnection: 'CashoutConnection', cashoutItemMatch: 'CashoutItemMatch',
   calendarEvent: 'CalendarEvent', productNote: 'ProductNote', transactionNote: 'TransactionNote',
+  taxForm1099K: 'TaxForm1099K',
 };
 // A removed cashout connection comes back without its key (the key is never
 // logged), marked as needing attention so background sync leaves it alone
@@ -220,7 +222,8 @@ const RESTORE_OVERRIDES = {
 const LINKS = {
   paymentMethod: [['inventory', 'payment_method_id'], ['expense', 'payment_method_id'], ['recurringExpense', 'payment_method_id'], ['sales', 'sale_shipping_payment_method_id']],
   account: [['inventory', 'account_id']],
-  platform: [['inventory', 'vendor_id'], ['sales', 'platform_id'], ['cashoutConnection', 'platform_id'], ['account', 'platform_id']],
+  // A 1099-K form keeps its payer name when its platform goes; undo relinks it.
+  platform: [['inventory', 'vendor_id'], ['sales', 'platform_id'], ['cashoutConnection', 'platform_id'], ['account', 'platform_id'], ['taxForm1099K', 'platform_id']],
   buyer: [['sales', 'buyer_id']],
   recurringExpense: [['expense', 'recurring_expense_id']],
   // Removing a connection deletes its commitments and item matches (ON DELETE
@@ -352,6 +355,8 @@ async function trackChange(tx, userId, meta, work) {
       action: meta.action,
       product_name: productName,
       rows: changes,
+      // e.g. { email_order_id } so the Automation page can reject the change.
+      ...(meta.extra || {}),
     },
     source: meta.source,
   });
@@ -485,6 +490,7 @@ const USED_BY = {
   inventory: 'purchases', sales: 'sales', expense: 'expenses', recurringExpense: 'recurring expenses',
   cashoutConnection: 'cashout connections', account: 'store accounts',
   cashoutCommitment: 'cashout commitments', cashoutItemMatch: 'matched cashout items',
+  taxForm1099K: '1099-K forms',
 };
 
 async function undoChange(tx, userId, entry, source) {
@@ -614,6 +620,8 @@ const toJson = (entry, now) => entry && ({
   created_at: entry.created_at,
   undo_state: undoState(entry, now),
   undo_until: undoDeadline(entry),
+  review_state: entry.review_state ?? null,
+  reviewed_at: entry.reviewed_at ?? null,
 });
 
 // Newest first, `limit` at a time; pass the last entry's created_at as
@@ -622,15 +630,26 @@ const toJson = (entry, now) => entry && ({
 // expenses), 'records' (everything else: purchases, sales, expenses), or
 // omitted for all.
 const SETUP_TYPES = [...Object.keys(SETUP_MODEL), ...SETUP_EVENT_TYPES];
-async function listActivity(userId, { before, limit, group } = {}) {
+// source: only entries made by one actor ('email' = the email sync's automatic
+// changes, shown on the Automation page; 'assistant'; 'web').
+const SOURCES = ['web', 'assistant', 'email'];
+// review (Automation page): 'open' = not confirmed, rejected or undone yet;
+// 'done' = any of those.
+const REVIEW_FILTER = {
+  open: { review_state: null, undone_at: null },
+  done: { OR: [{ review_state: { not: null } }, { undone_at: { not: null } }] },
+};
+async function listActivity(userId, { before, limit, group, source, review } = {}) {
   const take = Math.min(Math.max(Number(limit) || 50, 1), 100);
   const beforeDate = before ? new Date(before) : null;
   if (beforeDate && Number.isNaN(beforeDate.getTime())) throw requestError(400, 'Invalid "before" date');
   if (group !== undefined && group !== 'setup' && group !== 'records') throw requestError(400, 'Invalid "group"');
+  if (source !== undefined && !SOURCES.includes(source)) throw requestError(400, 'Invalid "source"');
+  if (review !== undefined && !REVIEW_FILTER[review]) throw requestError(400, 'Invalid "review"');
   const typeFilter = group === 'setup' ? { record_type: { in: SETUP_TYPES } }
     : group === 'records' ? { record_type: { notIn: SETUP_TYPES } } : {};
   const rows = await prisma.activityLog.findMany({
-    where: { user_id: userId, ...typeFilter, ...(beforeDate ? { created_at: { lt: beforeDate } } : {}) },
+    where: { user_id: userId, ...typeFilter, ...(source ? { source } : {}), ...(review ? REVIEW_FILTER[review] : {}), ...(beforeDate ? { created_at: { lt: beforeDate } } : {}) },
     orderBy: { created_at: 'desc' },
     take: take + 1,
   });

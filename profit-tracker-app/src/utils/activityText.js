@@ -2,6 +2,7 @@
 // profit-tracker-api/services/activityLog.js for what each kind stores).
 import { displayLabel } from '../data/statusWorkflow';
 import { formatMoney } from './money';
+import { orderRef } from './emailRefs';
 
 // Same wording as the buttons the user pressed (statusTransitions.js labels).
 const ACTION_LABELS = {
@@ -71,12 +72,12 @@ const ARTICLE = { purchase: 'a purchase', sale: 'a sale', expense: 'an expense' 
 
 // Fields worth naming in the summary. Anything else (internal mirrors,
 // timestamps) is only counted, never shown raw.
-const FIELD_LABELS = {
+export const FIELD_LABELS = {
   product_name: ['Name'], name: ['Name'],
   unit_price: ['Price', 'money'], unit_purchase_cost: ['Unit cost', 'money'], amount: ['Amount', 'money'],
   quantity: ['Qty', 'int'], qty_purchased: ['Qty bought', 'int'],
   sales_tax: ['Tax', 'money'], shipping_cost_inbound: ['Shipping', 'money'], sale_shipping: ['Shipping', 'money'],
-  fees: ['Fees', 'money'], commission_fee: ['Fees', 'money'], gift_card_amount: ['Gift card', 'money'],
+  fees: ['Fees', 'money'], commission_fee: ['Fees', 'money'], gift_card_amount: ['Gift card', 'money'], gift_card_cost: ['Gift card cost', 'money'],
   sale_tax_collected: ['Tax collected', 'money'], cashback_earned: ['Cashback', 'money'],
   purchase_date: ['Date', 'date'], sale_date: ['Date', 'date'], date: ['Date', 'date'],
   payout_date: ['Payout date', 'date'], return_by_date: ['Return by', 'date'],
@@ -84,7 +85,7 @@ const FIELD_LABELS = {
   platform_id: ['Platform', 'ref'], vendor_id: ['Vendor', 'ref'], account_id: ['Account', 'ref'], payment_method_id: ['Card', 'ref'], buyer_id: ['Buyer', 'ref'],
 };
 
-function formatField(kind, value) {
+export function formatField(kind, value) {
   if (value === null || value === undefined || value === '') return '—';
   if (kind === 'money') return `$${formatMoney(Number(value) || 0)}`;
   if (kind === 'int') return String(Number(value) || 0);
@@ -278,6 +279,20 @@ function eventText(entry) {
       title: d.action === 'everything' ? 'Reset all data' : 'Reset purchases and sales',
       change: counts.length ? `${counts.join(', ')} deleted` : '',
       product: d.product_name || 'Data',
+    };
+  }
+  if (type === 'email_sort') {
+    return { title: 'Set aside as personal', change: [d.reason, d.total != null ? `${formatMoney(d.total)}` : null].filter(Boolean).join(' · '), product: d.product_name || 'Order from email' };
+  }
+  if (type === 'email_link') {
+    const what = { purchase: 'purchase', sale: 'sale', expense: 'expense' }[d.linked_to] || 'record';
+    const email = { check: 'check', receipt: 'receipt', purchase: 'order' }[d.order_type] || 'email';
+    const many = Number(d.count) > 1;
+    const number = d.order_number ? orderRef(d.order_number) : '';
+    return {
+      title: `Linked a${/^[aeiou]/i.test(d.store || '') ? 'n' : ''} ${d.store || 'store'} ${email} to your ${many ? `${d.count} ${what}s` : what}`,
+      change: number,
+      product: d.product_name || 'Email',
     };
   }
   if (type === 'cashout_connection') return { title: 'Replaced a cashout key', change: '', product: d.product_name || 'Cashout connection' };

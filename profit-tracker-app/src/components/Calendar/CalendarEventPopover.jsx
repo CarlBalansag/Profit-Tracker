@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { X, Plus, ShoppingBag, DollarSign, Banknote, Calendar, CreditCard, Bell } from 'lucide-react';
+import { X, Plus, ShoppingBag, DollarSign, Banknote, Calendar, CreditCard, Bell, Landmark } from 'lucide-react';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 
 const TYPE_CONFIG = {
@@ -9,6 +9,7 @@ const TYPE_CONFIG = {
   manual:     { label: 'Event',       color: 'var(--dp-accent)', icon: Calendar },
   credit_due: { label: 'CC Due',      color: '#ef4444', icon: CreditCard },
   reminder:   { label: 'Reminder',    color: '#f43f5e', icon: Bell },
+  tax:        { label: 'Tax deadline', color: '#d97706', icon: Landmark },
 };
 
 const COLOR_HEX = {

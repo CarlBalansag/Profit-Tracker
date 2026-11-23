@@ -15,7 +15,7 @@ function reset() {
     paymentMethod:[{id:ids.card,user_id:ids.user,name:'QA Credit Card',type:'Credit',default_cashback_rate:2,category_rates:'[]',statement_close_day:15,due_day:10,credit_limit:5000,min_payment_pct:2}],
     inventory:[{id:ids.inventory,user_id:ids.user,product_name:'QA Multi-unit Sneaker',vendor_id:ids.vendor,payment_method_id:ids.card,unit_purchase_cost:100,qty_purchased:5,qty_on_hand:3,sales_tax:40,shipping_cost_inbound:20,fees:10,gift_card_amount:50,cashback_earned:10.4,status:'PURCHASED',category:'Shoes',purchase_date:new Date('2026-09-01T12:00:00Z'),created_at:new Date(),tracking_number:'9400111899223856928499',receipt_url:null,tax_exempt:false,refunded_amount:0,refunded_qty:0}],
     sales:[{id:ids.sale,inventory_id:ids.inventory,platform_id:ids.platform,buyer_id:null,quantity:2,unit_price:150,commission_fee:15,sale_shipping:12,sale_tax_collected:8,taxable:true,customer_tax_exempt:false,status:'SOLD',sale_date:new Date('2026-09-03T12:00:00Z'),payout_date:null,paid_at:null,paid_amount:null,paid_reference:null,payout_account:null,payout_short_amount:null,refunded_amount:0,refunded_qty:0}],
-    expense:[{id:randomUUID(),user_id:ids.user,name:'QA Storage',amount:25,tax_version:0,date:new Date('2026-09-01T12:00:00Z'),category:'Storage'}],recurringExpense:[],cardCatalog:[],refund:[],account:[],goal:[],calendarEvent:[],productNote:[],authAttemptBucket:[],buyer:[],invoice:[],apiKey:[],mcpWriteLog:[],changeLog:[],activityLog:[],transactionNote:[],attachment:[],cashoutConnection:[],cashoutDealSnapshot:[],cashoutItemMatch:[],cashoutCommitment:[],cashoutWriteLog:[],todoState:[],reminder:[],pushSubscription:[],notificationSettings:[],notificationSent:[],importBatch:[]};
+    expense:[{id:randomUUID(),user_id:ids.user,name:'QA Storage',amount:25,tax_version:0,date:new Date('2026-09-01T12:00:00Z'),category:'Storage'}],recurringExpense:[],taxYearSetting:[],taxForm1099K:[],taxProfile:[],taxReserveEntry:[],taxPayment:[],taxMileageTrip:[],taxAsset:[],taxReportSnapshot:[],emailAccount:[],emailMessage:[],emailFolderCursor:[],emailOrder:[],emailMatch:[],emailMerchantRule:[],emailStoreCandidate:[],reminder:[],todoState:[],pushSubscription:[],notificationSettings:[],notificationSent:[],cardCatalog:[],refund:[],account:[],goal:[],calendarEvent:[],productNote:[],authAttemptBucket:[],buyer:[],invoice:[],apiKey:[],mcpWriteLog:[],changeLog:[],activityLog:[],transactionNote:[],attachment:[],cashoutConnection:[],cashoutDealSnapshot:[],cashoutItemMatch:[],cashoutCommitment:[],cashoutWriteLog:[],importBatch:[]};
 }
 reset();
 function relations(model,row,key) {
@@ -44,6 +44,8 @@ function matches(model,row,where={}) {
   return Object.entries(where).every(([k,v])=>{
     if(k==='OR')return v.some(w=>matches(model,row,w));
     if(k==='AND')return v.every(w=>matches(model,row,w));
+    // Compound unique key (Prisma's user_id_year: { user_id, year }).
+    if(v&&typeof v==='object'&&!(v instanceof Date)&&!(k in row)&&Object.keys(v).join('_')===k)return matches(model,row,v);
     const rel=relations(model,row,k); if(rel)return rel[1]&&matches(rel[0],rel[1],v);
     // A compound unique (`user_id_key: { user_id, key }`) is its fields ANDed.
     if(v&&typeof v==='object'&&!(v instanceof Date)&&!(k in row)&&k===Object.keys(v).join('_'))return matches(model,row,v);
@@ -125,13 +127,14 @@ prisma.$transaction=async fn=>{
   try{return await fn(prisma);}catch(error){db=snapshot;throw error;}finally{release();}
 };
 require.cache[requireApi.resolve('./prisma.js')]={id:requireApi.resolve('./prisma.js'),filename:requireApi.resolve('./prisma.js'),loaded:true,exports:prisma};
-requireApi('cloudinary').v2.uploader.upload=async(data,options)=>{calls.push({model:'cloudinary',op:'upload',options});if(faults['cloudinary.upload'])throw new Error('Injected cloudinary.upload failure');return {secure_url:'https://example.invalid/qa-receipt-'+options.public_id+'.png',public_id:options.public_id,resource_type:'image'};};
+requireApi('cloudinary').v2.uploader.upload=async(data,options)=>{calls.push({model:'cloudinary',op:'upload',options});if(faults['cloudinary.upload'])throw new Error('Injected cloudinary.upload failure');const publicId=options.folder?options.folder+'/'+options.public_id:options.public_id;return {secure_url:'https://example.invalid/qa-receipt-'+options.public_id+'.png',public_id:publicId,resource_type:'image',format:'png',type:options.type||'upload'};}; // Like Cloudinary: the folder is part of the public_id.
 requireApi('cloudinary').v2.uploader.destroy=async(publicId,options)=>{calls.push({model:'cloudinary',op:'destroy',publicId,options});};
 function app() {
   const app=express();app.use(express.json());
   app.use((req,res,next)=>{const unauthenticated=req.headers['x-qa-unauthenticated']==='true';req.user=unauthenticated?null:db.user[0];req.apiKeyId=unauthenticated?null:'qa-api-key';req.isAuthenticated=()=>!unauthenticated;next();});
   app.get('/auth/me',(req,res)=>res.json(db.user[0]));
   app.use('/api/schedule-c', requireApi('./routes/scheduleC'));
+  app.use('/api/tax', requireApi('./routes/tax'));
   app.use('/mcp', requireApi('./routes/mcp.js'));
   const { verifySyncSecret, runScheduledSync } = requireApi('./services/cashouts/syncScheduler');
   app.post('/internal/notifications/run', async (req, res) => {

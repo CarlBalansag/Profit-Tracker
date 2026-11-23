@@ -12,6 +12,8 @@ import { localToday } from '../utils/returnWindow';
 import { toast } from 'sonner';
 import { toastWithUndo } from '../utils/undoToast';
 import LoadError from '../components/UI/LoadError';
+import { ReceiptPicker } from '../components/Expenses/ReceiptPicker';
+import { readReceiptFile } from '../hooks/receiptUpload';
 import {
   Receipt, Download, Plus, DollarSign,
   Search, X, Trash2, Pencil, RefreshCw, Pause, Play, CreditCard, Lock, ExternalLink, Info,
@@ -78,6 +80,7 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
+  const [receipt, setReceipt] = useState(null);
   const nameRef = useRef(null);
   const modalRef = useModalKeyboard(open, () => { if (!saving) onClose(); }, nameRef);
 
@@ -116,11 +119,19 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
     } else {
       setForm({ ...EMPTY_FORM, date: today, start_date: today });
     }
-    setError(''); setSaving(false);
+    setError(''); setSaving(false); setReceipt(null);
   }, [open, initial, initialIsRecurring]);
 
   if (!open) return null;
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  // What was read from the receipt fills blank fields; the date replaces the
+  // default (today) since the receipt's own date is the better guess.
+  const fillFromReceipt = ({ merchant, total, date }) => setForm(f => ({
+    ...f,
+    name: f.name.trim() ? f.name : (merchant || f.name),
+    amount: String(f.amount).trim() ? f.amount : (total || f.amount),
+    date: date || f.date,
+  }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -155,7 +166,7 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
           notes:    form.notes.trim() || null,
           payment_method_id: form.payment_method_id || null,
           external_id: form.external_id.trim() || null,
-        });
+        }, receipt);
       }
       onClose();
     } catch (err) { setError(err.message || 'Failed to save.'); setSaving(false); }
@@ -274,6 +285,8 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
               </select>
             </div>
           </div>
+
+          {!form.recurring && <ReceiptPicker file={receipt} onFile={setReceipt} onRead={fillFromReceipt} disabled={saving} />}
 
           {/* Notes */}
           <div>
@@ -417,12 +430,23 @@ const Expenses = () => {
     try { const j = await res.json(); return j.error || j.message || fallback; } catch { return `${fallback} (HTTP ${res.status})`; }
   };
 
-  const handleSaveOneOff = async (data) => {
+  const handleSaveOneOff = async (data, receipt = null) => {
     const url    = editingItem && !editingIsRec ? `/api/expenses/${editingItem.id}` : `/api/expenses`;
     const method = editingItem && !editingIsRec ? 'PUT' : 'POST';
     const res = await apiFetch(url, { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(data) });
     if (!res.ok) throw new Error(await safeErrMsg(res, 'Save failed'));
     const saved = await res.json().catch(() => ({}));
+    // The receipt uploads after the expense exists; if that fails, the
+    // expense is still saved and can get its receipt on the Receipts page.
+    const expenseId = saved?.id || (editingItem && !editingIsRec ? editingItem.id : null);
+    if (receipt && expenseId) {
+      try {
+        const fileData = await readReceiptFile(receipt);
+        await requireSuccessfulResponse(await apiFetch('/api/receipts/attach', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ itemType: 'expense', itemId: expenseId, fileData, fileName: receipt.name }) }), 'Could not attach the receipt');
+      } catch (err) {
+        toast.error(`Expense saved, but the receipt didn't upload: ${err.message}. Attach it from the Receipts page.`);
+      }
+    }
     await fetchAll();
     if (saved?.activity_id) {
       toastWithUndo(method === 'POST' ? 'Expense added.' : 'Expense saved.', saved.activity_id, () => { fetchAll(); });

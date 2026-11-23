@@ -15,6 +15,7 @@ import TodoSection from '../components/Todos/TodoSection';
 import RemindersPanel from '../components/Todos/RemindersPanel';
 import HiddenPanel from '../components/Todos/HiddenPanel';
 import PhoneAlertsCard from '../components/Todos/PhoneAlertsCard';
+import EmailAutomationCard from '../components/Todos/EmailAutomationCard';
 import { PANEL, URGENCIES, whenText } from '../components/Todos/todoMeta';
 
 // Things that need the user, worked out from their records by the API
@@ -153,6 +154,7 @@ export default function Todos() {
 
           {/* ── Side column (below the list on phones) ── */}
           <aside aria-label="Reminders and more" className="min-w-0 space-y-4 lg:sticky lg:top-0">
+            <EmailAutomationCard />
             <WaitingPayments payers={data?.waiting_payments ?? []} className={`${PANEL} px-4 py-3`} />
             <ClearedWeek week={data?.cleared_week} />
             <RemindersPanel reminders={reminders} onNew={() => setEditing({})} onEdit={setEditing} />

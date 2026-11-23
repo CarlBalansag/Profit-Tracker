@@ -197,6 +197,12 @@ router.get('/auto', isAuthenticated, async (req, res, next) => {
       }
     }
 
+    // Tax deadlines in this month (Schedule C users).
+    const { userTaxDeadlines } = require('../services/taxDeadlines');
+    for (const d of await userTaxDeadlines(req.user.id)) {
+      if (d.date >= start && d.date <= end) events.push({ id: d.id, title: d.title, date: d.date, type: 'tax', color: null, notes: d.notes });
+    }
+
     events.sort((a, b) => a.date.localeCompare(b.date));
     res.json(events);
   } catch (err) {

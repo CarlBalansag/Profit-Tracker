@@ -9,7 +9,7 @@ import '@fullcalendar/react/themes/breezy/theme.css';
 import '@fullcalendar/react/themes/breezy/palettes/rose.css';
 import {
   CalendarDays,
-  ShoppingBag, DollarSign, Banknote, Link2, Copy, Check, CreditCard, Bell,
+  ShoppingBag, DollarSign, Banknote, Link2, Copy, Check, CreditCard, Bell, Landmark,
 } from 'lucide-react';
 import { useCalendarEvents, useCalendarAutoEvents, useCalendarToken } from '../hooks/useApi';
 import CalendarEventModal from '../components/Calendar/CalendarEventModal';
@@ -26,6 +26,7 @@ const TYPE_COLOR = {
   manual:      'var(--dp-accent)', // theme accent
   credit_due:  '#dc2626',
   reminder:    '#e11d48',
+  tax:         '#d97706',
 };
 
 const NAMED_COLOR = {
@@ -232,6 +233,7 @@ export default function Calendar() {
               { color: 'var(--dp-accent)', label: 'Manual',     icon: CalendarDays },
               { color: '#dc2626', label: 'CC Due',     icon: CreditCard },
               { color: '#e11d48', label: 'Reminder',   icon: Bell },
+              { color: '#d97706', label: 'Tax',        icon: Landmark },
             ].map(({ color, label, icon: Icon }) => (
               <div key={label} className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />

@@ -389,10 +389,13 @@ export const useRefundMutations = (kind, id) => {
 // Newest first, 50 at a time. Undo itself lives in utils/undoToast.js; every
 // undo invalidates all queries, which refreshes this list too.
 // group: undefined (everything), 'records' (buys, sales, expenses) or 'setup'.
-export const useActivity = (group) =>
+// source 'email': only the email sync's automatic changes (Automation page).
+// review (email automation): 'open' = still to confirm, 'done' = confirmed,
+// rejected or undone.
+export const useActivity = (group, source, review) =>
   useInfiniteQuery({
-    queryKey: ['activity', group ?? 'all'],
-    queryFn: ({ pageParam }) => fetcher(`/api/activity?limit=50${group ? `&group=${group}` : ''}${pageParam ? `&before=${encodeURIComponent(pageParam)}` : ''}`),
+    queryKey: ['activity', group ?? 'all', ...(source ? [source] : []), ...(review ? [review] : [])],
+    queryFn: ({ pageParam }) => fetcher(`/api/activity?limit=50${group ? `&group=${group}` : ''}${source ? `&source=${source}` : ''}${review ? `&review=${review}` : ''}${pageParam ? `&before=${encodeURIComponent(pageParam)}` : ''}`),
     initialPageParam: null,
     getNextPageParam: (last) => last.next_before ?? undefined,
   });
@@ -822,5 +825,133 @@ export const useCashoutMutations = () => {
     syncConnection,
     logPurchase,
     deleteCommitment,
+  };
+};
+
+// ---- Email connections (E1) ----
+const emailJson = async (r, fallback) => {
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.error || fallback);
+  return body;
+};
+export const useEmailSetup = () => useQuery({ queryKey: ['email', 'setup'], queryFn: () => fetcher('/api/email/setup'), staleTime: 300_000 });
+export const useEmailAccounts = () => useQuery({
+  queryKey: ['email', 'accounts'],
+  queryFn: () => fetcher('/api/email/accounts'),
+  // While a sync runs, check back every few seconds so the count updates.
+  refetchInterval: (query) => (Array.isArray(query.state.data) && query.state.data.some((a) => a.syncing || a.catching_up) ? 3000 : false),
+});
+// `found` (the total count) is part of the key, so the list reloads when a
+// background sync finds more.
+export const useEmailMessages = ({ limit = 10, kind = 'all', found = 0 } = {}) => useQuery({
+  queryKey: ['email', 'messages', limit, kind, found],
+  queryFn: () => fetcher(`/api/email/messages?limit=${limit}${kind !== 'all' ? `&kind=${kind}` : ''}`),
+  placeholderData: keepPreviousData,
+});
+export const useEmailMutations = () => {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['email'] });
+  const json = (method, path, body) => apiFetch(path, {
+    method,
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return {
+    connect: useMutation({ mutationFn: (data) => json('POST', '/api/email/accounts', data).then((r) => emailJson(r, 'Could not connect this email.')), onSuccess: invalidate }),
+    update: useMutation({ mutationFn: ({ id, ...data }) => json('PATCH', `/api/email/accounts/${id}`, data).then((r) => emailJson(r, 'Could not save.')), onSuccess: invalidate }),
+    sync: useMutation({ mutationFn: (id) => json('POST', `/api/email/accounts/${id}/sync`).then((r) => emailJson(r, 'Could not sync.')), onSettled: invalidate }),
+    remove: useMutation({ mutationFn: ({ id, deleteData }) => json('DELETE', `/api/email/accounts/${id}${deleteData ? '?delete_data=true' : ''}`).then((r) => emailJson(r, 'Could not disconnect.')), onSuccess: invalidate }),
+  };
+};
+
+// ---- Orders from email and matches (E3) ----
+export const useEmailOrders = ({ state = 'review', limit = 20, found = 0 } = {}) => useQuery({
+  queryKey: ['email', 'orders', state, limit, found],
+  queryFn: () => fetcher(`/api/email/orders?state=${state}&limit=${limit}`),
+  placeholderData: keepPreviousData,
+});
+export const useEmailAutomation = () => useQuery({ queryKey: ['email', 'automation'], queryFn: () => fetcher('/api/email/automation') });
+export const useEmailOrderMutations = () => {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['email'] });
+    qc.invalidateQueries({ queryKey: ['todos'] });
+    qc.invalidateQueries({ queryKey: ['inventory'] });
+  };
+  const post = (path, body) => apiFetch(path, {
+    method: 'POST',
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }).then((r) => emailJson(r, 'Could not save.'));
+  return {
+    accept: useMutation({ mutationFn: (id) => post(`/api/email/matches/${id}/accept`), onSuccess: invalidate }),
+    reject: useMutation({ mutationFn: (id) => post(`/api/email/matches/${id}/reject`), onSuccess: invalidate }),
+    acceptAll: useMutation({ mutationFn: () => post('/api/email/matches/accept-all'), onSuccess: invalidate }),
+    dismiss: useMutation({ mutationFn: ({ id, restore = false }) => post(`/api/email/orders/${id}/dismiss`, { restore }), onSuccess: invalidate }),
+    automation: useMutation({
+      mutationFn: (changes) => apiFetch('/api/email/automation', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes) }).then((r) => emailJson(r, 'Could not save.')),
+      onSuccess: (data) => qc.setQueryData(['email', 'automation'], data),
+    }),
+  };
+};
+
+// What "Review & link" would change, before linking (read-only).
+export const useEmailMatchPreview = (matchId) => useQuery({
+  queryKey: ['email', 'match-preview', matchId],
+  queryFn: () => fetcher(`/api/email/matches/${matchId}/preview`),
+  enabled: Boolean(matchId),
+  staleTime: 0,
+});
+
+// Email automation review: how many automatic changes wait for a confirm
+// (Automation page tabs and the optional To-Do card; never the nav badge).
+export const useAutomationReview = () => useQuery({ queryKey: ['email', 'automation-review'], queryFn: () => fetcher('/api/email/automation/review') });
+export const useAutomationReviewMutations = () => {
+  const qc = useQueryClient();
+  const post = (path, body) => apiFetch(path, {
+    method: 'POST',
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }).then((r) => emailJson(r, 'Could not save.'));
+  return {
+    confirm: useMutation({
+      mutationFn: (ids) => post('/api/email/automation/confirm', { ids }),
+      onSuccess: () => { qc.invalidateQueries({ queryKey: ['activity'] }); qc.invalidateQueries({ queryKey: ['email', 'automation-review'] }); },
+    }),
+    // "No" takes the change back, so the records it touched refresh too.
+    reject: useMutation({ mutationFn: (id) => post(`/api/email/automation/${id}/reject`), onSuccess: () => qc.invalidateQueries() }),
+    // Names a purchase made from an email (a past purchase's name, or typed).
+    name: useMutation({ mutationFn: ({ id, name }) => post(`/api/email/automation/${id}/name`, { name }), onSuccess: () => qc.invalidateQueries() }),
+  };
+};
+
+// ---- Trusted store rules (E4) ----
+export const useEmailStores = () => useQuery({ queryKey: ['email', 'stores'], queryFn: () => fetcher('/api/email/stores') });
+export const useEmailStoreMutations = () => {
+  const qc = useQueryClient();
+  const send = (method, path) => apiFetch(path, { method }).then((r) => emailJson(r, 'Could not save.'));
+  const refresh = () => qc.invalidateQueries({ queryKey: ['email', 'stores'] });
+  return {
+    scan: useMutation({ mutationFn: () => send('POST', '/api/email/stores/scan'), onSuccess: (data) => qc.setQueryData(['email', 'stores'], data) }),
+    request: useMutation({ mutationFn: ({ id, on }) => send(on ? 'POST' : 'DELETE', `/api/email/stores/${id}/request`), onSuccess: refresh }),
+    hide: useMutation({ mutationFn: ({ id, on }) => send(on ? 'POST' : 'DELETE', `/api/email/stores/${id}/hide`), onSuccess: (data) => qc.setQueryData(['email', 'stores'], data) }),
+  };
+};
+export const useEmailRules = () => useQuery({ queryKey: ['email', 'rules'], queryFn: () => fetcher('/api/email/rules') });
+export const useEmailRuleMutations = () => {
+  const qc = useQueryClient();
+  const invalidate = () => { qc.invalidateQueries({ queryKey: ['email'] }); qc.invalidateQueries({ queryKey: ['expenses'] }); };
+  const send = (method, path, body) => apiFetch(path, {
+    method,
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }).then((r) => emailJson(r, 'Could not save.'));
+  return {
+    save: useMutation({ mutationFn: (rule) => send('POST', '/api/email/rules', rule), onSuccess: invalidate }),
+    remove: useMutation({ mutationFn: (id) => send('DELETE', `/api/email/rules/${id}`), onSuccess: invalidate }),
+    addExpense: useMutation({ mutationFn: (orderId) => send('POST', `/api/email/orders/${orderId}/expense`), onSuccess: invalidate }),
+    addPurchase: useMutation({ mutationFn: (orderId) => send('POST', `/api/email/orders/${orderId}/purchase`), onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ['inventory'] }); qc.invalidateQueries({ queryKey: ['todos'] }); } }),
+    saveInvoice: useMutation({ mutationFn: (orderId) => send('POST', `/api/email/orders/${orderId}/save-invoice`), onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ['inventory'] }); } }),
+    handled: useMutation({ mutationFn: (orderId) => send('POST', `/api/email/orders/${orderId}/handled`), onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ['todos'] }); } }),
   };
 };

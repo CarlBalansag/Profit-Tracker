@@ -614,3 +614,25 @@ describe('cleared this week', () => {
     expect(body.cleared_week).toMatchObject({ payouts: 0, paid_total: 0, sales_moved: 0, bills_paid: 0 });
   });
 });
+
+describe('orders from email to check', () => {
+  it('lists each one with its best match to answer on the To-Do, and sums up the rest', () => {
+    const order = (id, over = {}) => ({
+      id, merchant: 'points4days', order_number: '190261', type: 'sale', total: '85.00',
+      match: { id: `m-${id}`, record_type: 'sale', names: ['Amazon Echo Dot (newest model)'], reasons: [
+        { code: 'already_paid', text: 'Sale already marked paid', points: 0 }, { code: 'quantity_part', text: '1 of the 3 sold', points: 10 },
+        { code: 'price_close', text: 'Price within 3%', points: 10 }, { code: 'date_far', text: '40 days apart', points: -10 },
+      ] },
+      ...over,
+    });
+    const items = todos.emailItems({ count: 3, newestId: 'a', orders: [
+      order('a'),
+      order('b', { merchant: 'walmart', order_number: '2000123-45678901', type: 'purchase', total: '64.74', match: { id: 'm-b', record_type: 'purchase', names: ['Pokemon Booster Bundle', 'Sleeves'], reasons: [] } }),
+    ] }, []);
+    expect(items.map((i) => [i.title, i.detail, i.group, i.amount, i.email_match?.id])).toEqual([
+      ['Is this Points4Days email #190261 your sale?', 'Your sale: Amazon Echo Dot (newest model) · Sale already marked paid · 1 of the 3 sold · Price within 3%', 'cashout', 85, 'm-a'],
+      ['Is this Walmart order #2000123-45678901 your purchase?', 'Your 2 purchases: Pokemon Booster Bundle, Sleeves', 'purchases', 64.74, 'm-b'],
+      ['1 more order from email to check', 'Say yes or no to the record each one looks like.', 'purchases', null, undefined],
+    ]);
+  });
+});

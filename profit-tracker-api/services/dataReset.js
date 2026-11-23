@@ -9,6 +9,7 @@ const cloudinary = require('cloudinary').v2;
 const defaultPrisma = require('../prisma');
 const { dealsCache } = require('./cashouts/service');
 const { publishCalendarFeed } = require('./calendarFeed');
+const { parsePrivateRef } = require('./privateReceipts');
 
 const RESET_SCOPES = ['transactions', 'everything'];
 const RESET_CONFIRMATION = 'RESET';
@@ -27,6 +28,15 @@ const RECEIPT_NAME = /^(inventory|expense)_([^_/]+)(?:_[^/]*)?$/;
 // whose own name points at a row being deleted for this user is returned --
 // otherwise a pasted URL could destroy another user's receipt.
 function receiptFileFromUrl(url, ownedRows, cloudName = process.env.CLOUDINARY_CLOUD_NAME) {
+  // A private receipt reference (services/privateReceipts.js): the same
+  // ownership rule, on the file's own name.
+  const ref = parsePrivateRef(url);
+  if (ref) {
+    if (!ref.publicId.startsWith(RECEIPT_FOLDER)) return null;
+    const owner = ref.publicId.slice(RECEIPT_FOLDER.length).match(RECEIPT_NAME);
+    if (!owner || !ownedRows.has(`${owner[1]}:${owner[2]}`)) return null;
+    return { publicId: ref.publicId, resourceType: ref.resourceType, type: 'authenticated' };
+  }
   if (typeof url !== 'string' || !cloudName) return null;
   let parsed;
   try {
@@ -142,6 +152,20 @@ async function deleteSetupData(tx, userId) {
   const calendarEvents = await tx.calendarEvent.deleteMany({ where });
   const reminders = await tx.reminder.deleteMany({ where });
   const todoStates = await tx.todoState.deleteMany({ where });
+  const taxYearSettings = await tx.taxYearSetting.deleteMany({ where });
+  const taxForms1099K = await tx.taxForm1099K.deleteMany({ where });
+  const taxProfiles = await tx.taxProfile.deleteMany({ where });
+  const taxReserveEntries = await tx.taxReserveEntry.deleteMany({ where });
+  const taxPayments = await tx.taxPayment.deleteMany({ where });
+  const taxMileageTrips = await tx.taxMileageTrip.deleteMany({ where });
+  const taxAssets = await tx.taxAsset.deleteMany({ where });
+  const taxReportSnapshots = await tx.taxReportSnapshot.deleteMany({ where });
+  await tx.emailMatch.deleteMany({ where });
+  const emailMessages = await tx.emailMessage.deleteMany({ where });
+  await tx.emailOrder.deleteMany({ where });
+  await tx.emailMerchantRule.deleteMany({ where });
+  await tx.emailStoreCandidate.deleteMany({ where });
+  const emailAccounts = await tx.emailAccount.deleteMany({ where });
   const accounts = await tx.account.deleteMany({ where });
   const platforms = await tx.platform.deleteMany({ where });
   const paymentMethods = await tx.paymentMethod.deleteMany({ where });
@@ -160,6 +184,16 @@ async function deleteSetupData(tx, userId) {
     calendarEvents: calendarEvents.count,
     reminders: reminders.count,
     todoStates: todoStates.count,
+    taxYearSettings: taxYearSettings.count,
+    taxForms1099K: taxForms1099K.count,
+    taxProfiles: taxProfiles.count,
+    taxReserveEntries: taxReserveEntries.count,
+    taxPayments: taxPayments.count,
+    taxMileageTrips: taxMileageTrips.count,
+    taxAssets: taxAssets.count,
+    taxReportSnapshots: taxReportSnapshots.count,
+    emailMessages: emailMessages.count,
+    emailAccounts: emailAccounts.count,
     accounts: accounts.count,
     platforms: platforms.count,
     paymentMethods: paymentMethods.count,
@@ -219,9 +253,9 @@ async function removeReceiptFiles(files) {
   let failed = 0;
   const worker = async () => {
     while (queue.length) {
-      const { publicId, resourceType } = queue.shift();
+      const { publicId, resourceType, type } = queue.shift();
       try {
-        await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+        await cloudinary.uploader.destroy(publicId, { resource_type: resourceType, ...(type ? { type } : {}) });
       } catch (error) {
         failed += 1;
         console.error('[data-reset] receipt file not removed:', publicId, error.message);

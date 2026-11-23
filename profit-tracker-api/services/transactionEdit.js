@@ -77,6 +77,8 @@ async function editTransaction(prisma, inventoryId, userId, payload, options = {
 
     const inventoryData = { ...writable(payload.inventory, updateInventory), qty_purchased: purchased, qty_on_hand: purchased - sold };
     delete inventoryData.account_id;
+    // Same rule as PUT /api/inventory/:id: no gift card, no gift card cost.
+    if (inventoryData.gift_card_amount === 0) inventoryData.gift_card_cost = null;
     if (nextAccountId !== undefined) inventoryData.account_id = nextAccountId;
     // Same rules as PUT /api/inventory/:id: a first tracking number is only
     // valid while the purchase is still on its way, and it moves the status

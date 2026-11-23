@@ -64,6 +64,25 @@ router.put('/dashboard-settings/:style', isAuthenticated, validateBody(dashboard
   }
 });
 
+// How much tax math the tax pages show: 'simple' (default) or 'detailed'.
+router.get('/tax-math', isAuthenticated, async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const value = parsePreferences(user?.accounting_preferences).taxMath;
+    res.json({ taxMath: value === 'detailed' ? 'detailed' : 'simple' });
+  } catch (error) { next(error); }
+});
+router.put('/tax-math', isAuthenticated, async (req, res, next) => {
+  try {
+    const value = req.body?.taxMath;
+    if (!['simple', 'detailed'].includes(value) || Object.keys(req.body).length !== 1) return res.status(400).json({ error: 'taxMath must be simple or detailed' });
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const preferences = { ...parsePreferences(user?.accounting_preferences), taxMath: value };
+    await prisma.user.update({ where: { id: req.user.id }, data: { accounting_preferences: JSON.stringify(preferences) } });
+    res.json({ taxMath: value });
+  } catch (error) { next(error); }
+});
+
 router.get('/schedule-c', isAuthenticated, async (req, res, next) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { schedule_c_enabled: true } });

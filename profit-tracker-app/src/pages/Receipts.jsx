@@ -2,7 +2,7 @@ import { formatMoney } from '../utils/money';
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
 import { RECEIPTS_PAGE_KEY, useCacheArrivals, useOptionalQueryClient } from '../hooks/usePageCache';
-import { Search, Paperclip, Eye, Trash2, FileText, Package, Receipt, X, Upload } from 'lucide-react';
+import { Search, Paperclip, Eye, Trash2, FileText, Package, Receipt, X, Upload, Lock } from 'lucide-react';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { usePhoneList } from '../hooks/usePhoneList';
 import ShowMoreButton from '../components/UI/ShowMoreButton';
@@ -16,6 +16,8 @@ function isPdfUrl(url) {
   if (url.startsWith('data:application/pdf')) return true;
   // Cloudinary PDF (resource_type raw or image with .pdf extension)
   if (url.toLowerCase().endsWith('.pdf')) return true;
+  // Private receipt: a signed download link names the format in its query.
+  if (/[?&]format=pdf(&|$)/i.test(url)) return true;
   return false;
 }
 
@@ -281,7 +283,18 @@ const Receipts = () => {
                   {/* Receipt thumbnail — only in "with" tab */}
                   {tab === 'with' && (
                     <td className="px-4 py-3.5">
-                      {isImageUrl(item.receipt_url) ? (
+                      {item.receipt_private ? (
+                        // Private receipts load only when opened: their signed
+                        // links aren't cached, so no thumbnails up front.
+                        <button
+                          onClick={() => item.receipt_url && setPreviewUrl(item.receipt_url)}
+                          disabled={!item.receipt_url}
+                          title={item.receipt_url ? 'Private receipt' : "This receipt can't be opened right now"}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white text-xs transition-colors border border-white/10 disabled:opacity-50"
+                        >
+                          <Lock className="w-3.5 h-3.5" /> Private
+                        </button>
+                      ) : isImageUrl(item.receipt_url) ? (
                         <img
                           src={item.receipt_url}
                           alt="receipt thumbnail"
@@ -304,8 +317,9 @@ const Receipts = () => {
                     {tab === 'with' ? (
                       <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => setPreviewUrl(item.receipt_url)}
-                          className="flex items-center gap-1.5 px-2.5 h-7 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white text-xs transition-colors"
+                          onClick={() => item.receipt_url && setPreviewUrl(item.receipt_url)}
+                          disabled={!item.receipt_url}
+                          className="flex items-center gap-1.5 px-2.5 h-7 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white text-xs transition-colors disabled:opacity-50 disabled:hover:bg-transparent"
                         >
                           <Eye className="w-3.5 h-3.5" /> View
                         </button>

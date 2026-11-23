@@ -12,13 +12,13 @@ datasource db {
 }
 
 model User {
-  id                     String           @id @default(uuid())
-  discord_id             String?          @unique
+  id                     String                @id @default(uuid())
+  discord_id             String?               @unique
   username               String?
-  email                  String           @unique
+  email                  String                @unique
   auth_provider          String?
   accounting_preferences String?
-  tutorial_seen          Boolean          @default(false)
+  tutorial_seen          Boolean               @default(false)
   inventories            Inventory[]
   payment_methods        PaymentMethod[]
   expenses               Expense[]
@@ -29,14 +29,14 @@ model User {
   goals                  Goal[]
   product_notes          ProductNote[]
   calendar_events        CalendarEvent[]
-  calendar_token         String?          @unique
+  calendar_token         String?               @unique
   local_credential       LocalCredential?
-  login_disabled         Boolean          @default(false)
+  login_disabled         Boolean               @default(false)
   firebase_identity      FirebaseIdentity?
-  schedule_c_enabled     Boolean          @default(false)
+  schedule_c_enabled     Boolean               @default(false)
   // Set automatically the first time one of this user's cashout keys passes
   // the provider's own check -- not a manual approval list.
-  cashout_access_granted Boolean          @default(false)
+  cashout_access_granted Boolean               @default(false)
   buyers                 Buyer[]
   invoices               Invoice[]
   api_keys               ApiKey[]
@@ -57,6 +57,20 @@ model User {
   notifications_sent     NotificationSent[]
   import_batches         ImportBatch[]
   invites                Invite[]
+  tax_year_settings      TaxYearSetting[]
+  tax_forms_1099k        TaxForm1099K[]
+  tax_profiles           TaxProfile[]
+  tax_reserve_entries    TaxReserveEntry[]
+  tax_payments           TaxPayment[]
+  tax_mileage_trips      TaxMileageTrip[]
+  tax_assets             TaxAsset[]
+  tax_report_snapshots   TaxReportSnapshot[]
+  email_accounts         EmailAccount[]
+  email_messages         EmailMessage[]
+  email_orders           EmailOrder[]
+  email_matches          EmailMatch[]
+  email_rules            EmailMerchantRule[]
+  email_store_candidates EmailStoreCandidate[]
 }
 
 // A per-user bearer token for the MCP server (AI assistant access), separate
@@ -64,24 +78,24 @@ model User {
 // sha256 hash is stored -- the raw token is shown to the user exactly once,
 // at creation/rotation time, and is not recoverable afterward.
 model ApiKey {
-  id           String    @id @default(uuid())
-  user_id      String
-  user         User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  name         String?
-  key_hash     String    @unique
+  id                   String    @id @default(uuid())
+  user_id              String
+  user                 User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  name                 String?
+  key_hash             String    @unique
   // First 8 chars of the raw token, kept in the clear so the Settings UI can
   // show "which key is this" without ever displaying the full secret again.
-  key_prefix   String
-  created_at   DateTime  @default(now())
-  last_used_at DateTime?
-  revoked_at   DateTime?
+  key_prefix           String
+  created_at           DateTime  @default(now())
+  last_used_at         DateTime?
+  revoked_at           DateTime?
   // Off by default: a key can only make binding cashout writes (commit,
   // change, withdraw, send tracking) through MCP once the owner turns this on.
-  allow_cashout_writes Boolean @default(false)
+  allow_cashout_writes Boolean   @default(false)
   // The AI guide version (shared/aiGuide.mjs) the AI using this key last
   // pulled with the get_ai_guide MCP tool, so the next call returns only what
   // is new. NULL = it has never pulled the guide.
-  ai_guide_version String?
+  ai_guide_version     String?
 
   @@index([user_id])
 }
@@ -151,7 +165,7 @@ model TransactionNote {
   id          String    @id @default(uuid())
   user_id     String
   user        User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  entity_type String    // 'sale' | 'purchase'
+  entity_type String // 'sale' | 'purchase'
   entity_id   String
   body        String
   author      String    @default("carl") // 'carl' | 'bot'
@@ -171,45 +185,48 @@ model Attachment {
   id          String   @id @default(uuid())
   user_id     String
   user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  entity_type String   // 'sale' | 'purchase'
+  entity_type String // 'sale' | 'purchase'
   entity_id   String
   url         String
   label       String?
-  kind        String?  // 'gmail' | 'receipt' | 'label' | 'other'
+  kind        String? // 'gmail' | 'receipt' | 'label' | 'other'
   created_at  DateTime @default(now())
 
   @@index([user_id, entity_type, entity_id])
 }
 
 model FirebaseIdentity {
-  id          String @id @default(uuid())
-  project_id  String
+  id           String            @id @default(uuid())
+  project_id   String
   firebase_uid String
-  user_id     String @unique
-  email       String
-  user        User @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  sessions    FirebaseSession[]
+  user_id      String            @unique
+  email        String
+  user         User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  sessions     FirebaseSession[]
+
   @@unique([project_id, firebase_uid])
 }
 
 model FirebaseSession {
-  fingerprint String @id
+  fingerprint String           @id
   identity_id String
-  identity FirebaseIdentity @relation(fields: [identity_id], references: [id], onDelete: Cascade)
-  expires_at DateTime
-  revoked Boolean @default(false)
+  identity    FirebaseIdentity @relation(fields: [identity_id], references: [id], onDelete: Cascade)
+  expires_at  DateTime
+  revoked     Boolean          @default(false)
+
   @@index([expires_at])
 }
 
 model AuthIntent {
-  id String @id @default(uuid())
-  proof_hash String
-  session_hash String
-  purpose String
-  user_id String?
+  id                 String   @id @default(uuid())
+  proof_hash         String
+  session_hash       String
+  purpose            String
+  user_id            String?
   credential_version Int?
-  expires_at DateTime
-  consumed Boolean @default(false)
+  expires_at         DateTime
+  consumed           Boolean  @default(false)
+
   @@index([expires_at])
 }
 
@@ -217,12 +234,12 @@ model AuthIntent {
 // about once a month from its public JSON export. One row per source; `data`
 // is the normalized card list as JSON. Global, not per user.
 model CardCatalog {
-  id           String   @id            // "opencard-us"
-  data         String                  // JSON array of normalized cards
-  card_count   Int
-  source_url   String
-  synced_at    DateTime
-  last_verified String?                // newest last_verified date in the data
+  id            String   @id // "opencard-us"
+  data          String // JSON array of normalized cards
+  card_count    Int
+  source_url    String
+  synced_at     DateTime
+  last_verified String? // newest last_verified date in the data
 }
 
 // One row per user-visible action (a refund added or removed, a status button
@@ -230,32 +247,36 @@ model CardCatalog {
 // its own entry (reverts_id -> the entry it reversed) and stamps undone_at on
 // the original, so an undo can itself be undone. See services/activityLog.js.
 model ActivityLog {
-  id          String    @id @default(uuid())
-  user_id     String
-  user        User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  kind        String
-  record_type String
-  record_id   String
-  detail      Json
-  source      String    @default("web")
-  reverts_id  String?
-  undone_at   DateTime?
-  undone_by   String?
-  created_at  DateTime  @default(now())
+  id           String    @id @default(uuid())
+  user_id      String
+  user         User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  kind         String
+  record_type  String
+  record_id    String
+  detail       Json
+  source       String    @default("web")
+  reverts_id   String?
+  undone_at    DateTime?
+  undone_by    String?
+  // Email automation review: 'confirmed' or 'rejected' (null = not looked at).
+  review_state String?
+  reviewed_at  DateTime?
+  created_at   DateTime  @default(now())
 
   @@index([user_id, created_at])
   @@index([user_id, record_id])
+  @@index([user_id, source, review_state])
 }
 
 model Invite {
-  id         String    @id @default(uuid())
-  token_hash String    @unique
+  id         String   @id @default(uuid())
+  token_hash String   @unique
   created_by String
-  user       User      @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [created_by], references: [id], onDelete: Cascade)
   expires_at DateTime
-  consumed   Boolean   @default(false)
+  consumed   Boolean  @default(false)
   used_by    String?
-  created_at DateTime  @default(now())
+  created_at DateTime @default(now())
 
   @@index([token_hash])
   @@index([expires_at])
@@ -263,111 +284,117 @@ model Invite {
 }
 
 model MigrationApproval {
-  id String @id @default(uuid())
-  user_id String
-  project_id String
+  id           String   @id @default(uuid())
+  user_id      String
+  project_id   String
   firebase_uid String
-  expires_at DateTime
-  consumed Boolean @default(false)
+  expires_at   DateTime
+  consumed     Boolean  @default(false)
+
   @@index([user_id, project_id, firebase_uid])
 }
 
 model AuthAttemptBucket {
-  key String @id
-  count Int @default(1)
+  key        String   @id
+  count      Int      @default(1)
   expires_at DateTime
+
   @@index([expires_at])
 }
 
 model LocalCredential {
-  user_id              String   @id
-  user                 User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  email                String   @unique
+  user_id              String    @id
+  user                 User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  email                String    @unique
   password_hash        String
-  must_change_password Boolean  @default(true)
+  must_change_password Boolean   @default(true)
   temporary_expires_at DateTime?
-  version              Int      @default(1)
-  disabled             Boolean  @default(false)
+  version              Int       @default(1)
+  disabled             Boolean   @default(false)
 }
 
 model Inventory {
-  id                    String         @id @default(uuid())
-  user_id               String
-  user                  User           @relation(fields: [user_id], references: [id])
-  product_name          String
-  vendor_id             String?
-  vendor                Platform?      @relation(fields: [vendor_id], references: [id])
+  id                            String         @id @default(uuid())
+  user_id                       String
+  user                          User           @relation(fields: [user_id], references: [id])
+  product_name                  String
+  vendor_id                     String?
+  vendor                        Platform?      @relation(fields: [vendor_id], references: [id])
   // Optional login at the store (Settings > Data Setup > Accounts) the purchase
   // was made on. Must belong to the same store as vendor_id; cleared when the
   // account is deleted.
-  account_id            String?
-  account               Account?       @relation(fields: [account_id], references: [id], onDelete: SetNull)
+  account_id                    String?
+  account                       Account?       @relation(fields: [account_id], references: [id], onDelete: SetNull)
   // The cashout import that created this purchase (Settings > Data > Past
   // imports), so the import can be viewed or undone later. Cleared if the
   // import record is removed.
-  import_batch_id       String?
-  import_batch          ImportBatch?   @relation(fields: [import_batch_id], references: [id], onDelete: SetNull)
-  payment_method_id     String?
-  payment_method        PaymentMethod? @relation(fields: [payment_method_id], references: [id])
-  purchase_date         DateTime
-  received_date         DateTime?
+  import_batch_id               String?
+  import_batch                  ImportBatch?   @relation(fields: [import_batch_id], references: [id], onDelete: SetNull)
+  payment_method_id             String?
+  payment_method                PaymentMethod? @relation(fields: [payment_method_id], references: [id])
+  purchase_date                 DateTime
+  received_date                 DateTime?
   // Optional last day the store accepts a return (its return policy). NULL
   // means no window was recorded; it is informational only, never a total.
-  return_by_date        DateTime?
+  return_by_date                DateTime?
   // Running totals of this purchase's Refund rows (money back from the store,
   // units sent back), kept in step with them in the same transaction so every
   // cost formula can read them without loading the refund history.
-  refunded_amount       Decimal        @default(0) @db.Decimal(19, 2)
-  refunded_qty          Int            @default(0)
-  unit_purchase_cost    Float
-  unit_purchase_cost_decimal Decimal?  @db.Decimal(19, 2)
-  qty_purchased         Int
-  qty_on_hand           Int
-  status                String         @default("PURCHASED")
+  refunded_amount               Decimal        @default(0) @db.Decimal(19, 2)
+  refunded_qty                  Int            @default(0)
+  unit_purchase_cost            Float
+  unit_purchase_cost_decimal    Decimal?       @db.Decimal(19, 2)
+  qty_purchased                 Int
+  qty_on_hand                   Int
+  status                        String         @default("PURCHASED")
   // Status-workflow rework (additive). `status` above stays authoritative until
   // a later checkpoint moves routes onto these fields. A NULL receiving_status
   // means "not yet backfilled" -- see scripts/migrateStatusWorkflow.js.
-  receiving_status      String?
+  receiving_status              String?
   // When receiving_status last changed. NULL for a row that has not had a
   // status change since the column was added -- there is no backfill.
-  receiving_status_changed_at DateTime?
-  is_listed             Boolean        @default(false)
-  received_at           DateTime?
-  cancelled_at          DateTime?
+  receiving_status_changed_at   DateTime?
+  is_listed                     Boolean        @default(false)
+  received_at                   DateTime?
+  cancelled_at                  DateTime?
   // Why the purchase was voided (MCP void_purchase). NULL unless voided.
-  void_reason           String?
-  correction_note       String?
-  sales_tax             Float          @default(0)
-  sales_tax_decimal     Decimal?       @db.Decimal(19, 2)
-  shipping_cost_inbound Float          @default(0)
-  shipping_cost_inbound_decimal Decimal? @db.Decimal(19, 2)
-  fees                  Float          @default(0)
-  fees_decimal          Decimal?       @db.Decimal(19, 2)
-  cashback_earned       Float          @default(0)
-  cashback_earned_decimal Decimal?     @db.Decimal(19, 2)
-  cashback_rate         Float?
-  cashback_rate_decimal Decimal?       @db.Decimal(9, 6)
-  gift_card_amount      Float          @default(0)
-  gift_card_amount_decimal Decimal?    @db.Decimal(19, 2)
-  order_number          String?
-  tracking_number       String?
+  void_reason                   String?
+  correction_note               String?
+  sales_tax                     Float          @default(0)
+  sales_tax_decimal             Decimal?       @db.Decimal(19, 2)
+  shipping_cost_inbound         Float          @default(0)
+  shipping_cost_inbound_decimal Decimal?       @db.Decimal(19, 2)
+  fees                          Float          @default(0)
+  fees_decimal                  Decimal?       @db.Decimal(19, 2)
+  cashback_earned               Float          @default(0)
+  cashback_earned_decimal       Decimal?       @db.Decimal(19, 2)
+  cashback_rate                 Float?
+  cashback_rate_decimal         Decimal?       @db.Decimal(9, 6)
+  gift_card_amount              Float          @default(0)
+  gift_card_amount_decimal      Decimal?       @db.Decimal(19, 2)
+  // What the gift card amount above cost the user (bought at a discount, or
+  // with a fee). NULL = not entered. Only the Schedule C books use it; the rest
+  // of the app still treats gift cards as free.
+  gift_card_cost                Decimal?       @db.Decimal(19, 2)
+  order_number                  String?
+  tracking_number               String?
   // Manual/MCP-set carrier override. Falls back to tracking_info.carrier (the
   // last live carrier check) and then to services/tracking.js's format-based
   // detectCarrier() when unset -- see mcp.js's resolveCarrier.
-  carrier               String?
-  tracking_info         Json?
-  category              String?
-  receipt_url           String?
-  tax_exempt            Boolean        @default(false)
-  notes                 String?
+  carrier                       String?
+  tracking_info                 Json?
+  category                      String?
+  receipt_url                   String?
+  tax_exempt                    Boolean        @default(false)
+  notes                         String?
   // Current per-unit market value (MCP set_market_value), the source it came
   // from, and when it was checked. NULL = not priced.
-  market_value          Decimal?       @db.Decimal(19, 2)
-  market_source         String?
-  market_checked_at     DateTime?
-  created_at            DateTime       @default(now())
-  sales                 Sales[]
-  refunds               Refund[]
+  market_value                  Decimal?       @db.Decimal(19, 2)
+  market_source                 String?
+  market_checked_at             DateTime?
+  created_at                    DateTime       @default(now())
+  sales                         Sales[]
+  refunds                       Refund[]
 
   @@index([user_id])
   @@index([user_id, purchase_date])
@@ -377,88 +404,88 @@ model Inventory {
 }
 
 model Sales {
-  id                  String    @id @default(uuid())
-  inventory_id        String
-  inventory           Inventory @relation(fields: [inventory_id], references: [id], onDelete: Cascade)
-  platform_id         String?
-  platform            Platform? @relation(fields: [platform_id], references: [id])
-  buyer_id            String?
-  buyer               Buyer?    @relation(fields: [buyer_id], references: [id])
-  quantity            Int
-  unit_price          Float
-  unit_price_decimal  Decimal?  @db.Decimal(19, 2)
-  commission_fee      Float     @default(0)
-  commission_fee_decimal Decimal? @db.Decimal(19, 2)
-  sale_shipping       Float     @default(0)
-  sale_shipping_decimal Decimal? @db.Decimal(19, 2)
+  id                              String             @id @default(uuid())
+  inventory_id                    String
+  inventory                       Inventory          @relation(fields: [inventory_id], references: [id], onDelete: Cascade)
+  platform_id                     String?
+  platform                        Platform?          @relation(fields: [platform_id], references: [id])
+  buyer_id                        String?
+  buyer                           Buyer?             @relation(fields: [buyer_id], references: [id])
+  quantity                        Int
+  unit_price                      Float
+  unit_price_decimal              Decimal?           @db.Decimal(19, 2)
+  commission_fee                  Float              @default(0)
+  commission_fee_decimal          Decimal?           @db.Decimal(19, 2)
+  sale_shipping                   Float              @default(0)
+  sale_shipping_decimal           Decimal?           @db.Decimal(19, 2)
   // Card the shipping label was bought with (Pirate Ship, Shippo, ...). NULL
   // means the label was taken out of the marketplace payout, so no card spend.
   sale_shipping_payment_method_id String?
-  sale_shipping_payment_method    PaymentMethod? @relation("SaleShippingCard", fields: [sale_shipping_payment_method_id], references: [id], onDelete: SetNull)
+  sale_shipping_payment_method    PaymentMethod?     @relation("SaleShippingCard", fields: [sale_shipping_payment_method_id], references: [id], onDelete: SetNull)
   // Running totals of this sale's Refund rows (money back to the buyer, units
   // the buyer sent back), kept in step with them in the same transaction.
-  refunded_amount     Decimal   @default(0) @db.Decimal(19, 2)
-  refunded_qty        Int       @default(0)
-  refunds             Refund[]
+  refunded_amount                 Decimal            @default(0) @db.Decimal(19, 2)
+  refunded_qty                    Int                @default(0)
+  refunds                         Refund[]
   // Units a cancel_sale/void_sale/mark_returned action put back in stock
   // (mark_returned can restore only part of the sale). A sale still holds
   // quantity - refunded_qty - restored_qty units out of stock.
-  restored_qty        Int       @default(0)
-  sale_date           DateTime
+  restored_qty                    Int                @default(0)
+  sale_date                       DateTime
   // User-entered "expected payout" reminder. Not a payment confirmation --
   // that is paid_at/paid_amount/paid_reference below.
-  payout_date         DateTime?
-  status              String    @default("SOLD")
+  payout_date                     DateTime?
+  status                          String             @default("SOLD")
   // Status-workflow rework (additive). workflow_type is copied from the
   // platform's preset when the sale is created, so changing a platform's
   // preset later never rewrites old sales.
-  workflow_type       String?
-  workflow_status     String?
+  workflow_type                   String?
+  workflow_status                 String?
   // When workflow_status last changed. NULL for a row that has not had a status
   // change since the column was added -- there is no backfill.
-  workflow_status_changed_at DateTime?
-  delivered_at        DateTime?
-  paid_at             DateTime?
-  paid_amount         Decimal?  @db.Decimal(19, 2)
-  paid_reference      String?
+  workflow_status_changed_at      DateTime?
+  delivered_at                    DateTime?
+  paid_at                         DateTime?
+  paid_amount                     Decimal?           @db.Decimal(19, 2)
+  paid_reference                  String?
   // Which bank/payout rail the money actually landed in (e.g. "Chase College",
   // "PayPal"). Separate from paid_reference, which is a free-text note about
   // the specific deposit, not the account it hit.
-  payout_account      String?
+  payout_account                  String?
   // Set only when a bulk mark-paid deposit was smaller than this sale's share
   // of the sales it covered (see services/markSalesPaid.js). NULL/0 means this
   // sale was paid in full -- paid_amount already reflects any shortfall, this
   // column exists purely so a short pay stays visible instead of looking like
   // a normal full payment.
-  payout_short_amount Decimal?  @db.Decimal(19, 2)
-  cancelled_at        DateTime?
-  voided_at           DateTime?
+  payout_short_amount             Decimal?           @db.Decimal(19, 2)
+  cancelled_at                    DateTime?
+  voided_at                       DateTime?
   // Why the sale was voided (MCP void_sale). NULL unless voided.
-  void_reason         String?
-  return_requested_at DateTime?
-  returned_at         DateTime?
-  disputed_at         DateTime?
+  void_reason                     String?
+  return_requested_at             DateTime?
+  returned_at                     DateTime?
+  disputed_at                     DateTime?
   // Set only by the mark_completed action -- lets a user skip the Statuses
   // board's automatic "Completed 3 days after paid_at" wait when they already
   // know a PAID sale is fully done. workflow_status itself never changes.
-  completed_at        DateTime?
-  taxable             Boolean   @default(true)
-  sale_tax_collected  Float     @default(0)
-  sale_tax_collected_decimal Decimal? @db.Decimal(19, 2)
-  customer_tax_exempt Boolean   @default(false)
-  exemption_type      String?
-  tracking_number     String?
+  completed_at                    DateTime?
+  taxable                         Boolean            @default(true)
+  sale_tax_collected              Float              @default(0)
+  sale_tax_collected_decimal      Decimal?           @db.Decimal(19, 2)
+  customer_tax_exempt             Boolean            @default(false)
+  exemption_type                  String?
+  tracking_number                 String?
   // Manual/MCP-set carrier override, outbound side of the same convention as
   // Inventory.carrier.
-  carrier             String?
-  tracking_info       Json?
-  notes               String?
-  cashout_commitment  CashoutCommitment?
+  carrier                         String?
+  tracking_info                   Json?
+  notes                           String?
+  cashout_commitment              CashoutCommitment?
   // Rows of a cashout's sold/received items report this sale was imported from
   // (Settings > Data > Import from cashouts, services/cashouts/importSold.js),
   // e.g. "eb:<invoice>:<serial>" or "la:<line id>". Lets a later import of an
   // overlapping date range skip them. Empty for sales entered any other way.
-  import_refs         String[]  @default([])
+  import_refs                     String[]           @default([])
 
   @@index([inventory_id])
   @@index([import_refs], type: Gin)
@@ -469,41 +496,42 @@ model Sales {
 }
 
 model Platform {
-  id               String      @id @default(uuid())
-  user_id          String
-  user             User        @relation(fields: [user_id], references: [id])
-  name             String
-  type             String      // "Marketplace, Cashout, Vendor"
-  fee_pct          Float       @default(0)
-  fee_pct_decimal  Decimal?    @db.Decimal(9, 6)
-  address          String?
-  notes            String?
-  tax_exempt_place Boolean     @default(false)
+  id                  String              @id @default(uuid())
+  user_id             String
+  user                User                @relation(fields: [user_id], references: [id])
+  name                String
+  type                String // "Marketplace, Cashout, Vendor"
+  fee_pct             Float               @default(0)
+  fee_pct_decimal     Decimal?            @db.Decimal(9, 6)
+  address             String?
+  notes               String?
+  tax_exempt_place    Boolean             @default(false)
   // Usual return window in days, prefilled on new purchases from this vendor.
   default_return_days Int?
   // Default sale workflow for new sales on this platform (status-workflow
   // rework, additive). Separate from `type` above, whose live values
   // ('Vendor' | 'Marketplace' | 'Cashout') other screens already depend on.
-  workflow_preset  String?
-  inventories      Inventory[] // Platforms as vendors
-  sales            Sales[]     // Platforms as marketplaces
-  accounts         Account[]
+  workflow_preset     String?
+  inventories         Inventory[] // Platforms as vendors
+  sales               Sales[] // Platforms as marketplaces
+  accounts            Account[]
   cashout_connections CashoutConnection[]
-  import_batches   ImportBatch[]
+  import_batches      ImportBatch[]
+  tax_forms_1099k     TaxForm1099K[]
 
   @@index([user_id])
 }
 
 model Account {
-  id          String   @id @default(uuid())
+  id          String      @id @default(uuid())
   user_id     String
-  user        User     @relation(fields: [user_id], references: [id])
+  user        User        @relation(fields: [user_id], references: [id])
   platform_id String
-  platform    Platform @relation(fields: [platform_id], references: [id], onDelete: Cascade)
+  platform    Platform    @relation(fields: [platform_id], references: [id], onDelete: Cascade)
   name        String
   email       String?
   username    String?
-  status      String   @default("Active")
+  status      String      @default("Active")
   notes       String?
   inventories Inventory[]
 
@@ -519,55 +547,55 @@ model Buyer {
   sales              Sales[]
   invoices           Invoice[]
 
-  @@index([user_id])
   @@unique([id, user_id])
+  @@index([user_id])
 }
 
 model PaymentMethod {
-  id                    String      @id @default(uuid())
-  user_id               String
-  user                  User        @relation(fields: [user_id], references: [id])
-  name                  String      // "e.g. Amex Blue"
-  type                  String      // "Credit, Debit"
-  default_cashback_rate Float       @default(0)
-  default_cashback_rate_decimal Decimal? @db.Decimal(9, 6)
-  preset_card_id        String?     // matches PRESET_CARDS[].id in presetCards.js
-  last4                 String?     // last 4 digits of the card number, display-only
-  category_rates        String?     // JSON array: [{store, rate, expires?}]
-  statement_close_day   Int?        // day of month statement closes (1–28)
-  due_day               Int?        // day of month payment is due (1–28)
-  credit_limit          Float?      // total credit limit on the card
-  credit_limit_decimal  Decimal?    @db.Decimal(19, 2)
-  min_payment_pct       Float?      // minimum payment as % of balance (e.g. 2.0 = 2%)
-  min_payment_pct_decimal Decimal?  @db.Decimal(9, 6)
+  id                            String             @id @default(uuid())
+  user_id                       String
+  user                          User               @relation(fields: [user_id], references: [id])
+  name                          String // "e.g. Amex Blue"
+  type                          String // "Credit, Debit"
+  default_cashback_rate         Float              @default(0)
+  default_cashback_rate_decimal Decimal?           @db.Decimal(9, 6)
+  preset_card_id                String? // matches PRESET_CARDS[].id in presetCards.js
+  last4                         String? // last 4 digits of the card number, display-only
+  category_rates                String? // JSON array: [{store, rate, expires?}]
+  statement_close_day           Int? // day of month statement closes (1–28)
+  due_day                       Int? // day of month payment is due (1–28)
+  credit_limit                  Float? // total credit limit on the card
+  credit_limit_decimal          Decimal?           @db.Decimal(19, 2)
+  min_payment_pct               Float? // minimum payment as % of balance (e.g. 2.0 = 2%)
+  min_payment_pct_decimal       Decimal?           @db.Decimal(9, 6)
   // True for a personal account/card fronting business purchases (e.g. a
   // personal checking account used to buy inventory). Drives the "owed to
   // personal account" calculation: unreimbursed spend on personal-flagged
   // methods, minus Expenses with category "Owner Reimbursement".
-  is_personal           Boolean     @default(false)
+  is_personal                   Boolean            @default(false)
   // How the card earns: "cashback" (rates are % back) or "points" (points or
   // miles per $1). For a points card, points_base_rate and each
   // category_rates[].points hold the multipliers, and the server derives the
   // dollar % stored in default_cashback_rate / category_rates[].rate as
   // multiplier x point_value_cents -- so every profit total keeps reading a
   // plain dollar rate.
-  reward_type           String      @default("cashback")
-  points_base_rate      Float?      // e.g. 1 for 1x on everything else
-  point_value_cents     Float?      // what one point is worth to the user, in cents (default 1)
-  rewards_label         String?     // e.g. "Membership Rewards points", "SkyMiles"
-  catalog_card_id       String?     // matches CardCatalog card ids (OpenCard DB), e.g. "us-amex-gold"
+  reward_type                   String             @default("cashback")
+  points_base_rate              Float? // e.g. 1 for 1x on everything else
+  point_value_cents             Float? // what one point is worth to the user, in cents (default 1)
+  rewards_label                 String? // e.g. "Membership Rewards points", "SkyMiles"
+  catalog_card_id               String? // matches CardCatalog card ids (OpenCard DB), e.g. "us-amex-gold"
   // JSON of what was last copied from the catalog (services/catalogCardFields.js),
   // so catalog changes auto-update the card without overwriting the user's edits.
-  catalog_applied       String?
-  catalog_synced_at     DateTime?   // when the card last took rates from the catalog
+  catalog_applied               String?
+  catalog_synced_at             DateTime? // when the card last took rates from the catalog
   // One-time "cards were reworked" notice for cards saved before the catalog:
   // null = not asked yet, "switched" = updated from the catalog, "kept" = left as-is.
-  rework_prompt_state   String?
-  inventories           Inventory[]
-  expenses              Expense[]
-  recurring_expenses    RecurringExpense[]
-  sale_shipping_sales   Sales[]     @relation("SaleShippingCard")
-  reminders             Reminder[]
+  rework_prompt_state           String?
+  inventories                   Inventory[]
+  expenses                      Expense[]
+  recurring_expenses            RecurringExpense[]
+  sale_shipping_sales           Sales[]            @relation("SaleShippingCard")
+  reminders                     Reminder[]
 }
 
 // Money back on a purchase (inventory_id set) or to a buyer on a sale (sale_id
@@ -614,60 +642,64 @@ model Expense {
   payment_method       PaymentMethod?    @relation(fields: [payment_method_id], references: [id], onDelete: SetNull)
   tax_details          Json?
   tax_version          Int               @default(0)
+  // Set only when the user says so: "external" (kept elsewhere) or
+  // "insufficient". Attached receipts and linked emails are worked out.
+  documentation        String?
+  documentation_note   String?
 
-  @@index([user_id])
-  @@index([user_id, date])
   @@unique([recurring_expense_id, date])
   @@unique([user_id, external_id])
+  @@index([user_id])
+  @@index([user_id, date])
 }
 
 model RecurringExpense {
-  id               String    @id @default(uuid())
-  user_id          String
-  user             User      @relation(fields: [user_id], references: [id])
-  name             String
-  amount           Float
-  amount_decimal   Decimal?  @db.Decimal(19, 2)
-  category         String?
-  frequency        String    // "weekly" | "biweekly" | "monthly"
-  start_date       DateTime
-  end_date         DateTime?
-  active           Boolean   @default(true)
-  notes            String?
-  last_generated   DateTime?
+  id                String         @id @default(uuid())
+  user_id           String
+  user              User           @relation(fields: [user_id], references: [id])
+  name              String
+  amount            Float
+  amount_decimal    Decimal?       @db.Decimal(19, 2)
+  category          String?
+  frequency         String // "weekly" | "biweekly" | "monthly"
+  start_date        DateTime
+  end_date          DateTime?
+  active            Boolean        @default(true)
+  notes             String?
+  last_generated    DateTime?
   payment_method_id String?
-  payment_method   PaymentMethod? @relation(fields: [payment_method_id], references: [id], onDelete: SetNull)
+  payment_method    PaymentMethod? @relation(fields: [payment_method_id], references: [id], onDelete: SetNull)
   generated_entries Expense[]
 }
 
 model Invoice {
-  id           String   @id @default(uuid())
-  user_id      String
-  user         User     @relation(fields: [user_id], references: [id])
-  buyer_id     String
-  buyer        Buyer    @relation(fields: [buyer_id, user_id], references: [id, user_id])
-  issue_date   DateTime
-  due_date     DateTime
-  total_amount Float
+  id                   String   @id @default(uuid())
+  user_id              String
+  user                 User     @relation(fields: [user_id], references: [id])
+  buyer_id             String
+  buyer                Buyer    @relation(fields: [buyer_id, user_id], references: [id, user_id])
+  issue_date           DateTime
+  due_date             DateTime
+  total_amount         Float
   total_amount_decimal Decimal? @db.Decimal(19, 2)
-  status       String   // "Paid, Unpaid"
+  status               String // "Paid, Unpaid"
 
   @@index([user_id])
 }
 
 model Goal {
-  id           String   @id @default(uuid())
-  user_id      String
-  user         User     @relation(fields: [user_id], references: [id])
-  metric       String            // 'netProfit' | 'totalRevenue' | 'unitsSold'
-  target_7d    Float?            // target for 7-day period
-  target_7d_decimal Decimal?     @db.Decimal(19, 2) // NULL when metric = 'unitsSold' (a count, not money)
-  target_30d   Float?            // target for 30-day period
-  target_30d_decimal Decimal?    @db.Decimal(19, 2)
-  target_ytd   Float?            // target for year-to-date period
-  target_ytd_decimal Decimal?    @db.Decimal(19, 2)
-  active       Boolean  @default(true)
-  created_at   DateTime @default(now())
+  id                 String   @id @default(uuid())
+  user_id            String
+  user               User     @relation(fields: [user_id], references: [id])
+  metric             String // 'netProfit' | 'totalRevenue' | 'unitsSold'
+  target_7d          Float? // target for 7-day period
+  target_7d_decimal  Decimal? @db.Decimal(19, 2) // NULL when metric = 'unitsSold' (a count, not money)
+  target_30d         Float? // target for 30-day period
+  target_30d_decimal Decimal? @db.Decimal(19, 2)
+  target_ytd         Float? // target for year-to-date period
+  target_ytd_decimal Decimal? @db.Decimal(19, 2)
+  active             Boolean  @default(true)
+  created_at         DateTime @default(now())
 
   @@index([user_id])
 }
@@ -676,7 +708,7 @@ model ProductNote {
   id           String   @id @default(uuid())
   user_id      String
   user         User     @relation(fields: [user_id], references: [id])
-  product_name String   // stored lowercase-trimmed for case-insensitive matching
+  product_name String // stored lowercase-trimmed for case-insensitive matching
   note         String
   updated_at   DateTime @updatedAt
 
@@ -685,46 +717,46 @@ model ProductNote {
 }
 
 model CalendarEvent {
-  id          String   @id @default(uuid())
-  user_id     String
-  user        User     @relation(fields: [user_id], references: [id])
-  title       String
-  date        String   // YYYY-MM-DD (local date, no TZ shift)
-  end_date    String?  // optional multi-day end (YYYY-MM-DD)
-  type        String   @default("manual")
-  color       String?  // "purple"|"blue"|"green"|"amber"|"red"
-  notes       String?
-  created_at  DateTime @default(now())
+  id         String   @id @default(uuid())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id])
+  title      String
+  date       String // YYYY-MM-DD (local date, no TZ shift)
+  end_date   String? // optional multi-day end (YYYY-MM-DD)
+  type       String   @default("manual")
+  color      String? // "purple"|"blue"|"green"|"amber"|"red"
+  notes      String?
+  created_at DateTime @default(now())
 
   @@index([user_id])
   @@index([user_id, date])
 }
 
 model EbayPriceCache {
-  product_name   String   @id
-  last_sold_price Float?
+  product_name            String   @id
+  last_sold_price         Float?
   last_sold_price_decimal Decimal? @db.Decimal(19, 2)
-  currency       String   @default("USD")
-  fetched_at     DateTime @updatedAt
+  currency                String   @default("USD")
+  fetched_at              DateTime @updatedAt
 
   @@map("ebay_price_cache")
 }
 
 model CashoutConnection {
-  id             String               @id @default(uuid())
+  id             String                @id @default(uuid())
   user_id        String
-  user           User                 @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user           User                  @relation(fields: [user_id], references: [id], onDelete: Cascade)
   provider       String
   display_name   String?
   encrypted_key  String
   key_last4      String
-  status         String               @default("active")
+  status         String                @default("active")
   platform_id    String?
-  platform       Platform?            @relation(fields: [platform_id], references: [id], onDelete: SetNull)
+  platform       Platform?             @relation(fields: [platform_id], references: [id], onDelete: SetNull)
   last_synced_at DateTime?
   last_error     String?
-  created_at     DateTime             @default(now())
-  updated_at     DateTime             @updatedAt
+  created_at     DateTime              @default(now())
+  updated_at     DateTime              @updatedAt
   snapshots      CashoutDealSnapshot[]
   matches        CashoutItemMatch[]
   commitments    CashoutCommitment[]
@@ -778,45 +810,45 @@ model CashoutItemMatch {
 // -- tracking_codes here is our own record of what we told it, for our UI
 // only, not something the provider can be queried against.
 model CashoutCommitment {
-  id                      String            @id @default(uuid())
-  user_id                 String
-  user                    User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  connection_id           String
-  connection              CashoutConnection @relation(fields: [connection_id], references: [id], onDelete: Cascade)
-  sale_id                 String?           @unique
-  sale                    Sales?            @relation(fields: [sale_id], references: [id], onDelete: SetNull)
-  external_deal_id        String
-  external_item_id        String
+  id                     String            @id @default(uuid())
+  user_id                String
+  user                   User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  connection_id          String
+  connection             CashoutConnection @relation(fields: [connection_id], references: [id], onDelete: Cascade)
+  sale_id                String?           @unique
+  sale                   Sales?            @relation(fields: [sale_id], references: [id], onDelete: SetNull)
+  external_deal_id       String
+  external_item_id       String
   // One row per purchase (sale) committed to an item. Buying more of an item
   // already committed adds another row: when its tracking is added, the
   // provider's single commitment for the item is raised by its quantity, so
   // rows with the same external_commitment_id share one provider commitment
   // and `quantity` is this purchase's share of it.
   // external_item_id while this row is open, null once it's withdrawn.
-  open_item_id            String?
+  open_item_id           String?
   // Null while status is "pending": logged from Log Purchase with no tracking
   // number yet, so nothing has been committed with the provider. Filled in
   // when the tracking number is added and the user confirms the commit.
-  external_commitment_id  String?
-  quantity                Int
+  external_commitment_id String?
+  quantity               Int
   // Why this purchase couldn't be committed (e.g. the provider refused to
   // raise the commitment: deal limit reached or closed). The row stays
   // "pending" so it can be tried again. Null once committed.
-  commit_error            String?
+  commit_error           String?
   // Mirrors the provider deal's own status at commit time (active/expired/
   // closed) plus "withdrawn" for our own DELETE, "pending" for a purchase
   // logged before it shipped (not committed yet), and "committing" while that
   // pending commit is in flight with the provider. Not kept live in sync after
   // that -- re-synced the next time this commitment is read from the provider.
-  status                  String            @default("active")
-  tracking_codes          String[]          @default([])
-  tracking_submitted_at   DateTime?
-  tracking_error          String?
+  status                 String            @default("active")
+  tracking_codes         String[]          @default([])
+  tracking_submitted_at  DateTime?
+  tracking_error         String?
   // When the provider's deal ends (services/cashouts/dealEnds.js), so the
   // To-Do list can warn first. Null when the provider gives no end date.
-  deal_expires_at         DateTime?
-  created_at              DateTime          @default(now())
-  updated_at              DateTime          @updatedAt
+  deal_expires_at        DateTime?
+  created_at             DateTime          @default(now())
+  updated_at             DateTime          @updatedAt
 
   @@index([connection_id, open_item_id])
   @@index([external_commitment_id])
@@ -830,17 +862,17 @@ model CashoutCommitment {
 // "card-due:<card id>:2026-12-10" -- so dismissing or paying this month's card
 // bill never hides next month's. A key with no row is simply shown.
 model TodoState {
-  id         String    @id @default(uuid())
+  id         String   @id @default(uuid())
   user_id    String
-  user       User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
   key        String
   // "snoozed" (hidden until `until`), "dismissed" or "done" (hidden for good),
   // or "waiting" (a late payout hidden until the sale is paid).
   state      String
   // Local date (YYYY-MM-DD) a snoozed item comes back on. NULL otherwise.
   until      String?
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   @@unique([user_id, key])
   @@index([user_id])
@@ -942,7 +974,7 @@ model ImportBatch {
   id          String      @id @default(uuid())
   user_id     String
   user        User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  source      String      // 'eb' | 'la' | 'p4d'
+  source      String // 'eb' | 'la' | 'p4d'
   platform_id String?
   platform    Platform?   @relation(fields: [platform_id], references: [id], onDelete: SetNull)
   file_name   String?
@@ -954,4 +986,404 @@ model ImportBatch {
   inventory   Inventory[]
 
   @@index([user_id, created_at])
+}
+
+// Per-user, per-tax-year Schedule C settings.
+model TaxYearSetting {
+  id                      String    @id @default(uuid())
+  user_id                 String
+  user                    User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year                    Int
+  // Cost of stock on hand on December 31 of `year` that isn't entered as a
+  // purchase in ProfitTracker (for example, stock from before tracking began).
+  // NULL = not entered: the most recent earlier year's value carries forward.
+  // January 1 of a year is the previous year's December 31 value.
+  untracked_inventory_end Decimal?  @db.Decimal(19, 2)
+  // Simplified home office (Schedule C line 30): square feet used regularly
+  // and only for the business, months used that year, and the home's total
+  // square footage (asked on line 30). NULL = not claimed.
+  home_office_sq_ft       Int?
+  home_office_months      Int?
+  home_total_sq_ft        Int?
+  // Schedule C Part IV (vehicle): when the vehicle was first used for the
+  // business, and the year's commuting and other personal miles. Business
+  // miles come from the mileage log.
+  vehicle_in_service      DateTime?
+  vehicle_commuting_miles Decimal?  @db.Decimal(12, 1)
+  vehicle_other_miles     Decimal?  @db.Decimal(12, 1)
+  created_at              DateTime  @default(now())
+  updated_at              DateTime  @updatedAt
+
+  @@unique([user_id, year])
+}
+
+// A Form 1099-K the user received, entered by hand to compare with their sales
+// on the Schedule C page. Only the amounts are stored: no TIN or account number.
+model TaxForm1099K {
+  id                String    @id @default(uuid())
+  user_id           String
+  user              User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year              Int
+  // Who sent the form, as printed on it (e.g. "eBay", "PayPal").
+  payer_name        String
+  // The user's marketplace this form covers, for the comparison. Optional:
+  // a payment app may cover sales from several places.
+  platform_id       String?
+  platform          Platform? @relation(fields: [platform_id], references: [id], onDelete: SetNull)
+  // Box 1a, gross amount of payment transactions.
+  gross_amount      Decimal   @db.Decimal(19, 2)
+  // Box 3, number of payment transactions (optional).
+  transaction_count Int?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  @@index([user_id, year])
+}
+
+// What a user chose to save about their own tax situation for one tax year,
+// for the Schedule C tax estimate. Only what the estimate needs: no names,
+// SSNs or birth dates (just "65 or older"). Every amount is optional; the
+// estimate says what it assumed for anything left blank. The user can delete
+// it, and can also estimate without saving anything (nothing is sent then).
+model TaxProfile {
+  id                     String   @id @default(uuid())
+  user_id                String
+  user                   User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year                   Int
+  state                  String? // two-letter code, e.g. "TX"
+  filing_status          String // single | mfj | mfs | hoh | qss
+  non_business_income    Decimal? @db.Decimal(19, 2) // expected for the year, all sources
+  wages                  Decimal? @db.Decimal(19, 2) // the part of it that is W-2 wages
+  other_se_income        Decimal? @db.Decimal(19, 2)
+  federal_withholding    Decimal? @db.Decimal(19, 2)
+  state_withholding      Decimal? @db.Decimal(19, 2)
+  // Superseded by TaxPayment (phase 7): no longer read or written. Kept so
+  // the migration stays additive.
+  federal_estimated_paid Decimal? @db.Decimal(19, 2)
+  state_estimated_paid   Decimal? @db.Decimal(19, 2)
+  qualifying_children    Int?
+  other_dependents       Int?
+  age65                  Boolean  @default(false)
+  spouse_age65           Boolean  @default(false)
+  adjustments            Decimal? @db.Decimal(19, 2) // e.g. IRA, HSA, student loan interest
+  itemized_deductions    Decimal? @db.Decimal(19, 2)
+  prior_year_tax         Decimal? @db.Decimal(19, 2)
+  prior_year_agi         Decimal? @db.Decimal(19, 2)
+  reserve_mode           String   @default("personalized") // personalized | flat | conservative
+  flat_rate              Decimal? @db.Decimal(6, 4) // 0.25 = 25%
+  buffer_rate            Decimal? @db.Decimal(6, 4) // 0.10 = 10% extra
+  // How to project the year's profit: actual | run_rate | recent | seasonal |
+  // target. NULL = the default (run_rate for the current year).
+  forecast_method        String?
+  profit_target          Decimal? @db.Decimal(19, 2) // the user's own full-year estimate
+  created_at             DateTime @default(now())
+  updated_at             DateTime @updatedAt
+
+  @@unique([user_id, year])
+}
+
+// Money the user moved aside for taxes (or took back), per tax year. A ledger
+// of their own savings: never an expense, never part of any profit total, and
+// separate from tax payments.
+model TaxReserveEntry {
+  id         String   @id @default(uuid())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year       Int
+  kind       String // set_aside | released
+  amount     Decimal  @db.Decimal(19, 2)
+  date       DateTime
+  note       String?
+  created_at DateTime @default(now())
+
+  @@index([user_id, year])
+}
+
+// A tax payment the user made: an estimated payment for a quarter, an
+// extension payment, or another payment toward a year's tax. Kept apart from
+// the reserve (money set aside) and never part of any profit total.
+model TaxPayment {
+  id           String   @id @default(uuid())
+  user_id      String
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year         Int // the tax year the payment is for
+  jurisdiction String // "US" for the IRS, or a two-letter state code
+  period       String // Q1 | Q2 | Q3 | Q4 | extension | other
+  amount       Decimal  @db.Decimal(19, 2)
+  paid_date    DateTime
+  reference    String? // e.g. a confirmation number, if the user wants it
+  created_at   DateTime @default(now())
+
+  @@index([user_id, year])
+}
+
+// A business trip in the mileage log (standard mileage rate, Schedule C
+// line 9). Only what the IRS asks a log to show: date, where, why, miles.
+model TaxMileageTrip {
+  id            String   @id @default(uuid())
+  user_id       String
+  user          User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  date          DateTime
+  miles         Decimal  @db.Decimal(10, 1)
+  destination   String
+  purpose       String
+  // Business parking fees and tolls, deductible on top of the mileage rate.
+  parking_tolls Decimal? @db.Decimal(19, 2)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  @@index([user_id, date])
+}
+
+// Equipment used in the business (label printer, scale, shelving, computer),
+// deducted in full (de minimis safe harbor or Section 179) or depreciated
+// over its MACRS recovery period. Not vehicles: those use the mileage log.
+model TaxAsset {
+  id                String    @id @default(uuid())
+  user_id           String
+  user              User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  name              String
+  placed_in_service DateTime
+  cost              Decimal   @db.Decimal(19, 2)
+  business_percent  Int // 1-100
+  // de_minimis | section_179 | macrs
+  method            String
+  // 5 or 7 (MACRS recovery period); 5 for computers, 7 for furniture/shelving.
+  recovery_years    Int?
+  disposed_date     DateTime?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  @@index([user_id])
+}
+
+// A finalized Schedule C report for a tax year. Never changed after it's
+// written: a revision is a new row with the next revision number and a reason.
+// `rules` records the rule versions it was built with, so a later rule change
+// can't silently change finalized history; `input_hash` tells whether the
+// records have changed since.
+model TaxReportSnapshot {
+  id         String   @id @default(uuid())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  year       Int
+  revision   Int
+  reason     String?
+  report     Json
+  rules      Json
+  input_hash String
+  created_at DateTime @default(now())
+
+  @@unique([user_id, year, revision])
+}
+
+// Email connections (phase E1). Optional, read-only. Only mail from the
+// sender allow-list is ever fetched, and only its headers are kept.
+model EmailAccount {
+  id                String              @id @default(uuid())
+  user_id           String
+  user              User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  provider          String // "imap" now; "gmail" and "outlook" (OAuth) later
+  preset            String // gmail | icloud | yahoo | aol | other
+  email_address     String
+  imap_host         String?
+  imap_port         Int?
+  imap_username     String?
+  // AES-256-GCM with EMAIL_TOKEN_KEY ("v1:iv:ciphertext:tag"); null once disconnected.
+  encrypted_secret  String?
+  status            String              @default("active") // active | error | disconnected
+  last_error        String?
+  sync_since        DateTime // first day to look back to
+  include_spam      Boolean             @default(false)
+  last_synced_at    DateTime?
+  stores_scanned_at DateTime? // last "Find stores in my email"
+  sync_started_at   DateTime?
+  created_at        DateTime            @default(now())
+  updated_at        DateTime            @updatedAt
+  folders           EmailFolderCursor[]
+  messages          EmailMessage[]
+
+  @@unique([user_id, email_address])
+  @@index([status])
+}
+
+// Where each folder's sync stopped. A changed uid_validity means the server
+// renumbered the folder, so the cursor is thrown away and the window rescanned.
+model EmailFolderCursor {
+  id           String       @id @default(uuid())
+  account_id   String
+  account      EmailAccount @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  folder       String
+  uid_validity String?
+  last_uid     Int          @default(0)
+  // Sender domains already searched up to last_uid. A sender added later
+  // (a new built-in store) is searched once over the whole window. Empty on
+  // cursors from before this was kept: every sender is searched once.
+  domains      String[]     @default([])
+  updated_at   DateTime     @updatedAt
+
+  @@unique([account_id, folder])
+}
+
+// One row per matching email: headers only, never the body.
+model EmailMessage {
+  id           String       @id @default(uuid())
+  user_id      String
+  user         User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  account_id   String
+  account      EmailAccount @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  // sha256(account + Message-ID), or of the sender/date/subject when there is none.
+  dedupe_key   String
+  message_id   String?
+  folder       String
+  uid          Int
+  from_address String
+  from_name    String?
+  subject      String?
+  sent_at      DateTime?
+  merchant     String?
+  status       String       @default("new") // new | extracted | ignored | failed
+  created_at   DateTime     @default(now())
+
+  // Read out of the body during sync (E2); the body itself is never stored.
+  uid_validity     String?
+  kind             String? // order | shipped | delivered | pickup | cancelled | refund | return | receipt | sale | payout | other
+  order_number     String?
+  currency         String      @default("USD")
+  total            Decimal?    @db.Decimal(12, 2)
+  subtotal         Decimal?    @db.Decimal(12, 2)
+  tax              Decimal?    @db.Decimal(12, 2)
+  shipping         Decimal?    @db.Decimal(12, 2)
+  discount         Decimal?    @db.Decimal(12, 2)
+  tracking_numbers String[]    @default([])
+  items            Json? // [{ name, quantity, unit_price, total }]
+  payment_hint     String? // "Visa 1234"
+  confidence       Json? // { field: 0..1 }
+  parser           String? // "amazon@1", "schema.org@1", "generic@1"
+  parser_version   Int?
+  extracted_at     DateTime?
+  extract_error    String?
+  attachment_name  String? // a PDF invoice was attached (name only; E6)
+  // Where the order ships, as "CITY, ST" only (never the name or street).
+  // Read from Amazon emails, where it tells resale (shipped out of state) from personal.
+  ship_to          String?
+  order_id         String?
+  order            EmailOrder? @relation(fields: [order_id], references: [id], onDelete: SetNull)
+
+  @@unique([user_id, dedupe_key])
+  @@index([user_id, sent_at])
+  @@index([account_id])
+  @@index([user_id, order_number])
+  @@index([account_id, status])
+  @@index([order_id])
+}
+
+// Every email about one order (confirmation, shipped, delivered, refund...)
+// grouped together (E3), so matching and actions work on the order, not on
+// five separate emails. Key: "<merchant>:<order #>", or "track:<number>"
+// for carrier emails until an order with that tracking number shows up.
+model EmailOrder {
+  id               String         @id @default(uuid())
+  user_id          String
+  user             User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  key              String
+  merchant         String
+  order_number     String?
+  type             String // purchase | sale | receipt | shipment
+  status           String // latest by rank: order, shipped, delivered, cancelled...
+  first_seen       DateTime?
+  last_seen        DateTime?
+  currency         String         @default("USD")
+  total            Decimal?       @db.Decimal(12, 2)
+  subtotal         Decimal?       @db.Decimal(12, 2)
+  tax              Decimal?       @db.Decimal(12, 2)
+  shipping         Decimal?       @db.Decimal(12, 2)
+  discount         Decimal?       @db.Decimal(12, 2)
+  tracking_numbers String[]       @default([])
+  items            Json?
+  payment_hint     String?
+  match_state      String         @default("unmatched") // unmatched | review | linked | dismissed
+  // E5: the last status already applied to the linked records, and what needs
+  // the user (a cancellation or refund to record), shown on To-Do.
+  applied_status   String?
+  attention        String?
+  ship_to          String? // "CITY, ST" from the order's emails (Amazon)
+  // For a store order with no matching purchase: "resale" (add it), "ask"
+  // (a To-Do asks), "personal" (set aside as Not business), or "kept" (the
+  // user said it's business, so it's never set aside again). With why.
+  leaning          String?
+  leaning_reason   String?
+  updated_at       DateTime       @updatedAt
+  created_at       DateTime       @default(now())
+  messages         EmailMessage[]
+  matches          EmailMatch[]
+
+  @@unique([user_id, key])
+  @@index([user_id, match_state])
+}
+
+// A suggested or accepted link between an order from email and a record.
+model EmailMatch {
+  id          String     @id @default(uuid())
+  user_id     String
+  user        User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  order_id    String
+  order       EmailOrder @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  record_type String // purchase | sale | expense
+  record_ids  String[] // a multi-item order can be several purchase rows
+  score       Int
+  band        String // high | medium
+  reasons     Json // [{ code, text, points }]
+  state       String     @default("suggested") // suggested | linked | rejected
+  auto        Boolean    @default(false)
+  decided_at  DateTime?
+  created_at  DateTime   @default(now())
+
+  @@unique([order_id, record_type, record_ids])
+  @@index([user_id, state])
+}
+
+// "Trusted store" rules (E4): what to do with a store's receipts. A rule with
+// a sender domain also adds that sender to the email search (subscriptions
+// and tools that aren't on the built-in list).
+model EmailMerchantRule {
+  id                String   @id @default(uuid())
+  user_id           String
+  user              User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  merchant          String // built-in key ("pirateship") or "custom:<domain>"
+  domain            String? // custom sender domain
+  label             String
+  action            String   @default("create_expense") // create_expense | ignore
+  auto              Boolean  @default(true)
+  category          String?
+  tax_category      String?
+  business_use      String   @default("business") // business | mixed
+  business_percent  Decimal  @default(100) @db.Decimal(5, 2)
+  purpose           String?
+  payment_method_id String?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  @@unique([user_id, merchant])
+}
+
+// Stores found in a user's email that ProfitTracker can't read yet. Found by
+// looking at sender and subject lines only (nothing else is kept): the sender
+// domain, a name, and how many order-like emails it sent. requested_at is set
+// when the user asks for the store to be supported.
+model EmailStoreCandidate {
+  id           String    @id @default(uuid())
+  user_id      String
+  user         User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  domain       String
+  label        String
+  order_emails Int       @default(0)
+  last_seen    DateTime?
+  scanned_at   DateTime  @default(now())
+  requested_at DateTime?
+  // "Not a store": hidden from the list and kept so a new check doesn't bring it back.
+  hidden_at    DateTime?
+
+  @@unique([user_id, domain])
+  @@index([requested_at])
 }

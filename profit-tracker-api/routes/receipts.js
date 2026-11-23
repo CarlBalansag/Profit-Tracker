@@ -6,6 +6,7 @@ const cloudinary = require('cloudinary').v2;
 const { validateBody } = require('../middleware/validate');
 const { attachReceipt, detachReceipt } = require('../validation/schemas');
 const { grossBatchCost } = require('../services/decimalFinance');
+const { privateRef, receiptLink, withReceiptLink } = require('../services/privateReceipts');
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -71,7 +72,8 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       })),
     ];
 
-    const withReceipts    = all.filter(i => i.receipt_url);
+    // Private receipts go out as short-lived signed links.
+    const withReceipts    = all.filter(i => i.receipt_url).map(i => withReceiptLink(i, i.itemType));
     const withoutReceipts = all.filter(i => !i.receipt_url);
 
     res.json({ withReceipts, withoutReceipts });
@@ -129,14 +131,16 @@ router.post('/attach', isAuthenticated, validateBody(attachReceipt), async (req,
 
     // Upload base64 dataURL to Cloudinary. Never overwrites the previous
     // receipt in place — a failed database write below must not leave the
-    // item with no receipt at all.
+    // item with no receipt at all. Stored privately ("authenticated"): only a
+    // signed, short-lived link opens it, and the database keeps a reference.
     const uploadResult = await cloudinary.uploader.upload(fileData, {
       folder: 'profittracker/receipts',
       resource_type: 'auto',  // handles images and PDFs
+      type: 'authenticated',
       public_id: `${itemType}_${itemId}_${randomUUID()}`,
       overwrite: false,
     });
-    const receiptUrl = uploadResult.secure_url;
+    const receiptUrl = privateRef({ resourceType: uploadResult.resource_type, format: uploadResult.format, publicId: uploadResult.public_id });
 
     try {
       if (itemType === 'inventory') {
@@ -159,6 +163,7 @@ router.post('/attach', isAuthenticated, validateBody(attachReceipt), async (req,
         try {
           await cloudinary.uploader.destroy(uploadResult.public_id, {
             resource_type: uploadResult.resource_type || 'image',
+            type: 'authenticated',
           });
         } catch (cleanupError) {
           console.error('[receipts] failed upload cleanup:', cleanupError.message);
@@ -167,7 +172,7 @@ router.post('/attach', isAuthenticated, validateBody(attachReceipt), async (req,
       throw error;
     }
 
-    res.json({ success: true, receipt_url: receiptUrl });
+    res.json({ success: true, receipt_url: receiptLink(receiptUrl, itemType, itemId), receipt_private: true });
   } catch (err) {
     next(err);
   }

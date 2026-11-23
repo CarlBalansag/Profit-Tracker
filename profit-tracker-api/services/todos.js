@@ -267,6 +267,104 @@ function connectionItems(connections) {
     }));
 }
 
+// Email: orders waiting for a yes/no on their match, and mailboxes whose
+// password stopped working. The review item's key follows the newest order,
+// so a dismissed reminder comes back when new orders arrive.
+const STORE_LABEL = { amazon: 'Amazon', walmart: 'Walmart', bestbuy: 'Best Buy', target: 'Target', apple: 'Apple', costco: 'Costco', samsclub: "Sam's Club", homedepot: 'Home Depot', lowes: "Lowe's", gamestop: 'GameStop', nike: 'Nike', ebay: 'eBay', stockx: 'StockX', goat: 'GOAT', paypal: 'PayPal', points4days: 'Points4Days', pirateship: 'Pirate Ship', homedepot: 'Home Depot' };
+const storeLabel = (key) => STORE_LABEL[key] || String(key || '').replace(/^custom:/, '');
+const CASHOUT_STORES = new Set(['points4days']);
+// "CHECK 1185" -> "check #1185 "; "211338" -> "#211338 " (with its space).
+const orderRef = (n) => (!n ? '' : /^CHECK\s/i.test(n) ? `#${String(n).replace(/^CHECK\s*/i, '')} ` : `#${n} `);
+const REVIEW_ITEMS = 15;
+
+function emailItems(review, accounts, extra = {}) {
+  const out = [];
+  for (const o of extra.attention || []) {
+    if (o.attention === 'deposit_check') {
+      const label = o.merchant === 'points4days' ? 'Points4Days' : storeLabel(o.merchant);
+      const number = String(o.order_number || '').replace(/^CHECK\s*/i, '');
+      out.push(item({
+        key: `email-deposit_check:${o.id}`, type: 'email_deposit_check', group: 'cashout', urgency: 'soon',
+        title: `Deposit your ${label} check${number ? ` #${number}` : ''}`,
+        detail: `Print it from ${label} when you're ready to deposit. It can only be printed once.`,
+        amount: o.total != null ? Number(o.total) : null,
+        link: { kind: 'page', to: '/settings', state: { tab: 'email' } },
+      }));
+      continue;
+    }
+    const what = o.attention === 'cancelled' ? 'cancelled' : 'refunded or returned';
+    out.push(item({
+      key: `email-${o.attention}:${o.id}`, type: `email_${o.attention}`, group: 'purchases', urgency: 'soon',
+      title: `${storeLabel(o.merchant)} order${o.order_number ? ` ${o.order_number}` : ''} was ${what}`,
+      detail: o.attention === 'cancelled' ? 'Cancel the purchase too, or change its quantity.' : 'Record the refund on the purchase.',
+      amount: o.total != null ? Number(o.total) : null,
+      link: { kind: 'page', to: '/settings', state: { tab: 'email' } },
+    }));
+  }
+  for (const m of extra.taxForms || []) {
+    out.push(item({
+      key: `email-taxform:${m.id}`, type: 'email_tax_form', group: 'bookkeeping', urgency: 'soon',
+      title: `Tax form from ${storeLabel(m.merchant)}`,
+      detail: 'Enter its numbers on Schedule C (1099-K forms).',
+      link: { kind: 'page', to: '/schedule-c' },
+    }));
+  }
+  // Automatic changes to confirm are an optional card on the To-Do page
+  // (GET /api/email/automation/review), not an item: they don't count toward
+  // the sidebar badge.
+  // Each email order waiting for a yes or no on its best match, answered right
+  // on the To-Do (Yes, link / Not this). Past the first few, one item sums up the rest.
+  const listed = review.orders || [];
+  for (const o of listed) {
+    const match = o.match;
+    const what = { purchase: 'purchase', sale: 'sale', expense: 'expense' }[match.record_type] || 'record';
+    const records = match.names.length > 1 ? `Your ${match.names.length} ${what}s: ${match.names.join(', ')}` : `Your ${what}: ${match.names[0] || what}`;
+    const reasons = (match.reasons || []).filter((r) => r.points > 0 || r.code === 'already_paid').slice(0, 3).map((r) => r.text);
+    out.push(item({
+      key: `email-review:${o.id}:${match.id}`, type: 'email_review',
+      group: match.record_type === 'expense' ? 'bookkeeping' : match.record_type === 'sale' && CASHOUT_STORES.has(o.merchant) ? 'cashout' : 'purchases',
+      urgency: 'info',
+      title: `Is this ${storeLabel(o.merchant)} ${o.type === 'check' ? 'check' : o.type === 'sale' ? 'email' : o.type === 'receipt' ? 'receipt' : 'order'} ${orderRef(o.order_number)}your ${what}?`.replace(/\s+/g, ' '),
+      detail: [records, ...reasons].join(' · '),
+      amount: o.total != null ? Number(o.total) : null,
+      email_match: { id: match.id, order_id: o.id },
+      link: { kind: 'page', to: '/settings', state: { tab: 'email' } },
+    }));
+  }
+  // Store orders with no matching purchase that look like resale or are
+  // unclear: Add purchase / Personal right on the To-Do (last 30 days).
+  for (const o of extra.toAdd || []) {
+    const items = Array.isArray(o.items) ? o.items.filter((i) => i && i.name) : [];
+    const what = items.map((i) => (Number(i.quantity) > 1 && !i.more ? `${i.quantity} × ${i.name}` : i.name)).join(', ');
+    out.push(item({
+      key: `email-add:${o.id}`, type: 'email_add_purchase', group: 'purchases', urgency: 'info',
+      title: `Add this ${storeLabel(o.merchant)} order as a purchase?`,
+      detail: [what || (o.order_number ? `Order #${o.order_number}` : 'No items listed'), o.leaning_reason].filter(Boolean).join(' · '),
+      amount: o.total != null ? Number(o.total) : null,
+      email_order: { id: o.id },
+      link: { kind: 'page', to: '/settings', state: { tab: 'email' } },
+    }));
+  }
+  if (review.count > listed.length) {
+    const rest = review.count - listed.length;
+    out.push(item({
+      key: listed.length ? `email-review-rest:${review.newestId}` : `email-review:${review.newestId}`, type: 'email_review', group: 'purchases', urgency: 'info',
+      title: `${rest} ${listed.length ? 'more ' : ''}${rest === 1 ? 'order' : 'orders'} from email to check`,
+      detail: 'Say yes or no to the record each one looks like.',
+      link: { kind: 'page', to: '/settings', state: { tab: 'email' } },
+    }));
+  }
+  for (const a of accounts.filter((x) => x.status === 'error')) {
+    out.push(item({
+      key: `email-reconnect:${a.id}`, type: 'email_reconnect', group: 'purchases', urgency: 'today',
+      title: `Reconnect ${a.email_address}`,
+      detail: a.last_error || 'The mail server stopped accepting the saved password.',
+      link: { kind: 'page', to: '/settings', state: { tab: 'email' } },
+    }));
+  }
+  return out;
+}
+
 function saleItems(sales, today) {
   const items = [];
   for (const sale of sales) {
@@ -655,6 +753,7 @@ function buildTodos(data, today) {
     ...cardItems(data.cards || [], today, data.spendByCard || new Map()),
     ...recurringItems(data.recurring || [], today),
     ...reminderItems(data.reminders || [], today),
+    ...emailItems(data.emailReview || { count: 0 }, data.emailAccounts || [], { ...(data.emailExtra || {}), today }),
   ]);
   return items.sort((a, b) =>
     URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency]
@@ -746,9 +845,25 @@ function clearedThisWeek(sales, states, today) {
   };
 }
 
+// The names of the records each email order to check looks like (user's own only).
+async function reviewOrders(prisma, userId, orders) {
+  const withMatch = orders.filter((o) => o.matches?.[0]);
+  const ids = (type) => withMatch.filter((o) => o.matches[0].record_type === type).flatMap((o) => o.matches[0].record_ids);
+  const [purchases, sales, expenses] = await Promise.all([
+    ids('purchase').length ? prisma.inventory.findMany({ where: { user_id: userId, id: { in: ids('purchase') } }, select: { id: true, product_name: true } }) : [],
+    ids('sale').length ? prisma.sales.findMany({ where: { inventory: { user_id: userId }, id: { in: ids('sale') } }, select: { id: true, inventory: { select: { product_name: true } } } }) : [],
+    ids('expense').length ? prisma.expense.findMany({ where: { user_id: userId, id: { in: ids('expense') } }, select: { id: true, name: true } }) : [],
+  ]);
+  const name = new Map([...purchases.map((r) => [r.id, r.product_name]), ...sales.map((r) => [r.id, r.inventory?.product_name]), ...expenses.map((r) => [r.id, r.name])]);
+  return withMatch.map(({ matches, ...o }) => {
+    const m = matches[0];
+    return { ...o, match: { id: m.id, record_type: m.record_type, reasons: m.reasons, names: m.record_ids.map((id) => name.get(id)).filter(Boolean) } };
+  }).filter((o) => o.match.names.length);
+}
+
 async function loadTodoData(prisma, userId, today) {
   const lookback = new Date(toUtc(addDays(today, -365)));
-  const [commitments, connections, sales, inventories, cards, recurring, reminders] = await Promise.all([
+  const [commitments, connections, sales, inventories, cards, recurring, reminders, emailReviewCount, emailReviewOrders, emailAccounts, emailAttention, emailTaxForms, emailToAdd] = await Promise.all([
     prisma.cashoutCommitment.findMany({
       where: { user_id: userId, status: { in: ['pending', 'active', 'expired', 'closed'] } },
       include: {
@@ -771,6 +886,19 @@ async function loadTodoData(prisma, userId, today) {
       where: { user_id: userId, done_at: null, due_date: { lte: addDays(today, THRESHOLDS.reminderAhead) } },
       include: { payment_method: { select: { name: true, last4: true } } },
     }),
+    prisma.emailOrder ? prisma.emailOrder.count({ where: { user_id: userId, match_state: 'review' } }) : 0,
+    prisma.emailOrder ? prisma.emailOrder.findMany({
+      where: { user_id: userId, match_state: 'review' }, orderBy: { last_seen: 'desc' }, take: REVIEW_ITEMS,
+      select: { id: true, merchant: true, order_number: true, type: true, total: true, matches: { where: { state: 'suggested' }, orderBy: { score: 'desc' }, take: 1 } },
+    }) : [],
+    prisma.emailAccount ? prisma.emailAccount.findMany({ where: { user_id: userId }, select: { id: true, email_address: true, status: true, last_error: true } }) : [],
+    prisma.emailOrder ? prisma.emailOrder.findMany({ where: { user_id: userId, attention: { not: null } }, select: { id: true, merchant: true, order_number: true, attention: true, total: true }, take: 50 }) : [],
+    prisma.emailMessage ? prisma.emailMessage.findMany({ where: { user_id: userId, kind: 'tax_form', sent_at: { gte: lookback } }, select: { id: true, merchant: true }, take: 20 }) : [],
+    prisma.emailOrder ? prisma.emailOrder.findMany({
+      where: { user_id: userId, type: 'purchase', match_state: 'unmatched', leaning: { in: ['resale', 'ask', 'kept'] }, status: { notIn: ['cancelled', 'refund', 'return'] }, first_seen: { gte: new Date(Date.now() - 30 * 86400000) } },
+      orderBy: { first_seen: 'desc' }, take: 15,
+      select: { id: true, merchant: true, order_number: true, total: true, items: true, leaning_reason: true },
+    }) : [],
   ]);
 
   // Tracked spend this month, only needed when a card's statement is close.
@@ -782,7 +910,9 @@ async function loadTodoData(prisma, userId, today) {
     for (const card of dashboard.cards) spendByCard.set(card.id, card.totalSpend);
   }
 
-  return { commitments, connections, sales, inventories, cards, recurring, reminders, spendByCard };
+  return { commitments, connections, sales, inventories, cards, recurring, reminders, spendByCard,
+    emailReview: { count: emailReviewCount || 0, newestId: emailReviewOrders?.[0]?.id || null, orders: await reviewOrders(prisma, userId, emailReviewOrders || []) }, emailAccounts: emailAccounts || [],
+    emailExtra: { attention: emailAttention || [], taxForms: emailTaxForms || [], toAdd: emailToAdd || [] } };
 }
 
 async function listTodos(prisma, userId, today) {
@@ -822,6 +952,7 @@ module.exports = {
   isHidden,
   clearedThisWeek,
   // exported for tests
+  emailItems,
   monthlyDates,
   nextRecurringDate,
   daysBetween,
