@@ -122,6 +122,31 @@ describe('Automation page', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('opens the email a change came from, or the store order page, in a new tab', () => {
+    const gmail = 'https://mail.google.com/mail/?authuser=me%40gmail.com#search/rfc822msgid%3Aa%40lowes.test';
+    const lowes = { ...link, id: 'l2', detail: { ...link.detail, product_name: "Lowe's order 9101", store: "Lowe's" },
+      email_source: { store: "Lowe's", order_number: '9101', store_url: null, email: { subject: 'Your order is confirmed', url: gmail },
+        emails: [{ subject: 'Your order is confirmed', sent_at: now, url: gmail }, { subject: 'Your order shipped', sent_at: now, url: null }] } };
+    const walmart = { ...tracking, id: 't2', email_source: { store: 'Walmart', order_number: '2000123-45678901', store_url: 'https://www.walmart.com/orders/200012345678901', email: { subject: 'Shipped', url: null }, emails: [] } };
+    setQuery({ data: page([lowes, walmart, paid]) });
+    show();
+    expect(screen.getByText('Your order is confirmed')).toBeInTheDocument();
+    const open = screen.getByRole('link', { name: /Open the email for Linked a Lowe's order/ });
+    expect(open).toHaveAttribute('href', gmail);
+    expect(open).toHaveAttribute('target', '_blank');
+    expect(open).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(screen.getByRole('link', { name: /Open the Walmart order page/ })).toHaveAttribute('href', 'https://www.walmart.com/orders/200012345678901');
+    // No source known: no button.
+    expect(screen.getAllByRole('link', { name: /Open the/ })).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole('button', { name: /Details: Linked a Lowe's order/ }));
+    const dialog = screen.getByRole('dialog');
+    const from = within(dialog).getByRole('region', { name: 'From your email' });
+    expect(from).toHaveTextContent("From your email · Lowe's 9101");
+    expect(within(from).getAllByRole('link')).toHaveLength(1);
+    expect(within(from).getByText('Your order shipped')).toBeInTheDocument();
+  });
+
   it('shows what happened to completed ones, without Confirm or No', () => {
     setQuery({ data: page([{ ...paid, review_state: 'confirmed' }, { ...tracking, review_state: 'rejected', undo_state: 'undone', undone_at: now }]) });
     show();

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { BadgeDollarSign, Check, CheckCheck, Link2, ListTree, Mail, PenLine, Plus, Settings2, Truck, UserRound, X, Zap } from 'lucide-react';
+import { BadgeDollarSign, Check, CheckCheck, ExternalLink, Link2, ListTree, Mail, PenLine, Plus, Settings2, Truck, UserRound, X, Zap } from 'lucide-react';
 import { useActivity, useAutomationReview, useAutomationReviewMutations, useEmailAccounts, useEmailAutomation } from '../hooks/useApi';
 import { AUTOMATION_KINDS, describeAutomation } from '../utils/automationText';
 import { AUTOMATIONS } from '../data/emailAutomations';
@@ -37,6 +37,28 @@ const canReject = (entry) => isOpen(entry) && (entry.kind === 'event' || entry.u
 const noLabel = (change) => (change.kind === 'sorted' ? "No, it's business" : 'No');
 
 const SMALL = '!h-8 !px-2.5 !text-xs';
+const GHOST = 'inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-gray-400 transition-colors hover:bg-white/[0.05] hover:text-gray-100';
+
+// The email a change came from (Gmail opens that one message), else the
+// store's order page. Opens in a new tab; nothing here changes the record.
+function SourceLink({ source, what }) {
+  const email = source?.email;
+  if (email?.url) {
+    return (
+      <a href={email.url} target="_blank" rel="noopener noreferrer" className={GHOST} title={email.subject || undefined}>
+        <Mail size={13} aria-hidden="true" /><span aria-hidden="true">Open email</span><span className="sr-only">Open the email for {what} (new tab)</span>
+      </a>
+    );
+  }
+  if (source?.store_url) {
+    return (
+      <a href={source.store_url} target="_blank" rel="noopener noreferrer" className={GHOST}>
+        <ExternalLink size={13} aria-hidden="true" /><span aria-hidden="true">Order on {source.store}</span><span className="sr-only">Open the {source.store} order page for {what} (new tab)</span>
+      </a>
+    );
+  }
+  return null;
+}
 
 const dayKey = (iso) => new Date(iso).toDateString();
 function dayLabel(iso) {
@@ -141,6 +163,12 @@ function AutomationRow({ entry, change, busy, onConfirm, onReject, onDetails }) 
           <span className="shrink-0 text-[11px] tabular-nums text-gray-500">{timeOf(entry.created_at)}</span>
         </div>
         <p className="mt-0.5 truncate text-[13px] text-gray-300" title={change.subject}>{change.subject}</p>
+        {entry.email_source?.email?.subject && (
+          <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-gray-500">
+            <Mail size={11} aria-hidden="true" className="shrink-0" />
+            <span className="truncate" title={entry.email_source.email.subject}>{entry.email_source.email.subject}</span>
+          </p>
+        )}
         {change.facts.length > 0 && (
           <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-gray-500">
             {change.facts.map((fact, i) => (
@@ -159,9 +187,10 @@ function AutomationRow({ entry, change, busy, onConfirm, onReject, onDetails }) 
               <X size={13} aria-hidden="true" /><span aria-hidden="true">{noLabel(change)}</span><span className="sr-only">No, take back: {what}</span>
             </button>
           )}
-          <button type="button" onClick={() => onDetails(entry, change)} className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-gray-400 transition-colors hover:bg-white/[0.05] hover:text-gray-100">
+          <button type="button" onClick={() => onDetails(entry, change)} className={GHOST}>
             <ListTree size={13} aria-hidden="true" /><span aria-hidden="true">Details</span><span className="sr-only">Details: {what}</span>
           </button>
+          <SourceLink source={entry.email_source} what={what} />
           {open && !canReject(entry) && entry.undo_state === 'expired' && <span className="text-xs text-gray-600">Too old to take back</span>}
           <Outcome entry={entry} />
         </div>

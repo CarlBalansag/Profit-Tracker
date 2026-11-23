@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const { listActivity, undoActivity } = require('../services/activityLog');
+const { attachSources } = require('../services/email/review');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -11,7 +12,10 @@ const isAuthenticated = (req, res, next) => {
 // GET /api/activity?before=<iso>&limit=50[&group=records|setup][&source=email] -- newest first.
 router.get('/', isAuthenticated, async (req, res, next) => {
   try {
-    res.json(await listActivity(req.user.id, req.query));
+    const page = await listActivity(req.user.id, req.query);
+    // The Automation page: each change with the email it came from.
+    if (req.query.source === 'email') page.entries = await attachSources(req.user.id, page.entries);
+    res.json(page);
   } catch (err) {
     next(err);
   }

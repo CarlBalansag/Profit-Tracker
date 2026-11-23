@@ -98,3 +98,70 @@ async function rejectEntry(userId, entryId) {
 }
 
 module.exports = { toConfirmCount, confirmEntries, rejectEntry, orderIdFor };
+
+// ─── Where a change came from: the email itself, and the store's order page ──
+// Gmail opens one message from its Message-ID (search rfc822msgid:), in the
+// right account when several are signed in (authuser). Other providers have no
+// such link, so only the subject is shown.
+const { SENDERS } = require('./config');
+
+const storeLabel = (merchant) => SENDERS.find((s) => s.key === merchant)?.label || String(merchant || '').replace(/^custom:/, '');
+function emailUrl(account, messageId) {
+  if (!account || !messageId || account.preset !== 'gmail') return null;
+  const id = messageId.replace(/^<|>$/g, '');
+  return `https://mail.google.com/mail/?authuser=${encodeURIComponent(account.email_address)}#search/rfc822msgid%3A${encodeURIComponent(id)}`;
+}
+// Order pages whose address is the order number (others have no such page).
+const ORDER_PAGES = {
+  amazon: (n) => /^\d{3}-\d{7}-\d{7}$/.test(n) && `https://www.amazon.com/gp/your-account/order-details?orderID=${n}`,
+  walmart: (n) => /^\d{7}-?\d{8}$/.test(n) && `https://www.walmart.com/orders/${n.replace('-', '')}`,
+  target: (n) => /^\d{12,15}$/.test(n) && `https://www.target.com/orders/${n}`,
+};
+const storeOrderUrl = (merchant, n) => (n && ORDER_PAGES[merchant] ? ORDER_PAGES[merchant](n) || null : null);
+
+// Which of the order's emails a change most likely came from.
+const SHIPPING_KINDS = ['shipped', 'delivered', 'pickup'];
+const FIRST_KINDS = ['order', 'receipt', 'payout', 'sale', 'check'];
+function pickEmail(entry, emails) {
+  const d = entry.detail || {};
+  const fields = { ...(d.fields || {}), ...Object.assign({}, ...(d.rows || []).map((r) => r.fields || {})) };
+  const shipping = entry.kind === 'status' || fields.tracking_number || fields.return_by_date;
+  const prefer = shipping ? SHIPPING_KINDS : FIRST_KINDS;
+  return emails.find((m) => prefer.includes(m.kind)) || emails[0] || null;
+}
+
+// Adds `email_source` to each Automation entry: { store, order_number,
+// store_url, email: { subject, sent_at, url }, emails }.
+async function attachSources(userId, entries) {
+  const orderIds = new Map();
+  for (const entry of entries) orderIds.set(entry.id, await orderIdFor(userId, entry).catch(() => null));
+  const ids = [...new Set([...orderIds.values()].filter(Boolean))];
+  if (!ids.length) return entries;
+  const orders = await prisma.emailOrder.findMany({
+    where: { id: { in: ids }, user_id: userId },
+    select: {
+      id: true, merchant: true, order_number: true,
+      messages: { select: { subject: true, sent_at: true, kind: true, message_id: true, account: { select: { preset: true, email_address: true } } }, orderBy: { sent_at: 'asc' }, take: 20 },
+    },
+  });
+  const byId = new Map(orders.map((o) => [o.id, o]));
+  return entries.map((entry) => {
+    const order = byId.get(orderIds.get(entry.id));
+    if (!order) return entry;
+    const best = pickEmail(entry, order.messages);
+    const email = (m) => ({ subject: m.subject, sent_at: m.sent_at, kind: m.kind, url: emailUrl(m.account, m.message_id) });
+    return {
+      ...entry,
+      email_source: {
+        store: storeLabel(order.merchant), order_number: order.order_number,
+        store_url: storeOrderUrl(order.merchant, order.order_number),
+        email: best ? email(best) : null,
+        emails: order.messages.map(email),
+      },
+    };
+  });
+}
+
+module.exports.attachSources = attachSources;
+module.exports.emailUrl = emailUrl;
+module.exports.storeOrderUrl = storeOrderUrl;

@@ -468,6 +468,29 @@ describe('email orders and matching on Postgres', () => {
       expect((await listTodos(prisma, user.id, today)).items.some((t) => t.key.startsWith('email-add:'))).toBe(false);
     });
 
+    it('links each change to the email it came from (Gmail) and the store order page', async () => {
+      await purchase({ product_name: 'Pokemon Booster Bundle', order_number: '2000123-45678901', unit_purchase_cost: 29.97, qty_purchased: 2, qty_on_hand: 2, sales_tax: 4.8 });
+      await email({ merchant: 'walmart', kind: 'order', order_number: '2000123-45678901', total: '64.74', message_id: '<order-1@walmart.test>', subject: 'Thanks for your order', sent_at: new Date('2026-03-02T15:00:00Z') });
+      await email({ merchant: 'walmart', kind: 'shipped', order_number: '2000123-45678901', total: '64.74', tracking_numbers: ['1Z999AA10123456784'], message_id: '<ship-1@walmart.test>', subject: 'Your order shipped', sent_at: new Date('2026-03-03T16:00:00Z') });
+      await sync.organize(prisma, user.id);
+      const { entries } = await activity.listActivity(user.id, { source: 'email' });
+      const withSource = await review().attachSources(user.id, entries);
+      const fill = withSource.find((e) => e.record_type === 'purchase');
+      expect(fill.email_source).toMatchObject({ store: 'Walmart', order_number: '2000123-45678901', store_url: 'https://www.walmart.com/orders/200012345678901' });
+      // A tracking fill points at the shipping email.
+      expect(fill.email_source.email).toMatchObject({ subject: 'Your order shipped', kind: 'shipped' });
+      expect(fill.email_source.email.url).toBe('https://mail.google.com/mail/?authuser=me%40gmail.com#search/rfc822msgid%3Aship-1%40walmart.test');
+      expect(fill.email_source.emails.map((m) => m.subject)).toEqual(['Thanks for your order', 'Your order shipped']);
+      const link = withSource.find((e) => e.record_type === 'email_link');
+      expect(link.email_source.email.subject).toBe('Thanks for your order');
+      // Not Gmail: no link to open, the subject still shows.
+      await prisma.emailAccount.update({ where: { id: account.id }, data: { preset: 'yahoo' } });
+      const again = await review().attachSources(user.id, entries);
+      expect(again.find((e) => e.record_type === 'email_link').email_source.email).toMatchObject({ subject: 'Thanks for your order', url: null });
+      expect(review().storeOrderUrl('lowes', '9101')).toBe(null);
+      expect(review().storeOrderUrl('amazon', '113-5291515-4133865')).toBe('https://www.amazon.com/gp/your-account/order-details?orderID=113-5291515-4133865');
+    });
+
     it('"No" on an order set aside as personal brings it back as business', async () => {
       await send('PUT', '/api/email/automation', { homeState: 'CA' });
       await email({ merchant: 'amazon', kind: 'order', order_number: '113-0000000-0000001', total: '24.99', ship_to: 'SACRAMENTO, CA', items: [{ name: 'Pet Supplies', quantity: 1, category: true }], sent_at: new Date(Date.now() - 2 * 86400000) });

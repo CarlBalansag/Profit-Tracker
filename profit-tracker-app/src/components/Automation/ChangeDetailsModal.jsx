@@ -1,12 +1,44 @@
 import React, { useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowRight, X } from 'lucide-react';
+import { ArrowRight, ExternalLink, Mail, X } from 'lucide-react';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 import { changeDetails } from '../../utils/changeDetails';
 
 // Details of one automatic change: each field it wrote, before -> now, read
 // from the change's own Activity snapshot. Read-only; Confirm / No stay on
 // the row (and are repeated here for a phone, where the row is far away).
+
+const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '');
+const LINK = 'inline-flex min-h-[32px] shrink-0 items-center gap-1 rounded-md px-2 text-xs font-medium text-[var(--accent)] hover:bg-white/[0.05]';
+
+// The emails this order came from, each opening in Gmail, and the store's
+// order page when it has one.
+function SourceEmails({ source }) {
+  const emails = (source.emails || []).filter((m) => m.subject || m.url);
+  if (!emails.length && !source.store_url) return null;
+  return (
+    <section aria-label="From your email">
+      <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+        From your email{source.order_number ? ` · ${source.store} ${source.order_number}` : ''}
+      </h3>
+      <ul className="divide-y divide-white/[0.05] rounded-xl bg-white/[0.03]">
+        {emails.map((m, i) => (
+          <li key={`${m.sent_at}-${i}`} className="flex items-center gap-2 px-3 py-1.5">
+            <Mail size={13} aria-hidden="true" className="shrink-0 text-gray-500" />
+            <span className="min-w-0 flex-1 truncate text-sm text-gray-200" title={m.subject || undefined}>{m.subject || 'No subject'}</span>
+            <span className="shrink-0 text-[11px] tabular-nums text-gray-500">{day(m.sent_at)}</span>
+            {m.url && <a href={m.url} target="_blank" rel="noopener noreferrer" className={LINK}>Open<span className="sr-only"> {m.subject} in Gmail (new tab)</span><ExternalLink size={11} aria-hidden="true" /></a>}
+          </li>
+        ))}
+      </ul>
+      {source.store_url && (
+        <a href={source.store_url} target="_blank" rel="noopener noreferrer" className={`${LINK} mt-1.5 -ml-2`}>
+          See the order on {source.store}<ExternalLink size={11} aria-hidden="true" />
+        </a>
+      )}
+    </section>
+  );
+}
 
 const when = (iso) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
@@ -65,6 +97,7 @@ export default function ChangeDetailsModal({ entry, change, actions, onClose }) 
             </section>
           ))}
           {!sections.length && <p className="text-sm text-gray-500">No field details were saved for this change.</p>}
+          {entry.email_source && <SourceEmails source={entry.email_source} />}
           {note && <p className="text-xs text-gray-500">{note}</p>}
         </div>
 
