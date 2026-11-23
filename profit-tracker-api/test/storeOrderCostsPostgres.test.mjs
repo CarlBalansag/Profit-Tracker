@@ -165,6 +165,42 @@ describe('reading the Amazon export', () => {
   });
 });
 
+describe('returned orders, split dates and match scores', () => {
+  it('skips returned or refunded lines and takes the earliest of "A and B" order dates', () => {
+    const csv = [
+      AMAZON_HEADER,
+      amazonRow({ id: '112-7000000-0000001', date: '2026-11-05T09:00:00Z and 2026-11-02T10:00:00Z', price: '10', qty: 1, name: 'Split order' }),
+      amazonRow({ id: '112-7000000-0000002', date: '2026-11-05T09:00:00Z', price: '10', qty: 1, status: 'Returned', name: 'Sent back' }),
+    ].join('\n');
+    const [split, returned] = fillCosts.parseOrders('amazon', csv);
+    expect(split).toMatchObject({ orderDate: '2026-11-02', problem: null });
+    expect(returned.problem).toBe('Returned or refunded.');
+  });
+
+  const lineOf = (index, over) => ({ index, orderId: `112-000000${index}-0000000`, orderDate: '2026-11-15', name: 'Nintendo Switch 2 Console', qty: 1, unitPrice: 449.99, tracking: [], problem: null, perUnit: { cost: 449.99, tax: 0, shipping: 0 }, ...over });
+  const buy = (over) => ({ id: 'p', name: 'Nintendo Switch 2', date: '2026-11-20', qty: 1, tracking: [], ...over });
+
+  it('applies strong name + date matches with their reasons, and only suggests weak ones', () => {
+    const [strong] = fillCosts.matchPurchases([buy()], [lineOf(1)]);
+    expect(strong).toMatchObject({ match: 'name', lineIndex: 1, score: 80, reasons: ['Name 100% alike', 'Ordered 5 days before'] });
+    // Same name, but ordered 40 days earlier: 60 points, below the bar.
+    const [weak] = fillCosts.matchPurchases([buy()], [lineOf(1, { orderDate: '2026-10-11' })]);
+    expect(weak).toMatchObject({ match: 'suggested', lineIndex: null, candidates: [1], score: 60 });
+    expect(weak.review).toMatch(/Possible match/);
+  });
+
+  it('matches by order number first, and never across a different Amazon order number', () => {
+    const lines = [lineOf(1, { orderId: '112-1111111-1111111' }), lineOf(2, { orderId: '112-2222222-2222222', tracking: ['TBA1'] })];
+    const [byOrder] = fillCosts.matchPurchases([buy({ orderNumber: '112-1111111-1111111', tracking: ['TBA1'] })], lines);
+    expect(byOrder).toMatchObject({ match: 'order', lineIndex: 1, score: 100, reasons: ['Same order number', 'Name 100% alike'] });
+    // Its order number isn't in the file, so the other order's tracking and name are ruled out.
+    const [vetoed] = fillCosts.matchPurchases([buy({ orderNumber: '112-9999999-9999999', tracking: ['TBA1'] })], lines);
+    expect(vetoed).toMatchObject({ match: 'none', lineIndex: null, candidates: [] });
+    const [tracked] = fillCosts.matchPurchases([buy({ tracking: ['TBA1'] })], lines);
+    expect(tracked).toMatchObject({ match: 'tracking', lineIndex: 2, score: 90 });
+  });
+});
+
 describe('matching (real Postgres)', () => {
   it('pairs each "Cost needed" purchase by tracking, picking the right item in a shared box', async () => {
     await importCashout();
@@ -414,16 +450,20 @@ describe('several Amazon files and accounts (real Postgres)', () => {
     expect(lines.get(byKey.get(groups.find((g) => g.name === 'Nintendo Switch 2').key).lineIndex)).toMatchObject({ accountName: 'Bizz', vendorId: ids.amazon });
   });
 
-  it('uses a line once when two files overlap, and takes the account from the file that has one', async () => {
+  it('uses a line once when two files overlap, and asks which account an untagged file is from', async () => {
     const { sent } = await groupsOf();
     const matched = await fillCosts.matchReport(ME, {
       source: 'amazon', groups: sent,
-      files: [{ id: 1, csv: AMAZON_CSV }, { id: 3, csv: fileA, accountId: cb.id }],
+      files: [{ id: 1, csv: AMAZON_CSV, accountId: cb.id }, { id: 3, csv: fileA, accountId: cb.id }],
     });
     expect(matched.summary.files[1]).toMatchObject({ id: 3, lines: 2, duplicates: 2 });
     expect(matched.summary).toMatchObject({ byTracking: 2, byName: 1 });
     const fourKLine = matched.lines.find((l) => l.orderId === '112-1111111-1111111');
     expect(fourKLine).toMatchObject({ index: fillCosts.FILE_STRIDE, accountId: cb.id });
+    // Two Amazon logins saved: every file has to say which one it's from.
+    await expect(fillCosts.matchReport(ME, { source: 'amazon', groups: sent, files: [{ id: 1, csv: fileA, accountId: cb.id }, { id: 2, csv: fileB }] }))
+      .rejects.toThrow('Choose which Amazon account file 2 is from.');
+    await expect(fillCosts.preview(ME, { source: 'amazon', csv: AMAZON_CSV })).rejects.toThrow('Choose which Amazon account this file is from.');
     // The same order under two different accounts can't be right: set aside.
     const clash = await fillCosts.matchReport(ME, {
       source: 'amazon', groups: sent,
@@ -455,10 +495,10 @@ describe('several Amazon files and accounts (real Postgres)', () => {
     const match = (files) => fillCosts.matchReport(ME, { source: 'amazon', groups: sent, files });
     await expect(match([{ id: 1, csv: fileA, accountId: theirs.id }])).rejects.toMatchObject({ status: 404 });
     await expect(match([{ id: 1, csv: fileA, accountId: onCashout.id }])).rejects.toMatchObject({ status: 400 });
-    await expect(match([{ id: 1, csv: fileA }, { id: 1, csv: fileB }])).rejects.toThrow(/twice/);
+    await expect(match([{ id: 1, csv: fileA, accountId: cb.id }, { id: 1, csv: fileB, accountId: cb.id }])).rejects.toThrow(/twice/);
     await expect(match([{ id: 0, csv: fileA }])).rejects.toThrow(/invalid/);
     await expect(match(Array.from({ length: 11 }, (_, i) => ({ id: i + 1, csv: fileA })))).rejects.toThrow(/at most/);
-    await expect(match([{ id: 1, csv: fileA }, { id: 2, csv: 'a,b\n1,2' }])).rejects.toThrow(/^File 2:/);
+    await expect(match([{ id: 1, csv: fileA, accountId: cb.id }, { id: 2, csv: 'a,b\n1,2', accountId: bizz.id }])).rejects.toThrow(/^File 2:/);
     const g = groups[0];
     await expect(importSold.commit(ME, { source: 'eb', platformId: ids.eb, groups: [{ ...g, qty: g.newQty, unitCost: 5, accountId: theirs.id }] })).rejects.toMatchObject({ status: 404 });
     await expect(importSold.commit(ME, { source: 'eb', platformId: ids.eb, groups: [{ ...g, qty: g.newQty, unitCost: 5, accountId: onCashout.id }] })).rejects.toMatchObject({ status: 400 });

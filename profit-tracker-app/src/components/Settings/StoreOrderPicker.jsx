@@ -5,8 +5,10 @@ import { FileText, X } from 'lucide-react';
 // picker over its candidate order lines, how it was matched, and the tax,
 // shipping and card that come with it.
 const MATCH_LABELS = {
+  order: { text: 'Same order #', tone: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
   tracking: { text: 'Same tracking', tone: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
   name: { text: 'Name + date', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
+  suggested: { text: 'Possible match', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
   none: { text: 'No match', tone: 'text-gray-400 border-gray-700 bg-white/5' },
 };
 
@@ -20,12 +22,15 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 // a remove button. info: the server's summary.files ({ id, lines, problems,
 // duplicates }) from the last read; a file added since shows "Not read yet".
 export function OrderFileList({ files, info, accounts, onAccount, onRemove, disabled }) {
+  // With several logins saved, a file is only used once it says which one.
+  const needsAccount = accounts.length > 1;
   if (!files.length) return null;
   return (
     <ul className="space-y-2" aria-label="Order files">
       {files.map((f) => {
         const read = info?.find((x) => x.id === f.id);
-        const notes = read ? [
+        const waiting = needsAccount && !f.accountId;
+        const notes = waiting ? 'Pick its account to use this file' : read ? [
           plural(read.lines - read.problems - read.duplicates, 'order line'),
           read.problems ? `${read.problems} skipped` : null,
           read.duplicates ? `${read.duplicates} already in another file` : null,
@@ -35,13 +40,14 @@ export function OrderFileList({ files, info, accounts, onAccount, onRemove, disa
             <FileText size={14} className="shrink-0 text-gray-500" aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm text-gray-200" title={f.name}>{f.name}</div>
-              <div className="text-xs text-gray-500">{notes}</div>
+              <div className={`text-xs ${waiting ? 'text-amber-300' : 'text-gray-500'}`}>{notes}</div>
             </div>
             {accounts.length > 0 && (
               <select
                 aria-label={`Amazon account for ${f.name}`}
                 className="order-last w-full sm:order-none sm:w-56 bg-[#0A0A0F] border border-gray-800 rounded-lg px-3 h-9 text-sm text-gray-200 focus:outline-none focus:border-[var(--accent)]"
                 value={f.accountId}
+                aria-invalid={waiting ? 'true' : undefined}
                 onChange={(e) => onAccount(f.id, e.target.value)}
                 disabled={disabled}
               >
@@ -75,8 +81,10 @@ export function MatchPill({ match }) {
 export function OrderPicker({ name, qty, match, picked, lines, cardName, onPick, id, disabled }) {
   if (!match.candidates.length) return <MatchPill match="none" />;
   const line = picked !== null && picked !== undefined ? lines.get(picked) : null;
-  // A line the user picked over the server's own pick needs no pill.
-  const how = line ? (picked === match.lineIndex ? match.match : 'picked') : 'none';
+  // A line the user picked over the server's own pick needs no pill. The
+  // server's pick (or its suggestion) says why it was chosen.
+  const how = line ? (picked === match.lineIndex ? match.match : 'picked') : (match.match === 'suggested' ? 'suggested' : 'none');
+  const ownPick = picked === match.lineIndex || (match.match === 'suggested' && picked === match.candidates[0]);
   return (
     <div className="space-y-1">
       <select id={id} aria-label={`Order for ${name}`} className={selectClass} value={picked ?? ''} onChange={(e) => onPick(e.target.value === '' ? null : Number(e.target.value))} disabled={disabled}>
@@ -92,6 +100,7 @@ export function OrderPicker({ name, qty, match, picked, lines, cardName, onPick,
           </span>
         )}
       </div>
+      {ownPick && match.reasons?.length > 0 && <p className="text-xs text-gray-500">{match.reasons.join(' · ')}</p>}
       {match.review && picked === match.lineIndex && <p className="text-xs text-amber-300">{match.review}</p>}
     </div>
   );

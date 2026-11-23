@@ -7,6 +7,7 @@ import { useMatchMedia } from '../../hooks/useMatchMedia';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 import { AMAZON_HOW_TO, MAX_ORDER_FILES, defaultFileAccount, orderFilesTooBig, readOrderFile, storeAccountChoices } from '../../utils/orderCsv';
 import { OrderFileList, OrderPicker } from './StoreOrderPicker';
+import { OrderColumnMap } from './StoreOrderColumnMap';
 import { StoreOrderImport } from './StoreOrderImport';
 
 // Settings > Data > Import from cashouts. Brings items already sold to a
@@ -99,6 +100,8 @@ export function CashoutImport() {
   // Orders the user picked (or cleared) by hand, kept when files change.
   const [manualPick, setManualPick] = useState({});
   const fileSeq = useRef(0);
+  // A file that isn't Amazon's own export, waiting for its columns to be matched.
+  const [columnMap, setColumnMap] = useState(null);
 
   const sourceInfo = SOURCES.find((s) => s.id === source);
   const connection = connections.find((c) => c.provider === source) || null;
@@ -118,6 +121,7 @@ export function CashoutImport() {
     setOrderPick({});
     setOrderFiles([]);
     setManualPick({});
+    setColumnMap(null);
     preview.reset();
   };
 
@@ -125,13 +129,21 @@ export function CashoutImport() {
   const orderLines = useMemo(() => new Map((orders?.lines || []).map((l) => [l.index, l])), [orders]);
   const cardNames = useMemo(() => new Map(paymentMethods.map((p) => [p.id, p.name])), [paymentMethods]);
   const amazonAccounts = useMemo(() => storeAccountChoices(platforms), [platforms]);
+  // With several Amazon logins, a file is matched only once it has its account.
+  const needsAccount = amazonAccounts.length > 1;
 
   // Matches the rows against these files. The list only changes when the match
   // works, so a bad file leaves the earlier ones as they were. A cost that came
   // from an order follows the new match; a typed cost stays.
   const matchFiles = async (files) => {
     setError(null);
-    if (orderFilesTooBig(files)) {
+    const ready = needsAccount ? files.filter((f) => f.accountId) : files;
+    if (!ready.length) {
+      clearMatches();
+      setOrderFiles(files);
+      return;
+    }
+    if (orderFilesTooBig(ready)) {
       setError('These order files are too long to match together. Remove one, or split it by year.');
       return;
     }
@@ -140,7 +152,7 @@ export function CashoutImport() {
       const res = await matchOrders.mutateAsync({
         source: 'amazon',
         groups,
-        files: files.map((f) => ({ id: f.id, csv: f.csv, accountId: f.accountId || null })),
+        files: ready.map((f) => ({ id: f.id, csv: f.csv, accountId: f.accountId || null })),
       });
       const lines = new Map(res.lines.map((l) => [l.index, l]));
       const nextPick = Object.fromEntries(res.matches.map((m) => {
@@ -175,18 +187,28 @@ export function CashoutImport() {
       return;
     }
     try {
-      const csv = await readOrderFile(file);
-      fileSeq.current += 1;
-      await matchFiles([...orderFiles, { id: fileSeq.current, name: file.name, csv, accountId: defaultFileAccount(amazonAccounts) }]);
+      const read = await readOrderFile(file);
+      if (read.mapping) setColumnMap(read.mapping);
+      else await addOrderCsv(file.name, read.csv);
     } catch (err) {
       setError(err.message);
     }
   };
 
+  // A file still waiting for its account changes nothing that's matched.
+  const waiting = (f) => needsAccount && !f.accountId;
+
+  const addOrderCsv = async (name, csv) => {
+    fileSeq.current += 1;
+    const file = { id: fileSeq.current, name, csv, accountId: defaultFileAccount(amazonAccounts) };
+    if (waiting(file)) setOrderFiles([...orderFiles, file]);
+    else await matchFiles([...orderFiles, file]);
+  };
+
   const setFileAccount = (id, accountId) => matchFiles(orderFiles.map((f) => (f.id === id ? { ...f, accountId } : f)));
 
-  const removeOrders = () => {
-    // Costs that came from an order go too; typed ones stay.
+  // Costs that came from an order go; typed ones stay.
+  const clearMatches = () => {
     setCosts((current) => {
       const next = { ...current };
       for (const [key, index] of Object.entries(orderPick)) {
@@ -196,14 +218,20 @@ export function CashoutImport() {
     });
     setOrders(null);
     setOrderPick({});
+  };
+
+  const removeOrders = () => {
+    clearMatches();
     setOrderFiles([]);
     setManualPick({});
   };
 
   const removeFile = (id) => {
+    const gone = orderFiles.find((f) => f.id === id);
     const rest = orderFiles.filter((f) => f.id !== id);
-    if (rest.length) matchFiles(rest);
-    else removeOrders();
+    if (!rest.length) removeOrders();
+    else if (gone && waiting(gone)) setOrderFiles(rest);
+    else matchFiles(rest);
   };
 
   const pickOrder = (key, index) => {
@@ -433,6 +461,15 @@ export function CashoutImport() {
           onSetFileAccount={setFileAccount}
           onRemoveFile={removeFile}
           onPickOrder={pickOrder}
+          blockClose={Boolean(columnMap)}
+        />
+      )}
+
+      {columnMap && (
+        <OrderColumnMap
+          mapping={columnMap}
+          onCancel={() => setColumnMap(null)}
+          onDone={(csv) => { const { name } = columnMap; setColumnMap(null); addOrderCsv(name, csv); }}
         />
       )}
 
@@ -455,7 +492,7 @@ function ImportReview({
   cashouts, vendors, paymentMethods, platformId, setPlatformId, vendorId, setVendorId, paymentMethodId, setPaymentMethodId,
   paidThrough, setPaidThrough, isPaid,
   chosen, chosenUnits, missingCost, busy, committing, error, onImport, onCancel,
-  orders, orderPick, orderLines, cardNames, matching, orderFiles, amazonAccounts, onAddOrders, onSetFileAccount, onRemoveFile, onPickOrder,
+  orders, orderPick, orderLines, cardNames, matching, orderFiles, amazonAccounts, onAddOrders, onSetFileAccount, onRemoveFile, onPickOrder, blockClose,
 }) {
   const ordersFileRef = useRef(null);
   const orderMatch = useMemo(() => new Map((orders?.matches || []).map((m) => [m.key, m])), [orders]);
@@ -472,7 +509,8 @@ function ImportReview({
       disabled={!selected[g.key]}
     />
   ) : null);
-  const close = () => { if (!committing) onCancel(); };
+  // Escape while the column screen is open closes only that screen.
+  const close = () => { if (!committing && !blockClose) onCancel(); };
   const modalRef = useModalKeyboard(true, close);
   const { summary, groups, problems } = result;
   const adding = groups.filter(isNew);
@@ -557,6 +595,7 @@ function ImportReview({
                   {orders ? (
                     <p className="text-xs text-gray-400 mt-1">
                       {orders.summary.byTracking} matched by tracking{orders.summary.byName > 0 && <>, <span className="text-amber-300">{orders.summary.byName} by name and date (check these)</span></>}
+                      {orders.summary.suggested > 0 && <>, <span className="text-amber-300">{orders.summary.suggested} possible (pick if right)</span></>}
                       {orders.summary.unmatched > 0 && <>, {orders.summary.unmatched} not found</>}. Matched rows get the order&apos;s cost, tax, shipping, order number, date and card{amazonAccounts.length > 0 && ', and the account of the file it came from'}.
                     </p>
                   ) : (

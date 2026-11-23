@@ -66,10 +66,21 @@ const AMAZON_COLUMNS = {
   discount: ['total discounts'],
   total: ['total owed', 'item total'],
   orderStatus: ['order status'],
+  shipmentStatus: ['shipment status'],
   tracking: ['carrier name tracking number'],
   payment: ['payment instrument type'],
   currency: ['currency'],
 };
+
+// "2026-11-02T10:00:00Z and 2026-11-05T09:00:00Z" (an order split over
+// shipments): the earliest is when it was bought.
+function orderDateOf(value) {
+  const dates = String(value ?? '').split(/\s+and\s+/i).map(isoDate).filter(Boolean).sort();
+  return dates[0] || null;
+}
+
+// Lines that were never kept: cancelled, returned or refunded.
+const NOT_KEPT = /cancel|return|refund/i;
 
 function amazonLines(csv) {
   if (typeof csv !== 'string' || !csv.trim()) throw badRequest('Choose the CSV file from your Amazon order export.');
@@ -91,7 +102,7 @@ function amazonLines(csv) {
     const line = {
       index,
       orderId: cleanText(get(cells, 'orderId'), 60),
-      orderDate: isoDate(get(cells, 'orderDate')),
+      orderDate: orderDateOf(get(cells, 'orderDate')),
       name: cleanText(get(cells, 'name')),
       asin: cleanText(get(cells, 'asin'), 20),
       qty: Number.isInteger(qty) ? qty : null,
@@ -102,7 +113,9 @@ function amazonLines(csv) {
       problem: null,
     };
     const currency = get(cells, 'currency');
-    if (/cancel/i.test(get(cells, 'orderStatus'))) line.problem = 'Cancelled order.';
+    const status = `${get(cells, 'orderStatus')} ${get(cells, 'shipmentStatus')}`;
+    if (/cancel/i.test(status)) line.problem = 'Cancelled order.';
+    else if (/return|refund/i.test(status)) line.problem = 'Returned or refunded.';
     else if (!line.name) line.problem = 'No product name.';
     else if (!line.qty || line.qty < 1) line.problem = 'No quantity.';
     else if (unitPrice === null || unitPrice < 0) line.problem = 'No unit price.';
@@ -156,6 +169,16 @@ async function readOrderFiles(userId, source, { csv, files }) {
   });
   if (new Set(clean.map((f) => f.id)).size !== clean.length) throw badRequest('The same file is in the list twice. Add it again.');
   const accounts = await accountsById(userId, clean.map((f) => f.accountId));
+  // With more than one login saved for this store, each file must say which
+  // one it came from, so purchases never get a guessed account.
+  const label = SOURCES[source];
+  const storeAccounts = await prisma.account.count({
+    where: { user_id: userId, platform: { type: 'Vendor', name: { contains: label, mode: 'insensitive' } } },
+  });
+  if (storeAccounts > 1) {
+    const missing = clean.findIndex((f) => !f.accountId);
+    if (missing >= 0) throw badRequest(`Choose which ${label} account ${clean.length > 1 ? `file ${missing + 1}` : 'this file'} is from.`);
+  }
 
   const all = [];
   const fileInfo = [];
@@ -240,54 +263,91 @@ async function costNeededPurchases(userId, client = prisma) {
     hasStore: Boolean(r.vendor_id),
     hasCard: Boolean(r.payment_method_id),
     hasOrderNumber: Boolean(r.order_number),
+    orderNumber: r.order_number || null,
   }));
 }
 
-// Pairs purchases with order lines. Each line is used up by quantity: name +
-// date matches only take lines with units left, while a tracking match always
-// wins (the box went straight to the cashout) and is flagged if it overdraws.
+// Pairs purchases with order lines. Each match gets a score and the reasons
+// behind it, so the review can say why. Each line is used up by quantity.
+//   Same order number: 100. Same tracking number: 90. Both are applied.
+//   Name + date: up to 60 for the name, plus 20 when ordered within 7 days of
+//   the cashout's date (10 within 30). Applied from AUTO_SCORE; below that it
+//   is only suggested, and the user picks it if it's right.
+// A purchase that already has an Amazon order number never matches a line
+// from a different order.
+const AUTO_SCORE = 70;
+const AMAZON_ORDER = /^\d{3}-\d{7}-\d{7}$/;
+const pct = (score) => `Name ${Math.round(score * 100)}% alike`;
+const daysText = (days) => (days === 0 ? 'Ordered the same day' : `Ordered ${days} day${days === 1 ? '' : 's'} before`);
+
 function matchPurchases(purchases, lines) {
   const usable = lines.filter((l) => !l.problem);
   const left = new Map(usable.map((l) => [l.index, l.qty]));
   const byTracking = new Map();
-  for (const l of usable) for (const t of l.tracking) {
-    if (!byTracking.has(t)) byTracking.set(t, []);
-    byTracking.get(t).push(l);
-  }
-
-  const results = purchases.map((p) => ({ ...p, lineIndex: null, match: 'none', candidates: [], review: null }));
-
-  // Pass 1: tracking number.
-  for (const r of results) {
-    const found = [...new Set(r.tracking.flatMap((t) => byTracking.get(t) || []))];
-    if (!found.length) continue;
-    const ranked = found
-      .map((l) => ({ l, score: nameScore(r.name, l.name) }))
-      .sort((a, b) => b.score - a.score || (left.get(b.l.index) - left.get(a.l.index)));
-    const best = ranked[0];
-    r.lineIndex = best.l.index;
-    r.match = 'tracking';
-    r.candidates = ranked.slice(0, 8).map((c) => c.l.index);
-    if (ranked.length > 1 && (best.score < NAME_MATCH_SCORE || ranked[1].score === best.score)) {
-      r.review = 'This box had more than one item. Check that the right one is picked.';
+  const byOrder = new Map();
+  for (const l of usable) {
+    for (const t of l.tracking) {
+      if (!byTracking.has(t)) byTracking.set(t, []);
+      byTracking.get(t).push(l);
     }
-    left.set(best.l.index, left.get(best.l.index) - r.qty);
+    if (l.orderId) {
+      if (!byOrder.has(l.orderId)) byOrder.set(l.orderId, []);
+      byOrder.get(l.orderId).push(l);
+    }
+  }
+  const allowed = (r, l) => !(r.orderNumber && AMAZON_ORDER.test(r.orderNumber) && l.orderId !== r.orderNumber);
+
+  const results = purchases.map((p) => ({ ...p, lineIndex: null, match: 'none', candidates: [], review: null, score: 0, reasons: [] }));
+
+  // Pass 1 and 2: same order number, then same tracking number. Both name the
+  // order for sure; the name only picks the item when a box held several.
+  for (const [match, score, keyOf, why] of [
+    ['order', 100, (r) => (r.orderNumber ? byOrder.get(r.orderNumber) || [] : []), 'Same order number'],
+    ['tracking', 90, (r) => r.tracking.flatMap((t) => byTracking.get(t) || []), 'Same tracking number'],
+  ]) {
+    for (const r of results) {
+      if (r.match !== 'none') continue;
+      const found = [...new Set(keyOf(r))].filter((l) => allowed(r, l));
+      if (!found.length) continue;
+      const ranked = found
+        .map((l) => ({ l, name: nameScore(r.name, l.name) }))
+        .sort((a, b) => b.name - a.name || (left.get(b.l.index) - left.get(a.l.index)));
+      const best = ranked[0];
+      Object.assign(r, { lineIndex: best.l.index, match, score, candidates: ranked.slice(0, 8).map((c) => c.l.index), reasons: [why, pct(best.name)] });
+      if (ranked.length > 1 && (best.name < NAME_MATCH_SCORE || ranked[1].name === best.name)) {
+        r.review = 'This box had more than one item. Check that the right one is picked.';
+      }
+      left.set(best.l.index, left.get(best.l.index) - r.qty);
+    }
   }
 
-  // Pass 2: name + order date (ordered on or up to NAME_MATCH_DAYS before the
-  // cashout's date), closest date first.
+  // Pass 3: name + order date (ordered on or up to NAME_MATCH_DAYS before the
+  // cashout's date). Highest score first, then closest date.
   for (const r of results) {
     if (r.match !== 'none') continue;
     const ranked = usable
-      .filter((l) => l.orderDate)
-      .map((l) => ({ l, score: nameScore(r.name, l.name), days: daysBetween(l.orderDate, r.date) }))
-      .filter((c) => c.score >= NAME_MATCH_SCORE && c.days >= 0 && c.days <= NAME_MATCH_DAYS)
+      .filter((l) => l.orderDate && allowed(r, l))
+      .map((l) => {
+        const name = nameScore(r.name, l.name);
+        const days = daysBetween(l.orderDate, r.date);
+        return { l, name, days, score: Math.round(name * 60) + (days <= 7 ? 20 : days <= 30 ? 10 : 0) };
+      })
+      .filter((c) => c.name >= NAME_MATCH_SCORE && c.days >= 0 && c.days <= NAME_MATCH_DAYS)
       .sort((a, b) => b.score - a.score || a.days - b.days);
     if (!ranked.length) continue;
     r.candidates = ranked.slice(0, 8).map((c) => c.l.index);
     const best = ranked.find((c) => left.get(c.l.index) >= r.qty);
     if (!best) {
       r.review = 'Matching orders were already used by other purchases. Pick one if it\'s right.';
+      continue;
+    }
+    r.score = best.score;
+    r.reasons = [pct(best.name), daysText(best.days)];
+    if (best.score < AUTO_SCORE) {
+      // Only a suggestion: listed first, not applied.
+      r.match = 'suggested';
+      r.candidates = [best.l.index, ...r.candidates.filter((i) => i !== best.l.index)];
+      r.review = 'Possible match by name and date. Pick it if it\'s the right order.';
       continue;
     }
     r.lineIndex = best.l.index;
@@ -352,8 +412,10 @@ async function preview(userId, { source, csv, files }) {
       problems: lines.filter((l) => l.problem).length,
       costNeeded: purchases.length,
       files: fileInfo,
+      byOrder: count('order'),
       byTracking: count('tracking'),
       byName: count('name'),
+      suggested: count('suggested'),
       unmatched: count('none'),
     },
     purchases: results,
@@ -386,12 +448,14 @@ async function matchReport(userId, { source, csv, files, groups }) {
     summary: {
       lines: lines.length,
       problems: lines.filter((l) => l.problem).length,
+      byOrder: count('order'),
       byTracking: count('tracking'),
       byName: count('name'),
+      suggested: count('suggested'),
       unmatched: count('none'),
       files: fileInfo,
     },
-    matches: results.map((r) => ({ key: r.id, lineIndex: r.lineIndex, match: r.match, candidates: r.candidates, review: r.review })),
+    matches: results.map((r) => ({ key: r.id, lineIndex: r.lineIndex, match: r.match, candidates: r.candidates, review: r.review, score: r.score, reasons: r.reasons })),
     lines: await linesFor(userId, lines, results, accounts),
   };
 }

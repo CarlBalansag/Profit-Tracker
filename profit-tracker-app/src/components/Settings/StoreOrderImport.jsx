@@ -7,6 +7,7 @@ import { useMatchMedia } from '../../hooks/useMatchMedia';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 import { AMAZON_HOW_TO, MAX_ORDER_FILES, defaultFileAccount, orderFilesTooBig, readOrderFile, storeAccountChoices } from '../../utils/orderCsv';
 import { OrderFileList, OrderPicker } from './StoreOrderPicker';
+import { OrderColumnMap } from './StoreOrderColumnMap';
 
 // Settings > Data > Fill in costs from store orders. The cashout import saves
 // purchases at $0 ("Cost needed") because cashout reports have no purchase
@@ -45,12 +46,16 @@ export function StoreOrderImport({ embedded = false } = {}) {
   const [files, setFiles] = useState([]);
   const [fileInfo, setFileInfo] = useState(null);
   const fileSeq = useRef(0);
+  const [columnMap, setColumnMap] = useState(null);
 
   const storeInfo = STORES.find((s) => s.id === store);
   const vendors = platforms.filter((p) => p.type === 'Vendor');
   const cardName = useMemo(() => new Map(paymentMethods.map((p) => [p.id, p.name])), [paymentMethods]);
   const lines = useMemo(() => new Map((result?.lines || []).map((l) => [l.index, l])), [result]);
   const accounts = useMemo(() => storeAccountChoices(platforms, storeInfo.match), [platforms, storeInfo]);
+  // With several logins saved, every file says which one it's from first.
+  const needsAccount = accounts.length > 1;
+  const untagged = needsAccount && files.some((f) => !f.accountId);
 
   const reset = () => {
     setResult(null);
@@ -75,6 +80,10 @@ export function StoreOrderImport({ embedded = false } = {}) {
     setDone(null);
     reset();
     if (!list.length) return;
+    if (needsAccount && list.some((f) => !f.accountId)) {
+      setError(`Pick which ${storeInfo.label} account each file is from.`);
+      return;
+    }
     if (orderFilesTooBig(list)) {
       setError('These order files are too long to read together. Remove one, or split it by year.');
       return;
@@ -93,17 +102,22 @@ export function StoreOrderImport({ embedded = false } = {}) {
     setError(null);
     try {
       if (files.length >= MAX_ORDER_FILES) throw new Error(`Add at most ${MAX_ORDER_FILES} order files. Remove one first.`);
-      const csv = await readOrderFile(file);
-      fileSeq.current += 1;
-      const next = [...files, { id: fileSeq.current, name: file.name, csv, accountId: defaultFileAccount(accounts) }];
-      setFiles(next);
-      // With several accounts, pick this file's account before reviewing.
-      if (accounts.length <= 1) await review(next);
+      const read = await readOrderFile(file);
+      if (read.mapping) setColumnMap(read.mapping);
+      else await addFileCsv(file.name, read.csv);
     } catch (err) {
       setError(err.message);
     } finally {
       if (fileRef.current) fileRef.current.value = '';
     }
+  };
+
+  const addFileCsv = async (name, csv) => {
+    fileSeq.current += 1;
+    const next = [...files, { id: fileSeq.current, name, csv, accountId: defaultFileAccount(accounts) }];
+    setFiles(next);
+    // With several accounts, pick this file's account before reviewing.
+    if (!needsAccount) await review(next);
   };
 
   const setFileAccount = (id, accountId) => setFiles((current) => current.map((f) => (f.id === id ? { ...f, accountId } : f)));
@@ -185,12 +199,19 @@ export function StoreOrderImport({ embedded = false } = {}) {
             <FileUp size={14} /> {preview.isPending ? 'Reading…' : files.length ? 'Add another file' : `Choose ${storeInfo.label} order CSV`}
           </label>
           {files.length > 0 && (
-            <button type="button" onClick={() => review(files)} disabled={busy} className="page-btn inline-flex items-center justify-center gap-2 px-4 h-9 rounded-lg bg-[var(--accent)] text-sm font-medium text-white disabled:opacity-50 w-full sm:w-auto">
+            <button type="button" onClick={() => review(files)} disabled={busy || untagged} className="page-btn inline-flex items-center justify-center gap-2 px-4 h-9 rounded-lg bg-[var(--accent)] text-sm font-medium text-white disabled:opacity-50 w-full sm:w-auto">
               <Search size={14} /> {files.length === 1 ? 'Review costs' : `Review costs from ${files.length} files`}
             </button>
           )}
         </div>
         <OrderFileList files={files} info={fileInfo} accounts={accounts} onAccount={setFileAccount} onRemove={removeFile} disabled={busy} />
+        {columnMap && (
+          <OrderColumnMap
+            mapping={columnMap}
+            onCancel={() => setColumnMap(null)}
+            onDone={(csv) => { const { name } = columnMap; setColumnMap(null); addFileCsv(name, csv); }}
+          />
+        )}
         {files.length > 0 && accounts.length > 1 && (
           <p className="text-xs text-gray-500">Add one file per {storeInfo.label} account and pick its account. An order that shows up in two files is used once.</p>
         )}
@@ -287,8 +308,8 @@ function CostReview({
           ) : (
             <dl className="grid grid-cols-2 lg:grid-cols-4 gap-2" aria-label="Match summary">
               <SummaryTile label="Waiting for a cost" value={String(summary.costNeeded)} note="From the cashout import" />
-              <SummaryTile label="Same tracking" value={String(summary.byTracking)} note="Shipped straight to the cashout" tone="text-emerald-400" />
-              <SummaryTile label="Name + date" value={String(summary.byName)} note={summary.byName ? 'Check these' : 'None'} tone={summary.byName ? 'text-amber-300' : undefined} />
+              <SummaryTile label="Same tracking" value={String(summary.byTracking + (summary.byOrder || 0))} note={summary.byOrder ? `${summary.byOrder} by order number` : 'Shipped straight to the cashout'} tone="text-emerald-400" />
+              <SummaryTile label="Name + date" value={String(summary.byName)} note={summary.suggested ? `${summary.suggested} more possible: pick if right` : summary.byName ? 'Check these' : 'None'} tone={summary.byName || summary.suggested ? 'text-amber-300' : undefined} />
               <SummaryTile label="Will be saved" value={money(total)} note={`${plural(chosen.length, 'purchase')}, with tax and shipping`} />
             </dl>
           )}

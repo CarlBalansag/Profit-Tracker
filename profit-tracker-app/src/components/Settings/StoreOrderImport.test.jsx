@@ -33,7 +33,7 @@ const RESULT = {
   lines: [line(0), line(1, { perUnit: { cost: 25, tax: 1.75, shipping: 0 } }), line(2, { qty: 1, perUnit: { cost: 449.99, tax: 31.5, shipping: 5.99 }, paymentMethodId: null, payment: 'Discover - 1111' })],
 };
 
-const upload = async (text = 'Order ID,Product Name\n1,X') => {
+const upload = async (text = 'Order ID,Product Name,Unit Price,Quantity\n1,X,5,1') => {
   const file = new File([text], 'Retail.OrderHistory.1.csv', { type: 'text/csv' });
   fireEvent.change(document.getElementById('store-order-file'), { target: { files: [file] } });
   await waitFor(() => expect(preview.mutateAsync).toHaveBeenCalled());
@@ -65,8 +65,8 @@ describe('StoreOrderImport', () => {
 
   it('uploads only the kept columns and previews the matches', async () => {
     render(<StoreOrderImport />);
-    await upload('Order ID,Billing Address,Product Name\n1,secret,X');
-    expect(preview.mutateAsync).toHaveBeenCalledWith({ source: 'amazon', files: [{ id: 1, csv: 'Order ID,Product Name\n1,X', accountId: null }] });
+    await upload('Order ID,Billing Address,Product Name,Unit Price,Quantity\n1,secret,X,5,1');
+    expect(preview.mutateAsync).toHaveBeenCalledWith({ source: 'amazon', files: [{ id: 1, csv: 'Order ID,Product Name,Unit Price,Quantity\n1,X,5,1', accountId: null }] });
     const dialog = screen.getByRole('dialog', { name: 'Review costs' });
     expect(dialog).toHaveTextContent('Waiting for a cost3');
     // $40 x 2 + $6 tax, and $449.99 + $31.50 tax + $5.99 shipping.
@@ -102,22 +102,24 @@ describe('StoreOrderImport', () => {
     });
     render(<StoreOrderImport />);
     const add = async (name) => {
-      fireEvent.change(document.getElementById('store-order-file'), { target: { files: [new File(['Order ID\n1'], name)] } });
+      fireEvent.change(document.getElementById('store-order-file'), { target: { files: [new File(['Order ID,Product Name,Unit Price,Quantity\n1,X,5,1'], name)] } });
       await screen.findByLabelText(`Amazon account for ${name}`);
     };
     // With two accounts nothing is read until each file has its account.
     await add('cb.csv');
     expect(preview.mutateAsync).not.toHaveBeenCalled();
     expect(screen.getByLabelText('Amazon account for cb.csv')).toHaveValue('');
-    expect(screen.getByText('Not read yet')).toBeInTheDocument();
+    expect(screen.getByText('Pick its account to use this file')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Review costs' })).toBeDisabled();
     fireEvent.change(screen.getByLabelText('Amazon account for cb.csv'), { target: { value: 'cb' } });
+    expect(screen.getByText('Not read yet')).toBeInTheDocument();
     await add('bizz.csv');
     expect(screen.getAllByRole('option', { name: 'Bizz (bizz1)' })).toHaveLength(2);
     fireEvent.change(screen.getByLabelText('Amazon account for bizz.csv'), { target: { value: 'bizz' } });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Review costs from 2 files' })); });
     expect(preview.mutateAsync).toHaveBeenCalledWith({ source: 'amazon', files: [
-      { id: 1, csv: 'Order ID\n1', accountId: 'cb' },
-      { id: 2, csv: 'Order ID\n1', accountId: 'bizz' },
+      { id: 1, csv: 'Order ID,Product Name,Unit Price,Quantity\n1,X,5,1', accountId: 'cb' },
+      { id: 2, csv: 'Order ID,Product Name,Unit Price,Quantity\n1,X,5,1', accountId: 'bizz' },
     ] });
     // The order picker names the account an order came from.
     expect(screen.getAllByRole('option', { name: /^112-0 · CBAmazon · 2026-11-16/ }).length).toBeGreaterThan(0);

@@ -8,7 +8,7 @@ const KEEP_COLUMNS = new Set([
   'order id', 'order date', 'product name', 'title', 'asin', 'asin isbn', 'quantity', 'original quantity',
   'unit price', 'purchase price per unit', 'unit price tax', 'shipment item subtotal tax', 'item subtotal tax',
   'shipping charge', 'total discounts', 'total owed', 'item total', 'order status',
-  'carrier name tracking number', 'payment instrument type', 'currency',
+  'carrier name tracking number', 'payment instrument type', 'currency', 'shipment status',
 ]);
 const headerKey = (h) => String(h || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
@@ -62,15 +62,80 @@ const readText = (file) => (typeof file.text === 'function'
     reader.readAsText(file);
   }));
 
-// Reads a chosen order export and trims it for upload. Throws with a message
-// the user can act on.
-export async function readOrderFile(file) {
-  if (file.size > MAX_FILE_BYTES) throw new Error('That file is too big to read here.');
-  const csv = trimOrderCsv(await readText(file));
+// ─── Files we don't recognize: the user matches the columns ────────────────
+// Each detail the server reads, the Amazon column name it goes up under, and
+// the column names other exports commonly use for it (first guesses).
+export const ORDER_FIELDS = [
+  { key: 'orderId', label: 'Order number', header: 'Order ID', required: true, aliases: ['order id', 'order number', 'order no', 'order', 'orderid', 'order num', 'confirmation number'] },
+  { key: 'orderDate', label: 'Order date', header: 'Order Date', hint: 'Needed to match by name and date', aliases: ['order date', 'date', 'purchase date', 'ordered', 'order placed', 'date ordered'] },
+  { key: 'name', label: 'Item name', header: 'Product Name', required: true, aliases: ['product name', 'title', 'item', 'item name', 'product', 'description', 'item description'] },
+  { key: 'qty', label: 'Quantity', header: 'Quantity', required: true, aliases: ['quantity', 'qty', 'original quantity', 'units', 'count'] },
+  { key: 'unitPrice', label: 'Price per unit', header: 'Unit Price', required: true, aliases: ['unit price', 'price', 'item price', 'purchase price per unit', 'unit cost', 'cost', 'price each'] },
+  { key: 'tax', label: 'Tax for the line', header: 'Shipment Item Subtotal Tax', aliases: ['tax', 'sales tax', 'item tax', 'item subtotal tax', 'tax amount'] },
+  { key: 'shipping', label: 'Shipping', header: 'Shipping Charge', aliases: ['shipping', 'shipping charge', 'shipping cost', 'shipping fee', 'delivery'] },
+  { key: 'discount', label: 'Discount', header: 'Total Discounts', aliases: ['discount', 'discounts', 'total discounts', 'promotion', 'savings'] },
+  { key: 'tracking', label: 'Tracking number', header: 'Carrier Name & Tracking Number', aliases: ['tracking', 'tracking number', 'tracking numbers', 'carrier name tracking number', 'tracking id'] },
+  { key: 'payment', label: 'Card or payment', header: 'Payment Instrument Type', aliases: ['payment', 'payment method', 'payment instrument type', 'card', 'paid with'] },
+  { key: 'status', label: 'Order status', header: 'Order Status', aliases: ['status', 'order status', 'item status'] },
+];
+
+// Amazon's own export, under either of its two layouts.
+const recognized = (keys) => keys.has('order id')
+  && (keys.has('product name') || keys.has('title'))
+  && (keys.has('unit price') || keys.has('purchase price per unit'))
+  && (keys.has('quantity') || keys.has('original quantity'));
+
+// First guess for each field: the first column whose name is one of its aliases.
+export function guessOrderColumns(headers) {
+  const keys = headers.map(headerKey);
+  const taken = new Set();
+  return Object.fromEntries(ORDER_FIELDS.map((f) => {
+    const i = f.aliases.map((a) => keys.indexOf(a)).find((n) => n >= 0 && !taken.has(n));
+    if (i === undefined) return [f.key, ''];
+    taken.add(i);
+    return [f.key, String(i)];
+  }));
+}
+
+export const missingOrderColumns = (mapping) => ORDER_FIELDS.filter((f) => f.required && mapping[f.key] === '');
+
+// Rewrites a file under the column names the server reads, keeping only the
+// matched columns (so nothing else leaves the browser).
+export function applyOrderColumns(text, mapping) {
+  const rows = parseCsv(text);
+  const used = ORDER_FIELDS.filter((f) => mapping[f.key] !== '' && mapping[f.key] !== undefined);
+  return [
+    used.map((f) => csvCell(f.header)).join(','),
+    ...rows.slice(1).map((r) => used.map((f) => csvCell(r[Number(mapping[f.key])] ?? '')).join(',')),
+  ].join('\n');
+}
+
+const checkUploadSize = (csv) => {
   if (new Blob([csv]).size > MAX_UPLOAD_BYTES) {
     throw new Error('That order history is too long to read at once. Split the CSV into smaller files (by year) and add each one.');
   }
   return csv;
+};
+
+// Reads a chosen order export. An Amazon export comes back trimmed for upload
+// as { csv }. Any other file comes back as { mapping } (its column names, five
+// sample rows and first guesses) for the user to match its columns, then
+// finishOrderMapping() turns it into { csv }. Throws a message the user can act on.
+export async function readOrderFile(file) {
+  if (file.size > MAX_FILE_BYTES) throw new Error('That file is too big to read here.');
+  const text = await readText(file);
+  const rows = parseCsv(text);
+  if (!rows.length || !rows[0].some((h) => String(h).trim())) throw new Error('That file is empty.');
+  const headers = rows[0].map((h) => String(h).trim());
+  if (recognized(new Set(headers.map(headerKey)))) return { csv: checkUploadSize(trimOrderCsv(text)) };
+  if (rows.length < 2) throw new Error('That file has no order rows.');
+  return { mapping: { name: file.name, text, headers, sample: rows.slice(1, 6), guess: guessOrderColumns(headers) } };
+}
+
+export function finishOrderMapping(mapping, columns) {
+  const missing = missingOrderColumns(columns);
+  if (missing.length) throw new Error(`Pick the column for ${missing.map((f) => f.label.toLowerCase()).join(', ')}.`);
+  return checkUploadSize(applyOrderColumns(mapping.text, columns));
 }
 
 // Several files go up in one request, so together they share the limit.
