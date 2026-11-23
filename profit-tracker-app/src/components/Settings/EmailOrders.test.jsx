@@ -52,6 +52,16 @@ describe('EmailOrders', () => {
     expect(m.automation.mutate).toHaveBeenCalledWith({ linkMatches: false });
   });
 
+  it('shows the home state and personal words without opening Automatic actions', () => {
+    render(<EmailOrders found={3} />);
+    const state = screen.getByLabelText('Your home state');
+    expect(state).toBeVisible();
+    expect(state.closest('details')).toBeNull();
+    fireEvent.change(state, { target: { value: 'CA' } });
+    expect(m.automation.mutate).toHaveBeenCalledWith({ homeState: 'CA' });
+    expect(screen.getByLabelText('Always personal').closest('details')).toBeNull();
+  });
+
   it('hides itself until emails are found', () => {
     const { container } = render(<EmailOrders found={0} />);
     expect(container).toBeEmptyDOMElement();

@@ -129,9 +129,9 @@ export function EmailOrders({ found }) {
               <span>{label}<span className="block text-xs text-gray-500">{hint}</span></span>
             </label>
           ))}
-          {automation && <OrderSorting automation={automation} save={saveAutomation} />}
         </div>
       </details>
+      {automation && <OrderSorting automation={automation} save={saveAutomation} />}
       <div role="group" aria-label="Show" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 dp-no-native-scrollbar">
         {TABS.map(([key, label]) => (
           <button key={key} type="button" aria-pressed={tab === key} onClick={() => { setTab(key); setLimit(20); }}
