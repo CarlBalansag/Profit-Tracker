@@ -12,6 +12,7 @@ vi.mock('../../hooks/useApi', () => ({
   useEmailOrders: (opts) => { calls.push(opts); return { data }; },
   useEmailAutomation: () => ({ data: { linkMatches: true } }),
   useEmailOrderMutations: () => m,
+  useEmailMatchPreview: (id) => ({ data: id ? { match: { id, record_type: 'purchase' }, order: { store: 'Amazon', order_number: '112-1', total: '485.99', date: '2026-03-02', items: [] }, records: [{ id: 'p1', title: 'Nintendo Switch 2 Console', fields: [{ key: 'order_number', label: 'Order #', value: null, fill: '112-1' }] }], also: [] } : undefined }),
   useEmailRuleMutations: () => r,
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -19,7 +20,7 @@ afterEach(cleanup);
 
 const order = {
   id: 'o1', merchant: 'amazon', order_number: '112-1', total: '485.99', first_seen: '2026-03-02T15:00:00Z', status: 'delivered',
-  matches: [{ id: 'm1', record_type: 'purchase', state: 'suggested', band: 'medium', score: 65, auto: false,
+  matches: [{ id: 'm1', record_type: 'purchase', state: 'suggested', band: 'medium', score: 65, auto: false, will_fill: ['Order #'],
     reasons: [{ code: 'total', text: 'Same total', points: 25 }, { code: 'card_conflict', text: 'Different card', points: -5 }],
     records: [{ id: 'p1', name: 'Nintendo Switch 2 Console', amount: 449.99, date: '2026-03-02T15:00:00Z', quantity: 1 }] }],
 };
@@ -34,7 +35,11 @@ describe('EmailOrders', () => {
     expect(screen.getByText(/Nintendo Switch 2 Console/)).toBeInTheDocument();
     expect(screen.getByText('Same total')).toBeInTheDocument();
     expect(screen.getByText('Different card')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Yes, link/ }));
+    expect(screen.getByText('Will fill:')).toBeInTheDocument();
+    expect(screen.getByText('Order #')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Review & link/ }));
+    expect(screen.getByRole('dialog', { name: 'Link this order' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Link and fill 1' }));
     await waitFor(() => expect(m.accept.mutateAsync).toHaveBeenCalledWith('m1'));
     fireEvent.click(screen.getByRole('button', { name: /Not this/ }));
     await waitFor(() => expect(m.reject.mutateAsync).toHaveBeenCalledWith('m1'));

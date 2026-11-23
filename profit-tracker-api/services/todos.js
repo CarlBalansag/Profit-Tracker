@@ -309,15 +309,9 @@ function emailItems(review, accounts, extra = {}) {
       link: { kind: 'page', to: '/schedule-c' },
     }));
   }
-  if (extra.autoToday > 0) {
-    out.push(item({
-      key: `email-today:${extra.today}`, type: 'email_summary', group: 'purchases', urgency: 'info',
-      title: `Email made ${extra.autoToday} ${extra.autoToday === 1 ? 'change' : 'changes'} today`,
-      detail: 'See them, and undo any, on the Automation page.',
-      link: { kind: 'page', to: '/automation' },
-      actions: ['dismiss'],
-    }));
-  }
+  // Automatic changes to confirm are an optional card on the To-Do page
+  // (GET /api/email/automation/review), not an item: they don't count toward
+  // the sidebar badge.
   // Each email order waiting for a yes or no on its best match, answered right
   // on the To-Do (Yes, link / Not this). Past the first few, one item sums up the rest.
   const listed = review.orders || [];
@@ -869,7 +863,7 @@ async function reviewOrders(prisma, userId, orders) {
 
 async function loadTodoData(prisma, userId, today) {
   const lookback = new Date(toUtc(addDays(today, -365)));
-  const [commitments, connections, sales, inventories, cards, recurring, reminders, emailReviewCount, emailReviewOrders, emailAccounts, emailAttention, emailTaxForms, emailToAdd, emailAutoToday] = await Promise.all([
+  const [commitments, connections, sales, inventories, cards, recurring, reminders, emailReviewCount, emailReviewOrders, emailAccounts, emailAttention, emailTaxForms, emailToAdd] = await Promise.all([
     prisma.cashoutCommitment.findMany({
       where: { user_id: userId, status: { in: ['pending', 'active', 'expired', 'closed'] } },
       include: {
@@ -905,7 +899,6 @@ async function loadTodoData(prisma, userId, today) {
       orderBy: { first_seen: 'desc' }, take: 15,
       select: { id: true, merchant: true, order_number: true, total: true, items: true, leaning_reason: true },
     }) : [],
-    prisma.activityLog ? prisma.activityLog.count({ where: { user_id: userId, source: 'email', created_at: { gte: new Date(Date.now() - 86400000) } } }) : 0,
   ]);
 
   // Tracked spend this month, only needed when a card's statement is close.
@@ -919,7 +912,7 @@ async function loadTodoData(prisma, userId, today) {
 
   return { commitments, connections, sales, inventories, cards, recurring, reminders, spendByCard,
     emailReview: { count: emailReviewCount || 0, newestId: emailReviewOrders?.[0]?.id || null, orders: await reviewOrders(prisma, userId, emailReviewOrders || []) }, emailAccounts: emailAccounts || [],
-    emailExtra: { attention: emailAttention || [], taxForms: emailTaxForms || [], toAdd: emailToAdd || [], autoToday: emailAutoToday || 0 } };
+    emailExtra: { attention: emailAttention || [], taxForms: emailTaxForms || [], toAdd: emailToAdd || [] } };
 }
 
 async function listTodos(prisma, userId, today) {

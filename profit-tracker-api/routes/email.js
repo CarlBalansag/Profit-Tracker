@@ -13,6 +13,8 @@ const { syncAccount, testConnection, openAccount, catchUp, catchingUp } = requir
 // deps.catchUpRuns limits the runs (tests use 1).
 const keepSyncing = (accountId) => catchUp(accountId, deps, { maxRuns: deps.catchUpRuns ?? 30 }).catch(() => {});
 const { linkMatch, rejectMatch } = require('../services/email/match');
+const { linkPreview, willFill } = require('../services/email/linkPreview');
+const { toConfirmCount, confirmEntries, rejectEntry } = require('../services/email/review');
 const { getSettings, saveSettings, DEFAULTS } = require('../services/email/settings');
 const { createExpenseFromOrder, suggestRules, normalizeDomain, labelFor } = require('../services/email/rules');
 const { createPurchasesFromOrder, applyCashoutReceipts } = require('../services/email/automations');
@@ -302,6 +304,7 @@ router.get('/orders', isAuthenticated, async (req, res, next) => {
       prisma.emailOrder.groupBy({ by: ['match_state'], where: { user_id: req.user.id, type: { not: 'shipment' } }, _count: { _all: true } }),
     ]);
     const records = await recordSummaries(req.user.id, orders.flatMap((o) => o.matches));
+    const fills = await willFill(prisma, req.user.id, orders.filter((o) => o.match_state === 'review'));
     const withPdf = new Set((await prisma.emailMessage.findMany({
       where: { user_id: req.user.id, order_id: { in: orders.map((o) => o.id) }, attachment_name: { not: null } },
       select: { order_id: true },
@@ -315,10 +318,20 @@ router.get('/orders', isAuthenticated, async (req, res, next) => {
         has_invoice: withPdf.has(o.id),
         matches: matches.map((m) => ({
           id: m.id, record_type: m.record_type, score: m.score, band: m.band, reasons: m.reasons, state: m.state, auto: m.auto,
+          will_fill: fills.get(m.id) || [],
           records: m.record_ids.map((id) => records.get(`${m.record_type}:${id}`)).filter(Boolean),
         })),
       })),
     });
+  } catch (err) { next(err); }
+});
+
+// What linking this match would change, before it does (Review & link).
+router.get('/matches/:id/preview', isAuthenticated, async (req, res, next) => {
+  try {
+    const preview = await linkPreview(prisma, req.user.id, req.params.id, await getSettings(prisma, req.user.id));
+    if (!preview) return res.status(404).json({ error: 'This match is no longer available.' });
+    res.json(preview);
   } catch (err) { next(err); }
 });
 
@@ -369,6 +382,24 @@ router.post('/orders/:id/dismiss', isAuthenticated, async (req, res, next) => {
     });
     res.json({ match_state: restore ? 'unmatched' : 'dismissed' });
   } catch (err) { next(err); }
+});
+
+// Automation page review: how many automatic changes wait for a confirm, and
+// confirm / reject (services/email/review.js).
+router.get('/automation/review', isAuthenticated, async (req, res, next) => {
+  try { res.json({ to_confirm: await toConfirmCount(req.user.id) }); } catch (err) { next(err); }
+});
+const confirmBody = z.object({ ids: z.array(z.string().uuid()).min(1).max(500) }).strict();
+router.post('/automation/confirm', isAuthenticated, validateBody(confirmBody), async (req, res, next) => {
+  try { res.json({ confirmed: await confirmEntries(req.user.id, req.body.ids) }); } catch (err) { next(err); }
+});
+router.post('/automation/:id/reject', isAuthenticated, async (req, res, next) => {
+  try {
+    res.json(await rejectEntry(req.user.id, req.params.id));
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
 });
 
 router.get('/automation', isAuthenticated, async (req, res, next) => {

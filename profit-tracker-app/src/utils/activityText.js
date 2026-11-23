@@ -72,7 +72,7 @@ const ARTICLE = { purchase: 'a purchase', sale: 'a sale', expense: 'an expense' 
 
 // Fields worth naming in the summary. Anything else (internal mirrors,
 // timestamps) is only counted, never shown raw.
-const FIELD_LABELS = {
+export const FIELD_LABELS = {
   product_name: ['Name'], name: ['Name'],
   unit_price: ['Price', 'money'], unit_purchase_cost: ['Unit cost', 'money'], amount: ['Amount', 'money'],
   quantity: ['Qty', 'int'], qty_purchased: ['Qty bought', 'int'],
@@ -85,7 +85,7 @@ const FIELD_LABELS = {
   platform_id: ['Platform', 'ref'], vendor_id: ['Vendor', 'ref'], account_id: ['Account', 'ref'], payment_method_id: ['Card', 'ref'], buyer_id: ['Buyer', 'ref'],
 };
 
-function formatField(kind, value) {
+export function formatField(kind, value) {
   if (value === null || value === undefined || value === '') return '—';
   if (kind === 'money') return `$${formatMoney(Number(value) || 0)}`;
   if (kind === 'int') return String(Number(value) || 0);

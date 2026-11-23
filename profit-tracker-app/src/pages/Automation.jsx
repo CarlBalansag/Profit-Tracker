@@ -1,17 +1,19 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { BadgeDollarSign, ChevronDown, Link2, Mail, PenLine, Plus, Settings2, Truck, UserRound, Zap } from 'lucide-react';
-import { useActivity, useEmailAccounts, useEmailAutomation, useEmailOrderMutations, useInvalidate } from '../hooks/useApi';
-import { undoActivity } from '../utils/undoToast';
+import { BadgeDollarSign, Check, CheckCheck, Link2, ListTree, Mail, PenLine, Plus, Settings2, Truck, UserRound, X, Zap } from 'lucide-react';
+import { useActivity, useAutomationReview, useAutomationReviewMutations, useEmailAccounts, useEmailAutomation } from '../hooks/useApi';
 import { AUTOMATION_KINDS, describeAutomation } from '../utils/automationText';
 import { AUTOMATIONS } from '../data/emailAutomations';
 import { formatMoney } from '../utils/money';
 import LoadError from '../components/UI/LoadError';
+import ChangeDetailsModal from '../components/Automation/ChangeDetailsModal';
 
 // What ProfitTracker changed on its own from the user's email, newest first,
-// in plain words, with Undo. The same entries are in Activity ("From email");
-// this page is just the automatic ones (GET /api/activity?source=email).
+// in plain words. The changes already happened; Confirm is a double check that
+// moves one to Completed, and No takes it back (api services/email/review.js:
+// undo, plus unlinking the order so it isn't done again). Details shows each
+// field before and after. The same entries are in Activity ("From email").
 
 const PANEL = 'rounded-xl border border-gray-800 bg-[#12121A]';
 const KIND_LOOK = {
@@ -22,6 +24,19 @@ const KIND_LOOK = {
   details: { icon: PenLine, color: 'var(--dp-neutral-text)', bg: 'var(--dp-neutral-bg)' },
   sorted: { icon: UserRound, color: 'var(--dp-neutral-text)', bg: 'var(--dp-neutral-bg)' },
 };
+
+// What "No" does, said before it happens.
+const REJECT_TEXT = {
+  link: "Unlink this order and put back anything it filled in? It won't be linked again on its own.",
+  created: "Delete this record made from the email? It won't be added again on its own.",
+  sorted: 'Bring this order back as business? It goes back to your orders, and your To-Do can add it.',
+};
+const rejectText = (kind) => REJECT_TEXT[kind] || 'Put back what this change replaced?';
+const isOpen = (entry) => !entry.review_state && !entry.undone_at;
+const canReject = (entry) => isOpen(entry) && (entry.kind === 'event' || entry.undo_state === 'available');
+const noLabel = (change) => (change.kind === 'sorted' ? "No, it's business" : 'No');
+
+const SMALL = '!h-8 !px-2.5 !text-xs';
 
 const dayKey = (iso) => new Date(iso).toDateString();
 function dayLabel(iso) {
@@ -43,6 +58,27 @@ function ago(iso) {
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function ReviewTabs({ view, toConfirm, onPick }) {
+  const tabs = [['open', 'To confirm', toConfirm], ['done', 'Completed', 0]];
+  return (
+    <div role="tablist" aria-label="Review" className="inline-flex rounded-lg border border-white/10 bg-[#12121A] p-1">
+      {tabs.map(([id, label, count]) => (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          aria-selected={view === id}
+          onClick={() => onPick(id)}
+          className={`flex min-h-[36px] items-center gap-1.5 rounded-md px-3.5 text-[13px] font-semibold transition-colors ${view === id ? 'bg-white/[0.1] text-[var(--dp-text-primary)] shadow-sm' : 'text-gray-500 hover:text-white'}`}
+        >
+          {label}
+          {count > 0 && <span className="min-w-[20px] rounded-full bg-[var(--dp-accent-solid)] px-1.5 text-center text-[11px] leading-5 text-white tabular-nums">{count > 99 ? '99+' : count}</span>}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function KindTabs({ counts, total, active, onPick }) {
@@ -72,21 +108,35 @@ function KindTabs({ counts, total, active, onPick }) {
   );
 }
 
-function AutomationRow({ entry, change, busy, onUndo, onKeep }) {
-  const [open, setOpen] = useState(false);
+function Outcome({ entry }) {
+  if (entry.review_state === 'confirmed') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--dp-green-bg)] px-2 py-0.5 text-[11px] font-semibold text-[var(--dp-green-text)]">
+        <Check size={11} aria-hidden="true" />Confirmed
+      </span>
+    );
+  }
+  if (entry.review_state === 'rejected') return <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-gray-400">You said no</span>;
+  if (entry.undone_at) return <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-gray-400">Undone</span>;
+  return null;
+}
+
+function AutomationRow({ entry, change, busy, onConfirm, onReject, onDetails }) {
   const look = KIND_LOOK[change.kind] || KIND_LOOK.details;
   const Icon = look.icon;
-  const undone = entry.undo_state === 'undone';
+  const open = isOpen(entry);
+  const takenBack = entry.review_state === 'rejected' || Boolean(entry.undone_at);
+  const what = `${change.title}, ${change.subject}`;
   return (
-    <li data-activity={entry.id} className={`flex gap-3 px-4 py-3.5 ${undone ? 'opacity-60' : ''}`}>
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ background: look.bg }}>
+    <li data-activity={entry.id} className="flex gap-3 px-4 py-3.5">
+      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${takenBack ? 'opacity-60' : ''}`} style={{ background: look.bg }}>
         <Icon size={16} style={{ color: look.color }} aria-hidden="true" />
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-3">
-          <p className={`min-w-0 text-sm font-semibold ${undone ? 'text-gray-400 line-through decoration-gray-600' : 'text-[var(--dp-text-primary)]'}`}>
+          <p className={`min-w-0 text-sm font-semibold ${takenBack ? 'text-gray-400 line-through decoration-gray-600' : 'text-[var(--dp-text-primary)]'}`}>
             {change.title}
-            {change.amount != null && <span className="ml-2 font-semibold tabular-nums" style={{ color: undone ? undefined : look.color }}>${formatMoney(change.amount)}</span>}
+            {change.amount != null && <span className="ml-2 font-semibold tabular-nums" style={{ color: takenBack ? undefined : look.color }}>${formatMoney(change.amount)}</span>}
           </p>
           <span className="shrink-0 text-[11px] tabular-nums text-gray-500">{timeOf(entry.created_at)}</span>
         </div>
@@ -98,33 +148,23 @@ function AutomationRow({ entry, change, busy, onUndo, onKeep }) {
             ))}
           </p>
         )}
-        {open && change.details.map((line) => <p key={line} className="mt-1.5 break-words rounded-lg bg-white/[0.03] px-2.5 py-1.5 text-xs text-gray-400">{line}</p>)}
-        {(change.details.length > 0 || entry.undo_state !== 'not_undoable' || change.kind === 'sorted') && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-          {change.details.length > 0 && (
-            <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="inline-flex h-7 items-center gap-1 rounded-md text-xs font-medium text-gray-400 hover:text-gray-200">
-              {open ? 'Hide' : 'Show'} serials <ChevronDown size={12} aria-hidden="true" className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          {open && (
+            <button type="button" disabled={busy} onClick={() => onConfirm(entry)} className={`page-btn page-btn-secondary ${SMALL}`}>
+              <Check size={13} aria-hidden="true" /><span aria-hidden="true">Confirm</span><span className="sr-only">Confirm: {what}</span>
             </button>
           )}
-          {entry.undo_state === 'available' && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => onUndo(entry)}
-              className="inline-flex h-7 items-center rounded-md px-2 -ml-2 text-xs font-medium text-gray-400 transition-colors hover:bg-white/[0.05] hover:text-gray-100 disabled:opacity-50"
-            >
-              <span aria-hidden="true">Undo</span><span className="sr-only">Undo {change.title}, {change.subject}</span>
+          {canReject(entry) && (
+            <button type="button" disabled={busy} onClick={() => onReject(entry, change)} className={`page-btn page-btn-secondary ${SMALL}`}>
+              <X size={13} aria-hidden="true" /><span aria-hidden="true">{noLabel(change)}</span><span className="sr-only">No, take back: {what}</span>
             </button>
           )}
-          {change.kind === 'sorted' && (
-            <button type="button" disabled={busy} onClick={() => onKeep(entry)} className="inline-flex h-7 items-center rounded-md px-2 -ml-2 text-xs font-medium text-gray-400 transition-colors hover:bg-white/[0.05] hover:text-gray-100 disabled:opacity-50">
-              <span aria-hidden="true">It's business</span><span className="sr-only">It's business: {change.subject}</span>
-            </button>
-          )}
-          {undone && <span className="text-xs text-gray-500">Undone</span>}
-          {entry.undo_state === 'expired' && <span className="text-xs text-gray-600">Older than 30 days</span>}
+          <button type="button" onClick={() => onDetails(entry, change)} className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-gray-400 transition-colors hover:bg-white/[0.05] hover:text-gray-100">
+            <ListTree size={13} aria-hidden="true" /><span aria-hidden="true">Details</span><span className="sr-only">Details: {what}</span>
+          </button>
+          {open && !canReject(entry) && entry.undo_state === 'expired' && <span className="text-xs text-gray-600">Too old to take back</span>}
+          <Outcome entry={entry} />
         </div>
-        )}
       </div>
     </li>
   );
@@ -164,27 +204,20 @@ function RunningPanel() {
 }
 
 export default function Automation() {
-  const { data, isLoading, isError, refetch, isRefetching, hasNextPage, fetchNextPage, isFetchingNextPage } = useActivity(undefined, 'email');
-  const invalidate = useInvalidate();
+  const [view, setView] = useState('open');
+  const { data, isLoading, isError, refetch, isRefetching, hasNextPage, fetchNextPage, isFetchingNextPage } = useActivity(undefined, 'email', view);
+  const { data: review } = useAutomationReview();
+  const { confirm, reject } = useAutomationReviewMutations();
   const [pendingId, setPendingId] = useState(null);
   const [kind, setKind] = useState('all');
-  const { dismiss } = useEmailOrderMutations();
-  // A set-aside order brought back: it's business, and a To-Do asks to add it.
-  const handleKeep = async (entry) => {
-    setPendingId(entry.id);
-    try {
-      await dismiss.mutateAsync({ id: entry.record_id, restore: true });
-      toast.success('Brought back. Your To-Do asks whether to add it.');
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setPendingId(null);
-    }
-  };
+  const [details, setDetails] = useState(null);
+  const toConfirm = review?.to_confirm ?? 0;
+  const pickView = (next) => { setView(next); setKind('all'); };
 
   const rows = useMemo(() => (data?.pages.flatMap((page) => page.entries) ?? []).map((entry) => ({ entry, change: describeAutomation(entry) })), [data]);
   const counts = useMemo(() => rows.reduce((acc, r) => ({ ...acc, [r.change.kind]: (acc[r.change.kind] || 0) + 1 }), {}), [rows]);
   const visible = kind === 'all' ? rows : rows.filter((r) => r.change.kind === kind);
+  const openVisible = visible.filter((r) => isOpen(r.entry)).map((r) => r.entry);
   const days = [];
   for (const row of visible) {
     const key = dayKey(row.entry.created_at);
@@ -192,14 +225,29 @@ export default function Automation() {
     else days.push({ key, label: dayLabel(row.entry.created_at), rows: [row] });
   }
 
-  const handleUndo = async (entry) => {
+  const handleConfirm = async (entries) => {
+    const list = Array.isArray(entries) ? entries : [entries];
+    setPendingId(list.length === 1 ? list[0].id : 'all');
+    try {
+      const { confirmed } = await confirm.mutateAsync(list.map((e) => e.id));
+      if (list.length > 1) toast.success(`Confirmed ${confirmed}. They're in Completed.`);
+      setDetails(null);
+    } catch (err) {
+      toast.error(`Could not confirm: ${err.message}`);
+    } finally {
+      setPendingId(null);
+    }
+  };
+
+  const handleReject = async (entry, change) => {
+    if (!window.confirm(rejectText(change.kind))) return;
     setPendingId(entry.id);
     try {
-      await undoActivity(entry.id);
-      invalidate.all();
-      toast.success('Undone.');
+      await reject.mutateAsync(entry.id);
+      toast.success(change.kind === 'sorted' ? 'Brought back as business.' : 'Taken back.');
+      setDetails(null);
     } catch (err) {
-      toast.error(`Could not undo: ${err.message}`);
+      toast.error(err.message);
     } finally {
       setPendingId(null);
     }
@@ -207,14 +255,24 @@ export default function Automation() {
 
   if (isError && !data) return <LoadError title="Email automation" what="the automatic changes" onRetry={refetch} retrying={isRefetching} />;
 
+  const detailOpen = details && isOpen(details.entry);
   return (
     <div className="h-full overflow-auto">
       <div className="mx-auto w-full max-w-6xl space-y-5 px-4 py-6 pb-10 sm:px-6">
         <div className="min-w-0 max-w-2xl">
           <h1 className="text-2xl font-bold tracking-tight text-white">Email automation</h1>
           <p className="mt-1 text-sm text-gray-400">
-            What ProfitTracker changed on its own from your email, newest first. Each change is also in Activity, and most can be undone for 30 days.
+            What ProfitTracker already did on its own from your email. Confirm the ones that look right; No takes a change back (within 30 days). Each change is also in Activity.
           </p>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <ReviewTabs view={view} toConfirm={toConfirm} onPick={pickView} />
+          {view === 'open' && openVisible.length > 1 && (
+            <button type="button" disabled={pendingId !== null} onClick={() => handleConfirm(openVisible)} className="page-btn page-btn-secondary">
+              <CheckCheck size={15} aria-hidden="true" /> Confirm all {openVisible.length} shown
+            </button>
+          )}
         </div>
 
         {rows.length > 0 && <KindTabs counts={counts} total={rows.length} active={kind} onPick={setKind} />}
@@ -225,12 +283,16 @@ export default function Automation() {
               <p className="text-sm text-gray-500">Loading…</p>
             ) : rows.length === 0 ? (
               <div className={`${PANEL} px-6 py-14 text-center`}>
-                <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl" style={{ background: 'var(--dp-neutral-bg)' }}>
-                  <Zap className="h-7 w-7" style={{ color: 'var(--dp-neutral-text)' }} aria-hidden="true" />
+                <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl" style={{ background: view === 'open' ? 'var(--dp-green-bg)' : 'var(--dp-neutral-bg)' }}>
+                  {view === 'open'
+                    ? <CheckCheck className="h-7 w-7" style={{ color: 'var(--dp-green-text)' }} aria-hidden="true" />
+                    : <Zap className="h-7 w-7" style={{ color: 'var(--dp-neutral-text)' }} aria-hidden="true" />}
                 </span>
-                <p className="text-lg font-semibold text-white">Nothing changed on its own yet</p>
+                <p className="text-lg font-semibold text-white">{view === 'open' ? 'Nothing to confirm' : 'Nothing completed yet'}</p>
                 <p className="mx-auto mt-1 max-w-sm text-sm text-gray-400">
-                  When ProfitTracker reads your email and links an order, adds tracking, marks a sale paid or adds an expense, it shows up here.
+                  {view === 'open'
+                    ? 'When ProfitTracker reads your email and links an order, adds tracking, marks a sale paid or adds a purchase, it shows up here to confirm.'
+                    : 'Changes you confirm or say no to move here, so you can still look them up.'}
                 </p>
               </div>
             ) : (
@@ -241,7 +303,15 @@ export default function Automation() {
                   </h2>
                   <ul className={`${PANEL} divide-y divide-white/[0.06]`}>
                     {day.rows.map(({ entry, change }) => (
-                      <AutomationRow key={entry.id} entry={entry} change={change} busy={pendingId !== null} onUndo={handleUndo} onKeep={handleKeep} />
+                      <AutomationRow
+                        key={entry.id}
+                        entry={entry}
+                        change={change}
+                        busy={pendingId !== null}
+                        onConfirm={handleConfirm}
+                        onReject={handleReject}
+                        onDetails={(e, c) => setDetails({ entry: e, change: c })}
+                      />
                     ))}
                   </ul>
                 </section>
@@ -258,6 +328,26 @@ export default function Automation() {
           </aside>
         </div>
       </div>
+
+      {details && (
+        <ChangeDetailsModal
+          entry={details.entry}
+          change={details.change}
+          onClose={() => setDetails(null)}
+          actions={detailOpen ? (
+            <>
+              {canReject(details.entry) && (
+                <button type="button" disabled={pendingId !== null} onClick={() => handleReject(details.entry, details.change)} className="page-btn page-btn-secondary">
+                  <X size={14} aria-hidden="true" /> {details.change.kind === 'sorted' ? "No, it's business" : 'No, take it back'}
+                </button>
+              )}
+              <button type="button" disabled={pendingId !== null} onClick={() => handleConfirm(details.entry)} className="page-btn page-btn-primary">
+                <Check size={14} aria-hidden="true" /> Confirm
+              </button>
+            </>
+          ) : null}
+        />
+      )}
     </div>
   );
 }

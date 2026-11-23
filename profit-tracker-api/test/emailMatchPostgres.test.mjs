@@ -136,6 +136,8 @@ describe('email orders and matching on Postgres', () => {
     expect((await send('POST', `/api/email/matches/${order.matches[0].id}/accept`)).body).toEqual({ linked: true });
     expect((await prisma.inventory.findUnique({ where: { id: row.id } })).order_number).toBe('112-1234567-7654321');
     expect((await prisma.emailOrder.findFirst()).match_state).toBe('linked');
+    // The user reviewed it, so the fill isn't waiting on the Automation page.
+    expect(await prisma.activityLog.findFirst({ where: { source: 'email' } })).toMatchObject({ review_state: 'confirmed' });
   });
 
   it('never suggests a rejected match again, and Accept all takes the top suggestion', async () => {
@@ -375,6 +377,107 @@ describe('email orders and matching on Postgres', () => {
       expect(await prisma.emailOrder.count()).toBe(0);
       const todos = await listTodos(prisma, user.id, '2026-02-01');
       expect(todos.items.find((t) => t.key === `email-taxform:${m.id}`)).toMatchObject({ title: 'Tax form from PayPal', group: 'bookkeeping' });
+    });
+  });
+
+  describe('reviewing what the email did (Automation page)', () => {
+    const review = () => require('../services/email/review.js');
+    const openIds = async () => (await activity.listActivity(user.id, { source: 'email', review: 'open' })).entries.map((e) => e.id);
+
+    it('shows which blanks linking will fill, and previews the record before linking', async () => {
+      await purchase({ product_name: 'Nintendo Switch 2 Console', vendor_id: vendor.id, payment_method_id: card.id, unit_purchase_cost: 449.99, sales_tax: 36 });
+      await email({ merchant: 'amazon', kind: 'shipped', order_number: '112-1234567-7654321', total: '485.99', tracking_numbers: ['1Z999AA10123456784'],
+        items: [{ name: 'Nintendo Switch 2 Console', quantity: 1 }], sent_at: new Date('2026-03-02T15:30:00Z') });
+      await send('PUT', '/api/email/automation', { linkMatches: false });
+      await sync.organize(prisma, user.id);
+      const [order] = (await send('GET', '/api/email/orders?state=review')).body.orders;
+      expect(order.matches[0].will_fill).toEqual(['Order #', 'Tracking #', 'Carrier']);
+
+      const preview = await send('GET', `/api/email/matches/${order.matches[0].id}/preview`);
+      expect(preview.status).toBe(200);
+      expect(preview.body.order).toMatchObject({ store: 'Amazon', order_number: '112-1234567-7654321', total: '485.99' });
+      const fields = Object.fromEntries(preview.body.records[0].fields.map((x) => [x.key, x]));
+      expect(fields.order_number).toEqual({ key: 'order_number', label: 'Order #', value: null, fill: '112-1234567-7654321' });
+      expect(fields.carrier.fill).toBe('UPS');
+      expect(fields.product_name).toEqual({ key: 'product_name', label: 'Product', value: 'Nintendo Switch 2 Console' });
+      expect(fields.payment_method.value).toBe('Sapphire ••4242');
+      // Nothing was written by looking.
+      expect(await prisma.inventory.count({ where: { order_number: { not: null } } })).toBe(0);
+      actingUser = other;
+      expect((await send('GET', `/api/email/matches/${order.matches[0].id}/preview`)).status).toBe(404);
+    });
+
+    it("confirms changes so they move to Completed, only the user's own", async () => {
+      await purchase({ product_name: 'Pokemon Booster Bundle', order_number: '2000123-45678901', unit_purchase_cost: 29.97, qty_purchased: 2, qty_on_hand: 2, sales_tax: 4.8 });
+      await email({ merchant: 'walmart', kind: 'shipped', order_number: '2000123-45678901', total: '64.74', tracking_numbers: ['1Z999AA10123456784'], sent_at: new Date('2026-03-02T16:00:00Z') });
+      await sync.organize(prisma, user.id);
+      const ids = await openIds();
+      expect(ids.length).toBe(2); // the fill and the link
+      expect((await send('GET', '/api/email/automation/review')).body).toEqual({ to_confirm: 2 });
+
+      actingUser = other;
+      expect((await send('POST', '/api/email/automation/confirm', { ids })).body).toEqual({ confirmed: 0 });
+      actingUser = user;
+      expect((await send('POST', '/api/email/automation/confirm', { ids: [] })).status).toBe(400);
+      expect((await send('POST', '/api/email/automation/confirm', { ids })).body).toEqual({ confirmed: 2 });
+      expect((await send('GET', '/api/email/automation/review')).body).toEqual({ to_confirm: 0 });
+      const done = (await activity.listActivity(user.id, { source: 'email', review: 'done' })).entries;
+      expect(done.map((e) => e.review_state)).toEqual(['confirmed', 'confirmed']);
+      // Confirming twice changes nothing.
+      expect((await send('POST', '/api/email/automation/confirm', { ids })).body).toEqual({ confirmed: 0 });
+    });
+
+    it('"No" on an automatic link puts the blanks back, unlinks it and never links it again', async () => {
+      const row = await purchase({ product_name: 'Pokemon Booster Bundle', order_number: '2000123-45678901', unit_purchase_cost: 29.97, qty_purchased: 2, qty_on_hand: 2, sales_tax: 4.8, purchase_date: new Date('2026-03-02T15:00:00Z') });
+      await email({ merchant: 'walmart', kind: 'shipped', order_number: '2000123-45678901', total: '64.74', tracking_numbers: ['1Z999AA10123456784'],
+        items: [{ name: 'Pokemon Booster Bundle', quantity: 2 }], sent_at: new Date('2026-03-02T16:00:00Z') });
+      await sync.organize(prisma, user.id);
+      expect((await prisma.emailOrder.findFirst()).match_state).toBe('linked');
+      const link = await prisma.activityLog.findFirst({ where: { record_type: 'email_link' } });
+
+      actingUser = other;
+      expect((await send('POST', `/api/email/automation/${link.id}/reject`)).status).toBe(404);
+      actingUser = user;
+      expect((await send('POST', `/api/email/automation/${link.id}/reject`)).body).toEqual({ rejected: true });
+      const after = await prisma.inventory.findUnique({ where: { id: row.id } });
+      expect([after.order_number, after.tracking_number, after.carrier]).toEqual(['2000123-45678901', null, null]);
+      expect((await prisma.emailOrder.findFirst()).match_state).toBe('unmatched');
+      expect(await openIds()).toEqual([]);
+      expect((await send('POST', `/api/email/automation/${link.id}/reject`)).status).toBe(409);
+
+      await sync.organize(prisma, user.id);
+      expect((await prisma.emailOrder.findFirst()).match_state).not.toBe('linked');
+      expect((await prisma.inventory.findUnique({ where: { id: row.id } })).tracking_number).toBe(null);
+    });
+
+    it('"No" on a purchase made from an email deletes it and never adds it again', async () => {
+      await send('PUT', '/api/email/automation', { createPurchases: true });
+      await email({ merchant: 'target', kind: 'order', order_number: '912000000004', total: '30.00', items: [{ name: 'Echo Show 8', quantity: 2 }], sent_at: new Date(Date.now() - 3 * 86400000) });
+      expect(await sync.organize(prisma, user.id)).toMatchObject({ purchasesCreated: 1 });
+      const made = await prisma.activityLog.findFirst({ where: { source: 'email', record_type: 'purchase' } });
+      expect(made.detail.email_order_id).toBe((await prisma.emailOrder.findFirst()).id);
+      expect((await send('POST', `/api/email/automation/${made.id}/reject`)).body).toEqual({ rejected: true });
+      expect(await prisma.inventory.count()).toBe(0);
+      expect(await prisma.emailOrder.findFirst()).toMatchObject({ match_state: 'unmatched', leaning: 'declined' });
+
+      expect(await sync.organize(prisma, user.id)).toMatchObject({ purchasesCreated: 0 });
+      expect(await prisma.inventory.count()).toBe(0);
+      expect((await prisma.emailOrder.findFirst()).leaning).toBe('declined');
+      const today = new Date().toISOString().slice(0, 10);
+      const { listTodos } = require('../services/todos.js');
+      expect((await listTodos(prisma, user.id, today)).items.some((t) => t.key.startsWith('email-add:'))).toBe(false);
+    });
+
+    it('"No" on an order set aside as personal brings it back as business', async () => {
+      await send('PUT', '/api/email/automation', { homeState: 'CA' });
+      await email({ merchant: 'amazon', kind: 'order', order_number: '113-0000000-0000001', total: '24.99', ship_to: 'SACRAMENTO, CA', items: [{ name: 'Pet Supplies', quantity: 1, category: true }], sent_at: new Date(Date.now() - 2 * 86400000) });
+      await sync.organize(prisma, user.id);
+      const sorted = await prisma.activityLog.findFirst({ where: { record_type: 'email_sort' } });
+      await review().rejectEntry(user.id, sorted.id);
+      expect(await prisma.emailOrder.findFirst()).toMatchObject({ match_state: 'unmatched', leaning: 'kept' });
+      expect((await prisma.activityLog.findUnique({ where: { id: sorted.id } })).review_state).toBe('rejected');
+      await sync.organize(prisma, user.id);
+      expect((await prisma.emailOrder.findFirst()).match_state).toBe('unmatched');
     });
   });
 });

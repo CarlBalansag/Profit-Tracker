@@ -257,10 +257,14 @@ model ActivityLog {
   reverts_id  String?
   undone_at   DateTime?
   undone_by   String?
+  // Email automation review: 'confirmed' or 'rejected' (null = not looked at).
+  review_state String?
+  reviewed_at  DateTime?
   created_at  DateTime  @default(now())
 
   @@index([user_id, created_at])
   @@index([user_id, record_id])
+  @@index([user_id, source, review_state])
 }
 
 model Invite {

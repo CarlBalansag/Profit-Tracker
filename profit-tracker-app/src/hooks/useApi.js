@@ -390,10 +390,12 @@ export const useRefundMutations = (kind, id) => {
 // undo invalidates all queries, which refreshes this list too.
 // group: undefined (everything), 'records' (buys, sales, expenses) or 'setup'.
 // source 'email': only the email sync's automatic changes (Automation page).
-export const useActivity = (group, source) =>
+// review (email automation): 'open' = still to confirm, 'done' = confirmed,
+// rejected or undone.
+export const useActivity = (group, source, review) =>
   useInfiniteQuery({
-    queryKey: ['activity', group ?? 'all', ...(source ? [source] : [])],
-    queryFn: ({ pageParam }) => fetcher(`/api/activity?limit=50${group ? `&group=${group}` : ''}${source ? `&source=${source}` : ''}${pageParam ? `&before=${encodeURIComponent(pageParam)}` : ''}`),
+    queryKey: ['activity', group ?? 'all', ...(source ? [source] : []), ...(review ? [review] : [])],
+    queryFn: ({ pageParam }) => fetcher(`/api/activity?limit=50${group ? `&group=${group}` : ''}${source ? `&source=${source}` : ''}${review ? `&review=${review}` : ''}${pageParam ? `&before=${encodeURIComponent(pageParam)}` : ''}`),
     initialPageParam: null,
     getNextPageParam: (last) => last.next_before ?? undefined,
   });
@@ -824,6 +826,34 @@ export const useEmailOrderMutations = () => {
       mutationFn: (changes) => apiFetch('/api/email/automation', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes) }).then((r) => emailJson(r, 'Could not save.')),
       onSuccess: (data) => qc.setQueryData(['email', 'automation'], data),
     }),
+  };
+};
+
+// What "Review & link" would change, before linking (read-only).
+export const useEmailMatchPreview = (matchId) => useQuery({
+  queryKey: ['email', 'match-preview', matchId],
+  queryFn: () => fetcher(`/api/email/matches/${matchId}/preview`),
+  enabled: Boolean(matchId),
+  staleTime: 0,
+});
+
+// Email automation review: how many automatic changes wait for a confirm
+// (Automation page tabs and the optional To-Do card; never the nav badge).
+export const useAutomationReview = () => useQuery({ queryKey: ['email', 'automation-review'], queryFn: () => fetcher('/api/email/automation/review') });
+export const useAutomationReviewMutations = () => {
+  const qc = useQueryClient();
+  const post = (path, body) => apiFetch(path, {
+    method: 'POST',
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }).then((r) => emailJson(r, 'Could not save.'));
+  return {
+    confirm: useMutation({
+      mutationFn: (ids) => post('/api/email/automation/confirm', { ids }),
+      onSuccess: () => { qc.invalidateQueries({ queryKey: ['activity'] }); qc.invalidateQueries({ queryKey: ['email', 'automation-review'] }); },
+    }),
+    // "No" takes the change back, so the records it touched refresh too.
+    reject: useMutation({ mutationFn: (id) => post(`/api/email/automation/${id}/reject`), onSuccess: () => qc.invalidateQueries() }),
   };
 };
 

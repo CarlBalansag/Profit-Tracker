@@ -17,13 +17,13 @@ const { labelFor } = require('./rules');
 const RETURN_DAYS = { amazon: 30, walmart: 90, bestbuy: 15, target: 90, apple: 14, costco: 90, samsclub: 90, homedepot: 90, lowes: 90, gamestop: 30, nike: 60 };
 const DAY = 86400000;
 
-async function runAction(prisma, userId, row, action, payload) {
+async function runAction(prisma, userId, row, action, payload, orderId = null) {
   if (!statusTransitions.isActionAllowed(row, 'inventory', action) && !(statusTransitions.SYSTEM_ACTION_FROM.inventory[action] || []).includes(row.receiving_status)) return false;
   await prisma.$transaction(async (tx) => {
     const fresh = await tx.inventory.findFirst({ where: { id: row.id, user_id: userId } });
     if (!fresh) return;
     const result = await statusTransitions.applyTransition(tx, 'inventory', fresh, action, { ...payload, user_id: userId });
-    await activityLog.logStatus(tx, userId, 'inventory', fresh, result, { source: 'email' });
+    await activityLog.logStatus(tx, userId, 'inventory', fresh, result, { source: 'email', extra: orderId ? { email_order_id: orderId } : {} });
   });
   return true;
 }
@@ -32,7 +32,7 @@ async function fillReturnBy(prisma, userId, rows, order) {
   const blanks = rows.filter((r) => !r.return_by_date);
   if (!blanks.length || !order.last_seen) return;
   await prisma.$transaction((tx) => trackChange(tx, userId, {
-    action: 'edit', recordType: 'purchase', source: 'email', recordId: blanks[0].id,
+    action: 'edit', recordType: 'purchase', source: 'email', recordId: blanks[0].id, extra: { email_order_id: order.id },
     refs: async () => ({ inventory: blanks.map((r) => r.id) }),
   }, async () => {
     for (const r of blanks) {
@@ -59,13 +59,13 @@ async function applyOrderUpdates(prisma, userId, settings) {
     try {
       if (settings.updateShipping && ['shipped', 'delivered'].includes(order.status) && tracking) {
         for (const r of rows.filter((x) => ['PRE_ORDER', 'PURCHASED'].includes(x.receiving_status))) {
-          if (await runAction(prisma, userId, r, 'add_tracking', { tracking_number: r.tracking_number || tracking })) summary.tracking += 1;
+          if (await runAction(prisma, userId, r, 'add_tracking', { tracking_number: r.tracking_number || tracking }, order.id)) summary.tracking += 1;
         }
       }
       if (settings.updateShipping && order.status === 'delivered') {
         const fresh = await prisma.inventory.findMany({ where: { id: { in: ids }, user_id: userId } });
         for (const r of fresh.filter((x) => statusTransitions.SYSTEM_ACTION_FROM.inventory.mark_delivered.includes(x.receiving_status))) {
-          if (await runAction(prisma, userId, r, 'mark_delivered', { delivered_at: order.last_seen })) summary.delivered += 1;
+          if (await runAction(prisma, userId, r, 'mark_delivered', { delivered_at: order.last_seen }, order.id)) summary.delivered += 1;
         }
       }
       if (settings.returnReminders && order.status === 'delivered') await fillReturnBy(prisma, userId, rows, order);
@@ -74,7 +74,7 @@ async function applyOrderUpdates(prisma, userId, settings) {
       if (order.status === 'cancelled') {
         const open = rows.filter((r) => !r.cancelled_at && statusTransitions.isActionAllowed(r, 'inventory', 'cancel'));
         if (settings.cancellations && open.length === rows.length && rows.length) {
-          for (const r of open) if (await runAction(prisma, userId, r, 'cancel', {})) summary.cancelled += 1;
+          for (const r of open) if (await runAction(prisma, userId, r, 'cancel', {}, order.id)) summary.cancelled += 1;
         } else if (rows.some((r) => !r.cancelled_at)) {
           attention = 'cancelled';
         }
@@ -118,7 +118,7 @@ async function applyCashoutReceipt(prisma, userId, order, saleIds) {
   }).filter(Boolean);
   if (edits.length) {
     await prisma.$transaction((tx) => trackChange(tx, userId, {
-      action: 'edit', recordType: 'sale', source: 'email', recordId: edits[0].id,
+      action: 'edit', recordType: 'sale', source: 'email', recordId: edits[0].id, extra: { email_order_id: order.id },
       refs: async () => ({ sales: edits.map((e) => e.id) }),
     }, async () => {
       for (const e of edits) await tx.sales.update({ where: { id: e.id }, data: e.data });
@@ -133,7 +133,7 @@ async function applyCashoutReceipt(prisma, userId, order, saleIds) {
     : Number(order.total || 0);
   if (!amount) return { paid: 0 };
   await markSalesPaid({
-    client: prisma, userId, saleIds: payable.map((s) => s.id), source: 'email',
+    client: prisma, userId, saleIds: payable.map((s) => s.id), source: 'email', extra: { email_order_id: order.id },
     payoutDate: order.last_seen || new Date(), payoutAmount: amount.toFixed(2),
     payoutAccount: `${label} balance`, payoutReference: `${label} ${receipt}`,
   });
@@ -205,7 +205,7 @@ async function applyCashoutCheck(prisma, userId, order) {
   }
   if (moved.length) {
     await prisma.$transaction((tx) => trackChange(tx, userId, {
-      action: 'edit', recordType: 'sale', source: 'email', recordId: moved[0].id,
+      action: 'edit', recordType: 'sale', source: 'email', recordId: moved[0].id, extra: { email_order_id: order.id },
       refs: async () => ({ sales: moved.map((s) => s.id) }),
     }, async () => {
       for (const s of moved) await tx.sales.update({ where: { id: s.id }, data: { payout_account: checkName, paid_reference: `${checkName}, ${s.paid_reference || 'paid to balance'}`.slice(0, 250) } });
@@ -282,7 +282,7 @@ async function createPurchasesFromOrder(prisma, userId, order, { auto = false } 
   const discount = money(order.discount);
 
   const { result: created } = await prisma.$transaction((tx) => trackChange(tx, userId, {
-    action: 'create', recordType: 'purchase', source: 'email',
+    action: 'create', recordType: 'purchase', source: 'email', extra: { email_order_id: order.id },
     recordId: (made) => made?.[0]?.id,
     refs: async (_t, made) => ({ inventory: (made || []).map((r) => r.id) }),
   }, async () => {

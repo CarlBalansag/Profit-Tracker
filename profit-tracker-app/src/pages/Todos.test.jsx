@@ -21,7 +21,9 @@ vi.mock('../hooks/useApi', () => ({
   useReminders: () => ({ data: openReminders }),
   useReminderMutations: () => Object.fromEntries(Object.entries(reminderCalls).map(([name, fn]) => [name, asyncMutation(fn)])),
   usePaymentMethods: () => ({ data: [{ id: 'card-1', name: 'Amex Gold', last4: '1001' }] }),
+  useAutomationReview: () => ({ data: { to_confirm: automationToConfirm.count } }),
 }));
+const automationToConfirm = vi.hoisted(() => ({ count: 0 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 // The sale step on an item (Add tracking, Mark paid...) runs through the
 // shared status-action hook; here it only records what it was asked.
@@ -69,6 +71,22 @@ describe('To-Do page', () => {
     mount();
     expect(screen.getByText('All caught up')).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Show' })).not.toBeInTheDocument();
+  });
+
+  it('shows an optional Email automation card with its own count, only when there is something to confirm', () => {
+    todos = response([]);
+    mount();
+    expect(screen.queryByRole('region', { name: /Email automation/ })).not.toBeInTheDocument();
+    cleanup();
+    automationToConfirm.count = 3;
+    mount();
+    const card = screen.getByRole('region', { name: /Email automation/ });
+    expect(card).toHaveTextContent('3 changes to confirm');
+    expect(card).toHaveTextContent('Optional');
+    expect(screen.getByRole('link', { name: /Review changes/ })).toHaveAttribute('href', '/automation');
+    // Not a to-do item: the list (and so the nav badge's count) stays empty.
+    expect(screen.getByText('All caught up')).toBeInTheDocument();
+    automationToConfirm.count = 0;
   });
 
   it('shows a retry screen when the list fails to load', () => {

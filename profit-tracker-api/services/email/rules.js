@@ -41,7 +41,7 @@ async function createExpenseFromOrder(prisma, userId, order, rule = null, { auto
     reviewed: Boolean(rule.tax_category), source: 'email rule',
   } : null;
   const { result: expense } = await prisma.$transaction((tx) => trackChange(tx, userId, {
-    action: 'create', recordType: 'expense', source: 'email',
+    action: 'create', recordType: 'expense', source: 'email', extra: { email_order_id: order.id },
     recordId: (made) => made.id,
     refs: async (_t, made) => ({ expense: made ? [made.id] : [] }),
   }, () => tx.expense.create({ data: {
@@ -69,7 +69,7 @@ async function applyRules(prisma, userId, { createExpenses }) {
   if (!rules.length) return { created: 0, ignored: 0 };
   const byMerchant = new Map(rules.map((r) => [r.merchant, r]));
   const orders = await prisma.emailOrder.findMany({
-    where: { user_id: userId, match_state: 'unmatched', merchant: { in: [...byMerchant.keys()] }, type: { in: ['receipt', 'purchase'] }, status: { notIn: ['cancelled', 'refund'] } },
+    where: { user_id: userId, match_state: 'unmatched', merchant: { in: [...byMerchant.keys()] }, type: { in: ['receipt', 'purchase'] }, status: { notIn: ['cancelled', 'refund'] }, OR: [{ leaning: null }, { leaning: { not: 'declined' } }] },
     take: 200,
   });
   let created = 0;

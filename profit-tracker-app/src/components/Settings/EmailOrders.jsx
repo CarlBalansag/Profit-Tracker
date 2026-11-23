@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Check, X } from 'lucide-react';
+import { Eye, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useEmailAutomation, useEmailOrderMutations, useEmailOrders, useEmailRuleMutations } from '../../hooks/useApi';
 import { orderRef } from '../../utils/emailRefs';
 import { AUTOMATIONS } from '../../data/emailAutomations';
 import OrderSorting from './OrderSorting';
+import LinkReviewModal from './LinkReviewModal';
 
 const PANEL = 'rounded-xl border border-gray-800 bg-[#12121A] p-5 sm:p-6 space-y-4';
 const TABS = [['review', 'To check'], ['linked', 'Linked'], ['unmatched', 'No match'], ['dismissed', 'Not business']];
@@ -36,7 +37,8 @@ function Records({ match }) {
 }
 
 function OrderRow({ order, tab }) {
-  const { accept, reject, dismiss } = useEmailOrderMutations();
+  const { reject, dismiss } = useEmailOrderMutations();
+  const [reviewing, setReviewing] = useState(false);
   const { addExpense, addPurchase, handled, saveInvoice } = useEmailRuleMutations();
   const match = order.matches.find((m) => (tab === 'linked' ? m.state === 'linked' : m.state === 'suggested'));
   const run = async (fn, arg, done) => {
@@ -60,6 +62,13 @@ function OrderRow({ order, tab }) {
         </p>
       )}
       {match && tab === 'review' && (
+        <p className="text-xs text-gray-400">
+          {match.will_fill?.length
+            ? <>Will fill: <span className="font-medium text-[var(--accent)]">{match.will_fill.join(', ')}</span></>
+            : 'Links the email only; nothing on the record changes.'}
+        </p>
+      )}
+      {match && tab === 'review' && (
         <ul className="flex flex-wrap gap-1.5" aria-label="Why it looks like a match">
           {match.reasons.map((r) => (
             <li key={r.code} className={`rounded-md px-1.5 py-0.5 text-[11px] ${r.points < 0 ? 'bg-[var(--dp-warning-bg)] text-[var(--dp-warning-text)]' : 'bg-white/5 text-gray-400'}`}>{r.text}</li>
@@ -69,7 +78,7 @@ function OrderRow({ order, tab }) {
       <div className="flex flex-wrap gap-2">
         {tab === 'review' && match && (
           <>
-            <button type="button" onClick={() => run(accept, match.id, 'Linked')} className="page-btn page-btn-primary"><Check size={14} aria-hidden="true" /> Yes, link</button>
+            <button type="button" onClick={() => setReviewing(true)} className="page-btn page-btn-primary"><Eye size={14} aria-hidden="true" /> Review &amp; link</button>
             <button type="button" onClick={() => run(reject, match.id)} className="page-btn page-btn-secondary"><X size={14} aria-hidden="true" /> Not this</button>
           </>
         )}
@@ -95,6 +104,7 @@ function OrderRow({ order, tab }) {
           <button type="button" onClick={() => run(dismiss, { id: order.id, restore: true })} className="page-btn page-btn-secondary">Bring back</button>
         )}
       </div>
+      {reviewing && match && <LinkReviewModal matchId={match.id} onClose={() => setReviewing(false)} />}
     </li>
   );
 }

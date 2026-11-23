@@ -355,6 +355,8 @@ async function trackChange(tx, userId, meta, work) {
       action: meta.action,
       product_name: productName,
       rows: changes,
+      // e.g. { email_order_id } so the Automation page can reject the change.
+      ...(meta.extra || {}),
     },
     source: meta.source,
   });
@@ -600,6 +602,8 @@ const toJson = (entry, now) => entry && ({
   created_at: entry.created_at,
   undo_state: undoState(entry, now),
   undo_until: undoDeadline(entry),
+  review_state: entry.review_state ?? null,
+  reviewed_at: entry.reviewed_at ?? null,
 });
 
 // Newest first, `limit` at a time; pass the last entry's created_at as
@@ -611,16 +615,23 @@ const SETUP_TYPES = [...Object.keys(SETUP_MODEL), ...SETUP_EVENT_TYPES];
 // source: only entries made by one actor ('email' = the email sync's automatic
 // changes, shown on the Automation page; 'assistant'; 'web').
 const SOURCES = ['web', 'assistant', 'email'];
-async function listActivity(userId, { before, limit, group, source } = {}) {
+// review (Automation page): 'open' = not confirmed, rejected or undone yet;
+// 'done' = any of those.
+const REVIEW_FILTER = {
+  open: { review_state: null, undone_at: null },
+  done: { OR: [{ review_state: { not: null } }, { undone_at: { not: null } }] },
+};
+async function listActivity(userId, { before, limit, group, source, review } = {}) {
   const take = Math.min(Math.max(Number(limit) || 50, 1), 100);
   const beforeDate = before ? new Date(before) : null;
   if (beforeDate && Number.isNaN(beforeDate.getTime())) throw requestError(400, 'Invalid "before" date');
   if (group !== undefined && group !== 'setup' && group !== 'records') throw requestError(400, 'Invalid "group"');
   if (source !== undefined && !SOURCES.includes(source)) throw requestError(400, 'Invalid "source"');
+  if (review !== undefined && !REVIEW_FILTER[review]) throw requestError(400, 'Invalid "review"');
   const typeFilter = group === 'setup' ? { record_type: { in: SETUP_TYPES } }
     : group === 'records' ? { record_type: { notIn: SETUP_TYPES } } : {};
   const rows = await prisma.activityLog.findMany({
-    where: { user_id: userId, ...typeFilter, ...(source ? { source } : {}), ...(beforeDate ? { created_at: { lt: beforeDate } } : {}) },
+    where: { user_id: userId, ...typeFilter, ...(source ? { source } : {}), ...(review ? REVIEW_FILTER[review] : {}), ...(beforeDate ? { created_at: { lt: beforeDate } } : {}) },
     orderBy: { created_at: 'desc' },
     take: take + 1,
   });

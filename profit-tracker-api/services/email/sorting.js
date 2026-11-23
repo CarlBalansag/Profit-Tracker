@@ -8,7 +8,8 @@
 //   4. 2 or more of one item -> resale (Amazon shipped home: ask)
 //   5. Amazon, shipped to the home state, none of the above -> personal
 //   6. Anything else                                         -> ask
-// "kept" (the user said it's business) is never changed. Cancelled and
+// "kept" (the user said it's business) and "declined" (the user said no to
+// the purchase made automatically) are never changed. Cancelled and
 // refunded orders aren't sorted.
 const { logEvent } = require('../activityLog');
 const { itemOverlap } = require('./match');
@@ -41,7 +42,7 @@ function sortOrder(order, { homeState, personalWords = [], pastNames = [] }) {
 
 async function sortOrders(prisma, userId, settings) {
   const orders = await prisma.emailOrder.findMany({
-    where: { user_id: userId, type: 'purchase', match_state: 'unmatched', OR: [{ leaning: null }, { leaning: { notIn: ['kept'] } }] },
+    where: { user_id: userId, type: 'purchase', match_state: 'unmatched', OR: [{ leaning: null }, { leaning: { notIn: ['kept', 'declined'] } }] },
     take: 300,
   });
   const due = orders.filter((o) => !SKIP.has(o.status));

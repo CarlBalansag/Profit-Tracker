@@ -298,22 +298,34 @@ async function candidatesFor(prisma, userId, order) {
 
 const carrierFor = (t) => (/^1Z/i.test(t) ? 'UPS' : /^9[1-5]\d{18,}/.test(t) ? 'USPS' : null);
 
+// What linking writes on one record: only its blank fields, from the order.
+// Shared by fillBlanks and the "Review & link" preview, so they agree.
+function purchaseFills(row, order) {
+  const tracking = order.tracking_numbers?.[0] || null;
+  const data = {};
+  if (!row.order_number && order.order_number) data.order_number = order.order_number;
+  if (!row.tracking_number && tracking) { data.tracking_number = tracking; if (!row.carrier && carrierFor(tracking)) data.carrier = carrierFor(tracking); }
+  return data;
+}
+function saleFills(sale, order) {
+  const tracking = order.tracking_numbers?.[0];
+  if (!tracking || sale.tracking_number || CASHOUTS.has(order.merchant)) return {};
+  return { tracking_number: tracking, carrier: sale.carrier || carrierFor(tracking) };
+}
+
 // Fills blank fields on the linked records from the order (never overwrites
 // what the user typed), as one Activity entry with Undo.
 async function fillBlanks(prisma, userId, order, match) {
   if (match.record_type === 'purchase') {
-    const tracking = order.tracking_numbers[0] || null;
     return prisma.$transaction((tx) => trackChange(tx, userId, {
-      action: 'edit', recordType: 'purchase', source: 'email',
+      action: 'edit', recordType: 'purchase', source: 'email', extra: { email_order_id: order.id },
       recordId: match.record_ids[0],
       refs: async () => ({ inventory: match.record_ids }),
     }, async () => {
       for (const id of match.record_ids) {
         const row = await tx.inventory.findFirst({ where: { id, user_id: userId } });
         if (!row) continue;
-        const data = {};
-        if (!row.order_number && order.order_number) data.order_number = order.order_number;
-        if (!row.tracking_number && tracking) { data.tracking_number = tracking; if (!row.carrier && carrierFor(tracking)) data.carrier = carrierFor(tracking); }
+        const data = purchaseFills(row, order);
         if (Object.keys(data).length) await tx.inventory.update({ where: { id }, data });
       }
       return null;
@@ -327,9 +339,9 @@ async function fillBlanks(prisma, userId, order, match) {
     const sale = await prisma.sales.findFirst({ where: { id: match.record_ids[0], inventory: { user_id: userId } } });
     if (!sale || sale.tracking_number) return null;
     return prisma.$transaction((tx) => trackChange(tx, userId, {
-      action: 'edit', recordType: 'sale', source: 'email', recordId: sale.id,
+      action: 'edit', recordType: 'sale', source: 'email', recordId: sale.id, extra: { email_order_id: order.id },
       refs: async () => ({ sales: [sale.id] }),
-    }, () => tx.sales.update({ where: { id: sale.id }, data: { tracking_number: tracking, carrier: sale.carrier || carrierFor(tracking) } })));
+    }, () => tx.sales.update({ where: { id: sale.id }, data: saleFills(sale, order) })));
   }
   return null;
 }
@@ -382,8 +394,10 @@ async function linkMatch(prisma, userId, matchId, { auto = false } = {}) {
     prisma.emailMatch.update({ where: { id: match.id }, data: { state: 'linked', auto, decided_at: new Date() } }),
     prisma.emailOrder.update({ where: { id: match.order_id }, data: { match_state: 'linked' } }),
   ]);
-  await fillBlanks(prisma, userId, match.order, match);
+  const filled = await fillBlanks(prisma, userId, match.order, match);
   if (auto) await logAutoLink(prisma, userId, match);
+  // The user reviewed this link (Review & link): nothing left to confirm.
+  else if (filled?.activity?.id) await prisma.activityLog.update({ where: { id: filled.activity.id }, data: { review_state: 'confirmed', reviewed_at: new Date() } });
   return match;
 }
 
@@ -421,4 +435,4 @@ async function rejectMatch(prisma, userId, matchId) {
   return match;
 }
 
-module.exports = { matchOrders, linkMatch, rejectMatch, scorePurchases, scoreSale, scoreExpense, scoreCashoutLine, pairCashoutLines, CASHOUTS, nameMatches, itemOverlap, HIGH, MEDIUM, carrierFor };
+module.exports = { purchaseFills, saleFills, matchOrders, linkMatch, rejectMatch, scorePurchases, scoreSale, scoreExpense, scoreCashoutLine, pairCashoutLines, CASHOUTS, nameMatches, itemOverlap, HIGH, MEDIUM, carrierFor };

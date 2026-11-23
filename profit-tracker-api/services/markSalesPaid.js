@@ -47,7 +47,7 @@ const isPayable = (sale) => statusTransitions.isActionAllowed(sale, 'sale', 'mar
 // client: the Prisma client to use (the email sync passes its own).
 // Returns { sales, activity }: the updated rows and the one Activity entry
 // that covers the whole deposit (undoing it un-pays every sale it paid).
-async function markSalesPaid({ userId, saleIds, payoutDate, payoutAmount, payoutAccount, payoutReference, source = 'web', client = prisma }) {
+async function markSalesPaid({ userId, saleIds, payoutDate, payoutAmount, payoutAccount, payoutReference, source = 'web', client = prisma, extra }) {
   if (!Array.isArray(saleIds) || saleIds.length === 0) throw requestError(400, 'sale_ids must be a non-empty array');
   const uniqueIds = [...new Set(saleIds)];
   const deposit = decimal(payoutAmount);
@@ -82,7 +82,7 @@ async function markSalesPaid({ userId, saleIds, payoutDate, payoutAmount, payout
     const now = new Date();
     const inventoryIds = [...new Set(orderedSales.map((sale) => sale.inventory_id))];
     const { result: updated, activity } = await activityLog.trackChange(tx, userId, {
-      action: 'edit', recordType: 'sale', recordId: orderedSales[0].id, source,
+      action: 'edit', recordType: 'sale', recordId: orderedSales[0].id, source, extra,
       refs: async () => ({ inventory: inventoryIds, sales: uniqueIds }),
     }, async () => {
       const rows = [];
