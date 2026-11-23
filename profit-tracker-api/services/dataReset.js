@@ -107,6 +107,9 @@ async function deleteTransactions(tx, userId) {
   const refunds = await tx.refund.deleteMany({ where: { user_id: userId } });
   const sales = await tx.sales.deleteMany({ where: { inventory: { user_id: userId } } });
   const purchases = await tx.inventory.deleteMany({ where: { user_id: userId } });
+  // Past cashout imports only describe the purchases just deleted. History,
+  // like Activity, so not in the counts.
+  await tx.importBatch.deleteMany({ where: { user_id: userId } });
 
   return {
     purchases: purchases.count,

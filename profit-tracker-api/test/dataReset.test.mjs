@@ -206,6 +206,7 @@ describe('resetUserData on a real database', () => {
     await db.cashoutItemMatch.create({ data: {
       user_id: id, connection_id: connection.id, provider: 'eb', external_deal_id: '1', deal_item_name: 'i', inventory_id: purchase.id,
     } });
+    await db.importBatch.create({ data: { user_id: id, source: 'eb', inventory: { connect: { id: purchase.id } } } });
     return { purchase, sale, connection };
   }
 
@@ -232,13 +233,14 @@ describe('resetUserData on a real database', () => {
       productNote: await db.productNote.count({ where }),
       calendarEvent: await db.calendarEvent.count({ where }),
       mcpWriteLog: await db.mcpWriteLog.count({ where }),
+      importBatch: await db.importBatch.count({ where }),
     };
   }
 
   const FULL = {
     inventory: 1, sales: 1, refund: 2, transactionNote: 2, attachment: 1, changeLog: 2, cashoutItemMatch: 1,
     cashoutDealSnapshot: 1, cashoutConnection: 1, platform: 3, account: 1, paymentMethod: 1, buyer: 1, invoice: 1,
-    expense: 1, recurringExpense: 1, goal: 1, productNote: 1, calendarEvent: 1, mcpWriteLog: 1,
+    expense: 1, recurringExpense: 1, goal: 1, productNote: 1, calendarEvent: 1, mcpWriteLog: 1, importBatch: 1,
   };
 
   async function expectLoginIntact(id) {
@@ -287,7 +289,7 @@ describe('resetUserData on a real database', () => {
 
     expect(await counts(ME)).toEqual({
       ...FULL, inventory: 0, sales: 0, refund: 0, transactionNote: 0, attachment: 0,
-      cashoutItemMatch: 0, changeLog: 1,
+      cashoutItemMatch: 0, changeLog: 1, importBatch: 0,
     });
     expect(result.deleted).toEqual({
       purchases: 1, sales: 1, refunds: 2, transactionNotes: 2, attachments: 1, changeLogs: 1, cashoutItemMatches: 1,
