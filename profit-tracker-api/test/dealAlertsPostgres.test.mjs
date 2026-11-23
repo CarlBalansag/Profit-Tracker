@@ -157,6 +157,18 @@ describe('recordDealsSeen', () => {
   });
 });
 
+describe('notification text', () => {
+  it('shortens card names and marks payout rises', () => {
+    expect(alerts.shortCard('Blue Business Plus Credit Card from American Express')).toBe('Blue Business Plus');
+    expect(alerts.shortCard('Prime Visa')).toBe('Prime Visa');
+    const payload = alerts.buildPayload([{
+      alert: { id: 'x', kind: 'payout_up', previous_payout: 52, deal: { provider: 'p4d', name: 'Pencil USB-C', stores: ['Walmart'] } },
+      evaluation: { payout: 57, retail: 49, profit: 8.98, rewards: 0.98, best_card: { card: { name: 'Blue Business Plus Credit Card from American Express' }, rate: 2, store: 'Walmart' } },
+    }]);
+    expect(payload).toMatchObject({ title: 'P4D: Pencil USB-C (payout up)', body: 'Cashout $57 (was $52), $49 at Walmart -> +$8.98 Blue Business Plus', url: '/cashout?tab=new-deals&alert=x' });
+  });
+});
+
 describe('evaluateDeal', () => {
   it('picks the best card at the deal store and adds its rewards to the spread', async () => {
     const cards = await db.paymentMethod.findMany({ where: { user_id: ALICE } });
@@ -186,12 +198,11 @@ describe('dispatchDealAlerts', () => {
     expect(summary).toMatchObject({ alerts: 1, sent: 2 });
     const byUser = Object.fromEntries(sent.map((entry) => [entry.endpoint.split('/').pop(), entry]));
     expect(Object.keys(byUser).sort()).toEqual([ALICE, BOB].sort());
-    expect(byUser[ALICE].title).toBe('New deal on ElectronicsBuyer: PS5 Pro');
-    expect(byUser[ALICE].body).toContain('+$115.01 profit with BB Visa (5%)');
-    expect(byUser[ALICE].body).toContain('Limit 3.');
+    expect(byUser[ALICE].title).toBe('EB: PS5 Pro');
+    expect(byUser[ALICE].body).toBe('Cashout $780, $699.99 at Best Buy -> +$115.01 BB Visa');
     expect(byUser[ALICE].url).toMatch(/^\/cashout\?tab=new-deals&alert=/);
     // Bob: 80.01 + 1.5% of 699.99 = 90.51, above his $50.
-    expect(byUser[BOB].body).toContain('+$90.51 profit');
+    expect(byUser[BOB].body).toBe('Cashout $780, $699.99 at Best Buy -> +$90.51 Bob Card');
 
     // Sent once: a second run sends nothing.
     sent = [];
@@ -217,16 +228,15 @@ describe('dispatchDealAlerts', () => {
     await seedThenAdd([deal('1', { retail: null })]);
     await alerts.dispatchDealAlerts();
     expect(sent.map((entry) => entry.endpoint.split('/').pop())).toEqual([ALICE]);
-    expect(sent[0].body).toContain('no retail price listed');
+    expect(sent[0].body).toBe('Cashout $780, no retail price');
   });
 
   it('sends several new deals as one push, best profit first', async () => {
     await seedThenAdd([deal('1', { name: 'Small', payout: 110, retail: 100 }), deal('2', { name: 'Big', payout: 900, retail: 700 }), deal('3', { name: 'Mid', payout: 400, retail: 350 })]);
     await alerts.dispatchDealAlerts();
     const alice = sent.find((entry) => entry.endpoint.endsWith(ALICE));
-    expect(alice.title).toBe('3 new cashout deals (ElectronicsBuyer)');
-    expect(alice.body).toMatch(/^Best: Big \+\$235/);
-    expect(alice.body).toContain('Also: Mid, Small');
+    expect(alice.title).toBe('3 new cashout deals');
+    expect(alice.body.split('\n')).toEqual(['EB: Big +$235', 'EB: Mid +$67.50', 'EB: Small +$15']);
   });
 
   it('holds nothing back for quiet hours: those deals are skipped, the feed keeps them', async () => {

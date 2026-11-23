@@ -229,32 +229,44 @@ const money = (value) => `$${Number(value).toLocaleString('en-US', { minimumFrac
 const signed = (value) => `${value < 0 ? '-' : '+'}${money(Math.abs(value))}`;
 const shorten = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
+// Short cashout labels for notifications: "EB", "LA", "P4D".
+const shortProvider = (provider) => String(provider || '').toUpperCase();
+
+// A card's name without the boilerplate: "Blue Business Plus Credit Card from
+// American Express" -> "Blue Business Plus".
+function shortCard(name) {
+  const short = String(name || '')
+    .replace(/\s+from\s+.+$/i, '')
+    .replace(/\b(credit|debit)\s+card\b/ig, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return short || String(name || '').trim();
+}
+
+// "Cashout $52, $49 at Walmart -> +$3.98 Blue Business Plus"
 function alertLine(alert, evaluation) {
   const deal = alert.deal;
-  const parts = [];
+  let line = `Cashout ${money(evaluation.payout)}`;
   if (alert.kind === 'payout_up' && alert.previous_payout !== null && alert.previous_payout !== undefined) {
-    parts.push(`Payout up ${money(num(alert.previous_payout))} → ${money(evaluation.payout)}`);
-  } else {
-    parts.push(`Pays ${money(evaluation.payout)}`);
+    line += ` (was ${money(num(alert.previous_payout))})`;
   }
   if (evaluation.retail) {
     const store = evaluation.best_card?.store || (Array.isArray(deal.stores) && deal.stores[0]) || null;
-    parts.push(`${money(evaluation.retail)}${store ? ` at ${store}` : ''}`);
+    line += `, ${money(evaluation.retail)}${store ? ` at ${store}` : ''}`;
   } else {
-    parts.push('no retail price listed');
+    line += ', no retail price';
   }
-  let line = parts.join(' · ');
   if (evaluation.profit !== null) {
-    line += ` → ${signed(evaluation.profit)} profit`;
-    if (evaluation.best_card && evaluation.rewards) line += ` with ${evaluation.best_card.card.name} (${evaluation.best_card.rate}%)`;
+    line += ` -> ${signed(evaluation.profit)}`;
+    if (evaluation.best_card && evaluation.rewards) line += ` ${shortCard(evaluation.best_card.card.name)}`;
   }
-  if (deal.vendor_limit) line += `. Limit ${deal.vendor_limit}.`;
   return line;
 }
 
+// "EB: Pencil USB-C", with "(payout up)" or "(back)" when it isn't new.
 function alertTitle(alert) {
-  const label = alert.kind === 'payout_up' ? 'Payout up' : alert.kind === 'relisted' ? 'Back' : 'New deal';
-  return shorten(`${label} on ${providerName(alert.deal.provider)}: ${alert.deal.name}`, 90);
+  const note = alert.kind === 'payout_up' ? ' (payout up)' : alert.kind === 'relisted' ? ' (back)' : '';
+  return shorten(`${shortProvider(alert.deal.provider)}: ${alert.deal.name}`, 80 - note.length) + note;
 }
 
 function buildPayload(matches) {
@@ -262,14 +274,15 @@ function buildPayload(matches) {
     const [{ alert, evaluation }] = matches;
     return { title: alertTitle(alert), body: alertLine(alert, evaluation), url: `/cashout?tab=new-deals&alert=${alert.id}`, tag: `deal-${alert.id}` };
   }
+  // Several at once: one line each, best profit first.
   const ranked = [...matches].sort((a, b) => (b.evaluation.profit ?? -Infinity) - (a.evaluation.profit ?? -Infinity));
-  const top = ranked[0];
-  const providers = [...new Set(matches.map(({ alert }) => providerName(alert.deal.provider)))];
-  const best = top.evaluation.profit !== null ? `Best: ${shorten(top.alert.deal.name, 40)} ${signed(top.evaluation.profit)}` : `Including ${shorten(top.alert.deal.name, 40)}`;
-  const others = ranked.slice(1, 4).map(({ alert }) => shorten(alert.deal.name, 30));
+  const lines = ranked.slice(0, 4).map(({ alert, evaluation }) => (
+    `${shortProvider(alert.deal.provider)}: ${shorten(alert.deal.name, 32)}${evaluation.profit !== null ? ` ${signed(evaluation.profit)}` : ''}`
+  ));
+  if (ranked.length > 4) lines.push(`+${ranked.length - 4} more`);
   return {
-    title: `${matches.length} new cashout deals (${providers.join(', ')})`,
-    body: [best, others.length ? `Also: ${others.join(', ')}${matches.length > 4 ? '…' : ''}` : null].filter(Boolean).join('. '),
+    title: `${matches.length} new cashout deals`,
+    body: lines.join('\n'),
     url: '/cashout?tab=new-deals',
     tag: 'deals',
   };
@@ -403,6 +416,7 @@ module.exports = {
   dealStoreNames,
   inQuietHours,
   buildPayload,
+  shortCard,
   DEAL_DEFAULTS,
   PAYOUT_RISE_MIN,
 };
