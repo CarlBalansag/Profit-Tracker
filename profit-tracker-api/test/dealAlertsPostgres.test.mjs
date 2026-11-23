@@ -157,6 +157,17 @@ describe('recordDealsSeen', () => {
   });
 });
 
+describe('firstSeenDates', () => {
+  it('gives when each deal was first seen, per cashout', async () => {
+    const t0 = new Date('2026-11-20T12:00:00Z');
+    await alerts.recordDealsSeen('la', [deal('1')], { now: t0 });
+    await alerts.recordDealsSeen('la', [deal('1'), deal('2')], { now: new Date('2026-11-21T12:00:00Z') });
+    const dates = await alerts.firstSeenDates('la', ['1', 2, '3']);
+    expect(Object.fromEntries(dates)).toEqual({ 1: '2026-11-20T12:00:00.000Z', 2: '2026-11-21T12:00:00.000Z' });
+    expect((await alerts.firstSeenDates('eb', ['1'])).size).toBe(0);
+  });
+});
+
 describe('notification text', () => {
   it('shortens card names and marks payout rises', () => {
     expect(alerts.shortCard('Blue Business Plus Credit Card from American Express')).toBe('Blue Business Plus');

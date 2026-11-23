@@ -194,9 +194,17 @@ router.get('/deals', isAuthenticated, async (req, res, next) => {
       targetConnections.map(async (conn) => {
         try {
           const fetchResult = await fetchConnectionDeals(req.user.id, conn.id);
+          // When each deal was first seen, for sorting by Recently Added.
+          // Best effort: the list still loads without it.
+          let firstSeen = new Map();
+          try {
+            firstSeen = await require('../services/cashouts/dealAlerts').firstSeenDates(conn.provider, fetchResult.deals.map((deal) => deal.id));
+          } catch (err) {
+            console.warn('[cashouts] could not read first-seen dates:', err.message);
+          }
           return {
             connection: conn,
-            deals: fetchResult.deals,
+            deals: fetchResult.deals.map((deal) => ({ ...deal, firstSeenAt: firstSeen.get(String(deal.id)) || null })),
             lastUpdated: fetchResult.lastUpdated,
             isStale: fetchResult.isStale,
             warning: fetchResult.warning || null,

@@ -406,8 +406,22 @@ async function listDealFeed(userId, { now = new Date(), limit = 60 } = {}) {
   };
 }
 
+// When Profit Tracker first saw each of a cashout's deals, for "Recently
+// Added" on the Cashout page (only EB says when it posted a deal).
+// Returns Map(external deal id -> ISO date).
+async function firstSeenDates(provider, ids) {
+  const list = [...new Set((ids || []).map(String))];
+  if (!list.length) return new Map();
+  const rows = await prisma.cashoutDeal.findMany({
+    where: { provider, external_deal_id: { in: list } },
+    select: { external_deal_id: true, first_seen_at: true },
+  });
+  return new Map(rows.map((row) => [row.external_deal_id, new Date(row.first_seen_at).toISOString()]));
+}
+
 module.exports = {
   recordDealsSeen,
+  firstSeenDates,
   dispatchDealAlerts,
   listDealFeed,
   evaluateDeal,

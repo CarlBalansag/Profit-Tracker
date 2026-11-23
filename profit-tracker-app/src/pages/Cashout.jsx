@@ -84,7 +84,8 @@ export default function Cashout() {
   const [selectedCategory, setSelectedCategory] = useState('all'); // 'all' | 'above_retail' | 'close_to_retail'
   const [selectedStore, setSelectedStore] = useState('all');
   const [showExpired, setShowExpired] = useState(false);
-  const [sortBy, setSortBy] = useState('profit_desc'); // 'profit_desc' | 'payout_desc' | 'ending_soon' | 'updated_desc'
+  // Newest deals first every time the page opens.
+  const [sortBy, setSortBy] = useState('updated_desc'); // 'profit_desc' | 'payout_desc' | 'ending_soon' | 'updated_desc'
   const [viewMode, setViewMode] = useState(() => (localStorage.getItem(VIEW_MODE_KEY) === 'card' ? 'card' : 'table'));
   const setView = (mode) => {
     setViewMode(mode);
@@ -232,7 +233,10 @@ export default function Cashout() {
         return expiresAt(a) === expiresAt(b) ? 0 : expiresAt(a) - expiresAt(b);
       }
       if (sortBy === 'updated_desc') {
-        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+        // EB says when it posted a deal; LA and P4D don't, so it's when
+        // Profit Tracker first saw it.
+        const added = (deal) => new Date(deal.createdAt || deal.firstSeenAt || 0).getTime();
+        return added(b) - added(a);
       }
       return 0;
     });

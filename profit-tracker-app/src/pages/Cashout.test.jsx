@@ -178,7 +178,30 @@ describe('Cashout Page', () => {
     }
   });
 
-  it('sorts by highest profit by default', () => {
+  it('sorts by recently added by default, using when a deal was first seen when the cashout gives no date', () => {
+    currentDeals = {
+      results: [{
+        connection: mockConnections[0],
+        deals: [
+          { id: '1', name: 'Oldest', retail: 899.99, payout: 1140, createdAt: '2026-11-20T10:00:00Z' },
+          { id: '2', name: 'Newest Posted', retail: 1349.99, payout: 1350, createdAt: '2026-11-23T10:00:00Z' },
+          { id: '3', name: 'Seen Yesterday', retail: 100, payout: 300, createdAt: null, firstSeenAt: '2026-11-22T10:00:00Z' },
+          { id: '4', name: 'No Date', retail: 100, payout: 500 },
+        ],
+      }],
+    };
+    render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByLabelText('Sort deals')).toHaveValue('updated_desc');
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(rows.map((row) => row.cells[0].textContent)).toEqual(['Newest Posted', 'Seen Yesterday', 'Oldest', 'No Date']);
+  });
+
+  it('sorts by highest profit when chosen', () => {
     currentDeals = {
       results: [{
         connection: mockConnections[0],
@@ -194,6 +217,7 @@ describe('Cashout Page', () => {
       </MemoryRouter>
     );
 
+    fireEvent.change(screen.getByLabelText('Sort deals'), { target: { value: 'profit_desc' } });
     const rows = screen.getAllByRole('row').slice(1);
     expect(rows[0]).toHaveTextContent('Biggest Profit');
     expect(rows[1]).toHaveTextContent('Biggest Payout');
@@ -282,7 +306,7 @@ describe('Cashout Page', () => {
     expect(names()).toEqual(['Above Deal']);
 
     fireEvent.change(category, { target: { value: 'close_to_retail' } });
-    expect(names()).toEqual(['Equal Deal', 'Below Deal']);
+    expect(names().sort()).toEqual(['Below Deal', 'Equal Deal']);
 
     fireEvent.change(category, { target: { value: 'all' } });
     expect(names()).toHaveLength(4);
@@ -467,6 +491,7 @@ describe('Cashout Page', () => {
     });
 
     it('hides expired deals until asked, and leaves them out of the live count', () => {
+      fireEvent.change(screen.getByLabelText('Sort deals'), { target: { value: 'profit_desc' } });
       expect(names()).toEqual(['Both Deal', 'Amazon Deal', 'Open Deal']);
       expect(screen.getByText('Live Deals').nextSibling).toHaveTextContent('3');
 
@@ -496,7 +521,7 @@ describe('Cashout Page', () => {
       expect(within(store).getAllByRole('option').map((o) => o.textContent)).toEqual(['All Stores', 'Amazon', 'Target', 'Walmart']);
 
       fireEvent.change(store, { target: { value: 'Amazon' } });
-      expect(names()).toEqual(['Both Deal', 'Amazon Deal']);
+      expect(names().sort()).toEqual(['Amazon Deal', 'Both Deal']);
     });
 
     it('sorts by ending soon, with no expiration last', () => {
@@ -828,6 +853,7 @@ describe('Cashout Page', () => {
       </MemoryRouter>
     );
 
+    fireEvent.change(screen.getByLabelText('Sort deals'), { target: { value: 'profit_desc' } });
     const rows = screen.getAllByRole('row').slice(1);
     expect(rows.map((row) => row.cells[0].textContent)).toEqual([
       'Small Payout Big Profit',
