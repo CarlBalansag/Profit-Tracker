@@ -429,8 +429,8 @@ describe('several Amazon files and accounts (real Postgres)', () => {
     });
     expect(matched.summary).toMatchObject({ byTracking: 2, byName: 1, unmatched: 0 });
     expect(matched.summary.files).toEqual([
-      { id: 1, accountId: cb.id, lines: 2, problems: 0, duplicates: 0 },
-      { id: 2, accountId: bizz.id, lines: 2, problems: 1, duplicates: 0 },
+      { id: 1, accountId: cb.id, storeId: null, lines: 2, problems: 0, duplicates: 0 },
+      { id: 2, accountId: bizz.id, storeId: null, lines: 2, problems: 1, duplicates: 0 },
     ]);
     const lines = new Map(matched.lines.map((l) => [l.index, l]));
     // Line numbers start at file id * stride, so adding a file never renumbers another's.
@@ -485,6 +485,40 @@ describe('several Amazon files and accounts (real Postgres)', () => {
     const after = Object.fromEntries((await db.inventory.findMany({ where: { user_id: ME } })).map((r) => [r.product_name, r]));
     expect(after['Fire TV Stick 4K (Newest Model)']).toMatchObject({ account_id: cb.id, vendor_id: ids.amazon });
     expect(after['Fire TV Stick 4K Select']).toMatchObject({ account_id: null, vendor_id: best.id });
+  });
+
+  it('takes a file from another store: its store and login on the purchase, and its name in the note', async () => {
+    const best = await db.platform.create({ data: { user_id: ME, name: 'Best Buy', type: 'Vendor' } });
+    const bbMain = await db.account.create({ data: { user_id: ME, platform_id: best.id, name: 'BB main' } });
+    // Columns already renamed by the app's column screen.
+    const bestCsv = 'Order ID,Order Date,Product Name,Quantity,Unit Price,Shipment Item Subtotal Tax,Carrier Name & Tracking Number\nBB-9001,11/17/2026,Nintendo Switch 2 Console,1,449.99,31.50,1Z3Y67380340447798';
+    const rows = await importCashout();
+    // One Best Buy login saved: it isn't required, and the purchase gets the store anyway.
+    const preview = await fillCosts.preview(ME, { source: 'amazon', files: [{ id: 1, csv: fileA, accountId: cb.id }, { id: 2, csv: bestCsv, storeId: best.id }] });
+    const lines = new Map(preview.lines.map((l) => [l.index, l]));
+    const sw = preview.purchases.find((p) => p.name === 'Nintendo Switch 2');
+    expect(sw).toMatchObject({ match: 'tracking', lineIndex: 2 * fillCosts.FILE_STRIDE });
+    expect(lines.get(sw.lineIndex)).toMatchObject({ storeName: 'Best Buy', vendorId: best.id, accountId: null });
+    const items = itemsFrom(preview).map((it) => {
+      const l = lines.get(preview.purchases.find((p) => p.id === it.inventory_id).lineIndex);
+      return { ...it, account_id: l.accountId, vendor_id: l.vendorId };
+    });
+    expect(await fillCosts.commit(ME, { source: 'amazon', items })).toMatchObject({ updated: 3 });
+    const after = await db.inventory.findUnique({ where: { id: rows.find((r) => r.product_name === 'Nintendo Switch 2').id } });
+    expect(after).toMatchObject({ vendor_id: best.id, account_id: null, order_number: 'BB-9001', unit_purchase_cost: 449.99, notes: 'Cost from Best Buy order BB-9001.' });
+    const [entry] = await db.activityLog.findMany({ where: { user_id: ME, record_type: 'purchase' } });
+    expect(entry.detail.product_name).toBe('Costs from store orders for 3 purchases');
+
+    // A second Best Buy login: now the file has to say which; an Amazon login doesn't fit it.
+    await db.account.create({ data: { user_id: ME, platform_id: best.id, name: 'BB second' } });
+    const sent = [{ key: 'k', name: 'Nintendo Switch 2', date: '2026-11-20', qty: 1, tracking: ['1Z3Y67380340447798'] }];
+    const match = (files) => fillCosts.matchReport(ME, { source: 'amazon', groups: sent, files });
+    await expect(match([{ id: 2, csv: bestCsv, storeId: best.id }])).rejects.toThrow('Choose which Best Buy account this file is from.');
+    await expect(match([{ id: 2, csv: bestCsv, storeId: best.id, accountId: cb.id }])).rejects.toThrow(/belongs to a different store than Best Buy/);
+    const ok = await match([{ id: 2, csv: bestCsv, storeId: best.id, accountId: bbMain.id }]);
+    expect(ok.lines[0]).toMatchObject({ accountName: 'BB main', storeName: 'Best Buy', vendorId: best.id });
+    await expect(match([{ id: 2, csv: bestCsv, storeId: ids.eb }])).rejects.toThrow('Pick one of your stores.');
+    await expect(match([{ id: 2, csv: bestCsv, storeId: ids.theirEb }])).rejects.toMatchObject({ status: 404 });
   });
 
   it('refuses another user\'s account, an account on a cashout, and bad file lists, writing nothing', async () => {

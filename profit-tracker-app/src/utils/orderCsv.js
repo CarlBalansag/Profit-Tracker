@@ -153,6 +153,23 @@ export function storeAccountChoices(platforms, match = /amazon/i) {
   })));
 }
 
+// The logins for one store (a file from another store, its columns matched
+// by the user), or the Amazon ones when no store is named.
+export function fileAccountChoices(platforms, storeId) {
+  if (!storeId) return storeAccountChoices(platforms);
+  const store = (platforms || []).find((p) => p.id === storeId);
+  return (store?.accounts || []).map((a) => ({ id: a.id, vendorId: store.id, label: accountLabel(a) }));
+}
+
+// The store a file's name points to ("bestbuy-orders.csv" -> Best Buy).
+export function guessStoreId(fileName, stores) {
+  const squash = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const name = squash(fileName);
+  const hit = (stores || []).filter((st) => squash(st.name).length >= 3 && name.includes(squash(st.name)))
+    .sort((a, b) => squash(b.name).length - squash(a.name).length)[0];
+  return hit?.id || '';
+}
+
 // A newly added file starts on the only account there is; with several, the
 // user picks (most exports are one account's whole history).
 export const defaultFileAccount = (accounts) => (accounts.length === 1 ? accounts[0].id : '');

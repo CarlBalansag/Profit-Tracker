@@ -18,6 +18,7 @@ vi.mock('../../hooks/useApi', () => ({
     { id: 'eb-group', name: 'ElectronicsBuyer', type: 'Cashout' },
     { id: 'p4d-group', name: 'Points4Days', type: 'Cashout' },
     { id: 'amazon', name: 'Amazon', type: 'Vendor', accounts: amazonAccounts },
+    { id: 'walmart', name: 'Walmart', type: 'Vendor', accounts: [{ id: 'wm1', name: 'WM main', status: 'Active' }, { id: 'wm2', name: 'WM two', status: 'Active' }] },
   ] }),
   usePaymentMethods: () => ({ data: [{ id: 'card', name: 'Chase Prime' }] }),
   useCashoutImport: () => ({ preview, commit }),
@@ -114,7 +115,7 @@ describe('CashoutImport', () => {
     // Only the needed columns go up, with the rows about to be imported.
     expect(matchOrders.mutateAsync.mock.calls[0][0]).toEqual({
       source: 'amazon',
-      files: [{ id: 1, csv: 'Order ID,Product Name,Unit Price,Quantity\n1,X,5,1', accountId: null }],
+      files: [{ id: 1, csv: 'Order ID,Product Name,Unit Price,Quantity\n1,X,5,1', accountId: null, storeId: null }],
       groups: [
         { key: 'Fire TV Stick 4K', name: 'Fire TV Stick 4K', date: '2026-11-19', qty: 1, tracking: ['TBA336581719552'] },
         { key: 'Fire TV Stick 4K Select', name: 'Fire TV Stick 4K Select', date: '2026-11-19', qty: 2, tracking: ['TBA336581719552'] },
@@ -186,7 +187,7 @@ describe('CashoutImport', () => {
 
     matchOrders.mutateAsync.mockResolvedValueOnce(cbOnly);
     await act(async () => { fireEvent.change(screen.getByLabelText('Amazon account for cb.csv'), { target: { value: 'cb' } }); });
-    expect(matchOrders.mutateAsync.mock.calls[0][0].files).toEqual([{ id: 1, csv: 'Order ID,Product Name,Unit Price,Quantity\n1,X,5,1', accountId: 'cb' }]);
+    expect(matchOrders.mutateAsync.mock.calls[0][0].files).toEqual([{ id: 1, csv: 'Order ID,Product Name,Unit Price,Quantity\n1,X,5,1', accountId: 'cb', storeId: null }]);
     expect(screen.getByLabelText('Cost per unit for Fire TV Stick 4K')).toHaveValue('30');
     // Why it was matched shows under the picker.
     expect(screen.getAllByText('Same tracking number · Name 100% alike').length).toBeGreaterThan(0);
@@ -265,7 +266,7 @@ describe('CashoutImport', () => {
         { key: 'Fire TV Stick 4K', lineIndex: null, match: 'suggested', candidates: [100000], review: 'Possible match by name and date. Pick it if it\'s the right order.', score: 60, reasons: ['Name 100% alike', 'Ordered 40 days before'] },
         { key: 'Fire TV Stick 4K Select', lineIndex: null, match: 'none', candidates: [], review: null },
       ],
-      lines: [{ index: 100000, orderId: 'W-1', orderDate: '2026-10-10', name: 'Fire TV Stick 4K', qty: 2, tracking: [], perUnit: { cost: 30, tax: 0, shipping: 0 }, payment: null, paymentMethodId: null }],
+      lines: [{ index: 100000, orderId: 'W-1', orderDate: '2026-10-10', name: 'Fire TV Stick 4K', qty: 2, tracking: [], perUnit: { cost: 30, tax: 0, shipping: 0 }, payment: null, paymentMethodId: null, accountId: 'wm1', accountName: 'WM main', storeName: 'Walmart', vendorId: 'walmart' }],
     });
     render(<CashoutImport />);
     await upload();
@@ -277,19 +278,35 @@ describe('CashoutImport', () => {
     expect(screen.getByLabelText(/^Item name/)).toHaveValue('2');
     expect(screen.getByLabelText(/^Price per unit/)).toHaveValue('4');
     expect(mapper).toHaveTextContent('W-1 · 10/10/2026 · 2 × 30.00');
-    // Escape closes only the column screen, not the review under it.
+    // The store comes from the file name; a store and every needed column are required.
+    expect(screen.getByLabelText(/^Store these orders are from/)).toHaveValue('walmart');
+    fireEvent.change(screen.getByLabelText(/^Store these orders are from/), { target: { value: '' } });
     fireEvent.change(screen.getByLabelText(/^Quantity/), { target: { value: '' } });
     expect(screen.getByRole('button', { name: 'Use these columns' })).toBeDisabled();
-    expect(mapper).toHaveTextContent('Still needed: quantity.');
+    expect(mapper).toHaveTextContent('Still needed: store, quantity.');
+    fireEvent.change(screen.getByLabelText(/^Store these orders are from/), { target: { value: 'walmart' } });
     fireEvent.change(screen.getByLabelText(/^Quantity/), { target: { value: '3' } });
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Use these columns' })); });
-    expect(matchOrders.mutateAsync.mock.calls[0][0].files).toEqual([{ id: 1, accountId: null, csv: 'Order ID,Order Date,Product Name,Quantity,Unit Price\nW-1,10/10/2026,Fire TV Stick 4K,2,30.00' }]);
+    fireEvent.click(screen.getByRole('button', { name: 'Use these columns' }));
     expect(screen.queryByRole('dialog', { name: 'Match the columns' })).not.toBeInTheDocument();
+    // Walmart has two logins saved, so the file waits for its account.
+    expect(await screen.findByLabelText('Walmart account for walmart.csv')).toHaveValue('');
+    expect(screen.getByText('walmart.csv').textContent).toBe('walmart.csv · Walmart');
+    expect(matchOrders.mutateAsync).not.toHaveBeenCalled();
+    await act(async () => { fireEvent.change(screen.getByLabelText('Walmart account for walmart.csv'), { target: { value: 'wm1' } }); });
+    expect(matchOrders.mutateAsync.mock.calls[0][0].files).toEqual([{ id: 1, accountId: 'wm1', storeId: 'walmart', csv: 'Order ID,Order Date,Product Name,Quantity,Unit Price\nW-1,10/10/2026,Fire TV Stick 4K,2,30.00' }]);
     // A weak match is only offered: nothing picked, no cost filled in.
     expect(screen.getByLabelText('Order for Fire TV Stick 4K')).toHaveValue('');
     expect(screen.getByLabelText('Cost per unit for Fire TV Stick 4K')).toHaveValue('');
     expect(screen.getAllByText('Possible match').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Possible match by name and date/).length).toBeGreaterThan(0);
+    // Picking the suggestion saves it as a Walmart order on the WM main login.
+    expect(screen.getAllByRole('option', { name: /^W-1 · Walmart · WM main ·/ }).length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText('Order for Fire TV Stick 4K'), { target: { value: '100000' } });
+    expect(screen.getByLabelText('Cost per unit for Fire TV Stick 4K')).toHaveValue('30');
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Import 2 purchases/ })); });
+    expect(commit.mutateAsync.mock.calls[0][0].groups[0]).toMatchObject({ orderNumber: 'W-1', orderStore: 'Walmart', vendorId: 'walmart', accountId: 'wm1' });
+    commit.mutateAsync.mockClear();
+    await upload();
 
     // Escape on the column screen leaves the review open.
     fireEvent.change(document.getElementById('cashout-import-orders-file'), { target: { files: [new File([csv], 'again.csv')] } });

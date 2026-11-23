@@ -66,7 +66,7 @@ describe('StoreOrderImport', () => {
   it('uploads only the kept columns and previews the matches', async () => {
     render(<StoreOrderImport />);
     await upload('Order ID,Billing Address,Product Name,Unit Price,Quantity\n1,secret,X,5,1');
-    expect(preview.mutateAsync).toHaveBeenCalledWith({ source: 'amazon', files: [{ id: 1, csv: 'Order ID,Product Name,Unit Price,Quantity\n1,X,5,1', accountId: null }] });
+    expect(preview.mutateAsync).toHaveBeenCalledWith({ source: 'amazon', files: [{ id: 1, csv: 'Order ID,Product Name,Unit Price,Quantity\n1,X,5,1', accountId: null, storeId: null }] });
     const dialog = screen.getByRole('dialog', { name: 'Review costs' });
     expect(dialog).toHaveTextContent('Waiting for a cost3');
     // $40 x 2 + $6 tax, and $449.99 + $31.50 tax + $5.99 shipping.
@@ -86,8 +86,8 @@ describe('StoreOrderImport', () => {
     expect(commit.mutateAsync).toHaveBeenCalledWith({
       source: 'amazon', vendor_id: 'amazon', payment_method_id: 'mc', use_order_date: true,
       items: [
-        { inventory_id: 'p1', unit_cost: '40', sales_tax: 6, shipping: 0, order_number: '112-0', order_date: '2026-11-16', payment_method_id: 'visa', account_id: null },
-        { inventory_id: 'p2', unit_cost: '449.99', sales_tax: 31.5, shipping: 5.99, order_number: '112-2', order_date: '2026-11-16', payment_method_id: null, account_id: null },
+        { inventory_id: 'p1', unit_cost: '40', sales_tax: 6, shipping: 0, order_number: '112-0', order_date: '2026-11-16', payment_method_id: 'visa', account_id: null, vendor_id: null },
+        { inventory_id: 'p2', unit_cost: '449.99', sales_tax: 31.5, shipping: 5.99, order_number: '112-2', order_date: '2026-11-16', payment_method_id: null, account_id: null, vendor_id: null },
       ],
     });
     expect(await screen.findByText(/Filled in the cost on 2 purchases/)).toBeInTheDocument();
@@ -118,8 +118,8 @@ describe('StoreOrderImport', () => {
     fireEvent.change(screen.getByLabelText('Amazon account for bizz.csv'), { target: { value: 'bizz' } });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Review costs from 2 files' })); });
     expect(preview.mutateAsync).toHaveBeenCalledWith({ source: 'amazon', files: [
-      { id: 1, csv: 'Order ID,Product Name,Unit Price,Quantity\n1,X,5,1', accountId: 'cb' },
-      { id: 2, csv: 'Order ID,Product Name,Unit Price,Quantity\n1,X,5,1', accountId: 'bizz' },
+      { id: 1, csv: 'Order ID,Product Name,Unit Price,Quantity\n1,X,5,1', accountId: 'cb', storeId: null },
+      { id: 2, csv: 'Order ID,Product Name,Unit Price,Quantity\n1,X,5,1', accountId: 'bizz', storeId: null },
     ] });
     // The order picker names the account an order came from.
     expect(screen.getAllByRole('option', { name: /^112-0 · CBAmazon · 2026-11-16/ }).length).toBeGreaterThan(0);

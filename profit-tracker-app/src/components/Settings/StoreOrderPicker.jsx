@@ -13,7 +13,7 @@ const MATCH_LABELS = {
 };
 
 const money = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const lineLabel = (l) => `${l.orderId}${l.accountName ? ` · ${l.accountName}` : ''} · ${l.orderDate || 'no date'} · ${l.qty} × ${money(l.perUnit.cost)} · ${l.name.length > 48 ? `${l.name.slice(0, 47)}…` : l.name}`;
+const lineLabel = (l) => `${l.orderId}${l.storeName ? ` · ${l.storeName}` : ''}${l.accountName ? ` · ${l.accountName}` : ''} · ${l.orderDate || 'no date'} · ${l.qty} × ${money(l.perUnit.cost)} · ${l.name.length > 48 ? `${l.name.slice(0, 47)}…` : l.name}`;
 const selectClass = 'w-full bg-[#0A0A0F] border border-gray-800 rounded-lg px-3 h-8 text-xs text-gray-200 focus:outline-none focus:border-[var(--accent)]';
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -21,15 +21,19 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 // account it came from (when the user has accounts saved for the store), and
 // a remove button. info: the server's summary.files ({ id, lines, problems,
 // duplicates }) from the last read; a file added since shows "Not read yet".
-export function OrderFileList({ files, info, accounts, onAccount, onRemove, disabled }) {
-  // With several logins saved, a file is only used once it says which one.
-  const needsAccount = accounts.length > 1;
+// accounts: the logins to offer, or a function giving them per file (a file
+// from another store offers that store's). storeNameOf names a file's store.
+export function OrderFileList({ files, info, accounts, storeNameOf = () => null, onAccount, onRemove, disabled }) {
+  const choicesFor = (f) => (typeof accounts === 'function' ? accounts(f) : accounts);
   if (!files.length) return null;
   return (
     <ul className="space-y-2" aria-label="Order files">
       {files.map((f) => {
         const read = info?.find((x) => x.id === f.id);
-        const waiting = needsAccount && !f.accountId;
+        const choices = choicesFor(f);
+        const store = storeNameOf(f);
+        // With several logins saved, a file is only used once it says which one.
+        const waiting = choices.length > 1 && !f.accountId;
         const notes = waiting ? 'Pick its account to use this file' : read ? [
           plural(read.lines - read.problems - read.duplicates, 'order line'),
           read.problems ? `${read.problems} skipped` : null,
@@ -39,12 +43,12 @@ export function OrderFileList({ files, info, accounts, onAccount, onRemove, disa
           <li key={f.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-800 bg-[#16161E] p-2">
             <FileText size={14} className="shrink-0 text-gray-500" aria-hidden="true" />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm text-gray-200" title={f.name}>{f.name}</div>
+              <div className="truncate text-sm text-gray-200" title={f.name}>{f.name}{store && <span className="text-gray-500"> · {store}</span>}</div>
               <div className={`text-xs ${waiting ? 'text-amber-300' : 'text-gray-500'}`}>{notes}</div>
             </div>
-            {accounts.length > 0 && (
+            {choices.length > 0 && (
               <select
-                aria-label={`Amazon account for ${f.name}`}
+                aria-label={`${store || 'Amazon'} account for ${f.name}`}
                 className="order-last w-full sm:order-none sm:w-56 bg-[#0A0A0F] border border-gray-800 rounded-lg px-3 h-9 text-sm text-gray-200 focus:outline-none focus:border-[var(--accent)]"
                 value={f.accountId}
                 aria-invalid={waiting ? 'true' : undefined}
@@ -52,7 +56,7 @@ export function OrderFileList({ files, info, accounts, onAccount, onRemove, disa
                 disabled={disabled}
               >
                 <option value="">Account not set</option>
-                {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+                {choices.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
               </select>
             )}
             <button

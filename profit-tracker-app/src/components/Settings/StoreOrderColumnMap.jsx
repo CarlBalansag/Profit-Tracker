@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
-import { ORDER_FIELDS, finishOrderMapping, missingOrderColumns } from '../../utils/orderCsv';
+import { ORDER_FIELDS, finishOrderMapping, guessStoreId, missingOrderColumns } from '../../utils/orderCsv';
 
 // Opens when an order file isn't Amazon's own export: the user says which
 // column holds each detail, sees the first rows read that way, and the file
@@ -10,16 +10,23 @@ import { ORDER_FIELDS, finishOrderMapping, missingOrderColumns } from '../../uti
 // layer higher.
 const selectClass = 'w-full bg-[#0A0A0F] border border-gray-800 rounded-lg px-3 h-9 text-sm text-gray-200 focus:outline-none focus:border-[var(--accent)]';
 
-export function OrderColumnMap({ mapping, onDone, onCancel }) {
+// stores: the user's stores (Vendor platforms). The file's orders are saved
+// as that store's, with its logins to pick from.
+export function OrderColumnMap({ mapping, stores = [], onDone, onCancel }) {
   const [columns, setColumns] = useState(mapping.guess);
+  const [storeId, setStoreId] = useState(() => guessStoreId(mapping.name, stores));
   const [error, setError] = useState(null);
   const modalRef = useModalKeyboard(true, onCancel);
   const missing = missingOrderColumns(columns);
   const cell = (row, key) => (columns[key] === '' ? '' : String(row[Number(columns[key])] ?? '').trim());
 
   const confirm = () => {
+    if (!storeId) {
+      setError('Pick which store these orders are from.');
+      return;
+    }
     try {
-      onDone(finishOrderMapping(mapping, columns));
+      onDone(finishOrderMapping(mapping, columns), storeId);
     } catch (err) {
       setError(err.message);
     }
@@ -33,7 +40,7 @@ export function OrderColumnMap({ mapping, onDone, onCancel }) {
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-white">Match the columns</h2>
             <p className="mt-0.5 text-xs text-gray-500 break-words">
-              {mapping.name} isn&apos;t Amazon&apos;s own export. Pick the column that holds each detail. Only these columns are sent.
+              {mapping.name} isn&apos;t Amazon&apos;s own export. Pick its store and the column that holds each detail. Only these columns are sent.
             </p>
           </div>
           <button type="button" aria-label="Close" onClick={onCancel} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-white/5 hover:text-white">
@@ -42,6 +49,25 @@ export function OrderColumnMap({ mapping, onDone, onCancel }) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-5 theme-scrollbar">
+          <div>
+            <label htmlFor="order-col-store" className="block text-xs text-gray-400 mb-1">
+              Store these orders are from<span className="text-amber-300"> (needed)</span>
+            </label>
+            <select
+              id="order-col-store"
+              className={`${selectClass} sm:max-w-xs`}
+              value={storeId}
+              aria-invalid={storeId ? undefined : 'true'}
+              onChange={(e) => { setError(null); setStoreId(e.target.value); }}
+            >
+              <option value="">Pick a store…</option>
+              {stores.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              {stores.length ? 'Purchases get this store, and its logins to pick from.' : 'Add the store under Data Setup first.'}
+            </p>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {ORDER_FIELDS.map((f) => (
               <div key={f.key}>
@@ -79,16 +105,16 @@ export function OrderColumnMap({ mapping, onDone, onCancel }) {
         </div>
 
         <div className="shrink-0 border-t border-[color:var(--dp-border)] px-4 sm:px-6 py-3 space-y-2">
-          {(error || missing.length > 0) && (
+          {(error || missing.length > 0 || !storeId) && (
             <p role={error ? 'alert' : undefined} className={`text-sm sm:text-right ${error ? 'text-red-400' : 'text-gray-400'}`}>
-              {error || `Still needed: ${missing.map((f) => f.label.toLowerCase()).join(', ')}.`}
+              {error || `Still needed: ${[...(storeId ? [] : ['store']), ...missing.map((f) => f.label.toLowerCase())].join(', ')}.`}
             </p>
           )}
           <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
             <button type="button" onClick={onCancel} className="page-btn px-4 h-10 sm:h-9 rounded-lg border border-gray-700 text-sm text-gray-300 hover:bg-white/5">
               Cancel
             </button>
-            <button type="button" onClick={confirm} disabled={missing.length > 0} className="page-btn px-4 h-10 sm:h-9 rounded-lg bg-[var(--accent)] text-sm font-medium text-white disabled:opacity-50">
+            <button type="button" onClick={confirm} disabled={missing.length > 0 || !storeId} className="page-btn px-4 h-10 sm:h-9 rounded-lg bg-[var(--accent)] text-sm font-medium text-white disabled:opacity-50">
               Use these columns
             </button>
           </div>

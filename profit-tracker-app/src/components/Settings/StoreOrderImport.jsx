@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { usePaymentMethods, usePlatforms, useStoreOrderCosts } from '../../hooks/useApi';
 import { useMatchMedia } from '../../hooks/useMatchMedia';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
-import { AMAZON_HOW_TO, MAX_ORDER_FILES, defaultFileAccount, orderFilesTooBig, readOrderFile, storeAccountChoices } from '../../utils/orderCsv';
+import { AMAZON_HOW_TO, MAX_ORDER_FILES, defaultFileAccount, fileAccountChoices, orderFilesTooBig, readOrderFile, storeAccountChoices } from '../../utils/orderCsv';
 import { OrderFileList, OrderPicker } from './StoreOrderPicker';
 import { OrderColumnMap } from './StoreOrderColumnMap';
 
@@ -53,9 +53,12 @@ export function StoreOrderImport({ embedded = false } = {}) {
   const cardName = useMemo(() => new Map(paymentMethods.map((p) => [p.id, p.name])), [paymentMethods]);
   const lines = useMemo(() => new Map((result?.lines || []).map((l) => [l.index, l])), [result]);
   const accounts = useMemo(() => storeAccountChoices(platforms, storeInfo.match), [platforms, storeInfo]);
-  // With several logins saved, every file says which one it's from first.
-  const needsAccount = accounts.length > 1;
-  const untagged = needsAccount && files.some((f) => !f.accountId);
+  // A file's logins: its own store's (a file from another store), else Amazon's.
+  // With several, every file says which one it's from first.
+  const accountsFor = (f) => (f.storeId ? fileAccountChoices(platforms, f.storeId) : accounts);
+  const storeNameOf = (f) => (f.storeId ? platforms.find((p) => p.id === f.storeId)?.name || null : null);
+  const waiting = (f) => accountsFor(f).length > 1 && !f.accountId;
+  const untagged = files.some(waiting);
 
   const reset = () => {
     setResult(null);
@@ -80,8 +83,8 @@ export function StoreOrderImport({ embedded = false } = {}) {
     setDone(null);
     reset();
     if (!list.length) return;
-    if (needsAccount && list.some((f) => !f.accountId)) {
-      setError(`Pick which ${storeInfo.label} account each file is from.`);
+    if (list.some(waiting)) {
+      setError('Pick which account each file is from.');
       return;
     }
     if (orderFilesTooBig(list)) {
@@ -89,7 +92,7 @@ export function StoreOrderImport({ embedded = false } = {}) {
       return;
     }
     try {
-      const data = await preview.mutateAsync({ source: store, files: list.map((f) => ({ id: f.id, csv: f.csv, accountId: f.accountId || null })) });
+      const data = await preview.mutateAsync({ source: store, files: list.map((f) => ({ id: f.id, csv: f.csv, accountId: f.accountId || null, storeId: f.storeId || null })) });
       setFileInfo(data.summary.files);
       showPreview(data);
     } catch (err) {
@@ -112,12 +115,14 @@ export function StoreOrderImport({ embedded = false } = {}) {
     }
   };
 
-  const addFileCsv = async (name, csv) => {
+  const addFileCsv = async (name, csv, storeId = null) => {
     fileSeq.current += 1;
-    const next = [...files, { id: fileSeq.current, name, csv, accountId: defaultFileAccount(accounts) }];
+    const file = { id: fileSeq.current, name, csv, storeId, accountId: '' };
+    file.accountId = defaultFileAccount(accountsFor(file));
+    const next = [...files, file];
     setFiles(next);
     // With several accounts, pick this file's account before reviewing.
-    if (!needsAccount) await review(next);
+    if (!next.some(waiting)) await review(next);
   };
 
   const setFileAccount = (id, accountId) => setFiles((current) => current.map((f) => (f.id === id ? { ...f, accountId } : f)));
@@ -161,6 +166,7 @@ export function StoreOrderImport({ embedded = false } = {}) {
             order_date: line.orderDate,
             payment_method_id: line.paymentMethodId,
             account_id: line.accountId || null,
+            vendor_id: line.vendorId || null,
           };
         }),
       });
@@ -204,16 +210,17 @@ export function StoreOrderImport({ embedded = false } = {}) {
             </button>
           )}
         </div>
-        <OrderFileList files={files} info={fileInfo} accounts={accounts} onAccount={setFileAccount} onRemove={removeFile} disabled={busy} />
+        <OrderFileList files={files} info={fileInfo} accounts={accountsFor} storeNameOf={storeNameOf} onAccount={setFileAccount} onRemove={removeFile} disabled={busy} />
         {columnMap && (
           <OrderColumnMap
             mapping={columnMap}
             onCancel={() => setColumnMap(null)}
-            onDone={(csv) => { const { name } = columnMap; setColumnMap(null); addFileCsv(name, csv); }}
+            stores={vendors}
+            onDone={(csv, storeId) => { const { name } = columnMap; setColumnMap(null); addFileCsv(name, csv, storeId); }}
           />
         )}
-        {files.length > 0 && accounts.length > 1 && (
-          <p className="text-xs text-gray-500">Add one file per {storeInfo.label} account and pick its account. An order that shows up in two files is used once.</p>
+        {files.some((f) => accountsFor(f).length > 1) && (
+          <p className="text-xs text-gray-500">Add one file per account and pick its account. An order that shows up in two files is used once.</p>
         )}
       </div>
 

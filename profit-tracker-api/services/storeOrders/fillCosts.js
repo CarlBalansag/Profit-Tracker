@@ -152,7 +152,19 @@ async function accountsById(userId, ids, client = prisma) {
   return new Map(rows.map((a) => [a.id, { id: a.id, name: a.name, vendorId: a.platform_id }]));
 }
 
-// { csv } (one file) or { files: [{ id, csv, accountId }] }. Returns every
+// The stores files or items name: this user's, and type Vendor.
+async function storesById(userId, ids, client = prisma) {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return new Map();
+  const rows = await client.platform.findMany({ where: { id: { in: unique }, user_id: userId }, select: { id: true, name: true, type: true } });
+  if (rows.length !== unique.length) throw Object.assign(new Error('Store not found or access denied'), { status: 404 });
+  if (rows.some((p) => p.type !== 'Vendor')) throw badRequest('Pick one of your stores.');
+  return new Map(rows.map((p) => [p.id, p]));
+}
+
+// { csv } (one file) or { files: [{ id, csv, accountId, storeId }] }. A file
+// from another store (its columns matched by the user) names that store;
+// Amazon's own export doesn't need to. Returns every
 // file's lines as one list. A line that's in two files (overlapping exports)
 // is used once. An order that shows up under two different accounts can't be
 // right, so its lines are set aside instead of guessing.
@@ -165,19 +177,33 @@ async function readOrderFiles(userId, source, { csv, files }) {
     const id = Number(f?.id);
     if (!f || !Number.isInteger(id) || id < 1 || id > 9999) throw badRequest(`File ${i + 1} is invalid. Add it again.`);
     const accountId = typeof f.accountId === 'string' && f.accountId ? f.accountId : null;
-    return { id, csv: f.csv, accountId };
+    const storeId = typeof f.storeId === 'string' && f.storeId ? f.storeId : null;
+    return { id, csv: f.csv, accountId, storeId };
   });
   if (new Set(clean.map((f) => f.id)).size !== clean.length) throw badRequest('The same file is in the list twice. Add it again.');
   const accounts = await accountsById(userId, clean.map((f) => f.accountId));
-  // With more than one login saved for this store, each file must say which
-  // one it came from, so purchases never get a guessed account.
+  const stores = await storesById(userId, clean.map((f) => f.storeId));
+  // With more than one login saved for a file's store, the file must say which
+  // one it came from, so purchases never get a guessed account. A file with no
+  // store is Amazon's own export.
   const label = SOURCES[source];
-  const storeAccounts = await prisma.account.count({
-    where: { user_id: userId, platform: { type: 'Vendor', name: { contains: label, mode: 'insensitive' } } },
-  });
-  if (storeAccounts > 1) {
-    const missing = clean.findIndex((f) => !f.accountId);
-    if (missing >= 0) throw badRequest(`Choose which ${label} account ${clean.length > 1 ? `file ${missing + 1}` : 'this file'} is from.`);
+  const loginCount = new Map();
+  const loginsFor = async (storeId) => {
+    if (!loginCount.has(storeId)) {
+      loginCount.set(storeId, await prisma.account.count({
+        where: storeId
+          ? { user_id: userId, platform_id: storeId }
+          : { user_id: userId, platform: { type: 'Vendor', name: { contains: label, mode: 'insensitive' } } },
+      }));
+    }
+    return loginCount.get(storeId);
+  };
+  for (const [n, f] of clean.entries()) {
+    const which = clean.length > 1 ? `file ${n + 1}` : 'this file';
+    const storeName = f.storeId ? stores.get(f.storeId).name : label;
+    const account = f.accountId ? accounts.get(f.accountId) : null;
+    if (account && f.storeId && account.vendorId !== f.storeId) throw badRequest(`The account picked for ${which} belongs to a different store than ${storeName}.`);
+    if (!account && await loginsFor(f.storeId) > 1) throw badRequest(`Choose which ${storeName} account ${which} is from.`);
   }
 
   const all = [];
@@ -190,8 +216,9 @@ async function readOrderFiles(userId, source, { csv, files }) {
       if (clean.length > 1 && err.status === 400) err.message = `File ${n + 1}: ${err.message}`;
       throw err;
     }
-    fileInfo.push({ id: f.id, accountId: f.accountId, lines: lines.length, problems: 0, duplicates: 0 });
-    for (const l of lines) all.push({ ...l, index: f.id * FILE_STRIDE + l.index, file: f.id, accountId: f.accountId });
+    fileInfo.push({ id: f.id, accountId: f.accountId, storeId: f.storeId, lines: lines.length, problems: 0, duplicates: 0 });
+    const storeName = f.storeId ? stores.get(f.storeId).name : null;
+    for (const l of lines) all.push({ ...l, index: f.id * FILE_STRIDE + l.index, file: f.id, accountId: f.accountId, storeId: f.storeId, storeName });
     if (all.length > MAX_TOTAL_LINES) throw badRequest(`These files have more than ${MAX_TOTAL_LINES} rows together. Add fewer files at a time.`);
   }
   const infoOf = (id) => fileInfo.find((fi) => fi.id === id);
@@ -392,7 +419,8 @@ async function linesFor(userId, lines, results, accounts = new Map()) {
     paymentMethodId: l.last4 ? cards.get(l.last4) || null : null,
     accountId: l.accountId || null,
     accountName: l.accountId ? accounts.get(l.accountId)?.name || null : null,
-    vendorId: l.accountId ? accounts.get(l.accountId)?.vendorId || null : null,
+    vendorId: (l.accountId ? accounts.get(l.accountId)?.vendorId : null) || l.storeId || null,
+    storeName: l.storeName || null,
   }));
 }
 
@@ -490,6 +518,7 @@ function cleanItem(raw, index) {
     orderDate,
     paymentMethodId: typeof raw.payment_method_id === 'string' && raw.payment_method_id ? raw.payment_method_id : null,
     accountId: typeof raw.account_id === 'string' && raw.account_id ? raw.account_id : null,
+    vendorId: typeof raw.vendor_id === 'string' && raw.vendor_id ? raw.vendor_id : null,
   };
 }
 
@@ -508,9 +537,12 @@ async function commit(userId, { source, vendorId, paymentMethodId, useOrderDate,
   const owned = await prisma.paymentMethod.findMany({ where: { id: { in: cardIds }, user_id: userId }, select: { id: true } });
   if (owned.length !== cardIds.length) throw Object.assign(new Error('Payment method not found'), { status: 404 });
   const accounts = await accountsById(userId, clean.map((c) => c.accountId));
+  const orderStores = await storesById(userId, clean.map((c) => c.vendorId));
 
   const label = SOURCES[source];
   const ids = clean.map((c) => c.inventoryId);
+  const fromNames = new Set(clean.map((c) => (c.vendorId && orderStores.get(c.vendorId)?.name) || label));
+  const fromAll = fromNames.size === 1 ? [...fromNames][0] : 'store orders';
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`store-order-costs:${userId}`}))`;
     const { result } = await activityLog.trackChange(tx, userId, {
@@ -518,7 +550,7 @@ async function commit(userId, { source, vendorId, paymentMethodId, useOrderDate,
       recordType: 'purchase',
       refs: async () => ({ inventory: ids }),
       recordId: ids[0],
-      productName: clean.length === 1 ? undefined : `Costs from ${label} for ${clean.length} purchases`,
+      productName: clean.length === 1 ? undefined : `Costs from ${fromAll} for ${clean.length} purchases`,
     }, async () => {
       let updated = 0;
       let skipped = 0;
@@ -535,9 +567,10 @@ async function commit(userId, { source, vendorId, paymentMethodId, useOrderDate,
         // The order's account names its store. Saved only when the purchase
         // has no account yet and ends up at that store.
         const account = c.accountId ? accounts.get(c.accountId) : null;
-        const storeId = current.vendor_id || (account ? account.vendorId : vendorId) || null;
+        const storeId = current.vendor_id || (account ? account.vendorId : null) || c.vendorId || vendorId || null;
         const accountId = account && !current.account_id && storeId === account.vendorId ? account.id : null;
-        const filledNote = `Cost from ${label}${c.orderNumber ? ` order ${c.orderNumber}` : ''}.`;
+        const from = (c.vendorId && orderStores.get(c.vendorId)?.name) || label;
+        const filledNote = `Cost from ${from}${c.orderNumber ? ` order ${c.orderNumber}` : ''}.`;
         await tx.inventory.update({
           where: { id: c.inventoryId },
           data: {
