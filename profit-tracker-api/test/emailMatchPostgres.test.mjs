@@ -407,6 +407,34 @@ describe('email orders and matching on Postgres', () => {
       expect((await send('GET', `/api/email/matches/${order.matches[0].id}/preview`)).status).toBe(404);
     });
 
+    it('warns when the purchase already has a different order number', async () => {
+      const row = await purchase({ product_name: 'Apple Watch Series 11', vendor_id: vendor.id, unit_purchase_cost: 279, qty_purchased: 2, qty_on_hand: 2 });
+      await email({ merchant: 'amazon', kind: 'order', order_number: '113-3377308-3825054', total: '558.00',
+        items: [{ name: 'Apple Watch Series 11', quantity: 2 }], sent_at: new Date('2026-03-01T15:30:00Z') });
+      await send('PUT', '/api/email/automation', { linkMatches: false });
+      await sync.organize(prisma, user.id);
+      const [order] = (await send('GET', '/api/email/orders?state=review')).body.orders;
+      // The purchase gets its own (other) order number after the match was suggested.
+      await prisma.inventory.update({ where: { id: row.id }, data: { order_number: '113-5291515-4133865' } });
+      const preview = (await send('GET', `/api/email/matches/${order.matches[0].id}/preview`)).body;
+      expect(preview.warnings).toEqual([{ code: 'order_number', text: expect.stringContaining('different order number (113-5291515-4133865)') }]);
+      const field = preview.records[0].fields.find((x) => x.key === 'order_number');
+      expect(field).toMatchObject({ value: '113-5291515-4133865', conflict: '113-3377308-3825054' });
+      expect(field.fill).toBeUndefined();
+    });
+
+    it('no warning when the purchase has no order number yet', async () => {
+      await purchase({ product_name: 'Apple Watch Series 11', vendor_id: vendor.id, unit_purchase_cost: 279, qty_purchased: 2, qty_on_hand: 2 });
+      await email({ merchant: 'amazon', kind: 'order', order_number: '113-3377308-3825054', total: '558.00',
+        items: [{ name: 'Apple Watch Series 11', quantity: 2 }], sent_at: new Date('2026-03-01T15:30:00Z') });
+      await send('PUT', '/api/email/automation', { linkMatches: false });
+      await sync.organize(prisma, user.id);
+      const [order] = (await send('GET', '/api/email/orders?state=review')).body.orders;
+      const preview = (await send('GET', `/api/email/matches/${order.matches[0].id}/preview`)).body;
+      expect(preview.warnings).toEqual([]);
+      expect(preview.records[0].fields.find((x) => x.key === 'order_number')).toMatchObject({ value: null, fill: '113-3377308-3825054' });
+    });
+
     it("confirms changes so they move to Completed, only the user's own", async () => {
       await purchase({ product_name: 'Pokemon Booster Bundle', order_number: '2000123-45678901', unit_purchase_cost: 29.97, qty_purchased: 2, qty_on_hand: 2, sales_tax: 4.8 });
       await email({ merchant: 'walmart', kind: 'shipped', order_number: '2000123-45678901', total: '64.74', tracking_numbers: ['1Z999AA10123456784'], sent_at: new Date('2026-03-02T16:00:00Z') });

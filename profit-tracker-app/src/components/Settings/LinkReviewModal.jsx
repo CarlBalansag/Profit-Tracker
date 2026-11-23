@@ -1,6 +1,6 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowRight, Check, Mail, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Check, Mail, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 import { useEmailMatchPreview, useEmailOrderMutations } from '../../hooks/useApi';
@@ -18,6 +18,17 @@ const show = (field, value) => (value && DATE_KEYS.has(field.key) ? shortDay(val
 
 function FieldRow({ field }) {
   const fills = field.fill !== undefined;
+  if (field.conflict) {
+    return (
+      <div className="grid grid-cols-[minmax(84px,auto)_1fr] items-baseline gap-x-3 rounded-lg border-l-2 border-[color:var(--dp-warning-text)] bg-[var(--dp-warning-bg)] px-3 py-2">
+        <dt className="text-xs font-semibold text-[var(--dp-warning-text)]">{field.label}</dt>
+        <dd className="min-w-0 text-sm">
+          <span className="break-all text-gray-200">{field.value}</span>
+          <span className="block break-all text-xs text-[var(--dp-warning-text)]">Email says {orderRef(field.conflict)}</span>
+        </dd>
+      </div>
+    );
+  }
   return (
     <div className={`grid grid-cols-[minmax(84px,auto)_1fr] items-baseline gap-x-3 rounded-lg border-l-2 px-3 py-2 ${fills ? 'border-[color:var(--accent)] bg-[var(--accent-bg)]' : 'border-transparent'}`}>
       <dt className={`text-xs ${fills ? 'font-semibold text-[var(--accent)]' : 'text-gray-500'}`}>{field.label}</dt>
@@ -39,10 +50,14 @@ function FieldRow({ field }) {
 
 export default function LinkReviewModal({ matchId, onClose, onLinked }) {
   const linkRef = useRef(null);
+  const cancelRef = useRef(null);
   const { data, isLoading, isError, error } = useEmailMatchPreview(matchId);
   const { accept } = useEmailOrderMutations();
   const busy = accept.isPending;
   const modalRef = useModalKeyboard(Boolean(matchId), () => { if (!busy) onClose(); }, linkRef);
+  const warned = Boolean(data?.warnings?.length);
+  // A likely wrong match: start on Cancel so Enter doesn't link it.
+  useEffect(() => { if (warned) cancelRef.current?.focus(); }, [warned]);
   if (!matchId) return null;
 
   const fills = data ? data.records.reduce((t, r) => t + r.fields.filter((f) => f.fill !== undefined).length, 0) : 0;
@@ -97,6 +112,15 @@ export default function LinkReviewModal({ matchId, onClose, onLinked }) {
                 </div>
               </section>
 
+              {warned && (
+                <div role="alert" className="flex gap-2.5 rounded-xl bg-[var(--dp-warning-bg)] px-3.5 py-3 text-sm text-[var(--dp-warning-text)]">
+                  <AlertTriangle size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
+                  <div className="space-y-1">
+                    {data.warnings.map((w) => <p key={w.code}>{w.text}</p>)}
+                  </div>
+                </div>
+              )}
+
               {data.records.map((record) => (
                 <section key={record.id} aria-label={record.title || RECORD[data.match.record_type]}>
                   <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
@@ -120,9 +144,9 @@ export default function LinkReviewModal({ matchId, onClose, onLinked }) {
         </div>
 
         <div className="flex justify-end gap-2 border-t border-[color:var(--dp-border)] px-5 py-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
-          <button type="button" disabled={busy} onClick={onClose} className="page-btn page-btn-secondary">Cancel</button>
-          <button ref={linkRef} type="button" disabled={busy || !data} onClick={link} className="page-btn page-btn-primary">
-            <Check size={14} aria-hidden="true" /> {busy ? 'Linking…' : fills ? `Link and fill ${fills}` : 'Link'}
+          <button ref={cancelRef} type="button" disabled={busy} onClick={onClose} className="page-btn page-btn-secondary">Cancel</button>
+          <button ref={linkRef} type="button" disabled={busy || !data} onClick={link} className={`page-btn ${warned ? 'page-btn-secondary' : 'page-btn-primary'}`}>
+            <Check size={14} aria-hidden="true" /> {busy ? 'Linking…' : warned ? 'Link anyway' : fills ? `Link and fill ${fills}` : 'Link'}
           </button>
         </div>
       </div>

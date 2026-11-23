@@ -6,13 +6,14 @@ import { EmailOrders } from './EmailOrders';
 const mutation = () => ({ mutateAsync: vi.fn().mockResolvedValue({ linked: 2 }), mutate: vi.fn(), isPending: false });
 const m = { accept: mutation(), reject: mutation(), acceptAll: mutation(), dismiss: mutation(), automation: mutation() };
 let data;
+let previewExtra = {};
 const r = { addExpense: mutation(), addPurchase: mutation(), handled: mutation(), saveInvoice: mutation() };
 const calls = [];
 vi.mock('../../hooks/useApi', () => ({
   useEmailOrders: (opts) => { calls.push(opts); return { data }; },
   useEmailAutomation: () => ({ data: { linkMatches: true } }),
   useEmailOrderMutations: () => m,
-  useEmailMatchPreview: (id) => ({ data: id ? { match: { id, record_type: 'purchase' }, order: { store: 'Amazon', order_number: '112-1', total: '485.99', date: '2026-03-02', items: [] }, records: [{ id: 'p1', title: 'Nintendo Switch 2 Console', fields: [{ key: 'order_number', label: 'Order #', value: null, fill: '112-1' }] }], also: [] } : undefined }),
+  useEmailMatchPreview: (id) => ({ data: id ? { match: { id, record_type: 'purchase' }, order: { store: 'Amazon', order_number: '112-1', total: '485.99', date: '2026-03-02', items: [] }, records: [{ id: 'p1', title: 'Nintendo Switch 2 Console', fields: [{ key: 'order_number', label: 'Order #', value: null, fill: '112-1' }] }], also: [], warnings: [], ...previewExtra } : undefined }),
   useEmailRuleMutations: () => r,
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -26,7 +27,7 @@ const order = {
 };
 
 describe('EmailOrders', () => {
-  beforeEach(() => { data = { orders: [order], counts: { review: 2, linked: 5 }, total: 2 }; calls.length = 0; vi.clearAllMocks(); });
+  beforeEach(() => { data = { orders: [order], counts: { review: 2, linked: 5 }, total: 2 }; calls.length = 0; previewExtra = {}; vi.clearAllMocks(); });
 
   it('shows what the order looks like and why, and links or rejects it', async () => {
     render(<EmailOrders found={3} />);
@@ -43,6 +44,20 @@ describe('EmailOrders', () => {
     await waitFor(() => expect(m.accept.mutateAsync).toHaveBeenCalledWith('m1'));
     fireEvent.click(screen.getByRole('button', { name: /Not this/ }));
     await waitFor(() => expect(m.reject.mutateAsync).toHaveBeenCalledWith('m1'));
+  });
+
+  it('warns in the Link window when the purchase has a different order number', async () => {
+    previewExtra = {
+      records: [{ id: 'p1', title: 'Apple Watch Series 11', fields: [{ key: 'order_number', label: 'Order #', value: '113-5291515-4133865', conflict: '113-3377308-3825054' }] }],
+      warnings: [{ code: 'order_number', text: 'Your purchase has a different order number (113-5291515-4133865). This email is probably for another order.' }],
+    };
+    render(<EmailOrders found={3} />);
+    fireEvent.click(screen.getByRole('button', { name: /Review & link/ }));
+    expect(screen.getByRole('alert')).toHaveTextContent('probably for another order');
+    expect(screen.getByText(/Email says/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus());
+    fireEvent.click(screen.getByRole('button', { name: 'Link anyway' }));
+    await waitFor(() => expect(m.accept.mutateAsync).toHaveBeenCalledWith('m1'));
   });
 
   it('links everything after asking, switches tabs and saves the auto-link switch', async () => {

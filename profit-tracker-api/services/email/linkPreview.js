@@ -7,6 +7,7 @@ const { SENDERS } = require('./config');
 
 const FIELD_LABELS = { order_number: 'Order #', tracking_number: 'Tracking #', carrier: 'Carrier' };
 const storeLabel = (merchant) => SENDERS.find((s) => s.key === merchant)?.label || String(merchant || '').replace(/^custom:/, '');
+const normOrder = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 const money = (n) => (n == null || Number.isNaN(Number(n)) ? null : Number(n).toFixed(2));
 const cardName = (pm) => (pm ? `${pm.name}${pm.last4 ? ` ••${pm.last4}` : ''}` : null);
@@ -30,6 +31,8 @@ function fillsFor(recordType, row, order) {
 function recordView(recordType, row, order) {
   const fills = fillsFor(recordType, row, order);
   const f = (key, label, value) => ({ key, label, value: value ?? null, ...(fills[key] !== undefined ? { fill: String(fills[key]) } : {}) });
+  // The record already has a different order number than the email: likely another order.
+  const conflict = recordType === 'purchase' && order.order_number && row.order_number && normOrder(row.order_number) !== normOrder(order.order_number);
   if (recordType === 'purchase') {
     const unit = Number(row.unit_purchase_cost_decimal ?? row.unit_purchase_cost);
     return { id: row.id, title: row.product_name, fields: [
@@ -39,7 +42,7 @@ function recordView(recordType, row, order) {
       f('purchase_date', 'Bought', day(row.purchase_date)),
       f('vendor', 'Store', row.vendor?.name),
       f('payment_method', 'Card', cardName(row.payment_method)),
-      f('order_number', FIELD_LABELS.order_number, row.order_number),
+      { ...f('order_number', FIELD_LABELS.order_number, row.order_number), ...(conflict ? { conflict: order.order_number } : {}) },
       f('tracking_number', FIELD_LABELS.tracking_number, row.tracking_number),
       f('carrier', FIELD_LABELS.carrier, row.carrier),
     ] };
@@ -94,6 +97,13 @@ async function linkPreview(prisma, userId, matchId, settings = {}) {
     if (unpaid) also.push(`Marks ${unpaid === 1 ? 'the sale' : `${unpaid} sales`} paid to your ${storeLabel(order.merchant)} balance, from the receipt`);
   }
   if (match.record_type === 'purchase' && settings.updateShipping) also.push('Later emails for this order add tracking and mark it delivered');
+  const warnings = [];
+  const conflicts = records.filter((r) => r.fields.some((x) => x.conflict));
+  if (conflicts.length) {
+    warnings.push({ code: 'order_number', text: conflicts.length === records.length && records.length === 1
+      ? `Your purchase has a different order number (${conflicts[0].fields.find((x) => x.key === 'order_number').value}). This email is probably for another order.`
+      : `${conflicts.length} of these purchases have a different order number. This email is probably for another order.` });
+  }
   if (!records.some((r) => r.fields.some((x) => x.fill)) && !also.length) also.push('Nothing on the record changes; the email is just linked to it');
   return {
     match: { id: match.id, record_type: match.record_type, score: match.score, reasons: match.reasons },
@@ -104,6 +114,7 @@ async function linkPreview(prisma, userId, matchId, settings = {}) {
     },
     records,
     also,
+    warnings,
   };
 }
 
