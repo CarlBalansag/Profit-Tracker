@@ -130,8 +130,15 @@ async function runScheduledSync() {
     }
   } finally {
     await releaseLock();
-    summary.durationMs = Date.now() - startTime;
   }
+
+  // Push the new deals this sync found (dealAlerts.js). Best effort.
+  try {
+    summary.dealAlerts = await require('./dealAlerts').dispatchDealAlerts();
+  } catch (err) {
+    console.error('[deal-alerts] dispatch failed:', err.message);
+  }
+  summary.durationMs = Date.now() - startTime;
 
   return summary;
 }

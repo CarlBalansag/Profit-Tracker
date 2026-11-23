@@ -1,4 +1,5 @@
 const { syncDealEnds } = require('./dealEnds');
+const { recordDealsSeen } = require('./dealAlerts');
 const prisma = require('../../prisma');
 const { requireOwned } = require('../ownership');
 const { encryptKey, decryptKey, maskKey } = require('./crypto');
@@ -327,6 +328,12 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
 
     // Record snapshot on successful pull
     await recordSnapshots(userId, connectionId, conn.provider, deals);
+    // New-deal alerts (dealAlerts.js). Best effort: never fails the deal list.
+    try {
+      await recordDealsSeen(conn.provider, deals);
+    } catch (err) {
+      console.warn('[cashouts] could not record deals for alerts:', err.message);
+    }
     // Keep open commitments' deal end dates current for the To-Do list.
     // Best effort: never fails the deal list.
     try {

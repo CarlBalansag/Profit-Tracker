@@ -206,7 +206,14 @@ async function runNotifications({ now = new Date() } = {}) {
     }
   }
   await prisma.notificationSent.deleteMany({ where: { sent_at: { lt: new Date(now.getTime() - KEEP_SENT_DAYS * 86400000) } } });
-  return { status: 'ok', users: userIds.length, sent, errors: errors.length };
+  // Cashout deal alerts a manual deal refresh found since the last cashout sync.
+  let dealAlerts = null;
+  try {
+    dealAlerts = await require('./cashouts/dealAlerts').dispatchDealAlerts({ now });
+  } catch (err) {
+    console.error('[deal-alerts] dispatch failed:', err.message);
+  }
+  return { status: 'ok', users: userIds.length, sent, errors: errors.length, dealAlerts };
 }
 
 // The run endpoint is called by an outside cron with

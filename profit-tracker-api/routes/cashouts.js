@@ -167,6 +167,16 @@ router.post('/connections/:id/sync', isAuthenticated, async (req, res, next) => 
   }
 });
 
+// GET /api/cashouts/deal-alerts — the last week of new cashout deals (from
+// every cashout, connected or not), with this user's profit and best card.
+router.get('/deal-alerts', isAuthenticated, async (req, res, next) => {
+  try {
+    res.json(await require('../services/cashouts/dealAlerts').listDealFeed(req.user.id, { limit: req.query.limit }));
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/cashouts/deals — live deals from each connected cashout service
 router.get('/deals', isAuthenticated, async (req, res, next) => {
   try {
