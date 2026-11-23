@@ -13,6 +13,7 @@ const TIMEOUT_MS = 20000;
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
 const PAGE_SIZE = 100;
+const RECEIVED_ITEMS_TABLE = 'it@receipt-items-details';
 const MAX_PAGES = 20;
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 const SCREEN = { width: 1280, height: 720 };
@@ -461,25 +462,25 @@ class ParsefileClient {
   }
 
   // Reads every page of a table, checking the pages add up.
-  async readTable(context, table) {
+  async readTable(context, table, what = 'deals') {
     const def = context.tables.get(table);
-    if (!def) throw this.fail('no longer has the deals table. No data was synced.');
+    if (!def) throw this.fail(`no longer has the ${what} table. No data was synced.`);
     const rows = [];
     const seen = new Set();
     let total = null;
     for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber += 1) {
       const data = await this.fetchTablePage(context.page, table, def.query, pageNumber);
-      if (total !== null && total !== data.count) throw this.fail('the deals table changed while reading. Try again.');
+      if (total !== null && total !== data.count) throw this.fail(`the ${what} table changed while reading. Try again.`);
       total = data.count;
       for (const row of data.data) {
         const id = rowId(row[def.id]);
-        if (seen.has(id)) throw this.fail('repeated a page of deals. No data was synced.');
+        if (seen.has(id)) throw this.fail(`repeated a page of ${what}. No data was synced.`);
         seen.add(id);
         rows.push(row);
       }
       if (rows.length >= total || data.data.length < PAGE_SIZE) break;
     }
-    if (rows.length !== total) throw this.fail('the full deals table could not be read. No data was synced.');
+    if (rows.length !== total) throw this.fail(`the full ${what} table could not be read. No data was synced.`);
     return rows;
   }
 
@@ -493,6 +494,15 @@ class ParsefileClient {
     } catch {
       throw this.fail('returned a deal in an unexpected format. No data was synced.');
     }
+  }
+
+  // Receiving analytics > Received items: one row per received line (item,
+  // qty, payout, tracking). Read only, like the deals table. Raw rows; the
+  // import (importSold.js parseParsefileTableRows) checks and maps them.
+  async readReceivedItems() {
+    const context = await this.openPage('it@analysis');
+    if (!context.tables.get(RECEIVED_ITEMS_TABLE)?.readOnly) throw this.fail('the received items table is not read only. Nothing was read.');
+    return this.readTable(context, RECEIVED_ITEMS_TABLE, 'received items');
   }
 }
 

@@ -635,6 +635,72 @@ export const cashoutCommitmentsQuery = () => ({
 });
 export const useCashoutCommitments = () => useQuery(cashoutCommitmentsQuery());
 
+// Settings > Data > Import from cashouts. Preview writes nothing; commit
+// writes purchases + sales, so every screen that shows them is refreshed.
+const postJson = (path, body, fallback) =>
+  apiFetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then(async (r) => {
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || fallback);
+    return data;
+  });
+
+export const useCashoutImport = () => {
+  const qc = useQueryClient();
+  const preview = useMutation({
+    mutationFn: ({ connectionId, ...body }) => postJson(
+      connectionId ? `/api/cashouts/connections/${encodeURIComponent(connectionId)}/import/preview` : '/api/cashouts/import/preview',
+      body,
+      'Could not read the report.',
+    ),
+  });
+  const commit = useMutation({
+    mutationFn: (body) => postJson('/api/cashouts/import/commit', body, 'Import failed. Nothing was saved.'),
+    onSuccess: () => qc.invalidateQueries(),
+  });
+  return { preview, commit };
+};
+
+// Settings > Data > Import from cashouts > Past imports: each import, what
+// it added, and an undo that removes everything it added that's still there.
+export const useCashoutImports = () => useQuery({
+  queryKey: ['cashout', 'imports'],
+  queryFn: () => fetcher('/api/cashouts/imports'),
+});
+export const useCashoutImportDetail = (id) => useQuery({
+  queryKey: ['cashout', 'imports', id],
+  queryFn: () => fetcher(`/api/cashouts/imports/${encodeURIComponent(id)}`),
+  enabled: Boolean(id),
+});
+export const useUndoCashoutImport = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => postJson(`/api/cashouts/imports/${encodeURIComponent(id)}/undo`, {}, 'Could not undo the import. Nothing was removed.'),
+    onSuccess: () => qc.invalidateQueries(),
+  });
+};
+
+// Settings > Data > Fill in costs from store orders (purchases the cashout
+// import saved at $0).
+export const useStoreOrderCosts = () => {
+  const qc = useQueryClient();
+  const preview = useMutation({
+    mutationFn: (body) => postJson('/api/cashouts/import/costs/preview', body, 'Could not read the order export.'),
+  });
+  const commit = useMutation({
+    mutationFn: (body) => postJson('/api/cashouts/import/costs/commit', body, 'Saving failed. Nothing was changed.'),
+    onSuccess: () => qc.invalidateQueries(),
+  });
+  // Pairs a cashout report's rows, before they're imported, with store orders.
+  const match = useMutation({
+    mutationFn: (body) => postJson('/api/cashouts/import/costs/match', body, 'Could not read the order export.'),
+  });
+  return { preview, commit, match };
+};
+
 export const useCashoutMutations = () => {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ['cashout'] });

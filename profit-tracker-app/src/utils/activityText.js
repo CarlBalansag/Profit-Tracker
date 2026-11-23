@@ -109,6 +109,14 @@ function changeText(entry) {
   else title = `Edited ${what.replace(/^an? /, '')}`;
   title = prefix + title;
 
+  // Several purchases in one entry (undoing a whole cashout import): count them.
+  const many = entry.record_type === 'purchase' && d.action === 'delete'
+    ? rows.filter((r) => r.model === 'inventory' && r.op === main.op).length : 0;
+  if (many > 1) {
+    const sales = rows.filter((r) => r.model === 'sales' && r.op === main.op).length;
+    return { title: `${prefix}Deleted ${plural(many, 'purchase')}`, change: sales ? `with ${plural(sales, 'sale')}` : '' };
+  }
+
   if (main.op === 'create' || main.op === 'delete') {
     const v = main.row?.values || {};
     const parts = [];

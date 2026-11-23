@@ -55,6 +55,7 @@ model User {
   push_subscriptions     PushSubscription[]
   notification_settings  NotificationSettings?
   notifications_sent     NotificationSent[]
+  import_batches         ImportBatch[]
   invites                Invite[]
 }
 
@@ -301,6 +302,11 @@ model Inventory {
   // account is deleted.
   account_id            String?
   account               Account?       @relation(fields: [account_id], references: [id], onDelete: SetNull)
+  // The cashout import that created this purchase (Settings > Data > Past
+  // imports), so the import can be viewed or undone later. Cleared if the
+  // import record is removed.
+  import_batch_id       String?
+  import_batch          ImportBatch?   @relation(fields: [import_batch_id], references: [id], onDelete: SetNull)
   payment_method_id     String?
   payment_method        PaymentMethod? @relation(fields: [payment_method_id], references: [id])
   purchase_date         DateTime
@@ -366,6 +372,7 @@ model Inventory {
   @@index([user_id])
   @@index([user_id, purchase_date])
   @@index([account_id])
+  @@index([import_batch_id])
   @@index([tax_exempt])
 }
 
@@ -447,8 +454,14 @@ model Sales {
   tracking_info       Json?
   notes               String?
   cashout_commitment  CashoutCommitment?
+  // Rows of a cashout's sold/received items report this sale was imported from
+  // (Settings > Data > Import from cashouts, services/cashouts/importSold.js),
+  // e.g. "eb:<invoice>:<serial>" or "la:<line id>". Lets a later import of an
+  // overlapping date range skip them. Empty for sales entered any other way.
+  import_refs         String[]  @default([])
 
   @@index([inventory_id])
+  @@index([import_refs], type: Gin)
   @@index([sale_shipping_payment_method_id])
   @@index([platform_id])
   @@index([sale_date])
@@ -476,6 +489,7 @@ model Platform {
   sales            Sales[]     // Platforms as marketplaces
   accounts         Account[]
   cashout_connections CashoutConnection[]
+  import_batches   ImportBatch[]
 
   @@index([user_id])
 }
@@ -918,4 +932,26 @@ model user_sessions {
   expire DateTime @db.Timestamp(6)
 
   @@ignore
+}
+
+// One cashout import (Settings > Data > Import from cashouts): which report it
+// read and what it added. Its purchases point back here (Inventory.import_batch_id);
+// what's still there is counted live, so a purchase deleted or restored later
+// shows up correctly. The counts here are what the import added at the time.
+model ImportBatch {
+  id          String      @id @default(uuid())
+  user_id     String
+  user        User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  source      String      // 'eb' | 'la' | 'p4d'
+  platform_id String?
+  platform    Platform?   @relation(fields: [platform_id], references: [id], onDelete: SetNull)
+  file_name   String?
+  purchases   Int         @default(0)
+  units       Int         @default(0)
+  payout      Decimal     @default(0) @db.Decimal(12, 2)
+  cost_needed Int         @default(0)
+  created_at  DateTime    @default(now())
+  inventory   Inventory[]
+
+  @@index([user_id, created_at])
 }

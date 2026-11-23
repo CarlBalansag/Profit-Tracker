@@ -160,6 +160,12 @@ const p4dAdapter = {
     return { success: true };
   },
 
+  // Settings > Data > Import from cashouts: every received items row, raw.
+  // The import filters them by date and maps them (importSold.js).
+  async fetchReceivedItems(rawKey) {
+    return withSession(rawKey, (client) => client.readReceivedItems());
+  },
+
   async fetchDeals(rawKey) {
     const deals = await withSession(rawKey, (client) => client.readDeals());
     return deals.filter((deal) => deal.available && !deal.disabled).map(toDeal);

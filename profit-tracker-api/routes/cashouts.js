@@ -52,6 +52,11 @@ async function logCashout(userId, action, commitment, { name, quantity } = {}) {
     console.error('[activity] could not log cashout action:', err.message);
   }
 }
+const importSold = require('../services/cashouts/importSold');
+const importHistory = require('../services/cashouts/importHistory');
+const { publishCalendarFeed } = require('../services/calendarFeed');
+const fillCosts = require('../services/storeOrders/fillCosts');
+const { pullReceivedItems } = require('../services/cashouts/service');
 
 // Errors from these routes. A message we wrote (it has a status) or the
 // provider's own refusal is shown as is. Anything else (a database error, a
@@ -362,6 +367,118 @@ router.get('/connections/:id/tracking', isAuthenticated, async (req, res, next) 
       offset: offset ? parseInt(offset, 10) : undefined,
     });
     res.json(result);
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// POST /api/cashouts/import/preview — parse an uploaded sold/received items
+// report ({ source: 'eb'|'la'|'p4d', csv }) and say which rows are new.
+// Writes nothing.
+router.post('/import/preview', isAuthenticated, async (req, res) => {
+  try {
+    res.json(await importSold.preview(req.user.id, { source: req.body?.source, csv: req.body?.csv }));
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// POST /api/cashouts/connections/:id/import/preview — the same, pulled from a
+// connected cashout's own report with its saved login ({ from, to } dates).
+router.post('/connections/:id/import/preview', isAuthenticated, async (req, res) => {
+  try {
+    const { source, rows } = await pullReceivedItems(req.user.id, req.params.id, { from: req.body?.from, to: req.body?.to });
+    res.json(await importSold.preview(req.user.id, { source, rows }));
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// POST /api/cashouts/import/commit — write the previewed purchases the user
+// kept: { source, platform_id, vendor_id?, payment_method_id?, groups: [...] }.
+router.post('/import/commit', isAuthenticated, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const result = await importSold.commit(req.user.id, {
+      source: b.source,
+      platformId: b.platform_id,
+      vendorId: b.vendor_id || null,
+      paymentMethodId: b.payment_method_id || null,
+      groups: b.groups,
+      fileName: typeof b.file_name === 'string' ? b.file_name : null,
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// GET /api/cashouts/imports — past cashout imports, newest first, each with
+// how many of its purchases are still there.
+router.get('/imports', isAuthenticated, async (req, res) => {
+  try {
+    res.json(await importHistory.list(req.user.id));
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// GET /api/cashouts/imports/:id — one import and the purchases (with their
+// sales) it added that are still there.
+router.get('/imports/:id', isAuthenticated, async (req, res) => {
+  try {
+    res.json(await importHistory.detail(req.user.id, req.params.id));
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// POST /api/cashouts/imports/:id/undo — delete everything that import added
+// that's still there, in one step. Logged in Activity, where Undo restores it.
+router.post('/imports/:id/undo', isAuthenticated, async (req, res) => {
+  try {
+    const result = await importHistory.undo(req.user.id, req.params.id);
+    await publishCalendarFeed(req.user.id);
+    res.json(result);
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// POST /api/cashouts/import/costs/preview — read a store's order export
+// ({ source: 'amazon', csv } or { source, files: [{ id, csv, accountId }] }) and pair it with purchases the cashout import
+// saved without a cost. Writes nothing.
+router.post('/import/costs/preview', isAuthenticated, async (req, res) => {
+  try {
+    res.json(await fillCosts.preview(req.user.id, { source: req.body?.source, csv: req.body?.csv, files: req.body?.files }));
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// POST /api/cashouts/import/costs/match — pair the purchases a cashout import
+// is about to create with a store's order export ({ source, csv, groups }),
+// so the review can fill in their costs before importing. Writes nothing.
+router.post('/import/costs/match', isAuthenticated, async (req, res) => {
+  try {
+    res.json(await fillCosts.matchReport(req.user.id, { source: req.body?.source, csv: req.body?.csv, files: req.body?.files, groups: req.body?.groups }));
+  } catch (err) {
+    sendCashoutError(res, err);
+  }
+});
+
+// POST /api/cashouts/import/costs/commit — fill in the costs the user kept:
+// { source, vendor_id?, payment_method_id?, use_order_date?, items: [...] }.
+router.post('/import/costs/commit', isAuthenticated, async (req, res) => {
+  try {
+    const b = req.body || {};
+    res.json(await fillCosts.commit(req.user.id, {
+      source: b.source,
+      vendorId: b.vendor_id || null,
+      paymentMethodId: b.payment_method_id || null,
+      useOrderDate: b.use_order_date === true,
+      items: b.items,
+    }));
   } catch (err) {
     sendCashoutError(res, err);
   }
