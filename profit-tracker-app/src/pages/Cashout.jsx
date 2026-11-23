@@ -21,8 +21,9 @@ import {
   ShoppingCart,
   CreditCard,
   Truck,
+  BellRing,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   useCashoutProviders,
@@ -59,6 +60,7 @@ import {
   storeLogoUrl,
 } from '../utils/cashoutDeals';
 import LoadError from '../components/UI/LoadError';
+import NewDeals from '../components/Cashout/NewDeals';
 
 // API keys are managed only in Data Setup.
 const DATA_SETUP_STATE = { tab: 'datasetup', view: 'Cashouts' };
@@ -168,7 +170,19 @@ export default function Cashout() {
     [allDeals],
   );
 
-  const [showCommitments, setShowCommitments] = useState(false);
+  // ?tab=new-deals (from a deal notification) or ?tab=commitments opens that tab.
+  const location = useLocation();
+  const urlParams = new URLSearchParams(location.search);
+  const urlTab = urlParams.get('tab');
+  const highlightAlert = urlParams.get('alert');
+  const [tab, setTab] = useState(() => (['new-deals', 'commitments'].includes(urlTab) ? urlTab : 'live'));
+  useEffect(() => {
+    if (['new-deals', 'commitments'].includes(urlTab)) setTab(urlTab);
+  }, [urlTab, location.key]);
+  const showCommitments = tab === 'commitments';
+  const showNewDeals = tab === 'new-deals';
+  const showLive = tab === 'live';
+  const setShowCommitments = (on) => setTab(on ? 'commitments' : 'live');
   const { data: commitments = [] } = useCashoutCommitments();
   const activeCommitmentCount = useMemo(() => commitments.filter((c) => c.status === 'active').length, [commitments]);
 
@@ -374,19 +388,19 @@ export default function Cashout() {
       )}
 
       {/* Tabs: Live Deals / Commitments */}
-      <div role="tablist" className="flex items-center gap-1 border-b border-[color:var(--dp-border)]">
+      <div role="tablist" className="flex items-center gap-0.5 sm:gap-1 border-b border-[color:var(--dp-border)]">
         <button
           type="button"
           role="tab"
-          aria-selected={!showCommitments}
+          aria-selected={showLive}
           onClick={() => setShowCommitments(false)}
-          className={`flex items-center gap-2 px-3.5 py-2.5 -mb-px text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
-            !showCommitments
+          className={`flex shrink-0 items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2.5 -mb-px whitespace-nowrap text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
+            showLive
               ? 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] text-[var(--dp-text-primary)]'
               : 'bg-transparent border-transparent text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'
           }`}
         >
-          <Layers size={15} className={!showCommitments ? 'text-[var(--dp-accent)]' : ''} />
+          <Layers size={15} className={`hidden sm:block ${showLive ? 'text-[var(--dp-accent)]' : ''}`} />
           <span>Live Deals</span>
           <span className="text-xs px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)]">
             {liveProductCount}
@@ -397,7 +411,7 @@ export default function Cashout() {
           role="tab"
           aria-selected={showCommitments}
           onClick={() => setShowCommitments(true)}
-          className={`flex items-center gap-2 px-3.5 py-2.5 -mb-px text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
+          className={`flex shrink-0 items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2.5 -mb-px whitespace-nowrap text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
             showCommitments
               ? 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] text-[var(--dp-text-primary)]'
               : 'bg-transparent border-transparent text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'
@@ -406,7 +420,21 @@ export default function Cashout() {
           <span>Commitments</span>
           <span className="text-xs px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)]">{activeCommitmentCount}</span>
         </button>
-        {!showCommitments && expiredCount > 0 && (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={showNewDeals}
+          onClick={() => setTab('new-deals')}
+          className={`flex shrink-0 items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2.5 -mb-px whitespace-nowrap text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
+            showNewDeals
+              ? 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] text-[var(--dp-text-primary)]'
+              : 'bg-transparent border-transparent text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'
+          }`}
+        >
+          <BellRing size={15} className={`hidden sm:block ${showNewDeals ? 'text-[var(--dp-accent)]' : ''}`} />
+          <span>New deals</span>
+        </button>
+        {showLive && expiredCount > 0 && (
           <label className="ml-auto flex items-center gap-1.5 text-xs font-normal text-[var(--dp-text-secondary)] cursor-pointer">
             <input
               type="checkbox"
@@ -420,8 +448,10 @@ export default function Cashout() {
 
       {showCommitments && <CommitmentsPanel commitments={commitments} allDeals={allDeals} />}
 
+      {showNewDeals && <NewDeals highlightId={highlightAlert} />}
+
       {/* Empty State when no connections added yet */}
-      {!showCommitments && (connectionsLoading ? (
+      {showLive && (connectionsLoading ? (
         <div className="p-8 text-center text-xs text-[var(--dp-text-secondary)]">Loading cashout deals…</div>
       ) : connections.length === 0 ? (
         <div className="rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] p-10 text-center max-w-md mx-auto my-8">

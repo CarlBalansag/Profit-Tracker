@@ -40,7 +40,8 @@ const storeKey = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g
 
 function providerName(provider) {
   try {
-    return getAdapter(provider).name || provider.toUpperCase();
+    const adapter = getAdapter(provider);
+    return adapter.settingsName || adapter.name || provider.toUpperCase();
   } catch {
     return String(provider || '').toUpperCase();
   }

@@ -629,6 +629,16 @@ export const useCashoutDeals = (connectionId = null) =>
     refetchIntervalInBackground: false,
   });
 
+// New cashout deals from every cashout (api services/cashouts/dealAlerts.js),
+// with the signed-in user's profit at their best card.
+export const useCashoutDealAlerts = (enabled = true) => useQuery({
+  queryKey: ['cashout', 'deal-alerts'],
+  queryFn: () => fetcher('/api/cashouts/deal-alerts'),
+  enabled,
+  refetchInterval: 60_000,
+  refetchIntervalInBackground: false,
+});
+
 export const cashoutCommitmentsQuery = () => ({
   queryKey: ['cashout', 'commitments'],
   queryFn: () => fetcher('/api/cashouts/commitments'),
