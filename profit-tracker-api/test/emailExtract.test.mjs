@@ -42,6 +42,31 @@ describe('confidence', () => {
   });
 });
 
+describe('stores that put the item name on its own line', () => {
+  it("reads Lowe's items: the name above Item #, the unit price and the quantity", () => {
+    const text = ['Order Details', 'SHIPPING', '1-1/2-in Carbide-tipped Straight Router Bit', 'Item #: 76740 |Model #: 85680MC', 'Unit Price $45.98 | Subtotal $91.96', 'QTY', '2',
+      'Mainstays Hose Nozzle', 'Item #: 1234 |Model #: HN-1', 'Unit Price $9.98 | Subtotal $9.98', 'QTY', '1', 'Order Total $101.94'].join('\n');
+    const r = extractEmail({ merchant: 'lowes', subject: 'Thanks for your order', text: `Order # 300906290260518059\n${text}` });
+    expect(r.items).toEqual([
+      { name: '1-1/2-in Carbide-tipped Straight Router Bit', quantity: 2, unit_price: 45.98, total: '91.96' },
+      { name: 'Mainstays Hose Nozzle', quantity: 1, unit_price: 9.98, total: '9.98' },
+    ]);
+  });
+  it('reads GameStop items between View order details and Order summary, once each', () => {
+    const text = ['Order Number: 1101000080429674', 'VIEW ORDER DETAILS', 'GameStop Pro', 'GameStop Pro', 'ORDER SUMMARY', 'Subtotal', '$25.00', 'Estimated Tax', '$2.19', 'Estimated Total', '$27.19'].join('\n');
+    const r = extractEmail({ merchant: 'gamestop', subject: 'Thank you for your order!', text });
+    expect(r.items).toEqual([{ name: 'GameStop Pro', quantity: 1, total: null }]);
+    expect(r.order_number).toBe('1101000080429674');
+  });
+  it('reads GameStop pickup items from the line above QTY, never the pickup block (store, address, who picks up)', () => {
+    const text = ['VIEW ORDER DETAILS', 'STORE PICK-UP', 'PRE ORDER', 'Pick-up at:', 'GameStop', '1689 Arden Way,', 'Sacramento, CA, 95815', 'Pick-up by: Pat Example',
+      '2026 Topps Chrome Formula 1 Value Box', 'QTY: 2', '$34.99', 'ORDER SUMMARY'].join('\n');
+    expect(extractEmail({ merchant: 'gamestop', subject: 'Thank you for your order!', text }).items).toEqual([{ name: '2026 Topps Chrome Formula 1 Value Box', quantity: 2, unit_price: 34.99, total: '69.98' }]);
+    const noItems = ['VIEW ORDER DETAILS', 'STORE PICK-UP', 'Pick-up at:', 'GameStop', '10853 Olson Dr,', 'Rancho Cordova, CA, 95670', 'Pick-up by: Pat Example', 'ORDER SUMMARY'].join('\n');
+    expect(extractEmail({ merchant: 'gamestop', subject: 'Thank you for your order!', text: noItems }).items || []).toEqual([]);
+  });
+});
+
 describe('generic reader', () => {
   it('reads amounts on the same line or the next', () => {
     expect(generic.amounts('Order Total:\n$1,234.56\nSales tax $3.10')).toMatchObject({ total: '1234.56', tax: '3.10' });

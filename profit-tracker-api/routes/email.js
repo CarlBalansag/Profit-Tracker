@@ -14,7 +14,7 @@ const { syncAccount, testConnection, openAccount, catchUp, catchingUp } = requir
 const keepSyncing = (accountId) => catchUp(accountId, deps, { maxRuns: deps.catchUpRuns ?? 30 }).catch(() => {});
 const { linkMatch, rejectMatch } = require('../services/email/match');
 const { linkPreview, willFill } = require('../services/email/linkPreview');
-const { toConfirmCount, confirmEntries, rejectEntry } = require('../services/email/review');
+const { toConfirmCount, confirmEntries, rejectEntry, namePurchase } = require('../services/email/review');
 const { getSettings, saveSettings, DEFAULTS } = require('../services/email/settings');
 const { createExpenseFromOrder, suggestRules, normalizeDomain, labelFor } = require('../services/email/rules');
 const { createPurchasesFromOrder, applyCashoutReceipts } = require('../services/email/automations');
@@ -393,6 +393,17 @@ const confirmBody = z.object({ ids: z.array(z.string().uuid()).min(1).max(500) }
 router.post('/automation/confirm', isAuthenticated, validateBody(confirmBody), async (req, res, next) => {
   try { res.json({ confirmed: await confirmEntries(req.user.id, req.body.ids) }); } catch (err) { next(err); }
 });
+// Names a purchase made from an email (e.g. from a past purchase's name).
+const nameBody = z.object({ name: z.string().trim().min(1).max(200) }).strict();
+router.post('/automation/:id/name', isAuthenticated, validateBody(nameBody), async (req, res, next) => {
+  try {
+    res.json(await namePurchase(req.user.id, req.params.id, req.body.name));
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
 router.post('/automation/:id/reject', isAuthenticated, async (req, res, next) => {
   try {
     res.json(await rejectEntry(req.user.id, req.params.id));

@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowRight, ExternalLink, Mail, X } from 'lucide-react';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
@@ -40,9 +40,35 @@ function SourceEmails({ source }) {
   );
 }
 
+// A purchase made from an email with no item name: type one, or take a past
+// purchase's name (same store, same price).
+function NameForm({ purchase, busy, onName }) {
+  const [name, setName] = useState('');
+  const submit = (e) => { e.preventDefault(); if (name.trim()) onName(name.trim()); };
+  return (
+    <form onSubmit={submit} aria-label="Name this purchase" className="rounded-xl bg-[var(--accent-bg)] px-3 py-3">
+      <label htmlFor="name-purchase" className="block text-sm font-semibold text-[var(--dp-text-primary)]">Name this purchase</label>
+      <p className="text-xs text-gray-400">The email didn't say what was bought.</p>
+      <div className="mt-2 flex gap-2">
+        <input id="name-purchase" value={name} onChange={(e) => setName(e.target.value)} maxLength={200} placeholder="What was it?" className="min-w-0 flex-1 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] px-3 py-2 text-base text-[var(--dp-text-primary)] placeholder-gray-600 focus:border-[var(--accent)] focus:outline-none sm:text-sm" />
+        <button type="submit" disabled={busy || !name.trim()} className="page-btn page-btn-primary">Save</button>
+      </div>
+      {purchase.hints?.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {purchase.hints.map((h) => (
+            <button key={h.name} type="button" disabled={busy} onClick={() => onName(h.name)} className="page-btn page-btn-secondary !h-8 !px-2.5 !text-xs max-w-full">
+              <span className="truncate">Use “{h.name}”</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </form>
+  );
+}
+
 const when = (iso) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
-export default function ChangeDetailsModal({ entry, change, actions, onClose }) {
+export default function ChangeDetailsModal({ entry, change, actions, onClose, onName, busy = false }) {
   const closeRef = useRef(null);
   const modalRef = useModalKeyboard(Boolean(entry), onClose, closeRef);
   if (!entry) return null;
@@ -72,6 +98,7 @@ export default function ChangeDetailsModal({ entry, change, actions, onClose }) 
         </div>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          {entry.purchase?.placeholder && onName && <NameForm purchase={entry.purchase} busy={busy} onName={onName} />}
           {sections.map((section) => (
             <section key={section.title} aria-label={section.title}>
               <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500">{section.title}</h3>

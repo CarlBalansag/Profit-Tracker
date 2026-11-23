@@ -130,9 +130,82 @@ function pickEmail(entry, emails) {
   return emails.find((m) => prefer.includes(m.kind)) || emails[0] || null;
 }
 
+// A purchase made from an email with no item name ("GameStop order 1101…"):
+// names of the user's own past purchases from the same store at the same
+// unit price, most used first, so one tap can name it.
+const isPlaceholder = (name, store) => String(name || '').startsWith(`${store} order`);
+async function nameHints(userId, row, store) {
+  const unit = Number(row.unit_purchase_cost);
+  if (!store || !Number.isFinite(unit) || unit <= 0) return [];
+  const past = await prisma.inventory.findMany({
+    where: {
+      user_id: userId, id: { not: row.id }, vendor: { name: { equals: store, mode: 'insensitive' } },
+      unit_purchase_cost: { gte: unit - 0.01, lte: unit + 0.01 },
+      NOT: { product_name: { startsWith: `${store} order` } },
+    },
+    select: { product_name: true, purchase_date: true },
+    orderBy: { purchase_date: 'desc' },
+    take: 200,
+  });
+  const byName = new Map();
+  for (const p of past) {
+    const key = p.product_name.trim().toLowerCase();
+    const hit = byName.get(key) || { name: p.product_name.trim(), times: 0, last_date: p.purchase_date };
+    hit.times += 1;
+    byName.set(key, hit);
+  }
+  return [...byName.values()].sort((a, b) => b.times - a.times || b.last_date - a.last_date).slice(0, 3);
+}
+
+// The purchase a "made from email" change created (one row only), for naming.
+const createdPurchaseId = (entry) => {
+  const d = entry.detail || {};
+  if (entry.record_type !== 'purchase' || d.action !== 'create') return null;
+  const rows = (d.rows || []).filter((r) => r.model === 'inventory' && r.op === 'create');
+  return rows.length === 1 ? rows[0].id : null;
+};
+
+// Names the purchase an automatic change made (Use this name). Logged as the
+// user's edit, with Undo.
+async function namePurchase(userId, entryId, name) {
+  const { trackChange } = require('../activityLog');
+  const entry = await prisma.activityLog.findFirst({ where: { id: entryId, user_id: userId, source: 'email' } });
+  const id = entry && createdPurchaseId(entry);
+  if (!id) throw requestError(404, 'This change has no purchase to name.');
+  const row = await prisma.inventory.findFirst({ where: { id, user_id: userId }, select: { id: true } });
+  if (!row) throw requestError(404, 'This purchase no longer exists.');
+  await prisma.$transaction((tx) => trackChange(tx, userId, {
+    action: 'edit', recordType: 'purchase', source: 'web', recordId: id,
+    refs: async () => ({ inventory: [id] }),
+  }, () => tx.inventory.update({ where: { id }, data: { product_name: name } })));
+  return { id, product_name: name };
+}
+
 // Adds `email_source` to each Automation entry: { store, order_number,
-// store_url, email: { subject, sent_at, url }, emails }.
+// store_url, email: { subject, sent_at, url }, emails }, and for a purchase
+// made from an email, `purchase`: { id, name, placeholder, hints }.
 async function attachSources(userId, entries) {
+  const withPurchases = await attachPurchases(userId, entries);
+  return attachEmails(userId, withPurchases);
+}
+
+async function attachPurchases(userId, entries) {
+  const ids = entries.map(createdPurchaseId).filter(Boolean);
+  if (!ids.length) return entries;
+  const rows = await prisma.inventory.findMany({ where: { id: { in: ids }, user_id: userId }, select: { id: true, product_name: true, unit_purchase_cost: true, vendor: { select: { name: true } } } });
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const out = [];
+  for (const entry of entries) {
+    const row = byId.get(createdPurchaseId(entry));
+    if (!row) { out.push(entry); continue; }
+    const store = row.vendor?.name || String(entry.detail?.product_name || '').replace(/ order.*$/, '');
+    const placeholder = isPlaceholder(row.product_name, store);
+    out.push({ ...entry, purchase: { id: row.id, name: row.product_name, placeholder, hints: placeholder ? await nameHints(userId, row, store) : [] } });
+  }
+  return out;
+}
+
+async function attachEmails(userId, entries) {
   const orderIds = new Map();
   for (const entry of entries) orderIds.set(entry.id, await orderIdFor(userId, entry).catch(() => null));
   const ids = [...new Set([...orderIds.values()].filter(Boolean))];
@@ -163,5 +236,6 @@ async function attachSources(userId, entries) {
 }
 
 module.exports.attachSources = attachSources;
+module.exports.namePurchase = namePurchase;
 module.exports.emailUrl = emailUrl;
 module.exports.storeOrderUrl = storeOrderUrl;

@@ -4,11 +4,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Automation from './Automation';
 
-const mocks = vi.hoisted(() => ({ query: {}, calls: [], confirm: vi.fn(), reject: vi.fn(), success: vi.fn(), error: vi.fn(), toConfirm: 0 }));
+const mocks = vi.hoisted(() => ({ query: {}, calls: [], confirm: vi.fn(), reject: vi.fn(), name: vi.fn(), success: vi.fn(), error: vi.fn(), toConfirm: 0 }));
 vi.mock('../hooks/useApi', () => ({
   useActivity: (group, source, review) => { mocks.calls.push([group, source, review]); return mocks.query; },
   useAutomationReview: () => ({ data: { to_confirm: mocks.toConfirm } }),
-  useAutomationReviewMutations: () => ({ confirm: { mutateAsync: mocks.confirm }, reject: { mutateAsync: mocks.reject } }),
+  useAutomationReviewMutations: () => ({ confirm: { mutateAsync: mocks.confirm }, reject: { mutateAsync: mocks.reject }, name: { mutateAsync: mocks.name } }),
   useEmailAutomation: () => ({ data: { linkMatches: true, updateShipping: true, cashoutPayouts: true, returnReminders: true, createPurchases: false, cancellations: false } }),
   useEmailAccounts: () => ({ data: [{ id: 'a1', status: 'active', last_synced_at: new Date(Date.now() - 5 * 60000).toISOString() }] }),
 }));
@@ -145,6 +145,39 @@ describe('Automation page', () => {
     expect(from).toHaveTextContent("From your email · Lowe's 9101");
     expect(within(from).getAllByRole('link')).toHaveLength(1);
     expect(within(from).getByText('Your order shipped')).toBeInTheDocument();
+  });
+
+  it('offers names from past purchases for one made with no item name, and names it from Details too', async () => {
+    mocks.name.mockResolvedValue({});
+    const values = { product_name: 'GameStop order 1101', qty_purchased: 1, qty_on_hand: 1, unit_purchase_cost: '25', sales_tax: '2.19', fees: '0', cashback_earned: '0', gift_card_amount: '0',
+      shipping_cost_inbound: '0', receiving_status: 'PURCHASED', status: 'PURCHASED', order_number: '1101', notes: 'Created from an order email', purchase_date: '2026-04-16T15:00:00.000Z' };
+    const made = { id: 'c1', kind: 'change', record_type: 'purchase', source: 'email', undo_state: 'available', review_state: null, created_at: now,
+      detail: { action: 'create', product_name: 'GameStop order 1101', rows: [{ model: 'inventory', op: 'create', id: 'inv1', row: { values } }] },
+      purchase: { id: 'inv1', name: 'GameStop order 1101', placeholder: true, hints: [{ name: 'Topps Chrome Value', times: 3 }, { name: 'Pokemon ETB', times: 1 }] },
+      email_source: { store: 'GameStop', order_number: '1101', store_url: null, email: null, emails: [] } };
+    const named = { ...made, id: 'c2', purchase: { id: 'inv2', name: 'GameStop Pro', placeholder: false, hints: [] } };
+    setQuery({ data: page([made, named]) });
+    show();
+    expect(screen.getByText(/You've bought these at GameStop for the same price/)).toBeInTheDocument();
+    // The one named since shows its new name and no suggestions.
+    expect(screen.getByText('GameStop Pro')).toBeInTheDocument();
+    expect(screen.getAllByText(/No item name in the email/)).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: /Use “Topps Chrome Value”/ }));
+    await waitFor(() => expect(mocks.name).toHaveBeenCalledWith({ id: 'c1', name: 'Topps Chrome Value' }));
+    expect(mocks.success).toHaveBeenCalledWith('Named it “Topps Chrome Value”.');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Details: Added a purchase, GameStop order 1101' }));
+    const dialog = screen.getByRole('dialog');
+    // Each field once, no $0.00 rows, the name and amounts first.
+    expect(within(dialog).getAllByText('Status')).toHaveLength(1);
+    expect(within(dialog).queryByText('Fees')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('Cashback')).not.toBeInTheDocument();
+    expect(within(dialog).getAllByRole('term').map((t) => t.textContent).slice(0, 4)).toEqual(['Name', 'Qty bought', 'Unit cost', 'Tax']);
+    const form = within(dialog).getByRole('form', { name: 'Name this purchase' });
+    expect(within(form).getByRole('button', { name: 'Save' })).toBeDisabled();
+    fireEvent.change(within(form).getByLabelText('Name this purchase'), { target: { value: '  GameStop Pro membership ' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(mocks.name).toHaveBeenLastCalledWith({ id: 'c1', name: 'GameStop Pro membership' }));
   });
 
   it('shows what happened to completed ones, without Confirm or No', () => {

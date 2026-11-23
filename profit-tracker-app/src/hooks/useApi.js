@@ -854,6 +854,8 @@ export const useAutomationReviewMutations = () => {
     }),
     // "No" takes the change back, so the records it touched refresh too.
     reject: useMutation({ mutationFn: (id) => post(`/api/email/automation/${id}/reject`), onSuccess: () => qc.invalidateQueries() }),
+    // Names a purchase made from an email (a past purchase's name, or typed).
+    name: useMutation({ mutationFn: ({ id, name }) => post(`/api/email/automation/${id}/name`, { name }), onSuccess: () => qc.invalidateQueries() }),
   };
 };
 

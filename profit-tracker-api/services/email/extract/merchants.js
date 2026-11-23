@@ -57,6 +57,60 @@ function amazonShipTo(text) {
   return null;
 }
 
+const textLines = (text) => String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+const PRICE = /\$\s?([\d,]+\.\d{2})/;
+const num = (v) => Number(String(v).replace(/,/g, ''));
+
+// Lowe's: the name is the line above "Item #: 76740 |Model #: 85680MC", then
+// "Unit Price $45.98 | Subtotal $45.98" and "QTY" over the quantity.
+function lowesItems(text) {
+  const lines = textLines(text);
+  const out = [];
+  for (let i = 1; i < lines.length && out.length < 50; i += 1) {
+    if (!/^item\s*#\s*:/i.test(lines[i])) continue;
+    const name = lines[i - 1];
+    if (!name || PRICE.test(name) || /^(qty|item|model|order|shipping|pickup|delivery)\b/i.test(name) || name.length < 3) continue;
+    const near = lines.slice(i + 1, i + 7);
+    const unit = near.map((l) => l.match(/unit price\s*\$\s?([\d,]+\.\d{2})/i)).find(Boolean);
+    const qtyAt = near.findIndex((l) => /^qty\b/i.test(l));
+    const qtyLine = qtyAt >= 0 ? (near[qtyAt].match(/(\d{1,3})\s*$/) || [null, near[qtyAt + 1]])[1] : null;
+    const quantity = /^\d{1,3}$/.test(String(qtyLine || '')) ? Number(qtyLine) : 1;
+    const unitPrice = unit ? num(unit[1]) : null;
+    out.push({ name: name.slice(0, 200), quantity, unit_price: unitPrice, total: unitPrice != null ? (unitPrice * quantity).toFixed(2) : null });
+  }
+  return out;
+}
+
+// GameStop: each item's name is the line above "QTY: 2", with its unit price
+// below ("$34.99"), in order, pickup and shipping emails alike. A membership
+// order has no QTY line: then the names between "VIEW ORDER DETAILS" and
+// "ORDER SUMMARY", leaving out the pickup block (store, address, who picks up).
+const GAMESTOP_NOT_ITEM = /^(?:store pick-?up|pre ?-?order|pick-?up\b.*|gamestop|ship(?:ping)? to\b.*|deliver(?:y|ing) to\b.*)$/i;
+function gamestopItems(text) {
+  const lines = textLines(text);
+  const out = [];
+  for (let i = 1; i < lines.length && out.length < 50; i += 1) {
+    const qty = lines[i].match(/^(?:qty|quantity)\s*:?\s*(\d{1,3})\b/i);
+    if (!qty) continue;
+    const name = lines[i - 1];
+    if (!name || name.length < 3 || PRICE.test(name) || GAMESTOP_NOT_ITEM.test(name) || /:$/.test(name)) continue;
+    const price = (lines[i + 1] || '').match(/^\$\s?([\d,]+\.\d{2})$/);
+    const quantity = Number(qty[1]);
+    const unitPrice = price ? num(price[1]) : null;
+    out.push({ name: name.slice(0, 200), quantity, unit_price: unitPrice, total: unitPrice != null ? (unitPrice * quantity).toFixed(2) : null });
+  }
+  if (out.length) return out;
+  const from = lines.findIndex((l) => /^view order details$/i.test(l));
+  const to = lines.findIndex((l, i) => i > from && /^order summary$/i.test(l));
+  if (from < 0 || to < 0) return [];
+  for (const l of lines.slice(from + 1, to)) {
+    // Addresses and the pickup person have digits, commas or a label.
+    if (l.length < 3 || GAMESTOP_NOT_ITEM.test(l) || /[\d,@]|:$/.test(l) || out.some((x) => x.name === l)) continue;
+    out.push({ name: l.slice(0, 200), quantity: 1, total: null });
+  }
+  return out.slice(0, 10);
+}
+
 const MERCHANTS = {
   // Cash-out receipts ("Enclosed is your RECEIPT - ID 211338"): the PDF lists
   // what was scanned in and what the balance was credited. Check notices
@@ -136,8 +190,16 @@ const MERCHANTS = {
   costco: { version: 1, orderNumber: [/order\s*(?:number|#)\s*[:#]?\s*(\d{9,11})\b/i] },
   samsclub: { version: 1, orderNumber: [/order\s*(?:number|#)\s*[:#]?\s*(\d{9,13})\b/i] },
   homedepot: { version: 2, orderNumber: [/order\s*(?:number|#)\s*[:#]?\s*([A-Z]{0,2}\d{8,12})\b/i] },
-  lowes: { version: 1, orderNumber: [/order\s*(?:number|#)\s*[:#]?\s*(\d{9,12})\b/i] },
-  gamestop: { version: 1, orderNumber: [/order\s*(?:number|#)\s*[:#]?\s*(\d{10,16})\b/i] },
+  lowes: {
+    version: 2,
+    orderNumber: [/order\s*(?:number|#)\s*[:#]?\s*(\d{9,12})\b/i],
+    read: (_subject, text) => { const items = lowesItems(text); return items.length ? { items } : null; },
+  },
+  gamestop: {
+    version: 3,
+    orderNumber: [/order\s*(?:number|#)\s*[:#]?\s*(\d{10,16})\b/i],
+    read: (_subject, text) => { const items = gamestopItems(text); return items.length ? { items } : null; },
+  },
   nike: { version: 1, orderNumber: [/order\s*(?:number|#)\s*[:#]?\s*(C\d{10,12})\b/i] },
   ebay: {
     version: 1,
@@ -182,4 +244,4 @@ const MERCHANTS = {
   usps: { version: 1, carrier: true },
 };
 
-module.exports = { MERCHANTS };
+module.exports = { MERCHANTS, lowesItems, gamestopItems };

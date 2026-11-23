@@ -17,7 +17,7 @@ const { groupMessages, recompute } = require('./orders');
 const { matchOrders } = require('./match');
 const { getSettings } = require('./settings');
 const { applyRules, customMerchant } = require('./rules');
-const { applyOrderUpdates, applyCashoutReceipts, applyCashoutChecks, createMissingPurchases } = require('./automations');
+const { applyOrderUpdates, applyCashoutReceipts, applyCashoutChecks, createMissingPurchases, namePlaceholderPurchases } = require('./automations');
 const { sortOrders } = require('./sorting');
 const { pdfText, mergePdfDetails, firstPdf } = require('./attachments');
 const { looksPrivate } = require('./extract/generic');
@@ -337,6 +337,7 @@ async function organize(prisma, userId) {
     const sorted = await sortOrders(prisma, userId, settings);
     const purchases = settings.createPurchases ? await createMissingPurchases(prisma, userId) : 0;
     const updates = await applyOrderUpdates(prisma, userId, settings);
+    await namePlaceholderPurchases(prisma, userId).catch((err) => console.error('[email] naming purchases skipped:', err?.code || err?.message));
     const cashoutsPaid = await applyCashoutReceipts(prisma, userId, settings);
     // Checks after receipts, so a receipt and its check in one sync line up.
     const checksMoved = await applyCashoutChecks(prisma, userId, settings);

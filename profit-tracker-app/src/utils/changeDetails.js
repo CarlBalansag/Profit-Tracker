@@ -29,10 +29,19 @@ function fieldRows(fields = {}) {
     .map(([key, f]) => ({ label: labelOf(key), before: show(key, f.before), after: show(key, f.after) }));
 }
 
+// A new or removed record: the fields that matter first, no empty or zero
+// amounts, and each label once (a purchase has two status columns).
+const FIRST = ['product_name', 'name', 'qty_purchased', 'quantity', 'unit_purchase_cost', 'unit_price', 'amount', 'sales_tax', 'shipping_cost_inbound', 'purchase_date', 'sale_date', 'date', 'order_number', 'tracking_number', 'receiving_status', 'status', 'notes'];
+const rank = (key) => { const i = FIRST.indexOf(key); return i < 0 ? FIRST.length : i; };
+const isEmpty = (key, v) => v === null || v === '' || v === undefined || v === false
+  || (['money', 'int'].includes((LABELS[key] || [])[1]) && Number(v) === 0 && key !== 'qty_purchased' && key !== 'quantity');
 function valueRows(values = {}) {
+  const seen = new Set();
   return Object.entries(values)
-    .filter(([key, v]) => LABELS[key] && !HIDDEN.test(key) && v !== null && v !== '' && v !== undefined)
-    .map(([key, v]) => ({ label: labelOf(key), after: show(key, v) }));
+    .filter(([key, v]) => LABELS[key] && !HIDDEN.test(key) && !isEmpty(key, v))
+    .sort(([a], [b]) => rank(a) - rank(b))
+    .map(([key, v]) => ({ label: labelOf(key), after: show(key, v) }))
+    .filter((row) => (seen.has(row.label) ? false : seen.add(row.label)));
 }
 
 export function changeDetails(entry) {

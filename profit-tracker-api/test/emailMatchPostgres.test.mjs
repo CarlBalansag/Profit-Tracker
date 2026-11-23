@@ -491,6 +491,58 @@ describe('email orders and matching on Postgres', () => {
       expect(review().storeOrderUrl('amazon', '113-5291515-4133865')).toBe('https://www.amazon.com/gp/your-account/order-details?orderID=113-5291515-4133865');
     });
 
+    it('names a purchase made from an email once its items are read, unless the user renamed it', async () => {
+      await prisma.platform.create({ data: { user_id: user.id, name: 'GameStop', type: 'Vendor' } });
+      await email({ merchant: 'gamestop', kind: 'order', order_number: '1101000080429674', total: '27.19', subtotal: '25.00', tax: '2.19', sent_at: new Date('2026-04-16T15:00:00Z') });
+      await email({ merchant: 'gamestop', kind: 'order', order_number: '1101000080429675', total: '10.00', sent_at: new Date('2026-04-16T15:00:00Z') });
+      await sync.organize(prisma, user.id);
+      const [first, second] = await prisma.emailOrder.findMany({ orderBy: { order_number: 'asc' } });
+      const a = (await send('POST', `/api/email/orders/${first.id}/purchase`)).body.purchase_ids[0];
+      const b = (await send('POST', `/api/email/orders/${second.id}/purchase`)).body.purchase_ids[0];
+      expect((await prisma.inventory.findUnique({ where: { id: a } })).product_name).toBe('GameStop order 1101000080429674');
+      await prisma.inventory.update({ where: { id: b }, data: { product_name: 'My own name' } });
+      // The emails are read again with names (a reader update).
+      await prisma.emailMessage.updateMany({ data: { items: [{ name: 'GameStop Pro', quantity: 1 }] } });
+      await prisma.emailOrder.updateMany({ data: { items: [{ name: 'GameStop Pro', quantity: 1 }] } });
+      await sync.organize(prisma, user.id);
+      expect((await prisma.inventory.findUnique({ where: { id: a } })).product_name).toBe('GameStop Pro');
+      expect((await prisma.inventory.findUnique({ where: { id: b } })).product_name).toBe('My own name');
+      const named = await prisma.activityLog.findFirst({ where: { source: 'email', record_id: a, kind: 'change', detail: { path: ['action'], equals: 'edit' } } });
+      expect(named.detail.email_order_id).toBe(first.id);
+      await activity.undoActivity(user.id, named.id);
+      expect((await prisma.inventory.findUnique({ where: { id: a } })).product_name).toBe('GameStop order 1101000080429674');
+    });
+
+    it('suggests names from past purchases at the same store and price, and names the purchase in one tap', async () => {
+      const target = await prisma.platform.create({ data: { user_id: user.id, name: 'Target', type: 'Vendor' } });
+      for (const name of ['Pokemon 151 Booster Bundle', 'Pokemon 151 Booster Bundle', 'Topps Hanger Box']) {
+        await purchase({ product_name: name, vendor_id: target.id, unit_purchase_cost: 29.99, purchase_date: new Date('2026-02-01') });
+      }
+      await purchase({ product_name: 'Something else', vendor_id: target.id, unit_purchase_cost: 12, purchase_date: new Date('2026-02-01') });
+      await purchase({ product_name: 'Other store, same price', vendor_id: vendor.id, unit_purchase_cost: 29.99 });
+      const theirs = await prisma.platform.create({ data: { user_id: other.id, name: 'Target', type: 'Vendor' } });
+      await prisma.inventory.create({ data: { user_id: other.id, vendor_id: theirs.id, product_name: 'Not yours', purchase_date: new Date(), unit_purchase_cost: 29.99, qty_purchased: 1, qty_on_hand: 1 } });
+      await email({ merchant: 'target', kind: 'order', order_number: '912000000077', total: '29.99', sent_at: new Date('2026-03-02T15:00:00Z') });
+      await sync.organize(prisma, user.id);
+      const order = await prisma.emailOrder.findFirst({ where: { order_number: '912000000077' } });
+      const made = (await send('POST', `/api/email/orders/${order.id}/purchase`)).body.purchase_ids[0];
+      const { entries } = await activity.listActivity(user.id, { source: 'email' });
+      const created = (await review().attachSources(user.id, entries)).find((e) => e.purchase);
+      expect(created.purchase).toMatchObject({ id: made, name: 'Target order 912000000077', placeholder: true });
+      expect(created.purchase.hints.map((h) => [h.name, h.times])).toEqual([['Pokemon 151 Booster Bundle', 2], ['Topps Hanger Box', 1]]);
+
+      actingUser = other;
+      expect((await send('POST', `/api/email/automation/${created.id}/name`, { name: 'x' })).status).toBe(404);
+      actingUser = user;
+      expect((await send('POST', `/api/email/automation/${created.id}/name`, { name: '  ' })).status).toBe(400);
+      expect((await send('POST', `/api/email/automation/${created.id}/name`, { name: 'Pokemon 151 Booster Bundle' })).body).toEqual({ id: made, product_name: 'Pokemon 151 Booster Bundle' });
+      expect((await prisma.inventory.findUnique({ where: { id: made } })).product_name).toBe('Pokemon 151 Booster Bundle');
+      const after = (await review().attachSources(user.id, (await activity.listActivity(user.id, { source: 'email' })).entries)).find((e) => e.purchase);
+      expect(after.purchase).toMatchObject({ name: 'Pokemon 151 Booster Bundle', placeholder: false, hints: [] });
+      // The rename is the user's own edit, with Undo.
+      expect(await prisma.activityLog.count({ where: { source: 'web', record_id: made } })).toBe(1);
+    });
+
     it('"No" on an order set aside as personal brings it back as business', async () => {
       await send('PUT', '/api/email/automation', { homeState: 'CA' });
       await email({ merchant: 'amazon', kind: 'order', order_number: '113-0000000-0000001', total: '24.99', ship_to: 'SACRAMENTO, CA', items: [{ name: 'Pet Supplies', quantity: 1, category: true }], sent_at: new Date(Date.now() - 2 * 86400000) });

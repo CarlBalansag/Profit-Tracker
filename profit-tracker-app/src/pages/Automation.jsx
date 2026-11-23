@@ -143,7 +143,33 @@ function Outcome({ entry }) {
   return null;
 }
 
-function AutomationRow({ entry, change, busy, onConfirm, onReject, onDetails }) {
+// A purchase made from an email with no item name: names the user has given
+// past purchases from the same store at the same price, one tap each.
+function NameHints({ entry, busy, onName }) {
+  const { hints = [] } = entry.purchase || {};
+  const store = entry.email_source?.store;
+  return (
+    <div className="mt-2 rounded-lg bg-white/[0.03] px-2.5 py-2">
+      <p className="text-xs text-gray-400">
+        {hints.length ? `No item name in the email. You've bought these${store ? ` at ${store}` : ''} for the same price:` : 'No item name in the email. Open it, or name the purchase in Details.'}
+      </p>
+      {hints.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {hints.map((h) => (
+            <button key={h.name} type="button" disabled={busy} onClick={() => onName(entry, h.name)} className={`page-btn page-btn-secondary ${SMALL} max-w-full`}>
+              <span className="truncate">Use “{h.name}”</span>
+              {h.times > 1 && <span className="shrink-0 tabular-nums text-gray-500">{h.times}×</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AutomationRow({ entry, change: described, busy, onConfirm, onReject, onDetails, onName }) {
+  // A purchase made from the email shows its name now (it may have been named since).
+  const change = entry.purchase?.name ? { ...described, subject: entry.purchase.name } : described;
   const look = KIND_LOOK[change.kind] || KIND_LOOK.details;
   const Icon = look.icon;
   const open = isOpen(entry);
@@ -176,6 +202,7 @@ function AutomationRow({ entry, change, busy, onConfirm, onReject, onDetails }) 
             ))}
           </p>
         )}
+        {entry.purchase?.placeholder && !takenBack && <NameHints entry={entry} busy={busy} onName={onName} />}
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
           {open && (
             <button type="button" disabled={busy} onClick={() => onConfirm(entry)} className={`page-btn page-btn-secondary ${SMALL}`}>
@@ -236,7 +263,7 @@ export default function Automation() {
   const [view, setView] = useState('open');
   const { data, isLoading, isError, refetch, isRefetching, hasNextPage, fetchNextPage, isFetchingNextPage } = useActivity(undefined, 'email', view);
   const { data: review } = useAutomationReview();
-  const { confirm, reject } = useAutomationReviewMutations();
+  const { confirm, reject, name: nameMutation } = useAutomationReviewMutations();
   const [pendingId, setPendingId] = useState(null);
   const [kind, setKind] = useState('all');
   const [details, setDetails] = useState(null);
@@ -263,6 +290,19 @@ export default function Automation() {
       setDetails(null);
     } catch (err) {
       toast.error(`Could not confirm: ${err.message}`);
+    } finally {
+      setPendingId(null);
+    }
+  };
+
+  const handleName = async (entry, name) => {
+    setPendingId(entry.id);
+    try {
+      await nameMutation.mutateAsync({ id: entry.id, name });
+      toast.success(`Named it “${name}”.`);
+      setDetails(null);
+    } catch (err) {
+      toast.error(`Could not rename: ${err.message}`);
     } finally {
       setPendingId(null);
     }
@@ -340,6 +380,7 @@ export default function Automation() {
                         onConfirm={handleConfirm}
                         onReject={handleReject}
                         onDetails={(e, c) => setDetails({ entry: e, change: c })}
+                        onName={handleName}
                       />
                     ))}
                   </ul>
@@ -363,6 +404,8 @@ export default function Automation() {
           entry={details.entry}
           change={details.change}
           onClose={() => setDetails(null)}
+          onName={(name) => handleName(details.entry, name)}
+          busy={pendingId !== null}
           actions={detailOpen ? (
             <>
               {canReject(details.entry) && (

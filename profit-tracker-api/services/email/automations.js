@@ -328,4 +328,32 @@ async function createMissingPurchases(prisma, userId) {
   return created;
 }
 
-module.exports = { applyOrderUpdates, applyCashoutReceipt, applyCashoutReceipts, applyCashoutChecks, salesForAmount, createPurchasesFromOrder, createMissingPurchases, RETURN_DAYS };
+// A purchase made from an email before its items could be read is named
+// "GameStop order 1101…". Once the order's emails name the items (a later
+// email, or a reader update), the purchase takes that name, unless the user
+// renamed it. One purchase per order only; logged with Undo.
+const ownedName = (name, merchant) => String(name || '').startsWith(`${labelFor(merchant)} order`);
+async function namePlaceholderPurchases(prisma, userId) {
+  const matches = await prisma.emailMatch.findMany({
+    where: { user_id: userId, state: 'linked', record_type: 'purchase' },
+    include: { order: { select: { id: true, merchant: true, items: true } } },
+    take: 500,
+  });
+  let named = 0;
+  for (const m of matches) {
+    if (!(m.reasons || []).some((r) => r.code === 'created') || m.record_ids.length !== 1) continue;
+    const items = (Array.isArray(m.order.items) ? m.order.items : []).filter((i) => i && i.name && !i.category && !i.more);
+    if (!items.length) continue;
+    const row = await prisma.inventory.findFirst({ where: { id: m.record_ids[0], user_id: userId, notes: 'Created from an order email' }, select: { id: true, product_name: true } });
+    if (!row || !ownedName(row.product_name, m.order.merchant)) continue;
+    const name = (items.length === 1 ? items[0].name : items.map((i) => (Number(i.quantity) > 1 ? `${i.quantity} ${i.name}` : i.name)).join(', ')).slice(0, 200);
+    await prisma.$transaction((tx) => trackChange(tx, userId, {
+      action: 'edit', recordType: 'purchase', source: 'email', recordId: row.id, extra: { email_order_id: m.order.id },
+      refs: async () => ({ inventory: [row.id] }),
+    }, () => tx.inventory.update({ where: { id: row.id }, data: { product_name: name } })));
+    named += 1;
+  }
+  return named;
+}
+
+module.exports = { namePlaceholderPurchases, applyOrderUpdates, applyCashoutReceipt, applyCashoutReceipts, applyCashoutChecks, salesForAmount, createPurchasesFromOrder, createMissingPurchases, RETURN_DAYS };
