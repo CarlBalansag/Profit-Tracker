@@ -7,11 +7,12 @@ import { trimOrderCsv } from '../../utils/orderCsv';
 
 const preview = { mutateAsync: vi.fn(), reset: vi.fn(), isPending: false };
 const commit = { mutateAsync: vi.fn(), isPending: false };
+let amazonAccounts = [];
 
 vi.mock('../../hooks/useApi', () => ({
   usePlatforms: () => ({ data: [
     { id: 'eb', name: 'ElectronicsBuyer', type: 'Cashout' },
-    { id: 'amazon', name: 'Amazon', type: 'Vendor' },
+    { id: 'amazon', name: 'Amazon', type: 'Vendor', accounts: amazonAccounts },
   ] }),
   usePaymentMethods: () => ({ data: [{ id: 'visa', name: 'Chase Prime Visa' }, { id: 'mc', name: 'Citi MC' }] }),
   useStoreOrderCosts: () => ({ preview, commit }),
@@ -57,6 +58,7 @@ describe('trimOrderCsv', () => {
 describe('StoreOrderImport', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    amazonAccounts = [];
     preview.mutateAsync.mockResolvedValue(RESULT);
     commit.mutateAsync.mockResolvedValue({ updated: 2, skipped: 0 });
   });
@@ -64,7 +66,7 @@ describe('StoreOrderImport', () => {
   it('uploads only the kept columns and previews the matches', async () => {
     render(<StoreOrderImport />);
     await upload('Order ID,Billing Address,Product Name\n1,secret,X');
-    expect(preview.mutateAsync).toHaveBeenCalledWith({ source: 'amazon', csv: 'Order ID,Product Name\n1,X' });
+    expect(preview.mutateAsync).toHaveBeenCalledWith({ source: 'amazon', files: [{ id: 1, csv: 'Order ID,Product Name\n1,X', accountId: null }] });
     const dialog = screen.getByRole('dialog', { name: 'Review costs' });
     expect(dialog).toHaveTextContent('Waiting for a cost3');
     // $40 x 2 + $6 tax, and $449.99 + $31.50 tax + $5.99 shipping.
@@ -84,11 +86,55 @@ describe('StoreOrderImport', () => {
     expect(commit.mutateAsync).toHaveBeenCalledWith({
       source: 'amazon', vendor_id: 'amazon', payment_method_id: 'mc', use_order_date: true,
       items: [
-        { inventory_id: 'p1', unit_cost: '40', sales_tax: 6, shipping: 0, order_number: '112-0', order_date: '2026-11-16', payment_method_id: 'visa' },
-        { inventory_id: 'p2', unit_cost: '449.99', sales_tax: 31.5, shipping: 5.99, order_number: '112-2', order_date: '2026-11-16', payment_method_id: null },
+        { inventory_id: 'p1', unit_cost: '40', sales_tax: 6, shipping: 0, order_number: '112-0', order_date: '2026-11-16', payment_method_id: 'visa', account_id: null },
+        { inventory_id: 'p2', unit_cost: '449.99', sales_tax: 31.5, shipping: 5.99, order_number: '112-2', order_date: '2026-11-16', payment_method_id: null, account_id: null },
       ],
     });
     expect(await screen.findByText(/Filled in the cost on 2 purchases/)).toBeInTheDocument();
+  });
+
+  it('with several Amazon accounts, reads one file per account together and saves each order\'s account', async () => {
+    amazonAccounts = [{ id: 'cb', name: 'CBAmazon', status: 'Active' }, { id: 'bizz', name: 'Bizz', username: 'bizz1', status: 'Active' }];
+    preview.mutateAsync.mockResolvedValue({
+      ...RESULT,
+      summary: { ...RESULT.summary, files: [{ id: 1, accountId: 'cb', lines: 3, problems: 1, duplicates: 0 }, { id: 2, accountId: 'bizz', lines: 2, problems: 0, duplicates: 1 }] },
+      lines: [line(0, { accountId: 'cb', accountName: 'CBAmazon' }), line(1), line(2, { qty: 1, accountId: 'bizz', accountName: 'Bizz', perUnit: { cost: 449.99, tax: 31.5, shipping: 5.99 } })],
+    });
+    render(<StoreOrderImport />);
+    const add = async (name) => {
+      fireEvent.change(document.getElementById('store-order-file'), { target: { files: [new File(['Order ID\n1'], name)] } });
+      await screen.findByLabelText(`Amazon account for ${name}`);
+    };
+    // With two accounts nothing is read until each file has its account.
+    await add('cb.csv');
+    expect(preview.mutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Amazon account for cb.csv')).toHaveValue('');
+    expect(screen.getByText('Not read yet')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Amazon account for cb.csv'), { target: { value: 'cb' } });
+    await add('bizz.csv');
+    expect(screen.getAllByRole('option', { name: 'Bizz (bizz1)' })).toHaveLength(2);
+    fireEvent.change(screen.getByLabelText('Amazon account for bizz.csv'), { target: { value: 'bizz' } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Review costs from 2 files' })); });
+    expect(preview.mutateAsync).toHaveBeenCalledWith({ source: 'amazon', files: [
+      { id: 1, csv: 'Order ID\n1', accountId: 'cb' },
+      { id: 2, csv: 'Order ID\n1', accountId: 'bizz' },
+    ] });
+    // The order picker names the account an order came from.
+    expect(screen.getAllByRole('option', { name: /^112-0 · CBAmazon · 2026-11-16/ }).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Save costs for 2 purchases' }));
+    await waitFor(() => expect(commit.mutateAsync).toHaveBeenCalled());
+    expect(commit.mutateAsync.mock.calls[0][0].items.map((i) => i.account_id)).toEqual(['cb', 'bizz']);
+  });
+
+  it('keeps the files after Cancel so an account can be changed, and removes one', async () => {
+    render(<StoreOrderImport />);
+    await upload();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByText('Retail.OrderHistory.1.csv')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Retail.OrderHistory.1.csv' }));
+    expect(screen.queryByText('Retail.OrderHistory.1.csv')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Review costs/ })).not.toBeInTheDocument();
   });
 
   it('switching to another order line takes its cost; unticking leaves the row out', async () => {

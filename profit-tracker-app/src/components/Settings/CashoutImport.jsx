@@ -5,8 +5,8 @@ import { toast } from 'sonner';
 import { useCashoutConnections, useCashoutImport, useCashoutProviders, usePaymentMethods, usePlatforms, useStoreOrderCosts } from '../../hooks/useApi';
 import { useMatchMedia } from '../../hooks/useMatchMedia';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
-import { AMAZON_HOW_TO, readOrderFile } from '../../utils/orderCsv';
-import { OrderPicker } from './StoreOrderPicker';
+import { AMAZON_HOW_TO, MAX_ORDER_FILES, defaultFileAccount, orderFilesTooBig, readOrderFile, storeAccountChoices } from '../../utils/orderCsv';
+import { OrderFileList, OrderPicker } from './StoreOrderPicker';
 import { StoreOrderImport } from './StoreOrderImport';
 
 // Settings > Data > Import from cashouts. Brings items already sold to a
@@ -92,6 +92,13 @@ export function CashoutImport() {
   // and, on import, its tax, shipping, order number, date, store and card.
   const [orders, setOrders] = useState(null);
   const [orderPick, setOrderPick] = useState({});
+  // The order files added (one per Amazon account, or older and newer
+  // exports), each with the store account it came from. They're matched
+  // together; a line found in two files is used once.
+  const [orderFiles, setOrderFiles] = useState([]);
+  // Orders the user picked (or cleared) by hand, kept when files change.
+  const [manualPick, setManualPick] = useState({});
+  const fileSeq = useRef(0);
 
   const sourceInfo = SOURCES.find((s) => s.id === source);
   const connection = connections.find((c) => c.provider === source) || null;
@@ -109,35 +116,74 @@ export function CashoutImport() {
     setError(null);
     setOrders(null);
     setOrderPick({});
+    setOrderFiles([]);
+    setManualPick({});
     preview.reset();
   };
 
   const amazonVendorId = vendors.find((v) => /amazon/i.test(v.name))?.id || null;
   const orderLines = useMemo(() => new Map((orders?.lines || []).map((l) => [l.index, l])), [orders]);
   const cardNames = useMemo(() => new Map(paymentMethods.map((p) => [p.id, p.name])), [paymentMethods]);
+  const amazonAccounts = useMemo(() => storeAccountChoices(platforms), [platforms]);
 
-  const addOrders = async (file) => {
-    if (!file || !result) return;
+  // Matches the rows against these files. The list only changes when the match
+  // works, so a bad file leaves the earlier ones as they were. A cost that came
+  // from an order follows the new match; a typed cost stays.
+  const matchFiles = async (files) => {
     setError(null);
+    if (orderFilesTooBig(files)) {
+      setError('These order files are too long to match together. Remove one, or split it by year.');
+      return;
+    }
     try {
-      const csv = await readOrderFile(file);
       const groups = result.groups.filter(isNew).map((g) => ({ key: g.key, name: g.name, date: g.date, qty: g.newQty, tracking: g.tracking }));
-      const res = await matchOrders.mutateAsync({ source: 'amazon', csv, groups });
+      const res = await matchOrders.mutateAsync({
+        source: 'amazon',
+        groups,
+        files: files.map((f) => ({ id: f.id, csv: f.csv, accountId: f.accountId || null })),
+      });
       const lines = new Map(res.lines.map((l) => [l.index, l]));
-      setOrders(res);
-      setOrderPick(Object.fromEntries(res.matches.map((m) => [m.key, m.lineIndex])));
-      // Matched rows take the order's cost unless one was typed already.
+      const nextPick = Object.fromEntries(res.matches.map((m) => {
+        const mine = manualPick[m.key];
+        return [m.key, mine !== undefined && (mine === null || lines.has(mine)) ? mine : m.lineIndex];
+      }));
       setCosts((current) => {
         const next = { ...current };
         for (const m of res.matches) {
-          if (m.lineIndex !== null && !String(current[m.key] ?? '').trim()) next[m.key] = String(lines.get(m.lineIndex).perUnit.cost);
+          const before = orderPick[m.key] !== undefined && orderPick[m.key] !== null ? orderLines.get(orderPick[m.key]) : null;
+          const typed = String(current[m.key] ?? '').trim();
+          if (typed && !(before && typed === String(before.perUnit.cost))) continue;
+          const line = nextPick[m.key] !== null ? lines.get(nextPick[m.key]) : null;
+          if (line) next[m.key] = String(line.perUnit.cost);
+          else delete next[m.key];
         }
         return next;
       });
+      setOrders(res);
+      setOrderPick(nextPick);
+      setOrderFiles(files);
     } catch (err) {
       setError(err.message);
     }
   };
+
+  const addOrders = async (file) => {
+    if (!file || !result) return;
+    setError(null);
+    if (orderFiles.length >= MAX_ORDER_FILES) {
+      setError(`Add at most ${MAX_ORDER_FILES} order files. Remove one first.`);
+      return;
+    }
+    try {
+      const csv = await readOrderFile(file);
+      fileSeq.current += 1;
+      await matchFiles([...orderFiles, { id: fileSeq.current, name: file.name, csv, accountId: defaultFileAccount(amazonAccounts) }]);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const setFileAccount = (id, accountId) => matchFiles(orderFiles.map((f) => (f.id === id ? { ...f, accountId } : f)));
 
   const removeOrders = () => {
     // Costs that came from an order go too; typed ones stay.
@@ -150,9 +196,18 @@ export function CashoutImport() {
     });
     setOrders(null);
     setOrderPick({});
+    setOrderFiles([]);
+    setManualPick({});
+  };
+
+  const removeFile = (id) => {
+    const rest = orderFiles.filter((f) => f.id !== id);
+    if (rest.length) matchFiles(rest);
+    else removeOrders();
   };
 
   const pickOrder = (key, index) => {
+    setManualPick((current) => ({ ...current, [key]: index }));
     setOrderPick((current) => ({ ...current, [key]: index }));
     const line = index === null ? null : orderLines.get(index);
     setCosts((current) => ({ ...current, [key]: line ? String(line.perUnit.cost) : '' }));
@@ -169,7 +224,9 @@ export function CashoutImport() {
       orderNumber: line.orderId,
       orderDate: line.orderDate,
       orderStore: orders.sourceName,
-      vendorId: amazonVendorId,
+      // The file's account names its store; otherwise the store called Amazon.
+      vendorId: line.vendorId || amazonVendorId,
+      accountId: line.accountId || null,
       paymentMethodId: line.paymentMethodId,
     };
   };
@@ -370,8 +427,11 @@ export function CashoutImport() {
           orderLines={orderLines}
           cardNames={cardNames}
           matching={matchOrders.isPending}
+          orderFiles={orderFiles}
+          amazonAccounts={amazonAccounts}
           onAddOrders={addOrders}
-          onRemoveOrders={removeOrders}
+          onSetFileAccount={setFileAccount}
+          onRemoveFile={removeFile}
           onPickOrder={pickOrder}
         />
       )}
@@ -395,7 +455,7 @@ function ImportReview({
   cashouts, vendors, paymentMethods, platformId, setPlatformId, vendorId, setVendorId, paymentMethodId, setPaymentMethodId,
   paidThrough, setPaidThrough, isPaid,
   chosen, chosenUnits, missingCost, busy, committing, error, onImport, onCancel,
-  orders, orderPick, orderLines, cardNames, matching, onAddOrders, onRemoveOrders, onPickOrder,
+  orders, orderPick, orderLines, cardNames, matching, orderFiles, amazonAccounts, onAddOrders, onSetFileAccount, onRemoveFile, onPickOrder,
 }) {
   const ordersFileRef = useRef(null);
   const orderMatch = useMemo(() => new Map((orders?.matches || []).map((m) => [m.key, m])), [orders]);
@@ -497,7 +557,7 @@ function ImportReview({
                   {orders ? (
                     <p className="text-xs text-gray-400 mt-1">
                       {orders.summary.byTracking} matched by tracking{orders.summary.byName > 0 && <>, <span className="text-amber-300">{orders.summary.byName} by name and date (check these)</span></>}
-                      {orders.summary.unmatched > 0 && <>, {orders.summary.unmatched} not found</>}. Matched rows get the order&apos;s cost, tax, shipping, order number, date and card.
+                      {orders.summary.unmatched > 0 && <>, {orders.summary.unmatched} not found</>}. Matched rows get the order&apos;s cost, tax, shipping, order number, date and card{amazonAccounts.length > 0 && ', and the account of the file it came from'}.
                     </p>
                   ) : (
                     <p className="text-xs text-gray-500 mt-1">Bought these on Amazon? Add your Amazon order history and each item gets its real cost, tax, order number, order date and card, matched by tracking number, then by name and date. {AMAZON_HOW_TO}</p>
@@ -506,15 +566,17 @@ function ImportReview({
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                   <input ref={ordersFileRef} id="cashout-import-orders-file" type="file" accept=".csv,text/csv" className="sr-only" onChange={(e) => { onAddOrders(e.target.files?.[0]); e.target.value = ''; }} disabled={busy} />
                   <label htmlFor="cashout-import-orders-file" className={`page-btn inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-3 h-9 rounded-lg border border-gray-700 text-sm text-gray-200 hover:bg-white/5 cursor-pointer ${busy ? 'opacity-50 pointer-events-none' : ''}`}>
-                    <FileUp size={14} /> {matching ? 'Matching…' : orders ? 'Use another file' : 'Add Amazon orders CSV'}
+                    <FileUp size={14} /> {matching ? 'Matching…' : orderFiles.length ? 'Add another file' : 'Add Amazon orders CSV'}
                   </label>
-                  {orders && (
-                    <button type="button" onClick={onRemoveOrders} disabled={busy} className="page-btn flex-1 sm:flex-none px-3 h-9 rounded-lg border border-gray-700 text-sm text-gray-300 hover:bg-white/5 disabled:opacity-50">
-                      Remove
-                    </button>
-                  )}
                 </div>
               </div>
+              <OrderFileList files={orderFiles} info={orders?.summary.files} accounts={amazonAccounts} onAccount={onSetFileAccount} onRemove={onRemoveFile} disabled={busy} />
+              {orderFiles.length > 0 && amazonAccounts.length === 0 && (
+                <p className="text-xs text-gray-500">Buy on more than one Amazon login? Add each one under Data Setup &gt; Accounts, then pick which account each file is from.</p>
+              )}
+              {orderFiles.length > 0 && amazonAccounts.length > 1 && (
+                <p className="text-xs text-gray-500">Add one file per Amazon account and pick its account. An order that shows up in two files is used once.</p>
+              )}
             </section>
           )}
 

@@ -471,6 +471,7 @@ function cleanGroup(raw, index) {
     orderStore: cleanText(raw.orderStore, 40),
     vendorId: id(raw.vendorId),
     paymentMethodId: id(raw.paymentMethodId),
+    accountId: id(raw.accountId),
     name,
     date,
     qty,
@@ -502,6 +503,14 @@ async function commit(userId, { source, platformId, vendorId, paymentMethodId, g
   }
   for (const id of new Set([paymentMethodId, ...clean.map((g) => g.paymentMethodId)].filter(Boolean))) {
     await requireOwned('paymentMethod', id, userId, 'Payment method');
+  }
+  // A matched store order's account (Amazon login) names its store too.
+  const accounts = new Map();
+  for (const id of new Set(clean.map((g) => g.accountId).filter(Boolean))) {
+    const account = await requireOwned('account', id, userId, 'Store account');
+    const store = await prisma.platform.findFirst({ where: { id: account.platform_id, user_id: userId }, select: { type: true } });
+    if (store?.type !== 'Vendor') throw badRequest('Pick an account that belongs to one of your stores.');
+    accounts.set(id, account);
   }
 
   const workflow = statusTransitions.resolveSaleWorkflow(platform.workflow_preset);
@@ -541,7 +550,8 @@ async function commit(userId, { source, platformId, vendorId, paymentMethodId, g
         data: {
           user_id: userId,
           product_name: g.name,
-          vendor_id: g.vendorId || vendorId || null,
+          vendor_id: (g.accountId && accounts.get(g.accountId).platform_id) || g.vendorId || vendorId || null,
+          account_id: g.accountId || null,
           payment_method_id: g.paymentMethodId || paymentMethodId || null,
           purchase_date: dateAtNoon(bought),
           sales_tax: g.salesTax,

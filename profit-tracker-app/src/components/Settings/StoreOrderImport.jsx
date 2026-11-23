@@ -1,12 +1,12 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FileUp, Save, X } from 'lucide-react';
+import { FileUp, Save, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePaymentMethods, usePlatforms, useStoreOrderCosts } from '../../hooks/useApi';
 import { useMatchMedia } from '../../hooks/useMatchMedia';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
-import { AMAZON_HOW_TO, readOrderFile } from '../../utils/orderCsv';
-import { OrderPicker } from './StoreOrderPicker';
+import { AMAZON_HOW_TO, MAX_ORDER_FILES, defaultFileAccount, orderFilesTooBig, readOrderFile, storeAccountChoices } from '../../utils/orderCsv';
+import { OrderFileList, OrderPicker } from './StoreOrderPicker';
 
 // Settings > Data > Fill in costs from store orders. The cashout import saves
 // purchases at $0 ("Cost needed") because cashout reports have no purchase
@@ -39,11 +39,18 @@ export function StoreOrderImport({ embedded = false } = {}) {
   const [useOrderDate, setUseOrderDate] = useState(true);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(null);
+  // The order files added (one per Amazon account, or older and newer
+  // exports) and what the last review read from each. They stay listed after
+  // Cancel, so an account can be changed and the review run again.
+  const [files, setFiles] = useState([]);
+  const [fileInfo, setFileInfo] = useState(null);
+  const fileSeq = useRef(0);
 
   const storeInfo = STORES.find((s) => s.id === store);
   const vendors = platforms.filter((p) => p.type === 'Vendor');
   const cardName = useMemo(() => new Map(paymentMethods.map((p) => [p.id, p.name])), [paymentMethods]);
   const lines = useMemo(() => new Map((result?.lines || []).map((l) => [l.index, l])), [result]);
+  const accounts = useMemo(() => storeAccountChoices(platforms, storeInfo.match), [platforms, storeInfo]);
 
   const reset = () => {
     setResult(null);
@@ -63,18 +70,46 @@ export function StoreOrderImport({ embedded = false } = {}) {
     setVendorId((current) => (current && vendors.some((v) => v.id === current) ? current : (vendors.find((v) => storeInfo.match.test(v.name))?.id || '')));
   };
 
-  const readFile = async (file) => {
+  // Reads every file together and opens the review.
+  const review = async (list) => {
     setDone(null);
     reset();
-    if (!file) return;
+    if (!list.length) return;
+    if (orderFilesTooBig(list)) {
+      setError('These order files are too long to read together. Remove one, or split it by year.');
+      return;
+    }
     try {
+      const data = await preview.mutateAsync({ source: store, files: list.map((f) => ({ id: f.id, csv: f.csv, accountId: f.accountId || null })) });
+      setFileInfo(data.summary.files);
+      showPreview(data);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const readFile = async (file) => {
+    if (!file) return;
+    setError(null);
+    try {
+      if (files.length >= MAX_ORDER_FILES) throw new Error(`Add at most ${MAX_ORDER_FILES} order files. Remove one first.`);
       const csv = await readOrderFile(file);
-      showPreview(await preview.mutateAsync({ source: store, csv }));
+      fileSeq.current += 1;
+      const next = [...files, { id: fileSeq.current, name: file.name, csv, accountId: defaultFileAccount(accounts) }];
+      setFiles(next);
+      // With several accounts, pick this file's account before reviewing.
+      if (accounts.length <= 1) await review(next);
     } catch (err) {
       setError(err.message);
     } finally {
       if (fileRef.current) fileRef.current.value = '';
     }
+  };
+
+  const setFileAccount = (id, accountId) => setFiles((current) => current.map((f) => (f.id === id ? { ...f, accountId } : f)));
+  const removeFile = (id) => {
+    setFiles((current) => current.filter((f) => f.id !== id));
+    setFileInfo((current) => current && current.filter((f) => f.id !== id));
   };
 
   const update = (id, patch) => setRows((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
@@ -111,12 +146,15 @@ export function StoreOrderImport({ embedded = false } = {}) {
             order_number: line.orderId,
             order_date: line.orderDate,
             payment_method_id: line.paymentMethodId,
+            account_id: line.accountId || null,
           };
         }),
       });
       setDone(res);
       toast.success(`Filled in the cost on ${plural(res.updated, 'purchase')}.`);
       reset();
+      setFiles([]);
+      setFileInfo(null);
     } catch (err) {
       setError(err.message);
     }
@@ -142,9 +180,20 @@ export function StoreOrderImport({ embedded = false } = {}) {
       <div className="space-y-2">
         <p className="text-xs text-gray-500">{storeInfo.howTo}</p>
         <input ref={fileRef} id="store-order-file" type="file" accept=".csv,text/csv" className="sr-only" onChange={(e) => readFile(e.target.files?.[0])} disabled={busy} />
-        <label htmlFor="store-order-file" className={`page-btn inline-flex items-center justify-center gap-2 px-4 h-9 rounded-lg border border-gray-700 text-sm text-gray-200 hover:bg-white/5 cursor-pointer w-full sm:w-auto ${busy ? 'opacity-50 pointer-events-none' : ''}`}>
-          <FileUp size={14} /> {preview.isPending ? 'Reading…' : `Choose ${storeInfo.label} order CSV`}
-        </label>
+        <div className="flex flex-wrap gap-2">
+          <label htmlFor="store-order-file" className={`page-btn inline-flex items-center justify-center gap-2 px-4 h-9 rounded-lg border border-gray-700 text-sm text-gray-200 hover:bg-white/5 cursor-pointer w-full sm:w-auto ${busy ? 'opacity-50 pointer-events-none' : ''}`}>
+            <FileUp size={14} /> {preview.isPending ? 'Reading…' : files.length ? 'Add another file' : `Choose ${storeInfo.label} order CSV`}
+          </label>
+          {files.length > 0 && (
+            <button type="button" onClick={() => review(files)} disabled={busy} className="page-btn inline-flex items-center justify-center gap-2 px-4 h-9 rounded-lg bg-[var(--accent)] text-sm font-medium text-white disabled:opacity-50 w-full sm:w-auto">
+              <Search size={14} /> {files.length === 1 ? 'Review costs' : `Review costs from ${files.length} files`}
+            </button>
+          )}
+        </div>
+        <OrderFileList files={files} info={fileInfo} accounts={accounts} onAccount={setFileAccount} onRemove={removeFile} disabled={busy} />
+        {files.length > 0 && accounts.length > 1 && (
+          <p className="text-xs text-gray-500">Add one file per {storeInfo.label} account and pick its account. An order that shows up in two files is used once.</p>
+        )}
       </div>
 
       {error && !result && <p role="alert" className="text-sm text-red-400">{error}</p>}

@@ -1,3 +1,5 @@
+import { accountLabel } from './storeAccounts';
+
 // Store order exports (Settings > Data > Fill in costs from store orders).
 // The columns the server reads (see AMAZON_COLUMNS in fillCosts.js). Everything
 // else, like shipping and billing addresses, never leaves the browser, which
@@ -66,7 +68,26 @@ export async function readOrderFile(file) {
   if (file.size > MAX_FILE_BYTES) throw new Error('That file is too big to read here.');
   const csv = trimOrderCsv(await readText(file));
   if (new Blob([csv]).size > MAX_UPLOAD_BYTES) {
-    throw new Error('That order history is too long to read at once. Split the CSV into smaller files (by year) and import each one.');
+    throw new Error('That order history is too long to read at once. Split the CSV into smaller files (by year) and add each one.');
   }
   return csv;
 }
+
+// Several files go up in one request, so together they share the limit.
+export const MAX_ORDER_FILES = 10;
+export const orderFilesTooBig = (files) => new Blob(files.map((f) => f.csv)).size > MAX_UPLOAD_BYTES;
+
+// The logins saved under the user's Amazon store(s) (Data Setup > Accounts),
+// for tagging which account an order file came from.
+export function storeAccountChoices(platforms, match = /amazon/i) {
+  const stores = (platforms || []).filter((p) => p.type === 'Vendor' && match.test(p.name || ''));
+  return stores.flatMap((s) => (s.accounts || []).map((a) => ({
+    id: a.id,
+    vendorId: s.id,
+    label: stores.length > 1 ? `${accountLabel(a)} · ${s.name}` : accountLabel(a),
+  })));
+}
+
+// A newly added file starts on the only account there is; with several, the
+// user picks (most exports are one account's whole history).
+export const defaultFileAccount = (accounts) => (accounts.length === 1 ? accounts[0].id : '');

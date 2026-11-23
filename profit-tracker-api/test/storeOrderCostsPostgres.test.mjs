@@ -368,3 +368,103 @@ describe('store orders in the cashout import review (real Postgres)', () => {
     await expect(fillCosts.matchReport(ME, { source: 'amazon', csv: AMAZON_CSV, groups: [{ key: 'k', name: 'X', date: 'nope', qty: 1 }] })).rejects.toThrow(/invalid/);
   });
 });
+
+describe('several Amazon files and accounts (real Postgres)', () => {
+  const [header, fourK, select, switch2, cancelled] = AMAZON_CSV.split('\n');
+  const fileA = [header, fourK, select].join('\n');
+  const fileB = [header, switch2, cancelled].join('\n');
+  let cb;
+  let bizz;
+  beforeEach(async () => {
+    cb = await db.account.create({ data: { user_id: ME, platform_id: ids.amazon, name: 'CBAmazon' } });
+    bizz = await db.account.create({ data: { user_id: ME, platform_id: ids.amazon, name: 'Bizz' } });
+  });
+  const groupsOf = async () => {
+    const p = await importSold.preview(ME, { source: 'eb', csv: EB_CSV });
+    const groups = p.groups.filter((g) => g.newQty > 0);
+    return { groups, sent: groups.map((g) => ({ key: g.key, name: g.name, date: g.date, qty: g.newQty, tracking: g.tracking })) };
+  };
+
+  it('reads one file per account as one order list and saves each purchase with its account', async () => {
+    const { groups, sent } = await groupsOf();
+    const matched = await fillCosts.matchReport(ME, {
+      source: 'amazon', groups: sent,
+      files: [{ id: 1, csv: fileA, accountId: cb.id }, { id: 2, csv: fileB, accountId: bizz.id }],
+    });
+    expect(matched.summary).toMatchObject({ byTracking: 2, byName: 1, unmatched: 0 });
+    expect(matched.summary.files).toEqual([
+      { id: 1, accountId: cb.id, lines: 2, problems: 0, duplicates: 0 },
+      { id: 2, accountId: bizz.id, lines: 2, problems: 1, duplicates: 0 },
+    ]);
+    const lines = new Map(matched.lines.map((l) => [l.index, l]));
+    // Line numbers start at file id * stride, so adding a file never renumbers another's.
+    expect([...lines.keys()].every((i) => i >= fillCosts.FILE_STRIDE)).toBe(true);
+    const byKey = new Map(matched.matches.map((m) => [m.key, m]));
+    const result = await importSold.commit(ME, {
+      source: 'eb', platformId: ids.eb,
+      groups: groups.map((g) => {
+        const l = lines.get(byKey.get(g.key).lineIndex);
+        return { ...g, qty: g.newQty, unitCost: l.perUnit.cost, orderNumber: l.orderId, orderStore: 'Amazon', paymentMethodId: l.paymentMethodId, accountId: l.accountId };
+      }),
+    });
+    expect(result).toMatchObject({ created: 3, costNeeded: 0 });
+    const rows = Object.fromEntries((await db.inventory.findMany({ where: { user_id: ME } })).map((r) => [r.product_name, r]));
+    expect(rows['Fire TV Stick 4K (Newest Model)']).toMatchObject({ account_id: cb.id, vendor_id: ids.amazon });
+    expect(rows['Nintendo Switch 2']).toMatchObject({ account_id: bizz.id, vendor_id: ids.amazon, unit_purchase_cost: 449.99 });
+    expect(lines.get(byKey.get(groups.find((g) => g.name === 'Nintendo Switch 2').key).lineIndex)).toMatchObject({ accountName: 'Bizz', vendorId: ids.amazon });
+  });
+
+  it('uses a line once when two files overlap, and takes the account from the file that has one', async () => {
+    const { sent } = await groupsOf();
+    const matched = await fillCosts.matchReport(ME, {
+      source: 'amazon', groups: sent,
+      files: [{ id: 1, csv: AMAZON_CSV }, { id: 3, csv: fileA, accountId: cb.id }],
+    });
+    expect(matched.summary.files[1]).toMatchObject({ id: 3, lines: 2, duplicates: 2 });
+    expect(matched.summary).toMatchObject({ byTracking: 2, byName: 1 });
+    const fourKLine = matched.lines.find((l) => l.orderId === '112-1111111-1111111');
+    expect(fourKLine).toMatchObject({ index: fillCosts.FILE_STRIDE, accountId: cb.id });
+    // The same order under two different accounts can't be right: set aside.
+    const clash = await fillCosts.matchReport(ME, {
+      source: 'amazon', groups: sent,
+      files: [{ id: 1, csv: fileA, accountId: cb.id }, { id: 2, csv: fileA, accountId: bizz.id }],
+    });
+    expect(clash.summary).toMatchObject({ byTracking: 0 });
+    expect(clash.summary.files[0].problems).toBe(2);
+  });
+
+  it('fills an account later only where the purchase has none and is at that store', async () => {
+    const rows = await importCashout();
+    const best = await db.platform.create({ data: { user_id: ME, name: 'Best Buy', type: 'Vendor' } });
+    const select = rows.find((r) => r.product_name === 'Fire TV Stick 4K Select');
+    await db.inventory.update({ where: { id: select.id }, data: { vendor_id: best.id } });
+    const preview = await fillCosts.preview(ME, { source: 'amazon', files: [{ id: 5, csv: AMAZON_CSV, accountId: cb.id }] });
+    const lines = new Map(preview.lines.map((l) => [l.index, l]));
+    const items = itemsFrom(preview).map((it) => ({ ...it, account_id: lines.get(preview.purchases.find((p) => p.id === it.inventory_id).lineIndex).accountId }));
+    expect(await fillCosts.commit(ME, { source: 'amazon', items })).toEqual({ updated: 3, skipped: 0 });
+    const after = Object.fromEntries((await db.inventory.findMany({ where: { user_id: ME } })).map((r) => [r.product_name, r]));
+    expect(after['Fire TV Stick 4K (Newest Model)']).toMatchObject({ account_id: cb.id, vendor_id: ids.amazon });
+    expect(after['Fire TV Stick 4K Select']).toMatchObject({ account_id: null, vendor_id: best.id });
+  });
+
+  it('refuses another user\'s account, an account on a cashout, and bad file lists, writing nothing', async () => {
+    const { groups, sent } = await groupsOf();
+    const theirAmazon = await db.platform.create({ data: { user_id: OTHER, name: 'Amazon', type: 'Vendor' } });
+    const theirs = await db.account.create({ data: { user_id: OTHER, platform_id: theirAmazon.id, name: 'Theirs' } });
+    const onCashout = await db.account.create({ data: { user_id: ME, platform_id: ids.eb, name: 'EB login' } });
+    const match = (files) => fillCosts.matchReport(ME, { source: 'amazon', groups: sent, files });
+    await expect(match([{ id: 1, csv: fileA, accountId: theirs.id }])).rejects.toMatchObject({ status: 404 });
+    await expect(match([{ id: 1, csv: fileA, accountId: onCashout.id }])).rejects.toMatchObject({ status: 400 });
+    await expect(match([{ id: 1, csv: fileA }, { id: 1, csv: fileB }])).rejects.toThrow(/twice/);
+    await expect(match([{ id: 0, csv: fileA }])).rejects.toThrow(/invalid/);
+    await expect(match(Array.from({ length: 11 }, (_, i) => ({ id: i + 1, csv: fileA })))).rejects.toThrow(/at most/);
+    await expect(match([{ id: 1, csv: fileA }, { id: 2, csv: 'a,b\n1,2' }])).rejects.toThrow(/^File 2:/);
+    const g = groups[0];
+    await expect(importSold.commit(ME, { source: 'eb', platformId: ids.eb, groups: [{ ...g, qty: g.newQty, unitCost: 5, accountId: theirs.id }] })).rejects.toMatchObject({ status: 404 });
+    await expect(importSold.commit(ME, { source: 'eb', platformId: ids.eb, groups: [{ ...g, qty: g.newQty, unitCost: 5, accountId: onCashout.id }] })).rejects.toMatchObject({ status: 400 });
+    expect(await db.inventory.count()).toBe(0);
+    const rows = await importCashout();
+    await expect(fillCosts.commit(ME, { source: 'amazon', items: [{ inventory_id: rows[0].id, unit_cost: 5, account_id: theirs.id }] })).rejects.toMatchObject({ status: 404 });
+    expect((await db.inventory.findUnique({ where: { id: rows[0].id } })).unit_purchase_cost).toBe(0);
+  });
+});

@@ -374,11 +374,11 @@ router.post('/import/commit', isAuthenticated, async (req, res) => {
 });
 
 // POST /api/cashouts/import/costs/preview — read a store's order export
-// ({ source: 'amazon', csv }) and pair it with purchases the cashout import
+// ({ source: 'amazon', csv } or { source, files: [{ id, csv, accountId }] }) and pair it with purchases the cashout import
 // saved without a cost. Writes nothing.
 router.post('/import/costs/preview', isAuthenticated, async (req, res) => {
   try {
-    res.json(await fillCosts.preview(req.user.id, { source: req.body?.source, csv: req.body?.csv }));
+    res.json(await fillCosts.preview(req.user.id, { source: req.body?.source, csv: req.body?.csv, files: req.body?.files }));
   } catch (err) {
     sendCashoutError(res, err);
   }
@@ -389,7 +389,7 @@ router.post('/import/costs/preview', isAuthenticated, async (req, res) => {
 // so the review can fill in their costs before importing. Writes nothing.
 router.post('/import/costs/match', isAuthenticated, async (req, res) => {
   try {
-    res.json(await fillCosts.matchReport(req.user.id, { source: req.body?.source, csv: req.body?.csv, groups: req.body?.groups }));
+    res.json(await fillCosts.matchReport(req.user.id, { source: req.body?.source, csv: req.body?.csv, files: req.body?.files, groups: req.body?.groups }));
   } catch (err) {
     sendCashoutError(res, err);
   }
