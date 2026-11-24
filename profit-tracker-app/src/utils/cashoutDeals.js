@@ -306,6 +306,28 @@ export function dealConditionLabels(deal) {
     .map((condition) => CONDITION_LABELS[condition] || condition.replace(/_/g, ' '));
 }
 
+// How many units of a deal you've already bought through Log Purchase: every
+// commitment on it that isn't withdrawn (committed or still waiting on
+// tracking). Purchases logged any other way aren't linked to a deal, so they
+// don't count.
+export function dealBoughtCount(deal, commitments) {
+  if (!Array.isArray(commitments) || deal?.id === undefined || deal?.id === null) return 0;
+  return commitments
+    .filter((c) => c.status !== 'withdrawn' && String(c.external_deal_id) === String(deal.id) && (!c.connection_id || c.connection_id === deal.connectionId))
+    .reduce((total, c) => total + (Number(c.quantity) || 0), 0);
+}
+
+// "2 of 3 bought" against a deal's limit. With no purchases it's null (the
+// plain limit label shows). A deal whose items have different limits, or no
+// limit, just says how many were bought.
+export function dealBoughtLabel(deal, bought) {
+  if (!(bought > 0)) return null;
+  const limits = (deal.items || []).map((item) => item.vendorLimit).filter((limit) => limit > 0);
+  const limit = limits.length && Math.min(...limits) === Math.max(...limits) ? limits[0] : null;
+  if (limit === null) return { text: `${bought} bought`, reached: false };
+  return { text: `${bought} of ${limit} bought`, reached: bought >= limit };
+}
+
 // Items in one deal can have different limits, so this can be a range.
 export function dealLimitLabel(deal) {
   const limits = (deal.items || []).map((item) => item.vendorLimit).filter((limit) => limit > 0);

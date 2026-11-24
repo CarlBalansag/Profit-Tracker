@@ -252,6 +252,28 @@ describe('Cashout Page', () => {
     expect(names()).toHaveLength(4);
   });
 
+  it('shows how many you have bought against the limit of a deal', () => {
+    const row = (status, quantity, dealId = '1') => ({ id: `${status}-${quantity}-${dealId}`, status, quantity, connection_id: mockConnections[0].id, external_deal_id: dealId, external_item_id: 'i1', open_item_id: 'i1', tracking_codes: [], created_at: new Date().toISOString() });
+    currentCommitments = [row('active', 1), row('pending', 1), row('withdrawn', 3), row('active', 2, '2')];
+    currentDeals = {
+      results: [{
+        connection: mockConnections[0],
+        deals: [
+          { id: '1', name: 'Part Bought', retail: 100, payout: 110, items: [{ id: 'i1', name: 'Part Bought', vendorLimit: 3 }] },
+          { id: '2', name: 'Maxed Out', retail: 100, payout: 110, items: [{ id: 'i1', name: 'Maxed Out', vendorLimit: 2 }] },
+          { id: '3', name: 'Untouched', retail: 100, payout: 110, items: [{ id: 'i1', name: 'Untouched', vendorLimit: 4 }] },
+        ],
+      }],
+    };
+    render(<MemoryRouter><Cashout /></MemoryRouter>);
+    const rowOf = (name) => screen.getByText(name).closest('tr');
+    expect(rowOf('Part Bought')).toHaveTextContent('2 of 3 bought');
+    expect(rowOf('Part Bought')).not.toHaveTextContent('limit reached');
+    expect(rowOf('Maxed Out')).toHaveTextContent('2 of 2 bought · limit reached');
+    expect(rowOf('Untouched')).toHaveTextContent('Limit 4');
+    expect(rowOf('Untouched')).not.toHaveTextContent('bought');
+  });
+
   it('estimates profit as payout minus retail, to the cent', () => {
     expect(estimateDealProfit({ payout: 1140, retail: 899.99 })).toEqual({ amount: 240.01, pct: 26.67 });
     expect(estimateDealProfit({ payout: 16, retail: 14.99 })).toEqual({ amount: 1.01, pct: 6.74 });

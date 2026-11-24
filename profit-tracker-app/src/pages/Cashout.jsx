@@ -49,6 +49,8 @@ import {
   dealRoi,
   dealConditionLabels,
   dealLimitLabel,
+  dealBoughtCount,
+  dealBoughtLabel,
   dealStoreNames,
   estimateDealProfit,
   formatDealExpiry,
@@ -652,7 +654,7 @@ export default function Cashout() {
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
                 {dealCards.map((deal) => (
-                  <DealCard key={`${deal.connectionId}-${deal.id}`} deal={deal} paymentMethods={paymentMethods} />
+                  <DealCard key={`${deal.connectionId}-${deal.id}`} deal={deal} paymentMethods={paymentMethods} commitments={commitments} />
                 ))}
               </div>
               {dealCardsLeft > 0 && (
@@ -707,7 +709,7 @@ export default function Cashout() {
                         >
                           {/* Deal Info */}
                           <td className="py-3 px-4 max-w-[18rem]">
-                            <DealSummary deal={summaryDeal(deal)} />
+                            <DealSummary deal={summaryDeal(deal)} commitments={commitments} />
                           </td>
 
                           {/* Cashout */}
@@ -767,9 +769,10 @@ export default function Cashout() {
 }
 
 // Name, image, UPC, note and tags: the same on the table and the phone cards.
-function DealSummary({ deal }) {
+function DealSummary({ deal, commitments }) {
   const { note, address, deliverTo, coupon } = parseDealNotes(deal.notes);
   const limit = dealLimitLabel(deal);
+  const bought = dealBoughtLabel(deal, dealBoughtCount(deal, commitments));
   const conditions = dealConditionLabels(deal);
   const upc = deal.items?.[0]?.upcs?.[0];
 
@@ -807,7 +810,15 @@ function DealSummary({ deal }) {
           <DealTag key={condition} className="bg-rose-500/15 text-rose-400">{condition}</DealTag>
         ))}
         {deliverTo && <DealTag className="bg-amber-500/15 text-amber-400">{deliverTo}</DealTag>}
-        {limit && (
+        {bought && (
+          <DealTag
+            className={bought.reached ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'}
+            title={bought.reached ? "You've bought up to this deal's limit (purchases logged with Log Purchase)." : 'What you have bought on this deal with Log Purchase.'}
+          >
+            {bought.text}{bought.reached ? ' · limit reached' : ''}
+          </DealTag>
+        )}
+        {limit && !(bought && bought.text.includes(' of ')) && (
           <DealTag
             className="bg-[var(--dp-hover-bg)] text-[var(--dp-text-secondary)]"
             title="The vendor limit ElectronicsBuyer sends for this deal."
@@ -2155,12 +2166,12 @@ function LogPurchaseModal({ product, onClose }) {
   );
 }
 
-function DealCard({ deal, paymentMethods }) {
+function DealCard({ deal, paymentMethods, commitments }) {
   const expired = isDealExpired(deal);
 
   return (
     <article className={`p-3.5 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-xs flex flex-col gap-3 h-full ${expired ? 'opacity-60' : ''}`}>
-      <DealSummary deal={summaryDeal(deal)} />
+      <DealSummary deal={summaryDeal(deal)} commitments={commitments} />
 
       <dl className="grid grid-cols-3 gap-2">
         <div>
