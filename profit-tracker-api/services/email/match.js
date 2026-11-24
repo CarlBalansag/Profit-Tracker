@@ -20,7 +20,10 @@ const MERCHANT_NAMES = {
   paypal: ['paypal'], pirateship: ['pirate ship', 'pirateship'], points4days: ['points4days', 'points 4 days', 'p4d'],
 };
 const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9' ]/g, ' ').replace(/\s+/g, ' ').trim();
-const normOrder = (s) => String(s || '').toUpperCase().replace(/[\s#]/g, '');
+// Order numbers compare by letters and digits only: people type them with or
+// without the store's dashes, spaces or #.
+const normOrder = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const normTracking = (s) => String(s || '').toUpperCase().replace(/[\s#]/g, '');
 const num = (d, f) => Number(d ?? f ?? 0);
 const cents = (n) => Math.round(Number(n) * 100);
 
@@ -60,8 +63,8 @@ function scorePurchases(order, rows) {
   const rowNos = [...new Set(rows.map((r) => normOrder(r.order_number)).filter(Boolean))];
   if (orderNo && rowNos.includes(orderNo)) add('order_number', 'Same order number', 60);
   else if (orderNo && rowNos.length) add('order_number_conflict', 'Different order number', -60);
-  const tracking = new Set(order.tracking_numbers.map(normOrder));
-  if (rows.some((r) => r.tracking_number && tracking.has(normOrder(r.tracking_number)))) add('tracking', 'Same tracking number', 50);
+  const tracking = new Set(order.tracking_numbers.map(normTracking));
+  if (rows.some((r) => r.tracking_number && tracking.has(normTracking(r.tracking_number)))) add('tracking', 'Same tracking number', 50);
 
   if (order.total != null) {
     const total = rows.reduce((t, r) => t + purchaseTotal(r), 0);
@@ -91,8 +94,8 @@ function scorePurchases(order, rows) {
 function scoreSale(order, sale) {
   const reasons = [];
   const add = (code, text, points) => reasons.push({ code, text, points });
-  const tracking = new Set(order.tracking_numbers.map(normOrder));
-  if (sale.tracking_number && tracking.has(normOrder(sale.tracking_number))) add('tracking', 'Same tracking number', 50);
+  const tracking = new Set(order.tracking_numbers.map(normTracking));
+  if (sale.tracking_number && tracking.has(normTracking(sale.tracking_number))) add('tracking', 'Same tracking number', 50);
   const gross = num(sale.unit_price_decimal, sale.unit_price) * sale.quantity;
   if (order.total != null) {
     if (Math.abs(cents(gross) - cents(order.total)) <= 1) add('total', 'Same sale price', 30);
@@ -118,8 +121,8 @@ function scoreSale(order, sale) {
 function scoreCashoutLine(order, line, sale, { partial = false } = {}) {
   const reasons = [];
   const add = (code, text, points) => reasons.push({ code, text, points });
-  const tracking = normOrder(line.tracking);
-  const saleTracking = [sale.tracking_number, sale.inventory?.tracking_number].filter(Boolean).map(normOrder);
+  const tracking = normTracking(line.tracking);
+  const saleTracking = [sale.tracking_number, sale.inventory?.tracking_number].filter(Boolean).map(normTracking);
   if (tracking && saleTracking.includes(tracking)) add('tracking', 'Same tracking number', 50);
   const qty = Number(line.quantity) || null;
   if (qty && sale.quantity === qty) add('quantity', 'Same quantity', 10);
@@ -261,7 +264,8 @@ async function candidatesFor(prisma, userId, order) {
   const to = new Date(center.getTime() + 4 * DAY);
   if (order.type === 'purchase') {
     const or = [{ purchase_date: { gte: from, lte: to } }];
-    if (order.order_number) or.push({ order_number: { equals: order.order_number, mode: 'insensitive' } });
+    // Outside the date window, the number as the store writes it or without its dashes.
+    for (const no of new Set([order.order_number, normOrder(order.order_number)].filter(Boolean))) or.push({ order_number: { equals: no, mode: 'insensitive' } });
     if (order.tracking_numbers.length) or.push({ tracking_number: { in: order.tracking_numbers } });
     const rows = await prisma.inventory.findMany({
       where: { user_id: userId, status: { notIn: ['VOID'] }, OR: or },
@@ -271,7 +275,7 @@ async function candidatesFor(prisma, userId, order) {
     // Rows that share an order number are one order with several items.
     const sets = new Map();
     for (const r of rows) {
-      const key = r.order_number ? `o:${normOrder(r.order_number)}` : `r:${r.id}`;
+      const key = normOrder(r.order_number) ? `o:${normOrder(r.order_number)}` : `r:${r.id}`;
       sets.set(key, [...(sets.get(key) || []), r]);
     }
     return [...sets.values()].map((set) => ({ record_type: 'purchase', rows: set, ...scorePurchases(order, set) }));
@@ -493,4 +497,4 @@ async function rejectMatch(prisma, userId, matchId) {
   return match;
 }
 
-module.exports = { lockOrder, linkedElsewhere, purchaseFills, saleFills, matchOrders, linkMatch, rejectMatch, scorePurchases, scoreSale, scoreExpense, scoreCashoutLine, pairCashoutLines, CASHOUTS, nameMatches, itemOverlap, HIGH, MEDIUM, carrierFor };
+module.exports = { normOrder, lockOrder, linkedElsewhere, purchaseFills, saleFills, matchOrders, linkMatch, rejectMatch, scorePurchases, scoreSale, scoreExpense, scoreCashoutLine, pairCashoutLines, CASHOUTS, nameMatches, itemOverlap, HIGH, MEDIUM, carrierFor };
