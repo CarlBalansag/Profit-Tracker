@@ -45,8 +45,12 @@ import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { offerPendingCommit, offerTrackingSend } from '../utils/pendingCashoutCommit';
 import {
   bestCardForDeal,
+  formatDealRoi,
+  dealRoi,
   dealConditionLabels,
   dealLimitLabel,
+  dealBoughtCount,
+  dealBoughtLabel,
   dealStoreNames,
   estimateDealProfit,
   formatDealExpiry,
@@ -61,6 +65,7 @@ import {
 } from '../utils/cashoutDeals';
 import LoadError from '../components/UI/LoadError';
 import NewDeals from '../components/Cashout/NewDeals';
+import DealHistoryButton from '../components/Cashout/DealHistory';
 
 // API keys are managed only in Data Setup.
 const DATA_SETUP_STATE = { tab: 'datasetup', view: 'Cashouts' };
@@ -86,6 +91,7 @@ export default function Cashout() {
   const [selectedCategory, setSelectedCategory] = useState('all'); // 'all' | 'above_retail' | 'close_to_retail'
   const [selectedStore, setSelectedStore] = useState('all');
   const [showExpired, setShowExpired] = useState(false);
+  const [minRoi, setMinRoi] = useState('any'); // 'any' or a percent: '0', '2', '5', '10', '15'
   // Newest deals first every time the page opens.
   const [sortBy, setSortBy] = useState('updated_desc'); // 'profit_desc' | 'payout_desc' | 'ending_soon' | 'updated_desc'
   const [viewMode, setViewMode] = useState(() => (localStorage.getItem(VIEW_MODE_KEY) === 'card' ? 'card' : 'table'));
@@ -217,7 +223,16 @@ export default function Cashout() {
       return true;
     });
     // One row per product: the same product from several cashouts shares a row.
-    return groupDealsByProduct(matching).sort((a, b) => {
+    // ROI counts the best saved card's rewards, like the Best Card column.
+    const roiOf = new Map();
+    const roi = (deal) => {
+      if (!roiOf.has(deal)) roiOf.set(deal, dealRoi(deal, paymentMethods));
+      return roiOf.get(deal);
+    };
+    const grouped = groupDealsByProduct(matching);
+    // A deal with no retail price has no ROI, so a minimum leaves it out.
+    const kept = minRoi === 'any' ? grouped : grouped.filter((deal) => roi(deal) !== null && roi(deal) >= Number(minRoi));
+    return kept.sort((a, b) => {
       // Expired deals can't be bought, so they sit below every live one.
       const expiredOrder = isDealExpired(a) - isDealExpired(b);
       if (expiredOrder !== 0) return expiredOrder;
@@ -228,6 +243,10 @@ export default function Cashout() {
       if (sortBy === 'profit_desc') {
         // Deals with no estimate go last rather than counting as $0.
         return (b.estimatedProfit?.amount ?? -Infinity) - (a.estimatedProfit?.amount ?? -Infinity);
+      }
+      if (sortBy === 'roi_desc') {
+        // Deals with no ROI go last.
+        return (roi(b) ?? -Infinity) - (roi(a) ?? -Infinity);
       }
       if (sortBy === 'ending_soon') {
         // Deals with no expiration go last.
@@ -242,12 +261,12 @@ export default function Cashout() {
       }
       return 0;
     });
-  }, [allDeals, selectedProvider, selectedCategory, selectedStore, showExpired, searchTerm, sortBy]);
+  }, [allDeals, selectedProvider, selectedCategory, selectedStore, showExpired, searchTerm, sortBy, minRoi, paymentMethods]);
 
   // Deal cards come a page at a time: a hundred full cards made the phone
   // page dozens of screens long. A new search, filter or sort starts again
   // from the first page (the count only applies to the list it was set for).
-  const dealsListKey = [selectedProvider, selectedCategory, selectedStore, showExpired, searchTerm, sortBy].join('|');
+  const dealsListKey = [selectedProvider, selectedCategory, selectedStore, showExpired, searchTerm, sortBy, minRoi].join('|');
   const [dealPaging, setDealPaging] = useState({ key: '', count: DEAL_CARDS_PER_PAGE });
   const dealCardsShown = dealPaging.key === dealsListKey ? dealPaging.count : DEAL_CARDS_PER_PAGE;
   const dealCards = filteredDeals.slice(0, dealCardsShown);
@@ -591,6 +610,22 @@ export default function Cashout() {
                 ))}
               </select>
 
+              {/* Minimum ROI */}
+              <select
+                aria-label="Filter by minimum ROI"
+                value={minRoi}
+                onChange={(e) => setMinRoi(e.target.value)}
+                className={SELECT_CLASS}
+                title="ROI is profit as a percent of retail, with your best card's rewards."
+              >
+                <option value="any">Any ROI</option>
+                <option value="0">ROI 0%+</option>
+                <option value="2">ROI 2%+</option>
+                <option value="5">ROI 5%+</option>
+                <option value="10">ROI 10%+</option>
+                <option value="15">ROI 15%+</option>
+              </select>
+
               {/* Sort Dropdown */}
               <select
                 aria-label="Sort deals"
@@ -599,6 +634,7 @@ export default function Cashout() {
                 className={SELECT_CLASS}
               >
                 <option value="profit_desc">Highest Profit</option>
+                <option value="roi_desc">Highest ROI</option>
                 <option value="payout_desc">Highest Payout</option>
                 <option value="ending_soon">Ending Soon</option>
                 <option value="updated_desc">Recently Added</option>
@@ -619,7 +655,7 @@ export default function Cashout() {
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
                 {dealCards.map((deal) => (
-                  <DealCard key={`${deal.connectionId}-${deal.id}`} deal={deal} paymentMethods={paymentMethods} />
+                  <DealCard key={`${deal.connectionId}-${deal.id}`} deal={deal} paymentMethods={paymentMethods} commitments={commitments} />
                 ))}
               </div>
               {dealCardsLeft > 0 && (
@@ -647,14 +683,14 @@ export default function Cashout() {
                       <th className="py-3 px-3 text-right">Retail</th>
                       <th
                         className="py-3 px-3 text-right whitespace-nowrap"
-                        title="Payout minus retail. Doesn't include sales tax, cashback or coupons."
+                        title="Payout minus retail, and the ROI: that profit as a percent of retail. Doesn't include sales tax, cashback or coupons."
                       >
                         Est. Profit
                         <span className="block font-normal normal-case tracking-normal">before tax</span>
                       </th>
                       <th
                         className="py-3 px-3 whitespace-nowrap text-center"
-                        title="Your saved card that earns the most at one of this deal's stores, and the profit with its cashback on retail."
+                        title="Your saved card that earns the most at one of this deal's stores, the profit with its cashback on retail, and that profit's ROI (percent of retail)."
                       >
                         Best Card
                         <span className="block font-normal normal-case tracking-normal">profit with rewards</span>
@@ -674,7 +710,7 @@ export default function Cashout() {
                         >
                           {/* Deal Info */}
                           <td className="py-3 px-4 max-w-[18rem]">
-                            <DealSummary deal={summaryDeal(deal)} />
+                            <DealSummary deal={summaryDeal(deal)} commitments={commitments} />
                           </td>
 
                           {/* Cashout */}
@@ -734,9 +770,10 @@ export default function Cashout() {
 }
 
 // Name, image, UPC, note and tags: the same on the table and the phone cards.
-function DealSummary({ deal }) {
+function DealSummary({ deal, commitments }) {
   const { note, address, deliverTo, coupon } = parseDealNotes(deal.notes);
   const limit = dealLimitLabel(deal);
+  const bought = dealBoughtLabel(deal, dealBoughtCount(deal, commitments));
   const conditions = dealConditionLabels(deal);
   const upc = deal.items?.[0]?.upcs?.[0];
 
@@ -774,7 +811,15 @@ function DealSummary({ deal }) {
           <DealTag key={condition} className="bg-rose-500/15 text-rose-400">{condition}</DealTag>
         ))}
         {deliverTo && <DealTag className="bg-amber-500/15 text-amber-400">{deliverTo}</DealTag>}
-        {limit && (
+        {bought && (
+          <DealTag
+            className={bought.reached ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'}
+            title={bought.reached ? "You've bought up to this deal's limit (purchases logged with Log Purchase)." : 'What you have bought on this deal with Log Purchase.'}
+          >
+            {bought.text}{bought.reached ? ' · limit reached' : ''}
+          </DealTag>
+        )}
+        {limit && !(bought && bought.text.includes(' of ')) && (
           <DealTag
             className="bg-[var(--dp-hover-bg)] text-[var(--dp-text-secondary)]"
             title="The vendor limit ElectronicsBuyer sends for this deal."
@@ -784,6 +829,7 @@ function DealSummary({ deal }) {
         )}
         {coupon && <CopyButton value={coupon} label={`Code ${coupon}`} name={`Copy code ${coupon}`} />}
         {address && <CopyButton value={address} label="Address" name="Copy Address" title={address} />}
+        <DealHistoryButton deal={deal} />
       </div>
     </div>
   );
@@ -859,7 +905,7 @@ function EstProfit({ profit, expired = false }) {
   return (
     <div className="tabular-nums">
       <div className={`text-sm font-bold ${PROFIT_TONES[expired ? 'neutral' : tone]}`}>{amount}</div>
-      <div className="text-[12px] text-[var(--dp-text-label)]">{pct}</div>
+      <div className="text-[12px] text-[var(--dp-text-label)]">{pct} ROI</div>
     </div>
   );
 }
@@ -882,6 +928,7 @@ function BestCard({ best, expired = false, inline = false }) {
   const rate = `${Math.round(best.rate * 100) / 100}%`;
   const earns = best.store ? `${rate} at ${best.store}` : rate;
   const profit = best.profit ? formatDealProfit(best.profit) : null;
+  const roi = best.profit ? formatDealRoi(best.profit) : null;
   const cardLabel = best.card.last4 ? `${best.card.name} (${best.card.last4})` : best.card.name;
   const cashbackNote = best.cashback !== null ? `, $${formatMoney(best.cashback)} back on retail` : '';
   return (
@@ -891,6 +938,7 @@ function BestCard({ best, expired = false, inline = false }) {
       {profit && (
         <div className={`tabular-nums text-sm font-bold ${PROFIT_TONES[expired ? 'neutral' : profit.tone]}`}>{profit.amount}</div>
       )}
+      {roi && <div className="tabular-nums text-[12px] text-[var(--dp-text-label)]">{roi}</div>}
     </div>
   );
 }
@@ -2120,12 +2168,12 @@ function LogPurchaseModal({ product, onClose }) {
   );
 }
 
-function DealCard({ deal, paymentMethods }) {
+function DealCard({ deal, paymentMethods, commitments }) {
   const expired = isDealExpired(deal);
 
   return (
     <article className={`p-3.5 rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] text-xs flex flex-col gap-3 h-full ${expired ? 'opacity-60' : ''}`}>
-      <DealSummary deal={summaryDeal(deal)} />
+      <DealSummary deal={summaryDeal(deal)} commitments={commitments} />
 
       <dl className="grid grid-cols-3 gap-2">
         <div>

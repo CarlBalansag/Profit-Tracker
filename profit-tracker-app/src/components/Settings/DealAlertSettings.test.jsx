@@ -48,6 +48,28 @@ describe('DealAlertSettings', () => {
     expect(screen.getByLabelText('ElectronicsBuyer')).toBeDisabled();
   });
 
+  it('saves the minimum ROI on blur, clears it when blanked, and ignores a bad number', () => {
+    const change = vi.fn();
+    renderSettings({ deal_min_roi: null }, change);
+    const roi = screen.getByLabelText(/Minimum ROI/);
+    expect(roi).toHaveValue(null);
+    fireEvent.blur(roi);
+    expect(change).not.toHaveBeenCalled();
+    fireEvent.change(roi, { target: { value: '5000' } });
+    fireEvent.blur(roi);
+    expect(change).not.toHaveBeenCalled();
+    fireEvent.change(roi, { target: { value: '7.5' } });
+    fireEvent.blur(roi);
+    expect(change).toHaveBeenLastCalledWith({ deal_min_roi: 7.5 });
+    cleanup();
+    renderSettings({ deal_min_roi: 7.5 }, change);
+    const set = screen.getByLabelText(/Minimum ROI/);
+    expect(set).toHaveValue(7.5);
+    fireEvent.change(set, { target: { value: '' } });
+    fireEvent.blur(set);
+    expect(change).toHaveBeenLastCalledWith({ deal_min_roi: null });
+  });
+
   it('saves the minimum profit and stores on blur, and ignores a blank minimum', () => {
     const change = vi.fn();
     renderSettings({ deal_min_profit: 10 }, change);

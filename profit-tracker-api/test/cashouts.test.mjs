@@ -489,6 +489,15 @@ describe('Cache, Snapshots & History', () => {
     const snapshots3 = harness.db.cashoutDealSnapshot.filter(s => s.external_deal_id === '200');
     expect(snapshots3).toHaveLength(2);
     expect(Number(snapshots3[1].payout)).toBe(110);
+
+    // The deal's payout history (Cashout page > History): this user's changes
+    // for this deal only, oldest first.
+    harness.db.cashoutDealSnapshot.push({ ...snapshots3[0], id: 'other-user-snapshot', user_id: harness.ids.other, payout: 999 });
+    harness.db.cashoutDealSnapshot.push({ ...snapshots3[0], id: 'other-deal-snapshot', external_deal_id: '201', payout: 5 });
+    const history = await request('GET', '/api/cashouts/history?provider=eb&dealId=200&limit=100');
+    expect(history.status).toBe(200);
+    expect(history.body.snapshots.map((entry) => entry.payout)).toEqual([100, 110]);
+    expect(history.body.snapshots.every((entry) => entry.dealId === '200' && entry.capturedAt)).toBe(true);
   });
 
   it('Sync now enforces 60-second cooldown per connection', async () => {

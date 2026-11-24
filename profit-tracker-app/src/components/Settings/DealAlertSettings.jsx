@@ -69,6 +69,34 @@ export default function DealAlertSettings({ settings, busy, change }) {
             </div>
           </div>
 
+          <div className={`${ROW} py-2`}>
+            <label htmlFor="notif-deal-min-roi" className="min-w-0 flex-1">
+              <span className="block text-sm text-gray-100">Minimum ROI</span>
+              <span className="block text-xs text-gray-500">That profit as a percent of retail. Leave blank for any ROI.</span>
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                id="notif-deal-min-roi"
+                type="number"
+                inputMode="decimal"
+                step="1"
+                placeholder="Any"
+                defaultValue={settings.deal_min_roi ?? ''}
+                key={`roi-${settings.deal_min_roi ?? 'any'}`}
+                disabled={busy}
+                onBlur={(e) => {
+                  const current = settings.deal_min_roi ?? null;
+                  if (e.target.value === '') { if (current !== null) change({ deal_min_roi: null }); return; }
+                  const value = Number(e.target.value);
+                  if (!Number.isFinite(value) || value < -100 || value > 1000) { e.target.value = current ?? ''; return; }
+                  if (value !== current) change({ deal_min_roi: value });
+                }}
+                className={`${INPUT} w-28`}
+              />
+              <span className="text-sm text-gray-400" aria-hidden="true">%</span>
+            </div>
+          </div>
+
           <fieldset className="py-3">
             <legend className="text-sm text-gray-100">Cashouts</legend>
             <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">

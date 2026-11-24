@@ -198,7 +198,7 @@ describe('Cashout Page', () => {
 
     expect(screen.getByLabelText('Sort deals')).toHaveValue('updated_desc');
     const rows = screen.getAllByRole('row').slice(1);
-    expect(rows.map((row) => row.cells[0].textContent)).toEqual(['Newest Posted', 'Seen Yesterday', 'Oldest', 'No Date']);
+    expect(rows.map((row) => row.cells[0].textContent.replace(/History$/, ''))).toEqual(['Newest Posted', 'Seen Yesterday', 'Oldest', 'No Date']);
   });
 
   it('sorts by highest profit when chosen', () => {
@@ -221,6 +221,57 @@ describe('Cashout Page', () => {
     const rows = screen.getAllByRole('row').slice(1);
     expect(rows[0]).toHaveTextContent('Biggest Profit');
     expect(rows[1]).toHaveTextContent('Biggest Payout');
+  });
+
+  it('sorts by highest ROI and filters by a minimum ROI, counting the best card', () => {
+    currentPaymentMethods = [{ id: 'flat', name: 'Flat 2%', default_cashback_rate: 2, category_rates: [] }];
+    currentDeals = {
+      results: [{
+        connection: mockConnections[0],
+        deals: [
+          { id: '1', name: 'Big Dollars', retail: 1000, payout: 1040 }, // +$40, 4% (6% with card)
+          { id: '2', name: 'Big Percent', retail: 100, payout: 115 }, // +$15, 15% (17%)
+          { id: '3', name: 'Thin Deal', retail: 200, payout: 202 }, // 1% (3%)
+          { id: '4', name: 'No Retail Deal', retail: null, payout: 50 },
+        ],
+      }],
+    };
+    render(<MemoryRouter><Cashout /></MemoryRouter>);
+    const names = () => screen.getAllByRole('row').slice(1).map((row) => row.cells[0].textContent.replace(/History$/, ''));
+
+    fireEvent.change(screen.getByLabelText('Sort deals'), { target: { value: 'roi_desc' } });
+    expect(names().map((name) => name.match(/Big Percent|Big Dollars|Thin Deal|No Retail Deal/)[0])).toEqual(['Big Percent', 'Big Dollars', 'Thin Deal', 'No Retail Deal']);
+
+    // 5%+: the card's 2% lifts Big Dollars to 6%; Thin Deal (3%) and the unpriced deal drop out.
+    fireEvent.change(screen.getByLabelText('Filter by minimum ROI'), { target: { value: '5' } });
+    expect(names()).toHaveLength(2);
+    fireEvent.change(screen.getByLabelText('Filter by minimum ROI'), { target: { value: '15' } });
+    expect(names()).toHaveLength(1);
+    expect(names()[0]).toContain('Big Percent');
+    fireEvent.change(screen.getByLabelText('Filter by minimum ROI'), { target: { value: 'any' } });
+    expect(names()).toHaveLength(4);
+  });
+
+  it('shows how many you have bought against the limit of a deal', () => {
+    const row = (status, quantity, dealId = '1') => ({ id: `${status}-${quantity}-${dealId}`, status, quantity, connection_id: mockConnections[0].id, external_deal_id: dealId, external_item_id: 'i1', open_item_id: 'i1', tracking_codes: [], created_at: new Date().toISOString() });
+    currentCommitments = [row('active', 1), row('pending', 1), row('withdrawn', 3), row('active', 2, '2')];
+    currentDeals = {
+      results: [{
+        connection: mockConnections[0],
+        deals: [
+          { id: '1', name: 'Part Bought', retail: 100, payout: 110, items: [{ id: 'i1', name: 'Part Bought', vendorLimit: 3 }] },
+          { id: '2', name: 'Maxed Out', retail: 100, payout: 110, items: [{ id: 'i1', name: 'Maxed Out', vendorLimit: 2 }] },
+          { id: '3', name: 'Untouched', retail: 100, payout: 110, items: [{ id: 'i1', name: 'Untouched', vendorLimit: 4 }] },
+        ],
+      }],
+    };
+    render(<MemoryRouter><Cashout /></MemoryRouter>);
+    const rowOf = (name) => screen.getByText(name).closest('tr');
+    expect(rowOf('Part Bought')).toHaveTextContent('2 of 3 bought');
+    expect(rowOf('Part Bought')).not.toHaveTextContent('limit reached');
+    expect(rowOf('Maxed Out')).toHaveTextContent('2 of 2 bought · limit reached');
+    expect(rowOf('Untouched')).toHaveTextContent('Limit 4');
+    expect(rowOf('Untouched')).not.toHaveTextContent('bought');
   });
 
   it('estimates profit as payout minus retail, to the cent', () => {
@@ -273,10 +324,31 @@ describe('Cashout Page', () => {
 
     expect(screen.getByText('Est. Profit')).toBeInTheDocument();
     expect(screen.getByText('+$240.01')).toBeInTheDocument();
-    expect(screen.getByText('+26.67%')).toBeInTheDocument();
+    expect(screen.getByText('+26.67% ROI')).toBeInTheDocument();
     expect(screen.getByText('-$5.00')).toBeInTheDocument();
-    expect(screen.getByText('-12.5%')).toBeInTheDocument();
+    expect(screen.getByText('-12.5% ROI')).toBeInTheDocument();
     expect(screen.getByText('No Retail Deal').closest('tr')).toHaveTextContent('—');
+    expect(screen.getByText('No Retail Deal').closest('tr')).not.toHaveTextContent('ROI');
+  });
+
+  it('shows the ROI in card view too, and none for a deal with no retail price', () => {
+    localStorage.setItem('cashoutViewMode', 'card');
+    currentPaymentMethods = [{ id: 'flat', name: 'Flat 2%', default_cashback_rate: 2, category_rates: [] }];
+    currentDeals = {
+      results: [{
+        connection: mockConnections[0],
+        deals: [
+          { id: '1', name: 'Gain Deal', retail: 200, payout: 220 },
+          { id: '3', name: 'No Retail Deal', retail: null, payout: 50 },
+        ],
+      }],
+    };
+    render(<MemoryRouter><Cashout /></MemoryRouter>);
+    const gain = screen.getByText('Gain Deal').closest('article');
+    expect(within(gain).getByText('+10% ROI')).toBeInTheDocument();
+    // with the 2% card: $20 + $4 on $200
+    expect(within(gain).getByText('+12% ROI')).toBeInTheDocument();
+    expect(screen.getByText('No Retail Deal').closest('article')).not.toHaveTextContent('ROI');
   });
 
   it('filters by category: all deals, above retail, or at or below retail', () => {
@@ -296,7 +368,7 @@ describe('Cashout Page', () => {
         <Cashout />
       </MemoryRouter>
     );
-    const names = () => screen.getAllByRole('row').slice(1).map((row) => row.cells[0].textContent);
+    const names = () => screen.getAllByRole('row').slice(1).map((row) => row.cells[0].textContent.replace(/History$/, ''));
     const category = screen.getByLabelText('Filter by category');
 
     expect(category).toHaveValue('all');
@@ -855,7 +927,7 @@ describe('Cashout Page', () => {
 
     fireEvent.change(screen.getByLabelText('Sort deals'), { target: { value: 'profit_desc' } });
     const rows = screen.getAllByRole('row').slice(1);
-    expect(rows.map((row) => row.cells[0].textContent)).toEqual([
+    expect(rows.map((row) => row.cells[0].textContent.replace(/History$/, ''))).toEqual([
       'Small Payout Big Profit',
       'Biggest Payout Small Profit',
       'Loss Deal',
@@ -1628,6 +1700,8 @@ describe('Cashout Page', () => {
       expect(within(cell).getByText('5% at Amazon')).toBeInTheDocument();
       // $10 deal profit + 5% of $200 retail
       expect(within(cell).getByText('+$20.00')).toBeInTheDocument();
+      // ROI on what goes in: $20 on $200 retail
+      expect(within(cell).getByText('+10% ROI')).toBeInTheDocument();
     });
 
     it('skips an expired store rate', () => {
@@ -1641,6 +1715,7 @@ describe('Cashout Page', () => {
       expect(within(cell).getByText('Flat 2%')).toBeInTheDocument();
       expect(within(cell).getByText('2% at Amazon')).toBeInTheDocument();
       expect(within(cell).getByText('+$14.00')).toBeInTheDocument();
+      expect(within(cell).getByText('+7% ROI')).toBeInTheDocument();
     });
 
     it('links to Payment Methods when no card is saved', () => {

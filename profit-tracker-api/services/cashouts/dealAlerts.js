@@ -10,11 +10,12 @@
 //      connecting a cashout doesn't announce every deal it already has.
 //   2. dispatchDealAlerts() runs after the scheduled cashout sync and on every
 //      notification run. It pushes each new alert to every user who turned
-//      deal alerts on, if the deal passes their filters (minimum profit,
+//      deal alerts on, if the deal passes their filters (minimum profit / ROI,
 //      cashouts, stores, quiet hours). Several at once go out as one push.
 //   3. listDealFeed(userId) is the Cashout page's New deals list.
 //
 // Profit = payout - retail + the best card's rewards on retail (no sales tax).
+// ROI = that profit / retail.
 const prisma = require('../../prisma');
 const { effectiveCashbackRate } = require('../decimalFinance');
 const { getAdapter } = require('./registry');
@@ -31,7 +32,7 @@ const FORGET_DEALS_DAYS = 30;
 const FEED_DAYS = 7;
 
 const DEAL_DEFAULTS = {
-  deal_alerts: false, deal_min_profit: 0, deal_providers: null, deal_stores: null, deal_quiet_from: null, deal_quiet_to: null,
+  deal_alerts: false, deal_min_profit: 0, deal_min_roi: null, deal_providers: null, deal_stores: null, deal_quiet_from: null, deal_quiet_to: null,
 };
 
 const num = (value) => (value === null || value === undefined || value === '' ? null : Number(value));
@@ -199,6 +200,7 @@ function dealSettings(row) {
   return {
     ...merged,
     deal_min_profit: num(merged.deal_min_profit) ?? 0,
+    deal_min_roi: num(merged.deal_min_roi),
     deal_providers: list(merged.deal_providers),
     deal_stores: list(merged.deal_stores),
   };
@@ -213,7 +215,8 @@ function inQuietHours(settings, now) {
 }
 
 // Whether a deal is one this user asked to hear about. A deal with no retail
-// price has no profit to check, so it passes only a $0 minimum.
+// price has no profit or ROI to check, so it passes only a $0 minimum and no
+// ROI minimum above 0%.
 function passesFilters(deal, evaluation, settings) {
   if (settings.deal_providers.length && !settings.deal_providers.includes(deal.provider)) return false;
   if (settings.deal_stores.length) {
@@ -221,12 +224,27 @@ function passesFilters(deal, evaluation, settings) {
     const stores = (Array.isArray(deal.stores) ? deal.stores : []).map(storeKey);
     if (!stores.some((store) => wanted.some((want) => store.includes(want) || want.includes(store)))) return false;
   }
-  if (evaluation.profit === null) return settings.deal_min_profit <= 0;
-  return evaluation.profit >= settings.deal_min_profit;
+  const minRoi = settings.deal_min_roi ?? null;
+  if (evaluation.profit === null) return settings.deal_min_profit <= 0 && (minRoi === null || minRoi <= 0);
+  if (evaluation.profit < settings.deal_min_profit) return false;
+  return minRoi === null || (evaluation.roi ?? (evaluation.profit / evaluation.retail) * 100) >= minRoi;
 }
 
 const money = (value) => `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(value) ? 0 : 2, maximumFractionDigits: 2 })}`;
 const signed = (value) => `${value < 0 ? '-' : '+'}${money(Math.abs(value))}`;
+// ROI: profit over what goes in (retail; no sales tax, same as the profit),
+// one decimal: "+16.4% ROI". Nothing without a retail price.
+function roiLabel(evaluation) {
+  const retail = num(evaluation?.retail);
+  if (evaluation?.profit === null || evaluation?.profit === undefined || !(retail > 0)) return null;
+  const pct = Math.round((Number(evaluation.profit) / retail) * 1000) / 10;
+  if (!Number.isFinite(pct)) return null;
+  return `${pct > 0 ? '+' : pct < 0 ? '-' : ''}${Math.abs(pct)}% ROI`;
+}
+const withRoi = (evaluation) => {
+  const roi = roiLabel(evaluation);
+  return roi ? ` (${roi})` : '';
+};
 const shorten = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
 // Short cashout labels for notifications: "EB", "LA", "P4D".
@@ -243,7 +261,7 @@ function shortCard(name) {
   return short || String(name || '').trim();
 }
 
-// "Cashout $52, $49 at Walmart -> +$3.98 Blue Business Plus"
+// "Cashout $52, $49 at Walmart -> +$3.98 (+8.1% ROI) Blue Business Plus"
 function alertLine(alert, evaluation) {
   const deal = alert.deal;
   let line = `Cashout ${money(evaluation.payout)}`;
@@ -257,7 +275,7 @@ function alertLine(alert, evaluation) {
     line += ', no retail price';
   }
   if (evaluation.profit !== null) {
-    line += ` -> ${signed(evaluation.profit)}`;
+    line += ` -> ${signed(evaluation.profit)}${withRoi(evaluation)}`;
     if (evaluation.best_card && evaluation.rewards) line += ` ${shortCard(evaluation.best_card.card.name)}`;
   }
   return line;
@@ -277,7 +295,7 @@ function buildPayload(matches) {
   // Several at once: one line each, best profit first.
   const ranked = [...matches].sort((a, b) => (b.evaluation.profit ?? -Infinity) - (a.evaluation.profit ?? -Infinity));
   const lines = ranked.slice(0, 4).map(({ alert, evaluation }) => (
-    `${shortProvider(alert.deal.provider)}: ${shorten(alert.deal.name, 32)}${evaluation.profit !== null ? ` ${signed(evaluation.profit)}` : ''}`
+    `${shortProvider(alert.deal.provider)}: ${shorten(alert.deal.name, 32)}${evaluation.profit !== null ? ` ${signed(evaluation.profit)}${withRoi(evaluation)}` : ''}`
   ));
   if (ranked.length > 4) lines.push(`+${ranked.length - 4} more`);
   return {
@@ -430,6 +448,7 @@ module.exports = {
   dealStoreNames,
   inQuietHours,
   buildPayload,
+  roiLabel,
   shortCard,
   DEAL_DEFAULTS,
   PAYOUT_RISE_MIN,

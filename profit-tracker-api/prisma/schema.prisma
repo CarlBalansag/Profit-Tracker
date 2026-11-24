@@ -948,6 +948,8 @@ model NotificationSettings {
   // deal still shows in the Cashout page's New deals feed).
   deal_alerts     Boolean  @default(false)
   deal_min_profit Decimal  @default(0) @db.Decimal(19, 2)
+  // Optional: also require this ROI (profit / retail, in percent). Null = any.
+  deal_min_roi    Decimal? @db.Decimal(7, 2)
   deal_providers  Json?
   deal_stores     Json?
   deal_quiet_from String?

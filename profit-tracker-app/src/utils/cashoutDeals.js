@@ -26,6 +26,13 @@ export function formatDealProfit(profit) {
   };
 }
 
+// ROI: the profit as a share of what goes in (retail, no sales tax), labelled
+// for the screen: "+9.1% ROI". Nothing when there's no profit to compare.
+export function formatDealRoi(profit) {
+  if (!profit || !Number.isFinite(Number(profit.pct)) || !Number.isFinite(Number(profit.amount))) return null;
+  return `${formatDealProfit({ amount: Number(profit.amount), pct: Number(profit.pct) }).pct} ROI`;
+}
+
 // Above Retail pays more than retail and Close to Retail pays retail or less. A
 // deal with no retail price only appears under All Categories.
 export function matchesRetailCategory(deal, category) {
@@ -235,6 +242,16 @@ export function bestCardForDeal(deal, cards, today = new Date()) {
   };
 }
 
+// A deal's ROI as a number, for sorting and the minimum-ROI filter: with the
+// best saved card's rewards when one earns, otherwise the plain estimate. Null
+// when there's no retail price to compare against.
+export function dealRoi(deal, cards, today = new Date()) {
+  const withCard = bestCardForDeal(deal, cards, today)?.profit;
+  if (withCard) return withCard.pct;
+  const estimate = deal.estimatedProfit === undefined ? estimateDealProfit(deal) : deal.estimatedProfit;
+  return estimate ? estimate.pct : null;
+}
+
 // Every store a deal can be bought at, once each, for the store filter.
 export function dealStoreNames(deal) {
   return [...new Set(dealStoreLinks(deal).map((link) => link.name).filter(Boolean))];
@@ -287,6 +304,59 @@ export function dealConditionLabels(deal) {
   return [...new Set(conditions)]
     .filter((condition) => condition.toLowerCase() !== 'new')
     .map((condition) => CONDITION_LABELS[condition] || condition.replace(/_/g, ' '));
+}
+
+// How many units of a deal you've already bought through Log Purchase: every
+// commitment on it that isn't withdrawn (committed or still waiting on
+// tracking). Purchases logged any other way aren't linked to a deal, so they
+// don't count.
+export function dealBoughtCount(deal, commitments) {
+  if (!Array.isArray(commitments) || deal?.id === undefined || deal?.id === null) return 0;
+  return commitments
+    .filter((c) => c.status !== 'withdrawn' && String(c.external_deal_id) === String(deal.id) && (!c.connection_id || c.connection_id === deal.connectionId))
+    .reduce((total, c) => total + (Number(c.quantity) || 0), 0);
+}
+
+// "2 of 3 bought" against a deal's limit. With no purchases it's null (the
+// plain limit label shows). A deal whose items have different limits, or no
+// limit, just says how many were bought.
+export function dealBoughtLabel(deal, bought) {
+  if (!(bought > 0)) return null;
+  const limits = (deal.items || []).map((item) => item.vendorLimit).filter((limit) => limit > 0);
+  const limit = limits.length && Math.min(...limits) === Math.max(...limits) ? limits[0] : null;
+  if (limit === null) return { text: `${bought} bought`, reached: false };
+  return { text: `${bought} of ${limit} bought`, reached: bought >= limit };
+}
+
+// A deal's recorded payouts (oldest first, one entry per change) turned into
+// what the history window shows: each change with how much it moved, the
+// highest and lowest payout, and how often it rose or fell. Entries with a
+// payout or date that can't be read are skipped. Null when nothing was recorded.
+export function summarizePayoutHistory(snapshots) {
+  const points = [];
+  for (const snapshot of Array.isArray(snapshots) ? snapshots : []) {
+    const payout = Number(snapshot?.payout);
+    const at = new Date(snapshot?.capturedAt || NaN);
+    if (snapshot?.payout === null || !Number.isFinite(payout) || Number.isNaN(at.getTime())) continue;
+    const previous = points[points.length - 1];
+    points.push({
+      at: at.toISOString(),
+      payout,
+      status: snapshot.status || 'active',
+      change: previous ? roundCents(payout - previous.payout) : null,
+    });
+  }
+  if (points.length === 0) return null;
+  const payouts = points.map((point) => point.payout);
+  return {
+    points,
+    first: points[0],
+    latest: points[points.length - 1],
+    high: Math.max(...payouts),
+    low: Math.min(...payouts),
+    rises: points.filter((point) => point.change > 0).length,
+    drops: points.filter((point) => point.change < 0).length,
+  };
 }
 
 // Items in one deal can have different limits, so this can be a range.

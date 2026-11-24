@@ -41,6 +41,7 @@ const settingsBody = z.object({
   urgent_alerts: z.boolean().optional(),
   deal_alerts: z.boolean().optional(),
   deal_min_profit: z.number().finite().min(-100000).max(100000).optional(),
+  deal_min_roi: z.number().finite().min(-100).max(1000).nullable().optional(),
   deal_providers: z.array(z.string().trim().min(1).max(40)).max(20).nullable().optional(),
   deal_stores: z.array(z.string().trim().min(1).max(80)).max(50).nullable().optional(),
   deal_quiet_from: z.string().regex(TIME_RE, 'Time must be HH:MM.').nullable().optional(),
@@ -49,7 +50,7 @@ const settingsBody = z.object({
   .refine((body) => (body.deal_quiet_from === undefined) === (body.deal_quiet_to === undefined), 'Send both quiet-hour times, or neither.');
 
 const SETTINGS_FIELDS = ['timezone', 'digest_enabled', 'digest_time', 'reminder_alerts', 'urgent_alerts'];
-const DEAL_FIELDS = ['deal_alerts', 'deal_min_profit', 'deal_providers', 'deal_stores', 'deal_quiet_from', 'deal_quiet_to'];
+const DEAL_FIELDS = ['deal_alerts', 'deal_min_profit', 'deal_min_roi', 'deal_providers', 'deal_stores', 'deal_quiet_from', 'deal_quiet_to'];
 const pick = (row) => {
   const deal = dealSettings(row);
   return {
