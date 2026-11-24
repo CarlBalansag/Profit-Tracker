@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.50',
+    date: '2026-11-24',
+    notes: "You can now make invoices from a buyer's sales and download them as a PDF, and Cashout shows the ROI on each deal (sort, filter and alert by it), how many you've bought and past payouts. Store accounts now show on Statuses, in what you're owed on Cash Flow, and as a per-account breakdown in Store ROI; LA and Points4Days purchases can be logged without a tracking number.",
+  },
+  {
     version: '1.49',
     date: '2026-11-23',
     notes: "New Schedule C page that plans your taxes from your records, and Email: connect your inbox in Settings and store emails get matched to your purchases, fill in shipping and return dates, and mark cash-out sales paid, with every automatic change listed on the new Automation page where you can undo it. Settings > Data can now import your sold cash-out items and fill in their costs from a store order file, and Cashout can alert you to new deals.",
