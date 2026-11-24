@@ -657,8 +657,8 @@ const Expenses = () => {
                   {rec.notes && <p className="text-[11px] text-gray-500 mb-3 line-clamp-1">{rec.notes}</p>}
                   <div className="flex items-center justify-between pt-2 border-t border-white/[0.05]">
                     <p className="text-[11px] text-gray-600">
-                      Since {new Date(rec.start_date).toLocaleDateString()}
-                      {rec.end_date ? ` → ${new Date(rec.end_date).toLocaleDateString()}` : ''}
+                      {Number.isNaN(new Date(rec.start_date || NaN).getTime()) ? 'No start date' : `Since ${new Date(rec.start_date).toLocaleDateString()}`}
+                      {rec.end_date && !Number.isNaN(new Date(rec.end_date).getTime()) ? ` → ${new Date(rec.end_date).toLocaleDateString()}` : ''}
                     </p>
                     <div className="flex items-center gap-1">
                       <button onClick={() => handleToggleActive(rec)} title={rec.active ? 'Pause' : 'Resume'}

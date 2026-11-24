@@ -21,7 +21,7 @@ import ProductNoteButton from '../components/ProductNoteButton';
 import { detectCarrier } from '../utils/carrier';
 import { orderTransactionRows } from '../utils/transactionRowOrder';
 import { recordStatusLabel } from '../data/statusWorkflow';
-import { formatMoney } from '../utils/money';
+import { formatMoney, formatDollars, formatSignedDollars } from '../utils/money';
 import LoadError from '../components/UI/LoadError';
 
 // ─── Inline editable cell input ───────────────────────────────────────────────
@@ -808,7 +808,7 @@ const Transactions = () => {
         <StatCard compact label="Unsold Units" value={unsoldCount} icon={Tag} tone="amber" />
         <StatCard compact label="Sold / Done" value={soldCount} icon={Check} tone="green" />
         <StatCard compact label="Total Cost" value={`$${formatMoney(roundCents(totalCostSum))}`} sub="Rows shown, less refunds" icon={DollarSign} tone="red" />
-        <StatCard compact label="Total Profit" value={`$${formatMoney(roundCents(totalProfitSum))}`} icon={DollarSign} tone="green" />
+        <StatCard compact label="Total Profit" value={formatDollars(roundCents(totalProfitSum))} icon={DollarSign} tone="green" />
       </div>
 
       {/* Search and Filters */}
@@ -1294,7 +1294,7 @@ const Transactions = () => {
                         <td key="profit" className="px-4 py-3.5">
                           {Number.isFinite(row.profit) ? (
                             <span className={`text-sm font-bold ${row.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              {row.profit >= 0 ? '+' : ''}${formatMoney(row.profit)}
+                              {formatSignedDollars(row.profit)}
                             </span>
                           ) : <span className="text-gray-600">—</span>}
                         </td>

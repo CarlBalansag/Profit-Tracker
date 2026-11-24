@@ -1,4 +1,4 @@
-import { formatMoney } from '../utils/money';
+import { formatMoney, formatSignedDollars } from '../utils/money';
 import { batchCost, grossBatchCost, effectiveCashbackRate, inventoryCashback, saleEconomics, realizedSummary, isRealizedSale } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useRef } from 'react';
 import { X, DollarSign, Package, CreditCard, Tag, ChevronDown, ChevronUp, StickyNote, Undo2, MapPin, Paperclip, Hash, Truck } from 'lucide-react';
@@ -696,7 +696,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                           </div>
                           <div className="flex items-center gap-3">
                             <span className={`text-sm font-bold ${profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              {profit >= 0 ? '+' : ''}${formatMoney(profit)}
+                              {formatSignedDollars(profit)}
                             </span>
                             {isOpen
                               ? <ChevronUp className="w-3.5 h-3.5 text-gray-500" />
@@ -881,7 +881,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                               <div className="flex justify-between px-3 py-2 font-semibold">
                                 <span className="text-gray-300">Net Profit</span>
                                 <span className={profit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-                                  {profit >= 0 ? '+' : ''}${formatMoney(profit)}
+                                  {formatSignedDollars(profit)}
                                 </span>
                               </div>
                             </div>
@@ -1036,7 +1036,7 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-200 font-semibold">Realized Profit + Cashback</span>
                         <span className={`font-bold ${netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {netProfit >= 0 ? '+' : ''}${formatMoney(netProfit)}
+                          {formatSignedDollars(netProfit)}
                         </span>
                       </div>
                       {cbEarned > 0 && (

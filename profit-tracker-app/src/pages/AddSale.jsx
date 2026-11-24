@@ -1,4 +1,4 @@
-import { formatMoney } from '../utils/money';
+import { formatMoney, formatSignedDollars } from '../utils/money';
 import { allocatedCost, saleEconomics } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
@@ -436,7 +436,7 @@ const AddSale = () => {
                               <div className="flex justify-between px-4 py-2.5 font-semibold">
                                 <span className="text-gray-300">Est. Profit</span>
                                 <span className={profit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-                                  {profit >= 0 ? '+' : ''}${formatMoney(profit)}
+                                  {formatSignedDollars(profit)}
                                 </span>
                               </div>
                             )}

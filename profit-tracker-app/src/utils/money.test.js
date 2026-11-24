@@ -35,3 +35,20 @@ describe('formatWholeMoney', () => {
     expect(formatWholeMoney('abc')).toBe('0');
   });
 });
+
+describe('dollars with the sign in front', () => {
+  it('puts a minus before the $ instead of after it', async () => {
+    const { formatDollars, formatSignedDollars, formatWholeDollars } = await import('./money');
+    expect(formatDollars(-1234.5)).toBe('-$1,234.50');
+    expect(formatDollars(5)).toBe('$5.00');
+    expect(formatDollars(0)).toBe('$0.00');
+    expect(formatDollars('abc')).toBe('$0.00');
+    expect(formatSignedDollars(5)).toBe('+$5.00');
+    expect(formatSignedDollars(0)).toBe('+$0.00');
+    expect(formatSignedDollars(-5)).toBe('-$5.00');
+    expect(formatSignedDollars(null)).toBe('+$0.00');
+    expect(formatWholeDollars(-1234.4)).toBe('-$1,234');
+    expect(formatWholeDollars(999.5)).toBe('$1,000');
+    expect(formatWholeDollars(-0.2)).toBe('$0');
+  });
+});
