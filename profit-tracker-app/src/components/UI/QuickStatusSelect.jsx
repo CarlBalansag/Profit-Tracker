@@ -33,8 +33,8 @@ import { QUICK_STATUS_FIELD, quickStatusOptions } from '../../data/statusActions
  *   onSuccess  called with the updated record after a successful apply.
  */
 
-const SELECT = 'min-w-0 flex-1 h-7 rounded-lg bg-[#0d0d18] border border-white/10 px-2 text-xs text-gray-200 focus:outline-none focus:border-indigo-500/50 disabled:opacity-50 transition-colors';
-const APPLY = 'flex items-center justify-center w-7 h-7 shrink-0 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white transition-colors';
+const SELECT = 'min-w-0 flex-1 h-7 max-md:h-10 rounded-lg bg-[#0d0d18] border border-white/10 px-2 text-xs text-gray-200 focus:outline-none focus:border-indigo-500/50 disabled:opacity-50 transition-colors';
+const APPLY = 'flex items-center justify-center w-7 h-7 max-md:w-10 max-md:h-10 shrink-0 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white transition-colors';
 
 const SELECT_LABEL = {
   inventory: 'Change receiving status',

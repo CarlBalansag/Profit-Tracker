@@ -138,7 +138,7 @@ export default function ScheduleC() {
             <InfoTip name="this page" width="w-72" text="A helper for your taxes, not a tax return. It works on the cash method: sales count on the sale date, expenses when they're paid. Nothing is sent to the IRS." /></p>
         </div>
         <div className="schedule-c-actions flex flex-wrap items-center gap-2">
-          <label data-tutorial-id="sc-year" className="flex items-center gap-2 text-sm">Tax year<input aria-label="Tax year" type="number" min="1900" max="9999" step="1" value={year} onChange={e => { setYear(e.target.value); setFilter('all'); }} className="w-24 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] px-3 py-2 text-[var(--dp-text-primary)]" /></label>
+          <label data-tutorial-id="sc-year" className="flex items-center gap-2 text-sm">Tax year<input aria-label="Tax year" type="number" inputMode="numeric" min="1900" max="9999" step="1" value={year} onChange={e => { setYear(e.target.value); setFilter('all'); }} className="w-24 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] px-3 py-2 text-[var(--dp-text-primary)]" /></label>
           <button type="button" onClick={() => tutorial.start('scheduleC')} aria-label="How this page works" className="page-btn page-btn-secondary"><HelpCircle size={15} aria-hidden="true" /><span aria-hidden="true">How it works</span></button>
         </div>
       </div>

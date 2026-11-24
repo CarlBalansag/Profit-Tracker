@@ -31,7 +31,7 @@ const STATE_PILL = {
   due_soon: { label: () => 'Due soon', cls: 'bg-[var(--dp-warning-bg)] text-[var(--dp-warning-text)]' },
   on_time: { label: () => 'On time', cls: 'bg-[var(--dp-green-bg)] text-[var(--dp-green-text)]' },
 };
-const Pill = ({ cls, children }) => <span className={`shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${cls}`}>{children}</span>;
+const Pill = ({ cls, children }) => <span className={`shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${cls}`}>{children}</span>;
 
 function Kpi({ label, value, number, sub, tone = 'text-[var(--dp-text-primary)]', icon: Icon, pending }) {
   return (
@@ -95,7 +95,7 @@ function OwedRow({ group }) {
           ) : (
           <table className="w-full text-xs tabular-nums">
             <thead>
-              <tr className="text-[10px] uppercase tracking-wider text-[var(--dp-text-label)]">
+              <tr className="text-[11px] uppercase tracking-wider text-[var(--dp-text-label)]">
                 <th className="text-left font-semibold pb-1">Item</th>
                 <th className="text-right font-semibold pb-1">Sold</th>
                 <th className="text-right font-semibold pb-1">Expected</th>
@@ -118,7 +118,7 @@ function OwedRow({ group }) {
             </tbody>
           </table>
           )}
-          <p className="mt-1.5 text-[10px] text-[var(--dp-text-label)]">Expected date from {group.expectedBasis === 'default' ? 'a 14-day default (no paid sales from them yet)' : group.expectedBasis}.</p>
+          <p className="mt-1.5 text-[11px] text-[var(--dp-text-label)]">Expected date from {group.expectedBasis === 'default' ? 'a 14-day default (no paid sales from them yet)' : group.expectedBasis}.</p>
         </div>
       </Expand>
     </LateGlow>
@@ -145,7 +145,7 @@ function BillRow({ bill, index }) {
       </div>
       <div className="mt-2 pl-0">
         <GrowBar pct={pct} color={bill.covered ? 'var(--dp-green-text)' : 'var(--dp-warning-text)'} delay={0.1 + index * 0.06} height={5} />
-        <p className="mt-1 text-[10px] text-[var(--dp-text-label)] tabular-nums">
+        <p className="mt-1 text-[11px] text-[var(--dp-text-label)] tabular-nums">
           {usd(bill.payoutsBefore)} expected in payouts by then, against {usd(bill.billsSoFar)} of bills due by then
         </p>
       </div>

@@ -27,7 +27,7 @@ export default function PageNav({ count, index, onChange, isGlass = false, label
             key={i}
             type="button"
             onClick={() => onChange(i)}
-            className="page-dot flex items-center justify-center p-2 -m-1"
+            className="page-dot flex items-center justify-center p-2 -m-1 max-md:px-2.5 max-md:py-4 max-md:-my-3"
             aria-label={`Go to ${label} ${i + 1}`}
             aria-current={i === safeIndex ? 'true' : undefined}
           >

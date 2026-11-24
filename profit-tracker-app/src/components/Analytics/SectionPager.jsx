@@ -80,7 +80,7 @@ export function SectionDots({ options, value, onChange, className = 'pb-1' }) {
           key={o.key}
           type="button"
           onClick={() => onChange(o.key)}
-          className="page-dot flex items-center justify-center p-1.5"
+          className="page-dot flex items-center justify-center p-1.5 max-md:px-2.5 max-md:py-4 max-md:-my-2.5"
           aria-label={`Go to ${o.label}`}
           aria-current={i === index ? 'true' : undefined}
         >

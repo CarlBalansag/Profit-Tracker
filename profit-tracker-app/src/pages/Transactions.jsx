@@ -815,8 +815,8 @@ const Transactions = () => {
       <div className="card p-3 mb-6 bg-[#0f1115]">
         <div className="flex flex-col md:flex-row gap-3">
           {/* Search + Sale/Buy toggle */}
-          <div className="flex items-center gap-2 flex-1">
-            <div className="flex-1 relative">
+          <div className="flex items-center gap-2 flex-1 max-sm:flex-wrap">
+            <div className="flex-1 relative max-sm:basis-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
               <input
                 type="text"

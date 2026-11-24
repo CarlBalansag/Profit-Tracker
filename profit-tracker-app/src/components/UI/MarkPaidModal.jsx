@@ -93,7 +93,7 @@ const MarkPaidModal = ({ open, sale, busy = false, onSubmit, onClose }) => {
             <label className={labelClass} htmlFor="mark-paid-amount">Amount received</label>
             <input
               id="mark-paid-amount"
-              type="number"
+              type="number" inputMode="decimal"
               step="0.01"
               min="0"
               value={amount}

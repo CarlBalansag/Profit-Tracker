@@ -240,7 +240,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit, defaul
                 <label htmlFor="card-point-value" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Point value (¢)</label>
                 <input
                   id="card-point-value"
-                  type="number"
+                  type="number" inputMode="decimal"
                   name="pointValueCents"
                   step="0.05"
                   min="0.01"
@@ -285,7 +285,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit, defaul
                 <label htmlFor="card-base-rate" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Default Cashback %</label>
                 <input
                   id="card-base-rate"
-                  type="number"
+                  type="number" inputMode="decimal"
                   name="baseRate"
                   step="0.01"
                   min="0"
@@ -301,7 +301,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit, defaul
                   <label htmlFor="card-points-rate" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Points per $1</label>
                   <input
                     id="card-points-rate"
-                    type="number"
+                    type="number" inputMode="decimal"
                     name="pointsBaseRate"
                     step="0.25"
                     min="0"
@@ -318,7 +318,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit, defaul
                   <label htmlFor="card-point-value" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Point value (¢)</label>
                   <input
                     id="card-point-value"
-                    type="number"
+                    type="number" inputMode="decimal"
                     name="pointValueCents"
                     step="0.05"
                     min="0.01"
@@ -364,7 +364,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit, defaul
               <div className="space-y-2">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Statement Closes (Day)</label>
                 <input
-                  type="number"
+                  type="number" inputMode="decimal"
                   name="statement_close_day"
                   min="1"
                   max="28"
@@ -378,7 +378,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit, defaul
               <div className="space-y-2">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Payment Due (Day)</label>
                 <input
-                  type="number"
+                  type="number" inputMode="decimal"
                   name="due_day"
                   min="1"
                   max="28"
@@ -392,7 +392,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit, defaul
               <div className="space-y-2">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Credit Limit ($)</label>
                 <input
-                  type="number"
+                  type="number" inputMode="decimal"
                   name="credit_limit"
                   min="0"
                   step="100"
@@ -405,7 +405,7 @@ export const CustomCardModal = ({ isOpen, onClose, onAddCard, cardToEdit, defaul
               <div className="space-y-2">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Min Payment (%)</label>
                 <input
-                  type="number"
+                  type="number" inputMode="decimal"
                   name="min_payment_pct"
                   min="0"
                   step="0.01"

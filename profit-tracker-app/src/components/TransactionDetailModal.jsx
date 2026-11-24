@@ -57,7 +57,7 @@ function DollarInput({ value, onChange, placeholder = '0.00', accentClass = 'foc
     <div className="relative">
       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--dp-text-secondary)] text-sm">$</span>
       <input
-        type="number"
+        type="number" inputMode="decimal"
         step="0.01"
         value={value ?? ''}
         onChange={e => onChange(e.target.value)}

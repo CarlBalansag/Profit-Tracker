@@ -476,7 +476,7 @@ const AddTransaction = () => {
     <div className="relative">
       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
       <input
-        type="number" step="0.01" name={name}
+        type="number" inputMode="decimal" step="0.01" name={name}
         value={formData[name]} onChange={handleChange}
         className={`${inputCls(accent)} pl-7`}
         placeholder={placeholder}
@@ -677,7 +677,7 @@ const AddTransaction = () => {
                       className="px-3 py-1.5 text-gray-400 hover:text-white transition-colors border-r border-white/10 flex-shrink-0"
                     >-</button>
                     <input
-                      type="number"
+                      type="number" inputMode="decimal"
                       value={formData.qty_purchased}
                       onChange={handleQtyInput}
                       min="1"
@@ -718,7 +718,7 @@ const AddTransaction = () => {
               <div className="phone-extra grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
                 <Field label="Return window (days, optional)">
                   <input
-                    type="number" min="0" step="1" name="return_window_days" aria-label="Return window (days)"
+                    type="number" inputMode="numeric" min="0" step="1" name="return_window_days" aria-label="Return window (days)"
                     value={formData.return_window_days}
                     onChange={e => setFormData(prev => ({ ...prev, return_window_days: e.target.value, return_days_edited: true }))}
                     className={inputCls('blue')} placeholder="e.g. 30"
@@ -917,7 +917,7 @@ const AddTransaction = () => {
                 <Field label={isPointsCard(selectedCard) ? 'Points Value %' : 'Cashback Rate %'} className="phone-extra">
                   <div className="relative">
                     <input
-                      type="number" min="0" step="0.000001"
+                      type="number" inputMode="decimal" min="0" step="0.000001"
                       aria-label={isPointsCard(selectedCard) ? 'Points Value %' : 'Cashback Rate %'}
                       value={cashbackRate}
                       onChange={e => handleCashbackRateChange(e.target.value)}
@@ -942,7 +942,7 @@ const AddTransaction = () => {
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                     <input
-                      type="number" min="0" step="0.01"
+                      type="number" inputMode="decimal" min="0" step="0.01"
                       aria-label={isPointsCard(selectedCard) ? 'Points Value' : 'Cashback Amount'}
                       value={cashbackOverrideMode === 'amount' ? formData.cashback_earned : cashbackAmount.toFixed(2)}
                       onChange={e => handleCashbackAmountChange(e.target.value)}
@@ -969,7 +969,7 @@ const AddTransaction = () => {
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                     <input
-                      type="number" step="0.01"
+                      type="number" inputMode="decimal" step="0.01"
                       name="gift_card_amount" value={formData.gift_card_amount} onChange={handleChange}
                       className={`${inputCls('pink')} pl-7`}
                       placeholder="0.00"
@@ -981,7 +981,7 @@ const AddTransaction = () => {
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                       <input
-                        type="number" step="0.01" min="0"
+                        type="number" inputMode="decimal" step="0.01" min="0"
                         name="gift_card_cost" value={formData.gift_card_cost ?? ''} onChange={handleChange}
                         className={`${inputCls('pink')} pl-7`}
                         placeholder="Optional"
@@ -1138,7 +1138,7 @@ const AddTransaction = () => {
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                       <input
-                        type="number" step="0.01" name="sale_price"
+                        type="number" inputMode="decimal" step="0.01" name="sale_price"
                         value={formData.sale_price} onChange={handleChange}
                         className={`${inputCls('green')} pl-7`}
                         placeholder="0.00"
@@ -1154,7 +1154,7 @@ const AddTransaction = () => {
                         className="px-3 py-1.5 text-gray-400 hover:text-white transition-colors border-r border-white/10 flex-shrink-0"
                       >-</button>
                       <input
-                        type="number"
+                        type="number" inputMode="decimal"
                         value={formData.qty_sold}
                         min="1"
                         max={formData.qty_purchased || 1}
@@ -1176,7 +1176,7 @@ const AddTransaction = () => {
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                       <input
-                        type="number" step="0.01" name="sale_shipping"
+                        type="number" inputMode="decimal" step="0.01" name="sale_shipping"
                         value={formData.sale_shipping} onChange={handleChange}
                         className={`${inputCls('green')} pl-7`}
                         placeholder="0.00"
@@ -1199,7 +1199,7 @@ const AddTransaction = () => {
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                       <input
-                        type="number" step="0.01" name="commission_fee"
+                        type="number" inputMode="decimal" step="0.01" name="commission_fee"
                         value={formData.commission_fee} onChange={handleChange}
                         className={`${inputCls('green')} pl-7`}
                         placeholder="0.00"
@@ -1233,7 +1233,7 @@ const AddTransaction = () => {
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                       <input
-                        type="number" step="0.01" name="sale_tax_collected"
+                        type="number" inputMode="decimal" step="0.01" name="sale_tax_collected"
                         value={formData.sale_tax_collected} onChange={handleChange}
                         className={`${inputCls('green')} pl-7`}
                         placeholder="0.00"

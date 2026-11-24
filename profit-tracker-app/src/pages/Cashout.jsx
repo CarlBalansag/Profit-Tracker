@@ -69,6 +69,8 @@ const PAYMENT_METHODS_STATE = { tab: 'datasetup', view: 'Payment Methods' };
 // Below this the table no longer fits beside the sidebar -- cards take over
 // regardless of the view toggle.
 const DEAL_CARDS_QUERY = '(max-width: 1279px)';
+// How many deal cards each "Show more" adds (cards view only; the table lists everything).
+const DEAL_CARDS_PER_PAGE = 24;
 
 const VIEW_MODE_KEY = 'cashoutViewMode';
 
@@ -241,6 +243,15 @@ export default function Cashout() {
       return 0;
     });
   }, [allDeals, selectedProvider, selectedCategory, selectedStore, showExpired, searchTerm, sortBy]);
+
+  // Deal cards come a page at a time: a hundred full cards made the phone
+  // page dozens of screens long. A new search, filter or sort starts again
+  // from the first page (the count only applies to the list it was set for).
+  const dealsListKey = [selectedProvider, selectedCategory, selectedStore, showExpired, searchTerm, sortBy].join('|');
+  const [dealPaging, setDealPaging] = useState({ key: '', count: DEAL_CARDS_PER_PAGE });
+  const dealCardsShown = dealPaging.key === dealsListKey ? dealPaging.count : DEAL_CARDS_PER_PAGE;
+  const dealCards = filteredDeals.slice(0, dealCardsShown);
+  const dealCardsLeft = filteredDeals.length - dealCards.length;
 
   if (providersError || connectionsError || dealsError) {
     return (
@@ -605,11 +616,25 @@ export default function Cashout() {
               {allDeals.length === 0 ? 'No live deals right now.' : 'No cashout deals matched your search and filters.'}
             </div>
           ) : showCards ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
-              {filteredDeals.map((deal) => (
-                <DealCard key={`${deal.connectionId}-${deal.id}`} deal={deal} paymentMethods={paymentMethods} />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
+                {dealCards.map((deal) => (
+                  <DealCard key={`${deal.connectionId}-${deal.id}`} deal={deal} paymentMethods={paymentMethods} />
+                ))}
+              </div>
+              {dealCardsLeft > 0 && (
+                <div className="mt-4 flex flex-col items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setDealPaging({ key: dealsListKey, count: dealCardsShown + DEAL_CARDS_PER_PAGE })}
+                    className="h-11 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] px-5 text-sm font-medium text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
+                  >
+                    Show {Math.min(DEAL_CARDS_PER_PAGE, dealCardsLeft)} more
+                  </button>
+                  <p className="text-xs text-[var(--dp-text-secondary)]">Showing {dealCards.length} of {filteredDeals.length} deals</p>
+                </div>
+              )}
+            </>
           ) : (
             <div className="rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
@@ -926,9 +951,9 @@ function OpenOnCashout({ offer }) {
       rel="noopener noreferrer"
       aria-label={`Open on ${offer.connectionName}`}
       title={offer.connectionSupportsCommits ? `Open on ${offer.connectionName}` : `Open on ${offer.connectionName} to commit`}
-      className="p-1 rounded-md text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
+      className="inline-flex items-center justify-center p-1 max-md:min-h-11 max-md:min-w-11 rounded-md text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
     >
-      <ExternalLink size={13} />
+      <ExternalLink size={13} className="max-md:h-4 max-md:w-4" />
     </a>
   );
 }
@@ -1579,7 +1604,7 @@ function DollarInput({ id, value, onChange }) {
   return (
     <div className="relative">
       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--dp-text-label)]" aria-hidden="true">$</span>
-      <input id={id} type="number" step="0.01" min="0" value={value} onChange={onChange} className={`${LP_INPUT} pl-7`} />
+      <input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={value} onChange={onChange} className={`${LP_INPUT} pl-7`} />
     </div>
   );
 }
@@ -1989,7 +2014,7 @@ function LogPurchaseModal({ product, onClose }) {
                 <DollarInput id="lp-cost" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />
               </LpField>
               <LpField id="lp-qty" label="Quantity">
-                <input id="lp-qty" type="number" min="1" value={quantity} onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))} className={LP_INPUT} />
+                <input id="lp-qty" type="number" inputMode="decimal" min="1" value={quantity} onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))} className={LP_INPUT} />
               </LpField>
               <LpField id="lp-tax" label="Sales tax">
                 {taxExempt ? (
@@ -2051,7 +2076,7 @@ function LogPurchaseModal({ product, onClose }) {
               </LpField>
               {!recordOnly && tracking && (
                 <LpField id="lp-insured" label="Insured value (optional)">
-                  <input id="lp-insured" type="number" min="200" max="1500" step="0.01" value={insuredValue} onChange={(e) => setInsuredValue(e.target.value)}
+                  <input id="lp-insured" type="number" inputMode="decimal" min="200" max="1500" step="0.01" value={insuredValue} onChange={(e) => setInsuredValue(e.target.value)}
                     placeholder="$200–$1,500" className={LP_INPUT} />
                 </LpField>
               )}
