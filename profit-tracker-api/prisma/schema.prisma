@@ -427,6 +427,7 @@ model Sales {
   refunded_amount                 Decimal            @default(0) @db.Decimal(19, 2)
   refunded_qty                    Int                @default(0)
   refunds                         Refund[]
+  invoice_lines                   InvoiceLine[]
   // Units a cancel_sale/void_sale/mark_returned action put back in stock
   // (mark_returned can restore only part of the sale). A sale still holds
   // quantity - refunded_qty - restored_qty units out of stock.
@@ -672,19 +673,53 @@ model RecurringExpense {
   generated_entries Expense[]
 }
 
+// An invoice to a buyer for sales already recorded (routes/invoices.js,
+// services/invoices.js). Its lines are copies of the sales at the time they
+// were added, so the document doesn't change when a sale is edited later.
+// status: DRAFT | SENT | PAID | CANCELLED ("overdue" is a SENT invoice past
+// its due date, worked out when read). total = lines + tax_amount.
 model Invoice {
-  id                   String   @id @default(uuid())
+  id                   String        @id @default(uuid())
   user_id              String
-  user                 User     @relation(fields: [user_id], references: [id])
+  user                 User          @relation(fields: [user_id], references: [id])
   buyer_id             String
-  buyer                Buyer    @relation(fields: [buyer_id, user_id], references: [id, user_id])
+  buyer                Buyer         @relation(fields: [buyer_id, user_id], references: [id, user_id])
+  // Counts up per user from 1. Null only on rows from before invoices existed.
+  number               Int?
   issue_date           DateTime
   due_date             DateTime
   total_amount         Float
-  total_amount_decimal Decimal? @db.Decimal(19, 2)
-  status               String // "Paid, Unpaid"
+  total_amount_decimal Decimal?      @db.Decimal(19, 2)
+  // Sales tax collected on the invoiced sales, part of the total.
+  tax_amount           Decimal       @default(0) @db.Decimal(19, 2)
+  status               String        @default("DRAFT")
+  notes                String?
+  created_at           DateTime      @default(now())
+  updated_at           DateTime      @default(now()) @updatedAt
+  lines                InvoiceLine[]
 
+  @@unique([user_id, number])
   @@index([user_id])
+}
+
+// One sale on an invoice. sale_id goes null if the sale is deleted; the line
+// keeps what it said.
+model InvoiceLine {
+  id          String    @id @default(uuid())
+  invoice_id  String
+  invoice     Invoice   @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  sale_id     String?
+  sale        Sales?    @relation(fields: [sale_id], references: [id], onDelete: SetNull)
+  description String
+  quantity    Int
+  unit_price  Decimal   @db.Decimal(19, 2)
+  amount      Decimal   @db.Decimal(19, 2)
+  tax         Decimal   @default(0) @db.Decimal(19, 2)
+  sale_date   DateTime?
+  position    Int       @default(0)
+
+  @@index([invoice_id])
+  @@index([sale_id])
 }
 
 model Goal {
