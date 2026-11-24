@@ -36,6 +36,7 @@ const { verifySyncSecret, runScheduledSync } = require('./services/cashouts/sync
 const mcpRouter = require('./routes/mcp');
 const { apiKeyAuth } = require('./middleware/apiKeyAuth');
 const { apiLimiter, mcpLimiter } = require('./middleware/rateLimiters');
+const { requestLog } = require('./middleware/requestLog');
 
 const app = express();
 const isProd = process.env.NODE_ENV === 'production';
@@ -51,6 +52,9 @@ if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
 
 // Trust Render's reverse proxy so secure cookies work over HTTPS
 if (isProd) app.set('trust proxy', 1);
+
+// Request log (method, route, status, time; nothing private). Off in tests.
+if (process.env.NODE_ENV !== 'test') app.use(requestLog());
 
 // Protective response headers. This server only answers with JSON, so nothing
 // it sends may load scripts, be framed, or be guessed into another file type.
