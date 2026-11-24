@@ -4,3 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
+| fix-ai-guide-rate-limit | AI guide: note and ground rule for the per-key request limit on the AI-assistant endpoint (guide version 1.50) | `shared/aiGuide.mjs` | In progress | 2026-11-24 |
