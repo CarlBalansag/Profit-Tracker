@@ -4,3 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
+| feat-csv-export-due-banner | Transactions CSV export and a payment-due-soon banner on Credit Card | profit-tracker-app/src/pages/{Transactions,CreditCard}.jsx, profit-tracker-app/src/components/CreditCard/DueSoonBanner.jsx, profit-tracker-app/src/utils/cardDueDates.js, their tests, hook mocks in creditCardPoints/refundsScreens/loadErrors tests | QA passed, not merged | 2026-11-24 |

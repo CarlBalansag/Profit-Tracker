@@ -40,6 +40,7 @@ vi.mock('../hooks/useApi', () => ({
   useDashboard: () => load(),
   useCashFlow: () => load(),
   useCreditCard: () => load(),
+  useTodos: () => ({}),
   useGoals: () => load(),
   useCalendarEvents: () => load(),
   useCalendarAutoEvents: () => load(),

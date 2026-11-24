@@ -22,6 +22,7 @@ import { detectCarrier } from '../utils/carrier';
 import { orderTransactionRows } from '../utils/transactionRowOrder';
 import { recordStatusLabel } from '../data/statusWorkflow';
 import { formatMoney, formatDollars, formatSignedDollars } from '../utils/money';
+import { csvText, downloadFile } from '../utils/downloads';
 import LoadError from '../components/UI/LoadError';
 
 // ─── Inline editable cell input ───────────────────────────────────────────────
@@ -617,6 +618,40 @@ const Transactions = () => {
     return true;
   });
 
+  // Every row the filters leave, in the order shown (not just the cards a phone
+  // has loaded). Money goes out as plain numbers, so a spreadsheet can add it up
+  // and a loss isn't mistaken for a formula. Dates are the local day shown here.
+  const exportCSV = () => {
+    if (!filteredRows.length) {
+      toast.error('No transactions to export');
+      return;
+    }
+    const day = (value) => new Date(value).toLocaleDateString('en-CA');
+    const amount = (value) => (value != null && Number.isFinite(Number(value)) ? roundCents(Number(value)) : '');
+    const records = filteredRows.map(row => ({
+      Date: row.rawDate ? day(row.rawDate) : '',
+      Type: row.isSale ? 'Sale' : 'Purchase',
+      Product: row.product || '',
+      Category: row.category || '',
+      Vendor: row.vendor || '',
+      Platform: row.platform || '',
+      Quantity: row.qty ?? '',
+      Cost: amount(row.cost),
+      'Sale Amount': amount(row.sale),
+      Fees: amount(row.fees),
+      Shipping: amount(row.shipping),
+      Tax: amount(row.tax),
+      Cashback: amount(row.cashback),
+      Profit: amount(row.profit),
+      'Payment Method': row.payment || '',
+      Status: recordStatusLabel(row.status),
+      // Sale rows carry the purchase's number too, so it is named for what it is.
+      'Purchase Tracking': row.tracking_number || '',
+    }));
+    downloadFile(`transactions-${day(Date.now())}.csv`, csvText(records), 'text/csv;charset=utf-8');
+    toast.success(`Exported ${records.length} row${records.length === 1 ? '' : 's'} to CSV`);
+  };
+
   // The card list below shows up to the md breakpoint.
   const phoneRows = usePhoneList(filteredRows, { query: '(max-width: 767px)' });
 
@@ -786,8 +821,9 @@ const Transactions = () => {
               </div>
             )}
           </div>
-          <button 
-            onClick={() => toast('Coming Soon')}
+          <button
+            type="button"
+            onClick={exportCSV}
             className="page-btn page-btn-secondary page-btn-sm"
           >
             <Download className="w-3.5 h-3.5" /> CSV

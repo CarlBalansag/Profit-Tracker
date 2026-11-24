@@ -28,6 +28,8 @@ import {
   PiggyBank,
 } from 'lucide-react';
 import StatCard from '../components/UI/StatCard';
+import DueSoonBanner from '../components/CreditCard/DueSoonBanner';
+import { daysUntilDue, dueDateLabel } from '../utils/cardDueDates';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -55,22 +57,6 @@ function offsetMonth(key, delta) {
   const [y, m] = key.split('-').map(Number);
   const d = new Date(Date.UTC(y, m - 1 + delta, 1));
   return toMonthKey(d);
-}
-
-function daysUntilDue(dueDay) {
-  if (!dueDay) return null;
-  const now = new Date();
-  const thisMonth = new Date(now.getFullYear(), now.getMonth(), dueDay);
-  const target = thisMonth > now ? thisMonth : new Date(now.getFullYear(), now.getMonth() + 1, dueDay);
-  return Math.ceil((target - now) / (1000 * 60 * 60 * 24));
-}
-
-function dueDateLabel(dueDay) {
-  if (!dueDay) return null;
-  const now = new Date();
-  const thisMonth = new Date(now.getFullYear(), now.getMonth(), dueDay);
-  const target = thisMonth > now ? thisMonth : new Date(now.getFullYear(), now.getMonth() + 1, dueDay);
-  return target.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 const STATUS_SOLD = ['SOLD', 'PAID', 'COMPLETED', 'SHIPPED_OUT', 'AUTHENTICATION', 'PENDING_PAYMENT', 'IN_TRANSIT_OUT'];
@@ -302,7 +288,7 @@ function CreditCard() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {totalKeep > 0 && pill(`All Cards · Keep $${fmt(totalKeep)}`, 'green', 'Total cashback to keep across every active card for the selected month.')}
-          {urgentDays !== null && pill(`Due in ${urgentDays}d`, urgentTone)}
+          {urgentDays !== null && pill(urgentDays === 0 ? 'Due today' : `Due in ${urgentDays}d`, urgentTone)}
           {totalUncovered > 0 && pill(`Loss $${fmt(totalUncovered)}`, 'red')}
           <div className="flex items-center gap-1">
             <button
@@ -328,6 +314,8 @@ function CreditCard() {
           </div>
         </div>
       </div>
+
+      <DueSoonBanner />
 
       {cards.length === 0 ? (
         /* Empty state */
