@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.51',
+    date: '2026-11-24',
+    notes: "You can now download your transactions as a CSV, and the Credit Card page shows bills due soon with a Mark paid button. Restoring an undone cashout import is now reliable at any size, and invoice PDFs print quotes and dashes correctly.",
+  },
+  {
     version: '1.50',
     date: '2026-11-24',
     notes: "You can now make invoices from a buyer's sales and download them as a PDF, and Cashout shows the ROI on each deal (sort, filter and alert by it), how many you've bought and past payouts. Store accounts now show on Statuses, in what you're owed on Cash Flow, and as a per-account breakdown in Store ROI; LA and Points4Days purchases can be logged without a tracking number.",

@@ -18,7 +18,7 @@
 
 export const AI_GUIDE_UPDATES = [
   {
-    version: '1.50',
+    version: '1.51',
     date: '2026-11-24',
     notes: [
       'Calls are now limited per API key: about 1,200 in any 15 minutes. Past that, calls fail with "Too many requests from this API key" until the window passes. Nothing is saved by a refused call, so wait a few minutes and repeat it; do not retry in a tight loop. For big jobs, prefer one find_records or list call over many single lookups.',
