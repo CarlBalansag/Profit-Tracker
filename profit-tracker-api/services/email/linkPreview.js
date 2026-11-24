@@ -2,12 +2,11 @@
 // would be linked to, field by field, with the blanks linking fills in marked
 // (purchaseFills / saleFills, the same rules the link itself uses), plus what
 // else happens right away. Read-only.
-const { purchaseFills, saleFills, CASHOUTS } = require('./match');
+const { normOrder, purchaseFills, saleFills, CASHOUTS } = require('./match');
 const { SENDERS } = require('./config');
 
 const FIELD_LABELS = { order_number: 'Order #', tracking_number: 'Tracking #', carrier: 'Carrier' };
 const storeLabel = (merchant) => SENDERS.find((s) => s.key === merchant)?.label || String(merchant || '').replace(/^custom:/, '');
-const normOrder = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 const money = (n) => (n == null || Number.isNaN(Number(n)) ? null : Number(n).toFixed(2));
 const cardName = (pm) => (pm ? `${pm.name}${pm.last4 ? ` ••${pm.last4}` : ''}` : null);
@@ -32,7 +31,8 @@ function recordView(recordType, row, order) {
   const fills = fillsFor(recordType, row, order);
   const f = (key, label, value) => ({ key, label, value: value ?? null, ...(fills[key] !== undefined ? { fill: String(fills[key]) } : {}) });
   // The record already has a different order number than the email: likely another order.
-  const conflict = recordType === 'purchase' && order.order_number && row.order_number && normOrder(row.order_number) !== normOrder(order.order_number);
+  const [emailNo, rowNo] = [normOrder(order.order_number), normOrder(row.order_number)];
+  const conflict = recordType === 'purchase' && emailNo && rowNo && emailNo !== rowNo;
   if (recordType === 'purchase') {
     const unit = Number(row.unit_purchase_cost_decimal ?? row.unit_purchase_cost);
     return { id: row.id, title: row.product_name, fields: [

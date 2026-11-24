@@ -423,6 +423,41 @@ describe('email orders and matching on Postgres', () => {
       expect(field.fill).toBeUndefined();
     });
 
+    it('treats an order number typed without dashes as the same order', async () => {
+      // Bought long before the email, so only the order number finds it.
+      const old = await purchase({ product_name: 'Apple Watch Series 11', vendor_id: vendor.id, order_number: '11333773083825054', purchase_date: new Date('2025-12-01T12:00:00Z'), unit_purchase_cost: 279, qty_purchased: 2, qty_on_hand: 2 });
+      await email({ merchant: 'amazon', kind: 'order', order_number: '113-3377308-3825054', total: '558.00',
+        items: [{ name: 'Apple Watch Series 11', quantity: 2 }], sent_at: new Date('2026-03-01T15:30:00Z') });
+      await send('PUT', '/api/email/automation', { linkMatches: false });
+      await sync.organize(prisma, user.id);
+      const [order] = (await send('GET', '/api/email/orders?state=review')).body.orders;
+      expect(order.matches[0].record_ids ?? order.matches[0].records.map((r) => r.id)).toEqual([old.id]);
+      const codes = order.matches[0].reasons.map((r) => r.code);
+      expect(codes).toContain('order_number');
+      expect(codes).not.toContain('order_number_conflict');
+      const preview = (await send('GET', `/api/email/matches/${order.matches[0].id}/preview`)).body;
+      expect(preview.warnings).toEqual([]);
+      // What was typed stays as typed.
+      expect((await prisma.inventory.findUnique({ where: { id: old.id } })).order_number).toBe('11333773083825054');
+    });
+
+    it('still tells apart different numbers, and a bare dash is no number at all', async () => {
+      const { scorePurchases, normOrder } = require('../services/email/match.js');
+      const order = { merchant: 'amazon', order_number: '113-3377308-3825054', tracking_numbers: [], items: [] };
+      const code = (order_number) => scorePurchases(order, [{ order_number, qty_purchased: 1, unit_purchase_cost: 1, purchase_date: new Date() }]).reasons.map((r) => r.code).filter((c) => c.startsWith('order_number'));
+      expect(code('113 3377308 3825054')).toEqual(['order_number']);
+      expect(code('#113-3377308-3825054')).toEqual(['order_number']);
+      expect(code('113-5291515-4133865')).toEqual(['order_number_conflict']);
+      expect(code('-')).toEqual([]);
+      expect(normOrder(null)).toBe('');
+      // Two purchases with only a dash typed are not one order.
+      await purchase({ product_name: 'Widget A', order_number: '-', vendor_id: vendor.id, unit_purchase_cost: 100, purchase_date: new Date('2026-03-01T12:00:00Z') });
+      await purchase({ product_name: 'Widget B', order_number: '-', vendor_id: vendor.id, unit_purchase_cost: 50, purchase_date: new Date('2026-03-01T12:00:00Z') });
+      await email({ merchant: 'amazon', kind: 'order', order_number: '112-5-5', total: '150.00', items: [{ name: 'Widget A' }], sent_at: new Date('2026-03-01T15:30:00Z') });
+      await sync.organize(prisma, user.id);
+      expect((await prisma.emailMatch.findMany()).every((m) => m.record_ids.length === 1)).toBe(true);
+    });
+
     it('no warning when the purchase has no order number yet', async () => {
       await purchase({ product_name: 'Apple Watch Series 11', vendor_id: vendor.id, unit_purchase_cost: 279, qty_purchased: 2, qty_on_hand: 2 });
       await email({ merchant: 'amazon', kind: 'order', order_number: '113-3377308-3825054', total: '558.00',

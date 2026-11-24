@@ -144,7 +144,6 @@ router.post('/', isAuthenticated, validateBody(createInventory), async (req, res
       exemption_type,
     } = req.body;
 
-    console.log('POST inventory body:', JSON.stringify(req.body));
     const qty = parseInt(qty_purchased, 10) || 1;
     // A tracking number entered at creation time advances status the same
     // way adding one later does — unless the caller explicitly chose a status.

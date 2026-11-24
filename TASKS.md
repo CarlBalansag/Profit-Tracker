@@ -5,3 +5,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
 | fix-past-import-restore | Past imports: restoring an undone import from Activity works at any size, keeps cashout commitment links, and is refused when the items were imported again | `profit-tracker-api/services/activityLog.js` (undoChange, undoActivity, logRemoved removed), `profit-tracker-api/services/cashouts/importHistory.js`, `profit-tracker-api/test/importHistoryPostgres.test.mjs` | In progress | 2026-11-24 |
+| fix-email-order-dashes | Email matching ignores dashes in order numbers; adding a purchase no longer logs its details | `profit-tracker-api/services/email/{match,linkPreview}.js`, `profit-tracker-api/routes/inventory.js`, tests | QA passed, waiting for the next batch | 2026-11-24 |
