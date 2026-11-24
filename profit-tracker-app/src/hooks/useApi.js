@@ -642,6 +642,14 @@ export const useCashoutDealAlerts = (enabled = true) => useQuery({
   refetchIntervalInBackground: false,
 });
 
+// One deal's recorded payout changes, oldest first (kept 90 days). Only asked
+// for when its history window is open.
+export const useCashoutDealHistory = (provider, dealId, enabled = true) => useQuery({
+  queryKey: ['cashout', 'deal-history', provider, String(dealId)],
+  queryFn: () => fetcher(`/api/cashouts/history?provider=${encodeURIComponent(provider)}&dealId=${encodeURIComponent(dealId)}&limit=100`),
+  enabled: Boolean(enabled && provider && dealId !== undefined && dealId !== null),
+});
+
 export const cashoutCommitmentsQuery = () => ({
   queryKey: ['cashout', 'commitments'],
   queryFn: () => fetcher('/api/cashouts/commitments'),

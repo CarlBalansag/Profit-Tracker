@@ -328,6 +328,37 @@ export function dealBoughtLabel(deal, bought) {
   return { text: `${bought} of ${limit} bought`, reached: bought >= limit };
 }
 
+// A deal's recorded payouts (oldest first, one entry per change) turned into
+// what the history window shows: each change with how much it moved, the
+// highest and lowest payout, and how often it rose or fell. Entries with a
+// payout or date that can't be read are skipped. Null when nothing was recorded.
+export function summarizePayoutHistory(snapshots) {
+  const points = [];
+  for (const snapshot of Array.isArray(snapshots) ? snapshots : []) {
+    const payout = Number(snapshot?.payout);
+    const at = new Date(snapshot?.capturedAt || NaN);
+    if (snapshot?.payout === null || !Number.isFinite(payout) || Number.isNaN(at.getTime())) continue;
+    const previous = points[points.length - 1];
+    points.push({
+      at: at.toISOString(),
+      payout,
+      status: snapshot.status || 'active',
+      change: previous ? roundCents(payout - previous.payout) : null,
+    });
+  }
+  if (points.length === 0) return null;
+  const payouts = points.map((point) => point.payout);
+  return {
+    points,
+    first: points[0],
+    latest: points[points.length - 1],
+    high: Math.max(...payouts),
+    low: Math.min(...payouts),
+    rises: points.filter((point) => point.change > 0).length,
+    drops: points.filter((point) => point.change < 0).length,
+  };
+}
+
 // Items in one deal can have different limits, so this can be a range.
 export function dealLimitLabel(deal) {
   const limits = (deal.items || []).map((item) => item.vendorLimit).filter((limit) => limit > 0);

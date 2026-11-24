@@ -198,7 +198,7 @@ describe('Cashout Page', () => {
 
     expect(screen.getByLabelText('Sort deals')).toHaveValue('updated_desc');
     const rows = screen.getAllByRole('row').slice(1);
-    expect(rows.map((row) => row.cells[0].textContent)).toEqual(['Newest Posted', 'Seen Yesterday', 'Oldest', 'No Date']);
+    expect(rows.map((row) => row.cells[0].textContent.replace(/History$/, ''))).toEqual(['Newest Posted', 'Seen Yesterday', 'Oldest', 'No Date']);
   });
 
   it('sorts by highest profit when chosen', () => {
@@ -237,7 +237,7 @@ describe('Cashout Page', () => {
       }],
     };
     render(<MemoryRouter><Cashout /></MemoryRouter>);
-    const names = () => screen.getAllByRole('row').slice(1).map((row) => row.cells[0].textContent);
+    const names = () => screen.getAllByRole('row').slice(1).map((row) => row.cells[0].textContent.replace(/History$/, ''));
 
     fireEvent.change(screen.getByLabelText('Sort deals'), { target: { value: 'roi_desc' } });
     expect(names().map((name) => name.match(/Big Percent|Big Dollars|Thin Deal|No Retail Deal/)[0])).toEqual(['Big Percent', 'Big Dollars', 'Thin Deal', 'No Retail Deal']);
@@ -368,7 +368,7 @@ describe('Cashout Page', () => {
         <Cashout />
       </MemoryRouter>
     );
-    const names = () => screen.getAllByRole('row').slice(1).map((row) => row.cells[0].textContent);
+    const names = () => screen.getAllByRole('row').slice(1).map((row) => row.cells[0].textContent.replace(/History$/, ''));
     const category = screen.getByLabelText('Filter by category');
 
     expect(category).toHaveValue('all');
@@ -927,7 +927,7 @@ describe('Cashout Page', () => {
 
     fireEvent.change(screen.getByLabelText('Sort deals'), { target: { value: 'profit_desc' } });
     const rows = screen.getAllByRole('row').slice(1);
-    expect(rows.map((row) => row.cells[0].textContent)).toEqual([
+    expect(rows.map((row) => row.cells[0].textContent.replace(/History$/, ''))).toEqual([
       'Small Payout Big Profit',
       'Biggest Payout Small Profit',
       'Loss Deal',

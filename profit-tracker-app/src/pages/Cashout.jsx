@@ -65,6 +65,7 @@ import {
 } from '../utils/cashoutDeals';
 import LoadError from '../components/UI/LoadError';
 import NewDeals from '../components/Cashout/NewDeals';
+import DealHistoryButton from '../components/Cashout/DealHistory';
 
 // API keys are managed only in Data Setup.
 const DATA_SETUP_STATE = { tab: 'datasetup', view: 'Cashouts' };
@@ -828,6 +829,7 @@ function DealSummary({ deal, commitments }) {
         )}
         {coupon && <CopyButton value={coupon} label={`Code ${coupon}`} name={`Copy code ${coupon}`} />}
         {address && <CopyButton value={address} label="Address" name="Copy Address" title={address} />}
+        <DealHistoryButton deal={deal} />
       </div>
     </div>
   );
