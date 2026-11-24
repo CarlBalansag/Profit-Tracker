@@ -223,6 +223,35 @@ describe('Cashout Page', () => {
     expect(rows[1]).toHaveTextContent('Biggest Payout');
   });
 
+  it('sorts by highest ROI and filters by a minimum ROI, counting the best card', () => {
+    currentPaymentMethods = [{ id: 'flat', name: 'Flat 2%', default_cashback_rate: 2, category_rates: [] }];
+    currentDeals = {
+      results: [{
+        connection: mockConnections[0],
+        deals: [
+          { id: '1', name: 'Big Dollars', retail: 1000, payout: 1040 }, // +$40, 4% (6% with card)
+          { id: '2', name: 'Big Percent', retail: 100, payout: 115 }, // +$15, 15% (17%)
+          { id: '3', name: 'Thin Deal', retail: 200, payout: 202 }, // 1% (3%)
+          { id: '4', name: 'No Retail Deal', retail: null, payout: 50 },
+        ],
+      }],
+    };
+    render(<MemoryRouter><Cashout /></MemoryRouter>);
+    const names = () => screen.getAllByRole('row').slice(1).map((row) => row.cells[0].textContent);
+
+    fireEvent.change(screen.getByLabelText('Sort deals'), { target: { value: 'roi_desc' } });
+    expect(names().map((name) => name.match(/Big Percent|Big Dollars|Thin Deal|No Retail Deal/)[0])).toEqual(['Big Percent', 'Big Dollars', 'Thin Deal', 'No Retail Deal']);
+
+    // 5%+: the card's 2% lifts Big Dollars to 6%; Thin Deal (3%) and the unpriced deal drop out.
+    fireEvent.change(screen.getByLabelText('Filter by minimum ROI'), { target: { value: '5' } });
+    expect(names()).toHaveLength(2);
+    fireEvent.change(screen.getByLabelText('Filter by minimum ROI'), { target: { value: '15' } });
+    expect(names()).toHaveLength(1);
+    expect(names()[0]).toContain('Big Percent');
+    fireEvent.change(screen.getByLabelText('Filter by minimum ROI'), { target: { value: 'any' } });
+    expect(names()).toHaveLength(4);
+  });
+
   it('estimates profit as payout minus retail, to the cent', () => {
     expect(estimateDealProfit({ payout: 1140, retail: 899.99 })).toEqual({ amount: 240.01, pct: 26.67 });
     expect(estimateDealProfit({ payout: 16, retail: 14.99 })).toEqual({ amount: 1.01, pct: 6.74 });

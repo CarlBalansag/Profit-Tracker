@@ -242,6 +242,16 @@ export function bestCardForDeal(deal, cards, today = new Date()) {
   };
 }
 
+// A deal's ROI as a number, for sorting and the minimum-ROI filter: with the
+// best saved card's rewards when one earns, otherwise the plain estimate. Null
+// when there's no retail price to compare against.
+export function dealRoi(deal, cards, today = new Date()) {
+  const withCard = bestCardForDeal(deal, cards, today)?.profit;
+  if (withCard) return withCard.pct;
+  const estimate = deal.estimatedProfit === undefined ? estimateDealProfit(deal) : deal.estimatedProfit;
+  return estimate ? estimate.pct : null;
+}
+
 // Every store a deal can be bought at, once each, for the store filter.
 export function dealStoreNames(deal) {
   return [...new Set(dealStoreLinks(deal).map((link) => link.name).filter(Boolean))];

@@ -46,6 +46,7 @@ import { offerPendingCommit, offerTrackingSend } from '../utils/pendingCashoutCo
 import {
   bestCardForDeal,
   formatDealRoi,
+  dealRoi,
   dealConditionLabels,
   dealLimitLabel,
   dealStoreNames,
@@ -87,6 +88,7 @@ export default function Cashout() {
   const [selectedCategory, setSelectedCategory] = useState('all'); // 'all' | 'above_retail' | 'close_to_retail'
   const [selectedStore, setSelectedStore] = useState('all');
   const [showExpired, setShowExpired] = useState(false);
+  const [minRoi, setMinRoi] = useState('any'); // 'any' or a percent: '0', '2', '5', '10', '15'
   // Newest deals first every time the page opens.
   const [sortBy, setSortBy] = useState('updated_desc'); // 'profit_desc' | 'payout_desc' | 'ending_soon' | 'updated_desc'
   const [viewMode, setViewMode] = useState(() => (localStorage.getItem(VIEW_MODE_KEY) === 'card' ? 'card' : 'table'));
@@ -218,7 +220,16 @@ export default function Cashout() {
       return true;
     });
     // One row per product: the same product from several cashouts shares a row.
-    return groupDealsByProduct(matching).sort((a, b) => {
+    // ROI counts the best saved card's rewards, like the Best Card column.
+    const roiOf = new Map();
+    const roi = (deal) => {
+      if (!roiOf.has(deal)) roiOf.set(deal, dealRoi(deal, paymentMethods));
+      return roiOf.get(deal);
+    };
+    const grouped = groupDealsByProduct(matching);
+    // A deal with no retail price has no ROI, so a minimum leaves it out.
+    const kept = minRoi === 'any' ? grouped : grouped.filter((deal) => roi(deal) !== null && roi(deal) >= Number(minRoi));
+    return kept.sort((a, b) => {
       // Expired deals can't be bought, so they sit below every live one.
       const expiredOrder = isDealExpired(a) - isDealExpired(b);
       if (expiredOrder !== 0) return expiredOrder;
@@ -229,6 +240,10 @@ export default function Cashout() {
       if (sortBy === 'profit_desc') {
         // Deals with no estimate go last rather than counting as $0.
         return (b.estimatedProfit?.amount ?? -Infinity) - (a.estimatedProfit?.amount ?? -Infinity);
+      }
+      if (sortBy === 'roi_desc') {
+        // Deals with no ROI go last.
+        return (roi(b) ?? -Infinity) - (roi(a) ?? -Infinity);
       }
       if (sortBy === 'ending_soon') {
         // Deals with no expiration go last.
@@ -243,12 +258,12 @@ export default function Cashout() {
       }
       return 0;
     });
-  }, [allDeals, selectedProvider, selectedCategory, selectedStore, showExpired, searchTerm, sortBy]);
+  }, [allDeals, selectedProvider, selectedCategory, selectedStore, showExpired, searchTerm, sortBy, minRoi, paymentMethods]);
 
   // Deal cards come a page at a time: a hundred full cards made the phone
   // page dozens of screens long. A new search, filter or sort starts again
   // from the first page (the count only applies to the list it was set for).
-  const dealsListKey = [selectedProvider, selectedCategory, selectedStore, showExpired, searchTerm, sortBy].join('|');
+  const dealsListKey = [selectedProvider, selectedCategory, selectedStore, showExpired, searchTerm, sortBy, minRoi].join('|');
   const [dealPaging, setDealPaging] = useState({ key: '', count: DEAL_CARDS_PER_PAGE });
   const dealCardsShown = dealPaging.key === dealsListKey ? dealPaging.count : DEAL_CARDS_PER_PAGE;
   const dealCards = filteredDeals.slice(0, dealCardsShown);
@@ -592,6 +607,22 @@ export default function Cashout() {
                 ))}
               </select>
 
+              {/* Minimum ROI */}
+              <select
+                aria-label="Filter by minimum ROI"
+                value={minRoi}
+                onChange={(e) => setMinRoi(e.target.value)}
+                className={SELECT_CLASS}
+                title="ROI is profit as a percent of retail, with your best card's rewards."
+              >
+                <option value="any">Any ROI</option>
+                <option value="0">ROI 0%+</option>
+                <option value="2">ROI 2%+</option>
+                <option value="5">ROI 5%+</option>
+                <option value="10">ROI 10%+</option>
+                <option value="15">ROI 15%+</option>
+              </select>
+
               {/* Sort Dropdown */}
               <select
                 aria-label="Sort deals"
@@ -600,6 +631,7 @@ export default function Cashout() {
                 className={SELECT_CLASS}
               >
                 <option value="profit_desc">Highest Profit</option>
+                <option value="roi_desc">Highest ROI</option>
                 <option value="payout_desc">Highest Payout</option>
                 <option value="ending_soon">Ending Soon</option>
                 <option value="updated_desc">Recently Added</option>
