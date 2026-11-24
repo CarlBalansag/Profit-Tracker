@@ -44,6 +44,12 @@ function Kpi({ label, value, number, sub, tone = 'text-[var(--dp-text-primary)]'
   );
 }
 
+// The store account an owed item was bought on, after the item's name.
+function ItemAccount({ name }) {
+  if (!name) return null;
+  return <span data-store-account title={`${name} (store account)`} className="text-[var(--dp-text-muted)]">{` · ${name}`}</span>;
+}
+
 function OwedRow({ group }) {
   const [open, setOpen] = useState(false);
   const isPhone = useMatchMedia('(max-width: 639px)');
@@ -78,8 +84,8 @@ function OwedRow({ group }) {
             {group.items.map((item) => (
               <li key={item.id} className="py-2">
                 <div className="flex items-start justify-between gap-3">
-                  <span className="min-w-0 text-[var(--dp-text-secondary)]">
-                    {item.product}{item.payoutStatus === 'partial' && <span className="text-[var(--dp-warning-text)]"> · short-paid</span>}
+                  <span className="min-w-0 break-words text-[var(--dp-text-secondary)]">
+                    {item.product}<ItemAccount name={item.account} />{item.payoutStatus === 'partial' && <span className="text-[var(--dp-warning-text)]"> · short-paid</span>}
                   </span>
                   <span className="shrink-0 font-semibold text-[var(--dp-text-primary)]">{usd(item.amount)}</span>
                 </div>
@@ -105,8 +111,14 @@ function OwedRow({ group }) {
             <tbody>
               {group.items.map((item) => (
                 <tr key={item.id} className="border-t border-[color:var(--dp-border)]">
-                  <td className="py-1.5 pr-2 max-w-[160px] truncate text-[var(--dp-text-secondary)]">
-                    {item.product}{item.payoutStatus === 'partial' && <span className="text-[var(--dp-warning-text)]"> · short-paid</span>}
+                  <td className="py-1.5 pr-2 max-w-[160px] text-[var(--dp-text-secondary)]">
+                    {/* A long item name truncates; the account moves to a second line
+                        rather than being cut off. */}
+                    <span className="flex min-w-0 flex-wrap gap-x-1">
+                      <span className="max-w-full truncate" title={item.product}>{item.product}</span>
+                      {item.account && <span className="max-w-full break-words"><ItemAccount name={item.account} /></span>}
+                      {item.payoutStatus === 'partial' && <span className="text-[var(--dp-warning-text)]"> · short-paid</span>}
+                    </span>
                   </td>
                   <td className="py-1.5 text-right text-[var(--dp-text-muted)]">{dayLabel(item.saleDate)}</td>
                   <td className={`py-1.5 text-right ${item.lateDays > 0 ? 'text-[var(--dp-red-text)]' : 'text-[var(--dp-text-muted)]'}`}>

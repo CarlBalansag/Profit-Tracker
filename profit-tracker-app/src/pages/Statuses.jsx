@@ -409,9 +409,9 @@ function RecordCard({ record, quickStatus = false }) {
         <p className="text-[11px] font-semibold" style={{ color: `color-mix(in srgb, ${visual.color} 50%, var(--dp-text-primary))` }}>
           {statusLabel}
         </p>
-        {/* A long account name truncates; the tooltip keeps the whole line readable. */}
+        {/* A long store + account takes a second line (phones have no tooltip). */}
         <p
-          className="text-xs text-gray-500 truncate"
+          className={`text-xs text-gray-500 ${storeAccount ? 'line-clamp-2 break-words' : 'truncate'}`}
           title={storeAccount ? `${counterpartOf(record)} · ${storeAccount} (store account)` : undefined}
         >
           {counterpartOf(record)}

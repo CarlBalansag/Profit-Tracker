@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import { Rise, RiseItem, SlidingTabs, GrowBar, FlashNumber, Panel, Empty } from '../components/Analytics/Motion';
 import ProfitCalendar from '../components/Analytics/ProfitCalendar';
+import StoreRoi from '../components/Analytics/StoreRoi';
 import { ProfitShare, PriceBands, StoreRoutes } from '../components/Analytics/ProductPanels';
 
 
@@ -289,28 +290,7 @@ function Analytics() {
         {activeTab === 'products' && (
           <Rise key={`products-${mode}-${dateRange}`} className="grid grid-cols-1 lg:grid-cols-2 items-start gap-6">
             <RiseItem>
-              <Panel title="Store ROI" sub="Profit on items sold this period, by the store you bought them from.">
-                {storesWithSales.length ? (
-                  <div className="space-y-4">
-                    {storesWithSales.map((v, i) => {
-                      const maxProfit = Math.max(...storesWithSales.map((x) => Math.abs(x.profit)), 1);
-                      return (
-                        <div key={v.id ?? v.name}>
-                          <div className="flex justify-between gap-2 text-xs mb-1.5">
-                            <span className="truncate font-medium text-[var(--dp-text-primary)]">{v.name}</span>
-                            <span className="shrink-0 tabular-nums text-[var(--dp-text-muted)]">
-                              {v.unitsSold} sold · <b className={v.profit >= 0 ? 'text-[var(--dp-green-text)]' : 'text-[var(--dp-red-text)]'}>{v.profit >= 0 ? '+' : ''}{usd(v.profit)}</b>
-                              {v.roi != null && <> · {v.roi.toFixed(1)}% ROI</>}
-                            </span>
-                          </div>
-                          <GrowBar pct={(Math.abs(v.profit) / maxProfit) * 100} color={v.profit >= 0 ? 'var(--green)' : 'var(--red)'} delay={i * 0.05} />
-                          {mode === 'All' && <div className="mt-1 text-[11px] text-[var(--dp-text-label)] tabular-nums">{usd(v.spend)} spent this period · {usd(v.avgCostPerUnit)} avg / unit</div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : <Empty>{loading ? 'Loading…' : 'No sold items in this period'}</Empty>}
-              </Panel>
+              <StoreRoi stores={storesWithSales} showSpend={mode === 'All'} loading={loading} />
             </RiseItem>
             {/* The two shorter cards stack beside Store ROI, so neither waits
                 for it to end; the store-to-channel grid gets the full width. */}

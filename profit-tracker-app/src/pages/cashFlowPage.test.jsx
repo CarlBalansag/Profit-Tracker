@@ -35,6 +35,24 @@ describe('Cash Flow page', () => {
     expect(screen.getByText('· short-paid', { exact: false })).toBeInTheDocument();
   });
 
+  describe.each([['desktop', false], ['phone', true]])('store account on owed items (%s)', (_name, phone) => {
+    beforeEach(() => { vi.stubGlobal('matchMedia', () => ({ matches: phone, addEventListener() {}, removeEventListener() {} })); });
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('shows the account next to the item name, and nothing extra without one', () => {
+      const [group] = cashFlowFixture().owed;
+      const [lego, jordan] = group.items;
+      mocks.data = cashFlowFixture({ owed: [{ ...group, items: [{ ...lego, account: 'Business Prime' }, { ...jordan, account: null }] }] });
+      const { container } = page();
+      fireEvent.click(screen.getByRole('button', { name: /eBay Buyer/ }));
+      const rows = [...container.querySelectorAll(phone ? 'li' : 'tbody tr')];
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toHaveTextContent('Lego Set · Business Prime');
+      expect(rows[1]).toHaveTextContent('Jordan 4 · short-paid');
+      expect(container.querySelectorAll('[data-store-account]')).toHaveLength(1);
+    });
+  });
+
   it('shows each upcoming card bill and whether payouts cover it', () => {
     page();
     expect(screen.getByText('Short $224.00')).toBeInTheDocument();
