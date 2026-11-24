@@ -3,6 +3,7 @@ const monitoring = require('./monitoring');
 const express = require('express');
 const cors = require('cors');
 const compression = require('compression');
+const helmet = require('helmet');
 const prisma = require('./prisma');
 const { Pool } = require('pg');
 const session = require('express-session');
@@ -34,6 +35,7 @@ const { router: invitesRouter } = require('./routes/invites');
 const { verifySyncSecret, runScheduledSync } = require('./services/cashouts/syncScheduler');
 const mcpRouter = require('./routes/mcp');
 const { apiKeyAuth } = require('./middleware/apiKeyAuth');
+const { apiLimiter, mcpLimiter } = require('./middleware/rateLimiters');
 
 const app = express();
 const isProd = process.env.NODE_ENV === 'production';
@@ -49,6 +51,14 @@ if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
 
 // Trust Render's reverse proxy so secure cookies work over HTTPS
 if (isProd) app.set('trust proxy', 1);
+
+// Protective response headers. This server only answers with JSON, so nothing
+// it sends may load scripts, be framed, or be guessed into another file type.
+// Also drops the "X-Powered-By: Express" header.
+app.use(helmet({
+  contentSecurityPolicy: { useDefaults: false, directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } },
+  crossOriginResourcePolicy: { policy: 'same-site' },
+}));
 
 // Compress all responses — cuts JSON payload size by ~65-75%
 app.use(compression());
@@ -68,7 +78,7 @@ app.use(express.json({ limit: '7mb' }));
 // a bearer-token client has no browser cookie to forge and no session to
 // read. apiKeyAuth is this path's entire auth story; it never falls through
 // to firebaseAuth.guard.
-app.use('/mcp', apiKeyAuth, mcpRouter);
+app.use('/mcp', apiKeyAuth, mcpLimiter, mcpRouter);
 
 // Background cashout sync — protected by CASHOUT_SYNC_SECRET bearer token.
 // Mounted ahead of CSRF and Firebase session guards as it is called by an external scheduler.
@@ -202,6 +212,10 @@ app.use('/auth/firebase', firebaseAuth.router);
 app.use('/auth/firebase', (err, req, res, next) => {
   res.status(err.status === 413 ? 413 : 400).json({ error: err.status === 413 ? 'Authentication request too large.' : 'Invalid authentication request.' });
 });
+
+// Request limit for the data API, counted per signed-in user (see
+// middleware/rateLimiters.js). After the guard, so req.user is known.
+app.use('/api', apiLimiter);
 
 // --- ROUTES ---
 app.use('/api/payment-methods', paymentMethodsRouter);
