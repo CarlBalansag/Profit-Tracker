@@ -102,6 +102,30 @@ async function assertNoLinksFromOtherUsers(tx, userId, everything) {
   if (linked) throw new Error(`Data reset stopped: ${linked} other-user row(s) link to user ${userId}`);
 }
 
+// Email orders stay after a transactions reset (they describe the user's
+// mail, and expenses are kept), but their links and suggestions pointed at
+// the purchases and sales just deleted. Those go, and the orders go back to
+// "no match": they can be matched again, or added by hand from Settings >
+// Email, but are never added again on their own (leaning "declined"), so a
+// reset isn't undone by the next email sync.
+async function releaseEmailLinks(tx, userId) {
+  const gone = { user_id: userId, record_type: { in: ['purchase', 'sale'] } };
+  const links = await tx.emailMatch.findMany({ where: gone, select: { order_id: true, state: true } });
+  if (!links.length) return;
+  await tx.emailMatch.deleteMany({ where: gone });
+  const ids = (state) => [...new Set(links.filter((m) => m.state === state).map((m) => m.order_id))];
+  const chunks = (list) => Array.from({ length: Math.ceil(list.length / 5000) }, (_, i) => list.slice(i * 5000, (i + 1) * 5000));
+  for (const part of chunks(ids('linked'))) {
+    await tx.emailOrder.updateMany({
+      where: { user_id: userId, id: { in: part }, match_state: 'linked' },
+      data: { match_state: 'unmatched', applied_status: null, attention: null, leaning: 'declined', leaning_reason: 'Its record was removed by a data reset' },
+    });
+  }
+  for (const part of chunks(ids('suggested'))) {
+    await tx.emailOrder.updateMany({ where: { user_id: userId, id: { in: part }, match_state: 'review' }, data: { match_state: 'unmatched' } });
+  }
+}
+
 async function deleteTransactions(tx, userId) {
   const cashoutItemMatches = await tx.cashoutItemMatch.deleteMany({ where: { user_id: userId } });
   const transactionNotes = await tx.transactionNote.deleteMany({ where: { user_id: userId } });
@@ -120,6 +144,7 @@ async function deleteTransactions(tx, userId) {
   // Past cashout imports only describe the purchases just deleted. History,
   // like Activity, so not in the counts.
   await tx.importBatch.deleteMany({ where: { user_id: userId } });
+  await releaseEmailLinks(tx, userId);
 
   return {
     purchases: purchases.count,

@@ -44,6 +44,8 @@ async function parseSource(source, { maxBytes = MAX_SOURCE } = {}) {
   const text = cleanText(html ? convert(html, TEXT_OPTIONS) : mail.text || '');
   return {
     subject: mail.subject || '',
+    // The mail provider's verdicts on who sent this, topmost first (senderCheck.js).
+    authResults: (mail.headerLines || []).filter((h) => h.key === 'authentication-results').map((h) => h.line),
     html,
     text,
     attachments: (mail.attachments || []).map((a) => ({ filename: a.filename || null, contentType: a.contentType, size: a.size, content: a.content })),

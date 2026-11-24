@@ -1,11 +1,19 @@
 // Synthetic store emails (no real customer data) shaped like the stores' own
 // layouts: HTML tables for money lines, labels and amounts in separate cells.
-export function mime({ from, subject, html, text, date = 'Mon, 02 Mar 2026 10:00:00 +0000', id = `<${Math.random().toString(36).slice(2)}@example.test>` }) {
+// `auth`: the Authentication-Results line the mailbox provider adds on arrival.
+// By default Gmail's, saying the email really came from its From domain;
+// pass a string for another verdict, or null for none.
+export const passingAuth = (from) => {
+  const domain = String(from).replace(/^.*@/, '').replace(/[>\s"]/g, '');
+  return `mx.google.com; dkim=pass header.i=@${domain}; spf=pass smtp.mailfrom=bounce@${domain}; dmarc=pass (p=REJECT) header.from=${domain}`;
+};
+export function mime({ from, subject, html, text, date = 'Mon, 02 Mar 2026 10:00:00 +0000', id = `<${Math.random().toString(36).slice(2)}@example.test>`, auth = passingAuth(from) }) {
   const boundary = 'b1_qa';
   const parts = [];
   if (text) parts.push(`--${boundary}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${text}\r\n`);
   if (html) parts.push(`--${boundary}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${html}\r\n`);
   return Buffer.from([
+    ...(auth ? [`Authentication-Results: ${auth}`] : []),
     `From: ${from}`, `To: buyer@example.test`, `Subject: ${subject}`, `Date: ${date}`, `Message-ID: ${id}`,
     'MIME-Version: 1.0', `Content-Type: multipart/alternative; boundary="${boundary}"`, '',
     ...parts, `--${boundary}--`, '',
@@ -194,10 +202,11 @@ export function makePdf(lines) {
 }
 
 // An email with an HTML body and a PDF attached.
-export function mimeWithPdf({ from, subject, html, pdf, filename = 'invoice.pdf', date = 'Tue, 03 Mar 2026 09:01:00 +0000', id = `<${Math.random().toString(36).slice(2)}@example.test>` }) {
+export function mimeWithPdf({ from, subject, html, pdf, filename = 'invoice.pdf', date = 'Tue, 03 Mar 2026 09:01:00 +0000', id = `<${Math.random().toString(36).slice(2)}@example.test>`, auth = passingAuth(from) }) {
   const b = 'mixed_qa';
   const pdfB64 = pdf.toString('base64').replace(/.{76}/g, '$&\r\n');
   return Buffer.from([
+    ...(auth ? [`Authentication-Results: ${auth}`] : []),
     `From: ${from}`, 'To: buyer@example.test', `Subject: ${subject}`, `Date: ${date}`, `Message-ID: ${id}`,
     'MIME-Version: 1.0', `Content-Type: multipart/mixed; boundary="${b}"`, '',
     `--${b}`, 'Content-Type: text/html; charset=utf-8', '', html, '',

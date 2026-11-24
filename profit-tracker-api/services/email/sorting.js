@@ -43,6 +43,8 @@ function sortOrder(order, { homeState, personalWords = [], pastNames = [] }) {
 async function sortOrders(prisma, userId, settings) {
   const orders = await prisma.emailOrder.findMany({
     where: { user_id: userId, type: 'purchase', match_state: 'unmatched', OR: [{ leaning: null }, { leaning: { notIn: ['kept', 'declined'] } }] },
+    // Newest first, so new orders are always sorted however many older ones wait.
+    orderBy: { last_seen: { sort: 'desc', nulls: 'last' } },
     take: 300,
   });
   const due = orders.filter((o) => !SKIP.has(o.status));

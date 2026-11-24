@@ -39,8 +39,9 @@ function resetMail() {
   mail['[Gmail]/Spam'] = { uidValidity: '200', messages: [], specialUse: '\\Junk' };
 }
 let nextUid = 1;
-function addMail(folder, from, subject, date, messageId = `<m${nextUid}@x>`, html = '<p>Hello</p>') {
-  mail[folder].messages.push({ uid: nextUid++, from, subject, date: new Date(date), messageId, raw: mime({ from, subject, html, id: messageId }) });
+// auth: the mail provider's Authentication-Results line (default: Gmail's, passing); null for none.
+function addMail(folder, from, subject, date, messageId = `<m${nextUid}@x>`, html = '<p>Hello</p>', auth) {
+  mail[folder].messages.push({ uid: nextUid++, from, subject, date: new Date(date), messageId, raw: mime({ from, subject, html, id: messageId, ...(auth !== undefined ? { auth } : {}) }) });
 }
 async function fakeOpen(target) {
   log.push(['open', target]);
@@ -610,5 +611,50 @@ describe('email connections on Postgres', () => {
     expect(await sync.catchUp(body.id, { open: fakeOpen, resolve })).toMatchObject({ status: 'ok', more: false });
     const done = (await send('GET', '/api/email/accounts')).body[0];
     expect([done.pending, done.catching_up]).toEqual([0, false]);
+  });
+  it('only reads email the mail provider confirmed came from the store', async () => {
+    const html = (n) => `<p>Order #112-1234567-${n}</p><table><tr><td>Order Total:</td><td>$449.99</td></tr></table>`;
+    const subject = 'Your Amazon.com order of "Switch"';
+    addMail('INBOX', 'auto-confirm@amazon.com', subject, '2026-03-01', '<real@amazon.com>', html('7654321'));
+    // Faked From address: the provider's check failed, there is no check at all,
+    // or the only "pass" is one the sender wrote themselves.
+    addMail('INBOX', 'auto-confirm@amazon.com', subject, '2026-03-02', '<fake1@evil.example>', html('0000001'), 'mx.google.com; spf=fail smtp.mailfrom=a@evil.example; dmarc=fail (p=QUARANTINE) header.from=amazon.com');
+    addMail('INBOX', 'auto-confirm@amazon.com', subject, '2026-03-03', '<fake2@evil.example>', html('0000002'), null);
+    addMail('INBOX', 'auto-confirm@amazon.com', subject, '2026-03-04', '<fake3@evil.example>', html('0000003'), 'evil.example; dmarc=pass header.from=amazon.com');
+    const { body } = await send('POST', '/api/email/accounts', connectBody());
+    await waitIdle(body.id);
+    const rows = await prisma.emailMessage.findMany({ orderBy: { sent_at: 'asc' } });
+    expect(rows.map((r) => [r.status, r.order_number, r.total?.toString() ?? null])).toEqual([
+      ['extracted', '112-1234567-7654321', '449.99'],
+      ['ignored', null, null],
+      ['ignored', null, null],
+      ['ignored', null, null],
+    ]);
+    expect(rows.slice(1).every((r) => /couldn't confirm/.test(r.extract_error) && r.order_id === null)).toBe(true);
+    // Nothing is made from them, and they aren't read again on the next sync.
+    expect((await prisma.emailOrder.findMany()).map((o) => o.order_number)).toEqual(['112-1234567-7654321']);
+    log.length = 0;
+    await sync.syncAccount(body.id, { open: fakeOpen, resolve });
+    expect(log.filter((l) => l[0] === 'body')).toEqual([]);
+  });
+
+  it('answers the cron within its time limit while a long run carries on, one run at a time', async () => {
+    const { body } = await send('POST', '/api/email/accounts', connectBody());
+    await waitIdle(body.id);
+    let opens = 0;
+    const slowOpen = async (target) => { opens += 1; await new Promise((r) => setTimeout(r, 500)); return fakeOpen(target); };
+    const first = await sync.startScheduledEmailSync({ open: slowOpen, resolve }, { answerMs: 50 });
+    expect(first).toEqual({ status: 202, body: { status: 'running' } });
+    // A second call during the run doesn't start another.
+    const second = await sync.startScheduledEmailSync({ open: slowOpen, resolve }, { answerMs: 50 });
+    expect(second.status).toBe(202);
+    expect(opens).toBe(1);
+    await new Promise((r) => setTimeout(r, 300));
+    await waitIdle(body.id);
+    await new Promise((r) => setTimeout(r, 100));
+    // A run that finishes in time answers with its summary.
+    const done = await sync.startScheduledEmailSync({ open: fakeOpen, resolve }, { answerMs: 10000 });
+    expect(done.status).toBe(200);
+    expect(done.body).toMatchObject({ accounts: 1, synced: 1, errors: 0 });
   });
 });

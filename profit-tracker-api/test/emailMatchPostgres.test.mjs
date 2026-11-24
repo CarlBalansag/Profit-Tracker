@@ -583,4 +583,140 @@ describe('email orders and matching on Postgres', () => {
       expect((await prisma.emailOrder.findFirst()).match_state).toBe('unmatched');
     });
   });
+  describe('before email goes live: no copies, no stale links, no silent stops', () => {
+    // Loaded when used: the test database is swapped in by beforeAll.
+    const automations = { createMissingPurchases: (...a) => require('../services/email/automations.js').createMissingPurchases(...a), unappliedOrderIds: (...a) => require('../services/email/automations.js').unappliedOrderIds(...a) };
+    const daysAgo = (n) => new Date(Date.now() - n * 86400000);
+    const byNumber = (n) => prisma.emailOrder.findFirst({ where: { order_number: n } });
+    const statuses = (answers) => answers.map((a) => a.status).sort();
+
+    it('adds an order from email once, however many requests or syncs ask at the same time', async () => {
+      await email({ merchant: 'walmart', kind: 'order', order_number: '2000123-00000001', total: '21.60', subtotal: '20.00', tax: '1.60', items: [{ name: 'Lego Set', quantity: 1, total: '20.00' }], sent_at: daysAgo(3) });
+      await sync.organize(prisma, user.id);
+      const order = await byNumber('2000123-00000001');
+      const answers = await Promise.all([1, 2, 3, 4].map(() => send('POST', `/api/email/orders/${order.id}/purchase`)));
+      expect(statuses(answers)).toEqual([201, 409, 409, 409]);
+      expect(await prisma.inventory.count()).toBe(1);
+      expect(await prisma.emailMatch.count({ where: { order_id: order.id, state: 'linked' } })).toBe(1);
+      expect(await prisma.activityLog.count({ where: { source: 'email', record_type: 'purchase' } })).toBe(1);
+
+      // The automatic kind, from two syncs running at once.
+      await email({ merchant: 'target', kind: 'order', order_number: '912000000111', total: '30.00', items: [{ name: 'Board Game', quantity: 2, total: '30.00' }], sent_at: daysAgo(3) });
+      await sync.organize(prisma, user.id);
+      await prisma.emailOrder.updateMany({ where: { order_number: '912000000111' }, data: { leaning: 'kept', match_state: 'unmatched' } });
+      const made = await Promise.all([automations.createMissingPurchases(prisma, user.id), automations.createMissingPurchases(prisma, user.id)]);
+      expect(made[0] + made[1]).toBe(1);
+      expect(await prisma.inventory.count()).toBe(2);
+      expect((await byNumber('912000000111')).match_state).toBe('linked');
+    });
+
+    it('adds a receipt as an expense once, and only an unlinked store order or receipt', async () => {
+      await email({ merchant: 'pirateship', kind: 'receipt', total: '14.37', sent_at: new Date('2026-03-03T09:01:00Z') });
+      await sync.organize(prisma, user.id);
+      const receipt = await prisma.emailOrder.findFirst({ where: { merchant: 'pirateship' } });
+      const answers = await Promise.all([1, 2, 3].map(() => send('POST', `/api/email/orders/${receipt.id}/expense`)));
+      expect(statuses(answers)).toEqual([201, 201, 201]);
+      expect(new Set(answers.map((a) => a.body.expense_id)).size).toBe(1);
+      expect(await prisma.expense.count()).toBe(1);
+
+      // A sale email, a cancelled order, and an order already linked to a purchase.
+      await email({ merchant: 'ebay', kind: 'sale', order_number: '12-34567-00001', total: '50.00', sent_at: new Date('2026-03-04T10:00:00Z') });
+      await email({ merchant: 'target', kind: 'order', order_number: '912000000222', total: '9.99', sent_at: new Date('2026-03-04T10:00:00Z') });
+      await email({ merchant: 'target', kind: 'cancelled', order_number: '912000000222', sent_at: new Date('2026-03-05T10:00:00Z') });
+      await purchase({ product_name: 'Pokemon Booster Bundle', order_number: '2000123-45678901', unit_purchase_cost: 29.97, qty_purchased: 2, qty_on_hand: 2, sales_tax: 4.8 });
+      await email({ merchant: 'walmart', kind: 'order', order_number: '2000123-45678901', total: '64.74', sent_at: new Date('2026-03-02T16:00:00Z') });
+      await sync.organize(prisma, user.id);
+      const asExpense = async (n) => (await send('POST', `/api/email/orders/${(await byNumber(n)).id}/expense`)).status;
+      expect((await byNumber('2000123-45678901')).match_state).toBe('linked');
+      expect([await asExpense('12-34567-00001'), await asExpense('912000000222'), await asExpense('2000123-45678901')]).toEqual([400, 400, 409]);
+      expect(await prisma.expense.count()).toBe(1);
+    });
+
+    it('links a suggestion once, never a rejected one, and never one purchase to two orders', async () => {
+      await send('PUT', '/api/email/automation', { linkMatches: false });
+      await purchase({});
+      const thing = { merchant: 'target', kind: 'order', total: '10.00', items: [{ name: 'Thing' }], sent_at: new Date('2026-03-02T16:00:00Z') };
+      await email({ ...thing, order_number: '912000000301' });
+      await email({ ...thing, order_number: '912000000302' });
+      await sync.organize(prisma, user.id);
+      const suggestion = async (n) => prisma.emailMatch.findFirst({ where: { order_id: (await byNumber(n)).id, state: 'suggested' } });
+      const first = await suggestion('912000000301');
+      const second = await suggestion('912000000302');
+      expect([Boolean(first), Boolean(second)]).toEqual([true, true]);
+
+      const answers = await Promise.all([1, 2, 3].map(() => send('POST', `/api/email/matches/${first.id}/accept`)));
+      expect(statuses(answers)).toEqual([200, 404, 404]);
+      expect(await prisma.emailMatch.count({ where: { state: 'linked' } })).toBe(1);
+      // The other order's suggestion pointed at the purchase the first one
+      // took: it is withdrawn, the order goes back to no match, and a stale
+      // tab can't accept it.
+      expect((await prisma.emailMatch.findUnique({ where: { id: second.id } })).state).toBe('rejected');
+      expect((await byNumber('912000000302')).match_state).toBe('unmatched');
+      expect((await send('POST', `/api/email/matches/${second.id}/accept`)).status).toBe(404);
+      await sync.organize(prisma, user.id);
+      expect(await suggestion('912000000302')).toBe(null);
+      expect(await prisma.emailMatch.count({ where: { state: 'linked' } })).toBe(1);
+
+      // "Not this", then a stale tab says yes.
+      await purchase({ product_name: 'Other Gadget', unit_purchase_cost: 33 });
+      await email({ merchant: 'target', kind: 'order', order_number: '912000000303', total: '33.00', items: [{ name: 'Other Gadget' }], sent_at: new Date('2026-03-02T16:00:00Z') });
+      await sync.organize(prisma, user.id);
+      const third = await suggestion('912000000303');
+      expect((await send('POST', `/api/email/matches/${third.id}/reject`)).status).toBe(200);
+      expect((await send('POST', `/api/email/matches/${third.id}/accept`)).status).toBe(404);
+      expect((await byNumber('912000000303')).match_state).toBe('unmatched');
+    });
+
+    it('keeps applying updates when a user has more linked orders than one run reads', async () => {
+      await prisma.emailOrder.createMany({ data: Array.from({ length: 520 }, (_, i) => ({
+        user_id: user.id, key: `walmart:old-${i}`, merchant: 'walmart', order_number: `old-${i}`, type: 'purchase',
+        status: 'order', applied_status: 'order', match_state: 'linked', last_seen: new Date('2026-01-01T00:00:00Z'),
+      })) });
+      const row = await purchase({ product_name: 'Pokemon Booster Bundle', order_number: '2000123-45678901', unit_purchase_cost: 29.97, qty_purchased: 2, qty_on_hand: 2, sales_tax: 4.8, receiving_status: 'PURCHASED' });
+      await email({ merchant: 'walmart', kind: 'order', order_number: '2000123-45678901', total: '64.74', sent_at: new Date('2026-03-02T16:00:00Z') });
+      await email({ merchant: 'walmart', kind: 'shipped', order_number: '2000123-45678901', tracking_numbers: ['1Z999AA10123456784'], sent_at: new Date('2026-03-03T10:00:00Z') });
+      await sync.organize(prisma, user.id);
+      const after = await prisma.inventory.findUnique({ where: { id: row.id } });
+      expect([after.receiving_status, after.tracking_number]).toEqual(['INBOUND', '1Z999AA10123456784']);
+      // Nothing is left waiting, and only unapplied orders are ever picked.
+      expect(await automations.unappliedOrderIds(prisma, user.id, { type: 'purchase', matchState: 'linked', take: 500 })).toEqual([]);
+      await prisma.emailOrder.updateMany({ where: { order_number: { in: ['old-3', 'old-7'] } }, data: { status: 'shipped' } });
+      await prisma.emailOrder.updateMany({ where: { order_number: 'old-9' }, data: { applied_status: null } });
+      expect(await automations.unappliedOrderIds(prisma, user.id, { type: 'purchase', matchState: 'linked', take: 500 })).toHaveLength(3);
+      expect(await automations.unappliedOrderIds(prisma, user.id, { type: 'purchase', matchState: 'linked', take: 2 })).toHaveLength(2);
+      expect(await automations.unappliedOrderIds(prisma, other.id, { type: 'purchase', matchState: 'linked', take: 500 })).toEqual([]);
+    });
+
+    it('Reset transactions frees the email orders of deleted purchases, and the next sync does not add them back', async () => {
+      const { resetUserData } = require('../services/dataReset.js');
+      await purchase({ product_name: 'Pokemon Booster Bundle', order_number: '2000123-45678901', unit_purchase_cost: 29.97, qty_purchased: 2, qty_on_hand: 2, sales_tax: 4.8 });
+      await email({ merchant: 'walmart', kind: 'order', order_number: '2000123-45678901', total: '64.74', items: [{ name: 'Pokemon Booster Bundle', quantity: 2, total: '59.94' }], sent_at: new Date('2026-03-02T16:00:00Z') });
+      await prisma.expense.create({ data: { user_id: user.id, name: 'Pirate Ship labels', amount: 14.37, date: new Date('2026-03-03T09:00:00Z') } });
+      await email({ merchant: 'pirateship', kind: 'receipt', total: '14.37', sent_at: new Date('2026-03-03T09:01:00Z') });
+      // An order still waiting for a yes or no on its purchase.
+      await purchase({});
+      await email({ merchant: 'target', kind: 'order', order_number: '912000000301', total: '10.00', items: [{ name: 'Thing' }], sent_at: new Date('2026-03-02T16:00:00Z') });
+      await sync.organize(prisma, user.id);
+      const states = async () => Object.fromEntries((await prisma.emailOrder.findMany()).map((o) => [o.merchant, [o.match_state, o.leaning]]));
+      expect((await states()).walmart[0]).toBe('linked');
+      expect((await states()).pirateship[0]).toBe('linked');
+      expect((await states()).target[0]).toBe('review');
+
+      await send('PUT', '/api/email/automation', { createPurchases: true });
+      await resetUserData(user.id, 'transactions', prisma);
+      expect(await prisma.inventory.count()).toBe(0);
+      const after = await states();
+      expect(after.walmart).toEqual(['unmatched', 'declined']);
+      expect(after.target[0]).toBe('unmatched');
+      // Expenses are kept by this reset, and so is the receipt's link.
+      expect(after.pirateship[0]).toBe('linked');
+      expect((await prisma.emailMatch.findMany()).map((m) => m.record_type)).toEqual(['expense']);
+      expect((await byNumber('2000123-45678901')).applied_status).toBe(null);
+
+      await sync.organize(prisma, user.id);
+      expect(await prisma.inventory.count()).toBe(0);
+      // Still there to add by hand.
+      expect((await send('POST', `/api/email/orders/${(await byNumber('2000123-45678901')).id}/purchase`)).status).toBe(201);
+    });
+  });
 });

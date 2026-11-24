@@ -21,6 +21,7 @@ const { applyOrderUpdates, applyCashoutReceipts, applyCashoutChecks, createMissi
 const { sortOrders } = require('./sorting');
 const { pdfText, mergePdfDetails, firstPdf } = require('./attachments');
 const { looksPrivate } = require('./extract/generic');
+const { checkSender, UNVERIFIED_MESSAGE } = require('./senderCheck');
 
 const PRIVATE_ROW = (merchant) => ({ subject: null, status: 'ignored', kind: 'other', parser_version: parserVersion(merchant), extracted_at: new Date() });
 
@@ -237,7 +238,7 @@ async function extractPending(prisma, client, account, { started, budgetMs, onRe
         ...Object.keys(MERCHANTS).map((merchant) => ({ status: read, merchant, parser_version: { lt: parserVersion(merchant) } })),
       ],
     },
-    select: { id: true, folder: true, uid: true, uid_validity: true, message_id: true, merchant: true, status: true, parser_version: true, subject: true, order_id: true, order_number: true, tracking_numbers: true },
+    select: { id: true, folder: true, uid: true, uid_validity: true, message_id: true, merchant: true, status: true, parser_version: true, subject: true, order_id: true, order_number: true, tracking_numbers: true, from_address: true },
     orderBy: [{ sent_at: { sort: 'desc', nulls: 'last' } }],
     take: 2000,
   });
@@ -294,6 +295,19 @@ async function readDue(prisma, client, account, candidates, stale, { started, bu
         if (!source) { await markFailed(prisma, m.id, 'This email is no longer in the mailbox.'); continue; }
         try {
           const parsed = await parseSource(source);
+          // A From address can be faked: only email the mail provider confirmed
+          // came from the store's domain is read as the store's.
+          const sender = checkSender({ fromAddress: m.from_address, headers: parsed.authResults, preset: account.preset });
+          if (!sender.ok) {
+            await prisma.emailMessage.update({
+              where: { id: m.id },
+              data: { status: 'ignored', kind: 'other', parser_version: parserVersion(m.merchant), uid, uid_validity: box.uidValidity, extracted_at: new Date(), extract_error: UNVERIFIED_MESSAGE, order_id: null },
+            });
+            if (m.order_id) stale.add(m.order_id);
+            console.error(`[email] sender not verified for message ${m.id}: ${sender.reason}`);
+            read += 1;
+            continue;
+          }
           let details = extractEmail({ merchant: m.merchant, ...parsed });
           const pdf = firstPdf(parsed.attachments);
           if (pdf) {
@@ -397,6 +411,33 @@ async function runScheduledEmailSync(deps = {}) {
   return summary;
 }
 
+// The cron's entry point. Outside cron services give up on a request after
+// about 30 seconds and may switch a job off after repeated failures, while a
+// run can take up to a minute. So this answers within `answerMs`: with the
+// summary when the run finished (200), or "still running" (202) while it
+// carries on in the background. Only one run at a time on this server; a call
+// that arrives during a run gets 202 without starting another.
+let scheduledRun = null;
+async function startScheduledEmailSync(deps = {}, { answerMs = 20000 } = {}) {
+  const started = !scheduledRun;
+  if (!scheduledRun) {
+    scheduledRun = runScheduledEmailSync(deps)
+      .then((summary) => ({ summary }), (error) => ({ error }))
+      .finally(() => { scheduledRun = null; });
+  }
+  const run = scheduledRun;
+  let timer;
+  const waited = await Promise.race([run, new Promise((resolve) => { timer = setTimeout(() => resolve(null), answerMs); })]);
+  clearTimeout(timer);
+  if (!waited) {
+    // Logged when it ends, since nobody is waiting for the answer any more.
+    if (started) run.then((r) => { if (r.error) console.error('[email] scheduled sync failed:', r.error?.code || 'error'); });
+    return { status: 202, body: { status: 'running' } };
+  }
+  if (waited.error) throw waited.error;
+  return { status: 200, body: waited.summary };
+}
+
 function verifySyncSecret(authHeader) {
   const secret = process.env.EMAIL_SYNC_SECRET?.trim();
   if (!secret) return { ok: false, status: 401, message: 'Email sync secret is not configured on server.' };
@@ -410,4 +451,4 @@ function verifySyncSecret(authHeader) {
   return { ok: true };
 }
 
-module.exports = { openAccount, organize, extractPending, syncAccount, catchUp, catchingUp, runScheduledEmailSync, testConnection, verifySyncSecret, dedupeKey, foldersToRead, MAX_PER_RUN };
+module.exports = { startScheduledEmailSync, openAccount, organize, extractPending, syncAccount, catchUp, catchingUp, runScheduledEmailSync, testConnection, verifySyncSecret, dedupeKey, foldersToRead, MAX_PER_RUN };

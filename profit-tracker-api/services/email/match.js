@@ -296,6 +296,41 @@ async function candidatesFor(prisma, userId, order) {
   return [];
 }
 
+// One writer per email order at a time: linking a match, adding a purchase
+// or an expense from it. Held until the surrounding transaction ends.
+const lockOrder = (tx, orderId) => tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`email-order:${orderId}`}))`;
+
+// A purchase or an expense belongs to one email order. (A cash-out sale can
+// be paid over several receipts, so sales may be linked more than once.)
+const EXCLUSIVE = new Set(['purchase', 'expense']);
+// Of these records, the ones already linked to another email order.
+async function linkedElsewhere(client, userId, orderId, recordType, recordIds) {
+  if (!EXCLUSIVE.has(recordType) || !recordIds.length) return new Set();
+  const taken = await client.emailMatch.findMany({
+    where: { user_id: userId, state: 'linked', record_type: recordType, order_id: { not: orderId }, record_ids: { hasSome: recordIds } },
+    select: { record_ids: true },
+  });
+  const ids = new Set(taken.flatMap((m) => m.record_ids));
+  return new Set(recordIds.filter((id) => ids.has(id)));
+}
+
+// Once a purchase or an expense is linked to an order, other orders'
+// suggestions for it are withdrawn, and an order left with none goes back to
+// "no match" instead of waiting for an answer that can no longer be yes.
+async function retireSuggestions(tx, userId, orderId, recordType, recordIds) {
+  if (!EXCLUSIVE.has(recordType) || !recordIds.length) return;
+  const stale = await tx.emailMatch.findMany({
+    where: { user_id: userId, state: 'suggested', record_type: recordType, order_id: { not: orderId }, record_ids: { hasSome: recordIds } },
+    select: { id: true, order_id: true },
+  });
+  if (!stale.length) return;
+  await tx.emailMatch.updateMany({ where: { id: { in: stale.map((m) => m.id) } }, data: { state: 'rejected', decided_at: new Date() } });
+  for (const id of new Set(stale.map((m) => m.order_id))) {
+    const left = await tx.emailMatch.count({ where: { order_id: id, state: 'suggested' } });
+    if (!left) await tx.emailOrder.updateMany({ where: { id, user_id: userId, match_state: 'review' }, data: { match_state: 'unmatched' } });
+  }
+}
+
 const carrierFor = (t) => (/^1Z/i.test(t) ? 'UPS' : /^9[1-5]\d{18,}/.test(t) ? 'USPS' : null);
 
 // What linking writes on one record: only its blank fields, from the order.
@@ -353,7 +388,12 @@ async function matchOrders(prisma, userId, orderIds, { autoLink = true } = {}) {
   for (const id of orderIds) {
     const order = await prisma.emailOrder.findFirst({ where: { id, user_id: userId } });
     if (!order || order.match_state === 'linked' || order.match_state === 'dismissed' || ['shipment', 'check'].includes(order.type)) continue;
-    const scored = (await candidatesFor(prisma, userId, order)).filter((c) => band(c.score)).sort((a, b) => b.score - a.score).slice(0, 3);
+    const found = (await candidatesFor(prisma, userId, order)).filter((c) => band(c.score));
+    // Records another email order is already linked to aren't offered again.
+    const taken = EXCLUSIVE.has(found[0]?.record_type)
+      ? await linkedElsewhere(prisma, userId, order.id, found[0].record_type, [...new Set(found.flatMap((c) => c.rows.map((r) => r.id)))])
+      : new Set();
+    const scored = found.filter((c) => !c.rows.some((r) => taken.has(r.id))).sort((a, b) => b.score - a.score).slice(0, 3);
     const rejected = await prisma.emailMatch.findMany({ where: { order_id: order.id, state: 'rejected' } });
     const isRejected = (c) => rejected.some((r) => r.record_type === c.record_type && r.record_ids.join() === c.rows.map((x) => x.id).sort().join());
     const usable = scored.filter((c) => !isRejected(c));
@@ -368,8 +408,12 @@ async function matchOrders(prisma, userId, orderIds, { autoLink = true } = {}) {
     const sure = best && best.score >= HIGH && !(usable[1] && usable[1].score >= HIGH);
     if (sure && autoLink) {
       const match = await prisma.emailMatch.findFirst({ where: { order_id: order.id, state: 'suggested' }, orderBy: { score: 'desc' } });
-      await linkMatch(prisma, userId, match.id, { auto: true });
-      summary.linked += 1;
+      if (await linkMatch(prisma, userId, match.id, { auto: true })) summary.linked += 1;
+      else {
+        // Something else took the order or the record meanwhile: left for review.
+        await prisma.emailOrder.updateMany({ where: { id: order.id, match_state: { notIn: ['linked', 'dismissed'] } }, data: { match_state: 'review' } });
+        summary.review += 1;
+      }
     } else if (best) {
       await prisma.emailOrder.update({ where: { id: order.id }, data: { match_state: 'review' } });
       summary.review += 1;
@@ -389,11 +433,25 @@ async function linkMatch(prisma, userId, matchId, { auto = false } = {}) {
   const owner = match.record_type === 'sale' ? { inventory: { user_id: userId } } : { user_id: userId };
   const count = await prisma[model].count({ where: { id: { in: match.record_ids }, ...owner } });
   if (count !== match.record_ids.length) return null;
-  await prisma.$transaction([
-    prisma.emailMatch.updateMany({ where: { order_id: match.order_id, id: { not: match.id }, state: 'suggested' }, data: { state: 'rejected', decided_at: new Date() } }),
-    prisma.emailMatch.update({ where: { id: match.id }, data: { state: 'linked', auto, decided_at: new Date() } }),
-    prisma.emailOrder.update({ where: { id: match.order_id }, data: { match_state: 'linked' } }),
-  ]);
+  // Only a match that is still a suggestion, on an order that isn't linked or
+  // set aside, and whose records no other order has: checked and written
+  // under the order's lock, so two requests can't both link it.
+  const linked = await prisma.$transaction(async (tx) => {
+    await lockOrder(tx, match.order_id);
+    const order = await tx.emailOrder.findFirst({ where: { id: match.order_id, user_id: userId }, select: { match_state: true } });
+    if (!order || ['linked', 'dismissed'].includes(order.match_state)) return false;
+    const claimed = await tx.emailMatch.updateMany({ where: { id: match.id, state: 'suggested' }, data: { state: 'linked', auto, decided_at: new Date() } });
+    if (claimed.count !== 1) return false;
+    if ((await linkedElsewhere(tx, userId, match.order_id, match.record_type, match.record_ids)).size) {
+      // Rolls the claim back.
+      throw Object.assign(new Error('linked elsewhere'), { linkedElsewhere: true });
+    }
+    await tx.emailMatch.updateMany({ where: { order_id: match.order_id, id: { not: match.id }, state: 'suggested' }, data: { state: 'rejected', decided_at: new Date() } });
+    await tx.emailOrder.update({ where: { id: match.order_id }, data: { match_state: 'linked' } });
+    await retireSuggestions(tx, userId, match.order_id, match.record_type, match.record_ids);
+    return true;
+  }).catch((err) => { if (err?.linkedElsewhere) return false; throw err; });
+  if (!linked) return null;
   const filled = await fillBlanks(prisma, userId, match.order, match);
   if (auto) await logAutoLink(prisma, userId, match);
   // The user reviewed this link (Review & link): nothing left to confirm.
@@ -435,4 +493,4 @@ async function rejectMatch(prisma, userId, matchId) {
   return match;
 }
 
-module.exports = { purchaseFills, saleFills, matchOrders, linkMatch, rejectMatch, scorePurchases, scoreSale, scoreExpense, scoreCashoutLine, pairCashoutLines, CASHOUTS, nameMatches, itemOverlap, HIGH, MEDIUM, carrierFor };
+module.exports = { lockOrder, linkedElsewhere, purchaseFills, saleFills, matchOrders, linkMatch, rejectMatch, scorePurchases, scoreSale, scoreExpense, scoreCashoutLine, pairCashoutLines, CASHOUTS, nameMatches, itemOverlap, HIGH, MEDIUM, carrierFor };
