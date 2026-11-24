@@ -55,7 +55,7 @@ function HistoryWindow({ deal, onClose }) {
             <h2 className="text-base font-semibold text-[var(--dp-text-primary)]">Payout history</h2>
             <p className="mt-0.5 break-words text-xs text-[var(--dp-text-secondary)]">{deal.name}{deal.connectionName ? ` · ${deal.connectionName}` : ''}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="-mr-1.5 -mt-1.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--dp-text-label)] hover:bg-[var(--dp-hover-bg)] hover:text-[var(--dp-text-primary)]">
+          <button type="button" onClick={onClose} aria-label="Close" className="-mr-1.5 -mt-1.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--dp-text-label)] hover:bg-[var(--dp-hover-bg)] hover:text-[var(--dp-text-primary)]">
             <X size={16} />
           </button>
         </div>
@@ -132,7 +132,7 @@ export default function DealHistoryButton({ deal }) {
         onClick={() => setOpen(true)}
         aria-label={`Payout history for ${deal.name}`}
         title="How the payout of this deal has changed"
-        className="inline-flex items-center gap-1 px-2 py-1 max-md:min-h-10 max-md:px-3 rounded text-[12px] font-medium whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)]"
+        className="inline-flex items-center gap-1 px-2 py-1 max-md:h-11 max-md:px-3 rounded text-[12px] font-medium whitespace-nowrap border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)]"
       >
         <History size={10} aria-hidden="true" />
         History
