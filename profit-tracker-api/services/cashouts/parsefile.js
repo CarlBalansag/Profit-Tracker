@@ -4,9 +4,8 @@
 // user's own group login and reads the same deals table the group's own
 // Deals page loads. Read only: it never commits, saves or uploads anything.
 //
-// The flow was taken from Monar 0.3.14's client (static analysis, see
-// REAFeatures/BUYING_GROUP_DEALS_PLAN.md). Every step fails closed: if a page
-// or table doesn't look the way we expect, nothing is synced.
+// Every step fails closed: if a page or table doesn't look the way we expect,
+// nothing is synced.
 const crypto = require('node:crypto');
 
 const TIMEOUT_MS = 20000;
