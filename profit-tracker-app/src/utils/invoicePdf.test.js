@@ -75,11 +75,20 @@ describe('buildInvoicePdf', () => {
     })));
     checkStructure(file);
     expect(file).toContain('(Caf\\351 \\(West\\) \\\\ Co)');
-    expect(file).toContain('(Pay by wire ? ??)');
+    expect(file).toContain('(Pay by wire - ??)');
     expect(file).toContain('(Second line)');
     expect(file).toMatch(/\(Very long product name x+\.\.\.\)/);
     // Plain ASCII throughout, so byte offsets equal character offsets.
     expect([...file].every((char) => char.charCodeAt(0) < 128)).toBe(true);
+  });
+
+  it('prints typed punctuation as its plain form, and only then falls back to "?"', () => {
+    const file = text(buildInvoicePdf(invoice({ notes: 'It\u2019s \u201Cnew\u201D \u2014 10\u201312\u2026\u00A0ok\n\u2022 LEGO\u2122 Poke\u0301mon \u20AC \u{1F4B5}' })));
+    checkStructure(file);
+    expect(file).toContain('(It\'s "new" - 10-12... ok)');
+    expect(file).toContain('(- LEGO\\(TM\\) Pok\\351mon ? ?)');
+    // Widths are measured on what is printed, so amounts stay aligned.
+    expect(textWidth('\u2019', 10)).toBe(textWidth("'", 10));
   });
 
   it('builds with no lines or notes at all', () => {
