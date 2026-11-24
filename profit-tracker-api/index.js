@@ -239,6 +239,7 @@ app.use('/api/transaction-notes', transactionNotesRouter);
 app.use('/api/refunds', refundsRouter);
 app.use('/api/calendar-events', calendarEventsRouter);
 app.use('/api/buyers', buyersRouter);
+app.use('/api/invoices', require('./routes/invoices'));
 app.use('/api/api-keys', apiKeysRouter);
 app.use('/api/cashouts', cashoutsRouter);
 app.use('/api/data-reset', dataResetRouter);

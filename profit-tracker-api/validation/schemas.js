@@ -660,7 +660,27 @@ const taxPaymentBody = z.object({
   reference: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(100).nullable().optional()),
 }).strict().refine((b) => b.amount > 0, { message: 'Enter an amount above $0.', path: ['amount'] });
 
+// Invoices (routes/invoices.js). Dates are calendar days; the sales are ids.
+const invoiceNotes = z.preprocess(emptyToNull, z.string().trim().max(2000).nullable().optional());
+const invoiceSaleIds = z.array(requiredId).min(1, 'Pick at least one sale').max(200);
+const createInvoice = z.object({
+  buyer_id: requiredId,
+  sale_ids: invoiceSaleIds,
+  issue_date: calendarDate,
+  due_date: calendarDate,
+  notes: invoiceNotes,
+}).strict();
+const updateInvoice = z.object({
+  sale_ids: invoiceSaleIds.optional(),
+  issue_date: calendarDate.optional(),
+  due_date: calendarDate.optional(),
+  notes: invoiceNotes,
+  status: z.enum(['DRAFT', 'SENT', 'PAID', 'CANCELLED']).optional(),
+}).strict().refine((body) => Object.keys(body).length > 0, 'Nothing to change.');
+
 module.exports = {
+  createInvoice,
+  updateInvoice,
   finalizeBody,
   mileageTripBody,
   taxAssetBody,
