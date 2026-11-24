@@ -15,6 +15,7 @@ import { csvText, downloadFile, downloadJSON } from '../utils/downloads';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { HelpCircle } from 'lucide-react';
 import { useTutorial } from '../context/TutorialContext';
+import { isExpiringReceiptLink } from '../utils/receiptLink';
 
 const categoryLabel = (id) => taxCategories.find((c) => c.id === id)?.label || id;
 const VIEWS = [['overview', 'Tax estimate'], ['worksheet', 'Worksheet'], ['reports', 'Year-end report']];
@@ -119,7 +120,7 @@ export default function ScheduleC() {
     setView(next);
     document.getElementById(`schedule-c-tab-${next}`)?.focus();
   };
-  const exportCSV = () => downloadFile(`schedule-c-${year}-expenses.csv`, csvText(report.rows.map(row => ({ tax_year: year, reference_mapping_year: report.mapping_year, planning: report.planning, expense_id: row.id, source: row.source || 'manual', name: row.name, status: row.status, amount: row.amount, worksheet_amount: row.eligible, business_percent: row.tax_details.business_use === 'business' ? '100' : row.tax_details.business_percent, tax_category: row.tax_details.tax_category, reference_line: report.groups.find(group => group.id === row.tax_details.tax_category)?.line2025 || '', payee: row.tax_details.payee, purpose: row.tax_details.purpose, paid_date: row.tax_details.paid_date, payment_reference: row.tax_details.payment_reference, receipt_url: row.receipt_url, review_issues: row.issues.join('; '), possible_duplicate_of: row.possible_duplicate_of || '', receipt_missing: row.documentation_missing }))), 'text/csv;charset=utf-8');
+  const exportCSV = () => downloadFile(`schedule-c-${year}-expenses.csv`, csvText(report.rows.map(row => ({ tax_year: year, reference_mapping_year: report.mapping_year, planning: report.planning, expense_id: row.id, source: row.source || 'manual', name: row.name, status: row.status, amount: row.amount, worksheet_amount: row.eligible, business_percent: row.tax_details.business_use === 'business' ? '100' : row.tax_details.business_percent, tax_category: row.tax_details.tax_category, reference_line: report.groups.find(group => group.id === row.tax_details.tax_category)?.line2025 || '', payee: row.tax_details.payee, purpose: row.tax_details.purpose, paid_date: row.tax_details.paid_date, payment_reference: row.tax_details.payment_reference, receipt_url: isExpiringReceiptLink(row.receipt_url) ? 'Private receipt (open it in Profit Tracker)' : row.receipt_url, review_issues: row.issues.join('; '), possible_duplicate_of: row.possible_duplicate_of || '', receipt_missing: row.documentation_missing }))), 'text/csv;charset=utf-8');
   const reload = () => setRevision(value => value + 1);
   const showRecords = (f) => { setFilter(f); setTimeout(() => document.getElementById('schedule-c-records')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 0); };
   const panel = !validYear ? <p role="alert" className="text-sm text-[var(--dp-red-text)]">Choose a four-digit tax year from 1900 to 9999.</p>

@@ -8,6 +8,7 @@ import { usePhoneList } from '../hooks/usePhoneList';
 import ShowMoreButton from '../components/UI/ShowMoreButton';
 import { toast } from 'sonner';
 import LoadError from '../components/UI/LoadError';
+import { freshReceiptUrl } from '../utils/receiptLink';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
 function isPdfUrl(url) {
@@ -97,6 +98,16 @@ const Receipts = () => {
   }, [queryClient, withReceipts, withoutReceipts]);
   const [search, setSearch]         = useState('');
   const [previewUrl, setPreviewUrl] = useState(null);
+  // A private receipt's link expires after a few minutes, so a fresh one is
+  // fetched each time it is opened (utils/receiptLink.js).
+  const openPreview = async (item) => {
+    if (!item.receipt_url) return;
+    try {
+      setPreviewUrl(await freshReceiptUrl(apiFetch, item.itemType, item.id, item.receipt_url));
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
   const [attachingId, setAttachingId] = useState(null); // item id with open attach form
   const [detachConfirmId, setDetachConfirmId] = useState(null);
   const [uploading, setUploading]   = useState(false);
@@ -287,7 +298,7 @@ const Receipts = () => {
                         // Private receipts load only when opened: their signed
                         // links aren't cached, so no thumbnails up front.
                         <button
-                          onClick={() => item.receipt_url && setPreviewUrl(item.receipt_url)}
+                          onClick={() => openPreview(item)}
                           disabled={!item.receipt_url}
                           title={item.receipt_url ? 'Private receipt' : "This receipt can't be opened right now"}
                           className="flex items-center gap-1.5 px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white text-xs transition-colors border border-white/10 disabled:opacity-50"
@@ -317,7 +328,7 @@ const Receipts = () => {
                     {tab === 'with' ? (
                       <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => item.receipt_url && setPreviewUrl(item.receipt_url)}
+                          onClick={() => openPreview(item)}
                           disabled={!item.receipt_url}
                           className="flex items-center gap-1.5 px-2.5 h-7 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white text-xs transition-colors disabled:opacity-50 disabled:hover:bg-transparent"
                         >

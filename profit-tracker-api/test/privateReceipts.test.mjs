@@ -95,6 +95,41 @@ describe('private receipts over the API', () => {
     expect(JSON.stringify(receipts)).not.toContain('private:');
   });
 
+  it('hands out a fresh signed link for one receipt, to its owner only', async () => {
+    await send('POST', '/api/receipts/attach', { itemType: 'expense', itemId: expenseId(), fileData: 'data:image/png;base64,YWJj' });
+    const res = await fetch(`${base}/api/receipts/link?itemType=expense&itemId=${expenseId()}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    const body = await res.json();
+    expect(body.receipt_private).toBe(true);
+    const url = new URL(body.receipt_url);
+    expect([url.hostname, url.searchParams.get('type')]).toEqual(['api.cloudinary.com', 'authenticated']);
+    // A link that is still good: it expires in the future.
+    expect(Number(url.searchParams.get('expires_at'))).toBeGreaterThan(Date.now() / 1000);
+    expect(JSON.stringify(body)).not.toContain('private:');
+
+    // An older public receipt comes back as it is.
+    harness.db.inventory[0].receipt_url = 'https://res.cloudinary.com/qa/image/upload/old.png';
+    expect((await send('GET', `/api/receipts/link?itemType=inventory&itemId=${harness.ids.inventory}`)).body)
+      .toEqual({ receipt_url: 'https://res.cloudinary.com/qa/image/upload/old.png', receipt_private: false });
+
+    // No receipt, an unknown record, another user's record, bad input.
+    harness.db.inventory[0].receipt_url = null;
+    expect((await send('GET', `/api/receipts/link?itemType=inventory&itemId=${harness.ids.inventory}`)).status).toBe(404);
+    expect((await send('GET', '/api/receipts/link?itemType=expense&itemId=nope')).status).toBe(404);
+    harness.db.expense[0].user_id = 'someone-else';
+    expect((await send('GET', `/api/receipts/link?itemType=expense&itemId=${expenseId()}`)).status).toBe(404);
+    expect((await send('GET', '/api/receipts/link?itemType=sale&itemId=x')).status).toBe(400);
+    expect((await send('GET', '/api/receipts/link?itemType=expense')).status).toBe(400);
+    // A reference copied onto another record is never signed.
+    harness.db.expense[0].user_id = harness.db.user[0].id;
+    harness.db.expense[0].receipt_url = ref('expense', 'someone-elses-expense');
+    expect((await send('GET', `/api/receipts/link?itemType=expense&itemId=${expenseId()}`)).status).toBe(404);
+    // Signed out.
+    const anon = await fetch(`${base}/api/receipts/link?itemType=expense&itemId=${expenseId()}`, { headers: { 'x-qa-unauthenticated': 'true' } });
+    expect(anon.status).toBe(401);
+  });
+
   it('refuses a private reference sent by a client, and never signs one copied onto another record', async () => {
     const stolen = ref('expense', 'someone-elses-expense');
     expect((await send('POST', '/api/expenses', { name: 'x', amount: 1, date: '2026-01-01', receipt_url: stolen })).status).toBe(400);
