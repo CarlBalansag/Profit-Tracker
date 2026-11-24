@@ -940,7 +940,65 @@ model NotificationSettings {
   digest_time     String   @default("08:00")
   reminder_alerts Boolean  @default(true)
   urgent_alerts   Boolean  @default(true)
+  // Cashout deal alerts (services/cashouts/dealAlerts.js): off until the user
+  // turns them on. A deal is pushed when its profit with the user's best card
+  // is at least deal_min_profit. deal_providers / deal_stores are JSON arrays
+  // of provider ids / store names; null or empty means all. The quiet hours
+  // are local HH:MM; when both are set nothing is pushed between them (the
+  // deal still shows in the Cashout page's New deals feed).
+  deal_alerts     Boolean  @default(false)
+  deal_min_profit Decimal  @default(0) @db.Decimal(19, 2)
+  deal_providers  Json?
+  deal_stores     Json?
+  deal_quiet_from String?
+  deal_quiet_to   String?
   updated_at      DateTime @updatedAt
+}
+
+// Every cashout deal Profit Tracker has seen, once per provider deal, shared
+// by all users (deals are the same for everyone). Filled from whichever
+// user's connection syncs that provider. Used to tell a new deal from one
+// already seen; see services/cashouts/dealAlerts.js.
+model CashoutDeal {
+  id               String             @id @default(uuid())
+  provider         String
+  external_deal_id String
+  name             String
+  image_url        String?
+  deal_url         String?
+  retail           Decimal?           @db.Decimal(19, 2)
+  payout           Decimal            @db.Decimal(19, 2)
+  // Store names the deal can be bought at (JSON array of strings).
+  stores           Json?
+  vendor_limit     Int?
+  expires_at       DateTime?
+  first_seen_at    DateTime           @default(now())
+  last_seen_at     DateTime           @default(now())
+  // The payout the last alert went out at; a later rise of $5+ alerts again.
+  alerted_payout   Decimal?           @db.Decimal(19, 2)
+  alerts           CashoutDealAlert[]
+
+  @@unique([provider, external_deal_id])
+  @@index([last_seen_at])
+}
+
+// One alert-worthy moment of a deal: it appeared ("new"), came back after a
+// day away ("relisted"), or its payout went up ("payout_up"). Prices are as
+// of that moment. dispatched_at is set once pushes for it went out (or it was
+// too old to push), so it's sent once. Kept 14 days for the feed.
+model CashoutDealAlert {
+  id              String      @id @default(uuid())
+  deal_id         String
+  deal            CashoutDeal @relation(fields: [deal_id], references: [id], onDelete: Cascade)
+  kind            String
+  payout          Decimal     @db.Decimal(19, 2)
+  previous_payout Decimal?    @db.Decimal(19, 2)
+  retail          Decimal?    @db.Decimal(19, 2)
+  created_at      DateTime    @default(now())
+  dispatched_at   DateTime?
+
+  @@index([created_at])
+  @@index([dispatched_at])
 }
 
 // Which notifications already went out, so a run that repeats (or two runs at

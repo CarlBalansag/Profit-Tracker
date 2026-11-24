@@ -15,6 +15,8 @@ vi.mock('../../hooks/useApi', () => ({
   usePushMutations: () => Object.fromEntries(Object.entries(calls).map(([name, fn]) => [name, mutation(fn)])),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+// Its own tests: DealAlertSettings.test.jsx.
+vi.mock('./DealAlertSettings', () => ({ default: () => null }));
 
 const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/this-device';
 const fakeSub = { endpoint: ENDPOINT, toJSON: () => ({ endpoint: ENDPOINT, keys: { p256dh: 'p', auth: 'a' } }), unsubscribe: vi.fn() };

@@ -5,7 +5,9 @@ const { fetchConnectionDeals } = require('./service');
 // Unique 32-bit integer for Postgres advisory lock for cashout background sync
 const ADVISORY_LOCK_ID = 948273615;
 const MAX_EXECUTION_BUDGET_MS = 50 * 1000; // 50 seconds max per run
-const RECENT_SYNC_SKIP_MS = 60 * 1000; // Skip if synced within last 60s
+// Skip a connection synced this recently (a Cashout page visit or the last
+// run). Under a minute, so a cron every minute reaches every connection each run.
+const RECENT_SYNC_SKIP_MS = 45 * 1000;
 
 /**
  * Timing-safe string comparison to protect bearer token verification from timing attacks.
@@ -44,34 +46,49 @@ function verifySyncSecret(authHeader) {
   return { ok: true };
 }
 
-/**
- * Attempt to acquire Postgres advisory lock.
- * If in-memory mock or non-Postgres, falls back to in-memory boolean flag.
- */
+// One scheduled sync at a time. The lock is a transaction-scoped Postgres
+// advisory lock, held by one open transaction for the whole run and released
+// when it ends (even if the run fails). A session lock can't be used here: the
+// unlock ran on a different pooled connection than the lock, so the lock was
+// never released and every later run got 409 until the server restarted.
+// Without Postgres (the in-memory test harness) it falls back to a flag.
+const LOCK_HOLD_MS = 4 * 60 * 1000;
+const NO_DB_LOCK = Symbol('no-db-lock');
+const LOCKED = Symbol('locked');
 let inMemoryLock = false;
 
-async function acquireLock() {
+async function withRunLock(run) {
+  let started = false;
+  let result = NO_DB_LOCK;
   try {
-    const result = await prisma.$queryRaw`SELECT pg_try_advisory_lock(${ADVISORY_LOCK_ID}) as locked`;
-    if (Array.isArray(result) && result[0]) {
-      return Boolean(result[0].locked);
-    }
+    result = await prisma.$transaction(async (tx) => {
+      let rows;
+      try {
+        rows = await tx.$queryRaw`SELECT pg_try_advisory_xact_lock(${ADVISORY_LOCK_ID}) AS locked`;
+      } catch {
+        return NO_DB_LOCK;
+      }
+      // No answer (the in-memory harness returns no rows): no Postgres lock.
+      if (!Array.isArray(rows) || typeof rows[0]?.locked !== 'boolean') return NO_DB_LOCK;
+      if (!rows[0].locked) return LOCKED;
+      started = true;
+      return run();
+    }, { maxWait: 10 * 1000, timeout: LOCK_HOLD_MS });
   } catch (err) {
-    // If $queryRaw fails (e.g. SQLite / in-memory test harness), use in-memory lock
+    // A failure inside the run is the run's own. Before it (no interactive
+    // transactions in the test harness) fall back to the flag below.
+    if (started) throw err;
+    result = NO_DB_LOCK;
   }
+  if (result !== NO_DB_LOCK) return result;
 
-  if (inMemoryLock) return false;
+  if (inMemoryLock) return LOCKED;
   inMemoryLock = true;
-  return true;
-}
-
-async function releaseLock() {
   try {
-    await prisma.$queryRaw`SELECT pg_advisory_unlock(${ADVISORY_LOCK_ID})`;
-  } catch (err) {
-    // Ignore query failure on test harness
+    return await run();
+  } finally {
+    inMemoryLock = false;
   }
-  inMemoryLock = false;
 }
 
 /**
@@ -79,14 +96,6 @@ async function releaseLock() {
  */
 async function runScheduledSync() {
   const startTime = Date.now();
-  const locked = await acquireLock();
-  if (!locked) {
-    return {
-      status: 'locked',
-      message: 'Another background cashout sync is already in progress.',
-    };
-  }
-
   const summary = {
     total: 0,
     synced: 0,
@@ -95,7 +104,7 @@ async function runScheduledSync() {
     durationMs: 0,
   };
 
-  try {
+  const outcome = await withRunLock(async () => {
     const connections = await prisma.cashoutConnection.findMany({
       where: {
         status: 'active', // Exclude attention_needed or disconnected
@@ -128,11 +137,23 @@ async function runScheduledSync() {
         // Single connection failure must not abort the rest of the connections
       }
     }
-  } finally {
-    await releaseLock();
-    summary.durationMs = Date.now() - startTime;
-  }
 
+    // Push the new deals this sync found (dealAlerts.js). Best effort.
+    try {
+      summary.dealAlerts = await require('./dealAlerts').dispatchDealAlerts();
+    } catch (err) {
+      console.error('[deal-alerts] dispatch failed:', err.message);
+    }
+    return summary;
+  });
+
+  if (outcome === LOCKED) {
+    return {
+      status: 'locked',
+      message: 'Another background cashout sync is already in progress.',
+    };
+  }
+  summary.durationMs = Date.now() - startTime;
   return summary;
 }
 

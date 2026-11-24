@@ -156,6 +156,47 @@ describe('settings', () => {
   });
 });
 
+describe('cashout deal alert settings', () => {
+  it('are off by default and save the filters', async () => {
+    const first = await request('GET', '/api/push/settings');
+    expect(first.body).toMatchObject({ deal_alerts: false, deal_min_profit: 0, deal_providers: [], deal_stores: [], deal_quiet_from: null, deal_quiet_to: null });
+    const saved = await request('PUT', '/api/push/settings', {
+      deal_alerts: true, deal_min_profit: 25.5, deal_providers: ['eb', 'eb', 'la'], deal_stores: ['Best Buy', 'best-buy', 'Target'], deal_quiet_from: '22:00', deal_quiet_to: '07:00',
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.body).toMatchObject({ deal_alerts: true, deal_min_profit: 25.5, deal_providers: ['eb', 'la'], deal_stores: ['Best Buy', 'Target'], deal_quiet_from: '22:00', deal_quiet_to: '07:00' });
+    // Empty lists mean "all"; quiet hours clear with nulls.
+    const cleared = await request('PUT', '/api/push/settings', { deal_providers: [], deal_stores: null, deal_quiet_from: null, deal_quiet_to: null });
+    expect(cleared.body).toMatchObject({ deal_alerts: true, deal_providers: [], deal_stores: [], deal_quiet_from: null, deal_quiet_to: null });
+  });
+
+  it('rejects unknown cashouts, half-set quiet hours and bad numbers', async () => {
+    const bad = await Promise.all([
+      request('PUT', '/api/push/settings', { deal_providers: ['nope'] }),
+      request('PUT', '/api/push/settings', { deal_quiet_from: '22:00' }),
+      request('PUT', '/api/push/settings', { deal_min_profit: 'lots' }),
+      request('PUT', '/api/push/settings', { deal_alerts: 'on' }),
+    ]);
+    expect(bad.map((res) => res.status)).toEqual([400, 400, 400, 400]);
+    expect(harness.db.notificationSettings).toHaveLength(0);
+  });
+
+  it('lists the week of new deals with profit from the signed-in user cards', async () => {
+    const now = new Date();
+    harness.db.paymentMethod.push({ id: 'card-bb', user_id: ids.user, name: 'BB Visa', type: 'Credit', default_cashback_rate: 1, category_rates: JSON.stringify([{ store: 'Best Buy', rate: 5 }]) });
+    harness.db.cashoutDeal.push({ id: 'deal-1', provider: 'eb', external_deal_id: '1', name: 'PS5 Pro', payout: 780, retail: 699.99, stores: ['Best Buy'], vendor_limit: 3, last_seen_at: now, first_seen_at: now });
+    harness.db.cashoutDealAlert.push({ id: 'alert-1', deal_id: 'deal-1', kind: 'new', payout: 780, retail: 699.99, previous_payout: null, created_at: now, dispatched_at: null });
+    harness.db.cashoutDealAlert.push({ id: 'alert-old', deal_id: 'deal-1', kind: 'new', payout: 780, retail: 699.99, previous_payout: null, created_at: new Date(now.getTime() - 9 * 86400000), dispatched_at: now });
+    const res = await request('GET', '/api/cashouts/deal-alerts');
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0]).toMatchObject({ id: 'alert-1', profit: 115.01, rewards: 35, best_card: { rate: 5, store: 'Best Buy', card: { name: 'BB Visa' } }, deal: { name: 'PS5 Pro', provider_name: 'ElectronicsBuyer', live: true } });
+    expect(JSON.stringify(res.body)).not.toContain('category_rates');
+    const anon = await request('GET', '/api/cashouts/deal-alerts', undefined, { 'x-qa-unauthenticated': 'true' });
+    expect(anon.status).toBe(401);
+  });
+});
+
 describe('test notification', () => {
   it('sends to every device and drops ones the push service says are gone', async () => {
     expect((await request('POST', '/api/push/test')).status).toBe(409);

@@ -6,6 +6,9 @@ const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
 const { pushConfig, sendToUser } = require('../services/push');
 const { DEFAULTS, isValidTimeZone } = require('../services/notificationRun');
+const { dealSettings } = require('../services/cashouts/dealAlerts');
+const { listAvailableCashouts } = require('../services/cashouts/registry');
+const { Prisma } = require('@prisma/client');
 
 const router = express.Router();
 
@@ -36,10 +39,56 @@ const settingsBody = z.object({
   digest_time: z.string().regex(TIME_RE, 'Time must be HH:MM.').optional(),
   reminder_alerts: z.boolean().optional(),
   urgent_alerts: z.boolean().optional(),
-}).strict().refine((body) => Object.keys(body).length > 0, 'Nothing to change.');
+  deal_alerts: z.boolean().optional(),
+  deal_min_profit: z.number().finite().min(-100000).max(100000).optional(),
+  deal_providers: z.array(z.string().trim().min(1).max(40)).max(20).nullable().optional(),
+  deal_stores: z.array(z.string().trim().min(1).max(80)).max(50).nullable().optional(),
+  deal_quiet_from: z.string().regex(TIME_RE, 'Time must be HH:MM.').nullable().optional(),
+  deal_quiet_to: z.string().regex(TIME_RE, 'Time must be HH:MM.').nullable().optional(),
+}).strict().refine((body) => Object.keys(body).length > 0, 'Nothing to change.')
+  .refine((body) => (body.deal_quiet_from === undefined) === (body.deal_quiet_to === undefined), 'Send both quiet-hour times, or neither.');
 
 const SETTINGS_FIELDS = ['timezone', 'digest_enabled', 'digest_time', 'reminder_alerts', 'urgent_alerts'];
-const pick = (row) => Object.fromEntries(SETTINGS_FIELDS.map((field) => [field, row?.[field] ?? DEFAULTS[field]]));
+const DEAL_FIELDS = ['deal_alerts', 'deal_min_profit', 'deal_providers', 'deal_stores', 'deal_quiet_from', 'deal_quiet_to'];
+const pick = (row) => {
+  const deal = dealSettings(row);
+  return {
+    ...Object.fromEntries(SETTINGS_FIELDS.map((field) => [field, row?.[field] ?? DEFAULTS[field]])),
+    ...Object.fromEntries(DEAL_FIELDS.map((field) => [field, deal[field]])),
+  };
+};
+
+// Store names and cashout ids are kept once each; an empty list means all.
+function cleanSettings(body) {
+  const data = { ...body };
+  const unique = (list, key) => {
+    if (!Array.isArray(list)) return list;
+    const seen = new Set();
+    return list.filter((entry) => {
+      const id = key(entry);
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  };
+  if (data.deal_providers !== undefined) data.deal_providers = unique(data.deal_providers, (entry) => entry.toLowerCase());
+  if (data.deal_stores !== undefined) data.deal_stores = unique(data.deal_stores, (entry) => entry.toLowerCase().replace(/[^a-z0-9]/g, ''));
+  for (const field of ['deal_providers', 'deal_stores']) {
+    if (Array.isArray(data[field]) && data[field].length === 0) data[field] = null;
+  }
+  if (data.deal_providers) {
+    const known = new Set(listAvailableCashouts().map((entry) => entry.id));
+    const unknown = data.deal_providers.find((entry) => !known.has(entry));
+    if (unknown) {
+      const error = new Error(`Unknown cashout: ${unknown}`);
+      error.status = 400;
+      throw error;
+    }
+  }
+  if (data.deal_providers === null) data.deal_providers = Prisma.DbNull;
+  if (data.deal_stores === null) data.deal_stores = Prisma.DbNull;
+  return data;
+}
 
 async function settingsFor(userId) {
   const [row, devices] = await Promise.all([
@@ -69,10 +118,11 @@ router.get('/settings', isAuthenticated, async (req, res, next) => {
 
 router.put('/settings', isAuthenticated, validateBody(settingsBody), async (req, res, next) => {
   try {
+    const data = cleanSettings(req.body);
     await prisma.notificationSettings.upsert({
       where: { user_id: req.user.id },
-      create: { user_id: req.user.id, ...DEFAULTS, ...req.body },
-      update: req.body,
+      create: { user_id: req.user.id, ...DEFAULTS, ...data },
+      update: data,
     });
     res.json(await settingsFor(req.user.id));
   } catch (err) {

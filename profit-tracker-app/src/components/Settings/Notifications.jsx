@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { BellRing, Send, Smartphone, Trash2 } from 'lucide-react';
 import { usePushConfig, usePushMutations, usePushSettings } from '../../hooks/useApi';
 import { deviceLabel } from '../../utils/pushDevice';
+import DealAlertSettings from './DealAlertSettings';
 
 // Settings > Notifications: turn push on for this device, choose what gets
 // sent (api services/notificationRun.js), and see the devices that are on.
@@ -190,12 +191,14 @@ export function Notifications() {
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] pt-3 text-xs text-gray-500">
-          <span>Times are in {zone}. Nothing is sent after 9 PM.</span>
+          <span>Times are in {zone}. None of these are sent after 9 PM.</span>
           {zone !== localZone && (
             <button type="button" disabled={busy} onClick={() => change({ timezone: localZone })} className="page-btn page-btn-secondary !text-xs">Use {localZone}</button>
           )}
         </div>
       </section>
+
+      <DealAlertSettings settings={settings} busy={busy} change={change} />
 
       {devices.length > 0 && (
         <section aria-labelledby="notif-devices" className={PANEL}>
