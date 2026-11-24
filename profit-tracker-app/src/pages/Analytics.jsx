@@ -349,7 +349,7 @@ function Analytics() {
                               <span className="text-sm font-semibold text-[var(--dp-text-primary)]">{pl.name}</span>
                               <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded border" style={{ color: PLATFORM_TYPE_COLOR[pl.type] || 'var(--chart-1)', borderColor: PLATFORM_TYPE_COLOR[pl.type] || 'var(--chart-1)' }}>{pl.type}</span>
                             </div>
-                            <span className={`text-sm font-bold ${pl.profit >= 0 ? 'text-[var(--dp-green-text)]' : 'text-[var(--dp-red-text)]'}`}>{pl.profit >= 0 ? '+' : ''}${fmt(pl.profit)} profit</span>
+                            <span className={`text-sm font-bold ${pl.profit >= 0 ? 'text-[var(--dp-green-text)]' : 'text-[var(--dp-red-text)]'}`}>{pl.profit >= 0 ? '+' : '−'}${fmt(Math.abs(pl.profit))} profit</span>
                           </div>
                           <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                             <div><span className="text-[var(--dp-text-muted)]">Paid to you </span><span className="font-medium">${fmt(pl.revenue)}</span></div>

@@ -17,7 +17,7 @@ const TW = 150;
 const TH = 50;
 const DOTS = 10;
 
-const fmt = (n) => '$' + Math.round(n ?? 0).toLocaleString('en-US');
+const fmt = (n) => `${Math.round(n ?? 0) < 0 ? '−' : ''}$${Math.abs(Math.round(n ?? 0)).toLocaleString('en-US')}`;
 
 const pathFor = (t) => {
   const sx = SOURCE.x + SOURCE.w;

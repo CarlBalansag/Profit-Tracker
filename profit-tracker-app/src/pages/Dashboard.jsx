@@ -1126,7 +1126,7 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate, r
 
   const fmt = (v) => goal.metric === 'unitsSold'
     ? Math.round(v).toLocaleString()
-    : `$${Math.round(v).toLocaleString()}`;
+    : formatWholeDollars(v);
 
   return (
     <div className={`flex flex-col animate-in slide-in-from-bottom-4 duration-500 fade-in fill-mode-both h-full ${

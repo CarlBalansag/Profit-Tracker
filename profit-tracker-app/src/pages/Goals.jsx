@@ -5,6 +5,7 @@ import { useUiPreferences } from '../hooks/useUiPreferences';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { PageLoader } from '../components/PageLoader';
 import LoadError from '../components/UI/LoadError';
+import { formatWholeDollars } from '../utils/money';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -309,7 +310,7 @@ function GoalCard({ metaDef, goal, getStats, trend, isGlass, onEdit, onToggleAct
 
   const fmt = (v) => metaDef.value === 'unitsSold'
     ? Math.round(v).toLocaleString()
-    : `$${Math.round(v).toLocaleString()}`;
+    : formatWholeDollars(v);
 
   const isHidden = goal?.active === false;
 
