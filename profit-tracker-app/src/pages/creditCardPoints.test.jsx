@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({ card: null }));
 vi.mock('../hooks/useApi', () => ({
   useCreditCard: () => ({ data: mocks.card, isLoading: false }),
   useTodos: () => ({}),
+  useTodoState: () => ({}),
   useCashFlow: () => ({}),
   apiFetch: vi.fn(),
 }));

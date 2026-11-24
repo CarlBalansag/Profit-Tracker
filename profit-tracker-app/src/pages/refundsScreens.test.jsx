@@ -18,6 +18,7 @@ vi.mock('../hooks/useApi', () => ({
   useInvalidate: () => ({ all: vi.fn(), inventory: vi.fn() }),
   useCreditCard: () => ({ data: mocks.card, isLoading: false }),
   useTodos: () => ({}),
+  useTodoState: () => ({}),
   useCashFlow: () => ({}),
   useRefunds: (kind, id) => ({ data: mocks.refunds[`${kind}:${id}`] || [], isLoading: false }),
   useRefundMutations: () => ({ add: { mutateAsync: vi.fn(), isPending: false }, remove: { mutateAsync: vi.fn(), isPending: false } }),

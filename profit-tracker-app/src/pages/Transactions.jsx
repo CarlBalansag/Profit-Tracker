@@ -505,6 +505,7 @@ const Transactions = () => {
         shipping: Number(inv.shipping_cost_inbound) || 0,
         category: inv.category || null,
         tracking_number: inv.tracking_number || null,
+        account: inv.account?.name || '',
         refundedAmount: Number(inv.refunded_amount) || 0,
         refundedUnits: Number(inv.refunded_qty) || 0,
       });
@@ -552,6 +553,8 @@ const Transactions = () => {
           shipping: allocatedShipping,
           category: inv.category || null,
           tracking_number: inv.tracking_number || null,
+          saleTracking: sale.tracking_number || null,
+          account: inv.account?.name || '',
           rawCommission: sale.commission_fee,
           refundedAmount: Number(sale.refunded_amount) || 0,
           refundedUnits: Number(sale.refunded_qty) || 0,
@@ -621,6 +624,7 @@ const Transactions = () => {
   // Every row the filters leave, in the order shown (not just the cards a phone
   // has loaded). Money goes out as plain numbers, so a spreadsheet can add it up
   // and a loss isn't mistaken for a formula. Dates are the local day shown here.
+  // The byte order mark makes Excel read names like "Pokémon" correctly.
   const exportCSV = () => {
     if (!filteredRows.length) {
       toast.error('No transactions to export');
@@ -634,6 +638,7 @@ const Transactions = () => {
       Product: row.product || '',
       Category: row.category || '',
       Vendor: row.vendor || '',
+      'Store Account': row.account || '',
       Platform: row.platform || '',
       Quantity: row.qty ?? '',
       Cost: amount(row.cost),
@@ -645,10 +650,10 @@ const Transactions = () => {
       Profit: amount(row.profit),
       'Payment Method': row.payment || '',
       Status: recordStatusLabel(row.status),
-      // Sale rows carry the purchase's number too, so it is named for what it is.
-      'Purchase Tracking': row.tracking_number || '',
+      // A sale's own number, never the one its purchase arrived under.
+      'Tracking Number': (row.isSale ? row.saleTracking : row.tracking_number) || '',
     }));
-    downloadFile(`transactions-${day(Date.now())}.csv`, csvText(records), 'text/csv;charset=utf-8');
+    downloadFile(`transactions-${day(Date.now())}.csv`, `\uFEFF${csvText(records)}`, 'text/csv;charset=utf-8');
     toast.success(`Exported ${records.length} row${records.length === 1 ? '' : 's'} to CSV`);
   };
 

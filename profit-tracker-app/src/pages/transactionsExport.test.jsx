@@ -29,7 +29,7 @@ const purchase = (over = {}) => ({
   sales_tax: 20, shipping_cost_inbound: 0, fees: 0, gift_card_amount: 0, status: 'PURCHASED', tracking_number: '1Z99999999',
   sales: [{
     id: 'sale-1', platform: { name: 'eBay' }, platform_id: 'p1', buyer_id: null, quantity: 1, unit_price: 1200,
-    commission_fee: 38, sale_shipping: 10, sale_date: '2026-02-12T12:00:00.000Z', payout_date: null, status: 'SOLD',
+    commission_fee: 38, sale_shipping: 10, sale_date: '2026-02-12T12:00:00.000Z', payout_date: null, status: 'SOLD', tracking_number: '9400100000',
   }],
   ...over,
 });
@@ -38,7 +38,7 @@ const page = () => render(<MemoryRouter><Transactions /></MemoryRouter>);
 const press = () => fireEvent.click(screen.getByRole('button', { name: 'CSV' }));
 // Rows of the last export, as objects keyed by header.
 function exported() {
-  const [header, ...lines] = mocks.downloadFile.mock.calls.at(-1)[1].split('\r\n')
+  const [header, ...lines] = mocks.downloadFile.mock.calls.at(-1)[1].replace(/^\uFEFF/, '').split('\r\n')
     .map((line) => line.slice(1, -1).split('","'));
   return lines.map((cells) => Object.fromEntries(cells.map((cell, i) => [header[i], cell])));
 }
@@ -59,9 +59,9 @@ describe('Transactions CSV export', () => {
     const [sale, buy] = exported();
     expect(sale).toMatchObject({
       Date: '2026-02-12', Type: 'Sale', Product: 'Nintendo Switch OLED', Category: 'Gaming', Vendor: 'Best Buy', Platform: 'eBay',
-      Quantity: '1', Cost: '1310', 'Sale Amount': '1200', Fees: '48', 'Payment Method': 'Chase Ink', 'Purchase Tracking': '1Z99999999',
+      Quantity: '1', Cost: '1310', 'Sale Amount': '1200', Fees: '48', 'Payment Method': 'Chase Ink', 'Tracking Number': '9400100000',
     });
-    expect(buy).toMatchObject({ Date: '2026-02-10', Type: 'Purchase', Quantity: '2', Cost: '2620', 'Sale Amount': '', Fees: '', Profit: '', Platform: '' });
+    expect(buy).toMatchObject({ Date: '2026-02-10', Type: 'Purchase', Quantity: '2', Cost: '2620', 'Sale Amount': '', Fees: '', Profit: '', Platform: '', 'Tracking Number': '1Z99999999' });
     expect(mocks.success).toHaveBeenCalledWith('Exported 2 rows to CSV');
   });
 
@@ -91,7 +91,32 @@ describe('Transactions CSV export', () => {
     mocks.inventory = [purchase({ category: null, vendor: null, payment_method: null, purchase_date: null, tracking_number: null, sales: [] })];
     page();
     press();
-    expect(exported()[0]).toMatchObject({ Date: '', Category: '', Vendor: 'Direct', 'Payment Method': '', 'Purchase Tracking': '' });
+    expect(exported()[0]).toMatchObject({ Date: '', Category: '', Vendor: 'Direct', 'Payment Method': '', 'Store Account': '', 'Tracking Number': '' });
+  });
+
+  it('leaves a sale with no tracking of its own blank, not its purchase\'s number', () => {
+    const [sale] = purchase().sales;
+    mocks.inventory = [purchase({ sales: [{ ...sale, tracking_number: null }] })];
+    page();
+    press();
+    expect(exported().map((row) => [row.Type, row['Tracking Number']])).toEqual([['Sale', ''], ['Purchase', '1Z99999999']]);
+  });
+
+  it('names the store account on both the purchase and its sales', () => {
+    mocks.inventory = [purchase({ account: { id: 'a1', name: 'Business Prime' } })];
+    page();
+    press();
+    expect(exported().map((row) => row['Store Account'])).toEqual(['Business Prime', 'Business Prime']);
+  });
+
+  it('starts with one byte order mark, so Excel reads accents', () => {
+    mocks.inventory = [purchase({ product_name: 'Pokémon 151', sales: [] })];
+    page();
+    press();
+    const content = mocks.downloadFile.mock.calls[0][1];
+    expect(content.startsWith('\uFEFF"Date"')).toBe(true);
+    expect(content.lastIndexOf('\uFEFF')).toBe(0);
+    expect(exported()[0].Product).toBe('Pokémon 151');
   });
 
   it('says so instead of downloading when there is nothing to export', () => {

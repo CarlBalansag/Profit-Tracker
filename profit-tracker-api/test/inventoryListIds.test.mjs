@@ -30,4 +30,12 @@ describe('inventory list relationship IDs', () => {
       sales: [{ platform_id: harness.ids.platform, platform: { id: harness.ids.platform } }],
     });
   });
+
+  it('returns each sale\'s own tracking number beside its purchase\'s (the CSV export reads both)', async () => {
+    harness.db.inventory[0].tracking_number = 'INBOUND-1';
+    harness.db.sales[0].tracking_number = 'OUTBOUND-1';
+    const [inventory] = await (await fetch(`${baseUrl}/api/inventory`)).json();
+    expect(inventory.tracking_number).toBe('INBOUND-1');
+    expect(inventory.sales[0].tracking_number).toBe('OUTBOUND-1');
+  });
 });
