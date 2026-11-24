@@ -128,6 +128,44 @@ export const buyersQuery = () => ({
 });
 export const useBuyers = () => useQuery(buyersQuery());
 
+// ─── Invoices ─────────────────────────────────────────────────────────────────
+// Invoices to buyers, built from recorded sales (api routes/invoices.js).
+export const useInvoices = () => useQuery({ queryKey: ['invoices'], queryFn: () => fetcher('/api/invoices') });
+
+// The buyer's sales that can go on an invoice. With invoiceId, the sales
+// already on that draft are offered too.
+export const useBillableSales = (buyerId, invoiceId = null) => useQuery({
+  queryKey: ['invoices', 'billable', buyerId, invoiceId],
+  queryFn: () => fetcher(`/api/invoices/billable?buyer_id=${encodeURIComponent(buyerId)}${invoiceId ? `&invoice_id=${encodeURIComponent(invoiceId)}` : ''}`),
+  enabled: Boolean(buyerId),
+  staleTime: 0,
+});
+
+// Save, change and delete invoices. A refused save rejects with the server's
+// reason as the error message.
+export const useInvoiceMutations = () => {
+  const qc = useQueryClient();
+  const send = async (method, path, body) => {
+    const response = await apiFetch(path, {
+      method,
+      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      const detail = Array.isArray(data?.details) && data.details[0]?.message;
+      throw new Error((data?.error === 'Validation failed' && detail) || data?.error || 'Could not save the invoice.');
+    }
+    return data;
+  };
+  const onSuccess = () => qc.invalidateQueries({ queryKey: ['invoices'] });
+  return {
+    create: useMutation({ mutationFn: (invoice) => send('POST', '/api/invoices', invoice), onSuccess }),
+    update: useMutation({ mutationFn: ({ id, ...changes }) => send('PUT', `/api/invoices/${id}`, changes), onSuccess }),
+    remove: useMutation({ mutationFn: (id) => send('DELETE', `/api/invoices/${id}`), onSuccess }),
+  };
+};
+
 // ─── Payment Methods ──────────────────────────────────────────────────────────
 // Payment methods rarely change — 30-minute cache is safe. Invalidated on settings save.
 export const paymentMethodsQuery = () => ({
