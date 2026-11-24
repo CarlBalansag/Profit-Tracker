@@ -30,6 +30,6 @@ export default defineConfig({
   ],
   test: {
     // Gives tests a working localStorage on Node 25+ (see the file).
-    setupFiles: ['./src/test/setupStorage.js'],
+    setupFiles: ['./src/test/setupStorage.js', './src/test/setupDom.js'],
   },
 })
