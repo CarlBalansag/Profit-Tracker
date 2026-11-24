@@ -28,7 +28,7 @@ import TodoSummary from '../components/Dashboard/TodoSummary';
 // Status Pipeline views: every step, stock through paid ("All", the default),
 // or one sale workflow's own steps.
 const PIPELINE_VIEWS = [['all', 'All'], ['cashout', 'Cash-out'], ['marketplace', 'Marketplace']];
-import { formatMoney, formatWholeMoney } from '../utils/money';
+import { formatMoney, formatWholeMoney, formatWholeDollars } from '../utils/money';
 import { recordStatusLabel } from '../data/statusWorkflow';
 
 const GLASS_BASE_LAYOUT_ITEMS = ['statCards', 'radarGraph', 'trendChart', 'paymentMethods', 'recentSales'];
@@ -204,7 +204,7 @@ const Dashboard = () => {
     inventory: { label: 'Inventory', value: `$${formatWholeMoney(stats.inventoryValue || 0)}`, icon: Store, accent: false },
     qty: { label: 'Qty', value: String(stats.inventoryQty || 0), icon: Layers, accent: true },
     avgSale: { label: 'Avg Sale', value: `$${formatWholeMoney(stats.unitsSold ? stats.totalRevenue / stats.unitsSold : 0)}`, icon: TrendingUp, accent: false },
-    netProfit: { label: 'Net Profit', value: `$${formatWholeMoney(stats.profit || 0)}`, icon: Zap, accent: true },
+    netProfit: { label: 'Net Profit', value: formatWholeDollars(stats.profit || 0), icon: Zap, accent: true },
   };
 
   function renderDashboardSection(sectionId) {

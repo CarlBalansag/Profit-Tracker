@@ -4,4 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| fix-loose-ends | Small fixes: negative money shown as -$5.00 everywhere, no "Since Invalid Date" on recurring expenses, New Invoice button marked not-ready | profit-tracker-app/src/utils/money.js(+test), profit-tracker-app/src/pages/{Expenses,Invoices,Dashboard,TaxExempt,Transactions,AddSale,AddTransaction}.jsx (money/date display lines only), profit-tracker-app/src/components/TransactionDetailModal.jsx (profit display lines) | In progress | 2026-11-24 |
+| fix-loose-ends | Small fixes: negative money shown as -$5.00 everywhere, no "Since Invalid Date" on recurring expenses, New Invoice button marked not-ready | profit-tracker-app/src/utils/money.js(+test), profit-tracker-app/src/pages/{Expenses,Invoices,Dashboard,TaxExempt,Transactions,AddSale,AddTransaction}.jsx (money/date display lines only), profit-tracker-app/src/components/TransactionDetailModal.jsx (profit display lines) | Ready on branch (tests pass) | 2026-11-24 |

@@ -1,4 +1,4 @@
-import { formatMoney } from '../utils/money';
+import { formatMoney, formatSignedDollars } from '../utils/money';
 import { batchCost, allocatedCost, effectiveCashbackRate, saleEconomics } from '../../../shared/finance.mjs';
 import React, { useState, useEffect, useId, useRef } from 'react';
 import { toast } from 'sonner';
@@ -1438,7 +1438,7 @@ const AddTransaction = () => {
                                 {showCashbackProfit && cashbackAmount > 0 ? 'Est. Profit + Cashback' : 'Est. Profit'}
                               </span>
                               <span className={`font-bold text-base ${(showCashbackProfit ? profit + allocatedCashback : profit) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                {(showCashbackProfit ? profit + allocatedCashback : profit) >= 0 ? '+' : ''}${formatMoney((showCashbackProfit ? profit + allocatedCashback : profit))}
+                                {formatSignedDollars(showCashbackProfit ? profit + allocatedCashback : profit)}
                               </span>
                             </div>
 

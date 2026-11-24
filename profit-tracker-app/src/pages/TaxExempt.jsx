@@ -1,5 +1,5 @@
 import StatCard from '../components/UI/StatCard';
-import { formatMoney } from '../utils/money';
+import { formatMoney, formatDollars } from '../utils/money';
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../hooks/useApi';
 import { useCacheArrivals, useOptionalQueryClient } from '../hooks/usePageCache';
@@ -290,7 +290,7 @@ const TaxExempt = () => {
         <StatCard
           label="Exempt Profit"
           info={<InfoTooltip text="Revenue minus COGS minus platform fees and shipping for all exempt inventory sales." />}
-          value={`$${formatMoney(exemptProfit)}`}
+          value={formatDollars(exemptProfit)}
           tone={exemptProfit >= 0 ? 'green' : 'red'}
         />
       </div>

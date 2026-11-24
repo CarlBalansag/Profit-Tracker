@@ -11,8 +11,8 @@ const Invoices = () => {
           <h1 className="text-2xl font-bold text-white">Invoices</h1>
           <p className="text-sm text-gray-400 mt-1">Create, manage, and generate PDF invoices. Saved to cloud storage.</p>
         </div>
-        <button className="page-btn page-btn-primary">
-          <Plus className="w-4 h-4" /> New Invoice
+        <button type="button" disabled title="Invoices aren't ready yet" className="page-btn page-btn-primary opacity-60 cursor-not-allowed">
+          <Plus className="w-4 h-4" /> New Invoice <span className="font-normal">(coming soon)</span>
         </button>
       </div>
 
@@ -40,7 +40,7 @@ const Invoices = () => {
       {/* Empty State */}
       <div className="card p-12 text-center bg-white/[0.02] border border-white/10 rounded-xl mt-4">
         <FileText className="w-12 h-12 mx-auto text-gray-600 mb-3" />
-        <p className="text-gray-400 text-sm">No invoices yet. Create your first one!</p>
+        <p className="text-gray-400 text-sm">Invoices are coming soon. Nothing can be created here yet.</p>
       </div>
 
     </div>
