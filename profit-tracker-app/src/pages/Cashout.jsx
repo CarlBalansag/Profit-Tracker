@@ -1663,12 +1663,12 @@ function ModalShell({ modalRef, title, subtitle, onClose, busy = false, children
     <ModalLayer>
       <div ref={modalRef} role="dialog" aria-modal="true" aria-label={title}
         className="w-full max-w-xl rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] shadow-xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
-        <div className="flex items-center justify-between border-b border-[color:var(--dp-border)] pb-3">
-          <div>
+        <div className="flex items-center justify-between gap-3 border-b border-[color:var(--dp-border)] pb-3">
+          <div className="min-w-0">
             <h3 className="font-bold text-base text-[var(--dp-text-primary)]">{title}</h3>
             <p className="text-[11px] text-[var(--dp-text-secondary)] mt-0.5 truncate max-w-xs" title={subtitle}>{subtitle}</p>
           </div>
-          <button type="button" aria-label="Close" onClick={onClose} disabled={busy} className="text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]">
+          <button type="button" aria-label="Close" onClick={onClose} disabled={busy} className="shrink-0 text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)]">
             <X size={18} />
           </button>
         </div>
@@ -1709,8 +1709,8 @@ function LogPurchaseModal({ product, onClose }) {
   const { data: allCommitments = [] } = useCashoutCommitments();
   const vendors = useMemo(() => platforms.filter((p) => p.type === 'Vendor'), [platforms]);
   const cashoutGroups = useMemo(() => platforms.filter((p) => p.type === 'Cashout'), [platforms]);
-  // Points4Days can't take a commitment from here yet, so this only saves the
-  // purchase and sale, with the tracking number on the sale.
+  // LA and Points4Days can't take a commitment from here yet, so this only saves
+  // the purchase and sale, with the tracking number (if there is one) on the sale.
   const recordOnly = !deal.connectionSupportsCommits;
   // The cashout group the sale goes to: the connection's linked one, or picked
   // here. Preselected by name (Points4Days -> a "POINTS4DAYS" group).
@@ -1802,7 +1802,7 @@ function LogPurchaseModal({ product, onClose }) {
 
   const modalRef = useModalKeyboard(true, () => !logPurchase.isPending && onClose());
 
-  // 'form' -> (EB only) 'confirm' -> saved. Points4Days goes from 'form'
+  // 'form' -> (EB only) 'confirm' -> saved. LA and Points4Days go from 'form'
   // straight to 'saved', which reminds you to commit on their website.
   const [stage, setStage] = useState('form');
   // The keyboard hook only places focus when the window first opens, so each
@@ -1820,7 +1820,6 @@ function LogPurchaseModal({ product, onClose }) {
     if (!vendorId) return 'Pick the store you bought it from.';
     if (!paymentMethodId) return 'Pick the card or account you paid with.';
     if (needsSaleTo && !saleToId) return 'Pick which cashout group you sold it to.';
-    if (!tracking && recordOnly) return 'A tracking number is required -- this is for an item that has already shipped.';
     return null;
   };
 
@@ -1970,26 +1969,30 @@ function LogPurchaseModal({ product, onClose }) {
 
   if (stage === 'saved') {
     return (
-      <ModalShell modalRef={modalRef} title={`Saved. Now commit on ${deal.connectionName}`} subtitle={product.name} onClose={onClose}>
+      <ModalShell modalRef={modalRef} title={`Make sure to commit to ${deal.connectionName}`} subtitle={product.name} onClose={onClose}>
         <p className="text-xs text-[var(--dp-text-secondary)]">
-          The purchase and its sale are in Profit Tracker. {deal.connectionName} doesn't know about them yet: commit to the deal and send this tracking number on their website.
+          Your purchase and its sale are saved here, but {deal.connectionName} doesn't know about them yet. {tracking
+            ? 'Commit to the deal and send this tracking number on their website.'
+            : 'Commit to the deal on their website. When it ships, send them the tracking number and add it to the sale here.'}
         </p>
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-hover-bg)] px-3 py-2">
-          <span className="text-xs font-mono text-[var(--dp-text-primary)] break-all">{tracking}</span>
-          <button type="button" onClick={copyTracking}
-            className="shrink-0 px-2 py-1 text-[11px] font-medium rounded-md border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-card-bg)]">
-            Copy
-          </button>
-        </div>
+        {tracking && (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-hover-bg)] px-3 py-2">
+            <span className="text-xs font-mono text-[var(--dp-text-primary)] break-all">{tracking}</span>
+            <button type="button" onClick={copyTracking}
+              className="shrink-0 px-2 py-1 text-[11px] font-medium rounded-md border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-card-bg)]">
+              Copy
+            </button>
+          </div>
+        )}
         <div className="flex items-center justify-end gap-2 border-t border-[color:var(--dp-border)] pt-3">
           <button type="button" data-autofocus={deal.dealUrl ? undefined : true} onClick={onClose}
-            className="px-3.5 py-2 text-xs font-medium rounded-lg border border-[color:var(--dp-border)] text-[var(--dp-text-secondary)] hover:bg-[var(--dp-hover-bg)]">
+            className="page-btn page-btn-secondary">
             Done
           </button>
           {deal.dealUrl && (
             <a data-autofocus href={deal.dealUrl} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--dp-accent)] text-white hover:opacity-90">
-              Open on {deal.connectionName} <ExternalLink size={12} />
+              className="page-btn page-btn-primary">
+              Go to {deal.connectionName} <ExternalLink size={12} />
             </a>
           )}
         </div>
@@ -2119,7 +2122,7 @@ function LogPurchaseModal({ product, onClose }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <LpField id="lp-tracking" label="Tracking number" className={!recordOnly && tracking ? '' : 'sm:col-span-2'}>
                 <input id="lp-tracking" type="text" maxLength={24} value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
-                  placeholder={recordOnly ? '1Z999AA10123456784' : 'Blank if it hasn’t shipped yet'}
+                  placeholder="Blank if it hasn’t shipped yet"
                   className={`${LP_INPUT} font-mono`} />
               </LpField>
               {!recordOnly && tracking && (

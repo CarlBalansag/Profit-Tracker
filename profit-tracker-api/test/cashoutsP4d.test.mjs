@@ -150,6 +150,12 @@ describe('Points4Days adapter', () => {
     });
   });
 
+  it('links to the site itself when a deal has no usable link of its own', async () => {
+    site.rows = [dealRow(1, { t_f_deal_link: '' }), dealRow(2, { t_f_deal_link: 'https://evil.example/deal/2' }), dealRow(3)];
+    const deals = await p4dAdapter.fetchDeals(LOGIN);
+    expect(deals.map((d) => d.dealUrl)).toEqual([BASE, BASE, `${BASE}/p/it@deals/deal/3`]);
+  });
+
   it('names stores from short links and store subdomains, not the first part of the address', async () => {
     const links = ['https://a.co/d/09Ayk', 'https://direct.playstation.com/en-us/x', 'https://www.gamestop.com/x', 'https://shop.walmart.com/x', 'https://www.homedepot.com/x', 'https://unknownshop.com/x']
       .map((url, i) => [i, 'x', 'y', url]);

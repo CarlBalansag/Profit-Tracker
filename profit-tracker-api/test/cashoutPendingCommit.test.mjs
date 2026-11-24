@@ -102,15 +102,21 @@ describe('Log Purchase without a tracking number', () => {
     expect(harness.db.cashoutCommitment.map((c) => [c.sale_id, c.status])).toEqual([[first.sale.id, 'pending'], [second.sale.id, 'pending']]);
   });
 
-  it('still requires a tracking number for a cashout that can only be recorded', async () => {
+  it('saves no pending commitment for a cashout that can only be recorded, and adding tracking later asks nothing', async () => {
     harness.db.platform.push({ id: 'p4d-group', user_id: harness.ids.user, name: 'P4D', type: 'Cashout', fee_pct: 0, workflow_preset: 'CASHOUT' });
     harness.db.cashoutConnection.push({
       id: 'conn-p4d', user_id: harness.ids.user, provider: 'p4d', display_name: 'Points4Days',
       encrypted_key: encryptKey('x'), key_last4: 'xxxx', status: 'active', platform_id: 'p4d-group',
       created_at: new Date(), updated_at: new Date(),
     });
-    await expect(logWithoutTracking({ id: 'conn-p4d' })).rejects.toThrow('tracking number is required');
-    expect(harness.db.inventory).toHaveLength(1);
+    const result = await logWithoutTracking({ id: 'conn-p4d' });
+    expect(result).toMatchObject({ recordedOnly: true, commitPending: false, commitment: null });
+    expect(harness.db.cashoutCommitment).toHaveLength(0);
+
+    const edited = await addTracking(result.sale.id);
+    expect(edited.status).toBe(200);
+    expect(edited.body.cashout_commit_pending).toBeUndefined();
+    expect(harness.db.sales.find((s) => s.id === result.sale.id)).toMatchObject({ tracking_number: TRACKING, workflow_status: 'OUTBOUND' });
   });
 });
 
