@@ -500,9 +500,18 @@ router.post('/orders/:id/expense', isAuthenticated, async (req, res, next) => {
   try {
     const order = await prisma.emailOrder.findFirst({ where: { id: req.params.id, user_id: req.user.id } });
     if (!order) return res.status(404).json({ error: 'Order not found.' });
-    if (order.total == null) return res.status(400).json({ error: 'This email has no total to record.' });
+    if (order.total == null || Number(order.total) <= 0) return res.status(400).json({ error: 'This email has no total to record.' });
+    // Only store orders and receipts become expenses: never a sale, a payout,
+    // a check or a carrier's shipping notice.
+    if (!['receipt', 'purchase'].includes(order.type)) return res.status(400).json({ error: "This email isn't a store order or receipt." });
+    if (['cancelled', 'refund'].includes(order.status)) return res.status(400).json({ error: 'This order was cancelled or refunded.' });
+    // Asked twice (a double click): the expense already made from it, not a copy.
+    const made = await prisma.expense.findFirst({ where: { user_id: req.user.id, external_id: `email:${order.id}` }, select: { id: true } });
+    if (made) return res.status(201).json({ expense_id: made.id });
+    if (order.match_state === 'linked') return res.status(409).json({ error: 'This order is already linked to a record.' });
     const rule = await prisma.emailMerchantRule.findUnique({ where: { user_id_merchant: { user_id: req.user.id, merchant: order.merchant } } });
     const expense = await createExpenseFromOrder(prisma, req.user.id, order, rule);
+    if (!expense) return res.status(409).json({ error: 'This order is already linked to a record.' });
     res.status(201).json({ expense_id: expense.id });
   } catch (err) { next(err); }
 });

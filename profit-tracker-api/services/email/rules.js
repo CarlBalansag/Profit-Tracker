@@ -3,7 +3,7 @@
 // once. Custom sender domains add subscriptions and tools to the search.
 const { trackChange } = require('../activityLog');
 const { SENDERS } = require('./config');
-const { nameMatches } = require('./match');
+const { nameMatches, lockOrder } = require('./match');
 
 const LABELS = Object.fromEntries(SENDERS.map((s) => [s.key, s.label]));
 const labelFor = (merchant, rules = []) => rules.find((r) => r.merchant === merchant)?.label
@@ -40,25 +40,37 @@ async function createExpenseFromOrder(prisma, userId, order, rule = null, { auto
     // The user set this treatment once for the store; that is the review.
     reviewed: Boolean(rule.tax_category), source: 'email rule',
   } : null;
-  const { result: expense } = await prisma.$transaction((tx) => trackChange(tx, userId, {
-    action: 'create', recordType: 'expense', source: 'email', extra: { email_order_id: order.id },
-    recordId: (made) => made.id,
-    refs: async (_t, made) => ({ expense: made ? [made.id] : [] }),
-  }, () => tx.expense.create({ data: {
-    user_id: userId, name, amount: Number(order.total), amount_decimal: order.total, date,
-    category: rule?.category || null, external_id: externalId,
-    payment_method_id: rule?.payment_method_id || null,
-    tax_details: tax ? JSON.parse(JSON.stringify(tax)) : undefined,
-    notes: order.order_number ? `From email, order ${order.order_number}` : 'From email',
-  } })));
-  await prisma.emailMatch.upsert({
-    where: { order_id_record_type_record_ids: { order_id: order.id, record_type: 'expense', record_ids: [expense.id] } },
-    create: { user_id: userId, order_id: order.id, record_type: 'expense', record_ids: [expense.id], score: 100, band: 'high',
-      reasons: [{ code: 'created', text: auto ? 'Created by your rule' : 'Created from this email', points: 100 }], state: 'linked', auto, decided_at: new Date() },
-    update: { state: 'linked' },
-  });
-  await prisma.emailOrder.update({ where: { id: order.id }, data: { match_state: 'linked' } });
-  return expense;
+  // The expense, its link and the order's state in one transaction, under the
+  // order's lock: two requests (or two syncs) can't both add it, and an order
+  // that got linked to something meanwhile is left alone.
+  return prisma.$transaction(async (tx) => {
+    await lockOrder(tx, order.id);
+    const again = await tx.expense.findFirst({ where: { user_id: userId, external_id: externalId } });
+    if (again) return again;
+    const current = await tx.emailOrder.findFirst({ where: { id: order.id, user_id: userId }, select: { match_state: true } });
+    if (!current || current.match_state === 'linked') return null;
+    if (await tx.emailMatch.findFirst({ where: { order_id: order.id, state: 'linked' } })) return null;
+    const { result: expense } = await trackChange(tx, userId, {
+      action: 'create', recordType: 'expense', source: 'email', extra: { email_order_id: order.id },
+      recordId: (made) => made.id,
+      refs: async (_t, made) => ({ expense: made ? [made.id] : [] }),
+    }, () => tx.expense.create({ data: {
+      user_id: userId, name, amount: Number(order.total), amount_decimal: order.total, date,
+      category: rule?.category || null, external_id: externalId,
+      payment_method_id: rule?.payment_method_id || null,
+      tax_details: tax ? JSON.parse(JSON.stringify(tax)) : undefined,
+      notes: order.order_number ? `From email, order ${order.order_number}` : 'From email',
+    } }));
+    await tx.emailMatch.updateMany({ where: { order_id: order.id, state: 'suggested' }, data: { state: 'rejected', decided_at: new Date() } });
+    await tx.emailMatch.upsert({
+      where: { order_id_record_type_record_ids: { order_id: order.id, record_type: 'expense', record_ids: [expense.id] } },
+      create: { user_id: userId, order_id: order.id, record_type: 'expense', record_ids: [expense.id], score: 100, band: 'high',
+        reasons: [{ code: 'created', text: auto ? 'Created by your rule' : 'Created from this email', points: 100 }], state: 'linked', auto, decided_at: new Date() },
+      update: { state: 'linked' },
+    });
+    await tx.emailOrder.update({ where: { id: order.id }, data: { match_state: 'linked' } });
+    return expense;
+  }, { timeout: 30000, maxWait: 10000 });
 }
 
 // After matching: unmatched receipts from stores with a rule. "ignore" rules
@@ -70,6 +82,9 @@ async function applyRules(prisma, userId, { createExpenses }) {
   const byMerchant = new Map(rules.map((r) => [r.merchant, r]));
   const orders = await prisma.emailOrder.findMany({
     where: { user_id: userId, match_state: 'unmatched', merchant: { in: [...byMerchant.keys()] }, type: { in: ['receipt', 'purchase'] }, status: { notIn: ['cancelled', 'refund'] }, OR: [{ leaning: null }, { leaning: { not: 'declined' } }] },
+    // Newest first: orders a rule leaves alone stay unmatched, and must not
+    // crowd out the ones that just arrived.
+    orderBy: { last_seen: { sort: 'desc', nulls: 'last' } },
     take: 200,
   });
   let created = 0;

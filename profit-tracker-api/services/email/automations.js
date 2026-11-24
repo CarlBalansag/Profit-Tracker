@@ -5,10 +5,11 @@
 //   delivered -> purchase marked delivered; blank return-by date filled
 //   cancelled / refund -> a To-Do item; cancelling automatically is a
 //                 separate switch, off by default (it changes stock)
+const { Prisma } = require('@prisma/client');
 const statusTransitions = require('../statusTransitions');
 const activityLog = require('../activityLog');
 const { trackChange } = activityLog;
-const { carrierFor, nameMatches, pairCashoutLines, CASHOUTS } = require('./match');
+const { carrierFor, nameMatches, pairCashoutLines, CASHOUTS, lockOrder } = require('./match');
 const { markSalesPaid, needsPayoutBackfill } = require('../markSalesPaid');
 const { labelFor } = require('./rules');
 
@@ -26,6 +27,24 @@ async function runAction(prisma, userId, row, action, payload, orderId = null) {
     await activityLog.logStatus(tx, userId, 'inventory', fresh, result, { source: 'email', extra: orderId ? { email_order_id: orderId } : {} });
   });
   return true;
+}
+
+// Only orders whose newest status hasn't been applied yet, picked in the
+// database. (Taking a fixed number of orders and checking afterwards left
+// newer ones out once a user had more linked orders than that number.) Every
+// order handled gets applied_status set, so each run starts where the last
+// one stopped.
+async function unappliedOrderIds(prisma, userId, { type, matchState = null, status = null, merchants = null, oldestBy = 'last_seen', take }) {
+  const rows = await prisma.$queryRaw`
+    SELECT id FROM "EmailOrder"
+    WHERE user_id = ${userId} AND type = ${type}
+      AND applied_status IS DISTINCT FROM status
+      ${matchState ? Prisma.sql`AND match_state = ${matchState}` : Prisma.empty}
+      ${status ? Prisma.sql`AND status = ${status}` : Prisma.empty}
+      ${merchants ? Prisma.sql`AND merchant IN (${Prisma.join(merchants)})` : Prisma.empty}
+    ORDER BY ${oldestBy === 'first_seen' ? Prisma.sql`first_seen` : Prisma.sql`last_seen`} ASC NULLS LAST, id
+    LIMIT ${take}`;
+  return rows.map((r) => r.id);
 }
 
 async function fillReturnBy(prisma, userId, rows, order) {
@@ -47,12 +66,12 @@ async function fillReturnBy(prisma, userId, rows, order) {
 // Applies each linked order's newest status once.
 async function applyOrderUpdates(prisma, userId, settings) {
   const orders = await prisma.emailOrder.findMany({
-    where: { user_id: userId, match_state: 'linked', type: 'purchase' },
+    where: { user_id: userId, id: { in: await unappliedOrderIds(prisma, userId, { type: 'purchase', matchState: 'linked', take: 500 }) } },
     include: { matches: { where: { state: 'linked', record_type: 'purchase' } } },
-    take: 500,
+    orderBy: { last_seen: 'asc' },
   });
   const summary = { tracking: 0, delivered: 0, cancelled: 0, attention: 0 };
-  for (const order of orders.filter((o) => o.applied_status !== o.status)) {
+  for (const order of orders) {
     const ids = order.matches.flatMap((m) => m.record_ids);
     const rows = await prisma.inventory.findMany({ where: { id: { in: ids }, user_id: userId }, include: { vendor: { select: { default_return_days: true } } } });
     const tracking = order.tracking_numbers[0];
@@ -143,12 +162,12 @@ async function applyCashoutReceipt(prisma, userId, order, saleIds) {
 async function applyCashoutReceipts(prisma, userId, settings) {
   if (!settings.cashoutPayouts) return 0;
   const orders = await prisma.emailOrder.findMany({
-    where: { user_id: userId, match_state: 'linked', type: 'sale', merchant: { in: [...CASHOUTS] }, status: 'payout' },
+    where: { user_id: userId, id: { in: await unappliedOrderIds(prisma, userId, { type: 'sale', matchState: 'linked', status: 'payout', merchants: [...CASHOUTS], take: 200 }) } },
     include: { matches: { where: { state: 'linked', record_type: 'sale' } } },
-    take: 200,
+    orderBy: { last_seen: 'asc' },
   });
   let paid = 0;
-  for (const order of orders.filter((o) => o.applied_status !== o.status)) {
+  for (const order of orders) {
     try {
       paid += (await applyCashoutReceipt(prisma, userId, order, order.matches.flatMap((m) => m.record_ids))).paid;
     } catch (err) {
@@ -227,12 +246,11 @@ async function applyCashoutCheck(prisma, userId, order) {
 async function applyCashoutChecks(prisma, userId, settings) {
   if (!settings.cashoutPayouts) return 0;
   const orders = await prisma.emailOrder.findMany({
-    where: { user_id: userId, type: 'check', merchant: { in: [...CASHOUTS] }, status: 'check' },
+    where: { user_id: userId, id: { in: await unappliedOrderIds(prisma, userId, { type: 'check', status: 'check', merchants: [...CASHOUTS], oldestBy: 'first_seen', take: 100 }) } },
     orderBy: { first_seen: 'asc' },
-    take: 100,
   });
   let moved = 0;
-  for (const order of orders.filter((o) => o.applied_status !== o.status)) {
+  for (const order of orders) {
     try {
       moved += (await applyCashoutCheck(prisma, userId, order)).moved;
     } catch (err) {
@@ -248,6 +266,9 @@ const round2 = (n) => Math.round(n * 100) / 100;
 
 // One purchase per item in the email (or one for the whole order when the
 // items couldn't be read). Tax and shipping are shared by item cost.
+// The purchases, their link and the order's state are written in one
+// transaction, under a lock on the order: a double click, two mailboxes
+// syncing at once, or a crash part-way can't add the same order twice.
 async function createPurchasesFromOrder(prisma, userId, order, { auto = false } = {}) {
   if (order.type !== 'purchase' || order.total == null || ['cancelled', 'refund'].includes(order.status)) return null;
   const existing = await prisma.emailMatch.findFirst({ where: { order_id: order.id, state: 'linked' } });
@@ -281,11 +302,17 @@ async function createPurchasesFromOrder(prisma, userId, order, { auto = false } 
   const base = lines.reduce((t, l) => t + l.lineTotal, 0) || 1;
   const discount = money(order.discount);
 
-  const { result: created } = await prisma.$transaction((tx) => trackChange(tx, userId, {
-    action: 'create', recordType: 'purchase', source: 'email', extra: { email_order_id: order.id },
-    recordId: (made) => made?.[0]?.id,
-    refs: async (_t, made) => ({ inventory: (made || []).map((r) => r.id) }),
-  }, async () => {
+  return prisma.$transaction(async (tx) => {
+    await lockOrder(tx, order.id);
+    // Checked again now that the lock is held.
+    const current = await tx.emailOrder.findFirst({ where: { id: order.id, user_id: userId }, select: { match_state: true, status: true } });
+    if (!current || current.match_state === 'linked' || ['cancelled', 'refund'].includes(current.status)) return null;
+    if (await tx.emailMatch.findFirst({ where: { order_id: order.id, state: 'linked' } })) return null;
+    const { result: created } = await trackChange(tx, userId, {
+      action: 'create', recordType: 'purchase', source: 'email', extra: { email_order_id: order.id },
+      recordId: (made) => made?.[0]?.id,
+      refs: async (_t, made) => ({ inventory: (made || []).map((r) => r.id) }),
+    }, async () => {
     const out = [];
     for (const l of lines) {
       const share = l.lineTotal / base;
@@ -304,14 +331,17 @@ async function createPurchasesFromOrder(prisma, userId, order, { auto = false } 
       } }));
     }
     return out;
-  }));
-  await prisma.emailMatch.create({ data: {
-    user_id: userId, order_id: order.id, record_type: 'purchase', record_ids: created.map((r) => r.id).sort(), score: 100, band: 'high',
-    reasons: [{ code: 'created', text: auto ? 'Created automatically from the order email' : 'Created from this email', points: 100 }],
-    state: 'linked', auto, decided_at: new Date(),
-  } });
-  await prisma.emailOrder.update({ where: { id: order.id }, data: { match_state: 'linked', applied_status: null } });
-  return created;
+    });
+    // Suggestions the order had are settled by this link.
+    await tx.emailMatch.updateMany({ where: { order_id: order.id, state: 'suggested' }, data: { state: 'rejected', decided_at: new Date() } });
+    await tx.emailMatch.create({ data: {
+      user_id: userId, order_id: order.id, record_type: 'purchase', record_ids: created.map((r) => r.id).sort(), score: 100, band: 'high',
+      reasons: [{ code: 'created', text: auto ? 'Created automatically from the order email' : 'Created from this email', points: 100 }],
+      state: 'linked', auto, decided_at: new Date(),
+    } });
+    await tx.emailOrder.update({ where: { id: order.id }, data: { match_state: 'linked', applied_status: null } });
+    return created;
+  }, { timeout: 30000, maxWait: 10000 });
 }
 
 // Automatic purchases wait a day after the first email, so a purchase the user
@@ -321,6 +351,7 @@ async function createMissingPurchases(prisma, userId) {
     // Only orders sorted as resale (or kept by the user): personal ones and
     // ones still to ask about are never added on their own.
     where: { user_id: userId, type: 'purchase', match_state: 'unmatched', leaning: { in: ['resale', 'kept'] }, status: { notIn: ['cancelled', 'refund', 'return'] }, total: { not: null }, first_seen: { lte: new Date(Date.now() - DAY) } },
+    orderBy: { first_seen: 'asc' },
     take: 50,
   });
   let created = 0;
@@ -334,10 +365,16 @@ async function createMissingPurchases(prisma, userId) {
 // renamed it. One purchase per order only; logged with Undo.
 const ownedName = (name, merchant) => String(name || '').startsWith(`${labelFor(merchant)} order`);
 async function namePlaceholderPurchases(prisma, userId) {
+  // Start from the purchases that still have a placeholder name (few), not
+  // from every linked order (which grows without end).
+  const placeholders = await prisma.inventory.findMany({
+    where: { user_id: userId, notes: 'Created from an order email', product_name: { contains: ' order' } },
+    select: { id: true }, orderBy: { created_at: 'desc' }, take: 300,
+  });
+  if (!placeholders.length) return 0;
   const matches = await prisma.emailMatch.findMany({
-    where: { user_id: userId, state: 'linked', record_type: 'purchase' },
+    where: { user_id: userId, state: 'linked', record_type: 'purchase', record_ids: { hasSome: placeholders.map((p) => p.id) } },
     include: { order: { select: { id: true, merchant: true, items: true } } },
-    take: 500,
   });
   let named = 0;
   for (const m of matches) {
@@ -356,4 +393,4 @@ async function namePlaceholderPurchases(prisma, userId) {
   return named;
 }
 
-module.exports = { namePlaceholderPurchases, applyOrderUpdates, applyCashoutReceipt, applyCashoutReceipts, applyCashoutChecks, salesForAmount, createPurchasesFromOrder, createMissingPurchases, RETURN_DAYS };
+module.exports = { unappliedOrderIds, namePlaceholderPurchases, applyOrderUpdates, applyCashoutReceipt, applyCashoutReceipts, applyCashoutChecks, salesForAmount, createPurchasesFromOrder, createMissingPurchases, RETURN_DAYS };

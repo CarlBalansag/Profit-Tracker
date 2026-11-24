@@ -107,11 +107,14 @@ app.post('/internal/notifications/run', async (req, res) => {
 // Email sync -- EMAIL_SYNC_SECRET bearer token, called every 10-15 minutes by
 // an outside cron (services/email/sync.js). Reads only allow-listed senders.
 app.post('/internal/email/sync', async (req, res) => {
-  const { verifySyncSecret, runScheduledEmailSync } = require('./services/email/sync');
+  const { verifySyncSecret, startScheduledEmailSync } = require('./services/email/sync');
   const verify = verifySyncSecret(req.get('Authorization'));
   if (!verify.ok) return res.status(verify.status || 401).json({ error: verify.message });
   try {
-    res.json(await runScheduledEmailSync());
+    // Answers within 20 seconds either way: a long run carries on in the
+    // background and the cron service gets "still running" (202), not a timeout.
+    const { status, body } = await startScheduledEmailSync();
+    res.status(status).json(body);
   } catch (err) {
     console.error('[email] scheduled sync failed:', err?.code || 'error');
     res.status(500).json({ error: 'Email sync failed.' });
