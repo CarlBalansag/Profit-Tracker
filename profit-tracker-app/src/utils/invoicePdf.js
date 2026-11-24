@@ -18,8 +18,17 @@ const WIDTHS = [
   556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
 ];
 
-// The PDF's fonts hold Latin-1 only; anything else prints as "?".
-const printable = (text) => [...String(text ?? '')].map((char) => (char.charCodeAt(0) <= 255 && char.charCodeAt(0) >= 32 ? char : char === '\n' ? '\n' : '?')).join('');
+// The PDF's fonts hold Latin-1 only. Typed punctuation phones and word
+// processors put in (curly quotes, long dashes) goes in as its plain form;
+// anything else prints as "?".
+const PLAIN = {
+  '\u2018': "'", '\u2019': "'", '\u201A': "'", '\u201C': '"', '\u201D': '"', '\u201E': '"', '\u2032': "'", '\u2033': '"',
+  '\u2010': '-', '\u2011': '-', '\u2012': '-', '\u2013': '-', '\u2014': '-', '\u2212': '-',
+  '\u2022': '-', '\u2026': '...', '\u2122': '(TM)', '\u00A0': ' ', '\u2009': ' ', '\u202F': ' ', '\t': ' ', '\r': '', '\u200B': '', '\uFE0F': '',
+};
+const inFont = (code) => (code >= 32 && code <= 126) || (code >= 160 && code <= 255);
+const printable = (text) => [...String(text ?? '').normalize('NFC')]
+  .map((char) => PLAIN[char] ?? (char === '\n' || (char.length === 1 && inFont(char.charCodeAt(0))) ? char : '?')).join('');
 
 export function textWidth(text, size, bold = false) {
   let units = 0;
