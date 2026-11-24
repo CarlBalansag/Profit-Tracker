@@ -17,6 +17,7 @@
 const { Decimal, decimal, isRealizedSale, grossBatchCost, batchCost, keptQuantity, keptSaleQuantity, allocatedCost, saleEconomics } = require('./decimalFinance');
 const { payoutStatus } = require('./payoutStatus');
 const { withExactFields, MAPPINGS } = require('./decimalRead');
+const { ACCOUNT_SELECT, ownAccount } = require('./storeAccounts');
 
 const DAY = 24 * 60 * 60 * 1000;
 const DEFAULT_PAYOUT_DAYS = 14;
@@ -90,7 +91,7 @@ async function computeCashFlow(prisma, userId, now = new Date()) {
     prisma.inventory.findMany({ where: { user_id: userId }, include: { payment_method: true } }),
     prisma.sales.findMany({
       where: { inventory: { user_id: userId } },
-      include: { inventory: { include: { payment_method: true } }, platform: true, buyer: true },
+      include: { inventory: { include: { payment_method: true, account: ACCOUNT_SELECT } }, platform: true, buyer: true },
     }),
     prisma.expense.findMany({ where: { user_id: userId } }),
     prisma.refund.findMany({ where: { user_id: userId } }),
@@ -152,6 +153,8 @@ async function computeCashFlow(prisma, userId, now = new Date()) {
     g.items.push({
       id: sale.id,
       product: sale.inventory?.product_name || 'Untitled item',
+      // The store account it was bought on (name only), or null.
+      account: ownAccount(sale.inventory?.account, userId)?.name ?? null,
       saleDate: isoDay(sale.sale_date),
       amount: money(amount),
       payoutStatus: status,

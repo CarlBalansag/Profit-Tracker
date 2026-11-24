@@ -197,6 +197,29 @@ describe('Statuses board', () => {
     expect(cardKeys('On Hand')).toEqual([]);
   });
 
+  it('shows the store account next to the store on a purchase card that has one', () => {
+    setData({
+      inventory: [
+        purchase({ account: { id: 'acc1', name: 'Business Prime' } }),
+        purchase({ id: 'inv2', receiving_status: 'ON_HAND', account: null }),
+      ],
+    });
+    renderPage();
+    const withAccount = card('Incoming', 'inventory-inv1');
+    expect(withAccount.querySelector('[data-store-account]').textContent).toBe(' · Business Prime');
+    expect(withAccount.querySelector('[data-store-account]').parentElement.textContent).toBe('Store · Business Prime');
+    // No account: just the store, nothing extra.
+    const without = card('On Hand', 'inventory-inv2');
+    expect(without.querySelector('[data-store-account]')).toBeNull();
+    expect(within(without).getByText('Store')).toBeTruthy();
+  });
+
+  it('never shows a store account on a sale card', () => {
+    setData({ sales: [saleRecord({ account: { id: 'acc1', name: 'Business Prime' } })] });
+    renderPage();
+    expect(column('Outbound').querySelector('[data-store-account]')).toBeNull();
+  });
+
   it('renders a sale card from the linked inventory the sales endpoint already includes', () => {
     setData({ sales: [saleRecord()] });
     renderPage();

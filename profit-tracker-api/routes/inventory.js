@@ -14,6 +14,7 @@ const { editTransaction } = require('../services/transactionEdit');
 const pendingCommit = require('../services/cashouts/pendingCommit');
 const cashoutCommits = require('../services/cashouts/commits');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
+const { ACCOUNT_SELECT, ownAccount } = require('../services/storeAccounts');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -76,6 +77,8 @@ router.get('/', isAuthenticated, async (req, res, next) => {
         order_number: true, tracking_number: true, tracking_info: true, receipt_url: true,
         tax_exempt: true,
         vendor: { select: { id: true, name: true, type: true } },
+        // The store account the purchase was made on (shown on the Statuses board).
+        account: ACCOUNT_SELECT,
         payment_method: { select: { id: true, name: true, type: true, default_cashback_rate: true, default_cashback_rate_decimal: true, preset_card_id: true, category_rates: true } },
         sales: {
           select: {
@@ -93,7 +96,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
       },
       orderBy: { purchase_date: 'desc' }
     });
-    res.json(items.map((item) => withActions(exactInventory(item))));
+    res.json(items.map((item) => withActions(exactInventory({ ...item, account: ownAccount(item.account, req.user.id) }))));
   } catch (err) {
     next(err);
   }

@@ -9,6 +9,7 @@ const { buildWorkflowPipelines } = require('../services/workflowPipeline');
 const { payoutStatus } = require('../services/payoutStatus');
 const { withExactFields, MAPPINGS } = require('../services/decimalRead');
 const { computeCashFlow } = require('../services/cashFlow');
+const { ACCOUNT_SELECT, ownAccount, splitToCents } = require('../services/storeAccounts');
 
 const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
@@ -94,12 +95,12 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     const [rawInventories, rawSales, allInventoriesFetched, rawPriorSales, rawExpenses] = await Promise.all([
       prisma.inventory.findMany({
         where: inventoryWhere,
-        include: { payment_method: true, vendor: true },
+        include: { payment_method: true, vendor: true, account: ACCOUNT_SELECT },
       }),
       prisma.sales.findMany({
         where: salesWhere,
         include: {
-          inventory: { include: { payment_method: true, vendor: true } },
+          inventory: { include: { payment_method: true, vendor: true, account: ACCOUNT_SELECT } },
           platform: true,
           buyer: true,
         },
@@ -323,56 +324,94 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
     // units that actually sold through that channel (same reasoning as the
     // top-of-route "mode !== 'All'" cutover for totalCost).
     const vendorMap = new Map();
+    const vendorTotals = () => ({
+      spend: zero(), units: 0, purchases: 0,
+      soldCost: zero(), soldRevenue: zero(), soldProfit: zero(), unitsSold: 0,
+    });
     const ensureVendor = (inv) => {
       const key = inv.vendor_id || 'direct';
       if (!vendorMap.has(key)) {
         vendorMap.set(key, {
           id: inv.vendor_id || null,
           name: inv.vendor?.name || 'No Vendor',
-          spend: zero(), units: 0, purchases: 0,
-          soldCost: zero(), soldRevenue: zero(), soldProfit: zero(), unitsSold: 0,
+          ...vendorTotals(),
+          accounts: new Map(),
         });
       }
       return vendorMap.get(key);
     };
+    // The totals a purchase or sale counts towards: its store's, and within
+    // that the store account it was bought on (or "No account").
+    const vendorAndAccount = (inv) => {
+      const vendor = ensureVendor(inv);
+      const account = ownAccount(inv.account, userId);
+      const key = account?.id ?? 'none';
+      if (!vendor.accounts.has(key)) {
+        vendor.accounts.set(key, { id: account?.id ?? null, name: account?.name ?? 'No account', ...vendorTotals() });
+      }
+      return [vendor, vendor.accounts.get(key)];
+    };
     if (mode === 'All') {
-      inventories.forEach(inv => {
-        const v = ensureVendor(inv);
+      inventories.forEach(inv => vendorAndAccount(inv).forEach(v => {
         v.spend = v.spend.plus(batchCost(inv));
         v.units += keptQuantity(inv);
         v.purchases += 1;
-      });
+      }));
     } else {
-      saleAlloc.forEach(({ inv, saleCost, sale }) => {
-        const v = ensureVendor(inv);
+      saleAlloc.forEach(({ inv, saleCost, sale }) => vendorAndAccount(inv).forEach(v => {
         v.spend = v.spend.plus(saleCost);
         v.units += keptSaleQuantity(sale);
         v.purchases += 1;
-      });
+      }));
     }
     // Store ROI: what the units bought at each store went on to make, from the
     // sales in this window (the same sold-side scope as Profit above).
-    saleAlloc.forEach(({ inv, saleCost, saleRevenue, saleCashback, sale }) => {
-      const v = ensureVendor(inv);
+    saleAlloc.forEach(({ inv, saleCost, saleRevenue, saleCashback, sale }) => vendorAndAccount(inv).forEach(v => {
       v.soldCost = v.soldCost.plus(saleCost);
       v.soldRevenue = v.soldRevenue.plus(saleRevenue);
       v.soldProfit = v.soldProfit.plus(saleRevenue.minus(saleCost).plus(saleCashback));
       v.unitsSold += keptSaleQuantity(sale);
+    }));
+    const vendorRow = (v) => ({
+      id: v.id,
+      name: v.name,
+      spend: money(v.spend),
+      units: v.units,
+      purchases: v.purchases,
+      avgCostPerUnit: v.units > 0 ? money(v.spend.div(v.units)) : 0,
+      soldCost: money(v.soldCost),
+      soldRevenue: money(v.soldRevenue),
+      profit: money(v.soldProfit),
+      unitsSold: v.unitsSold,
+      roi: v.soldCost.greaterThan(0) ? money(v.soldProfit.div(v.soldCost).times(100)) : null,
     });
+    // A store bought from on two or more accounts in this window lists each
+    // one, best first, with anything on no account last. The money columns are
+    // rounded together so the rows add up to the store's own figures.
+    const accountRows = (v, row) => {
+      const accounts = Array.from(v.accounts.values());
+      if (accounts.filter(a => a.id).length < 2) return [];
+      const split = {
+        spend: splitToCents(accounts.map(a => a.spend), row.spend),
+        soldCost: splitToCents(accounts.map(a => a.soldCost), row.soldCost),
+        soldRevenue: splitToCents(accounts.map(a => a.soldRevenue), row.soldRevenue),
+        profit: splitToCents(accounts.map(a => a.soldProfit), row.profit),
+      };
+      return accounts
+        .map((a, i) => ({
+          ...vendorRow(a),
+          spend: split.spend[i],
+          soldCost: split.soldCost[i],
+          soldRevenue: split.soldRevenue[i],
+          profit: split.profit[i],
+        }))
+        .sort((a, b) => (a.id === null) - (b.id === null) || b.profit - a.profit || a.name.localeCompare(b.name));
+    };
     const vendorBreakdown = Array.from(vendorMap.values())
-      .map(v => ({
-        id: v.id,
-        name: v.name,
-        spend: money(v.spend),
-        units: v.units,
-        purchases: v.purchases,
-        avgCostPerUnit: v.units > 0 ? money(v.spend.div(v.units)) : 0,
-        soldCost: money(v.soldCost),
-        soldRevenue: money(v.soldRevenue),
-        profit: money(v.soldProfit),
-        unitsSold: v.unitsSold,
-        roi: v.soldCost.greaterThan(0) ? money(v.soldProfit.div(v.soldCost).times(100)) : null,
-      }))
+      .map(v => {
+        const row = vendorRow(v);
+        return { ...row, accounts: accountRows(v, row) };
+      })
       .sort((a, b) => b.spend - a.spend);
 
     // ── Margin by price range: sales grouped by what one unit cost you.
