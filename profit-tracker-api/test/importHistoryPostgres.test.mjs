@@ -178,6 +178,91 @@ describe('past imports', () => {
     await expect(history.undo(ME, importId)).rejects.toMatchObject({ status: 409 });
   });
 
+  it('unlinks a cashout commitment on undo and links it again on restore', async () => {
+    const { importId } = await importEb();
+    const sale = await db.sales.findFirst({ where: { inventory: { import_batch_id: importId } } });
+    const connection = await db.cashoutConnection.create({ data: { user_id: ME, provider: 'eb', encrypted_key: 'x', key_last4: '1234', platform_id: ids.eb } });
+    const commitment = await db.cashoutCommitment.create({ data: { user_id: ME, connection_id: connection.id, external_deal_id: 'd', external_item_id: 'i', external_commitment_id: 'c-1', quantity: 2, sale_id: sale.id } });
+    const res = await history.undo(ME, importId);
+    expect((await db.cashoutCommitment.findUnique({ where: { id: commitment.id } })).sale_id).toBeNull();
+    await activityLog.undoActivity(ME, res.activity_id);
+    expect((await db.cashoutCommitment.findUnique({ where: { id: commitment.id } })).sale_id).toBe(sale.id);
+  });
+
+  it('refuses to restore an import whose items were imported again, changing nothing', async () => {
+    const first = await importEb();
+    const undone = await history.undo(ME, first.importId);
+    const second = await importEb();
+    const refused = { status: 409, message: expect.stringMatching(/imported again/) };
+    await expect(activityLog.undoActivity(ME, undone.activity_id)).rejects.toMatchObject(refused);
+    expect(await db.inventory.count({ where: { user_id: ME } })).toBe(2);
+    // Even one of the items imported again is enough to refuse.
+    const [one] = await db.inventory.findMany({ where: { import_batch_id: second.importId } });
+    await db.inventory.delete({ where: { id: one.id } });
+    await expect(activityLog.undoActivity(ME, undone.activity_id)).rejects.toMatchObject(refused);
+    expect(await db.inventory.count({ where: { user_id: ME } })).toBe(1);
+    expect((await db.activityLog.findUnique({ where: { id: undone.activity_id } })).undone_at).toBeNull();
+    // With the newer import undone, the first one can come back.
+    await history.undo(ME, second.importId);
+    await activityLog.undoActivity(ME, undone.activity_id);
+    expect(await db.inventory.count({ where: { import_batch_id: first.importId } })).toBe(2);
+  });
+
+  it('applies the same check to one deleted purchase, ignoring what another user imported', async () => {
+    const { importId } = await importEb();
+    const one = await db.inventory.findFirst({ where: { import_batch_id: importId }, include: { sales: true } });
+    const { activity } = await db.$transaction((tx) => activityLog.trackChange(tx, ME, {
+      action: 'delete', recordType: 'purchase', recordId: one.id, productName: one.product_name,
+      refs: () => ({ inventory: [one.id], sales: one.sales.map((x) => x.id) }),
+    }, () => tx.inventory.delete({ where: { id: one.id } })));
+    // Someone else imported the very same report rows: nothing to do with this user.
+    const p = await importSold.preview(OTHER, { source: 'eb', csv: EB_CSV });
+    await importSold.commit(OTHER, { source: 'eb', platformId: ids.theirs, groups: kept(p.groups) });
+    const restored = await activityLog.undoActivity(ME, activity.id);
+    const removed = await activityLog.undoActivity(ME, restored.entry.id); // deleted again
+    await importEb();
+    await expect(activityLog.undoActivity(ME, removed.entry.id)).rejects.toMatchObject({ status: 409, message: expect.stringMatching(/imported again/) });
+    expect(await db.inventory.count({ where: { user_id: ME } })).toBe(2);
+  });
+
+  it('a restore racing a new import of the same file never leaves both', async () => {
+    const first = await importEb();
+    const undone = await history.undo(ME, first.importId);
+    const preview = await importSold.preview(ME, { source: 'eb', csv: EB_CSV });
+    await Promise.allSettled([
+      activityLog.undoActivity(ME, undone.activity_id),
+      importSold.commit(ME, { source: 'eb', platformId: ids.eb, groups: kept(preview.groups) }),
+    ]);
+    expect(await db.inventory.count({ where: { user_id: ME } })).toBe(2);
+  });
+
+  it('restores an undone import only once when asked twice at once', async () => {
+    const { importId } = await importEb();
+    const undone = await history.undo(ME, importId);
+    const results = await Promise.allSettled([activityLog.undoActivity(ME, undone.activity_id), activityLog.undoActivity(ME, undone.activity_id)]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.find((r) => r.status === 'rejected').reason).toMatchObject({ status: 409 });
+    expect(await db.inventory.count({ where: { user_id: ME } })).toBe(2);
+  });
+
+  it('restores a 3000-purchase import exactly, and can undo that restore', async () => {
+    const rows = Array.from({ length: 3000 }, (_, i) => `2026-11-19,9${i},TBA9${i},Item ${i},1,1,new,DE,S${i},20,20`);
+    const csv = ['Date,Invoice #,Tracking,Item Name,UPC,SKU,Condition,Location,Serial,Sale Price,Owed', ...rows].join('\n');
+    const preview = await importSold.preview(ME, { source: 'eb', csv });
+    const { importId, created } = await importSold.commit(ME, { source: 'eb', platformId: ids.eb, groups: kept(preview.groups) });
+    expect(created).toBe(3000);
+    const all = async () => JSON.stringify(await Promise.all([
+      db.inventory.findMany({ where: { user_id: ME }, orderBy: { id: 'asc' } }),
+      db.sales.findMany({ orderBy: { id: 'asc' } }),
+    ]), (key, v) => (key === 'updated_at' ? undefined : v));
+    const before = await all();
+    const undone = await history.undo(ME, importId);
+    const restored = await activityLog.undoActivity(ME, undone.activity_id);
+    expect((await all()) === before).toBe(true);
+    await activityLog.undoActivity(ME, restored.entry.id);
+    expect(await db.inventory.count()).toBe(0);
+  }, 120000);
+
   it('never shows or undoes another user\'s import', async () => {
     const { importId } = await importEb();
     expect(await history.list(OTHER)).toEqual([]);

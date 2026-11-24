@@ -4,3 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
+| fix-past-import-restore | Past imports: restoring an undone import from Activity works at any size, keeps cashout commitment links, and is refused when the items were imported again | `profit-tracker-api/services/activityLog.js` (undoChange, undoActivity, logRemoved removed), `profit-tracker-api/services/cashouts/importHistory.js`, `profit-tracker-api/test/importHistoryPostgres.test.mjs` | In progress | 2026-11-24 |

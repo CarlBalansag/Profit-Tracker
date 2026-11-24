@@ -21,6 +21,9 @@ const { Prisma } = require('@prisma/client');
 
 const UNDO_WINDOW_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
+// Bringing back a whole cashout import takes longer than Prisma's default 5
+// seconds, more so on a remote database.
+const UNDO_TRANSACTION = { timeout: 120000, maxWait: 10000 };
 
 const requestError = (status, message) => Object.assign(new Error(message), { status });
 
@@ -434,24 +437,6 @@ async function recordEvent(userId, options) {
   }
 }
 
-// Logs rows the caller is about to delete, read in bulk beforehand (a whole
-// cashout import can be thousands of rows, too many to snapshot one by one).
-// rows: { inventory: [row], sales: [row], refund: [row], cashoutCommitment: [row] }.
-// Undo puts every one of them back.
-async function logRemoved(tx, userId, meta, rows) {
-  const before = new Map();
-  for (const model of MODELS) for (const row of rows[model] || []) before.set(`${model}:${row.id}`, row);
-  const changes = diffRows(before, new Map());
-  if (!changes.length) return null;
-  return write(tx, userId, {
-    kind: 'change',
-    recordType: meta.recordType,
-    recordId: meta.recordId,
-    detail: { action: meta.action, product_name: meta.productName ?? null, rows: changes },
-    source: meta.source,
-  });
-}
-
 // What the Activity page calls the record: the product (purchases and sales),
 // the expense name, or the setup record's name (a goal's metric).
 async function nameFor(tx, recordType, recordId, rows) {
@@ -493,26 +478,67 @@ const USED_BY = {
   taxForm1099K: '1099-K forms',
 };
 
+// One undo can hold thousands of rows (a whole cashout import), so rows are
+// read, locked and written a batch at a time, never one query per row.
+const BATCH = 500;
+const batches = (list) => Array.from({ length: Math.ceil(list.length / BATCH) }, (_, i) => list.slice(i * BATCH, (i + 1) * BATCH));
+const byModel = (changes) => {
+  const groups = new Map();
+  for (const c of changes) {
+    if (!groups.has(c.model)) groups.set(c.model, []);
+    groups.get(c.model).push(c);
+  }
+  return groups;
+};
+async function findIn(tx, model, field, values, args = {}) {
+  const found = [];
+  for (const part of batches([...new Set(values)])) found.push(...await tx[model].findMany({ ...args, where: { [field]: { in: part } } }));
+  return found;
+}
+
+// Bringing back a sale that came from a cashout report must not add it a second
+// time: its report rows may have been imported again since it was removed.
+async function refuseImportedAgain(tx, userId, rows) {
+  const refs = rows.filter((c) => c.model === 'sales' && c.op === 'delete').flatMap((c) => c.row.values.import_refs || []);
+  if (!refs.length) return;
+  // The lock an import takes (services/cashouts/importSold.js), before any row
+  // lock, so an import can't add them while this is deciding.
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`cashout-import:${userId}`}))`;
+  for (const part of batches([...new Set(refs)])) {
+    const again = await tx.sales.findFirst({ where: { inventory: { user_id: userId }, import_refs: { hasSome: part } }, select: { id: true } });
+    if (again) throw requestError(409, 'These items were imported again since, so bringing them back would add them twice. Undo the newer import first (Settings > Data > Past imports).');
+  }
+}
+
 async function undoChange(tx, userId, entry, source) {
   const rows = entry.detail.rows || [];
   const refused = changedMessage(entry.record_type);
+  await refuseImportedAgain(tx, userId, rows);
 
   // Lock every row involved first, parents before children. TABLE is a fixed
   // whitelist, so the table name is never user input.
-  for (const change of rows) {
-    if (!TABLE[change.model]) throw requestError(409, 'This entry can\'t be undone.');
-    await tx.$queryRaw`SELECT id FROM ${Prisma.raw(`"${TABLE[change.model]}"`)} WHERE id = ${change.id} FOR UPDATE`;
+  const current = new Map();
+  for (const [model, changes] of byModel(rows)) {
+    if (!TABLE[model]) throw requestError(409, 'This entry can\'t be undone.');
+    const ids = changes.map((c) => c.id);
+    for (const part of batches(ids)) {
+      await tx.$queryRaw`SELECT id FROM ${Prisma.raw(`"${TABLE[model]}"`)} WHERE id IN (${Prisma.join(part)}) ORDER BY id FOR UPDATE`;
+    }
   }
+  for (const [model, changes] of byModel(rows)) {
+    for (const row of await findIn(tx, model, 'id', changes.map((c) => c.id))) current.set(`${model}:${row.id}`, row);
+  }
+  // A sale belongs to whoever owns its purchase.
+  const soldFrom = [...current].filter(([key]) => key.startsWith('sales:')).map(([, row]) => row.inventory_id);
+  const ownerOf = new Map((await findIn(tx, 'inventory', 'id', soldFrom, { select: { id: true, user_id: true } })).map((r) => [r.id, r.user_id]));
 
   // Check everything before writing anything. A link a setup delete cleared
   // (`link: true`) is only put back where it still holds what the delete left:
   // a purchase deleted since, or given another card since, is skipped.
   const skipped = new Set();
   for (const change of rows) {
-    const row = await tx[change.model].findUnique({ where: { id: change.id } });
-    const owner = change.model === 'sales'
-      ? (row ? (await tx.inventory.findUnique({ where: { id: row.inventory_id } }))?.user_id : null)
-      : row?.user_id;
+    const row = current.get(`${change.model}:${change.id}`) || null;
+    const owner = change.model === 'sales' ? (row ? ownerOf.get(row.inventory_id) : null) : row?.user_id;
     if (change.op === 'delete') {
       if (row) throw requestError(409, refused);
       continue;
@@ -533,6 +559,13 @@ async function undoChange(tx, userId, entry, source) {
   const applied = rows.filter((c) => !skipped.has(c));
   // Removing an added record must not take anything else with it.
   const removing = new Set(applied.filter((c) => c.op === 'create').map((c) => `${c.model}:${c.id}`));
+  const added = byModel(applied.filter((c) => c.op === 'create'));
+  const idsOf = (model) => (added.get(model) || []).map((c) => c.id);
+  const salesOn = new Set((await findIn(tx, 'sales', 'inventory_id', idsOf('inventory'), { select: { id: true, inventory_id: true } }))
+    .filter((r) => !removing.has(`sales:${r.id}`)).map((r) => r.inventory_id));
+  const refundsOn = async (model, field) => new Set((await findIn(tx, 'refund', field, idsOf(model), { select: { id: true, [field]: true } }))
+    .filter((r) => !removing.has(`refund:${r.id}`)).map((r) => r[field]));
+  const refunded = { inventory: await refundsOn('inventory', 'inventory_id'), sales: await refundsOn('sales', 'sale_id') };
   for (const change of applied.filter((c) => c.op === 'create')) {
     // A setup record: everything pointing at it now must be part of this undo
     // (removed with it, or unlinked by it). Otherwise removing it would quietly
@@ -545,21 +578,20 @@ async function undoChange(tx, userId, entry, source) {
       if (left) throw requestError(409, `This ${labelFor(entry.record_type)} is used by ${left} ${USED_BY[m] || 'records'} now, so undo can't remove it. Remove it from its own page instead.`);
     }
     if (change.model === 'inventory') {
-      const sales = await tx.sales.findMany({ where: { inventory_id: change.id }, select: { id: true } });
-      if (sales.some((s) => !removing.has(`sales:${s.id}`))) throw requestError(409, 'This purchase has sales recorded since, so it can\'t be removed. Delete those first.');
+      if (salesOn.has(change.id)) throw requestError(409, 'This purchase has sales recorded since, so it can\'t be removed. Delete those first.');
     }
     if (change.model === 'inventory' || change.model === 'sales') {
-      const refunds = (await tx.refund.findMany({ where: change.model === 'inventory' ? { inventory_id: change.id } : { sale_id: change.id }, select: { id: true } }))
-        .filter((r) => !removing.has(`refund:${r.id}`)).length;
-      if (refunds) throw requestError(409, `This ${change.model === 'sales' ? 'sale' : 'purchase'} has refunds recorded since, so it can't be removed. Remove those first.`);
+      if (refunded[change.model].has(change.id)) throw requestError(409, `This ${change.model === 'sales' ? 'sale' : 'purchase'} has refunds recorded since, so it can't be removed. Remove those first.`);
     }
   }
 
   // Write: put removed rows back (parents first), restore edited fields, then
   // remove added rows (children first).
   try {
-    for (const change of applied.filter((c) => c.op === 'delete')) {
-      await tx[change.model].create({ data: { ...rowData(change.row), ...(RESTORE_OVERRIDES[change.model] || {}) } });
+    for (const [model, changes] of byModel(applied.filter((c) => c.op === 'delete'))) {
+      for (const part of batches(changes)) {
+        await tx[model].createMany({ data: part.map((c) => ({ ...rowData(c.row), ...(RESTORE_OVERRIDES[model] || {}) })) });
+      }
     }
     for (const change of applied.filter((c) => c.op === 'update')) {
       const data = Object.fromEntries(Object.entries(change.fields)
@@ -568,8 +600,8 @@ async function undoChange(tx, userId, entry, source) {
       if (change.model === 'expense') data.tax_version = { increment: 1 };
       await tx[change.model].update({ where: { id: change.id }, data });
     }
-    for (const change of applied.filter((c) => c.op === 'create').reverse()) {
-      await tx[change.model].delete({ where: { id: change.id } });
+    for (const [model, changes] of [...added].reverse()) {
+      for (const part of batches(changes)) await tx[model].deleteMany({ where: { id: { in: part.map((c) => c.id) } } });
     }
   } catch (err) {
     // Foreign key / unique conflicts: something else now points at, or took
@@ -760,7 +792,7 @@ async function undoActivity(userId, entryId, { source = 'web' } = {}) {
   if (entry.kind === 'status') {
     created = await prisma.$transaction((tx) => undoStatus(tx, userId, entry, source));
   } else if (entry.kind === 'change') {
-    created = await prisma.$transaction((tx) => undoChange(tx, userId, entry, source));
+    created = await prisma.$transaction((tx) => undoChange(tx, userId, entry, source), UNDO_TRANSACTION);
   } else if (entry.kind === 'refund.add' || entry.kind === 'refund.remove') {
     // Lazy: services/refunds.js requires this module to log its writes.
     const refunds = require('./refunds');
@@ -807,7 +839,6 @@ module.exports = {
   recordEvent,
   SETUP_TYPES,
   linkedRefs,
-  logRemoved,
   listActivity,
   undoActivity,
   // exported for tests
