@@ -4,6 +4,16 @@ import { taxCategories } from '../../../../shared/scheduleC.mjs';
 import { Panel } from '../Analytics/Motion';
 import InfoTip from '../UI/InfoTip';
 import { Pill } from './Tile';
+import { toast } from 'sonner';
+import { apiFetch } from '../../hooks/useApi';
+import { isExpiringReceiptLink, openReceiptInNewTab } from '../../utils/receiptLink';
+
+// A private receipt's link expires after a few minutes: open a fresh one.
+const openFresh = (event, row) => {
+  if (!isExpiringReceiptLink(row.receipt_url)) return;
+  event.preventDefault();
+  openReceiptInNewTab(apiFetch, 'expense', row.id, row.receipt_url).catch((err) => toast.error(err.message));
+};
 
 const usd = (value) => `$${Math.abs(Number(value) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const categoryLabel = (id) => taxCategories.find((c) => c.id === id)?.label || id;
@@ -62,7 +72,7 @@ function ExpenseRow({ row, onReview }) {
         {fromSale
           ? <Link to="/transactions" state={{ openTransaction: { inventoryId: row.inventory_id, saleId: row.sale_id } }} className="page-btn page-btn-secondary !h-9 !px-3 !text-xs">Open sale</Link>
           : <div className="flex gap-2">
-            {/^https:\/\//i.test(row.receipt_url || '') && <a href={row.receipt_url} target="_blank" rel="noreferrer" className="page-btn page-btn-secondary !h-9 !px-3 !text-xs">View receipt</a>}
+            {/^https:\/\//i.test(row.receipt_url || '') && <a href={row.receipt_url} target="_blank" rel="noreferrer" onClick={(e) => openFresh(e, row)} className="page-btn page-btn-secondary !h-9 !px-3 !text-xs">View receipt</a>}
             <button type="button" onClick={() => onReview(row)} className={`page-btn !h-9 !px-3 !text-xs ${row.status === 'pending' ? 'page-btn-primary' : 'page-btn-secondary'}`}><span aria-hidden="true">{row.status === 'pending' ? 'Review' : 'Edit'}</span><span className="sr-only">Review {row.name}</span></button>
           </div>}
       </div>

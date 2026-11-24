@@ -6,7 +6,7 @@ const cloudinary = require('cloudinary').v2;
 const { validateBody } = require('../middleware/validate');
 const { attachReceipt, detachReceipt } = require('../validation/schemas');
 const { grossBatchCost } = require('../services/decimalFinance');
-const { privateRef, receiptLink, withReceiptLink } = require('../services/privateReceipts');
+const { privateRef, isPrivateRef, receiptLink, withReceiptLink } = require('../services/privateReceipts');
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -18,6 +18,28 @@ const isAuthenticated = (req, res, next) => {
   if (req.user) return next();
   res.status(401).json({ message: 'Unauthorized' });
 };
+
+// GET /api/receipts/link?itemType=inventory|expense&itemId=<id> — a fresh link
+// to one receipt. A private receipt's signed link expires after a few minutes,
+// and a page can stay open (or cached) for longer, so the app asks for a new
+// one each time a receipt is opened. Owner-only.
+router.get('/link', isAuthenticated, async (req, res, next) => {
+  try {
+    const { itemType, itemId } = req.query;
+    if (!['inventory', 'expense'].includes(itemType) || typeof itemId !== 'string' || !itemId) {
+      return res.status(400).json({ error: 'itemType must be inventory or expense, with an itemId' });
+    }
+    const model = itemType === 'inventory' ? prisma.inventory : prisma.expense;
+    const row = await model.findFirst({ where: { id: itemId, user_id: req.user.id }, select: { id: true, receipt_url: true } });
+    if (!row || !row.receipt_url) return res.status(404).json({ error: 'Receipt not found' });
+    const link = receiptLink(row.receipt_url, itemType, row.id);
+    if (!link) return res.status(404).json({ error: "This receipt can't be opened right now." });
+    res.set('Cache-Control', 'no-store');
+    res.json({ receipt_url: link, receipt_private: isPrivateRef(row.receipt_url) });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // GET /api/receipts — returns all inventory + expense items split by receipt status
 router.get('/', isAuthenticated, async (req, res, next) => {

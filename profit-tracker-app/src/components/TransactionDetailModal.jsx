@@ -14,6 +14,7 @@ import TransactionNotesPanel from './TransactionNotesPanel';
 import RefundsPanel from './RefundsPanel';
 import { recordStatusLabel } from '../data/statusWorkflow';
 import { RECEIPT_ACCEPT, MAX_RECEIPT_BYTES, attachInventoryReceipt, readReceiptFile, validateReceiptFile } from '../hooks/receiptUpload';
+import { isExpiringReceiptLink, openReceiptInNewTab } from '../utils/receiptLink';
 
 const STATUSES = ['Pre Order', 'PURCHASED', 'SHIPPED_IN', 'DELIVERED', 'SCANNED_IN', 'LISTED', 'SOLD', 'SHIPPED_OUT', 'AUTHENTICATION', 'PAID', 'COMPLETED', 'RETURNED', 'DISPUTED', 'CANCELLED'];
 // Same list as Add Transaction.
@@ -595,7 +596,18 @@ export default function TransactionDetailModal({ row, onClose, onSaved, platform
                     />
                   </label>
                   {/^https:\/\//i.test(form.receipt_url || '') && (
-                    <a href={form.receipt_url} target="_blank" rel="noreferrer" className="text-xs text-[var(--dp-accent)] underline">View receipt</a>
+                    <a
+                      href={form.receipt_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-[var(--dp-accent)] underline"
+                      onClick={e => {
+                        // A private receipt's link expires: open a fresh one.
+                        if (!isExpiringReceiptLink(form.receipt_url)) return;
+                        e.preventDefault();
+                        openReceiptInNewTab(apiFetch, 'inventory', row.rawId, form.receipt_url).catch(err => toast.error(err.message));
+                      }}
+                    >View receipt</a>
                   )}
                 </div>
                 <p className="text-[11px] text-gray-600 mt-1.5">JPEG, PNG, WebP, GIF, or PDF up to {MAX_RECEIPT_BYTES / (1024 * 1024)} MB. Saved right away.</p>
