@@ -18,6 +18,13 @@
 
 export const AI_GUIDE_UPDATES = [
   {
+    version: '1.50',
+    date: '2026-11-24',
+    notes: [
+      'Calls are now limited per API key: about 1,200 in any 15 minutes. Past that, calls fail with "Too many requests from this API key" until the window passes. Nothing is saved by a refused call, so wait a few minutes and repeat it; do not retry in a tight loop. For big jobs, prefer one find_records or list call over many single lookups.',
+    ],
+  },
+  {
     version: '1.47',
     date: '2026-11-21',
     notes: [
@@ -57,6 +64,7 @@ GROUND RULES
 - Never invent ids. Get them from list_*, search or find_records.
 - Dates are YYYY-MM-DD. Money is in dollars.
 - Before adding a purchase or sale, run find_records (order number, tracking number, or product name) so you don't create a duplicate.
+- Calls are limited per API key (about 1,200 in any 15 minutes). A call refused with "Too many requests from this API key" saved nothing: wait a few minutes, then repeat it. Don't retry in a tight loop, and prefer one find_records or list call over many single lookups.
 
 HOW THE DATA FITS TOGETHER
 - A purchase (inventory row) is one order of an item: qty, unit cost, store, card used, plus optional sales tax, inbound shipping, fees and gift card. Its total cost is worked out, never stored: unit_cost x qty + tax + shipping + fees - gift card - store refunds. To change it, change those parts.
