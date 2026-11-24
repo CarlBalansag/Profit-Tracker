@@ -26,6 +26,13 @@ export function formatDealProfit(profit) {
   };
 }
 
+// ROI: the profit as a share of what goes in (retail, no sales tax), labelled
+// for the screen: "+9.1% ROI". Nothing when there's no profit to compare.
+export function formatDealRoi(profit) {
+  if (!profit || !Number.isFinite(Number(profit.pct)) || !Number.isFinite(Number(profit.amount))) return null;
+  return `${formatDealProfit({ amount: Number(profit.amount), pct: Number(profit.pct) }).pct} ROI`;
+}
+
 // Above Retail pays more than retail and Close to Retail pays retail or less. A
 // deal with no retail price only appears under All Categories.
 export function matchesRetailCategory(deal, category) {

@@ -45,6 +45,7 @@ import { useModalKeyboard } from '../hooks/useModalKeyboard';
 import { offerPendingCommit, offerTrackingSend } from '../utils/pendingCashoutCommit';
 import {
   bestCardForDeal,
+  formatDealRoi,
   dealConditionLabels,
   dealLimitLabel,
   dealStoreNames,
@@ -647,14 +648,14 @@ export default function Cashout() {
                       <th className="py-3 px-3 text-right">Retail</th>
                       <th
                         className="py-3 px-3 text-right whitespace-nowrap"
-                        title="Payout minus retail. Doesn't include sales tax, cashback or coupons."
+                        title="Payout minus retail, and the ROI: that profit as a percent of retail. Doesn't include sales tax, cashback or coupons."
                       >
                         Est. Profit
                         <span className="block font-normal normal-case tracking-normal">before tax</span>
                       </th>
                       <th
                         className="py-3 px-3 whitespace-nowrap text-center"
-                        title="Your saved card that earns the most at one of this deal's stores, and the profit with its cashback on retail."
+                        title="Your saved card that earns the most at one of this deal's stores, the profit with its cashback on retail, and that profit's ROI (percent of retail)."
                       >
                         Best Card
                         <span className="block font-normal normal-case tracking-normal">profit with rewards</span>
@@ -859,7 +860,7 @@ function EstProfit({ profit, expired = false }) {
   return (
     <div className="tabular-nums">
       <div className={`text-sm font-bold ${PROFIT_TONES[expired ? 'neutral' : tone]}`}>{amount}</div>
-      <div className="text-[12px] text-[var(--dp-text-label)]">{pct}</div>
+      <div className="text-[12px] text-[var(--dp-text-label)]">{pct} ROI</div>
     </div>
   );
 }
@@ -882,6 +883,7 @@ function BestCard({ best, expired = false, inline = false }) {
   const rate = `${Math.round(best.rate * 100) / 100}%`;
   const earns = best.store ? `${rate} at ${best.store}` : rate;
   const profit = best.profit ? formatDealProfit(best.profit) : null;
+  const roi = best.profit ? formatDealRoi(best.profit) : null;
   const cardLabel = best.card.last4 ? `${best.card.name} (${best.card.last4})` : best.card.name;
   const cashbackNote = best.cashback !== null ? `, $${formatMoney(best.cashback)} back on retail` : '';
   return (
@@ -891,6 +893,7 @@ function BestCard({ best, expired = false, inline = false }) {
       {profit && (
         <div className={`tabular-nums text-sm font-bold ${PROFIT_TONES[expired ? 'neutral' : profit.tone]}`}>{profit.amount}</div>
       )}
+      {roi && <div className="tabular-nums text-[12px] text-[var(--dp-text-label)]">{roi}</div>}
     </div>
   );
 }

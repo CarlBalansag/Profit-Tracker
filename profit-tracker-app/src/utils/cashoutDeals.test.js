@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bestCardForDeal, groupDealsByProduct } from './cashoutDeals';
+import { bestCardForDeal, estimateDealProfit, formatDealRoi, groupDealsByProduct } from './cashoutDeals';
 
 const link = (name) => ({ name, url: `https://${name.toLowerCase().replace(/\s/g, '')}.com/item` });
 const deal = (stores, { payout = 210, retail = 200 } = {}) => ({
@@ -85,5 +85,26 @@ describe('bestCardForDeal', () => {
     expect(best).toMatchObject({ store: 'Amazon', rate: 5, cashback: 10 });
     // $220 best payout - $200 retail + $10 cashback
     expect(best.profit.amount).toBe(30);
+  });
+});
+
+describe('formatDealRoi', () => {
+  it('labels the profit as a percent of retail', () => {
+    expect(formatDealRoi(estimateDealProfit({ payout: 120, retail: 110 }))).toBe('+9.09% ROI');
+    expect(formatDealRoi(estimateDealProfit({ payout: 95, retail: 100 }))).toBe('-5% ROI');
+    expect(formatDealRoi(estimateDealProfit({ payout: 100, retail: 100 }))).toBe('0% ROI');
+    expect(formatDealRoi(estimateDealProfit({ payout: 1000.01, retail: 1000 }))).toBe('~0% ROI');
+  });
+
+  it("includes the best card's rewards when given that profit", () => {
+    const best = bestCardForDeal(deal(['Amazon'], { payout: 210, retail: 200 }), [prime]);
+    expect(formatDealRoi(best.profit)).toBe('+10% ROI');
+  });
+
+  it('shows nothing with no retail price or no cost', () => {
+    expect(formatDealRoi(estimateDealProfit({ payout: 100, retail: null }))).toBeNull();
+    expect(formatDealRoi(estimateDealProfit({ payout: 100, retail: 0 }))).toBeNull();
+    expect(formatDealRoi(null)).toBeNull();
+    expect(formatDealRoi({ amount: 5, pct: NaN })).toBeNull();
   });
 });

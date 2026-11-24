@@ -273,10 +273,31 @@ describe('Cashout Page', () => {
 
     expect(screen.getByText('Est. Profit')).toBeInTheDocument();
     expect(screen.getByText('+$240.01')).toBeInTheDocument();
-    expect(screen.getByText('+26.67%')).toBeInTheDocument();
+    expect(screen.getByText('+26.67% ROI')).toBeInTheDocument();
     expect(screen.getByText('-$5.00')).toBeInTheDocument();
-    expect(screen.getByText('-12.5%')).toBeInTheDocument();
+    expect(screen.getByText('-12.5% ROI')).toBeInTheDocument();
     expect(screen.getByText('No Retail Deal').closest('tr')).toHaveTextContent('—');
+    expect(screen.getByText('No Retail Deal').closest('tr')).not.toHaveTextContent('ROI');
+  });
+
+  it('shows the ROI in card view too, and none for a deal with no retail price', () => {
+    localStorage.setItem('cashoutViewMode', 'card');
+    currentPaymentMethods = [{ id: 'flat', name: 'Flat 2%', default_cashback_rate: 2, category_rates: [] }];
+    currentDeals = {
+      results: [{
+        connection: mockConnections[0],
+        deals: [
+          { id: '1', name: 'Gain Deal', retail: 200, payout: 220 },
+          { id: '3', name: 'No Retail Deal', retail: null, payout: 50 },
+        ],
+      }],
+    };
+    render(<MemoryRouter><Cashout /></MemoryRouter>);
+    const gain = screen.getByText('Gain Deal').closest('article');
+    expect(within(gain).getByText('+10% ROI')).toBeInTheDocument();
+    // with the 2% card: $20 + $4 on $200
+    expect(within(gain).getByText('+12% ROI')).toBeInTheDocument();
+    expect(screen.getByText('No Retail Deal').closest('article')).not.toHaveTextContent('ROI');
   });
 
   it('filters by category: all deals, above retail, or at or below retail', () => {
@@ -1628,6 +1649,8 @@ describe('Cashout Page', () => {
       expect(within(cell).getByText('5% at Amazon')).toBeInTheDocument();
       // $10 deal profit + 5% of $200 retail
       expect(within(cell).getByText('+$20.00')).toBeInTheDocument();
+      // ROI on what goes in: $20 on $200 retail
+      expect(within(cell).getByText('+10% ROI')).toBeInTheDocument();
     });
 
     it('skips an expired store rate', () => {
@@ -1641,6 +1664,7 @@ describe('Cashout Page', () => {
       expect(within(cell).getByText('Flat 2%')).toBeInTheDocument();
       expect(within(cell).getByText('2% at Amazon')).toBeInTheDocument();
       expect(within(cell).getByText('+$14.00')).toBeInTheDocument();
+      expect(within(cell).getByText('+7% ROI')).toBeInTheDocument();
     });
 
     it('links to Payment Methods when no card is saved', () => {

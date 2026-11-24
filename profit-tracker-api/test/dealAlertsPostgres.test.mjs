@@ -176,7 +176,26 @@ describe('notification text', () => {
       alert: { id: 'x', kind: 'payout_up', previous_payout: 52, deal: { provider: 'p4d', name: 'Pencil USB-C', stores: ['Walmart'] } },
       evaluation: { payout: 57, retail: 49, profit: 8.98, rewards: 0.98, best_card: { card: { name: 'Blue Business Plus Credit Card from American Express' }, rate: 2, store: 'Walmart' } },
     }]);
-    expect(payload).toMatchObject({ title: 'P4D: Pencil USB-C (payout up)', body: 'Cashout $57 (was $52), $49 at Walmart -> +$8.98 Blue Business Plus', url: '/cashout?tab=new-deals&alert=x' });
+    expect(payload).toMatchObject({ title: 'P4D: Pencil USB-C (payout up)', body: 'Cashout $57 (was $52), $49 at Walmart -> +$8.98 (+18.3% ROI) Blue Business Plus', url: '/cashout?tab=new-deals&alert=x' });
+  });
+
+  it('puts the ROI (profit over retail, rewards included) after the profit, and none without a retail price', () => {
+    expect(alerts.roiLabel({ profit: 8.98, retail: 49 })).toBe('+18.3% ROI');
+    expect(alerts.roiLabel({ profit: -2.5, retail: 100 })).toBe('-2.5% ROI');
+    expect(alerts.roiLabel({ profit: 0.01, retail: 1000 })).toBe('0% ROI');
+    expect(alerts.roiLabel({ profit: null, retail: 49 })).toBeNull();
+    expect(alerts.roiLabel({ profit: 5, retail: 0 })).toBeNull();
+    expect(alerts.roiLabel({ profit: 5, retail: null })).toBeNull();
+    const loss = alerts.buildPayload([{
+      alert: { id: 'y', kind: 'new', deal: { provider: 'eb', name: 'Switch', stores: ['Target'] } },
+      evaluation: { payout: 290, retail: 300, profit: -10, rewards: null, best_card: null },
+    }]);
+    expect(loss.body).toBe('Cashout $290, $300 at Target -> -$10 (-3.3% ROI)');
+    const noRetail = alerts.buildPayload([{
+      alert: { id: 'z', kind: 'new', deal: { provider: 'eb', name: 'Mystery', stores: [] } },
+      evaluation: { payout: 50, retail: null, profit: null, rewards: null, best_card: null },
+    }]);
+    expect(noRetail.body).toBe('Cashout $50, no retail price');
   });
 });
 
@@ -188,6 +207,7 @@ describe('evaluateDeal', () => {
     expect(result.spread).toBe(80.01);
     expect(result.rewards).toBe(35);
     expect(result.profit).toBe(115.01);
+    expect(result.roi).toBe(16.43);
     // At another store the flat 2% card wins.
     expect(alerts.evaluateDeal({ payout: 780, retail: 699.99, stores: ['Walmart'] }, cards).best_card.card.name).toBe('Flat 2%');
   });
@@ -210,10 +230,10 @@ describe('dispatchDealAlerts', () => {
     const byUser = Object.fromEntries(sent.map((entry) => [entry.endpoint.split('/').pop(), entry]));
     expect(Object.keys(byUser).sort()).toEqual([ALICE, BOB].sort());
     expect(byUser[ALICE].title).toBe('EB: PS5 Pro');
-    expect(byUser[ALICE].body).toBe('Cashout $780, $699.99 at Best Buy -> +$115.01 BB Visa');
+    expect(byUser[ALICE].body).toBe('Cashout $780, $699.99 at Best Buy -> +$115.01 (+16.4% ROI) BB Visa');
     expect(byUser[ALICE].url).toMatch(/^\/cashout\?tab=new-deals&alert=/);
     // Bob: 80.01 + 1.5% of 699.99 = 90.51, above his $50.
-    expect(byUser[BOB].body).toBe('Cashout $780, $699.99 at Best Buy -> +$90.51 Bob Card');
+    expect(byUser[BOB].body).toBe('Cashout $780, $699.99 at Best Buy -> +$90.51 (+12.9% ROI) Bob Card');
 
     // Sent once: a second run sends nothing.
     sent = [];
@@ -247,7 +267,7 @@ describe('dispatchDealAlerts', () => {
     await alerts.dispatchDealAlerts();
     const alice = sent.find((entry) => entry.endpoint.endsWith(ALICE));
     expect(alice.title).toBe('3 new cashout deals');
-    expect(alice.body.split('\n')).toEqual(['EB: Big +$235', 'EB: Mid +$67.50', 'EB: Small +$15']);
+    expect(alice.body.split('\n')).toEqual(['EB: Big +$235 (+33.6% ROI)', 'EB: Mid +$67.50 (+19.3% ROI)', 'EB: Small +$15 (+15% ROI)']);
   });
 
   it('holds nothing back for quiet hours: those deals are skipped, the feed keeps them', async () => {

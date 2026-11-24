@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { BellRing, ExternalLink, Sparkles } from 'lucide-react';
 import { useCashoutDealAlerts } from '../../hooks/useApi';
 import { formatMoney } from '../../utils/money';
+import { formatDealRoi } from '../../utils/cashoutDeals';
 
 // Cashout page > New deals: the last week of deals cashouts dropped (from
 // every cashout Profit Tracker syncs, connected here or not), newest first,
@@ -72,6 +73,9 @@ function DealRow({ item, highlighted, alertsOn }) {
           {item.profit !== null ? (
             <>
               <p className={`text-lg font-bold tabular-nums ${tone(item.profit)}`}>{signedMoney(item.profit)}</p>
+              {item.roi !== null && item.roi !== undefined && (
+                <p className="text-[12px] font-medium tabular-nums text-[var(--dp-text-secondary)]">{formatDealRoi({ amount: item.profit, pct: item.roi })}</p>
+              )}
               <p className="text-[12px] text-[var(--dp-text-label)]">
                 {best && item.rewards ? `incl. ${money(item.rewards)} back with ${best.card.name} (${Math.round(best.rate * 100) / 100}%)` : 'No card rewards counted'}
               </p>
