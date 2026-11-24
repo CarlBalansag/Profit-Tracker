@@ -87,6 +87,7 @@ router.get('/', isAuthenticated, async (req, res, next) => {
             refunded_amount: true, refunded_qty: true, restored_qty: true,
             workflow_type: true, workflow_status: true, workflow_status_changed_at: true,
             taxable: true, sale_tax_collected: true, customer_tax_exempt: true, exemption_type: true,
+            tracking_number: true,
             unit_price_decimal: true, commission_fee_decimal: true, sale_shipping_decimal: true, sale_tax_collected_decimal: true,
             platform: { select: { id: true, name: true, type: true, tax_exempt_place: true } },
             buyer: { select: { id: true, name: true } },

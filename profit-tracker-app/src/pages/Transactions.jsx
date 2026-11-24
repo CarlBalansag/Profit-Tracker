@@ -22,6 +22,7 @@ import { detectCarrier } from '../utils/carrier';
 import { orderTransactionRows } from '../utils/transactionRowOrder';
 import { recordStatusLabel } from '../data/statusWorkflow';
 import { formatMoney, formatDollars, formatSignedDollars } from '../utils/money';
+import { csvText, downloadFile } from '../utils/downloads';
 import LoadError from '../components/UI/LoadError';
 
 // ─── Inline editable cell input ───────────────────────────────────────────────
@@ -504,6 +505,7 @@ const Transactions = () => {
         shipping: Number(inv.shipping_cost_inbound) || 0,
         category: inv.category || null,
         tracking_number: inv.tracking_number || null,
+        account: inv.account?.name || '',
         refundedAmount: Number(inv.refunded_amount) || 0,
         refundedUnits: Number(inv.refunded_qty) || 0,
       });
@@ -551,6 +553,8 @@ const Transactions = () => {
           shipping: allocatedShipping,
           category: inv.category || null,
           tracking_number: inv.tracking_number || null,
+          saleTracking: sale.tracking_number || null,
+          account: inv.account?.name || '',
           rawCommission: sale.commission_fee,
           refundedAmount: Number(sale.refunded_amount) || 0,
           refundedUnits: Number(sale.refunded_qty) || 0,
@@ -616,6 +620,42 @@ const Transactions = () => {
     }
     return true;
   });
+
+  // Every row the filters leave, in the order shown (not just the cards a phone
+  // has loaded). Money goes out as plain numbers, so a spreadsheet can add it up
+  // and a loss isn't mistaken for a formula. Dates are the local day shown here.
+  // The byte order mark makes Excel read names like "Pokémon" correctly.
+  const exportCSV = () => {
+    if (!filteredRows.length) {
+      toast.error('No transactions to export');
+      return;
+    }
+    const day = (value) => new Date(value).toLocaleDateString('en-CA');
+    const amount = (value) => (value != null && Number.isFinite(Number(value)) ? roundCents(Number(value)) : '');
+    const records = filteredRows.map(row => ({
+      Date: row.rawDate ? day(row.rawDate) : '',
+      Type: row.isSale ? 'Sale' : 'Purchase',
+      Product: row.product || '',
+      Category: row.category || '',
+      Vendor: row.vendor || '',
+      'Store Account': row.account || '',
+      Platform: row.platform || '',
+      Quantity: row.qty ?? '',
+      Cost: amount(row.cost),
+      'Sale Amount': amount(row.sale),
+      Fees: amount(row.fees),
+      Shipping: amount(row.shipping),
+      Tax: amount(row.tax),
+      Cashback: amount(row.cashback),
+      Profit: amount(row.profit),
+      'Payment Method': row.payment || '',
+      Status: recordStatusLabel(row.status),
+      // A sale's own number, never the one its purchase arrived under.
+      'Tracking Number': (row.isSale ? row.saleTracking : row.tracking_number) || '',
+    }));
+    downloadFile(`transactions-${day(Date.now())}.csv`, `\uFEFF${csvText(records)}`, 'text/csv;charset=utf-8');
+    toast.success(`Exported ${records.length} row${records.length === 1 ? '' : 's'} to CSV`);
+  };
 
   // The card list below shows up to the md breakpoint.
   const phoneRows = usePhoneList(filteredRows, { query: '(max-width: 767px)' });
@@ -786,8 +826,9 @@ const Transactions = () => {
               </div>
             )}
           </div>
-          <button 
-            onClick={() => toast('Coming Soon')}
+          <button
+            type="button"
+            onClick={exportCSV}
             className="page-btn page-btn-secondary page-btn-sm"
           >
             <Download className="w-3.5 h-3.5" /> CSV
