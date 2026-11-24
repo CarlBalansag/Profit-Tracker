@@ -79,7 +79,8 @@ function toDeal(deal) {
     createdAt: null,
     avgRemainingPercentage: null,
     commitRequired: deal.commitRequired,
-    dealUrl: deal.url,
+    // The site itself when the deal row carries no usable link of its own.
+    dealUrl: deal.url || BASE_URL,
     items: items.map((item) => ({
       id: item.id,
       name: item.name,

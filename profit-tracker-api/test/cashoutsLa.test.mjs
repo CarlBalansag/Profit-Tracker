@@ -159,6 +159,12 @@ describe('LA (EarnFromBuying) cashout adapter', () => {
     });
   });
 
+  it('links to the site itself when a deal has no usable link of its own', async () => {
+    site.rows = [dealRow(1, { t_f_deal_link: '' }), dealRow(2, { t_f_deal_link: 'https://evil.example/deal/2' }), dealRow(3)];
+    const deals = await laAdapter.fetchDeals(LOGIN);
+    expect(deals.map((d) => d.dealUrl)).toEqual([BASE, BASE, `${BASE}/p/it@deals/deal/3`]);
+  });
+
   it('reuses cached session on subsequent fetch', async () => {
     await laAdapter.fetchDeals(LOGIN);
     const firstCallCount = site.calls.length;

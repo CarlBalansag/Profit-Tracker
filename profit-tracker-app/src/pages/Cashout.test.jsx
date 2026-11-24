@@ -1409,18 +1409,45 @@ describe('Cashout Page', () => {
       fireEvent.change(screen.getByLabelText('Payment method'), { target: { value: 'card-1' } });
     };
 
-    it('needs a tracking number, says it does not commit, and sells to the matching group', async () => {
+    it.each([
+      ['p4d', 'Points4Days', 'https://www.points4days.com/f/x'],
+      ['la', 'LA', 'https://www.earnfrombuying.com'],
+    ])('saves without a tracking number, then says to commit and links to the cashout (%s)', async (id, name, dealUrl) => {
+      currentProviders = [...mockProviders, { id, name, credentialType: 'login', supportsCommits: false }];
+      currentDeals.results[0].connection = { ...p4dConnection, provider: id, platformId: 'group-p4d' };
+      currentDeals.results[0].deals[0].dealUrl = dealUrl;
+      openForm();
+      expect(screen.getByLabelText('Tracking number')).toHaveAttribute('placeholder', 'Blank if it hasn’t shipped yet');
+      await act(async () => {
+        fireEvent.click(screen.getAllByRole('button', { name: 'Log Purchase' }).at(-1)); // the form's own button
+      });
+
+      expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledTimes(1);
+      expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ deal_id: 'p1', tracking_codes: [] }));
+      const dialog = within(screen.getByRole('dialog', { name: `Make sure to commit to ${name}` }));
+      expect(dialog.getByText(/When it ships, send them the tracking number/)).toBeInTheDocument();
+      expect(dialog.queryByRole('button', { name: 'Copy' })).not.toBeInTheDocument();
+      const link = dialog.getByRole('link', { name: `Go to ${name}` });
+      expect(link).toHaveAttribute('href', dealUrl);
+      expect(link).toHaveAttribute('target', '_blank');
+      await waitFor(() => expect(link).toHaveFocus());
+    });
+
+    it('shows the server error in the form and no commit reminder when the save fails', async () => {
+      mockMutations.logPurchase.mutateAsync.mockRejectedValueOnce(new Error('Store is required.'));
+      openForm();
+      await act(async () => {
+        fireEvent.click(screen.getAllByRole('button', { name: 'Log Purchase' }).at(-1));
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent('Store is required.');
+      expect(screen.queryByRole('heading', { name: /Make sure to commit/ })).not.toBeInTheDocument();
+    });
+
+    it('with a tracking number, says it does not commit, and sells to the matching group', async () => {
       openForm();
       expect(screen.getByText(/doesn't commit or send tracking to Points4Days/)).toBeInTheDocument();
       expect(screen.getByLabelText('Sold to')).toHaveValue('group-p4d');
       expect(screen.queryByLabelText(/Insured value/)).not.toBeInTheDocument();
-
-      // No tracking number: the form stops before saving anything.
-      await act(async () => {
-        fireEvent.click(screen.getAllByRole('button', { name: 'Log Purchase' }).at(-1)); // the form's own button
-      });
-      expect(screen.getByText(/A tracking number is required/)).toBeInTheDocument();
-      expect(mockMutations.logPurchase.mutateAsync).not.toHaveBeenCalled();
 
       fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: ' 1Z999AA10123456784 ' } });
       await act(async () => {
@@ -1437,15 +1464,15 @@ describe('Cashout Page', () => {
       }));
       // No confirm step for Points4Days: it saves, then says to commit on their site.
       expect(mockMutations.logPurchase.mutateAsync).toHaveBeenCalledTimes(1);
-      expect(screen.getByRole('heading', { name: 'Saved. Now commit on Points4Days' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Make sure to commit to Points4Days' })).toBeInTheDocument();
       expect(screen.getByText(/doesn't know about them yet/)).toBeInTheDocument();
       expect(screen.getByText('1Z999AA10123456784')).toBeInTheDocument();
-      const open = within(screen.getByRole('dialog')).getByRole('link', { name: /Open on Points4Days/ });
+      const open = within(screen.getByRole('dialog')).getByRole('link', { name: /Go to Points4Days/ });
       expect(open).toHaveAttribute('href', 'https://www.points4days.com/f/x');
       await waitFor(() => expect(open).toHaveFocus());
 
       fireEvent.click(screen.getByRole('button', { name: 'Done' }));
-      expect(screen.queryByRole('heading', { name: /Saved/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: /Make sure to commit/ })).not.toBeInTheDocument();
     });
 
     it('asks which group the sale goes to when none matches', async () => {

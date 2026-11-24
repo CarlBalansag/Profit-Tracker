@@ -48,11 +48,11 @@ const required = (value, label) => {
  * that sale later offers to commit then (see pendingCommit.js), at EB's payout
  * at that moment.
  *
- * Cashouts we can't commit to yet (Points4Days) skip steps 1 and 2: this only
- * writes the purchase and sale, and the user commits and sends tracking on the
- * cashout's own website. A tracking number is still required, as it is for EB:
- * Log Purchase is only for items that have shipped. It's saved on the sale only,
- * never sent anywhere. No commitment row is made, since nothing was committed here.
+ * Cashouts we can't commit to yet (LA, Points4Days) skip steps 1 and 2: this
+ * only writes the purchase and sale, and the user commits and sends tracking on
+ * the cashout's own website. A tracking number is optional; when given it's
+ * saved on the sale only, never sent anywhere. No commitment row is made, since
+ * nothing was committed here.
  *
  * The sale goes to the connection's linked cashout group, or to `platformId`
  * when the form picks one (a connection with no group linked yet).
@@ -90,9 +90,6 @@ async function logPurchase(userId, {
     commitsService.cleanQuantity(qty);
     if (codes.length) codes = commitsService.cleanTrackingCodes(codes);
     insured = commitsService.cleanInsuredValue(insuredValue);
-  }
-  if (codes.length === 0 && recordOnly) {
-    throw Object.assign(new Error('At least one tracking number is required.'), { status: 400 });
   }
   // EB with no tracking number: record now, commit once it ships.
   const deferCommit = !recordOnly && codes.length === 0;
