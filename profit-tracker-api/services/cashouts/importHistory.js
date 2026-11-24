@@ -104,27 +104,25 @@ async function undo(userId, id, { source = 'web' } = {}) {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`cashout-import:${userId}`}))`;
     const batch = await ownedBatch(userId, id, tx);
     await tx.$queryRaw`SELECT id FROM "Inventory" WHERE import_batch_id = ${batch.id} AND user_id = ${userId} FOR UPDATE`;
-    const inventory = await tx.inventory.findMany({ where: { user_id: userId, import_batch_id: batch.id } });
-    if (!inventory.length) throw Object.assign(new Error('Everything from this import is already gone.'), { status: 409 });
-    const ids = inventory.map((r) => r.id);
-    const sales = await tx.sales.findMany({ where: { inventory_id: { in: ids } } });
-    const saleIds = sales.map((s) => s.id);
-    const refund = await tx.refund.findMany({
-      where: { OR: [{ inventory_id: { in: ids } }, ...(saleIds.length ? [{ sale_id: { in: saleIds } }] : [])] },
-    });
-    const cashoutCommitment = saleIds.length ? await tx.cashoutCommitment.findMany({ where: { sale_id: { in: saleIds } } }) : [];
+    const ids = (await tx.inventory.findMany({ where: { user_id: userId, import_batch_id: batch.id }, select: { id: true } })).map((r) => r.id);
+    if (!ids.length) throw Object.assign(new Error('Everything from this import is already gone.'), { status: 409 });
+    const idsOf = async (model, where) => (await tx[model].findMany({ where, select: { id: true } })).map((r) => r.id);
+    const saleIds = await idsOf('sales', { inventory_id: { in: ids } });
+    const refundIds = await idsOf('refund', { OR: [{ inventory_id: { in: ids } }, { sale_id: { in: saleIds } }] });
+    const commitmentIds = await idsOf('cashoutCommitment', { sale_id: { in: saleIds } });
 
     const label = SOURCES[batch.source] || batch.source;
-    const activity = await activityLog.logRemoved(tx, userId, {
+    // Sales and refunds go with their purchase (ON DELETE CASCADE); a cashout
+    // commitment stays and loses its sale link (SET NULL), as a single delete
+    // does. trackChange logs each as what happened to it.
+    const { activity } = await activityLog.trackChange(tx, userId, {
       action: 'delete',
       recordType: 'purchase',
       recordId: ids[0],
       productName: `${label} import (${ids.length} purchase${ids.length === 1 ? '' : 's'})`,
       source,
-    }, { inventory, sales, refund, cashoutCommitment });
-    // Sales and refunds go with their purchase (ON DELETE CASCADE); a cashout
-    // commitment loses its sale link (SET NULL), as a single delete does.
-    await tx.inventory.deleteMany({ where: { id: { in: ids }, user_id: userId } });
+      refs: () => ({ inventory: ids, sales: saleIds, refund: refundIds, cashoutCommitment: commitmentIds }),
+    }, () => tx.inventory.deleteMany({ where: { id: { in: ids }, user_id: userId } }));
     return { removed: ids.length, sales: saleIds.length, activity_id: activity?.id ?? null };
   }, { timeout: 120000, maxWait: 10000 });
 }
