@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.49',
+    date: '2026-11-23',
+    notes: "New Schedule C page that plans your taxes from your records, and Email: connect your inbox in Settings and store emails get matched to your purchases, fill in shipping and return dates, and mark cash-out sales paid, with every automatic change listed on the new Automation page where you can undo it. Settings > Data can now import your sold cash-out items and fill in their costs from a store order file, and Cashout can alert you to new deals.",
+  },
+  {
     version: '1.48',
     date: '2026-11-22',
     notes: "Cashout now shows which store account you bought each item on: a new Account column in Commitments, and in the commit, tracking and withdraw prompts. Log Purchase picks your last account at that store and shows how many of the item each account already bought.",
