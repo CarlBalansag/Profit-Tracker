@@ -170,6 +170,19 @@ describe('cashout deal alert settings', () => {
     expect(cleared.body).toMatchObject({ deal_alerts: true, deal_providers: [], deal_stores: [], deal_quiet_from: null, deal_quiet_to: null });
   });
 
+  it('saves and clears the minimum ROI', async () => {
+    expect((await request('GET', '/api/push/settings')).body.deal_min_roi).toBeNull();
+    const saved = await request('PUT', '/api/push/settings', { deal_min_roi: 7.5 });
+    expect(saved.status).toBe(200);
+    expect(saved.body.deal_min_roi).toBe(7.5);
+    expect((await request('PUT', '/api/push/settings', { deal_min_roi: null })).body.deal_min_roi).toBeNull();
+    const bad = await Promise.all([
+      request('PUT', '/api/push/settings', { deal_min_roi: 'high' }),
+      request('PUT', '/api/push/settings', { deal_min_roi: 5000 }),
+    ]);
+    expect(bad.map((res) => res.status)).toEqual([400, 400]);
+  });
+
   it('rejects unknown cashouts, half-set quiet hours and bad numbers', async () => {
     const bad = await Promise.all([
       request('PUT', '/api/push/settings', { deal_providers: ['nope'] }),

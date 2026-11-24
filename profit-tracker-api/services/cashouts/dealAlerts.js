@@ -10,7 +10,7 @@
 //      connecting a cashout doesn't announce every deal it already has.
 //   2. dispatchDealAlerts() runs after the scheduled cashout sync and on every
 //      notification run. It pushes each new alert to every user who turned
-//      deal alerts on, if the deal passes their filters (minimum profit,
+//      deal alerts on, if the deal passes their filters (minimum profit / ROI,
 //      cashouts, stores, quiet hours). Several at once go out as one push.
 //   3. listDealFeed(userId) is the Cashout page's New deals list.
 //
@@ -32,7 +32,7 @@ const FORGET_DEALS_DAYS = 30;
 const FEED_DAYS = 7;
 
 const DEAL_DEFAULTS = {
-  deal_alerts: false, deal_min_profit: 0, deal_providers: null, deal_stores: null, deal_quiet_from: null, deal_quiet_to: null,
+  deal_alerts: false, deal_min_profit: 0, deal_min_roi: null, deal_providers: null, deal_stores: null, deal_quiet_from: null, deal_quiet_to: null,
 };
 
 const num = (value) => (value === null || value === undefined || value === '' ? null : Number(value));
@@ -200,6 +200,7 @@ function dealSettings(row) {
   return {
     ...merged,
     deal_min_profit: num(merged.deal_min_profit) ?? 0,
+    deal_min_roi: num(merged.deal_min_roi),
     deal_providers: list(merged.deal_providers),
     deal_stores: list(merged.deal_stores),
   };
@@ -214,7 +215,8 @@ function inQuietHours(settings, now) {
 }
 
 // Whether a deal is one this user asked to hear about. A deal with no retail
-// price has no profit to check, so it passes only a $0 minimum.
+// price has no profit or ROI to check, so it passes only a $0 minimum and no
+// ROI minimum above 0%.
 function passesFilters(deal, evaluation, settings) {
   if (settings.deal_providers.length && !settings.deal_providers.includes(deal.provider)) return false;
   if (settings.deal_stores.length) {
@@ -222,8 +224,10 @@ function passesFilters(deal, evaluation, settings) {
     const stores = (Array.isArray(deal.stores) ? deal.stores : []).map(storeKey);
     if (!stores.some((store) => wanted.some((want) => store.includes(want) || want.includes(store)))) return false;
   }
-  if (evaluation.profit === null) return settings.deal_min_profit <= 0;
-  return evaluation.profit >= settings.deal_min_profit;
+  const minRoi = settings.deal_min_roi ?? null;
+  if (evaluation.profit === null) return settings.deal_min_profit <= 0 && (minRoi === null || minRoi <= 0);
+  if (evaluation.profit < settings.deal_min_profit) return false;
+  return minRoi === null || (evaluation.roi ?? (evaluation.profit / evaluation.retail) * 100) >= minRoi;
 }
 
 const money = (value) => `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(value) ? 0 : 2, maximumFractionDigits: 2 })}`;

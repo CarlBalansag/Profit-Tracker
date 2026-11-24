@@ -217,6 +217,41 @@ describe('evaluateDeal', () => {
   });
 });
 
+describe('minimum ROI filter', () => {
+  const deal = { provider: 'eb', stores: ['Best Buy'] };
+  const settings = (extra) => alerts.dealSettings({ deal_alerts: true, ...extra });
+
+  it('is off unless set, then needs both the profit and the ROI', () => {
+    const thin = { profit: 20, retail: 1000, roi: 2 };
+    expect(alerts.passesFilters(deal, thin, settings({}))).toBe(true);
+    expect(alerts.passesFilters(deal, thin, settings({ deal_min_roi: 5 }))).toBe(false);
+    expect(alerts.passesFilters(deal, { profit: 20, retail: 200, roi: 10 }, settings({ deal_min_roi: 5 }))).toBe(true);
+    expect(alerts.passesFilters(deal, { profit: 20, retail: 200, roi: 10 }, settings({ deal_min_roi: 5, deal_min_profit: 50 }))).toBe(false);
+    expect(alerts.passesFilters(deal, { profit: 10, retail: 200, roi: 5 }, settings({ deal_min_roi: 5 }))).toBe(true);
+  });
+
+  it('keeps a deal with no retail price out when a minimum ROI above 0 is set', () => {
+    const unpriced = { profit: null, retail: null, roi: null };
+    expect(alerts.passesFilters(deal, unpriced, settings({}))).toBe(true);
+    expect(alerts.passesFilters(deal, unpriced, settings({ deal_min_roi: 0 }))).toBe(true);
+    expect(alerts.passesFilters(deal, unpriced, settings({ deal_min_roi: 3 }))).toBe(false);
+  });
+
+  it('holds back a push below the saved minimum ROI', async () => {
+    // Alice makes $115.01 on $699.99 (16.4%): 20% blocks it, 15% lets it through.
+    await db.notificationSettings.update({ where: { user_id: ALICE }, data: { deal_min_roi: 20 } });
+    await alerts.recordDealsSeen('eb', [{ id: 'seed', name: 'Seed', payout: 10, retail: 9, status: 'active', items: [], productLinks: [] }]);
+    await alerts.recordDealsSeen('eb', [{ id: 'r1', name: 'Roi Deal', payout: 780, retail: 699.99, status: 'active', productLinks: [], items: [{ id: 'r1-1', name: 'Roi Deal', purchaseLinks: [{ name: 'Best Buy', url: 'https://bestbuy.com/x' }] }] }]);
+    await alerts.dispatchDealAlerts();
+    expect(sent.filter((entry) => entry.endpoint.endsWith(ALICE))).toHaveLength(0);
+
+    await db.notificationSettings.update({ where: { user_id: ALICE }, data: { deal_min_roi: 15 } });
+    await alerts.recordDealsSeen('eb', [{ id: 'r2', name: 'Roi Deal 2', payout: 780, retail: 699.99, status: 'active', productLinks: [], items: [{ id: 'r2-1', name: 'Roi Deal 2', purchaseLinks: [{ name: 'Best Buy', url: 'https://bestbuy.com/x' }] }] }]);
+    await alerts.dispatchDealAlerts();
+    expect(sent.filter((entry) => entry.endpoint.endsWith(ALICE))).toHaveLength(1);
+  });
+});
+
 describe('dispatchDealAlerts', () => {
   async function seedThenAdd(newDeals, provider = 'eb') {
     await alerts.recordDealsSeen(provider, [deal('seed')]);
