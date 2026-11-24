@@ -222,7 +222,7 @@ function ExpenseModal({ open, onClose, onSaveOneOff, onSaveRecurring, initial, i
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                 <input
-                  type="number" min="0" step="0.01" placeholder="0.00"
+                  type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00"
                   value={form.amount} onChange={e => set('amount', e.target.value)}
                   className={`w-full pl-7 pr-3 py-2.5 rounded-lg text-sm text-white placeholder-gray-600 bg-white/[0.04] border border-white/10 focus:outline-none focus:border-${accent}-500/50`}
                 />

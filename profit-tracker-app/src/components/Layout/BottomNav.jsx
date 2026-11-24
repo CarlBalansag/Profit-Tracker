@@ -6,7 +6,7 @@ import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 import { usePrefetchProps } from '../../hooks/usePrefetchPage';
 import { useTodoCount } from '../../hooks/useApi';
 
-const ITEM = 'flex flex-1 flex-col items-center justify-center gap-0.5 h-14 min-w-0 text-[11px] font-medium';
+const ITEM = 'flex flex-1 flex-col items-center justify-center gap-0.5 h-14 min-w-0 px-0.5 text-[11px] max-[359px]:text-[10.5px] max-[359px]:tracking-tight font-medium';
 
 const QUICK_ADD = [
   { to: '/add-transaction', label: 'Add Transaction', icon: CirclePlus },

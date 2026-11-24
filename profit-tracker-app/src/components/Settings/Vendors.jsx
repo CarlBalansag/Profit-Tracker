@@ -250,7 +250,7 @@ function CustomModal({ onClose, onSave }) {
             <label htmlFor="new-vendor-return-days" className="block text-xs text-gray-400 mb-1.5">Return window (days, optional)</label>
             <input
               id="new-vendor-return-days"
-              type="number"
+              type="number" inputMode="numeric"
               min="0"
               max="3650"
               step="1"
@@ -364,7 +364,7 @@ function EditModal({ vendor, onClose, onSave }) {
             <label htmlFor="vendor-return-days" className="block text-xs text-gray-400 mb-1.5">Return window (days, optional)</label>
             <input
               id="vendor-return-days"
-              type="number"
+              type="number" inputMode="numeric"
               min="0"
               max="3650"
               step="1"

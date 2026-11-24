@@ -25,6 +25,16 @@
           theme = dark ? 'dark' : 'light';
         }
         document.documentElement.dataset.theme = theme;
+        // The phone's status bar matches the app's top bar, in whichever theme
+        // is showing (the theme can change later from the switch or the OS).
+        var bar = document.querySelector('meta[name="theme-color"]');
+        var paint = function () {
+          if (bar) bar.setAttribute('content', document.documentElement.dataset.theme === 'dark' ? '#0f0f1a' : '#ffffff');
+        };
+        paint();
+        try {
+          new MutationObserver(paint).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+        } catch (e) {}
       })();
     </script>
   </head>

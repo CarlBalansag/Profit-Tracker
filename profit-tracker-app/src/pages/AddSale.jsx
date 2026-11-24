@@ -341,7 +341,7 @@ const AddSale = () => {
                           className="px-3 py-2 text-gray-400 hover:text-white transition-colors border-r border-white/10 flex-shrink-0"
                         >-</button>
                         <input
-                          type="number"
+                          type="number" inputMode="decimal"
                           value={formData.quantity}
                           min="1"
                           max={selectedItem.qty_on_hand}
@@ -360,21 +360,21 @@ const AddSale = () => {
                       <label className="block text-xs font-medium text-gray-400 mb-1.5">Sale Price (per unit) *</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
-                        <input name="unit_price" type="number" step="0.01" value={formData.unit_price} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-green-500/50" placeholder="0.00" required />
+                        <input name="unit_price" type="number" inputMode="decimal" step="0.01" value={formData.unit_price} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-green-500/50" placeholder="0.00" required />
                       </div>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-400 mb-1.5">Platform Fees / Commission</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
-                        <input name="commission_fee" type="number" step="0.01" value={formData.commission_fee} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-green-500/50" placeholder="0.00" />
+                        <input name="commission_fee" type="number" inputMode="decimal" step="0.01" value={formData.commission_fee} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-green-500/50" placeholder="0.00" />
                       </div>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-400 mb-1.5">Sale Shipping</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
-                        <input name="sale_shipping" type="number" step="0.01" value={formData.sale_shipping} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-green-500/50" placeholder="0.00" />
+                        <input name="sale_shipping" type="number" inputMode="decimal" step="0.01" value={formData.sale_shipping} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-green-500/50" placeholder="0.00" />
                       </div>
                     </div>
                     <div>
@@ -477,7 +477,7 @@ const AddSale = () => {
                       <label className="block text-xs font-medium text-gray-400 mb-1.5">Sale Tax Collected</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
-                        <input name="sale_tax_collected" type="number" step="0.01" value={formData.sale_tax_collected} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50" placeholder="0.00" />
+                        <input name="sale_tax_collected" type="number" inputMode="decimal" step="0.01" value={formData.sale_tax_collected} onChange={handleChange} className="w-full bg-[#0A0A0F] border border-white/10 rounded-lg pl-7 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500/50" placeholder="0.00" />
                       </div>
                     </div>
                     <div>

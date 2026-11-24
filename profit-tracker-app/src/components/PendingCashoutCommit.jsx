@@ -376,7 +376,7 @@ function CommitDialog({ commitmentId, onClose }) {
             </dl>
             <div className="space-y-1.5">
               <label htmlFor="pc-insured" className="block text-[11px] text-[var(--dp-text-label)]">Insured value (optional, $200–$1,500)</label>
-              <input id="pc-insured" type="number" min="200" max="1500" step="0.01" value={insuredValue} onChange={(e) => setInsuredValue(e.target.value)}
+              <input id="pc-insured" type="number" inputMode="decimal" min="200" max="1500" step="0.01" value={insuredValue} onChange={(e) => setInsuredValue(e.target.value)}
                 placeholder="Leave blank to skip insurance"
                 className="w-full px-3 py-2 text-xs rounded-lg border border-[color:var(--dp-border)] bg-[var(--dp-bg)] text-[var(--dp-text-primary)] placeholder-[var(--dp-text-label)] focus:outline-none" />
             </div>

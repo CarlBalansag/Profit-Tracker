@@ -212,7 +212,7 @@ function GoalModal({ goal, onSave, onClose, isGlass, isSaving }) {
             <input
               key={tab}
               className={inputCls}
-              type="number"
+              type="number" inputMode="decimal"
               min="0.01"
               step="any"
               placeholder={metaDef.value === 'unitsSold' ? 'e.g. 20' : 'e.g. 500'}

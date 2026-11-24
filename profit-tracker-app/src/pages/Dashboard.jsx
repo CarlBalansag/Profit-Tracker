@@ -1378,7 +1378,7 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
           {/* One line, never wrapping: the mode tag sits small beside the title
               and is cut short if it doesn't fit, so the card keeps its height
               in All, Cashout and Marketplace. */}
-          <p className={isGlass ? "flex items-baseline gap-1.5 min-w-0 whitespace-nowrap text-[11px] text-white/25 font-medium uppercase tracking-[0.2em]" : `flex items-baseline gap-1.5 min-w-0 whitespace-nowrap text-[11px] font-medium uppercase tracking-[0.08em] dp-card-title transition-colors duration-300 text-[var(--dp-text-label)]`}>
+          <p className={isGlass ? "flex items-baseline gap-1.5 min-w-0 whitespace-nowrap text-[11px] text-white/25 font-medium uppercase tracking-[0.2em]" : `flex items-baseline gap-1.5 min-w-0 whitespace-nowrap text-[11px] max-[359px]:tracking-normal font-medium uppercase tracking-[0.08em] dp-card-title transition-colors duration-300 text-[var(--dp-text-label)]`}>
             <span className="shrink-0">{title}</span>
             {modeTag && (
               <span title={modeTag} className={isGlass ? "min-w-0 truncate text-[9px] font-normal normal-case tracking-normal text-[var(--text-muted)]" : `min-w-0 truncate text-[9px] font-normal normal-case tracking-normal dp-card-tag transition-colors duration-300 text-[var(--dp-text-label)]`}>
@@ -1390,7 +1390,7 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
               when the new ones arrive they count from the old value to the new
               one, up or down. Nothing fades or locks in between. */}
           <div aria-busy={loading || undefined}>
-            <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] text-[var(--dp-text-primary)]`}><CountUp value={value} pending={loading} /></p>
+            <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] max-[359px]:text-[17px] text-[var(--dp-text-primary)]`}><CountUp value={value} pending={loading} /></p>
             <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
           </div>
         </div>

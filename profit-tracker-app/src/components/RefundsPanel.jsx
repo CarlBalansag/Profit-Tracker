@@ -247,11 +247,11 @@ export default function RefundsPanel({ kind, id, maxUnits = 0, disabledReason = 
           <div className={modal ? 'grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-3' : 'grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2'}>
             <div className="min-w-0">
               <FieldLabel htmlFor={`refund-amount-${id}`} label={copy.amount} name={copy.amountName} tip={copy.amountTip} />
-              <input id={`refund-amount-${id}`} type="number" min="0" step="0.01" placeholder="0.00" value={draft.amount} onChange={e => set('amount', e.target.value)} className={INPUT} />
+              <input id={`refund-amount-${id}`} type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" value={draft.amount} onChange={e => set('amount', e.target.value)} className={INPUT} />
             </div>
             <div className="min-w-0">
               <FieldLabel htmlFor={`refund-units-${id}`} label={copy.units} name={copy.units.toLowerCase()} tip={copy.unitsTip} align="right" />
-              <input id={`refund-units-${id}`} type="number" min="0" max={maxUnits} step="1" placeholder="0" value={draft.quantity} onChange={e => set('quantity', e.target.value)} className={INPUT} />
+              <input id={`refund-units-${id}`} type="number" inputMode="numeric" min="0" max={maxUnits} step="1" placeholder="0" value={draft.quantity} onChange={e => set('quantity', e.target.value)} className={INPUT} />
             </div>
             <div className="min-w-0">
               <FieldLabel htmlFor={`refund-date-${id}`} label="Date" name="the date" tip={DATE_TIP} />

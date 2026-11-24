@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { Fragment, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { MotionConfig, motion } from 'motion/react';
 import AnimatedLogo from '../components/UI/AnimatedLogo';
@@ -55,11 +55,13 @@ const scrollToDemo = () => {
 };
 
 // The headline's words rise into place one after another.
+// Each space sits outside its word's mask: inside the inline-block mask it is
+// trailing whitespace, which browsers drop, and the words ran together.
 function RisingHeadline({ text }) {
   return (
     <h1 className="lp-display text-[clamp(2.6rem,7vw,5.6rem)] leading-[0.98]" aria-label={text}>
       {text.split(' ').map((word, i) => (
-        <span key={i} className="lp-word-mask" aria-hidden="true">
+        <Fragment key={i}><span className="lp-word-mask" aria-hidden="true">
           <MotionSpan
             className="inline-block"
             initial={{ y: '105%', opacity: 0, filter: 'blur(6px)' }}
@@ -68,8 +70,7 @@ function RisingHeadline({ text }) {
           >
             {word}
           </MotionSpan>
-          {' '}
-        </span>
+        </span>{' '}</Fragment>
       ))}
     </h1>
   );

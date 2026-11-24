@@ -10,7 +10,7 @@ export function ExpenseTaxFields({ value, onChange, disabled = false }) {
       <option value="unreviewed">Not classified yet</option><option value="business">100% business</option><option value="mixed">Mixed business and personal</option><option value="personal">Personal — excluded</option>
     </select></Field>
     {value.business_use !== 'personal' && <>
-      {value.business_use === 'mixed' && <Field label="Business-use percentage"><input className={inputClass} type="number" min="0.01" max="100" step="0.01" value={value.business_percent} onChange={e => set('business_percent', e.target.value)} /></Field>}
+      {value.business_use === 'mixed' && <Field label="Business-use percentage"><input className={inputClass} type="number" inputMode="decimal" min="0.01" max="100" step="0.01" value={value.business_percent} onChange={e => set('business_percent', e.target.value)} /></Field>}
       <Field label="Payee / vendor"><input className={inputClass} maxLength={1000} value={value.payee} onChange={e => set('payee', e.target.value)} /></Field>
       <Field label="Business purpose"><input className={inputClass} maxLength={1000} placeholder="e.g. Tape for packing customer orders" value={value.purpose} onChange={e => set('purpose', e.target.value)} /></Field>
       <Field label="Tax category"><select className={inputClass} value={value.tax_category} onChange={e => set('tax_category', e.target.value)}><option value="">Needs classification</option>{taxCategories.map(category => <option key={category.id} value={category.id}>{category.label}</option>)}</select></Field>

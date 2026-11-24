@@ -25,3 +25,15 @@
   from   = "/*"
   to     = "/index.html"
   status = 200
+
+# Protective headers on every page: the app can't be shown inside another
+# site's frame, files aren't guessed into another type, and other sites only
+# learn the address they were linked from, not the full page path.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    Content-Security-Policy = "frame-ancestors 'none'"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
