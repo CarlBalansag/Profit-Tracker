@@ -157,6 +157,22 @@ describe('describeActivity: setup records', () => {
     expect(describeActivity(undone).change).toBe('Enter its key again to sync');
   });
 
+  it('says which group was merged into which, what moved, and what an undo moved back', () => {
+    const rows = [
+      { model: 'platform', id: 'efb', op: 'update', fields: { notes: { before: null, after: 'x' } } },
+      { model: 'platform', id: 'la', op: 'delete', row: { values: { name: 'LA Cashout', type: 'Cashout' } } },
+      { model: 'sales', id: 's1', op: 'update', link: true, fields: { platform_id: { before: 'la', after: 'efb' } } },
+      { model: 'sales', id: 's2', op: 'update', link: true, fields: { platform_id: { before: 'la', after: 'efb' } } },
+      { model: 'importBatch', id: 'b1', op: 'update', link: true, fields: { platform_id: { before: 'la', after: 'efb' } } },
+    ];
+    const merged = { action: 'merge', product_name: 'LA Cashout', merged_into: 'EarnFromBuying', rows };
+    expect(describeActivity(setup('platform', merged)))
+      .toEqual({ title: 'Merged a cashout group', change: 'Into EarnFromBuying · Moved 2 sales, 1 import', product: 'LA Cashout' });
+    expect(describeActivity(setup('platform', { ...merged, undo: true })))
+      .toEqual({ title: 'Undid: Merged a cashout group', change: 'Out of EarnFromBuying · Moved back 2 sales, 1 import', product: 'LA Cashout' });
+    expect(describeActivity(setup('platform', { ...merged, rows: rows.slice(1, 2) })).change).toBe('Into EarnFromBuying');
+  });
+
   it('quotes a note, and names calendar events by date', () => {
     const note = setup('product_note', { action: 'create', product_name: 'Switch 2', rows: [{ model: 'productNote', id: 'n', op: 'create', row: { values: { note: 'Ask for price match' } } }] });
     expect(describeActivity(note)).toEqual({ title: 'Added a note', change: '“Ask for price match”', product: 'Switch 2' });

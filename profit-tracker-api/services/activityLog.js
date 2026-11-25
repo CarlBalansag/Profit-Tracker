@@ -183,7 +183,7 @@ const PARENT_FIRST = {
   platform: 0, account: 1, paymentMethod: 2, buyer: 3, goal: 4, recurringExpense: 5,
   cashoutConnection: 6, calendarEvent: 7, productNote: 8,
   inventory: 9, sales: 10, refund: 11, cashoutCommitment: 12, cashoutItemMatch: 13, expense: 14, transactionNote: 15,
-  taxForm1099K: 16,
+  taxForm1099K: 16, importBatch: 17,
 };
 const MODELS = Object.keys(PARENT_FIRST);
 // Background refreshes (carrier tracking, market price checks, the card
@@ -207,7 +207,7 @@ const TABLE = {
   paymentMethod: 'PaymentMethod', account: 'Account', platform: 'Platform', buyer: 'Buyer', goal: 'Goal',
   recurringExpense: 'RecurringExpense', cashoutConnection: 'CashoutConnection', cashoutItemMatch: 'CashoutItemMatch',
   calendarEvent: 'CalendarEvent', productNote: 'ProductNote', transactionNote: 'TransactionNote',
-  taxForm1099K: 'TaxForm1099K',
+  taxForm1099K: 'TaxForm1099K', importBatch: 'ImportBatch',
 };
 // A removed cashout connection comes back without its key (the key is never
 // logged), marked as needing attention so background sync leaves it alone
@@ -225,8 +225,9 @@ const RESTORE_OVERRIDES = {
 const LINKS = {
   paymentMethod: [['inventory', 'payment_method_id'], ['expense', 'payment_method_id'], ['recurringExpense', 'payment_method_id'], ['sales', 'sale_shipping_payment_method_id']],
   account: [['inventory', 'account_id']],
-  // A 1099-K form keeps its payer name when its platform goes; undo relinks it.
-  platform: [['inventory', 'vendor_id'], ['sales', 'platform_id'], ['cashoutConnection', 'platform_id'], ['account', 'platform_id'], ['taxForm1099K', 'platform_id']],
+  // A 1099-K form keeps its payer name, and a past import stays listed, when
+  // their platform goes; undo relinks them.
+  platform: [['inventory', 'vendor_id'], ['sales', 'platform_id'], ['cashoutConnection', 'platform_id'], ['account', 'platform_id'], ['taxForm1099K', 'platform_id'], ['importBatch', 'platform_id']],
   buyer: [['sales', 'buyer_id']],
   recurringExpense: [['expense', 'recurring_expense_id']],
   // Removing a connection deletes its commitments and item matches (ON DELETE
@@ -475,7 +476,7 @@ const USED_BY = {
   inventory: 'purchases', sales: 'sales', expense: 'expenses', recurringExpense: 'recurring expenses',
   cashoutConnection: 'cashout connections', account: 'store accounts',
   cashoutCommitment: 'cashout commitments', cashoutItemMatch: 'matched cashout items',
-  taxForm1099K: '1099-K forms',
+  taxForm1099K: '1099-K forms', importBatch: 'past imports',
 };
 
 // One undo can hold thousands of rows (a whole cashout import), so rows are
@@ -514,6 +515,12 @@ async function undoChange(tx, userId, entry, source) {
   const rows = entry.detail.rows || [];
   const refused = changedMessage(entry.record_type);
   await refuseImportedAgain(tx, userId, rows);
+  // What a merge moved is on the group it kept. Once that group is gone, the
+  // records are somewhere else and this would bring back an empty group.
+  if (entry.detail.action === 'merge' && !entry.detail.undo) {
+    const kept = await tx.platform.findFirst({ where: { id: entry.detail.merged_into_id, user_id: userId }, select: { id: true } });
+    if (!kept) throw requestError(409, `${entry.detail.merged_into} was merged or removed since. Undo that first.`);
+  }
 
   // Lock every row involved first, parents before children. TABLE is a fixed
   // whitelist, so the table name is never user input.
@@ -839,6 +846,8 @@ module.exports = {
   recordEvent,
   SETUP_TYPES,
   linkedRefs,
+  LINKS,
+  TABLE,
   listActivity,
   undoActivity,
   // exported for tests

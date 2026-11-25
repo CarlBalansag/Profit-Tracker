@@ -362,6 +362,10 @@ const updatePlatform = z.object({
   default_return_days: defaultReturnDays,
 }).passthrough();
 
+const mergePlatform = z.object({
+  into: z.string().trim().uuid(),
+});
+
 const platformBatch = z.object({
   vendors: z.array(z.object({
     id: z.string().trim().uuid().optional(),
@@ -705,6 +709,7 @@ module.exports = {
   reworkPrompt,
   platform,
   updatePlatform,
+  mergePlatform,
   platformBatch,
   buyer,
   updateBuyer,
