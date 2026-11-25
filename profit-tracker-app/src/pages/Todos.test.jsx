@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { toast } from 'sonner';
 import Todos from './Todos';
 import TodoSummary from '../components/Dashboard/TodoSummary';
 import { addDays, localToday } from '../utils/returnWindow';
@@ -9,6 +10,7 @@ import { addDays, localToday } from '../utils/returnWindow';
 let todos;
 let queryState;
 const mutate = vi.fn();
+const handled = vi.fn(async () => ({ handled: true }));
 const mutateAsync = vi.fn(async () => ({}));
 
 let openReminders = [];
@@ -21,6 +23,7 @@ vi.mock('../hooks/useApi', () => ({
   useReminders: () => ({ data: openReminders }),
   useReminderMutations: () => Object.fromEntries(Object.entries(reminderCalls).map(([name, fn]) => [name, asyncMutation(fn)])),
   usePaymentMethods: () => ({ data: [{ id: 'card-1', name: 'Amex Gold', last4: '1001' }] }),
+  useEmailRuleMutations: () => ({ handled: asyncMutation(handled) }),
   useAutomationReview: () => ({ data: { to_confirm: automationToConfirm.count } }),
 }));
 const automationToConfirm = vi.hoisted(() => ({ count: 0 }));
@@ -58,6 +61,11 @@ const mount = (element = <Todos />) => render(
 beforeEach(() => {
   queryState = { isError: false };
   mutate.mockReset();
+  mutateAsync.mockClear();
+  handled.mockClear();
+  toast.success.mockClear();
+  toast.error.mockClear();
+  runAction.mockClear();
   mutateAsync.mockClear();
   runAction.mockClear();
   openReminders = [];
@@ -201,7 +209,7 @@ describe('Dashboard Needs attention card', () => {
     const card = screen.getByRole('region', { name: 'Needs attention' });
     const byUrgency = within(card).getByRole('list', { name: 'By urgency' });
     expect(within(byUrgency).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['1 overdue', '4 this week']);
-    expect(within(card).getAllByRole('button')).toHaveLength(4);
+    expect(within(card).getAllByRole('button', { name: /^Item/ })).toHaveLength(4);
     expect(within(card).getByRole('link', { name: /View all/ })).toHaveAttribute('href', '/todos');
     fireEvent.click(within(card).getByText('Item 1'));
     expect(screen.getByTestId('where').textContent).toContain('/transactions');
@@ -219,7 +227,7 @@ describe('Dashboard Needs attention card', () => {
         </Routes>
       </MemoryRouter>,
     );
-    const row = screen.getByRole('button', { name: /Add tracking to commit/ });
+    const row = screen.getByRole('button', { name: /^Add tracking to commit/ });
     expect(row).toHaveTextContent('×3');
     expect(row).toHaveTextContent('2× Fire TV Stick 4K, 2× Fire TV Stick 4K Select, 2× Fire TV Stick HD');
     expect(row).toHaveTextContent('$300.00');
@@ -239,6 +247,127 @@ describe('Dashboard Needs attention card', () => {
       'TradePost2 sales · oldest 14 days$5,414.60',
       'EB1 sale · oldest today$649.00',
     ]);
+  });
+});
+
+const emailEntry = (fields = {}, attention = {}) => entry({
+  key: 'email-cancelled:o1', type: 'email_cancelled', group: 'purchases', title: 'Home Depot order WN1 was cancelled',
+  detail: '2 × Drill · Cancel the purchase too, or change its quantity.', amount: 597, lot: 'Home Depot order WN1',
+  link: { kind: 'transaction', inventoryId: 'inv-9', saleId: null }, actions: ['handled', 'snooze', 'dismiss'],
+  email_attention: {
+    order_id: 'o1', kind: 'cancelled', store: 'Home Depot', order_number: 'WN1', date: '2026-11-20T12:00:00Z',
+    records: [{ id: 'inv-9', name: 'Drill', quantity: 2, amount: 597, date: '2026-11-18T12:00:00Z', cancelled: false, cancel: { action: 'cancel', label: 'Cancel', destructive: true } }],
+    ...attention,
+  },
+  ...fields,
+});
+
+describe('Clearing to-dos from the Dashboard card', () => {
+  it('dismisses a row, and offers Done only where it means something', () => {
+    todos = response([
+      entry({ key: 'ship:1', title: 'Ship the PS5' }),
+      entry({ key: 'card-due:c1:2026-11-24', type: 'card_due', group: 'cards', title: 'Pay Amex', actions: ['mark_paid', 'snooze', 'dismiss'] }),
+    ]);
+    mount(<TodoSummary />);
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss: Ship the PS5' }));
+    expect(mutate).toHaveBeenCalledWith({ key: 'ship:1', action: 'dismiss', until: undefined }, expect.any(Object));
+    expect(screen.queryByRole('button', { name: 'Done: Ship the PS5' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Mark paid: Pay Amex' }));
+    expect(mutate).toHaveBeenCalledWith({ key: 'card-due:c1:2026-11-24', action: 'done', until: undefined }, expect.any(Object));
+    // Still on the Dashboard.
+    expect(screen.queryByTestId('where')).not.toBeInTheDocument();
+  });
+
+  it('dismisses every item of a folded row', async () => {
+    todos = response(['A', 'B'].map((name) => entry({ key: `commit-pending:${name}`, type: 'commit_pending', title: 'Add tracking to commit', detail: name })));
+    mount(<TodoSummary />);
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss all 2: Add tracking to commit' }));
+    await vi.waitFor(() => expect(mutateAsync.mock.calls.map(([arg]) => arg.key)).toEqual(['commit-pending:A', 'commit-pending:B']));
+  });
+
+  it('completes a reminder, which cannot be dismissed', () => {
+    todos = response([reminderEntry()]);
+    mount(<TodoSummary />);
+    expect(screen.queryByRole('button', { name: /^Dismiss/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Done: Call Amex/ }));
+    expect(reminderCalls.complete).toHaveBeenCalledWith({ id: 'rem-1', due_date: '2026-11-21' }, expect.any(Object));
+  });
+
+  it("marks a store's email done, with Undo", async () => {
+    todos = response([emailEntry()]);
+    mount(<TodoSummary />);
+    fireEvent.click(screen.getByRole('button', { name: /^Done: Home Depot order WN1/ }));
+    await vi.waitFor(() => expect(toast.success).toHaveBeenCalled());
+    expect(handled).toHaveBeenCalledWith('o1');
+    toast.success.mock.calls.at(-1)[1].action.onClick();
+    expect(handled).toHaveBeenLastCalledWith({ id: 'o1', undo: true });
+  });
+
+  it('says so when marking it done fails', async () => {
+    handled.mockRejectedValueOnce(new Error('offline'));
+    todos = response([emailEntry()]);
+    mount(<TodoSummary />);
+    fireEvent.click(screen.getByRole('button', { name: /^Done: Home Depot order WN1/ }));
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalledWith('Could not save: offline'));
+  });
+
+  it('opens what a store email is about without leaving the Dashboard, and cancels the purchase from there', async () => {
+    todos = response([emailEntry()]);
+    mount(<TodoSummary />);
+    fireEvent.click(screen.getByRole('button', { name: /^Home Depot order WN1/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Home Depot order WN1 was cancelled' });
+    expect(dialog).toHaveTextContent('The store emailed that this order was cancelled');
+    expect(dialog).toHaveTextContent('Home Depot · #WN1 · $597.00 · Nov 20, 2026');
+    expect(dialog).toHaveTextContent('2 × Drill');
+    // Cancelling asks first.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel purchase: Drill' }));
+    expect(runAction).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Go back' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel purchase: Drill' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Yes, cancel it' }));
+    await vi.waitFor(() => expect(runAction).toHaveBeenCalledWith('cancel', {}, expect.objectContaining({ action: 'cancel' })));
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Open purchase: Drill' }));
+    expect(screen.getByTestId('where').textContent).toBe('/transactions {"openTransaction":{"inventoryId":"inv-9","saleId":null}}');
+  });
+
+  it('marks done or dismisses from the window, and explains an order with no purchase', () => {
+    todos = response([emailEntry({}, { records: [] })]);
+    mount(<TodoSummary />);
+    fireEvent.click(screen.getByRole('button', { name: /^Home Depot order WN1/ }));
+    let dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('not linked to a purchase');
+    expect(within(dialog).queryByRole('button', { name: /Cancel purchase|Open purchase/ })).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Mark done' }));
+    expect(handled).toHaveBeenCalledWith('o1');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Home Depot order WN1/ }));
+    dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Dismiss' }));
+    expect(mutate).toHaveBeenCalledWith({ key: 'email-cancelled:o1', action: 'dismiss', until: undefined }, expect.any(Object));
+  });
+
+  it('sends an order to answer to the list, which has its buttons', () => {
+    todos = response([entry({ key: 'email-add:o2', type: 'email_add_purchase', title: 'Add this Amazon order as a purchase?', email_order: { id: 'o2' }, link: { kind: 'page', to: '/settings', state: { tab: 'email' } } })]);
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<TodoSummary />} />
+          <Route path="*" element={<Where />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^Add this Amazon order/ }));
+    expect(screen.getByTestId('where').textContent).toContain('/todos');
+  });
+
+  it('opens the same window and marks done on the To-Do page', () => {
+    todos = response([emailEntry()]);
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /^Open Home Depot order WN1/ }));
+    expect(screen.getByRole('dialog', { name: 'Home Depot order WN1 was cancelled' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Mark done: Home Depot/ }));
+    expect(handled).toHaveBeenCalledWith('o1');
   });
 });
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CircleCheck, Pencil } from 'lucide-react';
 import { openTodoLink } from '../../utils/todoLink';
@@ -7,6 +7,7 @@ import SnoozeMenu from './SnoozeMenu';
 import TodoRecordActions from './TodoRecordActions';
 import EmailMatchActions from './EmailMatchActions';
 import EmailOrderActions from './EmailOrderActions';
+import EmailAttentionModal from './EmailAttentionModal';
 
 
 export function GroupIcon({ group, urgency }) {
@@ -20,9 +21,11 @@ export function GroupIcon({ group, urgency }) {
 }
 
 // The buttons for one to-do: its main action first (the sale step that
-// clears it, Mark paid, Done), then Open, Edit and Later.
+// clears it, Mark paid, Done), then Open, Edit and Later. Open on a store's
+// cancellation, refund or check email shows what it is about in a window.
 function TodoActions({ entry, busy, onAct, onEdit }) {
   const navigate = useNavigate();
+  const [reviewing, setReviewing] = useState(false);
   const has = (action) => entry.actions?.includes(action);
   return (
     <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end">
@@ -39,10 +42,15 @@ function TodoActions({ entry, busy, onAct, onEdit }) {
           <CircleCheck className="h-3.5 w-3.5" aria-hidden="true" /> Done
         </button>
       )}
+      {has('handled') && entry.email_attention && (
+        <button type="button" disabled={busy} onClick={() => onAct(entry, 'handled')} className="page-btn page-btn-primary !h-9 !px-3 !text-xs">
+          <CircleCheck className="h-3.5 w-3.5" aria-hidden="true" /><span aria-hidden="true">Done</span><span className="sr-only">Mark done: {entry.title}</span>
+        </button>
+      )}
       {/* Named by hidden text, not aria-label: touch screens give text
           buttons the full 44px height (index.css, pointer: coarse). */}
       {entry.link && (
-        <button type="button" onClick={() => openTodoLink(navigate, entry.link)} className="page-btn page-btn-secondary !h-9 !px-3 !text-xs">
+        <button type="button" onClick={() => (entry.email_attention ? setReviewing(true) : openTodoLink(navigate, entry.link))} className="page-btn page-btn-secondary !h-9 !px-3 !text-xs">
           <span aria-hidden="true">Open</span><span className="sr-only">Open {entry.title}, {entry.detail}</span>
         </button>
       )}
@@ -54,6 +62,7 @@ function TodoActions({ entry, busy, onAct, onEdit }) {
       {(has('snooze') || has('dismiss')) && (
         <SnoozeMenu entry={entry} canSnooze={has('snooze')} canDismiss={has('dismiss')} canHold={has('hold')} canWaitPaid={has('until_paid')} busy={busy} onAct={onAct} />
       )}
+      {reviewing && <EmailAttentionModal entry={entry} busy={busy} onAct={onAct} onClose={() => setReviewing(false)} />}
     </div>
   );
 }

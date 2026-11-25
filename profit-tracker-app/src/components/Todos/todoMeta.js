@@ -91,7 +91,11 @@ export function foldByType(items) {
   return rows;
 }
 
-const FOLD_TITLES = { aging_stock: 'Not listed for 30+ days' };
+const FOLD_TITLES = {
+  aging_stock: 'Not listed for 30+ days',
+  email_cancelled: 'Orders the store cancelled',
+  email_refund: 'Orders refunded or returned',
+};
 
 // A folded row's title: the items' shared title ("Ship it"), a set name for
 // some kinds, or the first one's without its number.

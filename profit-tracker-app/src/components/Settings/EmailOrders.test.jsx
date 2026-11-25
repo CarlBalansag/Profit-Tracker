@@ -82,6 +82,15 @@ describe('EmailOrders', () => {
     expect(screen.getByLabelText('Always personal').closest('details')).toBeNull();
   });
 
+  it('opens on the list a to-do points at, and ignores one that does not exist', () => {
+    render(<EmailOrders found={3} openTab="linked" />);
+    expect(calls.at(-1)).toMatchObject({ state: 'linked' });
+    expect(screen.getByRole('button', { name: 'Linked (5)' })).toHaveAttribute('aria-pressed', 'true');
+    cleanup();
+    render(<EmailOrders found={3} openTab="nope" />);
+    expect(calls.at(-1)).toMatchObject({ state: 'review' });
+  });
+
   it('hides itself until emails are found', () => {
     const { container } = render(<EmailOrders found={0} />);
     expect(container).toBeEmptyDOMElement();

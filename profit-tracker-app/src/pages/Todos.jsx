@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { toast } from 'sonner';
 import { CircleCheckBig, Plus } from 'lucide-react';
-import { useReminderMutations, useReminders, useTodos, useTodoState } from '../hooks/useApi';
-import { addDays, localToday } from '../utils/returnWindow';
+import { useReminders, useTodos } from '../hooks/useApi';
+import useTodoActions from '../hooks/useTodoActions';
 import LoadError from '../components/UI/LoadError';
 import { PageLoader } from '../components/PageLoader';
 import ReminderModal from '../components/Reminders/ReminderModal';
@@ -16,32 +15,27 @@ import RemindersPanel from '../components/Todos/RemindersPanel';
 import HiddenPanel from '../components/Todos/HiddenPanel';
 import PhoneAlertsCard from '../components/Todos/PhoneAlertsCard';
 import EmailAutomationCard from '../components/Todos/EmailAutomationCard';
-import { PANEL, URGENCIES, whenText } from '../components/Todos/todoMeta';
+import { PANEL, URGENCIES } from '../components/Todos/todoMeta';
 
 // Things that need the user, worked out from their records by the API
 // (services/todos.js), plus reminders they write. An item clears on its own
 // once its record is fixed; Later only hides it, a card bill's "Mark paid"
 // closes that one cycle, and a reminder's "Done" finishes it (a repeating one
-// moves to its next date).
-
-const DONE_TEXT = { snooze: 'Snoozed.', dismiss: 'Dismissed.', done: 'Marked paid.', until_paid: "Hidden until it's paid." };
-// A month or more is "Holding" (todoMeta HOLDS), and says so.
-const doneText = (action, days) => (action === 'snooze' && days >= 30 ? 'On hold.' : DONE_TEXT[action]);
+// moves to its next date). The buttons' work is in useTodoActions, shared with
+// the Dashboard card.
 
 // Phones skip these: the urgency tiles right below say the same.
 const PILL = 'hidden sm:inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.05em]';
 
 export default function Todos() {
   const { data, isLoading, isError, refetch, isRefetching } = useTodos();
-  const mutation = useTodoState();
-  const reminderMutations = useReminderMutations();
+  const { act, restore, busy } = useTodoActions();
   const { data: reminders = [] } = useReminders('open');
   // null = closed; {} = new reminder; a reminder = editing it.
   const [editing, setEditing] = useState(null);
   const [group, setGroup] = useState('all');
   const [urgency, setUrgency] = useState(null);
   const items = useMemo(() => data?.items ?? [], [data]);
-  const busy = mutation.isPending || reminderMutations.complete.isPending;
 
   if (isError && !data) return <LoadError title="To-Do" what="your to-dos" onRetry={refetch} retrying={isRefetching} />;
   if (isLoading) return <PageLoader />;
@@ -50,48 +44,6 @@ export default function Todos() {
   const visible = urgency ? inGroup.filter((entry) => entry.urgency === urgency) : inGroup;
   const overdue = items.filter((entry) => entry.urgency === 'overdue').length;
   const today = items.filter((entry) => entry.urgency === 'today').length;
-
-  const completeReminder = (entry) => {
-    const { id } = entry.reminder;
-    reminderMutations.complete.mutate({ id, due_date: entry.reminder.due_date }, {
-      onSuccess: ({ reminder, previous }) => toast.success(
-        reminder.done_at ? 'Done.' : `Done. Next one ${whenText(reminder)}.`,
-        { action: { label: 'Undo', onClick: () => reminderMutations.undoComplete.mutate({ id, due_date: previous.due_date }, { onError: (err) => toast.error(`Could not undo: ${err.message}`) }) } },
-      ),
-      onError: (err) => toast.error(`Could not save: ${err.message}`),
-    });
-  };
-
-  // A folded row: the same choice for each of its items, one toast for all.
-  const actOnAll = async (row, action, days) => {
-    const until = action === 'snooze' ? addDays(localToday(), days) : undefined;
-    const keys = row.items.map((entry) => entry.key);
-    try {
-      await Promise.all(keys.map((key) => mutation.mutateAsync({ key, action, until })));
-      toast.success(`${keys.length} ${action === 'until_paid' ? 'hidden until paid.' : doneText(action, days).toLowerCase()}`, {
-        action: { label: 'Undo', onClick: () => keys.forEach((key) => mutation.mutate({ key, action: 'restore' })) },
-      });
-    } catch (err) {
-      toast.error(`Could not save all of them: ${err.message}`);
-    }
-  };
-
-  const act = (entry, action, days) => {
-    if (entry.fold) { actOnAll(entry, action, days); return; }
-    if (action === 'complete') { completeReminder(entry); return; }
-    const until = action === 'snooze' ? addDays(localToday(), days) : undefined;
-    mutation.mutate({ key: entry.key, action, until }, {
-      onSuccess: () => toast.success(doneText(action, days), {
-        action: { label: 'Undo', onClick: () => mutation.mutate({ key: entry.key, action: 'restore' }) },
-      }),
-      onError: (err) => toast.error(`Could not save: ${err.message}`),
-    });
-  };
-
-  const restore = (entry) => mutation.mutate({ key: entry.key, action: 'restore' }, {
-    onSuccess: () => toast.success('Back on your list.'),
-    onError: (err) => toast.error(`Could not bring it back: ${err.message}`),
-  });
 
   const clearFilters = () => { setGroup('all'); setUrgency(null); };
 

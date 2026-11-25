@@ -245,7 +245,8 @@ function ConnectForm({ presets, senders, onDone }) {
   );
 }
 
-export function EmailAccounts() {
+// `ordersTab`: which list of Orders from email a to-do sent the user here for.
+export function EmailAccounts({ ordersTab }) {
   const { data: setup, isLoading: setupLoading, error: setupError } = useEmailSetup();
   const { data: accounts = [], isLoading, error } = useEmailAccounts();
   const found = accounts.reduce((n, a) => n + (a.message_count || 0), 0);
@@ -275,7 +276,7 @@ export function EmailAccounts() {
           : <button type="button" onClick={() => setAdding(true)} className="page-btn page-btn-primary"><Plus size={14} aria-hidden="true" /> {accounts.length ? 'Connect another email' : 'Connect an email'}</button>)}
       </section>
 
-      <EmailOrders found={found} />
+      <EmailOrders found={found} openTab={ordersTab} />
       {accounts.length > 0 && <EmailRules />}
       {accounts.length > 0 && <EmailStores />}
       <FoundInEmail found={found} />

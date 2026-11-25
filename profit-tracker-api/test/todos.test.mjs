@@ -615,6 +615,16 @@ describe('cleared this week', () => {
   });
 });
 
+describe('dismissing email to-dos', () => {
+  it('takes the keys email to-dos use', async () => {
+    const id = '33333333-3333-4333-8333-333333333333';
+    for (const key of [`email-cancelled:${id}`, `email-refund:${id}`, `email-deposit_check:${id}`, `email-review:${id}:${id}`, `email-review-rest:${id}`, `email-add:${id}`]) {
+      const res = await request('POST', '/api/todos/state', { key, action: 'dismiss', today: TODAY });
+      expect([key, res.status]).toEqual([key, 200]);
+    }
+  });
+});
+
 describe('orders from email to check', () => {
   it('lists each one with its best match to answer on the To-Do, and sums up the rest', () => {
     const order = (id, over = {}) => ({

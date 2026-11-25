@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Eye, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useEmailAutomation, useEmailOrderMutations, useEmailOrders, useEmailRuleMutations } from '../../hooks/useApi';
@@ -109,12 +109,19 @@ function OrderRow({ order, tab }) {
   );
 }
 
-export function EmailOrders({ found }) {
-  const [tab, setTab] = useState('review');
+// `openTab` (from a to-do's link) opens on that list and scrolls to it.
+export function EmailOrders({ found, openTab }) {
+  const wanted = TABS.some(([key]) => key === openTab) ? openTab : null;
+  const [tab, setTab] = useState(wanted || 'review');
+  const listRef = useRef(null);
   const [limit, setLimit] = useState(20);
   const { data } = useEmailOrders({ state: tab, limit, found });
   const { data: automation } = useEmailAutomation();
   const { acceptAll, automation: saveAutomation } = useEmailOrderMutations();
+  // Again as each part loads, since what's above and below changes height.
+  useEffect(() => {
+    if (wanted) listRef.current?.scrollIntoView?.({ block: 'start' });
+  }, [wanted, Boolean(data), Boolean(automation)]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!found) return null;
   const counts = data?.counts || {};
   const orders = data?.orders || [];
@@ -142,7 +149,7 @@ export function EmailOrders({ found }) {
         </div>
       </details>
       {automation && <OrderSorting automation={automation} save={saveAutomation} />}
-      <div role="group" aria-label="Show" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 dp-no-native-scrollbar">
+      <div ref={listRef} role="group" aria-label="Show" className="scroll-mt-4 -mx-1 flex gap-1.5 overflow-x-auto px-1 dp-no-native-scrollbar">
         {TABS.map(([key, label]) => (
           <button key={key} type="button" aria-pressed={tab === key} onClick={() => { setTab(key); setLimit(20); }}
             className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium ${tab === key ? 'border-transparent bg-[var(--accent-bg)] text-[var(--accent)]' : 'border-[color:var(--dp-border)] text-gray-400'}`}>

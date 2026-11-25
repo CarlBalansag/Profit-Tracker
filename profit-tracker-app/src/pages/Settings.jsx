@@ -186,7 +186,7 @@ function Settings() {
           {/* TAX TAB */}
           {SCHEDULE_C_ENABLED && activeTab === 'tax' && <ScheduleCSettings />}
 
-          {activeTab === 'email' && <EmailAccounts />}
+          {activeTab === 'email' && <EmailAccounts ordersTab={location.state?.emailOrders} />}
 
           {/* APPEARANCE TAB */}
           {activeTab === 'notifications' && <Notifications />}

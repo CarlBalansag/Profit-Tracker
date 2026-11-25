@@ -22,6 +22,7 @@ const { createPurchasesFromOrder, applyCashoutReceipts } = require('../services/
 // A cash-out receipt the user just linked marks its sales paid right away.
 const payLinkedReceipts = async (userId) => applyCashoutReceipts(prisma, userId, await getSettings(prisma, userId));
 const { saveInvoice } = require('../services/email/attachments');
+const { ATTENTION_FOR_STATUS, attentionDetails } = require('../services/email/attention');
 const { scanStores, sourceLabel } = require('../services/email/storeScan');
 
 const isAuthenticated = (req, res, next) => {
@@ -305,6 +306,7 @@ router.get('/orders', isAuthenticated, async (req, res, next) => {
     ]);
     const records = await recordSummaries(req.user.id, orders.flatMap((o) => o.matches));
     const fills = await willFill(prisma, req.user.id, orders.filter((o) => o.match_state === 'review'));
+    const attention = await attentionDetails(prisma, req.user.id, orders);
     const withPdf = new Set((await prisma.emailMessage.findMany({
       where: { user_id: req.user.id, order_id: { in: orders.map((o) => o.id) }, attachment_name: { not: null } },
       select: { order_id: true },
@@ -314,6 +316,8 @@ router.get('/orders', isAuthenticated, async (req, res, next) => {
       counts: Object.fromEntries(counts.map((c) => [c.match_state, c._count._all])),
       orders: orders.map(({ _count, matches, user_id: _u, key: _k, ...o }) => ({
         ...o,
+        // Already dealt with: no note, same as on the To-Do.
+        attention: attention.get(o.id)?.settled ? null : o.attention,
         email_count: _count.messages,
         has_invoice: withPdf.has(o.id),
         matches: matches.map((m) => ({
@@ -530,8 +534,17 @@ router.post('/orders/:id/purchase', isAuthenticated, async (req, res, next) => {
 });
 
 // Clears a cancellation/refund reminder once the user has handled it.
+// { undo: true } brings it back.
 router.post('/orders/:id/handled', isAuthenticated, async (req, res, next) => {
   try {
+    if (req.body?.undo === true) {
+      const order = await prisma.emailOrder.findFirst({ where: { id: req.params.id, user_id: req.user.id }, select: { id: true, status: true, applied_status: true } });
+      if (!order) return res.status(404).json({ error: 'Order not found.' });
+      const attention = order.applied_status === order.status ? ATTENTION_FOR_STATUS[order.status] : null;
+      if (!attention) return res.status(409).json({ error: 'There is nothing to bring back for this order.' });
+      await prisma.emailOrder.updateMany({ where: { id: order.id, user_id: req.user.id }, data: { attention } });
+      return res.json({ handled: false });
+    }
     const done = await prisma.emailOrder.updateMany({ where: { id: req.params.id, user_id: req.user.id }, data: { attention: null } });
     if (!done.count) return res.status(404).json({ error: 'Order not found.' });
     res.json({ handled: true });
