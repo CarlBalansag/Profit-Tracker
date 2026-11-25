@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { UiPreferences } from '../components/Settings/UiPreferences';
 import { useUiPreferences } from './useUiPreferences';
 
 const Probe = () => {
@@ -35,6 +36,22 @@ describe('glass theme', () => {
     // 0.52 is 4.6:1 on the base colour but drops under 4.5:1 on raised cards.
     expect(alpha('secondary')).toBeGreaterThanOrEqual(0.58);
     expect(alpha('muted')).toBeGreaterThanOrEqual(0.58);
+  });
+});
+
+describe('Credit Card animations', () => {
+  const toggle = () => screen.getByRole('switch', { name: 'Credit Card animations' });
+  it('are on until turned off, and the choice is kept', () => {
+    // Saved before the setting existed.
+    localStorage.setItem('ui_preferences', JSON.stringify({ style: 'neon-dark' }));
+    const first = render(<UiPreferences />);
+    expect(toggle().getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(toggle());
+    first.unmount();
+    render(<UiPreferences />);
+    expect(toggle().getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(toggle());
+    expect(JSON.parse(localStorage.getItem('ui_preferences'))).toEqual({ style: 'neon-dark', motion: 'on' });
   });
 });
 

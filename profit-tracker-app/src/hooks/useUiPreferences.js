@@ -17,12 +17,13 @@ export const UI_STYLE_OPTIONS = [
   },
 ];
 
-// 'device' plays less when the device asks for reduced motion; 'always' plays anyway.
-export const MOTION_OPTIONS = ['device', 'always'];
+// Credit Card animations. A deliberate product choice, like the logo and theme
+// switch: they play even when the device asks for reduced motion, until turned off.
+export const MOTION_OPTIONS = ['on', 'off'];
 
 const DEFAULT_UI_PREFERENCES = {
   style: 'neon-dark',
-  motion: 'device',
+  motion: 'on',
 };
 
 function mergePreferences(stored) {

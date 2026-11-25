@@ -360,6 +360,6 @@
   .cc-summary small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 
-/* Motion turned down: the device asks for less and it wasn't turned on here. */
+/* Animations turned off in Settings > Appearance. */
 .cc-page:not([data-play]) *, .cc-sheet-back:not([data-play]) * { transition-duration: 0s !important; animation-duration: 0s !important; }
 .cc-page:not([data-play]) .cf-tilt { transform: none !important; }

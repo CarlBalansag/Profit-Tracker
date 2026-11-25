@@ -1,5 +1,4 @@
 import { createContext, useCallback, useContext, useState } from 'react';
-import { useReducedMotion } from 'motion/react';
 import { useUiPreferences } from '../../hooks/useUiPreferences';
 
 // The page's look. One place, so every view draws the same card.
@@ -12,11 +11,10 @@ export const TILT = 6; // degrees
 export const CardPageContext = createContext({ catalogById: new Map(), play: false });
 export const useCardPage = () => useContext(CardPageContext);
 
-// Motion follows the device unless the person turned it on in Settings > Appearance.
+// On unless the person turned it off in Settings > Appearance.
 export function usePlayfulMotion() {
-  const device = useReducedMotion();
   const { preferences } = useUiPreferences();
-  return !device || preferences.motion === 'always';
+  return preferences.motion !== 'off';
 }
 
 export function useSpring() {

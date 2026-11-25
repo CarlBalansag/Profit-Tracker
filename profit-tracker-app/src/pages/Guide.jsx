@@ -236,7 +236,7 @@ const Guide = () => {
 
           <AccordionItem icon={CreditCard} title="Credit Card tracker" color="rose">
             <p>The <strong className="text-gray-200">Credit Card</strong> page is scoped to the current calendar month. It shows per-card spending, cashback earned, losses on sold items, and exactly what to pay.</p>
-            <p>See your cards as a wallet, a deck, rows or tiles, and drag the wallet into your own order. Type a store in <strong className="text-gray-200">Best card at…</strong> to see which card earns the most there, and use <strong className="text-gray-200">Mark paid</strong> once you pay a bill. Animations follow your device; you can turn them on in Settings → Appearance.</p>
+            <p>See your cards as a wallet, a deck, rows or tiles, and drag the wallet into your own order. Type a store in <strong className="text-gray-200">Best card at…</strong> to see which card earns the most there, and use <strong className="text-gray-200">Mark paid</strong> once you pay a bill. You can turn the animations off in Settings → Appearance.</p>
             <p><strong className="text-gray-200">Redeem</strong> = cashback to apply toward losses (capped at the loss amount — you never redeem more than you need to).</p>
             <p><strong className="text-gray-200">Keep as Points</strong> = remaining cashback you don't need to redeem — stays in your rewards account.</p>
             <p><strong className="text-gray-200">Net to Pay</strong> = what you actually owe the card company after cashback redemption.</p>
