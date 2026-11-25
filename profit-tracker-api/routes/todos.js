@@ -16,8 +16,9 @@ const isAuthenticated = (req, res, next) => {
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-// "<type>:<record id>" with an optional ":<YYYY-MM-DD>" for one occurrence.
-const KEY_RE = /^[a-z][a-z-]{1,30}:[A-Za-z0-9-]{1,64}(:\d{4}-\d{2}-\d{2})?$/;
+// "<type>:<record id>" with an optional ":<YYYY-MM-DD>" for one occurrence or
+// ":<second record id>" (an email order and the match it may belong to).
+const KEY_RE = /^[a-z][a-z_-]{1,30}:[A-Za-z0-9-]{1,64}(:[A-Za-z0-9-]{1,64})?$/;
 const serverToday = () => new Date().toISOString().slice(0, 10);
 
 // The user's own date, from their device. Anything not a real date within a

@@ -149,7 +149,7 @@ describe('To-Do items from email', () => {
       ['email-reconnect:a1', 'Reconnect me@gmail.com'],
       ['email-review:o9', '2 orders from email to check'],
     ]);
-    expect(items[1].link).toEqual({ kind: 'page', to: '/settings', state: { tab: 'email' } });
+    expect(items[1].link).toEqual({ kind: 'page', to: '/settings', state: { tab: 'email', emailOrders: 'review' } });
   });
 });
 

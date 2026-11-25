@@ -1008,6 +1008,7 @@ export const useEmailRuleMutations = () => {
     addExpense: useMutation({ mutationFn: (orderId) => send('POST', `/api/email/orders/${orderId}/expense`), onSuccess: invalidate }),
     addPurchase: useMutation({ mutationFn: (orderId) => send('POST', `/api/email/orders/${orderId}/purchase`), onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ['inventory'] }); qc.invalidateQueries({ queryKey: ['todos'] }); } }),
     saveInvoice: useMutation({ mutationFn: (orderId) => send('POST', `/api/email/orders/${orderId}/save-invoice`), onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ['inventory'] }); } }),
-    handled: useMutation({ mutationFn: (orderId) => send('POST', `/api/email/orders/${orderId}/handled`), onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ['todos'] }); } }),
+    // An order id, or { id, undo: true } to bring its note back.
+    handled: useMutation({ mutationFn: (order) => (order?.undo ? send('POST', `/api/email/orders/${order.id}/handled`, { undo: true }) : send('POST', `/api/email/orders/${order}/handled`)), onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ['todos'] }); } }),
   };
 };

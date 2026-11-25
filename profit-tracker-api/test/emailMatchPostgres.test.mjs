@@ -300,6 +300,59 @@ describe('email orders and matching on Postgres', () => {
       expect((await prisma.inventory.findUnique({ where: { id: row.id } })).cancelled_at).not.toBe(null);
     });
 
+    it('says which purchase a cancellation is about, clears once it is cancelled, and comes back with Undo', async () => {
+      const row = await linkedWalmart();
+      await email({ merchant: 'walmart', kind: 'cancelled', order_number: '2000123-45678901', sent_at: new Date('2026-03-03T10:00:00Z') });
+      await sync.organize(prisma, user.id);
+      const order = await prisma.emailOrder.findFirst();
+      const find = async () => (await listTodos(prisma, user.id, '2026-03-04')).items.find((t) => t.key === `email-cancelled:${order.id}`);
+      const todo = await find();
+      expect(todo).toMatchObject({
+        detail: '2 × Pokemon Booster Bundle · Cancel the purchase too, or change its quantity.',
+        link: { kind: 'transaction', inventoryId: row.id, saleId: null },
+        actions: ['handled', 'snooze', 'dismiss'],
+      });
+      expect(todo.email_attention).toMatchObject({ order_id: order.id, kind: 'cancelled', store: 'Walmart', order_number: '2000123-45678901' });
+      expect(todo.email_attention.records).toMatchObject([{ id: row.id, name: 'Pokemon Booster Bundle', quantity: 2, amount: 59.94, cancelled: false, cancel: { action: 'cancel' } }]);
+
+      // Done, and Undo.
+      expect((await send('POST', `/api/email/orders/${order.id}/handled`)).body).toEqual({ handled: true });
+      expect(await find()).toBeUndefined();
+      expect((await send('POST', `/api/email/orders/${order.id}/handled`, { undo: true })).body).toEqual({ handled: false });
+      expect(await find()).toBeTruthy();
+
+      // A purchase that arrived can't be cancelled; one that isn't the user's never shows.
+      await prisma.inventory.update({ where: { id: row.id }, data: { receiving_status: 'ON_HAND' } });
+      expect((await find()).email_attention.records[0].cancel).toBe(null);
+      await prisma.inventory.update({ where: { id: row.id }, data: { user_id: other.id } });
+      expect(await find()).toMatchObject({ detail: 'Not linked to a purchase any more. Mark it done.', link: { kind: 'page', to: '/settings', state: { tab: 'email', emailOrders: 'linked' } } });
+
+      // Cancelled: gone from the To-Do and from Settings > Email.
+      await prisma.inventory.update({ where: { id: row.id }, data: { user_id: user.id, cancelled_at: new Date('2026-03-04T00:00:00Z') } });
+      expect(await find()).toBeUndefined();
+      expect((await send('GET', '/api/email/orders?state=linked')).body.orders[0].attention).toBe(null);
+    });
+
+    it('a refund clears once one is recorded on the purchase after the email, not by an older one', async () => {
+      const row = await linkedWalmart();
+      const before = new Date('2026-02-20T12:00:00Z');
+      await prisma.refund.create({ data: { user_id: user.id, inventory_id: row.id, amount: 5, date: before, created_at: before } });
+      await email({ merchant: 'walmart', kind: 'refund', order_number: '2000123-45678901', sent_at: new Date('2026-03-03T10:00:00Z') });
+      await sync.organize(prisma, user.id);
+      const order = await prisma.emailOrder.findFirst();
+      const find = async () => (await listTodos(prisma, user.id, '2026-03-04')).items.find((t) => t.key === `email-refund:${order.id}`);
+      expect(await find()).toMatchObject({ detail: '2 × Pokemon Booster Bundle · Record the refund on the purchase.' });
+      await prisma.refund.create({ data: { user_id: user.id, inventory_id: row.id, amount: 20, date: new Date('2026-03-04T12:00:00Z') } });
+      expect(await find()).toBeUndefined();
+    });
+
+    it('refuses Undo when there is nothing to bring back', async () => {
+      await linkedWalmart();
+      const order = await prisma.emailOrder.findFirst();
+      expect((await send('POST', `/api/email/orders/${order.id}/handled`, { undo: true })).status).toBe(409);
+      expect((await send('POST', '/api/email/orders/nope/handled', { undo: true })).status).toBe(404);
+    });
+
     it('creates purchases from an order email, one per item with tax and shipping shared', async () => {
       await prisma.platform.create({ data: { user_id: user.id, name: 'Best Buy', type: 'Vendor' } });
       await email({ merchant: 'bestbuy', kind: 'order', order_number: 'BBY01-806123456789', total: '330.74', subtotal: '300.00', tax: '24.74', shipping: '6.00', payment_hint: 'Visa 4242',

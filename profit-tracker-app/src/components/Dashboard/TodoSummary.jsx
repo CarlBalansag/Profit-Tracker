@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronRight, ListChecks } from 'lucide-react';
+import { Check, ChevronRight, ListChecks, X } from 'lucide-react';
 import { useTodos } from '../../hooks/useApi';
+import useTodoActions from '../../hooks/useTodoActions';
 import { openTodoLink } from '../../utils/todoLink';
 import { GroupIcon } from '../Todos/TodoItem';
+import EmailAttentionModal from '../Todos/EmailAttentionModal';
 import WaitingPayments from '../Todos/WaitingPayments';
 import { URGENCIES, money } from '../Todos/todoMeta';
 
@@ -31,6 +33,7 @@ function topRows(items) {
     return {
       id,
       first,
+      entries,
       count: entries.length,
       detail: entries.length === 1 ? first.detail : entries.map((entry) => entry.detail.split(' · ')[0]).join(', '),
       amount: amounts.length ? amounts.reduce((sum, value) => sum + value, 0) : null,
@@ -38,15 +41,54 @@ function topRows(items) {
   });
 }
 
+// How a to-do is marked complete from the row, when it can be: the reminder is
+// done, the card bill is paid, the store's email is dealt with. Everything else
+// clears once its record is fixed.
+const COMPLETE = [['complete', 'complete', 'Done'], ['handled', 'handled', 'Done'], ['mark_paid', 'done', 'Mark paid']];
+
+// Done and Dismiss on a row: words on phones and wide screens, icons in between.
+function RowActions({ row, busy, onAct, muted }) {
+  const { first, entries, count } = row;
+  const complete = count === 1 && COMPLETE.find(([has]) => first.actions?.includes(has));
+  const canDismiss = entries.every((entry) => entry.actions?.includes('dismiss'));
+  if (!complete && !canDismiss) return null;
+  const button = `page-btn page-btn-secondary !h-8 !px-2.5 !text-xs sm:max-xl:!w-8 sm:max-xl:!px-0 sm:max-xl:pointer-coarse:!w-11 ${muted}`;
+  const word = 'sm:max-xl:hidden';
+  return (
+    <div className="flex shrink-0 items-center gap-2 pb-2.5 pl-12 sm:pb-0 sm:pl-0">
+      {complete && (
+        <button type="button" disabled={busy} onClick={() => onAct(first, complete[1])} className={button}>
+          <Check className="h-3.5 w-3.5" aria-hidden="true" /><span aria-hidden="true" className={word}>{complete[2]}</span>
+          <span className="sr-only">{complete[2]}: {first.title}</span>
+        </button>
+      )}
+      {canDismiss && (
+        <button type="button" disabled={busy} onClick={() => onAct(count > 1 ? { fold: true, items: entries } : first, 'dismiss')} className={button}>
+          <X className="h-3.5 w-3.5" aria-hidden="true" /><span aria-hidden="true" className={word}>{count > 1 ? 'Dismiss all' : 'Dismiss'}</span>
+          <span className="sr-only">{count > 1 ? `Dismiss all ${count}` : 'Dismiss'}: {first.title}</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 // The Dashboard's "Needs attention" card: urgency counts, the most urgent
 // few to-dos, and who owes the user money. Renders nothing when there's
 // nothing to show or it's still loading.
 export default function TodoSummary({ isGlass = false }) {
-  const navigate = useNavigate();
   const { data } = useTodos();
   const items = data?.items ?? [];
   const payers = data?.waiting_payments ?? [];
   if (!items.length && !payers.length) return null;
+  return <SummaryCard items={items} payers={payers} isGlass={isGlass} />;
+}
+
+function SummaryCard({ items, payers, isGlass }) {
+  const navigate = useNavigate();
+  const { act, busy } = useTodoActions();
+  // The email to-do whose window is open; it closes when the item clears.
+  const [reviewingKey, setReviewingKey] = useState(null);
+  const reviewing = items.find((entry) => entry.key === reviewingKey && entry.email_attention);
 
   const card = isGlass
     ? 'rounded-[24px] border border-white/[0.06] bg-[#181a1c]/78 p-4 sm:p-5 text-[#e8e2d6]'
@@ -61,8 +103,11 @@ export default function TodoSummary({ isGlass = false }) {
     .filter((urgency) => urgency.count > 0 && urgency.id !== 'info');
   const rows = topRows(items);
 
+  // A store's cancellation, refund or check email opens its own window; one to
+  // answer (link it? add it?) opens the list, which has its buttons.
   const open = (row) => {
-    if (row.count === 1 && row.first.link) openTodoLink(navigate, row.first.link);
+    if (row.count === 1 && row.first.email_attention) setReviewingKey(row.first.key);
+    else if (row.count === 1 && row.first.link && !row.first.email_match && !row.first.email_order) openTodoLink(navigate, row.first.link);
     else navigate('/todos');
   };
 
@@ -100,11 +145,11 @@ export default function TodoSummary({ isGlass = false }) {
         {rows.length > 0 && (
           <ul className={`min-w-0 divide-y ${isGlass ? 'divide-white/[0.06]' : 'divide-[color:var(--dp-border)]'}`}>
             {rows.map((row) => (
-              <li key={row.id}>
+              <li key={row.id} className="sm:flex sm:items-center sm:gap-3">
                 <button
                   type="button"
                   onClick={() => open(row)}
-                  className={`-mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors ${hover}`}
+                  className={`-mx-2 flex w-[calc(100%+1rem)] min-w-0 items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors sm:mr-0 sm:w-auto sm:flex-1 ${hover}`}
                 >
                   <GroupIcon group={row.first.group} urgency={row.first.urgency} />
                   <span className="min-w-0 flex-1">
@@ -119,6 +164,7 @@ export default function TodoSummary({ isGlass = false }) {
                   )}
                   <ChevronRight className={`h-4 w-4 shrink-0 ${muted}`} aria-hidden="true" />
                 </button>
+                <RowActions row={row} busy={busy} onAct={act} muted={muted} />
               </li>
             ))}
           </ul>
@@ -130,6 +176,7 @@ export default function TodoSummary({ isGlass = false }) {
           className={rows.length ? `border-t pt-3 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-1 ${line}` : ''}
         />
       </div>
+      {reviewing && <EmailAttentionModal entry={reviewing} busy={busy} onAct={act} onClose={() => setReviewingKey(null)} />}
     </section>
   );
 }
