@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.53',
+    date: '2026-11-25',
+    notes: "The Credit Card page is rebuilt: see your cards with their real artwork as a wallet, a 3D deck, rows or tiles, find the best card for a store, and mark bills paid, with smooth animations you can turn off in Settings > Appearance. Store refunds now lower a card's estimated bill and balance, here and on Cash Flow.",
+  },
+  {
     version: '1.52',
     date: '2026-11-24',
     notes: "You can now mark to-dos done or dismiss them right on the Dashboard, and clicking one about a cancelled or refunded order shows the purchase it's about; it clears on its own once you cancel the purchase or record the refund. Two cashout groups that are the same buyer can be merged into one in Settings > Data Setup > Cashouts, with Undo.",
