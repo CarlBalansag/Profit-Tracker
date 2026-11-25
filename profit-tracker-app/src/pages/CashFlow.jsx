@@ -299,7 +299,7 @@ function CashFlow() {
           </Panel>
 
           {/* Card balances vs limits */}
-          <Panel title="Card balances vs limits" sub="Estimated balance from what was charged to each card since its last unpaid statement.">
+          <Panel title="Card balances vs limits" sub="Estimated balance from what was charged to each card, less store refunds, since its last unpaid statement.">
             {data.cards.length ? (
               <div className="space-y-4">
                 {data.cards.map((c, i) => {
@@ -310,8 +310,8 @@ function CashFlow() {
                       <div className="flex justify-between gap-2 text-xs mb-1.5">
                         <span className="truncate font-medium text-[var(--dp-text-primary)]">{c.name}{c.last4 && <span className="text-[var(--dp-text-label)]"> ··{c.last4}</span>}</span>
                         <span className="shrink-0 tabular-nums text-[var(--dp-text-muted)]">
-                          <b className="text-[var(--dp-text-primary)]">{usd(c.balance)}</b>
-                          {c.limit ? ` of ${usd(c.limit)} · ${Math.round(pct)}%` : ' · no limit set'}
+                          <b className="text-[var(--dp-text-primary)]">{c.balance < 0 ? `${usd(-c.balance)} credit` : usd(c.balance)}</b>
+                          {c.balance >= 0 && (c.limit ? ` of ${usd(c.limit)} · ${Math.round(pct)}%` : ' · no limit set')}
                         </span>
                       </div>
                       <GrowBar pct={c.limit ? pct : 0} color={color} delay={i * 0.07} />
@@ -328,7 +328,7 @@ function CashFlow() {
         </Panel>
 
         <p className="text-[11px] text-[var(--dp-text-label)]">
-          Card bills are estimates from purchases, expenses and shipping labels charged to each card; payments to the card aren't recorded in the app. Cashback isn't counted as money in.
+          Card bills are estimates from purchases, expenses and shipping labels charged to each card, less store refunds; payments to the card aren't recorded in the app. Cashback isn't counted as money in.
         </p>
       </div>
     </div>

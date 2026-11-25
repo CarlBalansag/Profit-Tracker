@@ -70,6 +70,13 @@ describe('Cash Flow page', () => {
     expect(screen.getByText(/covers the next 30 days/)).toBeInTheDocument();
   });
 
+  it('calls a balance below zero a credit', () => {
+    mocks.data = cashFlowFixture({ cards: [{ ...cashFlowFixture().cards[0], balance: -42.5, currentCycle: -42.5, utilizationPct: 0 }] });
+    page();
+    expect(screen.getByText('$42.50 credit')).toBeInTheDocument();
+    expect(screen.queryByText(/of \$5,000\.00/)).not.toBeInTheDocument();
+  });
+
   it('shows card balance against its limit', () => {
     page();
     expect(screen.getByText(/of \$5,000\.00 · 10%/)).toBeInTheDocument();
