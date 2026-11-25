@@ -6,7 +6,7 @@ import { billKey } from '../../utils/cardWallet';
 import { useMarkBillPaid } from '../../hooks/useMarkBillPaid';
 import CountUp from '../UI/CountUp';
 import { useCardPage } from './context';
-import { dueText, money, subtitle } from './format';
+import { balanceText, dueText, money, subtitle } from './format';
 import { CardChip, UtilBar } from './parts';
 
 const SETTINGS = { tab: 'datasetup', view: 'Payment Methods' };
@@ -31,7 +31,7 @@ function MonthFacts({ card }) {
 function TodayFacts({ card }) {
   return (
     <dl className="cc-facts">
-      {card.balance !== null && <Fact label="Balance" hint="estimated from charges">{money(card.balance)}</Fact>}
+      {card.balance !== null && <Fact label="Balance" hint="estimated, less refunds">{balanceText(card.balance)}</Fact>}
       {card.statementBalance !== null && <Fact label="Last statement" hint={card.billPaid ? 'marked paid' : card.bill !== null ? 'not paid yet' : null}>{money(card.statementBalance)}</Fact>}
       {card.available !== null && <Fact label="Available credit"><span className={card.available < 0 ? 'cc-red' : ''}>{money(card.available)}</span></Fact>}
       {card.limit !== null && <Fact label="Credit limit">{money(card.limit)}</Fact>}

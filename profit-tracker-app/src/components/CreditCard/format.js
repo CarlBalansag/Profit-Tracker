@@ -3,6 +3,9 @@ import { formatDollars } from '../../utils/money';
 
 export const money = (v) => (v === null || v === undefined ? null : formatDollars(v));
 
+// Store refunds can take a balance below zero: the card then owes the user.
+export const balanceText = (v) => (v <= -0.005 ? `${money(-v)} credit` : money(v));
+
 export const NONE = '—';
 
 export const cardLabel = (card) => [card.name, card.last4 && `ending in ${card.last4}`].filter(Boolean).join(', ');

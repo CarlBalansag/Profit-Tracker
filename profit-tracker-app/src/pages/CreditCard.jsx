@@ -16,7 +16,7 @@ import CardWallet from '../components/CreditCard/CardWallet';
 import FlightStage from '../components/CreditCard/FlightStage';
 import PurchasesPanel from '../components/CreditCard/PurchasesPanel';
 import { CardPageContext, usePlayfulMotion, useWidth } from '../components/CreditCard/context';
-import { dueText, money } from '../components/CreditCard/format';
+import { balanceText, dueText, money } from '../components/CreditCard/format';
 import { artCatalogIds } from '../utils/cardArtwork';
 import { SORTS, buildCards, loadCardPage, rankForStore, saveCardPage, sortCards, storeSuggestions } from '../utils/cardWallet';
 import './CreditCard.css';
@@ -42,7 +42,7 @@ function Summary({ cards, summary, play }) {
   const balances = cards.filter((c) => c.balance !== null);
   const tiles = [
     ['Net to pay', money(summary.totalAmountToPay) ?? '—', `${cards.length} card${cards.length === 1 ? '' : 's'} this month`],
-    ['Balance today', balances.length ? money(balances.reduce((s, c) => s + c.balance, 0)) : '—', 'estimated'],
+    ['Balance today', balances.length ? balanceText(balances.reduce((s, c) => s + c.balance, 0)) : '—', 'estimated'],
     ['Next payment', next ? next.dueLabel : '—', next ? `${next.name}, ${dueText(next).toLowerCase()}` : 'no due dates set'],
     ['Cashback to keep', money(summary.totalCashbackToKeep) ?? '—', summary.totalUncoveredLoss > 0 ? `${money(summary.totalUncoveredLoss)} loss not covered` : 'after covering losses'],
   ];

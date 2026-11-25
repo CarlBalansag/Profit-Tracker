@@ -123,6 +123,13 @@ describe('paying a bill', () => {
     expect(screen.getByRole('button', { name: /Not paid yet/ })).toBeInTheDocument();
     expect(screen.getByText('Balance').nextSibling).toHaveTextContent('$50.00');
   });
+  it('calls a balance below zero a credit', () => {
+    mocks.flow = { cards: [{ id: 'a', balance: -42.5, statementBalance: 0, statementOpen: true, statementDue: dueDate() }] };
+    open();
+    details();
+    expect(screen.getByText('Balance').nextSibling).toHaveTextContent('$42.50 credit');
+    expect(screen.queryByRole('button', { name: /Mark paid/ })).toBeNull();
+  });
   it('offers nothing to pay on a card with no due day', () => {
     open();
     view('Rows');

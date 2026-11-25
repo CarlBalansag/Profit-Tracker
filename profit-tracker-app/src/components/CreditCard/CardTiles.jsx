@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { fallbackTheme } from '../../utils/cardThemes';
 import CardFace from './CardFace';
 import { CARD_WIDTH, GAP, useLimited } from './context';
-import { NONE, cardLabel, money, subtitle } from './format';
+import { NONE, balanceText, cardLabel, money, subtitle } from './format';
 import { CardChip, FlipButton, ShowMore, UtilRing } from './parts';
 import { useArtwork } from './useArtwork';
 
@@ -28,7 +28,7 @@ function Tile({ card, active, onSelect }) {
           <UtilRing card={card} />
         </div>
         <dl className="cc-tile-facts">
-          <div><dt>Balance today</dt><dd>{money(card.balance) ?? NONE}</dd></div>
+          <div><dt>Balance today</dt><dd>{balanceText(card.balance) ?? NONE}</dd></div>
           <div><dt>Available</dt><dd className={card.available < 0 ? 'cc-red' : ''}>{money(card.available) ?? NONE}</dd></div>
           <div><dt>Rewards</dt><dd>{card.reward.short}</dd></div>
         </dl>
