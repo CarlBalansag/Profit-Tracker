@@ -2,7 +2,8 @@
 //   - owed:      unpaid and short-paid sales, grouped by who owes the money,
 //                with how long each has waited and whether it is late
 //   - cards:     an estimated bill and balance per credit card, from the
-//                purchases, expenses and shipping labels charged to it
+//                purchases, expenses and shipping labels charged to it, less
+//                store refunds credited back to it
 //   - coverage:  for each upcoming card due date, the payouts expected to
 //                land before it, and whether they cover the bills so far
 //   - monthly:   money in vs money out per month (payouts and store refunds
@@ -12,7 +13,7 @@
 //
 // Card bills are estimates: the app records what was charged to a card, not
 // the payments made to it, so a bill is "what was charged in that statement
-// cycle". Cashback is left out of cash in, because the card pays it out on
+// cycle, less store refunds" (see cardBalances). Cashback is left out of cash in, because the card pays it out on
 // its own schedule.
 const { Decimal, decimal, isRealizedSale, grossBatchCost, batchCost, keptQuantity, keptSaleQuantity, allocatedCost, saleEconomics } = require('./decimalFinance');
 const { payoutStatus } = require('./payoutStatus');
@@ -56,6 +57,60 @@ function nextOccurrenceAfter(day, after) {
   return thisMonth > a ? thisMonth : dayInMonth(a.getUTCFullYear(), a.getUTCMonth() + 1, day);
 }
 const monthBefore = (date, day) => dayInMonth(date.getUTCFullYear(), date.getUTCMonth() - 1, day);
+
+// The statement that closed on `lastClose` and the cycle open since, from a
+// card's dated entries ({ day, charge } or { day, credit }, as Decimals).
+// Payments aren't recorded, so every statement counts as paid in full once its
+// due date passes (at once on a card with no due day). A store refund is a
+// credit on its own date, inside the same (close, next close] window as charges:
+//   - while the last statement is still unpaid (up to and on its due date) it
+//     pays that statement down first, as card issuers do;
+//   - anything left comes off the cycle it arrived in;
+//   - if that takes a cycle below zero, its bill is $0 and the rest carries into
+//     the following cycles until charges use it up.
+// So a bill is never negative, and no refund is dropped or counted twice.
+// `sinceClose` is below zero when the card owes the user.
+function cardBalances(entries, { closeDay, dueDay, lastClose, prevClose, today }) {
+  const cycles = new Map([[prevClose.getTime(), []], [lastClose.getTime(), []]]);
+  const current = [];
+  entries.forEach((entry) => {
+    if (entry.day > today) return;
+    if (entry.day > lastClose) { current.push(entry); return; }
+    // The cycle an entry belongs to is named by its close: the first one on or
+    // after the entry's day. Without a close day cycles are calendar months.
+    const close = nextOccurrenceAfter(closeDay || 31, addDays(entry.day, -1)).getTime();
+    if (!cycles.has(close)) cycles.set(close, []);
+    cycles.get(close).push(entry);
+  });
+
+  let statement = { close: null, amount: zero(), credit: zero() };
+  // What one cycle's entries do to the statement before it and to the cycle.
+  const apply = (cycle, followsStatement) => {
+    const owed = followsStatement ? statement.amount : zero();
+    const due = dueDay && statement.close ? nextOccurrenceAfter(dueDay, statement.close) : null;
+    let charges = zero();
+    let credits = zero();
+    let creditsByDue = zero();
+    cycle.forEach(({ day, charge, credit }) => {
+      if (charge) charges = charges.plus(charge);
+      if (!credit) return;
+      credits = credits.plus(credit);
+      if (due && day <= due) creditsByDue = creditsByDue.plus(credit);
+    });
+    const paidDown = Decimal.min(owed, creditsByDue);
+    return { owed: owed.minus(paidDown), net: charges.minus(credits.minus(paidDown)).minus(statement.credit) };
+  };
+  Array.from(cycles.keys()).sort((a, b) => a - b).forEach((time) => {
+    const close = new Date(time);
+    // Cycles with nothing in them aren't listed; the statement before a gap has
+    // been paid by now, and only a leftover credit carries over it.
+    const follows = Boolean(statement.close) && monthBefore(close, closeDay || 31).getTime() === statement.close.getTime();
+    const { net } = apply(cycles.get(time), follows);
+    statement = { close, amount: Decimal.max(0, net), credit: Decimal.max(0, net.negated()) };
+  });
+  const { owed, net } = apply(current, true);
+  return { statement: owed, sinceClose: net };
+}
 
 const exactInventory = (inv) => {
   const result = withExactFields(inv, MAPPINGS.inventory);
@@ -188,15 +243,18 @@ async function computeCashFlow(prisma, userId, now = new Date()) {
   const owedTotal = owed.reduce((s, g) => s.plus(g.amount), zero());
 
   // ── Card bills and balances ──────────────────────────────────────────────
-  const chargesFor = (cardId, from, to) => {
-    // (from, to] in whole UTC days
-    const inWindow = (date) => { const d = utcDay(date); return d > from && d <= to; };
-    let total = zero();
-    inventories.forEach((inv) => { if (inv.payment_method_id === cardId && inWindow(inv.purchase_date)) total = total.plus(grossBatchCost(inv)); });
-    expenses.forEach((e) => { if (e.payment_method_id === cardId && inWindow(e.date)) total = total.plus(decimal(e.amount || 0)); });
-    sales.forEach((s) => { if (s.sale_shipping_payment_method_id === cardId && inWindow(s.sale_date)) total = total.plus(decimal(s.sale_shipping || 0)); });
-    return total;
-  };
+  const entriesByCard = new Map(cards.map((card) => [card.id, []]));
+  const addEntry = (cardId, date, entry) => entriesByCard.get(cardId)?.push({ day: utcDay(date), ...entry });
+  inventories.forEach((inv) => addEntry(inv.payment_method_id, inv.purchase_date, { charge: grossBatchCost(inv) }));
+  expenses.forEach((e) => addEntry(e.payment_method_id, e.date, { charge: decimal(e.amount || 0) }));
+  sales.forEach((s) => addEntry(s.sale_shipping_payment_method_id, s.sale_date, { charge: decimal(s.sale_shipping || 0) }));
+  // Store refunds go back to the card that paid for the purchase. A buyer
+  // refund (sale_id) is money the user pays out, not a card credit.
+  const cardOfPurchase = new Map(inventories.map((inv) => [inv.id, inv.payment_method_id]));
+  refunds.forEach((r) => {
+    const amount = decimal(r.amount || 0);
+    if (r.inventory_id && !r.sale_id && amount.gt(0)) addEntry(cardOfPurchase.get(r.inventory_id), r.date, { credit: amount });
+  });
   const bills = [];
   const cardRows = cards.map((rawCard) => {
     const card = withExactFields(rawCard, MAPPINGS.paymentMethod);
@@ -206,8 +264,7 @@ async function computeCashFlow(prisma, userId, now = new Date()) {
     const lastClose = closeDay ? lastOccurrence(closeDay, today) : new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0));
     const prevClose = closeDay ? monthBefore(lastClose, closeDay) : new Date(Date.UTC(lastClose.getUTCFullYear(), lastClose.getUTCMonth(), 0));
     const nextClose = closeDay ? nextOccurrenceAfter(closeDay, today) : new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0));
-    const statement = chargesFor(card.id, prevClose, lastClose);
-    const sinceClose = chargesFor(card.id, lastClose, today);
+    const { statement, sinceClose } = cardBalances(entriesByCard.get(card.id), { closeDay, dueDay, lastClose, prevClose, today });
     const statementDue = dueDay ? nextOccurrenceAfter(dueDay, lastClose) : null;
     const statementOpen = statementDue && statementDue >= today;
     const balance = (statementOpen ? statement : zero()).plus(sinceClose);
@@ -230,7 +287,7 @@ async function computeCashFlow(prisma, userId, now = new Date()) {
       statementOpen: Boolean(statementOpen),
       nextClose: isoDay(nextClose),
       limit: limit ? money(limit) : null,
-      utilizationPct: limit && limit.gt(0) ? money(balance.div(limit).times(100)) : null,
+      utilizationPct: limit && limit.gt(0) ? money(Decimal.max(0, balance).div(limit).times(100)) : null,
       hasDates: Boolean(closeDay && dueDay),
     };
   }).sort((a, b) => b.balance - a.balance);
@@ -355,4 +412,4 @@ async function computeCashFlow(prisma, userId, now = new Date()) {
   };
 }
 
-module.exports = { computeCashFlow, _internal: { lastOccurrence, nextOccurrenceAfter, dayInMonth } };
+module.exports = { computeCashFlow, _internal: { cardBalances, lastOccurrence, nextOccurrenceAfter, dayInMonth } };
