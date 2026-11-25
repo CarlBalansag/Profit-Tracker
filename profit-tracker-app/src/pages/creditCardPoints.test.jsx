@@ -3,11 +3,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import CreditCard from './CreditCard';
 
+globalThis.ResizeObserver ??= class { observe() {} disconnect() {} };
+
 const mocks = vi.hoisted(() => ({ card: null }));
 vi.mock('../hooks/useApi', () => ({
   useCreditCard: () => ({ data: mocks.card, isLoading: false }),
   useTodos: () => ({}),
   useTodoState: () => ({}),
+  usePaidBills: () => ({}),
+  useCardFaces: () => ({}),
+  usePaymentMethods: () => ({}),
+  usePlatforms: () => ({}),
   useCashFlow: () => ({}),
   apiFetch: vi.fn(),
 }));
@@ -27,10 +33,16 @@ const dashboard = (overrides) => ({
   }],
 });
 
+// On a phone-sized screen a card's own numbers show once it is opened.
+const openCard = () => {
+  render(<MemoryRouter><CreditCard /></MemoryRouter>);
+  fireEvent.click(screen.getByRole('button', { name: /Amex Gold/ }));
+};
+
 describe('Credit Card page: points cards', () => {
   it('shows points earned alongside their dollar value', () => {
     mocks.card = dashboard({ rewardType: 'points', pointValueCents: 1, rewardsLabel: 'Membership Rewards points' });
-    render(<MemoryRouter><CreditCard /></MemoryRouter>);
+    openCard();
     expect(screen.getByText('Points Earned')).toBeTruthy();
     expect(screen.getAllByText(/400 pts/).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'Show details' }));
@@ -40,7 +52,7 @@ describe('Credit Card page: points cards', () => {
 
   it('values points at the card\'s point value', () => {
     mocks.card = dashboard({ rewardType: 'points', pointValueCents: 2, rewardsLabel: 'SkyMiles', cashbackEarned: 8, cashbackToKeep: 8 });
-    render(<MemoryRouter><CreditCard /></MemoryRouter>);
+    openCard();
     // $8 of value at 2¢ per mile = 400 miles (not 800).
     expect(screen.getAllByText(/400 miles/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/800 miles/)).toBeNull();
@@ -48,7 +60,7 @@ describe('Credit Card page: points cards', () => {
 
   it('cashback cards keep the cashback wording', () => {
     mocks.card = dashboard({ rewardType: 'cashback' });
-    render(<MemoryRouter><CreditCard /></MemoryRouter>);
+    openCard();
     expect(screen.getByText('Cashback Earned')).toBeTruthy();
     expect(screen.queryByText(/pts/)).toBeNull();
   });

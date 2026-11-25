@@ -1,5 +1,6 @@
 import React from 'react';
 import { Check, LayoutDashboard, Layers } from 'lucide-react';
+import { useReducedMotion } from 'motion/react';
 import { UI_STYLE_OPTIONS, useUiPreferences } from '../../hooks/useUiPreferences';
 
 const STYLE_ICONS = {
@@ -46,6 +47,8 @@ function UiPreview({ styleId }) {
 
 export function UiPreferences() {
   const { preferences, savePreferences } = useUiPreferences();
+  const deviceAsksForLess = useReducedMotion();
+  const always = preferences.motion === 'always';
 
   const selectStyle = (style) => {
     savePreferences({ ...preferences, style });
@@ -99,6 +102,29 @@ export function UiPreferences() {
             </button>
           );
         })}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-xl border border-white/10 bg-[#12121A] p-4">
+        <div className="min-w-0 flex-1 basis-56">
+          <h2 id="card-motion-title" className="text-sm font-semibold text-white">Credit Card animations</h2>
+          <p id="card-motion-note" className="mt-1 text-xs leading-relaxed text-gray-500">
+            {deviceAsksForLess
+              ? 'This device has animations turned off. Turn this on to play them on the Credit Card page anyway.'
+              : 'They follow this device. Turn this on to keep them playing even if animations are turned off on it later.'}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={always}
+          aria-labelledby="card-motion-title"
+          aria-describedby="card-motion-note"
+          onClick={() => savePreferences({ ...preferences, motion: always ? 'device' : 'always' })}
+          className="relative h-7 w-12 shrink-0 rounded-full border border-[color:var(--dp-border-hover)] transition-colors"
+          style={{ background: always ? 'var(--dp-accent-solid)' : 'var(--dp-hover-bg)' }}
+        >
+          <span className="absolute top-[3px] block h-5 w-5 rounded-full bg-white shadow transition-[left]" style={{ left: always ? 24 : 3 }} />
+        </button>
       </div>
 
       <div className="rounded-xl border border-white/10 bg-[#12121A] p-4">

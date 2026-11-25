@@ -17,8 +17,12 @@ export const UI_STYLE_OPTIONS = [
   },
 ];
 
+// 'device' plays less when the device asks for reduced motion; 'always' plays anyway.
+export const MOTION_OPTIONS = ['device', 'always'];
+
 const DEFAULT_UI_PREFERENCES = {
   style: 'neon-dark',
+  motion: 'device',
 };
 
 function mergePreferences(stored) {
@@ -34,6 +38,8 @@ function mergePreferences(stored) {
   if (!UI_STYLE_OPTIONS.some((option) => option.id === next.style)) {
     next.style = DEFAULT_UI_PREFERENCES.style;
   }
+
+  if (!MOTION_OPTIONS.includes(next.motion)) next.motion = DEFAULT_UI_PREFERENCES.motion;
 
   return next;
 }

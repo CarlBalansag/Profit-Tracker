@@ -8,8 +8,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, CircleCheck } from 'lucide-react';
-import { toast } from 'sonner';
-import { useCashFlow, useTodos, useTodoState } from '../../hooks/useApi';
+import { useCashFlow, useTodos } from '../../hooks/useApi';
+import { useMarkBillPaid } from '../../hooks/useMarkBillPaid';
 import { localToday } from '../../utils/returnWindow';
 import { formatDollars } from '../../utils/money';
 
@@ -32,26 +32,8 @@ function cardBills(todos, cards) {
 export default function DueSoonBanner() {
   const { data: todos } = useTodos();
   const { data: cashFlow } = useCashFlow();
-  const mutation = useTodoState();
+  const { markPaid, saving } = useMarkBillPaid();
   const bills = cardBills(todos?.items ?? [], cashFlow?.cards ?? []);
-
-  // Awaited rather than passed as mutate callbacks, which are dropped when the
-  // page is left (or another bill is marked) before the save comes back.
-  const undo = async (key) => {
-    try {
-      await mutation.mutateAsync({ key, action: 'restore' });
-    } catch (err) {
-      toast.error(`Could not undo: ${err.message}`);
-    }
-  };
-  const markPaid = async (key) => {
-    try {
-      await mutation.mutateAsync({ key, action: 'done' });
-      toast.success('Marked paid.', { action: { label: 'Undo', onClick: () => undo(key) } });
-    } catch (err) {
-      toast.error(`Could not save: ${err.message}`);
-    }
-  };
 
   if (!bills.length) return null;
   return (
@@ -72,7 +54,7 @@ export default function DueSoonBanner() {
                   {bill.detail}
                 </p>
               </div>
-              <button type="button" disabled={mutation.isPending} onClick={() => markPaid(bill.key)} className="page-btn page-btn-secondary shrink-0">
+              <button type="button" disabled={saving} onClick={() => markPaid(bill.key)} className="page-btn page-btn-secondary shrink-0">
                 <CircleCheck size={14} aria-hidden="true" /> Mark paid<span className="sr-only">: {bill.title}</span>
               </button>
             </li>

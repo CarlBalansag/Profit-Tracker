@@ -12,6 +12,7 @@
 //      download leaves the cached/bundled copy in place.
 const path = require('node:path');
 const fs = require('node:fs');
+const { normalizeArt } = require('./cardArt');
 
 const SOURCE_ID = 'opencard-us';
 const SOURCE_URL = 'https://cdn.jsdelivr.net/gh/thedavidweng/opencard-db@main/exports/cards-all.json';
@@ -91,6 +92,8 @@ function normalizeCard(raw) {
     name,
     issuer: str(raw.issuer, 80) || 'Other',
     network: str(raw.network, 40),
+    network_tier: str(raw.network_tier, 40),
+    art: normalizeArt(raw.image),
     segment: str(raw.segment, 40),
     status: str(raw.status, 40),
     annual_fee: num(raw.annual_fee?.amount),
@@ -200,7 +203,17 @@ async function getCatalog(prisma, opts = {}) {
   const age = now.getTime() - new Date(catalog.synced_at).getTime();
   const syncDisabled = process.env.CARD_CATALOG_SYNC === 'off';
   if (!(age < REFRESH_AFTER_MS) && opts.refresh !== false && !syncDisabled) refreshInBackground(prisma, opts);
-  return { ...catalog, cards: applyCorrections(catalog.cards, opts.corrections) };
+  return { ...catalog, cards: applyCorrections(withArtwork(catalog.cards), opts.corrections) };
+}
+
+// Copies saved before artwork was kept have no `art` at all: they borrow it
+// from the bundled snapshot until their next monthly refresh.
+function withArtwork(cards) {
+  if (!cards.some((card) => card.art === undefined)) return cards;
+  const bundled = new Map(loadBundled().cards.map((card) => [card.id, card]));
+  return cards.map((card) => (card.art === undefined
+    ? { ...card, art: bundled.get(card.id)?.art ?? null, network_tier: card.network_tier ?? bundled.get(card.id)?.network_tier ?? null }
+    : card));
 }
 
 // ─── Our own corrections ──────────────────────────────────────────────────────

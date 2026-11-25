@@ -275,6 +275,21 @@ export const creditCardQuery = (month) => ({
 });
 export const useCreditCard = (month) => useQuery(creditCardQuery(month));
 
+// Card bills marked paid on the Credit Card page or the To-Do list.
+export const usePaidBills = () => useQuery({
+  queryKey: ['creditcard', 'paid-bills'],
+  queryFn: () => fetcher('/api/creditcard/paid-bills'),
+});
+
+// What the catalog knows about the given cards (issuer, network, artwork).
+export const useCardFaces = (ids = []) => useQuery({
+  queryKey: ['creditcard', 'faces', ids.join(',')],
+  queryFn: () => fetcher(`/api/card-catalog/cards?ids=${ids.map(encodeURIComponent).join(',')}`),
+  enabled: ids.length > 0,
+  staleTime: 1000 * 60 * 60,
+  placeholderData: keepPreviousData,
+});
+
 // ─── Goals ────────────────────────────────────────────────────────────────────
 export const goalsQuery = () => ({
   queryKey: ['goals'],
@@ -499,7 +514,10 @@ export const useTodoState = () => {
     onError: (_err, _vars, context) => {
       if (context?.previous) qc.setQueryData(['todos'], context.previous);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ['todos'] }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['todos'] });
+      qc.invalidateQueries({ queryKey: ['creditcard', 'paid-bills'] });
+    },
   });
 };
 
