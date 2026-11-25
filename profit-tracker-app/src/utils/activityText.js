@@ -198,7 +198,7 @@ function linkNoun(row) {
   if (row.model === 'sales') return row.fields?.sale_shipping_payment_method_id ? 'shipping label' : 'sale';
   return {
     inventory: 'purchase', expense: 'expense', recurringExpense: 'recurring expense', cashoutConnection: 'cashout connection', account: 'store account',
-    cashoutCommitment: 'commitment', cashoutItemMatch: 'matched item',
+    cashoutCommitment: 'commitment', cashoutItemMatch: 'matched item', importBatch: 'import', taxForm1099K: '1099-K form',
   }[row.model] || 'record';
 }
 
@@ -206,8 +206,17 @@ function setupText(entry) {
   const [model, noun] = SETUP[entry.record_type];
   const d = entry.detail || {};
   const rows = d.rows || [];
-  const main = rows.find((r) => r.model === model) || {};
   const prefix = d.undo ? 'Undid: ' : '';
+  // Two groups made one: say which is kept and what moved to it.
+  if (d.action === 'merge') {
+    const moved = {};
+    for (const r of rows.filter((x) => x.link)) moved[linkNoun(r)] = (moved[linkNoun(r)] || 0) + 1;
+    const list = Object.entries(moved).map(([what, n]) => plural(n, what)).join(', ');
+    const parts = [`${d.undo ? 'Out of' : 'Into'} ${d.merged_into || 'another group'}`];
+    if (list) parts.push(`${d.undo ? 'Moved back' : 'Moved'} ${list}`);
+    return { title: `${prefix}Merged a cashout group`, change: parts.join(' · ') };
+  }
+  const main = rows.find((r) => r.model === model) || {};
   const article = /^[aeiou]/.test(noun) ? 'an' : 'a';
   const verb = d.action === 'create' ? 'Added' : d.action === 'delete' ? 'Removed' : 'Edited';
   const title = `${prefix}${verb} ${verb === 'Edited' ? '' : `${article} `}${noun}`;

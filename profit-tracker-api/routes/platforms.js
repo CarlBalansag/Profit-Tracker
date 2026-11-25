@@ -2,9 +2,10 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
 const { validateBody } = require('../middleware/validate');
-const { platform, updatePlatform, platformBatch } = require('../validation/schemas');
+const { platform, updatePlatform, mergePlatform, platformBatch } = require('../validation/schemas');
 const { requireOwned } = require('../services/ownership');
 const activityLog = require('../services/activityLog');
+const { mergePreview, mergePlatforms } = require('../services/platformMerge');
 const { withExactFields, withExactList, MAPPINGS } = require('../services/decimalRead');
 
 const isAuthenticated = (req, res, next) => {
@@ -142,6 +143,26 @@ router.put('/:id', isAuthenticated, validateBody(updatePlatform), async (req, re
     }));
 
     res.json({ ...withExactFields(updated, MAPPINGS.platform), _salesUpdated: bulkResult.count, activity_id: activity?.id ?? null });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/platforms/:id/merge-preview - what merging this cashout group moves
+router.get('/:id/merge-preview', isAuthenticated, async (req, res, next) => {
+  try {
+    res.json(await mergePreview(req.user.id, req.params.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/platforms/:id/merge { into } - moves everything on this cashout
+// group to `into`, then removes this one (ownership of both enforced)
+router.post('/:id/merge', isAuthenticated, validateBody(mergePlatform), async (req, res, next) => {
+  try {
+    const { platform: kept, moved, activity } = await mergePlatforms(req.user.id, req.params.id, req.body.into);
+    res.json({ platform: withExactFields(kept, MAPPINGS.platform), moved, activity_id: activity?.id ?? null });
   } catch (err) {
     next(err);
   }

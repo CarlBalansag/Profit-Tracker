@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   DollarSign, Plus, Search, X, Edit2, Trash2,
-  Check
+  Check, Merge
 } from 'lucide-react';
 import { useInvalidate, apiFetch} from '../../hooks/useApi';
 import { requireSuccessfulResponse } from '../../hooks/apiResponse';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
+import { toastWithUndo } from '../../utils/undoToast';
 import { CashoutIntegrations } from './CashoutIntegrations';
+import { MergeCashoutGroups } from './MergeCashoutGroups';
 import { toast } from 'sonner';
 
 // ─── Quick Add Store Directory ────────────────────────────────────────────────
@@ -436,12 +438,14 @@ export function Cashouts() {
   const [showCustom, setShowCustom] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [editPlatform, setEditPlatform] = useState(null);
+  const [mergeFrom, setMergeFrom] = useState(null); // null = closed, '' = none picked yet
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const invalidate = useInvalidate();
 
-  const fetchPlatforms = useCallback(async () => {
-    setIsLoading(true);
+  // quiet: refresh without swapping the list for "Loading", so the page stays put.
+  const fetchPlatforms = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) setIsLoading(true);
     setLoadError(null);
     try {
       const res = await apiFetch(`/api/platforms`, { credentials: 'include' });
@@ -485,6 +489,14 @@ export function Cashouts() {
     invalidate.platforms();
   };
 
+  // A merge moves records every page shows, so everything is refreshed.
+  const refreshAfterMerge = () => { invalidate.all(); fetchPlatforms({ quiet: true }); };
+  const handleMerged = ({ from, into, activity_id }) => {
+    setMergeFrom(null);
+    refreshAfterMerge();
+    toastWithUndo(`${from.name} merged into ${into.name}.`, activity_id, refreshAfterMerge);
+  };
+
   const handleBatchSave = (newPlatforms) => {
     setPlatforms(v => [...v, ...newPlatforms]);
     invalidate.platforms();
@@ -502,11 +514,19 @@ export function Cashouts() {
 
       {/* List */}
       <div>
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
           <p className="text-sm text-gray-500">
             <span className="font-semibold text-gray-300">{platforms.length}</span> groups — who you wholesale to
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {platforms.length > 1 && (
+              <button
+                onClick={() => setMergeFrom('')}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-gray-300 text-sm font-medium hover:bg-white/[0.06] transition-colors"
+              >
+                <Merge className="w-3.5 h-3.5" /> Merge
+              </button>
+            )}
             <button
               onClick={() => setShowQuickAdd(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-gray-300 text-sm font-medium hover:bg-white/[0.06] transition-colors"
@@ -551,7 +571,15 @@ export function Cashouts() {
                       <p className="text-xs text-gray-500 capitalize">{platform.type}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1.5">
+                    {platforms.length > 1 && (
+                      <button aria-label={`Merge ${platform.name} into another group`}
+                        onClick={() => setMergeFrom(platform.id)}
+                        className="p-1 text-gray-500 hover:text-white transition-colors"
+                      >
+                        <Merge className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button aria-label={`Edit ${platform.name}`}
                       onClick={() => setEditPlatform(platform)}
                       className="p-1 text-gray-500 hover:text-white transition-colors"
@@ -581,6 +609,14 @@ export function Cashouts() {
       </div>
 
       {/* Modals */}
+      {mergeFrom !== null && (
+        <MergeCashoutGroups
+          groups={platforms}
+          initialFromId={mergeFrom}
+          onClose={() => setMergeFrom(null)}
+          onMerged={handleMerged}
+        />
+      )}
       {showCustom && (
         <CustomModal onClose={() => setShowCustom(false)} onSave={handleSaveNew} />
       )}
