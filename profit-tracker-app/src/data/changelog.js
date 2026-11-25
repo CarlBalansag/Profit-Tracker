@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.52',
+    date: '2026-11-24',
+    notes: "You can now mark to-dos done or dismiss them right on the Dashboard, and clicking one about a cancelled or refunded order shows the purchase it's about; it clears on its own once you cancel the purchase or record the refund. Two cashout groups that are the same buyer can be merged into one in Settings > Data Setup > Cashouts, with Undo.",
+  },
+  {
     version: '1.51',
     date: '2026-11-24',
     notes: "You can now download your transactions as a CSV, and the Credit Card page shows bills due soon with a Mark paid button. Restoring an undone cashout import is now reliable at any size, and invoice PDFs print quotes and dashes correctly.",
