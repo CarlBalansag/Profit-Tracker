@@ -100,7 +100,7 @@ describe('paying a bill', () => {
   it('marks it paid with the to-do list\'s own key, with Undo', async () => {
     open();
     details();
-    expect(screen.getAllByText(/Pay next/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Pay next · \$200\.00/).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: /Mark paid/ }));
     expect(mocks.mutateAsync).toHaveBeenCalledWith({ key: `card-due:a:${dueDate()}`, action: 'done' });
     await waitFor(() => expect(mocks.toast.success).toHaveBeenCalledWith('Marked paid.', expect.anything()));

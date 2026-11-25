@@ -22,7 +22,7 @@ export function CardChip({ card, short }) {
   if (card.atStore) {
     return <span className={`cc-chip ${card.atStore.best ? 'cc-chip-best' : 'cc-chip-none'}`}>{card.atStore.best && <Star size={11} aria-hidden="true" />}{card.atStore.label}<span className="sr-only">{card.atStore.best ? ', best card here' : ' here'}</span></span>;
   }
-  if (card.payNext) return <span className="cc-chip cc-chip-next" title={dueText(card)}>Pay next · {card.dueLabel}</span>;
+  if (card.payNext) return <span className="cc-chip cc-chip-next" title={dueText(card)}>Pay next · {money(card.bill)}<span className="cc-next-by">&nbsp;by {card.dueLabel}</span></span>;
   return <DueChip card={card} short={short} />;
 }
 
@@ -62,11 +62,13 @@ export function UtilRing({ card, size = 58 }) {
 export function CardTab({ card, height }) {
   const { ref, art } = useArtwork(card);
   const tint = art ? `rgb(${art.meta.tint.join(' ')})` : fallbackTheme(card).via;
+  // The bill takes the place of the last four digits, so the name still fits.
+  const tagged = card.payNext && !card.atStore;
   return (
     <div ref={ref} className="cc-tab" aria-hidden="true" style={{ '--tint': tint, height }}>
       <span className="cc-tab-name">{card.name}</span>
-      {card.last4 && <span className="cc-tab-last4">{card.last4}</span>}
-      {card.payNext && !card.atStore && <span className="cc-tab-next">Pay next</span>}
+      {card.last4 && !tagged && <span className="cc-tab-last4">{card.last4}</span>}
+      {tagged && <span className="cc-tab-next">Pay {money(card.bill)}</span>}
       <span className={`cc-tab-money ${card.atStore?.best ? 'best' : ''}`}>
         {card.atStore ? <>{card.atStore.best && <Star size={12} aria-hidden="true" />}{card.atStore.label}</> : money(card.netToPay)}
       </span>
