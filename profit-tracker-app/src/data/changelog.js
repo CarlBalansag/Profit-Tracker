@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.56',
+    date: '2026-11-25',
+    notes: "LA and Points4Days deals are now checked once a day instead of every minute, at their request. Sync now still refreshes them, up to once an hour; EB deals still update every minute.",
+  },
+  {
     version: '1.55',
     date: '2026-11-25',
     notes: "Your AI assistant can now say which cashout group a cashout purchase goes to, so logging works when a cashout isn't linked to a group yet.",

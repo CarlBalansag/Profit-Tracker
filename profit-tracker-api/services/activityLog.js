@@ -257,7 +257,8 @@ async function linkedRefs(tx, userId, model, id) {
 }
 // Secrets never go into the log. A cashout connection is only ever snapshotted
 // for its platform link, but its key columns are dropped regardless.
-const NEVER_STORED = new Set(['encrypted_key']);
+// A connection's cached deal list is a cache the next sync refills, not data.
+const NEVER_STORED = new Set(['encrypted_key', 'cached_deals']);
 // Prisma refuses a bare null for a Json column: it has to be DbNull.
 const JSON_FIELDS = Object.fromEntries(Object.entries(TABLE).map(([model, name]) => [
   model,

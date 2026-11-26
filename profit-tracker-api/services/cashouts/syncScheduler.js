@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const prisma = require('../../prisma');
-const { fetchConnectionDeals } = require('./service');
+const { fetchConnectionDeals, syncBlockedUntil } = require('./service');
+const { ADAPTERS } = require('./registry');
 
 // Unique 32-bit integer for Postgres advisory lock for cashout background sync
 const ADVISORY_LOCK_ID = 948273615;
@@ -8,6 +9,13 @@ const MAX_EXECUTION_BUDGET_MS = 50 * 1000; // 50 seconds max per run
 // Skip a connection synced this recently (a Cashout page visit or the last
 // run). Under a minute, so a cron every minute reaches every connection each run.
 const RECENT_SYNC_SKIP_MS = 45 * 1000;
+// A once-a-day cashout (adapter.syncIntervalMs) is due a little early, so the
+// minute the cron lands on doesn't push it later each day.
+const DUE_EARLY_MS = 5 * 60 * 1000;
+const skipFor = (provider) => {
+  const every = ADAPTERS[provider]?.syncIntervalMs;
+  return every ? Math.max(RECENT_SYNC_SKIP_MS, every - DUE_EARLY_MS) : RECENT_SYNC_SKIP_MS;
+};
 
 /**
  * Timing-safe string comparison to protect bearer token verification from timing attacks.
@@ -121,8 +129,13 @@ async function runScheduledSync() {
         break;
       }
 
-      // Skip if synced very recently
-      if (conn.last_synced_at && Date.now() - new Date(conn.last_synced_at).getTime() < RECENT_SYNC_SKIP_MS) {
+      // Skip if synced recently (within the day, for a once-a-day cashout)
+      if (conn.last_synced_at && Date.now() - new Date(conn.last_synced_at).getTime() < skipFor(conn.provider)) {
+        summary.skipped++;
+        continue;
+      }
+      // Or still waiting out a failed check, rather than asking again each minute.
+      if (Date.now() < (syncBlockedUntil.get(conn.id) || 0)) {
         summary.skipped++;
         continue;
       }

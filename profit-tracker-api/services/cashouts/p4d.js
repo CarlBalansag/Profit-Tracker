@@ -135,6 +135,10 @@ const p4dAdapter = {
   name: NAME,
   baseUrl: BASE_URL,
   credentialType: 'login',
+  // We sign in to check deals, so they're checked once a day (the cashout
+  // asked us to slow down). Sync now still works, at most once an hour.
+  syncIntervalMs: 24 * 60 * 60 * 1000,
+  manualSyncCooldownMs: 60 * 60 * 1000,
 
   // Builds the stored "key" from the connect form's fields.
   buildCredential({ email, password }) {

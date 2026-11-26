@@ -698,6 +698,28 @@ describe('Cashout Page', () => {
       expect(toast.info).toHaveBeenCalledWith('Please wait 30s', expect.anything());
       expect(toast.error).not.toHaveBeenCalled();
     });
+
+    it('a cashout still cooling down does not stop the others from syncing', async () => {
+      currentConnections = [
+        { ...mockConnections[0], id: 'conn-la', provider: 'la', displayName: 'LA' },
+        { ...mockConnections[0], id: 'conn-eb-2' },
+      ];
+      const cooldown = Object.assign(new Error('Please wait 50 min before syncing LA again.'), { cooldown: true, remainingSeconds: 3000 });
+      mockMutations.syncConnection.mutateAsync.mockRejectedValueOnce(cooldown).mockResolvedValueOnce({});
+      render(
+        <MemoryRouter>
+          <Cashout />
+        </MemoryRouter>
+      );
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /Sync now/i }));
+      });
+
+      expect(mockMutations.syncConnection.mutateAsync).toHaveBeenCalledWith('conn-eb-2');
+      expect(toast.success).toHaveBeenCalledWith('Synced. Please wait 50 min before syncing LA again.', expect.anything());
+      expect(toast.error).not.toHaveBeenCalled();
+    });
   });
 
   describe('view toggle', () => {

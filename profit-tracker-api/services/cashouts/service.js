@@ -20,6 +20,23 @@ const CACHE_TTL_MS = 60 * 1000;
 const MANUAL_SYNC_COOLDOWN_MS = 60 * 1000;
 const RETENTION_DAYS = 90;
 
+// A cashout can ask to be checked less often (adapter.syncIntervalMs: LA and
+// Points4Days, once a day). Its deals are then also saved on the connection,
+// so a restart doesn't mean asking again, and a failed check waits as long as
+// a Sync now would.
+const refreshEvery = (adapter) => adapter.syncIntervalMs || CACHE_TTL_MS;
+const manualCooldown = (adapter) => adapter.manualSyncCooldownMs || MANUAL_SYNC_COOLDOWN_MS;
+
+// "52 min", "3 h 5 min", "40s" for cooldown messages.
+function waitText(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
+}
+
 function safeConnection(conn) {
   if (!conn) return null;
   return {
@@ -292,10 +309,16 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
   const conn = await getConnection(userId, connectionId);
   const adapter = getAdapter(conn.provider, userId);
 
-  const cached = dealsCache.get(connectionId);
+  let cached = dealsCache.get(connectionId);
   const now = Date.now();
+  const ttl = refreshEvery(adapter);
+  // After a restart, a once-a-day cashout's saved list stands in for the cache.
+  if (!cached && adapter.syncIntervalMs && Array.isArray(conn.cached_deals) && conn.last_synced_at) {
+    cached = { deals: conn.cached_deals, fetchedAt: new Date(conn.last_synced_at).getTime(), error: null };
+    dealsCache.set(connectionId, cached);
+  }
 
-  if (!forceRefresh && cached && !cached.error && now - cached.fetchedAt < CACHE_TTL_MS) {
+  if (!forceRefresh && cached && !cached.error && now - cached.fetchedAt < ttl) {
     return {
       connection: safeConnection(conn),
       deals: cached.deals,
@@ -313,6 +336,11 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
       isStale: true,
       warning: `Refresh is paused after a failed attempt${conn.last_error ? `: ${conn.last_error.replace(/\.$/, '')}` : ''}. Showing last known data.`,
     };
+  }
+  // Nothing to show yet for a once-a-day cashout that just failed: say so
+  // instead of signing in again on every page load.
+  if (!forceRefresh && !cached && adapter.syncIntervalMs && now < (syncBlockedUntil.get(connectionId) || 0)) {
+    throw Object.assign(new Error(`Checking ${conn.display_name || adapter.name} is paused after a failed attempt${conn.last_error ? `: ${conn.last_error.replace(/\.$/, '')}` : ''}. Try Sync now later.`), { status: 503 });
   }
 
   try {
@@ -348,6 +376,7 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
         last_synced_at: new Date(now),
         last_error: null,
         status: 'active',
+        ...(adapter.syncIntervalMs ? { cached_deals: deals } : {}),
       },
     });
 
@@ -358,7 +387,7 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
       isStale: false,
     };
   } catch (err) {
-    const waitMs = Math.max(MANUAL_SYNC_COOLDOWN_MS, (err.retryAfter || 0) * 1000);
+    const waitMs = Math.max(manualCooldown(adapter), (err.retryAfter || 0) * 1000);
     syncBlockedUntil.set(connectionId, Date.now() + waitMs);
 
     // Always keep the reason so Manage Connections can show it. Only a rejected
@@ -391,14 +420,17 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
  */
 async function syncUserConnection(userId, connectionId) {
   const conn = await getConnection(userId, connectionId);
+  const adapter = getAdapter(conn.provider);
 
-  // 60-second cooldown after a successful sync, or longer after a failed one
+  // A cooldown after a successful sync (60s, or an hour for a once-a-day
+  // cashout), or longer after a failed one
   const lastSyncedAt = conn.last_synced_at ? new Date(conn.last_synced_at).getTime() : 0;
-  const readyAt = Math.max(lastSyncedAt + MANUAL_SYNC_COOLDOWN_MS, syncBlockedUntil.get(connectionId) || 0);
+  const readyAt = Math.max(lastSyncedAt + manualCooldown(adapter), syncBlockedUntil.get(connectionId) || 0);
   const remainingMs = readyAt - Date.now();
   if (remainingMs > 0) {
     const remainingSeconds = Math.ceil(remainingMs / 1000);
-    const error = new Error(`Sync cooldown active. Please wait ${remainingSeconds}s before syncing again.`);
+    const name = conn.display_name || adapter.name;
+    const error = new Error(`Sync cooldown active. Please wait ${waitText(remainingSeconds)} before syncing ${name} again.`);
     error.status = 429;
     error.cooldown = true;
     error.remainingSeconds = remainingSeconds;

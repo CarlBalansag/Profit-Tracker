@@ -2811,7 +2811,7 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
   });
 
   server.registerTool('sync_cashout_deals', {
-    description: 'Read-only refresh: re-fetch live deals from a connected cashout service right now instead of waiting for the normal 60s cache. Never places or logs a purchase. Subject to the same cooldown as the "Sync now" button -- a connection still cooling down is reported, not retried.',
+    description: 'Read-only refresh: re-fetch live deals from a connected cashout service right now instead of waiting for the normal refresh (about a minute for EB; once a day for LA and Points4Days, which asked to be checked less). Never places or logs a purchase. Subject to the same cooldown as the "Sync now" button (a minute for EB, an hour for LA and Points4Days) -- a connection still cooling down is reported, not retried. Only use it when the user asks for fresh LA or Points4Days deals.',
     inputSchema: {
       cashout: z.string().optional().describe('Limit to one connection by display name or provider (case-insensitive, partial match). Omit to sync every connection.'),
     },

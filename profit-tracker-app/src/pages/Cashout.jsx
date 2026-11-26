@@ -316,21 +316,28 @@ export default function Cashout() {
     const toastId = toast.loading('Syncing cashout deals…');
     try {
       let anySynced = false;
+      // A cashout still cooling down (LA and Points4Days: an hour) is skipped
+      // and named, so it doesn't stop the others from syncing.
+      const waiting = [];
       for (const conn of connections) {
         try {
           await syncConnection.mutateAsync(conn.id);
           anySynced = true;
         } catch (err) {
-          if (err.cooldown && err.remainingSeconds) {
-            setSyncCooldownSeconds(err.remainingSeconds);
-          }
-          throw err;
+          if (!err.cooldown) throw err;
+          waiting.push({ message: err.message, seconds: err.remainingSeconds || 60 });
         }
       }
+      const waitText = waiting.map((w) => w.message).join(' ');
       if (anySynced) {
         setSyncCooldownSeconds(60);
         await refetchDeals();
-        toast.success('Cashout deals synced successfully!', { id: toastId });
+        if (waiting.length) toast.success(`Synced. ${waitText}`, { id: toastId });
+        else toast.success('Cashout deals synced successfully!', { id: toastId });
+      } else if (waiting.length) {
+        // The button counts down a minute at most; the message gives the real wait.
+        setSyncCooldownSeconds(Math.min(60, ...waiting.map((w) => w.seconds)));
+        toast.info(waitText, { id: toastId });
       }
     } catch (err) {
       if (err.cooldown) {

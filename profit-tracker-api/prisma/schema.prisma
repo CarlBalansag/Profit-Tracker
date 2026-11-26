@@ -790,6 +790,9 @@ model CashoutConnection {
   platform       Platform?             @relation(fields: [platform_id], references: [id], onDelete: SetNull)
   last_synced_at DateTime?
   last_error     String?
+  // The last deal list, kept for cashouts checked once a day (adapter
+  // syncIntervalMs) so a restart doesn't sign in again. Null for the rest.
+  cached_deals   Json?
   created_at     DateTime              @default(now())
   updated_at     DateTime              @updatedAt
   snapshots      CashoutDealSnapshot[]
