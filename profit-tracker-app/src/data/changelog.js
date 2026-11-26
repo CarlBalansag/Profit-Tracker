@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.55',
+    date: '2026-11-25',
+    notes: "Your AI assistant can now say which cashout group a cashout purchase goes to, so logging works when a cashout isn't linked to a group yet.",
+  },
+  {
     version: '1.54',
     date: '2026-11-25',
     notes: "Your AI assistant can now log a cashout purchase before it ships and commit it once you have tracking, and it won't log the same order twice.",

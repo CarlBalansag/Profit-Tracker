@@ -2944,6 +2944,26 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
     }
   });
 
+  // The cashout group (a Cashout platform) the sale goes to: the one named,
+  // else the connection's linked one (null here), else the one whose name
+  // matches the cashout's, the same preselect the Log Purchase form uses.
+  const nameKey = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  async function cashoutGroupFor(conn, wanted) {
+    const groups = await prisma.platform.findMany({ where: { user_id: userId, type: 'Cashout' }, select: { id: true, name: true } });
+    const listed = groups.map((g) => g.name).join(', ') || '(none yet: add one with add_platform, type Cashout)';
+    if (wanted && wanted.trim()) {
+      const match = groups.find((g) => g.id === wanted.trim()) || groups.find((g) => nameKey(g.name) === nameKey(wanted));
+      if (!match) throw Object.assign(new Error(`No cashout group named "${wanted}". Cashout groups: ${listed}`), { toolError: true });
+      return match;
+    }
+    if (conn.platformId) return null;
+    for (const key of [conn.displayName, conn.provider].map(nameKey).filter(Boolean)) {
+      const match = groups.find((g) => nameKey(g.name) === key);
+      if (match) return match;
+    }
+    throw Object.assign(new Error(`${conn.displayName || conn.provider} has no cashout group linked, so pass cashout_group: the group this sale goes to. Cashout groups: ${listed}. Nothing was saved or sent.`), { toolError: true });
+  }
+
   const connectionOf = (conn) => ({ displayName: conn.displayName ?? conn.display_name, provider: conn.provider });
 
   server.registerTool('log_cashout_purchase', {
@@ -2957,6 +2977,7 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
       cashout: z.string().optional().describe('Which connected cashout. Omit when only one is connected.'),
       deal_id: z.string().describe('The deal id from list_cashout_deals.'),
       item_id: z.string().describe('The item_id from that deal\'s items[].'),
+      cashout_group: z.string().optional().describe('Which cashout group (a Cashout platform, by name or id) the sale goes to. Only needed when the cashout connection has no group linked and no group shares its name; the error then lists your groups. Overrides the linked group when given.'),
       deal_name: z.string().optional().describe('For your own purchase record and the tracking description; defaults to a generic label if omitted.'),
       item_name: z.string().optional().describe('Defaults to deal_name if omitted.'),
       quantity: z.number().int().min(1),
@@ -2976,7 +2997,7 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
       sale_date: z.string().optional().describe('YYYY-MM-DD, defaults to purchase_date.'),
     },
   }, async ({
-    cashout, deal_id, item_id, deal_name, item_name, quantity, tracking_codes: trackingCodes, order_number: orderNumber, insured_value: insuredValue,
+    cashout, deal_id, item_id, cashout_group: cashoutGroup, deal_name, item_name, quantity, tracking_codes: trackingCodes, order_number: orderNumber, insured_value: insuredValue,
     store, account, payment_method, unit_cost: unitCost, tax_exempt: taxExempt, sales_tax: salesTax,
     cashback_rate: cashbackRate, cashback_earned: cashbackEarned, unit_payout: unitPayout, purchase_date: purchaseDate, sale_date: saleDate,
   }) => {
@@ -2986,6 +3007,7 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
       const vendor = wantsAccount ? await findExistingStore(userId, store) : await findOrCreateVendor(userId, store);
       const storeAccount = wantsAccount ? await findStoreAccount(userId, vendor, account) : null;
       const paymentMethod = await findPaymentMethod(userId, payment_method);
+      const group = await cashoutGroupFor(conn, cashoutGroup);
       const sendsNow = (trackingCodes || []).some((code) => String(code || '').trim());
       // Without tracking nothing goes to the cashout, so the key needs no
       // cashout-write permission for it.
@@ -2995,9 +3017,10 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
         quantity, trackingCodes, insuredValue, orderNumber,
         vendorId: vendor.id, accountId: storeAccount ? storeAccount.id : null, paymentMethodId: paymentMethod.id, unitCost, taxExempt, salesTax,
         cashbackRate, cashbackEarned, purchaseDate, unitPayout, saleDate,
+        platformId: group ? group.id : undefined,
         activitySource: 'assistant',
       });
-      await logWrite(userId, apiKeyId, 'log_cashout_purchase', { cashout: conn.displayName || conn.provider, deal_id, item_id, quantity, tracking_codes: trackingCodes, order_number: orderNumber, store, account });
+      await logWrite(userId, apiKeyId, 'log_cashout_purchase', { cashout: conn.displayName || conn.provider, deal_id, item_id, cashout_group: cashoutGroup, quantity, tracking_codes: trackingCodes, order_number: orderNumber, store, account });
       const status = result.commitment?.status || null;
       // Something went to the cashout: a log-only entry, like the website's.
       const event = status === 'active'
@@ -3020,6 +3043,7 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
         // Saved, but the provider refused to commit it (e.g. limit reached).
         not_committed: result.commitError || null,
         sale_id: result.sale.id,
+        cashout_group: group ? group.name : (conn.platformName || null),
       });
     } catch (err) {
       return errorResult(err.message || 'Failed to log this purchase');

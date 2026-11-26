@@ -4,3 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
+| fix-mcp-cashout-group | MCP log_cashout_purchase: cashout_group input + name-match fallback | profit-tracker-api/routes/mcp.js (log_cashout_purchase), shared/aiGuide.mjs, profit-tracker-api/test/mcpCashoutCommits.test.mjs | In progress | 2026-11-25 |

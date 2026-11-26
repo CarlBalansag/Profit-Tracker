@@ -323,3 +323,48 @@ describe('MCP log_cashout_purchase without tracking, then commit_cashout_purchas
     expect(data.commit_activity_id).toBeTruthy();
   });
 });
+
+describe('log_cashout_purchase when the cashout connection has no group linked', () => {
+  const purchase = (extra = {}) => ({
+    deal_id: '2000', item_id: '101', deal_name: 'PS5 Pro', quantity: 1,
+    store: 'QA Store', payment_method: 'QA Credit Card', unit_cost: 400, unit_payout: 480, ...extra,
+  });
+  beforeEach(() => {
+    harness.db.cashoutConnection.find((c) => c.id === 'conn-1').platform_id = null;
+    harness.db.platform.push({ id: 'cashout-platform-2', user_id: harness.ids.user, name: 'Windy City', type: 'Cashout', fee_pct: 0, workflow_preset: 'CASHOUT' });
+  });
+
+  it('refuses without cashout_group when no group matches, listing the groups and saving nothing', async () => {
+    const before = harness.db.inventory.length;
+    const { isError, data } = await callTool('log_cashout_purchase', purchase());
+    expect(isError).toBe(true);
+    expect(data).toContain('cashout_group');
+    expect(data).toContain('EB (cashout)');
+    expect(data).toContain('Windy City');
+    expect(harness.db.inventory).toHaveLength(before);
+  });
+
+  it('uses the cashout_group named, by name or id', async () => {
+    const byName = await callTool('log_cashout_purchase', purchase({ cashout_group: 'eb (cashout)' }));
+    expect(byName.isError).toBe(false);
+    expect(byName.data.cashout_group).toBe('EB (cashout)');
+    expect(harness.db.sales.find((s) => s.id === byName.data.sale_id).platform_id).toBe(CASHOUT_PLATFORM_ID);
+
+    const byId = await callTool('log_cashout_purchase', purchase({ cashout_group: 'cashout-platform-2', item_id: '102' }));
+    expect(harness.db.sales.find((s) => s.id === byId.data.sale_id).platform_id).toBe('cashout-platform-2');
+  });
+
+  it('picks the group named like the cashout, as the Log Purchase form does', async () => {
+    harness.db.platform.push({ id: 'cashout-platform-eb', user_id: harness.ids.user, name: 'EB', type: 'Cashout', fee_pct: 0, workflow_preset: 'CASHOUT' });
+    const { isError, data } = await callTool('log_cashout_purchase', purchase());
+    expect(isError).toBe(false);
+    expect(data.cashout_group).toBe('EB');
+    expect(harness.db.sales.find((s) => s.id === data.sale_id).platform_id).toBe('cashout-platform-eb');
+  });
+
+  it('an unknown cashout_group is refused', async () => {
+    const { isError, data } = await callTool('log_cashout_purchase', purchase({ cashout_group: 'Nope' }));
+    expect(isError).toBe(true);
+    expect(data).toContain('No cashout group named "Nope"');
+  });
+});

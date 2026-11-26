@@ -18,6 +18,13 @@
 
 export const AI_GUIDE_UPDATES = [
   {
+    version: '1.55',
+    date: '2026-11-25',
+    notes: [
+      'log_cashout_purchase takes cashout_group: which cashout group (a Cashout platform, by name or id) the sale goes to. You only need it when the cashout connection has no group linked; a group named like the cashout is picked on its own. If neither works, the error lists the groups and nothing is saved: ask the user which one, then send the same call again with cashout_group.',
+    ],
+  },
+  {
     version: '1.54',
     date: '2026-11-25',
     notes: [
@@ -110,7 +117,7 @@ RECONCILING A STATEMENT
 - reconcile_transactions takes bank/card lines {id, date, amount, merchant, account}. Amount signs don't matter. Match tiers, best first: external_id, amount_date (same amount, date within tolerance), amount (same amount, further off), merchant (similar merchant, amount within 10% -- a guess; confirm it). It also lists lines that matched nothing and tracker records with no bank line.
 
 LOGGING A CASHOUT PURCHASE
-- log_cashout_purchase records the purchase and its sale to the cashout in one call. Pass order_number when the user has it: the same order for the same deal_id + item_id is refused as a duplicate, so don't retry around that error.
+- log_cashout_purchase records the purchase and its sale to the cashout in one call. The sale goes to the connection's linked cashout group, else a group named like the cashout; if neither exists, the error lists the user's cashout groups (nothing saved): ask which one and pass it as cashout_group. Pass order_number when the user has it: the same order for the same deal_id + item_id is refused as a duplicate, so don't retry around that error.
 - Not shipped yet: leave out tracking_codes. It is saved with a "pending" commitment (list_cashout_commitments, status "pending") and nothing is sent to the cashout.
 - When it ships: commit_cashout_purchase with that commitment_id (or the purchase_id) and the tracking numbers. It commits at the cashout's payout at that moment (the sale is repriced if it changed) and sends the tracking. committed: false (with the reason) means the cashout refused (deal closed, limit reached): the records stay and it stays pending. Tell the user; contacting the cashout is theirs to do.
 - Already shipped: pass tracking_codes to log_cashout_purchase and it commits, sends tracking and records in one go. If that commit is refused, nothing is saved.
