@@ -416,7 +416,9 @@ async function fetchConnectionDeals(userId, connectionId, { forceRefresh = false
 }
 
 /**
- * Sync single user connection (manual "Sync now").
+ * Sync single user connection (manual "Sync now"). Only the Cashout page's
+ * Sync now button calls this (POST /api/cashouts/connections/:id/sync): no MCP
+ * tool or background job may force a check.
  */
 async function syncUserConnection(userId, connectionId) {
   const conn = await getConnection(userId, connectionId);

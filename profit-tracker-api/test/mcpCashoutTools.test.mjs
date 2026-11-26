@@ -223,8 +223,8 @@ describe('MCP cashout tools', () => {
     expect(data).toEqual({ found: false, reason: expect.stringContaining('no longer listed') });
   });
 
-  it('get_cashout_deal reports stale_reason: fetch_failed with the error message when a retry also fails to refresh', async () => {
-    const conn = addConnection({ last_synced_at: new Date(Date.now() - 120000) }); // cooldown clear, forced sync will actually attempt a live fetch
+  it('get_cashout_deal reports stale_reason: fetch_failed with the error message when the normal refresh fails', async () => {
+    const conn = addConnection({ last_synced_at: new Date(Date.now() - 120000) });
     dealsCache.set(conn.id, { deals: [{ id: '7', provider: 'eb', name: 'Cached Deal', payout: 10, retail: 8, items: [] }], fetchedAt: Date.now() - 120000, error: null });
     vi.spyOn(ebAdapter, 'fetchDeals').mockRejectedValue(new Error('ElectronicsBuyer rate limit exceeded.'));
 
@@ -232,24 +232,18 @@ describe('MCP cashout tools', () => {
     expect(data.found).toBe(true);
     expect(data.fresh).toBe(false);
     expect(data.stale_reason).toBe('fetch_failed');
-    expect(data.cooldown_seconds_remaining).toBeNull();
     expect(data.error).toContain('rate limit');
   });
 
-  it('get_cashout_deal forces a fresh fetch and reports fresh: false when the cooldown blocks it', async () => {
-    const conn = addConnection({ last_synced_at: new Date() }); // just synced -- cooldown active
-    const fetchSpy = vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([
-      { id: '42', provider: 'eb', name: 'Still Here', payout: 20, retail: 15, items: [] },
-    ]);
-    // Seed the cache so the cooldown fallback has something to search.
+  it('get_cashout_deal reads the last check and never forces a new one', async () => {
+    const conn = addConnection({ last_synced_at: new Date() });
+    const fetchSpy = vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([]);
     dealsCache.set(conn.id, { deals: [{ id: '42', provider: 'eb', name: 'Still Here', payout: 20, retail: 15, items: [] }], fetchedAt: Date.now(), error: null });
 
     const { data } = await callTool('get_cashout_deal', { id: '42' });
     expect(data.found).toBe(true);
-    expect(data.fresh).toBe(false);
-    expect(data.stale_reason).toBe('cooldown');
-    expect(data.cooldown_seconds_remaining).toEqual(expect.any(Number));
-    expect(data.error).toBeUndefined();
+    expect(data.fresh).toBe(true);
+    expect(data.stale_reason).toBeNull();
     expect(data.deal.name).toBe('Still Here');
     expect(fetchSpy).not.toHaveBeenCalled();
 
@@ -302,19 +296,14 @@ describe('MCP cashout tools', () => {
     expect(JSON.stringify(data)).not.toContain('encrypted');
   });
 
-  it('sync_cashout_deals refreshes and reports a cooldown without retrying it', async () => {
-    const conn = addConnection({ last_synced_at: new Date() });
-    vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([]);
-    const { data } = await callTool('sync_cashout_deals', {});
-    expect(data.results).toEqual([{ cashout: 'EB Primary', synced: false, cooldown_seconds_remaining: expect.any(Number), error: expect.stringContaining('cooldown') }]);
-  });
-
-  it('sync_cashout_deals filters to one named cashout and errors on no match', async () => {
-    addConnection();
-    vi.spyOn(ebAdapter, 'fetchDeals').mockResolvedValue([]);
-    const match = await callTool('sync_cashout_deals', { cashout: 'primary' });
-    expect(match.data.results).toHaveLength(1);
-    const noMatch = await callTool('sync_cashout_deals', { cashout: 'nothing-like-this' });
-    expect(noMatch.isError).toBe(true);
+  it('has no tool that forces a cashout sync: only the Sync now button does', async () => {
+    const response = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 99, method: 'tools/list', params: {} }),
+    });
+    const names = (await response.json()).result.tools.map((t) => t.name);
+    expect(names).toContain('get_cashout_deal');
+    expect(names).not.toContain('sync_cashout_deals');
   });
 });

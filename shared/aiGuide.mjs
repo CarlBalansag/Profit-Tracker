@@ -21,7 +21,8 @@ export const AI_GUIDE_UPDATES = [
     version: '1.56',
     date: '2026-11-25',
     notes: [
-      'LA and Points4Days deals are now checked once a day, because those cashouts asked to be checked less. Their deals in list_cashout_deals can be up to a day old (last_synced_at in list_cashout_connections says when). sync_cashout_deals can refresh them at most once an hour: only do it when the user asks for fresh LA or Points4Days deals. EB is unchanged (about once a minute).',
+      'sync_cashout_deals is gone, and get_cashout_deal no longer forces a fresh check. Only the user can refresh cashout deals now, with Sync now on the Cashout page. If they want fresher deals, ask them to press it; then read again.',
+      'LA and Points4Days deals are checked once a day (those cashouts asked to be checked less), so theirs can be up to a day old; EB is about once a minute. last_synced_at in list_cashout_connections, and synced_at in get_cashout_deal, say when each was last checked. Mention it when the data is old.',
     ],
   },
   {
@@ -154,8 +155,8 @@ TOOLS -- READ ONLY
 - list_changes: field-level history of edits, with old values.
 - list_refunds: refunds on one purchase or sale.
 - list_notes, list_attachments: notes and attached links on purchases and sales.
-- list_cashout_connections, list_cashout_deals, get_cashout_deal, get_cashout_opportunity_summary, list_cashout_commitments, list_cashout_tracking_submissions: cashout services, live deals (re-check one with get_cashout_deal right before buying), commitments and submitted tracking.
-- sync_cashout_deals: refresh live deals now; never buys or logs anything. EB deals refresh about once a minute on their own; LA and Points4Days only once a day (they asked to be checked less), so theirs can be up to a day old, and syncing them is allowed once an hour. Only sync those when the user asks.
+- list_cashout_connections, list_cashout_deals, get_cashout_deal, get_cashout_opportunity_summary, list_cashout_commitments, list_cashout_tracking_submissions: cashout services, live deals (look one up with get_cashout_deal right before buying), commitments and submitted tracking.
+- Deal freshness: EB deals refresh about once a minute on their own; LA and Points4Days once a day (they asked to be checked less), so theirs can be up to a day old. No tool forces a refresh: only the user can, with Sync now on the Cashout page. Check last_synced_at, say how old the deals are, and ask the user to press Sync now if they need fresher ones.
 
 TOOLS -- CHANGE DATA (confirm with the user first)
 - add_purchase, update_purchase: log or edit a purchase. The store is created if new; the card must already exist.

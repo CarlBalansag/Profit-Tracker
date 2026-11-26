@@ -6,7 +6,7 @@ export const CHANGELOG = [
   {
     version: '1.56',
     date: '2026-11-25',
-    notes: "LA and Points4Days deals are now checked once a day instead of every minute, at their request. Sync now still refreshes them, up to once an hour; EB deals still update every minute.",
+    notes: "LA and Points4Days deals are now checked once a day instead of every minute, at their request, and EB deals still update every minute. Sync now on the Cashout page is the only way to refresh them sooner (LA and Points4Days up to once an hour); your AI assistant can no longer trigger it.",
   },
   {
     version: '1.55',

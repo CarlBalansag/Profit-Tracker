@@ -4,4 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| feat-daily-login-cashouts | LA/P4D deals checked once a day, 1h Sync now cooldown | profit-tracker-api/services/cashouts/{service,syncScheduler,la,p4d}.js, prisma (CashoutConnection.cached_deals), profit-tracker-app/src/pages/Cashout.jsx (handleSyncNow) | In progress | 2026-11-25 |
+| feat-daily-login-cashouts | LA/P4D deals checked once a day, 1h Sync now cooldown, Sync now only from the button | profit-tracker-api/services/cashouts/{service,syncScheduler,la,p4d}.js, prisma (CashoutConnection.cached_deals), profit-tracker-api/routes/mcp.js (cashout deal tools), shared/aiGuide.mjs, profit-tracker-app/src/pages/Cashout.jsx (handleSyncNow) | In progress | 2026-11-25 |

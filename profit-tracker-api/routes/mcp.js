@@ -98,9 +98,9 @@ const strictDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM
 }, 'date must be a real calendar date');
 
 // Every live deal across every connected cashout, each paired with the
-// connection it came from. Uses the same 60s cache fetchConnectionDeals
-// already keeps, so calling this doesn't hammer the provider on every tool
-// call -- only sync_cashout_deals and get_cashout_deal force a fresh fetch.
+// connection it came from. Uses the same cache fetchConnectionDeals keeps
+// (about a minute for EB, a day for LA and Points4Days). No MCP tool forces a
+// fresh fetch: that is only the Sync now button on the Cashout page.
 async function loadLiveCashoutDeals(userId) {
   const connections = await cashoutService.listConnections(userId);
   const perConnection = await Promise.all(connections.map(async (conn) => {
@@ -120,9 +120,9 @@ async function loadLiveCashoutDeals(userId) {
   return { deals, connections: perConnection.map(({ conn, result }) => ({ conn, result })) };
 }
 
-// Resolves the same loose "cashout" name match sync_cashout_deals already
-// uses (display name or provider, case-insensitive, partial) to one
-// connection -- shared so the commit/tracking tools below agree on it.
+// Resolves a loose "cashout" name (display name or provider,
+// case-insensitive, partial) to one connection -- shared so the
+// commit/tracking tools below agree on it.
 async function resolveConnection(userId, cashoutQuery) {
   const connections = await cashoutService.listConnections(userId);
   if (!cashoutQuery) {
@@ -2702,32 +2702,16 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
   });
 
   server.registerTool('get_cashout_deal', {
-    description: 'Re-check one specific cashout deal right before buying, instead of trusting a cached list. Forces a fresh fetch (respecting the normal sync cooldown; falls back to the last known data if the cooldown is active or the refresh fails -- check "fresh" to tell which happened, and "stale_reason" for why). synced_at always comes from the connection\'s own last-synced record, the same source list_cashout_connections.last_synced_at uses, so a stale response can never claim to be newer than it is. If found is false, the deal has sold out, expired, or been pulled -- do not buy it.',
+    description: 'Look up one cashout deal right before buying. Reads the deals as they were last checked (about a minute ago for EB; up to a day for LA and Points4Days) and never forces a new check -- only the user can do that, with Sync now on the Cashout page. synced_at says when that cashout was last checked, from the same record list_cashout_connections.last_synced_at uses. fresh is false when the last refresh failed and older data is shown (stale_reason "fetch_failed", with error). If found is false, the deal has sold out, expired, or been pulled -- do not buy it.',
     inputSchema: { id: z.string().describe('The deal id from list_cashout_deals.') },
   }, async ({ id }) => {
     const connections = await cashoutService.listConnections(userId);
     for (const conn of connections) {
       let result;
-      let fresh = true;
-      let staleReason = null;
-      let cooldownSecondsRemaining = null;
-      let fetchError = null;
       try {
-        result = await cashoutService.syncUserConnection(userId, conn.id);
-      } catch (err) {
-        fresh = false;
-        if (err.cooldown) {
-          staleReason = 'cooldown';
-          cooldownSecondsRemaining = err.remainingSeconds ?? null;
-        } else {
-          staleReason = 'fetch_failed';
-          fetchError = err.message;
-        }
-        try {
-          result = await cashoutService.fetchConnectionDeals(userId, conn.id);
-        } catch (err2) {
-          continue;
-        }
+        result = await cashoutService.fetchConnectionDeals(userId, conn.id);
+      } catch {
+        continue;
       }
       const match = (result.deals || []).find((d) => d.id === id);
       if (match) {
@@ -2737,10 +2721,9 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
         const current = await cashoutService.getConnection(userId, conn.id);
         return jsonResult({
           found: true,
-          fresh,
-          stale_reason: staleReason,
-          cooldown_seconds_remaining: cooldownSecondsRemaining,
-          ...(fetchError ? { error: fetchError } : {}),
+          fresh: !result.isStale,
+          stale_reason: result.isStale ? 'fetch_failed' : null,
+          ...(result.isStale && result.warning ? { error: result.warning } : {}),
           synced_at: current.last_synced_at ? current.last_synced_at.toISOString() : null,
           deal: presentDeal(match, conn),
         });
@@ -2808,32 +2791,6 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
       last_synced_at: c.lastSyncedAt,
       last_error: c.lastError,
     })));
-  });
-
-  server.registerTool('sync_cashout_deals', {
-    description: 'Read-only refresh: re-fetch live deals from a connected cashout service right now instead of waiting for the normal refresh (about a minute for EB; once a day for LA and Points4Days, which asked to be checked less). Never places or logs a purchase. Subject to the same cooldown as the "Sync now" button (a minute for EB, an hour for LA and Points4Days) -- a connection still cooling down is reported, not retried. Only use it when the user asks for fresh LA or Points4Days deals.',
-    inputSchema: {
-      cashout: z.string().optional().describe('Limit to one connection by display name or provider (case-insensitive, partial match). Omit to sync every connection.'),
-    },
-  }, async ({ cashout }) => {
-    const query = (cashout || '').toLowerCase();
-    const connections = await cashoutService.listConnections(userId);
-    const targets = query
-      ? connections.filter((c) => (c.displayName || '').toLowerCase().includes(query) || c.provider.toLowerCase().includes(query))
-      : connections;
-    if (query && targets.length === 0) {
-      return errorResult(`No connected cashout matches "${cashout}".`);
-    }
-    const results = await Promise.all(targets.map(async (conn) => {
-      const name = conn.displayName || conn.provider;
-      try {
-        const result = await cashoutService.syncUserConnection(userId, conn.id);
-        return { cashout: name, synced: true, deal_count: (result.deals || []).length, cooldown_seconds_remaining: null };
-      } catch (err) {
-        return { cashout: name, synced: false, cooldown_seconds_remaining: err.cooldown ? err.remainingSeconds : null, error: err.message };
-      }
-    }));
-    return jsonResult({ results });
   });
 
   server.registerTool('list_cashout_commitments', {
