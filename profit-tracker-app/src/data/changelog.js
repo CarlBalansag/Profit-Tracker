@@ -4,6 +4,11 @@
 // rule 8 in AGENTS.md.
 export const CHANGELOG = [
   {
+    version: '1.54',
+    date: '2026-11-25',
+    notes: "Your AI assistant can now log a cashout purchase before it ships and commit it once you have tracking, and it won't log the same order twice.",
+  },
+  {
     version: '1.53',
     date: '2026-11-25',
     notes: "The Credit Card page is rebuilt: see your cards with their real artwork as a wallet, a 3D deck, rows or tiles, find the best card for a store, and mark bills paid, with smooth animations you can turn off in Settings > Appearance. Store refunds now lower a card's estimated bill and balance, here and on Cash Flow.",

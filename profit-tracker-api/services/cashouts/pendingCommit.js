@@ -81,7 +81,9 @@ async function previewPending(userId, commitmentId) {
   };
 }
 
-async function commitPending(userId, commitmentId, { insuredValue } = {}) {
+// extraTrackingCodes: more numbers for the same purchase (the sale holds only
+// one), sent right after the sale's own number once the commit went through.
+async function commitPending(userId, commitmentId, { insuredValue, extraTrackingCodes = [] } = {}) {
   let record = await loadPending(userId, commitmentId);
   if (record.status === 'committing') {
     await recoverStuck(userId, record);
@@ -182,7 +184,7 @@ async function commitPending(userId, commitmentId, { insuredValue } = {}) {
     }
 
     const payoutChanged = Boolean(offer.payout) && Number(record.sale.unit_price) !== offer.payout;
-    const { commitment, sale } = await prisma.$transaction(async (tx) => ({
+    const saved = await prisma.$transaction(async (tx) => ({
       commitment: await tx.cashoutCommitment.update({
         where: { id: record.id },
         data: {
@@ -195,6 +197,24 @@ async function commitPending(userId, commitmentId, { insuredValue } = {}) {
         ? await tx.sales.update({ where: { id: record.sale.id }, data: { unit_price: offer.payout } })
         : await tx.sales.findUnique({ where: { id: record.sale.id } }),
     }));
+    const { sale } = saved;
+    let { commitment } = saved;
+
+    const extras = (extraTrackingCodes || []).filter((code) => code && code !== tracking);
+    if (trackingSubmitted && extras.length) {
+      try {
+        await sendNewTracking(userId, ctx, {
+          codes: extras,
+          description: `${offer.deal.name || 'Cashout deal'} x${quantity}`,
+          insuredValue: insured,
+          commitmentId: record.id,
+        });
+      } catch (err) {
+        trackingError = err.message;
+        await prisma.cashoutCommitment.update({ where: { id: record.id }, data: { tracking_error: trackingError } });
+      }
+      commitment = await prisma.cashoutCommitment.findFirst({ where: { id: record.id } });
+    }
 
     return {
       commitment,

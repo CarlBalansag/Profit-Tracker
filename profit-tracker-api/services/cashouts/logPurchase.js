@@ -9,12 +9,44 @@ const { getConnection } = require('./service');
 const commitsService = require('./commits');
 const pendingCommit = require('./pendingCommit');
 const { getAdapter } = require('./registry');
+const activityLog = require('../activityLog');
 
 const parseLocalDate = (str) => {
   if (!str) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return new Date(`${str}T12:00:00.000Z`);
   return new Date(str);
 };
+
+// The purchase already logged for this order: the same deal item (EB, read
+// through its commitment row) or, for cashouts with no commitment rows, the
+// same product sold to the same cashout group. Order numbers compare without
+// case. { purchaseId, saleId } or null.
+async function findLoggedOrder(client, userId, { connectionId, recordOnly, dealId, itemId, orderNumber, productName, platformId }) {
+  const sameOrder = { order_number: { equals: orderNumber, mode: 'insensitive' } };
+  if (!recordOnly) {
+    const row = await client.cashoutCommitment.findFirst({
+      where: {
+        user_id: userId, connection_id: connectionId, external_deal_id: String(dealId), external_item_id: String(itemId),
+        sale: { inventory: sameOrder },
+      },
+      select: { sale: { select: { id: true, inventory_id: true } } },
+    });
+    return row?.sale ? { purchaseId: row.sale.inventory_id, saleId: row.sale.id } : null;
+  }
+  const purchases = await client.inventory.findMany({ where: { user_id: userId, product_name: productName, ...sameOrder }, select: { id: true } });
+  if (!purchases.length) return null;
+  const sale = await client.sales.findFirst({ where: { inventory_id: { in: purchases.map((p) => p.id) }, platform_id: platformId }, select: { id: true, inventory_id: true } });
+  return sale ? { purchaseId: sale.inventory_id, saleId: sale.id } : null;
+}
+
+async function refuseLoggedOrder(client, userId, lookup) {
+  const found = await findLoggedOrder(client, userId, lookup);
+  if (found) {
+    throw Object.assign(new Error(
+      `Order ${lookup.orderNumber} is already logged for this item (purchase ${found.purchaseId}, sale ${found.saleId}). Nothing was logged again.`,
+    ), { status: 409, duplicate: found });
+  }
+}
 
 const required = (value, label) => {
   if (value === undefined || value === null || value === '') {
@@ -56,13 +88,19 @@ const required = (value, label) => {
  *
  * The sale goes to the connection's linked cashout group, or to `platformId`
  * when the form picks one (a connection with no group linked yet).
+ *
+ * An order number is saved on the purchase, and the same order for the same
+ * deal item (see findLoggedOrder) is refused before anything is sent.
  */
 async function logPurchase(userId, {
   connectionId, dealId, itemId, dealName, itemName,
   quantity, trackingCodes, insuredValue,
   vendorId, accountId, paymentMethodId, unitCost, taxExempt, salesTax,
   cashbackRate, cashbackEarned, purchaseDate,
-  unitPayout, saleDate, platformId,
+  unitPayout, saleDate, platformId, orderNumber,
+  // Set (e.g. 'assistant') to log the purchase, sale and pending commitment as
+  // one undoable Activity entry; the result then carries `activity`.
+  activitySource,
 }) {
   required(connectionId, 'connectionId');
   required(dealId, 'dealId');
@@ -93,6 +131,9 @@ async function logPurchase(userId, {
   }
   // EB with no tracking number: record now, commit once it ships.
   const deferCommit = !recordOnly && codes.length === 0;
+  const order = String(orderNumber ?? '').trim() || null;
+  if (order && order.length > 100) throw Object.assign(new Error('Order number is too long.'), { status: 400 });
+  const productName = itemName || dealName || 'Cashout deal';
 
   const saleTo = platformId || conn.platform_id;
   if (!saleTo) {
@@ -108,6 +149,13 @@ async function logPurchase(userId, {
   await requireOwned('platform', vendorId, userId, 'Store');
   await requireStoreAccount(accountId, vendorId, userId);
   await requireOwned('paymentMethod', paymentMethodId, userId, 'Payment method');
+
+  // The same order logged twice is refused before anything is sent anywhere,
+  // and checked again under a lock when the books are written.
+  const orderLookup = order && {
+    connectionId: conn.id, recordOnly, dealId, itemId, orderNumber: order, productName, platformId: salePlatform.id,
+  };
+  if (order) await refuseLoggedOrder(prisma, userId, orderLookup);
 
   // An active commitment for this item with no purchase recorded yet (made
   // through MCP, or an earlier Log Purchase whose save failed after the commit
@@ -198,13 +246,12 @@ async function logPurchase(userId, {
   const statusChangedAt = new Date();
   if (saleWorkflowData.workflow_status) saleWorkflowData.workflow_status_changed_at = statusChangedAt;
 
-  let books;
-  try {
-  books = await prisma.$transaction(async (tx) => {
+  const writeBooks = async (tx) => {
     const createdInventory = await tx.inventory.create({
       data: {
         user_id: userId,
-        product_name: itemName || dealName || 'Cashout deal',
+        product_name: productName,
+        order_number: order,
         vendor_id: vendorId,
         account_id: accountId || null,
         payment_method_id: paymentMethodId,
@@ -264,6 +311,34 @@ async function logPurchase(userId, {
     });
 
     return { inventory: createdInventory, sale: createdSale, commitment: updatedCommitment };
+  };
+
+  let books;
+  try {
+  books = await prisma.$transaction(async (tx) => {
+    if (order) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`cashout-order:${userId}:${order.toLowerCase()}`}))`;
+      await refuseLoggedOrder(tx, userId, orderLookup);
+    }
+    if (!activitySource) return { ...(await writeBooks(tx)), activity: null };
+    // An add: undo removes the purchase, the sale and a pending commitment. A
+    // commitment already made with the provider is only unlinked (it stays
+    // committed there).
+    const { result, activity } = await activityLog.trackChange(tx, userId, {
+      action: 'create',
+      recordType: 'purchase',
+      source: activitySource,
+      recordId: (made) => made.inventory.id,
+      refs: async (t, made) => {
+        if (!made) return commitment ? { cashoutCommitment: [commitment.id] } : {};
+        return {
+          inventory: [made.inventory.id],
+          sales: [made.sale.id],
+          ...(made.commitment ? { cashoutCommitment: [made.commitment.id] } : {}),
+        };
+      },
+    }, () => writeBooks(tx));
+    return { ...result, activity };
   });
   } catch (err) {
     if (!commitment) throw err;
@@ -281,26 +356,17 @@ async function logPurchase(userId, {
       + 'Log Purchase again for this item with the same quantity: it will record it against that commitment without committing twice.',
     ), { status: 500, committed: true });
   }
-  const { inventory, sale, commitment: updatedCommitment } = books;
+  const { inventory, sale, commitment: updatedCommitment, activity } = books;
 
   // More of an item already committed (or logged), with tracking in hand:
   // commit it now through the same path as adding tracking later. The
   // purchase is already saved, so a refusal leaves it logged and flagged.
   if (topUp && !deferCommit) {
     try {
-      const done = await pendingCommit.commitPending(userId, updatedCommitment.id, { insuredValue });
       // The sale holds one tracking number; any others for this purchase go too.
-      if (codes.length > 1 && done.trackingSubmitted) {
-        try {
-          const ctx = await commitsService.connectionAndAdapter(userId, connectionId);
-          await commitsService.sendNewTracking(userId, ctx, {
-            codes: codes.slice(1), description: `${dealName || 'Cashout deal'} x${qty}`, insuredValue: insured, commitmentId: done.commitment.id,
-          });
-        } catch (err) {
-          done.trackingError = err.message;
-        }
-      }
+      const done = await pendingCommit.commitPending(userId, updatedCommitment.id, { insuredValue, extraTrackingCodes: codes.slice(1) });
       return {
+        activity,
         inventory,
         sale: done.sale,
         commitment: done.commitment,
@@ -314,6 +380,7 @@ async function logPurchase(userId, {
     } catch (err) {
       const kept = await prisma.cashoutCommitment.findFirst({ where: { id: updatedCommitment.id } });
       return {
+        activity,
         inventory,
         sale,
         commitment: kept,
@@ -328,6 +395,7 @@ async function logPurchase(userId, {
   }
 
   return {
+    activity,
     inventory,
     sale,
     commitment: updatedCommitment,
@@ -340,4 +408,4 @@ async function logPurchase(userId, {
   };
 }
 
-module.exports = { logPurchase };
+module.exports = { logPurchase, findLoggedOrder };

@@ -117,6 +117,7 @@ for(const model of Object.keys(db)) {
   };
 }
 prisma.$queryRaw=async()=>[]; // Row locks mean nothing in this in-memory db.
+prisma.$executeRaw=async()=>0; // Nor do advisory locks: transactions here already run one at a time.
 let transactionTail=Promise.resolve();
 prisma.$transaction=async fn=>{
   if(typeof fn!=='function')return Promise.all(fn);

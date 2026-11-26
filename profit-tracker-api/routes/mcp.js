@@ -32,6 +32,8 @@ const cashoutService = require('../services/cashouts/service');
 const { presentDeal } = require('../services/cashouts/dealPresenter');
 const cashoutCommits = require('../services/cashouts/commits');
 const { logPurchase } = require('../services/cashouts/logPurchase');
+const pendingCommit = require('../services/cashouts/pendingCommit');
+const { logCashout } = require('../services/cashouts/activityEvents');
 const { listTodos, GROUPS: TODO_GROUPS } = require('../services/todos');
 const { localNow, DEFAULTS: NOTIFY_DEFAULTS } = require('../services/notificationRun');
 
@@ -743,8 +745,9 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
   // transaction, exactly like the website's routes, so it shows on the
   // Activity page (marked "AI assistant") and can be undone there or with
   // undo_activity. mark_sale_paid logs one entry per deposit inside
-  // services/markSalesPaid.js; log_cashout_purchase is not logged, same as
-  // its website counterpart.
+  // services/markSalesPaid.js; log_cashout_purchase logs its purchase + sale
+  // inside services/cashouts/logPurchase.js. What was sent to a cashout is a
+  // log-only entry on top (commit_activity_id), since undo can't take it back.
   const track = (tx, meta, work) => activityLog.trackChange(tx, userId, { source: 'assistant', ...meta }, work);
   const saleRefs = async (t, saleId) => {
     const sale = await t.sales.findUnique({ where: { id: saleId }, select: { inventory_id: true } });
@@ -2941,8 +2944,15 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
     }
   });
 
+  const connectionOf = (conn) => ({ displayName: conn.displayName ?? conn.display_name, provider: conn.provider });
+
   server.registerTool('log_cashout_purchase', {
-    description: 'The full action for a cashout item you have already bought and shipped: commits to the deal line item with the provider, submits the tracking number, then records the purchase and its sale in this app together (the same combined write Add Transaction does). Only call this once you actually have a tracking number -- it is required, since by the time this is used the item has shipped. If the commit itself is refused (deal closed, over the limit), nothing is written at all. Buying more of an item already committed is allowed: the purchase and sale are saved as their own records and the existing commitment is raised by this quantity; if the provider refuses that raise, they stay saved and not_committed says why (contact the cashout). If only the tracking submission fails, the purchase/sale/commitment are still saved, with the tracking failure reported back for a retry later via submit_cashout_tracking.',
+    description: 'Log a cashout item you bought: records the purchase and its sale to the cashout together (the same combined write as Log Purchase on the Cashout page). Two modes, picked by tracking_codes. '
+      + 'WITH tracking_codes (it has shipped): commits to the deal line item with the provider, submits the tracking, then records the purchase and sale. If the commit itself is refused (deal closed, over the limit), nothing is written at all. If only the tracking submission fails, everything is still saved and tracking_error says why (retry with submit_cashout_tracking). '
+      + 'WITHOUT tracking_codes (bought, not shipped yet): records the purchase and sale plus a "pending" commitment (see list_cashout_commitments), and sends nothing to the provider. Once it ships, call commit_cashout_purchase with that commitment_id and the tracking number. '
+      + 'Buying more of an item already committed is allowed: the purchase and sale are their own records and, once it has tracking, the existing commitment is raised by this quantity; if the provider refuses that raise, they stay saved and pending, and not_committed says why (contact the cashout). '
+      + 'order_number is stored on the purchase; the same order_number for the same deal_id + item_id is refused as a duplicate, naming the purchase it was already logged as. '
+      + 'activity_id undoes the purchase, sale and pending commitment with undo_activity; a commitment already made with the provider is only unlinked by an undo (withdraw it with delete_cashout_commitment).',
     inputSchema: {
       cashout: z.string().optional().describe('Which connected cashout. Omit when only one is connected.'),
       deal_id: z.string().describe('The deal id from list_cashout_deals.'),
@@ -2950,8 +2960,9 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
       deal_name: z.string().optional().describe('For your own purchase record and the tracking description; defaults to a generic label if omitted.'),
       item_name: z.string().optional().describe('Defaults to deal_name if omitted.'),
       quantity: z.number().int().min(1),
-      tracking_codes: z.array(z.string()).min(1).describe('At least one tracking number -- required.'),
-      insured_value: z.number().min(200).max(1500).optional(),
+      tracking_codes: z.array(z.string()).optional().describe('Tracking numbers, 24 characters or fewer each. Give them only once the item has shipped: they commit to the cashout now. Omit (or pass []) to log it as pending and commit later with commit_cashout_purchase.'),
+      order_number: z.string().max(100).optional().describe('The store\'s order number. Saved on the purchase and used to refuse logging the same order for the same deal item twice.'),
+      insured_value: z.number().min(200).max(1500).optional().describe('Only used when tracking is sent now.'),
       store: z.string().describe('Where you actually bought it (an existing Vendor by name, case-insensitive).'),
       account: z.string().optional().describe('Optional: which of your saved accounts at that store you bought on -- name, username, email or id from list_store_accounts.'),
       payment_method: z.string().describe('Which saved payment method you used (by name).'),
@@ -2960,12 +2971,12 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
       sales_tax: z.number().min(0).optional().describe('Total sales tax paid, default 0.'),
       cashback_rate: z.number().min(0).optional(),
       cashback_earned: z.number().min(0).optional(),
-      unit_payout: z.number().min(0).describe('What the cashout will pay per unit -- the deal\'s payout price.'),
+      unit_payout: z.number().min(0).describe('What the cashout will pay per unit -- the deal\'s payout price. A pending purchase is repriced to the provider\'s payout when it is committed.'),
       purchase_date: z.string().optional().describe('YYYY-MM-DD, defaults to today.'),
       sale_date: z.string().optional().describe('YYYY-MM-DD, defaults to purchase_date.'),
     },
   }, async ({
-    cashout, deal_id, item_id, deal_name, item_name, quantity, tracking_codes: trackingCodes, insured_value: insuredValue,
+    cashout, deal_id, item_id, deal_name, item_name, quantity, tracking_codes: trackingCodes, order_number: orderNumber, insured_value: insuredValue,
     store, account, payment_method, unit_cost: unitCost, tax_exempt: taxExempt, sales_tax: salesTax,
     cashback_rate: cashbackRate, cashback_earned: cashbackEarned, unit_payout: unitPayout, purchase_date: purchaseDate, sale_date: saleDate,
   }) => {
@@ -2975,19 +2986,34 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
       const vendor = wantsAccount ? await findExistingStore(userId, store) : await findOrCreateVendor(userId, store);
       const storeAccount = wantsAccount ? await findStoreAccount(userId, vendor, account) : null;
       const paymentMethod = await findPaymentMethod(userId, payment_method);
-      await requireCashoutWrites(apiKeyId);
+      const sendsNow = (trackingCodes || []).some((code) => String(code || '').trim());
+      // Without tracking nothing goes to the cashout, so the key needs no
+      // cashout-write permission for it.
+      if (sendsNow) await requireCashoutWrites(apiKeyId);
       const result = await logPurchase(userId, {
         connectionId: conn.id, dealId: deal_id, itemId: item_id, dealName: deal_name, itemName: item_name,
-        quantity, trackingCodes, insuredValue,
+        quantity, trackingCodes, insuredValue, orderNumber,
         vendorId: vendor.id, accountId: storeAccount ? storeAccount.id : null, paymentMethodId: paymentMethod.id, unitCost, taxExempt, salesTax,
         cashbackRate, cashbackEarned, purchaseDate, unitPayout, saleDate,
+        activitySource: 'assistant',
       });
-      await logWrite(userId, apiKeyId, 'log_cashout_purchase', { cashout: conn.displayName || conn.provider, deal_id, item_id, quantity, tracking_codes: trackingCodes, store, account });
+      await logWrite(userId, apiKeyId, 'log_cashout_purchase', { cashout: conn.displayName || conn.provider, deal_id, item_id, quantity, tracking_codes: trackingCodes, order_number: orderNumber, store, account });
+      const status = result.commitment?.status || null;
+      // Something went to the cashout: a log-only entry, like the website's.
+      const event = status === 'active'
+        ? await logCashout(userId, 'log_purchase', result.commitment, { name: result.inventory.product_name, quantity })
+        : null;
       return jsonResult({
+        // committed: sent to the cashout; pending: logged, commit later with
+        // commit_cashout_purchase; recorded: a cashout this app can't commit to.
+        mode: status === 'active' ? 'committed' : status ? 'pending' : 'recorded',
+        activity_id: result.activity?.id ?? null,
+        commit_activity_id: event?.id ?? null,
         tracking_submitted: result.trackingSubmitted,
         tracking_error: result.trackingError,
-        commitment: presentCommitment({ ...result.commitment, connection: conn }),
+        commitment: result.commitment ? presentCommitment({ ...result.commitment, connection: conn }) : null,
         purchase_id: result.inventory.id,
+        order_number: result.inventory.order_number ?? null,
         account: storeAccount ? storeAccount.name : null,
         // Bought more of an item already committed: the commitment's new total.
         added_to_commitment: result.addedTo ?? null,
@@ -2997,6 +3023,93 @@ function buildServer(userId, apiKeyId, guideVersion = null) {
       });
     } catch (err) {
       return errorResult(err.message || 'Failed to log this purchase');
+    }
+  });
+
+  server.registerTool('commit_cashout_purchase', {
+    description: 'Commit a purchase that log_cashout_purchase saved as pending (logged without tracking), now that it has shipped: puts the first tracking number on its sale, commits to the deal item with the cashout at the cashout\'s payout right now (the sale is repriced if it changed), and submits the tracking. Moves the commitment from "pending" to "active". '
+      + 'If the cashout refuses (deal closed, over the limit), the purchase, sale and tracking number stay saved, the commitment stays pending, and committed: false with commit_error says why -- try again later, or contact the cashout. If the cashout did not answer, the result is an error saying so: check list_cashout_commitments before trying again. '
+      + 'activity_id is the tracking-number edit on the sale (undoable); commit_activity_id is the log-only entry for the commit, which undo can\'t take back (use delete_cashout_commitment).',
+    inputSchema: {
+      commitment_id: z.string().optional().describe('The pending commitment\'s id (log_cashout_purchase\'s commitment.id, or list_cashout_commitments with status "pending"). Pass this or purchase_id.'),
+      purchase_id: z.string().optional().describe('Or the purchase_id log_cashout_purchase returned.'),
+      tracking_codes: z.array(z.string()).min(1).describe('Tracking numbers, 24 characters or fewer each. The first goes on the sale; all are sent to the cashout.'),
+      insured_value: z.number().min(200).max(1500).optional().describe('Declared insurance value in USD, $200-$1500. Omit to skip insurance.'),
+    },
+  }, async ({ commitment_id, purchase_id, tracking_codes: trackingCodes, insured_value: insuredValue }) => {
+    try {
+      if (Boolean(commitment_id) === Boolean(purchase_id)) return errorResult('Pass commitment_id or purchase_id (one of them).');
+      // Checked before anything is saved or sent.
+      const codes = cashoutCommits.cleanTrackingCodes(trackingCodes);
+      cashoutCommits.cleanInsuredValue(insuredValue);
+      let record;
+      if (commitment_id) {
+        record = await prisma.cashoutCommitment.findFirst({ where: { id: commitment_id, user_id: userId }, include: { connection: true } });
+      } else {
+        const sales = await prisma.sales.findMany({ where: { inventory_id: purchase_id, inventory: { user_id: userId } }, select: { id: true } });
+        const rows = sales.length
+          ? await prisma.cashoutCommitment.findMany({ where: { user_id: userId, sale_id: { in: sales.map((x) => x.id) } }, include: { connection: true } })
+          : [];
+        record = rows.find((r) => r.status === 'pending' || r.status === 'committing') || rows[0];
+      }
+      if (!record) return errorResult('No cashout commitment found for that id. Pending purchases are listed by list_cashout_commitments with status "pending".');
+      if (record.status === 'active') return errorResult('This purchase is already committed. To send another tracking number, use submit_cashout_tracking.');
+      if (record.status === 'withdrawn') return errorResult('This commitment was withdrawn. Log the purchase again to commit it.');
+      if (!record.sale_id) return errorResult('The sale for this purchase was deleted, so there is nothing to commit.');
+      await requireCashoutWrites(apiKeyId);
+
+      // The tracking number goes on the sale first, the same edit update_sale
+      // makes; the commit reads it from there.
+      const saleId = record.sale_id;
+      const { activity } = await prisma.$transaction(async (tx) => track(tx, {
+        action: 'edit', recordType: 'sale', recordId: saleId,
+        refs: (t) => saleRefs(t, saleId),
+      }, async () => {
+        const existing = await tx.sales.findUnique({ where: { id: saleId } });
+        if (existing.tracking_number === codes[0]) return existing;
+        const data = { ...trackingGateAndAdvance('sale', existing, codes[0], false), tracking_number: codes[0] };
+        const changes = [{ field: 'tracking_number', oldValue: existing.tracking_number, newValue: codes[0] }];
+        if (data.workflow_status) changes.push({ field: 'workflow_status', oldValue: existing.workflow_status, newValue: data.workflow_status });
+        await tx.sales.update({ where: { id: saleId }, data });
+        await recordChanges(tx, userId, 'Sales', saleId, changes);
+        return tx.sales.findUnique({ where: { id: saleId } });
+      }));
+      await logWrite(userId, apiKeyId, 'commit_cashout_purchase', { commitment_id: record.id, tracking_codes: codes, insured_value: insuredValue });
+
+      const conn = connectionOf(record.connection);
+      let done;
+      try {
+        done = await pendingCommit.commitPending(userId, record.id, { insuredValue, extraTrackingCodes: codes.slice(1) });
+      } catch (err) {
+        // No answer from the cashout: it may have gone through.
+        if (err.ambiguous) return errorResult(err.message);
+        const kept = await prisma.cashoutCommitment.findFirst({ where: { id: record.id } });
+        return jsonResult({
+          committed: false,
+          commit_error: kept?.commit_error || err.message,
+          commitment: kept ? presentCommitment({ ...kept, connection: conn }) : null,
+          sale_id: saleId,
+          activity_id: activity?.id ?? null,
+          commit_activity_id: null,
+        });
+      }
+      const event = await logCashout(userId, 'commit', done.commitment);
+      return jsonResult({
+        committed: true,
+        commit_error: null,
+        commitment: presentCommitment({ ...done.commitment, connection: conn }),
+        sale_id: saleId,
+        tracking_submitted: done.trackingSubmitted,
+        tracking_error: done.trackingError,
+        payout: done.payout,
+        // Set when the cashout's payout had changed since it was logged.
+        previous_payout: done.previousPayout,
+        added_to_commitment: done.raisedTo ?? null,
+        activity_id: activity?.id ?? null,
+        commit_activity_id: event?.id ?? null,
+      });
+    } catch (err) {
+      return errorResult(err.message || 'Failed to commit this purchase');
     }
   });
 

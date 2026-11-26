@@ -351,3 +351,59 @@ describe('buying more of an item already committed (real Postgres)', () => {
     expect(ebTotal()).toBe(3);
   });
 });
+
+describe('order numbers and the undoable add (real Postgres)', () => {
+  const logOrder = (orderNumber, extra = {}) => logPurchase(ME, {
+    connectionId: ids.conn, dealId: '2000', itemId: '101', dealName: 'PS5 Pro', itemName: 'PS5 Pro',
+    quantity: 1, trackingCodes: [], vendorId: ids.vendor, paymentMethodId: ids.card,
+    unitCost: 400, unitPayout: 480, purchaseDate: '2026-11-08', orderNumber, activitySource: 'assistant', ...extra,
+  });
+
+  it('refuses the same order for the same item, ignoring case, even when two arrive at once', async () => {
+    const commitSpy = mockEb();
+    const results = await Promise.allSettled([logOrder('112-ABC'), logOrder('112-abc')]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const refused = results.find((r) => r.status === 'rejected').reason;
+    expect(refused.status).toBe(409);
+    expect(refused.message).toMatch(/already logged/);
+    expect(await db.inventory.count()).toBe(1);
+    expect(await db.cashoutCommitment.count()).toBe(1);
+
+    // With tracking it is refused before the cashout is called.
+    await expect(logOrder('112-abc', { trackingCodes: ['1Z999AA10123456784'] })).rejects.toThrow(/already logged/);
+    expect(commitSpy).not.toHaveBeenCalled();
+    // Another item from the same order is fine.
+    await logOrder('112-ABC', { itemId: '102' });
+    expect(await db.inventory.count()).toBe(2);
+  });
+
+  it('logs one undoable entry; undo removes the purchase, sale and pending commitment', async () => {
+    mockEb();
+    const activityLog = require('../services/activityLog');
+    const logged = await logOrder('112-UNDO');
+    expect(logged.activity?.id).toBeTruthy();
+    expect((await db.inventory.findUnique({ where: { id: logged.inventory.id } })).order_number).toBe('112-UNDO');
+
+    await activityLog.undoActivity(ME, logged.activity.id, { source: 'assistant' });
+    expect(await db.inventory.count()).toBe(0);
+    expect(await db.sales.count()).toBe(0);
+    expect(await db.cashoutCommitment.count()).toBe(0);
+    // Undone, the order can be logged again.
+    await logOrder('112-UNDO');
+    expect(await db.inventory.count()).toBe(1);
+  });
+
+  it('commits a pending purchase later with every tracking number', async () => {
+    const commitSpy = mockEb();
+    const pendingCommit = require('../services/cashouts/pendingCommit');
+    const logged = await logOrder('112-LATER');
+    await db.sales.update({ where: { id: logged.sale.id }, data: { tracking_number: '1Z999AA10123456784' } });
+
+    const done = await pendingCommit.commitPending(ME, logged.commitment.id, { extraTrackingCodes: ['1Z999AA10123456784', '9400111899223397521787'] });
+
+    expect(commitSpy).toHaveBeenCalledTimes(1);
+    expect(done.commitment).toMatchObject({ status: 'active', tracking_error: null });
+    expect(done.commitment.tracking_codes).toEqual(['1Z999AA10123456784', '9400111899223397521787']);
+    expect(ebAdapter.submitTracking.mock.calls.flatMap((c) => c[1].trackingCodes)).toEqual(['1Z999AA10123456784', '9400111899223397521787']);
+  });
+});

@@ -18,6 +18,16 @@
 
 export const AI_GUIDE_UPDATES = [
   {
+    version: '1.54',
+    date: '2026-11-25',
+    notes: [
+      'log_cashout_purchase no longer needs tracking_codes. Without them it records the purchase and sale plus a "pending" commitment and sends nothing to the cashout (no cashout-write permission needed). With them it works as before: commit, send tracking, record.',
+      'New tool commit_cashout_purchase: once a pending purchase ships, pass its commitment_id (or purchase_id) and tracking_codes. It puts the tracking on the sale, commits at the cashout\'s current payout and sends the tracking. If the cashout refuses, the records stay, it stays pending, and you get committed: false with commit_error -- tell the user; don\'t retry on your own.',
+      'log_cashout_purchase takes order_number, saved on the purchase. The same order_number for the same deal_id + item_id is refused as a duplicate, naming the purchase it was logged as.',
+      'Both tools now return activity_id (undoable with undo_activity) and commit_activity_id (log-only, set when something went to the cashout). Undo removes our records only; a commitment made with the cashout stays until delete_cashout_commitment.',
+    ],
+  },
+  {
     version: '1.51',
     date: '2026-11-24',
     notes: [
@@ -99,6 +109,13 @@ EXPENSES
 RECONCILING A STATEMENT
 - reconcile_transactions takes bank/card lines {id, date, amount, merchant, account}. Amount signs don't matter. Match tiers, best first: external_id, amount_date (same amount, date within tolerance), amount (same amount, further off), merchant (similar merchant, amount within 10% -- a guess; confirm it). It also lists lines that matched nothing and tracker records with no bank line.
 
+LOGGING A CASHOUT PURCHASE
+- log_cashout_purchase records the purchase and its sale to the cashout in one call. Pass order_number when the user has it: the same order for the same deal_id + item_id is refused as a duplicate, so don't retry around that error.
+- Not shipped yet: leave out tracking_codes. It is saved with a "pending" commitment (list_cashout_commitments, status "pending") and nothing is sent to the cashout.
+- When it ships: commit_cashout_purchase with that commitment_id (or the purchase_id) and the tracking numbers. It commits at the cashout's payout at that moment (the sale is repriced if it changed) and sends the tracking. committed: false (with the reason) means the cashout refused (deal closed, limit reached): the records stay and it stays pending. Tell the user; contacting the cashout is theirs to do.
+- Already shipped: pass tracking_codes to log_cashout_purchase and it commits, sends tracking and records in one go. If that commit is refused, nothing is saved.
+- activity_id undoes our records only. A commitment already made with the cashout stays there until delete_cashout_commitment; the second, log-only activity id returned for it can't be undone.
+
 TOOLS -- READ ONLY
 - get_ai_guide: this guide, or only what changed since you last read it.
 - get_todos: the user's To-Do list -- what needs them now (unshipped sales, late payouts, cash-out tracking, card bills, unlisted stock, their reminders), by urgency, plus money owed by each payer and what got done this week. A to-do clears on its own once its record is fixed; to act on one, change the record with the usual tools after the user confirms. Snoozing and dismissing happen only in the app. Good for "what should I do today?".
@@ -139,7 +156,8 @@ TOOLS -- CHANGE DATA (confirm with the user first)
 - add_platform: a new marketplace, cashout or vendor.
 - add_payment_method, update_payment_method: a card, best taken from search_card_list so its rewards stay current.
 - undo_activity: reverse one Activity entry (needs confirm: true).
-- Binding with a cashout -- only when the user clearly asks, and only if their key allows cashout writes: commit_cashout_deal, update_cashout_commitment, delete_cashout_commitment, submit_cashout_tracking, log_cashout_purchase (commit + tracking + record the purchase and sale, once the item has shipped).`;
+- log_cashout_purchase without tracking_codes: record a cashout purchase and sale as pending (see LOGGING A CASHOUT PURCHASE). Nothing goes to the cashout.
+- Binding with a cashout -- only when the user clearly asks, and only if their key allows cashout writes: commit_cashout_deal, update_cashout_commitment, delete_cashout_commitment, submit_cashout_tracking, log_cashout_purchase with tracking_codes (commit + tracking + record the purchase and sale), commit_cashout_purchase (commit a pending purchase once it ships).`;
 
 const header = (version) => `PROFIT TRACKER AI GUIDE -- version ${version}`;
 
