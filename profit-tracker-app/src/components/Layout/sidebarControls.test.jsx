@@ -111,8 +111,7 @@ describe('Sidebar sections', () => {
 describe('Collapsed sidebar', () => {
   it('names each icon, keeps the to-do count, and shows a label on hover', () => {
     const { container } = renderSidebar({ isCollapsed: true });
-    const todo = screen.getByRole('link', { name: 'To-Do, 16 open' });
-    expect(todo).toHaveTextContent('16');
+    expect(screen.getByRole('link', { name: 'To-Do, 16 open' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /^Shipping/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
 
@@ -229,8 +228,8 @@ describe('Ledger', () => {
 describe('Ledger in every layout', () => {
   it('the collapsed rail keeps a dot for each figure, and a folded group says what waits inside', async () => {
     const { container } = renderSidebar({ isCollapsed: true });
-    // Countable figures get a number (Shipping 1); money gets a dot (Cash Flow).
-    expect(container.querySelectorAll('[data-figure-dot]').length).toBe(1);
+    // The rail stays quiet: no badges for plain figures (words are in the label).
+    expect(container.querySelectorAll('[data-figure-dot]').length).toBe(0);
     expect(screen.getByRole('link', { name: 'Cash Flow, $3.6k owed' })).toBeInTheDocument();
     cleanup();
     renderSidebar();

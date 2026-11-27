@@ -1523,9 +1523,14 @@ nav[aria-label="Main"] :is(a, button):focus-visible {
 /* Log a buy: the one filled red control in the sidebar. */
 .dp-action-primary { background: var(--dp-accent-gradient, var(--dp-accent-solid)); }
 
+/* The rail's late dot is cut out of whatever is behind it (sidebar or pill). */
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar .dp-rail-dot { --tw-ring-color: var(--dp-dash-sidebar); }
+
 /* The rail is only 72px wide: no visible scrollbar (it still scrolls). */
-.dp-rail { scrollbar-width: none; }
-.dp-rail::-webkit-scrollbar { display: none; }
+/* !important: the shared .dp-scrollbar rules would otherwise keep a gutter
+   that pushes every rail icon off-centre. */
+.dp-rail { scrollbar-width: none !important; }
+.dp-rail::-webkit-scrollbar { display: none !important; width: 0 !important; }
 
 /* Collapsed rail: a hairline between groups, since their names are hidden. */
 .dp-rail > [data-section] + [data-section] {

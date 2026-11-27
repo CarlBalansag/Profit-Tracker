@@ -673,14 +673,21 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, figure }) => 
     className={({ isActive }) =>
       clsx(
         "relative flex items-center rounded-md border-l-2 border-l-transparent transition-colors",
-        isCollapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5 lg:py-1 text-[15px] lg:text-[12px] font-medium",
+        isCollapsed ? "justify-center p-2.5 !border-l-0" : "gap-3 px-3 py-2.5 lg:py-1 text-[15px] lg:text-[12px] font-medium",
         isActive
           ? "text-[var(--dp-accent)] font-semibold cursor-default"
           : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)]"
       )
     }
   >
-    <Icon size={16} className={clsx("flex-shrink-0", !isCollapsed && "max-lg:size-[18px]")} />
+    <span className="relative flex shrink-0">
+      <Icon size={16} className={clsx("flex-shrink-0", !isCollapsed && "max-lg:size-[18px]")} />
+      {/* Collapsed rail: only late work gets a mark, a small red dot pinned to
+          the icon's corner; every figure's words are in the label and tooltip. */}
+      {isCollapsed && figure?.problem && (
+        <span aria-hidden="true" data-figure-dot="" className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-[var(--dp-red-text)] ring-2 ring-[var(--dp-card-bg)] dp-rail-dot" />
+      )}
+    </span>
     {!isCollapsed && <span className="truncate flex-1 disabled-link">{label}</span>}
     {/* The ledger column: one live figure, right-aligned in tabular numbers. */}
     {figure && !isCollapsed && (
@@ -688,14 +695,6 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, figure }) => 
         {figure.problem && <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />}
         <BadgeCount text={figure.text} data-figure="" className="text-right text-[13px] lg:text-[12px] font-semibold tabular-nums" />
       </span>
-    )}
-    {/* Collapsed rail: To-Do keeps its count; every other figure is a dot
-        (red when late), with its words in the label. */}
-    {figure?.count > 0 && isCollapsed && (
-      <BadgeCount count={figure.count} className={clsx("absolute -right-1 -top-1 min-w-[16px] rounded-full px-1 text-center text-[10px] font-semibold leading-[14px] tabular-nums", figure.problem ? "border border-transparent bg-[var(--dp-red-text)] text-[#2a0a0e]" : "border border-[color:var(--dp-text-label)] bg-[var(--dp-card-bg)] text-[var(--dp-text-secondary)]")} />
-    )}
-    {figure && !(figure.count > 0) && isCollapsed && (
-      <span aria-hidden="true" data-figure-dot="" className={clsx("absolute right-1 top-1 h-2 w-2 rounded-full", figure.problem ? "bg-[var(--dp-red-text)]" : "border border-[color:var(--dp-text-label)]")} />
     )}
   </NavLink>
 );
