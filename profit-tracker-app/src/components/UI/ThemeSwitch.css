@@ -57,6 +57,9 @@ html.theme-switching *:not(.sticky-theme-switch-wrapper, .sticky-theme-switch-wr
 .sticky-theme-switch-wrapper.theme-switch-inline {
   position: static;
   filter: none;
+  /* As a flex item the floating switch's z-index would still apply and
+     paint the switch over the sidebar's account menu. */
+  z-index: auto;
 }
 
 ::view-transition-group(theme-toggle-btn) {
