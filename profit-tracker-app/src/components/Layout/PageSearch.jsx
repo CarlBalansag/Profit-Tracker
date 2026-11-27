@@ -4,6 +4,18 @@ import { useNavigate } from 'react-router-dom';
 import { CornerDownLeft, Search } from 'lucide-react';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 
+// Best match first: the name starts with what you typed, then a word in the
+// name does, then the name contains it, then only the related words match.
+function rank(page, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return 0;
+  const label = page.label.toLowerCase();
+  if (label.startsWith(q)) return 0;
+  if (label.split(/[\s&-]+/).some((word) => word.startsWith(q))) return 1;
+  if (label.includes(q)) return 2;
+  return 3;
+}
+
 function matches(page, query) {
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -22,7 +34,11 @@ export default function PageSearch({ open, onClose, pages }) {
   const [active, setActive] = useState(0);
   const close = () => { setQuery(''); setActive(0); onClose(); };
   const ref = useModalKeyboard(open, close, inputRef);
-  const results = useMemo(() => pages.filter((page) => matches(page, query)), [pages, query]);
+  const results = useMemo(() => pages
+    .filter((page) => matches(page, query))
+    .map((page, i) => ({ page, i, rank: rank(page, query) }))
+    .sort((a, b) => a.rank - b.rank || a.i - b.i)
+    .map(({ page }) => page), [pages, query]);
   const current = Math.min(active, Math.max(results.length - 1, 0));
 
   if (!open) return null;
@@ -30,6 +46,8 @@ export default function PageSearch({ open, onClose, pages }) {
   const go = (page) => {
     close();
     navigate(page.to, page.state ? { state: page.state } : undefined);
+    // Keyboard focus moves to the page you went to.
+    requestAnimationFrame(() => document.getElementById('main-content')?.focus());
   };
   const onKeyDown = (e) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive((current + 1) % Math.max(results.length, 1)); }

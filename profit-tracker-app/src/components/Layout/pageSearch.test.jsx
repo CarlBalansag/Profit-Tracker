@@ -37,7 +37,9 @@ describe('Page search', () => {
     fireEvent.click(screen.getByRole('button', { name: /Search pages/ }));
     const input = screen.getByRole('combobox', { name: 'Page name' });
     fireEvent.change(input, { target: { value: 'tax' } });
-    expect(screen.getAllByRole('option').map((o) => o.textContent).some((t) => t.startsWith('Expenses'))).toBe(true);
+    const found = screen.getAllByRole('option').map((o) => o.textContent);
+    expect(found[0]).toMatch(/^Tax Exempt/); // a page named for it comes first
+    expect(found.some((t) => t.startsWith('Expenses'))).toBe(true);
     expect(screen.getAllByRole('option')[0]).toHaveAttribute('aria-selected', 'true');
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     expect(screen.getAllByRole('option')[1]).toHaveAttribute('aria-selected', 'true');

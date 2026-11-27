@@ -112,6 +112,7 @@ const BottomNav = ({ onMoreClick, isGlass }) => {
           aria-haspopup="dialog"
           aria-label={todoCount ? `More, ${todoCount} to do` : undefined}
           data-here={moreIsHere || undefined}
+          aria-current={moreIsHere ? 'page' : undefined}
           onClick={onMoreClick}
           className={clsx(ITEM, moreIsHere ? colors.active : colors.idle)}
         >

@@ -254,7 +254,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
         {/* Desktop footer: one row of icons (each named, with a label on hover
             and focus) so the pages above get the room. On phones these live in
             the account menu. */}
-        <div data-footer-tips="" className={clsx("hidden lg:flex border-t border-[color:var(--dp-border)] p-2", isCollapsed ? "flex-col items-center gap-1" : "items-center gap-1")}>
+        <div data-footer-tips="" className={clsx("hidden border-t border-[color:var(--dp-border)] p-2 items-center gap-1", !isCollapsed && "lg:flex")}>
           <button
             type="button"
             onClick={() => setShowChangelog(true)}
@@ -280,9 +280,10 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
             aria-label="Guide"
             data-tip="Guide"
             data-tutorial-id="sidebar-guide"
-            className={({ isActive }) => clsx("flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-[var(--dp-hover-bg)]", isActive ? "text-[var(--dp-accent-text)] bg-[var(--dp-accent-bg)]" : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]")}
+            className={({ isActive }) => clsx("flex h-8 items-center gap-1.5 rounded-md px-2 transition-colors hover:bg-[var(--dp-hover-bg)]", isActive ? "text-[var(--dp-accent-text)] bg-[var(--dp-accent-bg)]" : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]")}
           >
             <BookOpen size={14} aria-hidden="true" />
+            <span aria-hidden="true" className="text-[12px]">Guide</span>
           </NavLink>
           <div data-tip="Theme" className={clsx("flex items-center", isCollapsed ? "py-1" : "ml-auto pr-1")}>
             <ThemeSwitch inline />
@@ -293,7 +294,6 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
           <button
             ref={profileButtonRef}
             type="button"
-            aria-haspopup="true"
             aria-expanded={isProfileMenuOpen}
             aria-controls={profileMenuId}
             aria-label={isCollapsed ? `Account: ${user?.username || 'Account'}` : undefined}
@@ -330,7 +330,8 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
                  <History size={14} className="text-[var(--dp-text-secondary)]" /> Activity
                </NavLink>
                {/* Phone drawer only: the items the desktop sidebar keeps in its footer. */}
-               <div className="lg:hidden">
+               {/* On phones and on the collapsed rail: the tools the desktop footer shows. */}
+               <div className={isCollapsed ? undefined : 'lg:hidden'}>
                  <div className="h-px w-full bg-[var(--dp-border)] my-1"></div>
                  <button type="button" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[15px] lg:text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); setShowChangelog(true); }}>
                    <Sparkles size={14} className="text-[var(--dp-text-secondary)]" /> What's New <span className="ml-auto text-[11px] text-[var(--dp-text-label)]">v{CURRENT_VERSION}</span>
@@ -406,6 +407,8 @@ function useNavMarker(containerRef, deps) {
 
   // The current page's row is scrolled into view inside the nav on load, on
   // navigation and when the phone drawer opens (only the nav scrolls).
+  const revealRef = useRef(() => {});
+  const revealUntil = useRef(0);
   useLayoutEffect(() => {
     const reveal = () => {
       const container = containerRef.current;
@@ -422,8 +425,11 @@ function useNavMarker(containerRef, deps) {
       else if (l.bottom > c.bottom - pad) container.scrollTop += l.bottom - (c.bottom - pad);
     };
     reveal();
-    // Again once the drawer's rows have grown to their 44px touch height
-    // (that happens just after it opens).
+    // Keep it in view while the layout settles for a moment: a section that
+    // opens for this page slides open over 200ms, and the drawer's rows grow
+    // to 44px just after it opens. The resize observer below calls this.
+    revealRef.current = reveal;
+    revealUntil.current = performance.now() + 500;
     let second = 0;
     const first = requestAnimationFrame(() => { second = requestAnimationFrame(reveal); });
     return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
@@ -440,7 +446,10 @@ function useNavMarker(containerRef, deps) {
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return undefined;
-    const follow = () => measure(false);
+    const follow = () => {
+      measure(false);
+      if (performance.now() < revealUntil.current) revealRef.current();
+    };
     let ro = null;
     if (typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(follow);
@@ -575,10 +584,10 @@ function SignOutRow({ onSignOut }) {
   }
   return (
     <div role="group" aria-label="Sign out?" className="px-4 py-2">
-      <p className="text-[12px] font-medium text-[var(--dp-text-primary)]">Sign out of Profit Tracker?</p>
+      <p className="text-[15px] lg:text-[12px] font-medium text-[var(--dp-text-primary)]">Sign out of Profit Tracker?</p>
       <div className="mt-2 flex gap-2">
-        <button type="button" autoFocus onClick={cancel} className="flex-1 rounded-md bg-[var(--dp-hover-bg)] px-3 py-1.5 pointer-coarse:min-h-[44px] text-[15px] lg:text-[12px] font-medium text-[var(--dp-text-primary)]">Cancel</button>
-        <button type="button" onClick={onSignOut} className="flex-1 rounded-md bg-[var(--dp-red-bg)] px-3 py-1.5 pointer-coarse:min-h-[44px] text-[12px] font-semibold text-[var(--dp-red-text)]">Sign out</button>
+        <button type="button" autoFocus onClick={cancel} className="flex-1 rounded-md border border-[color:var(--dp-border)] px-3 py-1.5 pointer-coarse:min-h-[44px] text-[15px] lg:text-[12px] font-medium text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)]">Cancel</button>
+        <button type="button" onClick={onSignOut} className="flex-1 rounded-md bg-[var(--dp-red-bg)] px-3 py-1.5 pointer-coarse:min-h-[44px] text-[15px] lg:text-[12px] font-semibold text-[var(--dp-red-text)]">Sign out</button>
       </div>
     </div>
   );
@@ -750,18 +759,24 @@ function useCollapsedTooltip(containerRef, enabled, collapsed) {
       // Expanded, only the footer's icons need labels; collapsed, everything.
       if (!collapsed && !el.closest('[data-footer-tips]')) return;
       if (e.type === 'focusin' && !e.target.matches(':focus-visible')) return;
-      const r = el.getBoundingClientRect();
       // Beside the icon on the rail; above it in the expanded footer row.
-      setTip(collapsed
-        ? { text: el.getAttribute('data-tip'), top: r.top + r.height / 2, left: r.right + 10, side: 'right' }
-        : { text: el.getAttribute('data-tip'), top: r.top - 8, left: r.left + r.width / 2, side: 'top' });
+      const focus = e.type === 'focusin';
+      // A focused icon can scroll the rail first, so measure a frame later.
+      const place = () => {
+        const r2 = el.getBoundingClientRect();
+        setTip(collapsed
+          ? { text: el.getAttribute('data-tip'), top: r2.top + r2.height / 2, left: r2.right + 10, side: 'right', focus }
+          : { text: el.getAttribute('data-tip'), top: r2.top - 8, left: r2.left + r2.width / 2, side: 'top', focus });
+      };
+      place();
+      if (focus) requestAnimationFrame(place);
     };
     const hide = (e) => {
       const el = e.target.closest?.('[data-tip]');
       if (el && e.relatedTarget && el.contains(e.relatedTarget)) return;
       setTip(null);
     };
-    const clear = () => setTip(null);
+    const clear = () => setTip((t) => (t?.focus ? t : null));
     root.addEventListener('pointerover', show);
     root.addEventListener('pointerout', hide);
     root.addEventListener('focusin', show);
