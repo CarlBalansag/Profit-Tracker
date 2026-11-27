@@ -12,7 +12,7 @@ import {
   estimateDealProfit,
   formatDealExpiry,
   formatDealProfit,
-  formatLastSynced,
+  formatSyncTimes,
   groupDealsByProduct,
   groupStoreLinks,
   isDealExpired,
@@ -395,34 +395,47 @@ describe('Cashout Page', () => {
     expect(screen.getByText('Live Deals')).toBeInTheDocument();
   });
 
-  it('shows the newest sync time in the viewer time zone', () => {
+  it('lists each cashout with its own sync time in the viewer time zone', () => {
+    const providers = [{ id: 'eb', name: 'ElectronicsBuyer' }, { id: 'la', name: 'LA' }, { id: 'p4d', name: 'Points4Days' }];
+    const now = new Date('2026-11-27T00:59:00Z'); // Nov 26, 4:59 PM in Los Angeles
     const results = [
-      { lastUpdated: '2026-11-06T15:00:00Z' },
-      { lastUpdated: '2026-11-06T17:52:00Z' },
-      { lastUpdated: null },
+      { connection: { id: 'a', provider: 'eb' }, lastUpdated: '2026-11-27T00:59:00Z' },
+      { connection: { id: 'b', provider: 'la', displayName: 'LA main' }, lastUpdated: '2026-11-26T08:33:00Z' },
+      // A paused check has no deals time; the connection's last good sync stands in.
+      { connection: { id: 'c', provider: 'p4d', lastSyncedAt: '2026-11-25T08:33:00Z' }, lastUpdated: null },
+      // Never synced: left out.
+      { connection: { id: 'd', provider: 'eb', lastSyncedAt: null }, lastUpdated: null },
     ];
-    expect(formatLastSynced(results, 'America/Los_Angeles')).toMatch(/Nov 6.*9:52.*AM.*PST/);
-    expect(formatLastSynced(results, 'America/New_York')).toMatch(/Nov 6.*12:52.*PM.*EST/);
-    expect(formatLastSynced([], 'UTC')).toBeNull();
-    expect(formatLastSynced(undefined, 'UTC')).toBeNull();
+    const la = formatSyncTimes(results, providers, { timeZone: 'America/Los_Angeles', now });
+    expect(la.map((entry) => entry.name)).toEqual(['ElectronicsBuyer', 'LA main', 'Points4Days']);
+    expect(la[0].time).toMatch(/^4:59\sPM$/);
+    expect(la[1].time).toMatch(/^12:33\sAM$/);
+    expect(la[2].time).toMatch(/Nov 25.*12:33\sAM/);
+    // The same moments, three hours later on the clock.
+    const ny = formatSyncTimes(results, providers, { timeZone: 'America/New_York', now });
+    expect(ny[0].time).toMatch(/^7:59\sPM$/);
+    expect(ny[1].time).toMatch(/^3:33\sAM$/);
+    expect(formatSyncTimes([], providers)).toEqual([]);
+    expect(formatSyncTimes(undefined, providers)).toEqual([]);
   });
 
-  it('shows when deals last synced under Sync now, and nothing before the first sync', () => {
+  it("shows each cashout's sync time under Sync now, and nothing before the first sync", () => {
     const { unmount } = render(
       <MemoryRouter>
         <Cashout />
       </MemoryRouter>
     );
-    expect(screen.getByText(/^Last synced /)).toBeInTheDocument();
+    expect(screen.getByText('Last synced')).toBeInTheDocument();
+    expect(screen.getAllByText('EB Primary').length).toBeGreaterThan(0);
     unmount();
 
-    currentDeals = { results: [{ connection: mockConnections[0], deals: [], lastUpdated: null }] };
+    currentDeals = { results: [{ connection: { ...mockConnections[0], lastSyncedAt: null }, deals: [], lastUpdated: null }] };
     render(
       <MemoryRouter>
         <Cashout />
       </MemoryRouter>
     );
-    expect(screen.queryByText(/^Last synced /)).not.toBeInTheDocument();
+    expect(screen.queryByText('Last synced')).not.toBeInTheDocument();
   });
 
   describe('notes', () => {

@@ -55,7 +55,7 @@ import {
   estimateDealProfit,
   formatDealExpiry,
   formatDealProfit,
-  formatLastSynced,
+  formatSyncTimes,
   groupDealsByProduct,
   groupStoreLinks,
   isDealExpired,
@@ -350,7 +350,7 @@ export default function Cashout() {
     }
   };
 
-  const lastSynced = formatLastSynced(dealsData?.results);
+  const syncTimes = formatSyncTimes(dealsData?.results, providers);
   const troubledResult = dealsData?.results?.find((r) => r.isStale || r.connection?.status === 'attention_needed');
   const troubleMessage = troubledResult && (
     troubledResult.warning
@@ -375,7 +375,7 @@ export default function Cashout() {
           </p>
         </div>
 
-        {/* Wraps on phones: "Last synced …" plus Manage Cashouts don't fit one row at 375px. */}
+        {/* Wraps on phones: the sync times plus Manage Cashouts don't fit one row at 375px. */}
         <div className="flex flex-wrap items-start gap-2.5">
           <div className="flex flex-col items-start sm:items-center gap-1">
             <button
@@ -388,10 +388,19 @@ export default function Cashout() {
               <RefreshCw size={14} className={syncConnection.isPending || dealsFetching ? 'animate-spin' : ''} />
               <span>{syncCooldownSeconds > 0 ? `Sync (${syncCooldownSeconds}s)` : 'Sync now'}</span>
             </button>
-            {lastSynced && (
-              <span className="text-[12px] text-[var(--dp-text-label)] whitespace-nowrap">
-                Last synced {lastSynced}
-              </span>
+            {/* One line per cashout: they're checked on different schedules. */}
+            {syncTimes.length > 0 && (
+              <div className="text-[12px] text-[var(--dp-text-label)]">
+                <p className="sm:text-center">Last synced</p>
+                <ul className="grid grid-cols-[auto_auto] gap-x-2">
+                  {syncTimes.map((entry) => (
+                    <li key={entry.id} className="contents">
+                      <span className="text-[var(--dp-text-secondary)] truncate max-w-[9rem]">{entry.name}</span>
+                      <span className="whitespace-nowrap">{entry.time}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
 

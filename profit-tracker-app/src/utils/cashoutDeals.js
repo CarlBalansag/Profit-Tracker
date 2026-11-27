@@ -42,22 +42,29 @@ export function matchesRetailCategory(deal, category) {
   return category === 'above_retail' ? profit.amount > 0 : profit.amount <= 0;
 }
 
-// When the deals on screen were last fetched, newest across all connections. A
-// failed refresh keeps its old time, so this never overstates how fresh they are.
-// Shown in the device's time zone unless one is passed in.
-export function formatLastSynced(results, timeZone) {
-  const times = (results || [])
-    .map((result) => new Date(result.lastUpdated || NaN).getTime())
-    .filter(Number.isFinite);
-  if (times.length === 0) return null;
-
-  return new Date(Math.max(...times)).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZoneName: 'short',
-    timeZone,
+// When each connected cashout's deals were last fetched, one entry per
+// connection, since they're checked on different schedules (EB every minute,
+// LA and Points4Days once a day). A failed refresh keeps its old time, so this
+// never overstates how fresh they are. Today's checks show just the time, older
+// ones the date too, in the device's time zone unless one is passed in.
+export function formatSyncTimes(results, providers = [], { timeZone, now = new Date() } = {}) {
+  const dayOf = (date) => date.toLocaleDateString('en-US', { timeZone });
+  const today = dayOf(now);
+  return (results || []).flatMap((result) => {
+    const conn = result?.connection || {};
+    const at = new Date(result?.lastUpdated || conn.lastSyncedAt || NaN);
+    if (Number.isNaN(at.getTime())) return [];
+    const sameDay = dayOf(at) === today;
+    return [{
+      id: conn.id || conn.provider,
+      name: conn.displayName || providers.find((p) => p.id === conn.provider)?.name || conn.provider || 'Cashout',
+      time: at.toLocaleString(undefined, {
+        ...(sameDay ? {} : { month: 'short', day: 'numeric' }),
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone,
+      }),
+    }];
   });
 }
 
