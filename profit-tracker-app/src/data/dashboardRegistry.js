@@ -29,7 +29,7 @@ export const STAT_CARD_REGISTRY = {
     // there, not purchases, so the tile says so instead of keeping a label
     // that would suggest Marketplace spent more than All.
     channel: {
-      label: 'Cost of Units Sold',
+      label: 'Cost of Sales',
       formula: ['Cost of Each Unit Sold Through This Channel × Quantity'],
       description: 'What the units you sold through this channel cost you, for sales in the selected period. It is not your total purchase spend, which only the All view shows.',
       getSubtext: (s) => `${s.unitsSold ?? 0} ${s.unitsSold === 1 ? 'unit' : 'units'} sold here`,
@@ -45,7 +45,7 @@ export const STAT_CARD_REGISTRY = {
     getValue: (s) => `$${formatMoney(s.totalCashback)}`,
     getSubtext: (s) => `on purchases · ${s.avgCashbackRate.toFixed(2)}% avg`,
     channel: {
-      label: 'Cashback on Units Sold',
+      label: 'Cashback on Sales',
       formula: ['Cashback Earned on the Units Sold Through This Channel'],
       description: 'The card cashback earned on the units you sold through this channel in the selected period. This is the same cashback that Net Profit adds.',
       getSubtext: (s) => `${s.avgCashbackRate.toFixed(2)}% avg rate`,

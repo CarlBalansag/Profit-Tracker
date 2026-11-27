@@ -1086,7 +1086,7 @@ const Dashboard = () => {
                 type="button"
                 aria-pressed={dateFilter === f}
                 onClick={() => setDateFilter(f)}
-                className={`px-[10px] py-1 text-[12px] font-medium rounded-full transition-colors ${dateFilter === f ? 'bg-[var(--dp-accent)] text-[#ffffff]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
+                className={`px-[10px] py-1 text-[12px] font-medium rounded-full transition-colors ${dateFilter === f ? 'bg-[var(--dp-accent-bg)] font-semibold text-[var(--dp-text-primary)]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
               >
                 {f}
               </button>
@@ -1468,6 +1468,8 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], b
         setPopoverCoords(null);
       }
     };
+    // Focus moves into the explanation so a screen reader reads it next.
+    requestAnimationFrame(() => popoverRef.current?.focus());
     const onKey = (e) => {
       if (e.key !== 'Escape') return;
       setOpen(false);
@@ -1516,7 +1518,8 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], b
               and is cut short if it doesn't fit, so the card keeps its height
               in All, Cashout and Marketplace. */}
           <p className={isGlass ? "flex items-baseline gap-1.5 min-w-0 whitespace-nowrap text-[11px] text-white/25 font-medium uppercase tracking-[0.2em]" : `flex items-baseline gap-1.5 min-w-0 whitespace-nowrap text-[11px] max-[359px]:tracking-normal font-medium uppercase tracking-[0.08em] dp-card-title transition-colors duration-300 text-[var(--dp-text-label)]`}>
-            <span className="shrink-0">{title}</span>
+            {/* Cut short with an ellipsis rather than spilling out of a narrow card. */}
+            <span title={title} className="min-w-0 truncate">{title}</span>
             {modeTag && (
               <span title={modeTag} className={isGlass ? "min-w-0 truncate text-[9px] font-normal normal-case tracking-normal text-[var(--text-muted)]" : `min-w-0 truncate text-[9px] font-normal normal-case tracking-normal dp-card-tag transition-colors duration-300 text-[var(--dp-text-label)]`}>
                 {modeTag}
@@ -1574,9 +1577,10 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], b
           {open && popoverCoords && createPortal(
             <div
               ref={popoverRef}
+              tabIndex={-1}
               role="dialog"
               aria-label={`How ${title} is calculated`}
-              className={`fixed w-[280px] rounded-2xl ${isGlass ? 'bg-[#1a1c23] border-white/10 shadow-2xl' : 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] dp-elevated'} border p-4 z-[9999] animate-in fade-in duration-150 ${
+              className={`fixed w-[280px] rounded-2xl outline-none ${isGlass ? 'bg-[#1a1c23] border-white/10 shadow-2xl' : 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] dp-elevated'} border p-4 z-[9999] animate-in fade-in duration-150 ${
                 popoverPosition === 'bottom' ? 'slide-in-from-top-1' : 'slide-in-from-bottom-1'
               }`}
               style={{

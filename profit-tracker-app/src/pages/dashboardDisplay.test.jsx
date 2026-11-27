@@ -185,8 +185,8 @@ describe('Dashboard Recent Sales and chart', () => {
     mount('premium');
     expect(screen.getByText('Purchase Spend')).toBeInTheDocument();
     fireEvent.click(within(screen.getByRole('group', { name: 'Sales type' })).getByRole('button', { name: 'Marketplace' }));
-    expect(screen.getByText('Cost of Units Sold')).toBeInTheDocument();
-    expect(screen.getByText('Cashback on Units Sold')).toBeInTheDocument();
+    expect(screen.getByText('Cost of Sales')).toBeInTheDocument();
+    expect(screen.getByText('Cashback on Sales')).toBeInTheDocument();
     expect(screen.queryByText('Purchase Spend')).not.toBeInTheDocument();
   });
 
