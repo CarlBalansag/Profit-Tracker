@@ -9,12 +9,12 @@ globalThis.ResizeObserver ??= class { observe() {} disconnect() {} };
 
 const data = {
   stats: {
-    totalCost: 23097.2, totalRevenue: 31250.5, profit: 8153.3, soldCost: 20000, unitsSold: 40,
+    totalCost: 23097.2, totalRevenue: 31250.5, profit: 8153.3, soldCost: 20000, grossProfit: 6653.3, unitsSold: 40,
     inventoryValue: 12345.67, totalCashback: 1500, totalTax: 2100, roi: 12.5,
   },
   recentTransactions: [
-    { product: 'Big TV', cost: 1234.5, revenue: 2345.6, profit: 1111.1, status: 'SHIPPED_IN', date: '2026-11-01', quantity: 1 },
-    { product: 'Old Row', cost: 10, revenue: 20, profit: 10, status: null, date: '2026-11-01', quantity: 1 },
+    { id: 'sale-1', product: 'Big TV', cost: 1234.5, revenue: 2345.6, profit: 1111.1, status: 'SHIPPED_IN', buyer: 'Unknown', date: '2026-11-01', quantity: 1 },
+    { id: 'sale-2', product: 'Old Row', cost: 10, revenue: 20, profit: 0.4, status: null, buyer: 'Unknown', date: '2026-11-01', quantity: 1 },
   ],
   pipelineCounts: { 'Pre Order': 1234 },
   workflowPipelines: {
@@ -42,7 +42,9 @@ vi.mock('../hooks/useUiPreferences', () => ({ useUiPreferences: () => ({ prefere
 vi.mock('../hooks/useDashboardSettings', () => ({
   useDashboardSettings: () => ({ settings: DEFAULT_DASHBOARD_SETTINGS, saveSettings: vi.fn() }),
 }));
-vi.mock('../components/Dashboard/ProfitCostTrendChart', () => ({ default: () => null }));
+vi.mock('../components/Dashboard/ProfitCostTrendChart', () => ({ default: ({ markType }) => <div data-testid="trend-chart">{markType}</div> }));
+const navigateSpy = vi.fn();
+vi.mock('react-router-dom', async (importOriginal) => ({ ...(await importOriginal()), useNavigate: () => navigateSpy }));
 vi.mock('../components/Dashboard/MonthlyProfitSpendChart', () => ({ default: () => null }));
 
 const mount = (style) => {
@@ -53,6 +55,7 @@ const mount = (style) => {
 afterEach(() => {
   cleanup();
   placeholder = false;
+  localStorage.clear();
 });
 
 describe.each(['premium', 'glass'])('Dashboard display in the %s style', (style) => {
@@ -81,15 +84,30 @@ describe('Dashboard amounts', () => {
 });
 
 describe('Dashboard KPI cards', () => {
-  it('show the mode tag small on the title line, never wrapping, and no tag in All', () => {
+  it('says the period and sales type once above the tiles instead of tagging every card', () => {
     mount('premium');
-    expect(screen.queryByText(/sold via/)).not.toBeInTheDocument();
+    expect(screen.getByText('Last 30 days')).toBeInTheDocument();
+    expect(screen.getByText(/· all sales/)).toBeInTheDocument();
     fireEvent.click(within(screen.getByRole('group', { name: 'Sales type' })).getByRole('button', { name: 'Cashout' }));
-    const tag = screen.getAllByText('sold via Cashout')[0];
-    expect(tag).toHaveClass('truncate', 'text-[9px]');
-    const titleLine = tag.parentElement;
-    expect(titleLine).toHaveClass('whitespace-nowrap');
-    expect(titleLine).toHaveTextContent(/^Net Profitsold via Cashout$|^.+sold via Cashout$/);
+    expect(screen.getByText(/· Cashout sales only/)).toBeInTheDocument();
+    expect(screen.queryByText(/sold via/)).not.toBeInTheDocument();
+  });
+
+  it('shows Net Profit as Gross plus cashback so the cards add up, with live numbers in its popover', () => {
+    mount('premium');
+    // Net 8,153.30 = Gross 6,653.30 + 1,500.00 cashback on sold items
+    expect(screen.getByText('$6,653.30 gross + $1,500.00 cashback')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'How Net Profit is calculated' }));
+    const dialog = screen.getByRole('dialog', { name: 'How Net Profit is calculated' });
+    expect(within(dialog).getByText('$6,653.30 + $1,500.00 cashback on sold items = $8,153.30')).toBeInTheDocument();
+  });
+
+  it('remembers the chosen filters after a reload', () => {
+    const first = mount('premium');
+    fireEvent.click(within(screen.getByRole('group', { name: 'Date range' })).getByRole('button', { name: 'YTD' }));
+    first.unmount();
+    mount('premium');
+    expect(within(screen.getByRole('group', { name: 'Date range' })).getByRole('button', { name: 'YTD' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('keeps the page and the last numbers up, not faded or locked, while another filter loads', () => {
@@ -102,11 +120,10 @@ describe('Dashboard KPI cards', () => {
     expect(screen.getByText(/Welcome back/)).toBeInTheDocument();
   });
 
-  it('opens the Status Pipeline on All, the first tab, showing every step', () => {
+  it('opens the Status Pipeline on All with every step and no second filter of its own', () => {
     mount('premium');
-    const tabs = within(screen.getByRole('group', { name: 'Pipeline view' })).getAllByRole('button');
-    expect(tabs.map((t) => t.textContent)).toEqual(['All', 'Cashout', 'Marketplace']);
-    expect(tabs[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('group', { name: 'Pipeline view' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Unsold stock right now, at cost\. Sold items from this period/)).toBeInTheDocument();
     const onHand = screen.getByRole('button', { name: /^On Hand/ });
     expect(within(onHand).getByText('1234', { selector: '.sr-only' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Paid/ })).toBeInTheDocument();
@@ -146,6 +163,35 @@ describe('Dashboard KPI cards', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Status Pipeline' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Recent Sales' })).toBeInTheDocument();
     expect(screen.queryAllByRole('heading', { level: 3 })).toHaveLength(0);
+  });
+});
+
+describe('Dashboard Recent Sales and chart', () => {
+  it('opens a sale from its row and from the keyboard, and links to all sales', () => {
+    navigateSpy.mockClear();
+    mount('premium');
+    fireEvent.click(screen.getByRole('button', { name: 'Big TV' }));
+    expect(navigateSpy).toHaveBeenLastCalledWith('/transactions', { state: { openTransaction: { saleId: 'sale-1' } } });
+    fireEvent.click(screen.getByText('Old Row').closest('tr'));
+    expect(navigateSpy).toHaveBeenLastCalledWith('/transactions', { state: { openTransaction: { saleId: 'sale-2' } } });
+    fireEvent.click(screen.getByRole('button', { name: /View all sales/ }));
+    expect(navigateSpy.mock.lastCall[0]).toBe('/transactions');
+    expect(navigateSpy.mock.lastCall[1].state.cardScope).toBe('sold');
+  });
+
+  it('hides the Buyer column when no sale has a buyer and shows small profits to the cent', () => {
+    mount('premium');
+    expect(screen.queryByRole('columnheader', { name: 'Buyer' })).not.toBeInTheDocument();
+    expect(screen.getByText('+$0.40')).toBeInTheDocument();
+    expect(screen.queryByText('+$0')).not.toBeInTheDocument();
+  });
+
+  it('draws Line and Bar with the same chart, only the marks change', () => {
+    mount('premium');
+    expect(screen.getByTestId('trend-chart')).toHaveTextContent('line');
+    fireEvent.click(within(screen.getByRole('group', { name: 'Chart type' })).getByRole('button', { name: 'Bar' }));
+    expect(screen.getByTestId('trend-chart')).toHaveTextContent('bar');
+    expect(screen.getByRole('heading', { level: 2, name: 'Profit & Cost Trend' })).toBeInTheDocument();
   });
 });
 

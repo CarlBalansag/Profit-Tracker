@@ -524,6 +524,10 @@
     font-size: 11px !important;
     letter-spacing: 0.7px !important;
   }
+  /* Dashboard Recent Sales: neutral labels, so red only marks losses and alerts. */
+  .carbon-workspace thead tr.dp-neutral-head {
+    color: var(--dp-text-label) !important;
+  }
 
   .carbon-workspace thead th,
   .carbon-workspace thead th[class] {

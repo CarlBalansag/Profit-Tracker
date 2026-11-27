@@ -6,6 +6,10 @@ import {
   Undo2, AlertTriangle, XCircle, Hourglass, Truck, Shield, Clock
 } from 'lucide-react';
 
+const grossOf = (s) => s.grossProfit ?? ((s.totalRevenue || 0) - (s.soldCost || 0));
+// Net Profit = Gross Profit + cashback on the units sold.
+const soldCashbackOf = (s) => (s.profit || 0) - grossOf(s);
+
 // ── Stat Card Registry ────────────────────────────────────────────────────────
 // scope: 'all'  → includes all purchases (sold + unsold)
 // scope: 'sold' → sold items only
@@ -23,14 +27,14 @@ export const STAT_CARD_REGISTRY = {
     getSubtext: (s) => `${s.transactionCount} purchases`,
   },
   totalCashback: {
-    label: 'Cashback',
+    label: 'Cashback Earned',
     icon: Tag,
     color: 'pink',
     scope: 'all',
     formula: ['Purchase Amount Eligible for Cashback × Card Cashback Rate %'],
-    description: 'Cashback earned from inventory purchases. The All view includes sold and unsold items; a sales-channel view includes only the cashback connected to units you sold.',
+    description: 'Cashback earned on inventory you bought in the selected period, sold or not, so it can differ from the cashback inside Net Profit, which counts only the units you sold. A sales-channel view includes only the cashback connected to units sold there.',
     getValue: (s) => `$${formatMoney(s.totalCashback)}`,
-    getSubtext: (s) => `${s.avgCashbackRate.toFixed(2)}% avg rate`,
+    getSubtext: (s) => `on purchases · ${s.avgCashbackRate.toFixed(2)}% avg`,
   },
   totalTax: {
     label: 'Total Tax Paid',
@@ -72,7 +76,8 @@ export const STAT_CARD_REGISTRY = {
     formula: ['Sale Revenue', '− Cost of Sold Items'],
     description: 'Sale Revenue minus what the sold items cost you. Cashback is not added yet.',
     getValue: (s) => `$${formatMoney(s.grossProfit ?? (s.totalRevenue - (s.soldCost ?? 0)))}`,
-    getSubtext: () => 'sold items only',
+    getSubtext: () => 'before cashback',
+    getBreakdown: (s) => `$${formatMoney(s.totalRevenue)} − $${formatMoney(s.soldCost ?? 0)} = $${formatMoney(s.grossProfit ?? (s.totalRevenue - (s.soldCost ?? 0)))}`,
   },
   profit: {
     label: 'Net Profit',
@@ -82,7 +87,9 @@ export const STAT_CARD_REGISTRY = {
     formula: ['Gross Profit', '+ Cashback on Sold Items'],
     description: 'Gross Profit plus the cashback earned on the units you sold. Regular business expenses, such as subscriptions, rent, or supplies, are not subtracted here.',
     getValue: (s) => `$${formatMoney(s.profit)}`,
-    getSubtext: (s) => s.profit >= 0 ? 'sold items only' : 'sold items loss',
+    // Shows its two parts, so it reconciles with Gross Profit on the next card.
+    getSubtext: (s) => `$${formatMoney(grossOf(s))} gross + $${formatMoney(soldCashbackOf(s))} cashback`,
+    getBreakdown: (s) => `$${formatMoney(grossOf(s))} + $${formatMoney(soldCashbackOf(s))} cashback on sold items = $${formatMoney(s.profit)}`,
   },
   roi: {
     label: 'ROI',

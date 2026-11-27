@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   Clock, Layers, Zap, Store, Calendar, Settings,
-  CreditCard, Info, TrendingUp, Target, DollarSign, ShoppingBag, Flame
+  CreditCard, Info, TrendingUp, ChevronRight, Target, DollarSign, ShoppingBag, Flame
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useDashboardSettings } from '../hooks/useDashboardSettings';
@@ -63,11 +63,63 @@ const EMPTY_STATS = {
   salesVelocity: 0,
 };
 
-const CARBON_KPI_ORDER = ['profit', 'totalCost', 'totalRevenue', 'totalCashback'];
+// Sold-item results first (Net, Revenue, Gross), then purchase-side money
+// (Spend, Cashback), so related tiles sit together.
+const CARBON_KPI_ORDER = ['profit', 'totalRevenue', 'grossProfit', 'totalCost', 'totalCashback'];
+const PERIOD_LABELS = { '7 Days': 'Last 7 days', '30 Days': 'Last 30 days', YTD: 'This year', 'All Time': 'All time' };
+const MODE_LABELS = { All: 'all sales', Cashout: 'Cashout sales only', Marketplace: 'Marketplace sales only' };
+
+const FILTERS_KEY = 'pt-dashboard-filters';
+const DATE_FILTERS = ['7 Days', '30 Days', 'YTD', 'All Time'];
+const MODE_FILTERS = ['All', 'Cashout', 'Marketplace'];
+function readSavedFilters() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(FILTERS_KEY) || '{}');
+    return {
+      date: DATE_FILTERS.includes(saved.date) ? saved.date : null,
+      mode: MODE_FILTERS.includes(saved.mode) ? saved.mode : null,
+    };
+  } catch { return {}; }
+}
+function writeSavedFilters(filters) {
+  try { localStorage.setItem(FILTERS_KEY, JSON.stringify(filters)); } catch { /* private mode: nothing to keep */ }
+}
 
 function formatShortDate(dateValue) {
   if (!dateValue) return '';
   return new Date(dateValue).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// Row profit includes the card's cashback, so it is shown to the cent: whole
+// dollars turned small losses and gains into a misleading "+$0".
+const isZeroMoney = (v) => Math.abs(v) < 0.005;
+function signedMoney(v) {
+  if (isZeroMoney(v)) return '$0.00';
+  return `${v > 0 ? '+' : '−'}$${formatMoney(Math.abs(v))}`;
+}
+const profitTextClass = (v) => (isZeroMoney(v) ? 'text-[var(--dp-text-secondary)]' : v > 0 ? 'text-[var(--dp-green-text)]' : 'text-[var(--dp-red-text)]');
+const profitPillClass = (v) => (isZeroMoney(v)
+  ? 'bg-[var(--dp-bg)] text-[var(--dp-text-secondary)]'
+  : v > 0 ? 'bg-[var(--dp-green-bg)] text-[var(--dp-green-text)]' : 'bg-[var(--dp-red-bg)] text-[var(--dp-red-text)]');
+// Status pills move from "waiting" (amber) through "on its way" (blue) to
+// "paid" (green); red only for problems.
+const STATUS_TONES = {
+  waiting: 'bg-[var(--dp-warning-bg)] text-[var(--dp-warning-text)]',
+  moving: 'bg-[var(--dp-info-bg)] text-[var(--dp-info-text)]',
+  done: 'bg-[var(--dp-green-bg)] text-[var(--dp-green-text)]',
+  problem: 'bg-[var(--dp-red-bg)] text-[var(--dp-red-text)]',
+  neutral: 'bg-[var(--dp-bg)] text-[var(--dp-text-secondary)]',
+};
+const TONE_BY_STATUS = {
+  done: ['PAID', 'COMPLETED'],
+  problem: ['RETURNED', 'RETURN_IN_PROGRESS', 'DISPUTED', 'CANCELLED', 'REFUNDED', 'AUTHENTICATION_FAILED'],
+  waiting: ['SOLD', 'LISTED', 'PENDING', 'AWAITING_SHIPMENT', 'AWAITING_HANDOFF', 'WAITING_FOR_PAYMENT', 'PENDING_PAYMENT'],
+  moving: ['SHIPPED_OUT', 'OUTBOUND', 'IN_TRANSIT_OUT', 'HANDED_OVER', 'DELIVERED', 'DELIVERED_TO_PROVIDER',
+    'DELIVERED_TO_AUTHENTICATOR', 'WAITING_FOR_SCAN_IN', 'SCANNED_IN', 'ACCEPTED', 'AUTHENTICATION', 'AUTHENTICATING', 'SHIPPED_IN'],
+};
+function statusToneClass(status) {
+  const tone = Object.keys(TONE_BY_STATUS).find(key => TONE_BY_STATUS[key].includes(status));
+  return STATUS_TONES[tone || 'neutral'];
 }
 
 function getRowProfit(txn) {
@@ -120,19 +172,19 @@ const Dashboard = () => {
   const isGlass = preferences.style === 'glassmorphism-brown';
   // On a phone (in a store), what needs doing comes before the numbers.
   const isPhone = useMatchMedia('(max-width: 639px)');
-  const [dateFilter, setDateFilter] = useState(settings.defaultDateFilter || '30 Days');
-  const [modeFilter, setModeFilter] = useState('All');
+  // The last filters you picked come back after a reload or a visit elsewhere.
+  const [savedFilters] = useState(readSavedFilters);
+  const [dateFilter, setDateFilter] = useState(savedFilters.date || settings.defaultDateFilter || '30 Days');
+  const [modeFilter, setModeFilter] = useState(savedFilters.mode || 'All');
+  useEffect(() => { writeSavedFilters({ date: dateFilter, mode: modeFilter }); }, [dateFilter, modeFilter]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [trendMode, setTrendMode] = useState('period'); // 'period' | 'cumulative'
   const [chartView, setChartView] = useState('line'); // 'line' | 'bar'
-  const [pipelineView, setPipelineView] = useState('all'); // 'all' | 'cashout' | 'marketplace'
   // The Status Pipeline follows the dashboard filter: All shows every step,
   // Cashout/Marketplace (which only have sales of that kind) their workflow.
-  const chooseMode = (mode) => {
-    setModeFilter(mode);
-    setPipelineView(mode === 'Cashout' ? 'cashout' : mode === 'Marketplace' ? 'marketplace' : 'all');
-  };
+  const pipelineView = modeFilter === 'Cashout' ? 'cashout' : modeFilter === 'Marketplace' ? 'marketplace' : 'all';
+  const chooseMode = (mode) => setModeFilter(mode);
   const [topCardsPage, setTopCardsPage] = useState(0); // Top Cards pagination (3 per page, all breakpoints)
   const statsRowRef = useRef(null); // KPI row, driven by the drawn scrollbar below it
 
@@ -176,6 +228,11 @@ const Dashboard = () => {
     .filter(c => c.visible)
     .sort((a, b) => a.order - b.order);
   const showRecentSales = visibleRecentSalesColumns.length > 0;
+  // Buyer is dropped while none of the listed sales has one.
+  const salesColumns = visibleRecentSalesColumns.filter(c => c.id !== 'buyer' || recent.some(t => t.buyer && t.buyer !== 'Unknown'));
+  const openSale = (txn) => {
+    if (txn.id) navigate('/transactions', { state: { openTransaction: { saleId: txn.id } } });
+  };
 
   const colClasses = { 1: 'lg:grid-cols-1', 2: 'lg:grid-cols-2', 3: 'lg:grid-cols-3', 4: 'lg:grid-cols-4', 5: 'lg:grid-cols-5' };
   const statColClass = colClasses[visibleStatCards.length] || 'lg:grid-cols-5';
@@ -213,11 +270,17 @@ const Dashboard = () => {
   function renderDashboardSection(sectionId) {
     if (sectionId === 'statCards') {
       if (!showStatCards || visibleStatCards.length === 0) return null;
-      const modeTag = modeFilter !== 'All'
+      // Glass keeps its per-card tag; the default style says the scope once.
+      const modeTag = isGlass && modeFilter !== 'All'
         ? `sold via ${modeFilter}`
         : null;
       return (
         <div key="statCards">
+        {!isGlass && (
+          <p className="mb-2 text-[12px] text-[var(--dp-text-secondary)]">
+            <span className="font-medium text-[var(--dp-text-primary)]">{PERIOD_LABELS[dateFilter] || dateFilter}</span> · {MODE_LABELS[modeFilter] || modeFilter}
+          </p>
+        )}
         <div ref={statsRowRef} data-tutorial-id="dashboard-stats" className={isGlass
           ? `grid grid-cols-2 ${statColClass} gap-3 3xl:gap-4 max-sm:[&>*:first-child]:col-span-2 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both`
           : "grid min-w-0 grid-cols-2 gap-3 sm:gap-4 pb-4 lg:grid-cols-[repeat(auto-fit,minmax(180px,1fr))] max-sm:[&>*:first-child]:col-span-2 animate-in fade-in duration-300 fill-mode-both"
@@ -239,6 +302,7 @@ const Dashboard = () => {
                 icon={def.icon}
                 color={colorOverride}
                 formula={def.formula}
+                breakdown={def.getBreakdown?.(stats)}
                 description={def.description}
                 uiStyle={preferences.style}
                 onClick={() => navigate('/transactions', { state: { dateFilter, cardScope: def.scope, platformMode: modeFilter !== 'All' ? modeFilter : undefined } })}
@@ -258,27 +322,17 @@ const Dashboard = () => {
           ? "rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.22)] animate-in fade-in duration-300 fill-mode-both"
           : "rounded-[24px] p-6 bg-[var(--dp-card-bg)] dp-elevated animate-in fade-in duration-300 fill-mode-both"
         }>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <h2 className={isGlass ? "mb-1 px-0.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/24" : "text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)] mb-1"}>Status Pipeline</h2>
-            <div role="group" aria-label="Pipeline view" className="flex gap-0.5 rounded-full bg-[var(--dp-bg)] p-0.5">
-              {PIPELINE_VIEWS.map(([view, label]) => (
-                <button
-                  key={view}
-                  type="button"
-                  aria-pressed={pipelineView === view}
-                  onClick={() => setPipelineView(view)}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${pipelineView === view ? 'bg-[var(--dp-card-bg)] text-[var(--dp-accent-text)] dp-elevated' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {/* One line, whichever tab, so the card's height doesn't shift. */}
-          <p className={isGlass ? "mb-3 hidden truncate px-0.5 text-[11px] text-white/18 sm:block" : "mb-4 hidden truncate text-[12px] text-[var(--dp-text-secondary)] sm:block"}>
+          {/* Follows the page's All / Cashout / Marketplace filter; no second filter here. */}
+          <h2 className={isGlass ? "mb-1 px-0.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/24" : "mb-1 text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)]"}>
+            Status Pipeline
+            {pipelineView !== 'all' && <span className="normal-case tracking-normal"> · {PIPELINE_VIEWS.find(([v]) => v === pipelineView)?.[1]}</span>}
+          </h2>
+          {/* Up to two lines on a phone, one on wider screens; the same length
+              on every tab so the card's height doesn't shift. */}
+          <p className={isGlass ? "mb-3 hidden truncate px-0.5 text-[11px] text-white/18 sm:block" : "mb-4 line-clamp-2 min-h-[2lh] text-[12px] text-[var(--dp-text-secondary)] sm:min-h-0 sm:truncate"}>
             {pipelineView === 'all'
-              ? 'Units in each step right now: unsold stock at cost, sold items at their sale price. Click a step to see its items.'
-              : 'Units in each step of this workflow right now, at their sale price. Click a step to see its items.'}
+              ? 'Unsold stock right now, at cost. Sold items from this period, at sale price.'
+              : `${PIPELINE_VIEWS.find(([v]) => v === pipelineView)?.[1]} sales from this period, at sale price, by step.`}
           </p>
 
           {/* Not remounted per tab: the same steps slide between tabs. */}
@@ -305,14 +359,12 @@ const Dashboard = () => {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-3">
                 <div>
                   <h2 className={isGlass ? "text-lg font-normal tracking-tight text-[#e8e2d6]" : "text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--dp-text-primary)]"}>
-                    {chartView === 'bar' ? 'Monthly Profit vs Spending' : 'Profit & Cost Trend'}
+                    Profit & Cost Trend
                   </h2>
                   <p className={isGlass ? "text-[11px] text-white/20 mt-1" : "text-[12px] text-[var(--dp-text-secondary)] mt-1"}>
-                    {chartView === 'bar'
-                      ? 'Net profit and total spending grouped by month'
-                      : trendMode === 'cumulative'
-                        ? 'Running totals across the selected period'
-                        : 'Amounts as they happened across the selected period'}
+                    {trendMode === 'cumulative'
+                      ? 'Running totals across the selected period'
+                      : 'Amounts as they happened across the selected period'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -328,7 +380,7 @@ const Dashboard = () => {
                           chartView === val
                             ? isGlass
                               ? 'bg-white/[0.08] text-[#e8e2d6] border border-white/[0.10]'
-                              : 'bg-[var(--dp-card-bg)] text-[var(--dp-accent-text)] dp-elevated'
+                              : 'bg-[var(--dp-card-bg)] font-semibold text-[var(--dp-text-primary)] dp-elevated'
                             : isGlass
                               ? 'text-white/25 hover:text-white/50 border border-transparent'
                               : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] border border-transparent'
@@ -343,12 +395,8 @@ const Dashboard = () => {
               <div className={isGlass ? "flex-1 rounded-2xl bg-black/10" : "flex-1 rounded-2xl bg-[var(--dp-bg)]"}>
                 {isLoading ? (
                   <div className={isGlass ? "flex h-full min-h-[280px] items-center justify-center text-sm text-gray-500" : "flex h-full min-h-[280px] items-center justify-center text-sm text-[var(--dp-text-secondary)]"}>Loading trend...</div>
-                ) : chartView === 'bar' ? (
-                  <MonthlyProfitSpendChart
-                    trend={trend}
-                    uiStyle={preferences.style}
-                  />
                 ) : (
+                  // Line and Bar are the same data and colours; only the marks change.
                   <ProfitCostTrendChart
                     trend={trend}
                     trendMeta={trendMeta}
@@ -356,6 +404,7 @@ const Dashboard = () => {
                     uiStyle={preferences.style}
                     trendMode={trendMode}
                     onTrendModeChange={setTrendMode}
+                    markType={chartView}
                   />
                 )}
               </div>
@@ -387,11 +436,11 @@ const Dashboard = () => {
                     <div className="flex min-w-0 items-center gap-3">
                       <CreditCard className={isGlass ? "w-4 h-4 text-[#d8a65a]" : "w-4 h-4 text-[var(--dp-text-secondary)]"} />
                       <div className="min-w-0">
-                        <p className={isGlass ? "text-sm text-[#e8e2d6]" : `text-[12px] font-medium truncate max-w-[160px] ${i === 0 ? 'text-[var(--dp-text-primary)]' : 'text-[var(--dp-text-secondary)]'}`}>{card.name}</p>
-                        <p className={isGlass ? "text-xs text-white/20" : "text-[11px] text-[var(--dp-text-label)]"}>{card.txns} txns</p>
+                        <p title={card.name} className={isGlass ? "text-sm text-[#e8e2d6]" : "text-[12px] font-medium line-clamp-2 [overflow-wrap:anywhere] text-[var(--dp-text-primary)]"}>{card.name}</p>
+                        <p className={isGlass ? "text-xs text-white/20" : "text-[11px] text-[var(--dp-text-label)]"}>{card.txns} {card.txns === 1 ? 'purchase' : 'purchases'}</p>
                       </div>
                     </div>
-                    <p className={isGlass ? "shrink-0 whitespace-nowrap text-sm font-medium text-[#d8a65a]" : `text-[12px] font-semibold tabular-nums ${i === 0 ? 'text-[var(--dp-accent)]' : 'text-[var(--dp-text-secondary)]'}`}>${formatWholeMoney(card.amount)}</p>
+                    <p className={isGlass ? "shrink-0 whitespace-nowrap text-sm font-medium text-[#d8a65a]" : "shrink-0 text-[12px] font-semibold tabular-nums text-[var(--dp-text-primary)]"}>${formatWholeMoney(card.amount)}</p>
                   </div>
                 );
                 return (
@@ -399,7 +448,7 @@ const Dashboard = () => {
                     ? "rounded-[20px] p-5 bg-[#181a1c]/72 border border-white/[0.06] shadow-[0_10px_30px_rgba(0,0,0,0.22)]"
                     : "rounded-[24px] p-6 bg-[var(--dp-card-bg)] dp-elevated"
                   }>
-                    <h2 className={isGlass ? "mb-4 text-[11px] font-medium uppercase tracking-[0.22em] text-white/25" : "text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)] mb-3"}>{isGlass ? 'Payment Methods' : 'Top Cards'}</h2>
+                    <h2 className={isGlass ? "mb-4 text-[11px] font-medium uppercase tracking-[0.22em] text-white/25" : "text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)] mb-3"}>{isGlass ? 'Payment Methods' : 'Top Credit Cards'}</h2>
                     {sourceCards.length === 0 ? (
                       <p className={isGlass ? "text-xs text-white/20" : "text-[13px] text-[var(--dp-text-secondary)]"}>{dateFilter === 'All Time' ? 'No card spending recorded yet.' : 'No card spending in this period.'}</p>
                     ) : (
@@ -453,30 +502,37 @@ const Dashboard = () => {
             </div>
           ) : (
             <>
-            {/* Phones: one line per sale instead of a table that scrolls sideways */}
-            <ul className={isGlass ? "divide-y divide-white/5 sm:hidden" : "divide-y divide-[color:var(--dp-border)] sm:hidden"}>
+            {/* One layout per screen size: a list on phones, a table from sm up.
+                Each sale opens in Transactions. */}
+            {isPhone ? (
+            <ul className={isGlass ? "divide-y divide-white/5" : "divide-y divide-[color:var(--dp-border)]"}>
               {recent.map((txn, i) => (
-                <li key={i} className="flex items-center justify-between gap-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className={isGlass ? "truncate text-sm font-medium text-gray-200" : "truncate text-sm font-medium text-[var(--dp-text-primary)]"}>{txn.product}</p>
-                    <p className={isGlass ? "text-xs text-gray-500" : "text-xs text-[var(--dp-text-secondary)]"}>
-                      {formatShortDate(txn.date)} · {recordStatusLabel(txn.status || 'SOLD')}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className={isGlass ? "text-sm tabular-nums text-green-400" : "text-sm font-medium tabular-nums text-[var(--dp-text-primary)]"}>${formatMoney(txn.revenue ?? 0)} <span className="text-[11px] font-normal text-[var(--dp-text-secondary)]">payout</span></p>
-                    <p className={`text-xs tabular-nums ${getRowProfit(txn) >= 0 ? 'text-[var(--dp-green-text)]' : 'text-[var(--dp-red-text)]'}`}>
-                      {getRowProfit(txn) >= 0 ? '+' : '-'}${formatWholeMoney(Math.abs(getRowProfit(txn)))}
-                    </p>
-                  </div>
+                <li key={txn.id || i}>
+                  <button
+                    type="button"
+                    onClick={() => openSale(txn)}
+                    className="flex w-full items-center justify-between gap-3 py-2.5 text-left rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)]"
+                  >
+                    <span className="min-w-0">
+                      <span className={isGlass ? "block truncate text-sm font-medium text-gray-200" : "block truncate text-sm font-medium text-[var(--dp-text-primary)]"}>{txn.product}</span>
+                      <span className={isGlass ? "block text-xs text-gray-500" : "block text-xs text-[var(--dp-text-secondary)]"}>
+                        {formatShortDate(txn.date)} · {recordStatusLabel(txn.status || 'SOLD')}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className={isGlass ? "block text-sm tabular-nums text-green-400" : "block text-sm font-medium tabular-nums text-[var(--dp-text-primary)]"}>${formatMoney(txn.revenue ?? 0)} <span className="text-[11px] font-normal text-[var(--dp-text-secondary)]">payout</span></span>
+                      <span className={`block text-xs tabular-nums ${profitTextClass(getRowProfit(txn))}`}>{signedMoney(getRowProfit(txn))}</span>
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>
-            <div className={isGlass ? "hidden overflow-x-auto pb-4 sm:block" : "hidden overflow-x-auto dp-scrollbar pb-4 sm:block"}>
+            ) : (
+            <div className={isGlass ? "overflow-x-auto pb-4" : "overflow-x-auto dp-scrollbar pb-4"}>
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className={isGlass ? "border-b border-white/10 text-xs font-semibold text-gray-500 uppercase tracking-wider" : "border-b border-[color:var(--dp-border)] text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>
-                    {visibleRecentSalesColumns.map(column => (
+                  <tr className={isGlass ? "border-b border-white/10 text-xs font-semibold text-gray-500 uppercase tracking-wider" : "dp-neutral-head border-b border-[color:var(--dp-border)] text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>
+                    {salesColumns.map(column => (
                       <th key={column.id} className={`${column.id === 'product' ? 'pb-3 pr-4' : column.id === 'date' ? 'pb-3 pl-4' : 'pb-3 px-4'} font-medium`}>
                         {DEFAULT_DASHBOARD_SETTINGS.recentSalesColumns.find(c => c.id === column.id) && {
                           product: 'Product',
@@ -494,12 +550,19 @@ const Dashboard = () => {
                 </thead>
                 <tbody className={isGlass ? "text-sm divide-y divide-white/5" : "text-sm divide-y divide-[color:var(--dp-border)]"}>
                   {recent.map((txn, i) => (
-                    <tr key={i} className={isGlass ? "hover:bg-white/[0.02] transition-colors" : "hover:bg-[var(--dp-hover-bg)] transition-[background] duration-150"}>
-                      {visibleRecentSalesColumns.map(column => {
+                    <tr key={txn.id || i} onClick={() => openSale(txn)} className={isGlass ? "cursor-pointer hover:bg-white/[0.02] transition-colors" : "cursor-pointer hover:bg-[var(--dp-hover-bg)] transition-[background] duration-150"}>
+                      {salesColumns.map(column => {
                         if (column.id === 'product') {
                           return (
                             <td key={column.id} className={isGlass ? "py-3 pr-4 font-medium text-gray-200 max-w-[220px]" : "py-3 pr-4 font-semibold text-[var(--dp-text-primary)] max-w-[220px]"}>
-                              <span className="truncate block">{txn.product}</span>
+                              {/* The row is clickable; this button is how a keyboard reaches it. */}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); openSale(txn); }}
+                                className="block max-w-full truncate rounded text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)]"
+                              >
+                                {txn.product}
+                              </button>
                             </td>
                           );
                         }
@@ -526,12 +589,9 @@ const Dashboard = () => {
                           };
                           const st = (txn.status || 'SOLD').toUpperCase();
                           const cls = statusColorMap[st] || statusColorMap.SOLD;
-                          const premiumStatusClass = st === 'SHIPPED_IN'
-                            ? 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]'
-                            : 'bg-[var(--dp-green-bg)] text-[var(--dp-green-text)]';
                           return (
                             <td key={column.id} className="py-3 px-4">
-                              <span className={isGlass ? `inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wider uppercase border ${cls}` : `inline-flex items-center rounded-full px-2.5 py-[3px] text-[11px] font-semibold uppercase tracking-[0.04em] ${premiumStatusClass}`}>
+                              <span className={isGlass ? `inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wider uppercase border ${cls}` : `inline-flex items-center rounded-full px-2.5 py-[3px] text-[11px] font-semibold uppercase tracking-[0.04em] ${statusToneClass(st)}`}>
                                 {recordStatusLabel(txn.status || 'SOLD')}
                               </span>
                             </td>
@@ -548,8 +608,8 @@ const Dashboard = () => {
                       })}
                       {!isGlass && (
                         <td className="py-3 px-4">
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-[3px] text-[11px] font-semibold tabular-nums ${getRowProfit(txn) >= 0 ? 'bg-[var(--dp-green-bg)] text-[var(--dp-green-text)]' : 'bg-[var(--dp-red-bg)] text-[var(--dp-red-text)]'}`}>
-                            {getRowProfit(txn) >= 0 ? '+' : '-'}${formatWholeMoney(Math.abs(getRowProfit(txn)))}
+                          <span title={txn.cashback ? `Includes $${formatMoney(txn.cashback)} cashback` : undefined} className={`inline-flex items-center rounded-full px-2.5 py-[3px] text-[11px] font-semibold tabular-nums ${profitPillClass(getRowProfit(txn))}`}>
+                            {signedMoney(getRowProfit(txn))}
                           </span>
                         </td>
                       )}
@@ -558,6 +618,16 @@ const Dashboard = () => {
                 </tbody>
               </table>
             </div>
+            )}
+            {!isGlass && (
+              <button
+                type="button"
+                onClick={() => navigate('/transactions', { state: { dateFilter, cardScope: 'sold', platformMode: modeFilter !== 'All' ? modeFilter : undefined } })}
+                className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium text-[var(--dp-text-primary)] hover:underline"
+              >
+                View all sales <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            )}
             </>
           )}
         </div>
@@ -931,7 +1001,9 @@ const Dashboard = () => {
 
   if (isLoading) return <PageLoader variant="dashboard" />;
 
-  if (isError) {
+  // A failed refresh keeps the last good numbers on screen (see the bar below);
+  // only a first load with nothing to show gets the full error card.
+  if (isError && !data) {
     return (
       <div className="flex h-full items-center justify-center p-6 bg-[var(--dp-bg)]">
         <div className="max-w-sm text-center text-sm rounded-[24px] bg-[var(--dp-card-bg)] dp-elevated p-8">
@@ -982,7 +1054,7 @@ const Dashboard = () => {
                 type="button"
                 aria-pressed={modeFilter === mode}
                 onClick={() => chooseMode(mode)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-full transition-colors ${modeFilter === mode ? 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent-text)]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-full transition-colors ${modeFilter === mode ? 'bg-[var(--dp-accent-bg)] font-semibold text-[var(--dp-text-primary)]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
               >
                 {mode === 'All' && <Layers className="w-3.5 h-3.5" />}
                 {mode === 'Cashout' && <Zap className="w-3.5 h-3.5" />}
@@ -1011,6 +1083,13 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      {isError && data && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-red-bg)] px-4 py-3 text-[13px] text-[var(--dp-text-primary)]">
+          <span>Couldn&apos;t refresh. These are the last numbers that loaded.</span>
+          <button type="button" onClick={() => refetch()} className="rounded-full bg-[var(--dp-card-bg)] px-4 py-1.5 font-medium dp-elevated">Retry</button>
+        </div>
+      )}
 
       {/* "Needs attention": first on a phone; on wider screens right under
           the Status Pipeline, or at the top when the pipeline is hidden. */}
@@ -1338,7 +1417,7 @@ function GlassCircularPipeline({ cards, overflowCards = [], pipeline, onNavigate
   );
 }
 
-function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], description, onClick, uiStyle = 'neon-dark', loading = false, lead = false }) {
+function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], breakdown, description, onClick, uiStyle = 'neon-dark', loading = false, lead = false }) {
   const [open, setOpen] = useState(false);
   const [popoverPosition, setPopoverPosition] = useState('bottom');
   const [popoverCoords, setPopoverCoords] = useState(null);
@@ -1457,7 +1536,8 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
             title="How this is calculated"
             className={isGlass
               ? "absolute bottom-2 right-2 z-20 w-5 h-5 flex items-center justify-center rounded-full text-gray-600 hover:text-gray-300 hover:bg-white/10 transition-colors"
-              : `absolute bottom-3 right-3 z-20 w-5 h-5 flex items-center justify-center rounded-full transition-colors dp-card-info-btn text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] hover:bg-[var(--dp-bg)]`
+              // A 44px invisible tap zone around the small icon.
+              : `absolute bottom-3 right-3 z-20 w-5 h-5 flex items-center justify-center rounded-full transition-colors dp-card-info-btn text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] hover:bg-[var(--dp-bg)] after:absolute after:-inset-3 after:content-['']`
             }
           >
             <Info className="w-3 h-3" aria-hidden="true" />
@@ -1488,6 +1568,12 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
                   <p className={isGlass ? "text-[11px] font-medium uppercase tracking-[0.7px] text-[var(--text-muted)]" : "text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>Calculation</p>
                   <p className={isGlass ? "mt-1 text-xs font-semibold leading-relaxed text-[var(--text-primary)]" : "mt-1 text-xs font-semibold leading-relaxed text-[var(--dp-text-primary)]"}>{calculation}</p>
                 </div>
+                {breakdown && (
+                  <div>
+                    <p className={isGlass ? "text-[11px] font-medium uppercase tracking-[0.7px] text-[var(--text-muted)]" : "text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>This period</p>
+                    <p className={isGlass ? "mt-1 text-xs font-semibold tabular-nums leading-relaxed text-[var(--text-primary)]" : "mt-1 text-xs font-semibold tabular-nums leading-relaxed text-[var(--dp-text-primary)]"}>{breakdown}</p>
+                  </div>
+                )}
                 <div>
                   <p className={isGlass ? "text-[11px] font-medium uppercase tracking-[0.7px] text-[var(--text-muted)]" : "text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>Meaning</p>
                   <p className={isGlass ? "mt-1 text-xs leading-relaxed text-[var(--text-secondary)]" : "mt-1 text-xs leading-relaxed text-[var(--dp-text-secondary)]"}>{description || `${title} is available in the selected dashboard view.`}</p>

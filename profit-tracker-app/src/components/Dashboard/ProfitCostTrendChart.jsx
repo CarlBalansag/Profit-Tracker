@@ -1,12 +1,10 @@
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { animate, motion, motionValue, useInView, useMotionValue, useTransform } from 'motion/react';
-import { RotateCcw } from 'lucide-react';
 import {
   fillDailyWindow,
   formatAxisLabel,
   formatChipLabel,
   formatLongLabel,
-  monotonePath,
   niceTicks,
   normalizeTrendPoints,
   toCumulative,
@@ -16,15 +14,22 @@ import { CHART_SERIES_REGISTRY } from '../../data/dashboardRegistry';
 // Colors come from the app palette (colorPalette.css -> index.css --dp-* aliases).
 // A theme can set --dp-chart-* (the Dashboard's dark theme does); otherwise
 // each series falls back to the general palette tokens.
+// Only Revenue gets a soft fill; stacked fills hid the lines underneath.
+// Red is kept for alerts, so spending is orange rather than the accent.
 const SERIES_STYLE = {
-  totalRevenue: { color: 'var(--dp-chart-revenue, var(--dp-text-primary))', fillOpacity: 0.16 },
-  totalCost: { color: 'var(--dp-chart-spend, var(--dp-accent))', fillOpacity: 0.3 },
-  grossProfit: { color: 'var(--dp-chart-gross, var(--dp-warning-text))', fillOpacity: 0.16 },
-  cashback: { color: 'var(--dp-chart-cashback, var(--dp-green-text))', fillOpacity: 0.3 },
-  netProfit: { color: 'var(--dp-chart-net, var(--dp-info-text))', fillOpacity: 0.16 },
-  totalTax: { color: 'var(--dp-chart-tax, var(--dp-accent-light))', fillOpacity: 0.16 },
-  soldCost: { color: 'var(--dp-chart-soldcost, var(--dp-text-muted))', fillOpacity: 0.16 },
+  totalRevenue: { color: 'var(--dp-chart-revenue, var(--dp-text-primary))', fillOpacity: 0.1 },
+  totalCost: { color: 'var(--dp-chart-spend, var(--dp-warning-text))', fillOpacity: 0 },
+  grossProfit: { color: 'var(--dp-chart-gross, var(--dp-info-text))', fillOpacity: 0 },
+  cashback: { color: 'var(--dp-chart-cashback, var(--dp-green-text))', fillOpacity: 0 },
+  netProfit: { color: 'var(--dp-chart-net, var(--dp-accent-light))', fillOpacity: 0 },
+  totalTax: { color: 'var(--dp-chart-tax, var(--dp-text-secondary))', fillOpacity: 0 },
+  soldCost: { color: 'var(--dp-chart-soldcost, var(--dp-text-muted))', fillOpacity: 0 },
 };
+
+// Straight segments: smoothing invented peaks and dips between sparse days.
+function linearPath(pts) {
+  return pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x},${y}`).join('');
+}
 
 const FALLBACK_SERIES = ['totalRevenue', 'totalCost', 'grossProfit', 'cashback'];
 
@@ -53,7 +58,7 @@ const CLIP_PAD = 8; // lets dots and the line cap at the edges show fully
 const moneyFull = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const moneyCompact = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 });
 
-function SeriesLayer({ clipId, progress, plot, linePath, areaPath, dots, color, fillOpacity }) {
+function SeriesLayer({ clipId, progress, plot, linePath, areaPath, dots, bars, color, fillOpacity }) {
   const span = useMotionValue(plot.width + CLIP_PAD * 2);
   useEffect(() => { span.set(plot.width + CLIP_PAD * 2); }, [plot.width, span]);
   const clipWidth = useTransform([progress, span], ([p, s]) => Math.max(0, p * s));
@@ -71,17 +76,24 @@ function SeriesLayer({ clipId, progress, plot, linePath, areaPath, dots, color, 
         </clipPath>
       </defs>
       <g clipPath={`url(#${clipId})`}>
-        {areaPath && <path d={areaPath} fill={color} fillOpacity={fillOpacity} stroke="none" />}
-        <path d={linePath} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
-        {dots.map(([x, y], i) => (
-          <circle key={i} cx={x} cy={y} r={3} fill={color} stroke="var(--dp-card-bg)" strokeWidth={1.25} />
-        ))}
+        {bars ? bars.map(([x, y, w, h], i) => (
+          <rect key={i} x={x} y={y} width={w} height={h} rx={Math.min(3, w / 2)} fill={color} />
+        )) : (
+          <>
+            {areaPath && fillOpacity > 0 && <path d={areaPath} fill={color} fillOpacity={fillOpacity} stroke="none" />}
+            <path d={linePath} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            {dots.length <= 45 && dots.map(([x, y], i) => (
+              <circle key={i} cx={x} cy={y} r={dots.length === 1 ? 5 : 2.5} fill={color} stroke="var(--dp-card-bg)" strokeWidth={1.25} />
+            ))}
+          </>
+        )}
       </g>
     </g>
   );
 }
 
-export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSeries, uiStyle = 'neon-dark', trendMode = 'period', onTrendModeChange }) {
+export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSeries, uiStyle = 'neon-dark', trendMode = 'period', onTrendModeChange, markType = 'line' }) {
+  const asBars = markType === 'bar';
   const isGlass = uiStyle === 'glassmorphism-brown';
   const wrapRef = useRef(null);
   const svgRef = useRef(null);
@@ -145,21 +157,29 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
     const left = compact ? 44 : 60;
     const plot = { left, top: 12, width: Math.max(10, width - left - 14), height: height - 12 - 42 };
     const n = points.length;
-    const step = n > 1 ? plot.width / (n - 1) : 0;
-    const xAt = i => (n > 1 ? plot.left + i * step : plot.left + plot.width / 2);
+    // Bars sit in equal bands; lines run edge to edge.
+    const step = asBars ? plot.width / Math.max(1, n) : (n > 1 ? plot.width / (n - 1) : 0);
+    const xAt = asBars
+      ? i => plot.left + step * (i + 0.5)
+      : i => (n > 1 ? plot.left + i * step : plot.left + plot.width / 2);
     const yAt = v => plot.top + plot.height - ((Math.max(0, v) - yMin) / (yMax - yMin || 1)) * plot.height;
     const baseline = yAt(0);
-    const series = activeSeries.map(s => {
+    const groupW = Math.min(64, step * 0.78);
+    const barW = groupW / Math.max(1, activeSeries.length);
+    const series = activeSeries.map((s, k) => {
       const pts = points.map((p, i) => [xAt(i), yAt(p[s.id])]);
-      const linePath = monotonePath(pts);
+      const linePath = linearPath(pts);
       const areaPath = pts.length > 1
         ? `${linePath}L${pts[pts.length - 1][0]},${baseline}L${pts[0][0]},${baseline}Z`
         : '';
-      return { ...s, pts, linePath, areaPath };
+      const bars = asBars
+        ? pts.map(([x, y]) => [x - groupW / 2 + k * barW + barW * 0.08, y, Math.max(1, barW * 0.84), Math.max(0, baseline - y)])
+        : null;
+      return { ...s, pts, linePath, areaPath, bars };
     });
     const labelEvery = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(plot.width / (compact ? 58 : 56)))));
     return { ticks, plot, xAt, yAt, step, series, labelEvery, n };
-  }, [points, width, height, compact, activeSeries]);
+  }, [points, width, height, compact, activeSeries, asBars]);
 
   // ---- animation ----
   const stopAll = useCallback(() => {
@@ -227,7 +247,9 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
     if (!svg || geo.n === 0) return null;
     const x = event.clientX - svg.getBoundingClientRect().left;
     if (geo.n === 1) return 0;
-    const i = Math.round((x - geo.plot.left) / geo.step);
+    const i = asBars
+      ? Math.floor((x - geo.plot.left) / geo.step)
+      : Math.round((x - geo.plot.left) / geo.step);
     return Math.max(0, Math.min(geo.n - 1, i));
   };
 
@@ -272,6 +294,16 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
 
   const formatTick = v => (compact ? moneyCompact : moneyFull).format(v);
 
+  // What a screen reader hears instead of the picture: each line's total.
+  const chartSummary = isEmpty
+    ? 'Profit and cost trend: nothing in this period'
+    : `Profit and cost trend, ${geo.n} ${geo.n === 1 ? 'point' : 'points'}. ${visibleSeries.map((s) => {
+      const total = trendMode === 'cumulative'
+        ? (points[points.length - 1]?.[s.id] || 0)
+        : points.reduce((sum, p) => sum + (p[s.id] || 0), 0);
+      return `${s.label} ${moneyFull.format(total)}`;
+    }).join(', ')}.`;
+
   return (
     <div className="relative flex h-full min-h-[280px] w-full flex-col">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-4 pb-5">
@@ -285,7 +317,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
                 onClick={() => onTrendModeChange(val)}
                 className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] ${
                   trendMode === val
-                    ? 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent-text)]'
+                    ? 'bg-[var(--dp-accent-bg)] font-semibold text-[var(--dp-text-primary)]'
                     : 'text-[var(--dp-text-muted)] hover:text-[var(--dp-text-primary)]'
                 }`}
               >
@@ -315,15 +347,6 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
               </button>
             );
           })}
-          <button
-            type="button"
-            onClick={play}
-            aria-label="Replay chart animation"
-            title="Replay"
-            className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--dp-border-hover)] text-[var(--dp-text-muted)] transition-colors hover:text-[var(--dp-text-primary)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--dp-card-bg)]"
-          >
-            <RotateCcw size={13} strokeWidth={2} aria-hidden="true" />
-          </button>
         </div>
       </div>
 
@@ -336,7 +359,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
             className="absolute inset-0 block select-none tabular-nums"
             style={{ touchAction: 'pan-y', fontFamily: 'inherit' }}
             role="img"
-            aria-label={`Profit and cost trend, ${geo.n} ${geo.n === 1 ? 'point' : 'points'}`}
+            aria-label={chartSummary}
           >
             {/* grid + y axis */}
             {geo.ticks.map(t => (
@@ -364,7 +387,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
                 key={p.date}
                 x={geo.xAt(i)}
                 y={geo.plot.top + geo.plot.height + 30}
-                textAnchor={geo.n > 1 && i === 0 ? 'start' : geo.n > 1 && i === geo.n - 1 ? 'end' : 'middle'}
+                textAnchor={asBars ? 'middle' : geo.n > 1 && i === 0 ? 'start' : geo.n > 1 && i === geo.n - 1 ? 'end' : 'middle'}
                 fontSize={11}
                 fill="var(--dp-text-muted)"
               >
@@ -382,6 +405,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
                 linePath={s.linePath}
                 areaPath={s.areaPath}
                 dots={s.pts}
+                bars={s.bars}
                 color={s.color}
                 fillOpacity={s.fillOpacity}
               />

@@ -32,14 +32,14 @@
   --accent-gradient: linear-gradient(140deg, #b02e3e 0%, #9e2433 50%, #821c2a 100%);
 
   /* Trend-chart palette that goes with this accent (dark mode). */
-  /* Trend-chart series. Spend keeps the garnet; every other line gets its own
-     hue so lines can be told apart (same roles as the light-theme fallbacks
-     in ProfitCostTrendChart.jsx). */
-  --accent-chart-spend: #ef4444;
-  --accent-chart-gross: #fbbf24;
-  --accent-chart-net: #60a5fa;
+  /* Trend-chart series, each its own hue so lines can be told apart. Red is
+     left for losses and alerts, so spending is orange (same roles as the
+     light-theme fallbacks in ProfitCostTrendChart.jsx). */
+  --accent-chart-spend: #fb923c;
+  --accent-chart-gross: #60a5fa;
+  --accent-chart-net: #f9a8d4;
   --accent-chart-cashback: #4ade80;
-  --accent-chart-tax: #fb7185;
+  --accent-chart-tax: #cbd5e1;
   --accent-chart-revenue: #e5e7eb;
   --accent-chart-soldcost: #64748b;
 }

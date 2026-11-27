@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronRight, ArrowRight } from 'lucide-react';
 import CountUp from '../UI/CountUp';
+import { useMatchMedia } from '../../hooks/useMatchMedia';
 import { displayLabel } from '../../data/statusWorkflow';
 import { formatWholeMoney } from '../../utils/money';
 
@@ -10,6 +11,26 @@ const MotionDiv = motion.div;
 const MotionP = motion.p;
 
 const dollars = (value) => `$${formatWholeMoney(value || 0)}`;
+
+// One line per step, shown when a step is opened, so each step says what it holds.
+const STEP_HELP = {
+  PRE_ORDER: 'Ordered before release; the store has not sent it yet.',
+  PURCHASED: 'Bought, not marked as shipped to you yet.',
+  INBOUND: 'On its way to you.',
+  ON_HAND: 'Received and unsold. Counted at what it cost you.',
+  AWAITING_SHIPMENT: 'Sold and still needs to be shipped.',
+  AWAITING_HANDOFF: 'Sold locally and waiting to be handed over.',
+  OUTBOUND: 'Shipped and on its way to the buyer or provider.',
+  HANDED_OVER: 'Handed to the buyer in person.',
+  DELIVERED_TO_PROVIDER: 'Delivered to the cashout provider.',
+  DELIVERED_TO_AUTHENTICATOR: 'Delivered to the marketplace for checking.',
+  WAITING_FOR_SCAN_IN: 'Delivered; waiting for the provider to scan it in.',
+  SCANNED_IN: 'The provider has confirmed it arrived.',
+  ACCEPTED: 'The provider accepted it; payout comes next.',
+  AUTHENTICATING: 'The marketplace is checking it is authentic.',
+  WAITING_FOR_PAYMENT: 'Done on your side; the money has not arrived yet.',
+  PAID: 'The payment or payout has arrived.',
+};
 
 const sinceLabel = (since) => {
   if (!since) return null;
@@ -57,6 +78,8 @@ const MESSAGE_MOTION = {
 // The step row is always this tall, steps or not, so switching tabs or filters
 // never changes the card's height.
 const ROW_CLASS = '-mx-2 flex h-[148px] items-stretch overflow-x-auto px-2 pb-4 pt-2 dp-scrollbar';
+// Phones: every step visible in two columns, no sideways scrolling or cut-off names.
+const PHONE_GRID_CLASS = 'grid grid-cols-2 gap-2 pb-1';
 
 /**
  * The dashboard's Status Pipeline as steps (All, Cash-out or Marketplace), from
@@ -67,6 +90,7 @@ const ROW_CLASS = '-mx-2 flex h-[148px] items-stretch overflow-x-auto px-2 pb-4 
  */
 export default function WorkflowPipeline({ pipeline, pending = false, onNavigate, hideEmpty = false }) {
   const [openStatus, setOpenStatus] = useState(null);
+  const isPhone = useMatchMedia('(max-width: 639px)');
   // With hideEmpty (the All tab), only the steps that have something in them,
   // so the strip fits what's actually going on; otherwise every step of the
   // workflow, 0 or not. Always in workflow order.
@@ -99,13 +123,13 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
     <div className="flex flex-col gap-4">
       {/* Padding inside the scroll box so the cards' shadows, and their lift
           on hover, aren't cut off. */}
-      <div className={ROW_CLASS} data-stagger-cards>
+      <div className={isPhone ? PHONE_GRID_CLASS : ROW_CLASS} data-stagger-cards>
         <AnimatePresence initial={false}>
           {stages.length === 0 ? (
             <MotionP
               key="empty"
               {...MESSAGE_MOTION}
-              className="flex flex-1 items-center justify-center text-[12px] text-[var(--dp-text-secondary)]"
+              className="col-span-2 flex flex-1 items-center justify-center py-6 text-[12px] text-[var(--dp-text-secondary)]"
             >
               Nothing in any step right now.
             </MotionP>
@@ -121,10 +145,10 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
                 initial="hidden"
                 animate="shown"
                 exit="gone"
-                style={{ flexBasis: 0, flexShrink: 1 }}
+                style={isPhone ? undefined : { flexBasis: 0, flexShrink: 1 }}
                 className="flex items-stretch"
               >
-                {index > 0 && <ChevronRight size={14} aria-hidden="true" className="mx-0.5 flex-shrink-0 self-center text-[var(--dp-text-label)]" />}
+                {index > 0 && !isPhone && <ChevronRight size={14} aria-hidden="true" className="mx-0.5 flex-shrink-0 self-center text-[var(--dp-text-label)]" />}
                 <button
                   type="button"
                   aria-pressed={active}
@@ -175,6 +199,9 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
                   <span className="text-[11px] text-[var(--dp-text-label)]">Newest {open.items.length} of {open.itemCount}</span>
                 )}
               </div>
+              {STEP_HELP[open.status] && (
+                <p className="mt-1 text-[12px] text-[var(--dp-text-secondary)]">{STEP_HELP[open.status]}</p>
+              )}
               <div className="mt-2 divide-y divide-[color:var(--dp-border)]">
                 {open.items.length === 0 && <p className="py-2 text-[12px] text-[var(--dp-text-secondary)]">Nothing in this step.</p>}
                 {open.items.map((item) => (
