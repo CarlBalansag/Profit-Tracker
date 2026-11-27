@@ -308,7 +308,7 @@ const Dashboard = () => {
                 breakdown={def.getBreakdown?.(stats)}
                 description={def.description}
                 uiStyle={preferences.style}
-                onClick={() => navigate('/transactions', { state: { dateFilter, cardScope: def.scope, platformMode: modeFilter !== 'All' ? modeFilter : undefined } })}
+                onClick={() => navigate('/transactions', { state: { dateFilter, cardScope: modeFilter !== 'All' && base.channel ? 'sold' : def.scope, platformMode: modeFilter !== 'All' ? modeFilter : undefined } })}
               />
             );
           })}
