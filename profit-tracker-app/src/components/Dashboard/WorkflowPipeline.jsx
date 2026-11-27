@@ -51,6 +51,15 @@ const STEP_MIN_WIDTH = 130;
 const EXIT_STAGGER = 0.09;
 const ENTER_STAGGER = 0.14;
 const ENTER_AFTER_EXITS = 0.45; // when steps also left, new ones wait for them
+// Phones lay steps out in a two-column grid, where the grid sets the width:
+// the same fade and lift, without the strip's width animation and minimum
+// (which made the columns overlap at 320px).
+const PHONE_STEP_VARIANTS = {
+  hidden: { opacity: 0, y: 6 },
+  shown: ({ enterDelay }) => ({ opacity: 1, y: 0, transition: { delay: enterDelay, duration: 0.42, ease: 'easeOut' } }),
+  gone: ({ exitDelay }) => ({ opacity: 0, y: -4, transition: { delay: exitDelay, duration: 0.22, ease: 'easeIn' } }),
+};
+
 const STEP_VARIANTS = {
   hidden: { opacity: 0, flexGrow: 0, minWidth: '0px', y: 6 },
   shown: ({ enterDelay }) => ({
@@ -143,12 +152,14 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
               <MotionDiv
                 key={stage.status}
                 custom={stepTiming(stage.status, index)}
-                variants={STEP_VARIANTS}
+                variants={isPhone ? PHONE_STEP_VARIANTS : STEP_VARIANTS}
                 initial="hidden"
                 animate="shown"
                 exit="gone"
                 style={isPhone ? undefined : { flexBasis: 0, flexShrink: 1 }}
-                className="flex items-stretch"
+                // Capped on wide screens so one or two steps don't stretch
+                // across the whole card.
+                className={isPhone ? 'flex min-w-0 items-stretch' : 'flex max-w-[280px] items-stretch'}
               >
                 {index > 0 && !isPhone && <ChevronRight size={14} aria-hidden="true" className="mx-0.5 flex-shrink-0 self-center text-[var(--dp-text-label)]" />}
                 <button
