@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, ArrowLeftRight, Boxes,
   ReceiptText, FileText, ChartLine, Wallet, CreditCard as CreditCardIcon,
-  Settings, History, ChevronDown, PanelLeftClose, PanelLeft, Database, LogOut, Search, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins, ListChecks, Zap
+  Settings, History, ChevronDown, PanelLeftClose, PanelLeft, Database, LogOut, Search, Plus, DollarSign, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins, ListChecks, Zap
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
@@ -19,7 +19,8 @@ import PageSearch from './PageSearch';
 import { pageList } from './pageList';
 import { useCashoutProviders } from '../../hooks/useCashoutProviders';
 import { usePrefetchProps } from '../../hooks/usePrefetchPage';
-import { useTodoCount } from '../../hooks/useApi';
+import { useNavTodos, useTodoCount } from '../../hooks/useApi';
+import { navFigures } from './navFigures';
 import { useMatchMedia } from '../../hooks/useMatchMedia';
 import { useTutorial } from '../../context/TutorialContext';
 
@@ -41,6 +42,12 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
   const { data: cashoutProviders = [] } = useCashoutProviders();
   const hasCashoutAccess = Array.isArray(cashoutProviders) && cashoutProviders.length > 0;
   const todoCount = useTodoCount();
+  // Each row's live figure (owed, due, to ship...), from the same to-do list.
+  const navTodos = useNavTodos();
+  const figures = React.useMemo(() => navFigures(navTodos), [navTodos]);
+  const fig = (to) => figures[to];
+  const addBuyPrefetch = usePrefetchProps('/add-transaction');
+  const recordSalePrefetch = usePrefetchProps('/add-sale');
   const isGlass = uiStyle === 'glassmorphism-brown';
   const reduceMotion = useReducedMotion();
   // Ctrl+K / ⌘K opens page search from anywhere.
@@ -189,6 +196,35 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
           </button>
         </div>
 
+        {/* The two daily actions, as buttons above the places (on phones the
+            bottom bar's + already has them, so the drawer leaves them out). */}
+        {!inBar && (
+          <div data-tutorial-id="sidebar-section-core" className={clsx("px-2 pt-2.5", isCollapsed ? "flex flex-col items-center gap-1.5" : "grid grid-cols-2 gap-1.5")}>
+            <NavLink
+              to="/add-transaction"
+              data-tutorial-id="sidebar-add-transaction"
+              aria-label={isCollapsed ? 'Log a buy' : undefined}
+              data-tip={isCollapsed ? 'Log a buy' : undefined}
+              {...addBuyPrefetch}
+              className={({ isActive }) => clsx("dp-action-primary flex items-center justify-center gap-1 rounded-lg font-semibold text-white transition-[filter,transform] hover:brightness-110 active:scale-[0.98]", isCollapsed ? "h-9 w-9" : "h-9 whitespace-nowrap px-1.5 text-[13px] lg:text-[12px] pointer-coarse:h-11", isActive && "ring-2 ring-inset ring-white/60")}
+            >
+              <Plus size={15} aria-hidden="true" />
+              {!isCollapsed && <span>Log a buy</span>}
+            </NavLink>
+            <NavLink
+              to="/add-sale"
+              data-tutorial-id="sidebar-record-sale"
+              aria-label={isCollapsed ? 'Record sale' : undefined}
+              data-tip={isCollapsed ? 'Record sale' : undefined}
+              {...recordSalePrefetch}
+              className={({ isActive }) => clsx("flex items-center justify-center gap-1 rounded-lg border font-semibold transition-colors", isActive ? "border-[color:var(--dp-accent-text)] text-[var(--dp-accent-text)] bg-[var(--dp-accent-bg)]" : "border-[color:var(--dp-border)] text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)]", isCollapsed ? "h-9 w-9" : "h-9 whitespace-nowrap px-1.5 text-[13px] lg:text-[12px] pointer-coarse:h-11")}
+            >
+              <DollarSign size={15} aria-hidden="true" />
+              {!isCollapsed && <span>Record sale</span>}
+            </NavLink>
+          </div>
+        )}
+
         <div className={clsx("px-2 pt-2", isCollapsed && "flex justify-center")}>
           <button
             type="button"
@@ -213,37 +249,32 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
 
         <nav ref={navRef} aria-label="Pages" className={clsx("relative flex-1 py-1.5 px-2 space-y-2 overflow-y-auto overflow-x-hidden dp-scrollbar", isCollapsed && "dp-rail", moreBelow && "dp-nav-more", moreAbove && "dp-nav-less")}>
           <NavMarker marker={marker} className="!mt-0 rounded-md bg-[var(--dp-accent-bg)]" />
-          {/* Grouped by how a reseller works: today's work, buying and selling,
-              shipping, money, then the bookkeeping (folded by default). */}
+          {/* A ledger: each place carries the one live figure that says whether
+              it needs you, in a single right-aligned column. */}
           <SidebarSection title="Today" isCollapsed={isCollapsed} foldable={false}>
             {!inBar && <NavItem icon={LayoutDashboard} label="Dashboard" to="/" isCollapsed={isCollapsed} />}
-            <NavItem icon={ListChecks} label="To-Do" to="/todos" isCollapsed={isCollapsed} badge={todoCount} />
+            <NavItem icon={ListChecks} label="To-Do" to="/todos" isCollapsed={isCollapsed} figure={fig('/todos')} />
             <NavItem icon={CalendarDays} label="Calendar" to="/calendar" isCollapsed={isCollapsed} />
           </SidebarSection>
 
-          <SidebarSection title="Sell & Buy" isCollapsed={isCollapsed} tutorialId="sidebar-section-core">
-            <NavItem icon={ShoppingCart} label="Add Transaction" to="/add-transaction" isCollapsed={isCollapsed} tutorialId="sidebar-add-transaction" />
-            <NavItem icon={BadgeDollarSign} label="Record Sale" to="/add-sale" isCollapsed={isCollapsed} tutorialId="sidebar-record-sale" />
+          <SidebarSection title="Stock" isCollapsed={isCollapsed}>
+            {!inBar && <NavItem icon={Boxes} label="Inventory" to="/inventory" isCollapsed={isCollapsed} tutorialId="sidebar-inventory" figure={fig('/inventory')} />}
             {!inBar && <NavItem icon={ArrowLeftRight} label="Transactions" to="/transactions" isCollapsed={isCollapsed} tutorialId="sidebar-transactions" />}
-            {!inBar && <NavItem icon={Boxes} label="Inventory" to="/inventory" isCollapsed={isCollapsed} tutorialId="sidebar-inventory" />}
-            <NavItem icon={Zap} label="Email Automation" to="/automation" isCollapsed={isCollapsed} />
-          </SidebarSection>
-
-          <SidebarSection title="Ship" isCollapsed={isCollapsed}>
-            <NavItem icon={Truck} label="Shipping" to="/shipping" isCollapsed={isCollapsed} />
+            <NavItem icon={Truck} label="Shipping" to="/shipping" isCollapsed={isCollapsed} figure={fig('/shipping')} />
             <NavItem icon={ClipboardList} label="Statuses" to="/statuses" isCollapsed={isCollapsed} />
+            <NavItem icon={Zap} label="Email Automation" to="/automation" isCollapsed={isCollapsed} figure={fig('/automation')} />
           </SidebarSection>
 
           <SidebarSection title="Money" isCollapsed={isCollapsed} tutorialId="sidebar-section-insights">
-            <NavItem icon={Wallet} label="Cash Flow" to="/cashflow" isCollapsed={isCollapsed} tutorialId="sidebar-cashflow" />
-            <NavItem icon={CreditCardIcon} label="Credit Card" to="/creditcard" isCollapsed={isCollapsed} tutorialId="sidebar-creditcard" />
-            {hasCashoutAccess && <NavItem icon={HandCoins} label="Cashout" to="/cashout" isCollapsed={isCollapsed} />}
+            <NavItem icon={Wallet} label="Cash Flow" to="/cashflow" isCollapsed={isCollapsed} tutorialId="sidebar-cashflow" figure={fig('/cashflow')} />
+            <NavItem icon={CreditCardIcon} label="Credit Card" to="/creditcard" isCollapsed={isCollapsed} tutorialId="sidebar-creditcard" figure={fig('/creditcard')} />
+            {hasCashoutAccess && <NavItem icon={HandCoins} label="Cashout" to="/cashout" isCollapsed={isCollapsed} figure={fig('/cashout')} />}
             <NavItem icon={ChartLine} label="Analytics" to="/analytics" isCollapsed={isCollapsed} tutorialId="sidebar-analytics" />
             <NavItem icon={Target} label="Goals" to="/goals" isCollapsed={isCollapsed} />
           </SidebarSection>
 
           <SidebarSection title="Books" isCollapsed={isCollapsed} tutorialId="sidebar-section-operations" defaultFolded>
-            <NavItem icon={BanknoteArrowDown} label="Expenses" to="/expenses" isCollapsed={isCollapsed} tutorialId="sidebar-expenses" />
+            <NavItem icon={BanknoteArrowDown} label="Expenses" to="/expenses" isCollapsed={isCollapsed} tutorialId="sidebar-expenses" figure={fig('/expenses')} />
             <NavItem icon={ReceiptText} label="Receipts" to="/receipts" isCollapsed={isCollapsed} tutorialId="sidebar-receipts" />
             <NavItem icon={FileText} label="Invoices" to="/invoices" isCollapsed={isCollapsed} />
             <NavItem icon={BadgePercent} label="Tax Exempt" to="/tax-exempt" isCollapsed={isCollapsed} tutorialId="sidebar-tax-exempt" />
@@ -595,26 +626,27 @@ function SignOutRow({ onSignOut }) {
 // A count on a nav item (the To-Do list). Hidden at zero; 99+ past that.
 const badgeText = (count) => (count > 99 ? '99+' : String(count));
 
-// The count pops once when it changes (a to-do done or added), never on load.
-function BadgeCount({ count, className }) {
-  const [shown, setShown] = useState(count);
+// A figure pops once when it changes (a to-do done or added), never on load.
+function BadgeCount({ count, text, className, ...rest }) {
+  const value = text ?? badgeText(count);
+  const [shown, setShown] = useState(value);
   const [ticks, setTicks] = useState(0);
-  if (shown !== count) {
-    setShown(count);
+  if (shown !== value) {
+    setShown(value);
     setTicks((t) => t + 1);
   }
   return (
-    <span key={ticks} aria-hidden="true" data-ticks={ticks} className={clsx(className, ticks > 0 && 'pt-badge-tick')}>
-      {badgeText(count)}
+    <span key={ticks} aria-hidden="true" data-ticks={ticks} className={clsx(className, ticks > 0 && 'pt-badge-tick')} {...rest}>
+      {value}
     </span>
   );
 }
 
-const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, badge = 0 }) => (
+const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, figure }) => (
   <NavLink
     to={to}
-    aria-label={badge ? `${label}, ${badge} ${badge === 1 ? 'item' : 'items'}` : isCollapsed ? label : undefined}
-    data-tip={isCollapsed ? (badge ? `${label} · ${badgeText(badge)}` : label) : undefined}
+    aria-label={figure ? `${label}, ${figure.text}` : isCollapsed ? label : undefined}
+    data-tip={isCollapsed ? (figure ? `${label} · ${figure.text}` : label) : undefined}
     data-tutorial-id={tutorialId}
     {...usePrefetchProps(to)}
     onClick={(e) => { if (e.currentTarget.getAttribute('aria-current') === 'page') e.preventDefault(); }}
@@ -630,9 +662,17 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, badge = 0 }) 
   >
     <Icon size={16} className={clsx("flex-shrink-0", !isCollapsed && "max-lg:size-[18px]")} />
     {!isCollapsed && <span className="truncate flex-1 disabled-link">{label}</span>}
-    {badge > 0 && (isCollapsed
-      ? <BadgeCount count={badge} className="absolute -right-1 -top-1 min-w-[16px] rounded-full bg-[var(--dp-text-primary)] px-1 text-center text-[10px] font-semibold leading-4 text-[var(--dp-card-bg)] tabular-nums" />
-      : <BadgeCount count={badge} className="min-w-[20px] rounded-full bg-[var(--dp-text-primary)] px-1.5 text-center text-[11px] font-semibold leading-5 text-[var(--dp-card-bg)] tabular-nums" />)}
+    {/* The ledger column: one live figure, right-aligned in tabular numbers. */}
+    {figure && !isCollapsed && (
+      <BadgeCount
+        text={figure.text}
+        data-figure=""
+        className={clsx("dp-nav-figure shrink-0 text-right text-[13px] lg:text-[11px] font-semibold tabular-nums", figure.problem ? "text-[var(--dp-red-text)]" : "dp-nav-figure-muted")}
+      />
+    )}
+    {figure?.count > 0 && isCollapsed && (
+      <BadgeCount count={figure.count} className="absolute -right-1 -top-1 min-w-[16px] rounded-full bg-[var(--dp-text-primary)] px-1 text-center text-[10px] font-semibold leading-4 text-[var(--dp-card-bg)] tabular-nums" />
+    )}
   </NavLink>
 );
 

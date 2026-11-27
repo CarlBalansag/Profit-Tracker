@@ -470,10 +470,16 @@ export const useTodos = () => useQuery(todosQuery());
 // The open to-do count for the nav badges. The sidebar and bottom bar also
 // render without a QueryClientProvider (their unit tests), where this is 0.
 let inertClient = null;
-export function useTodoCount() {
+// The to-do list for the navigation (sidebar figures and badges); undefined
+// where there's no QueryClientProvider.
+export function useNavTodos() {
   const client = useOptionalQueryClient();
   inertClient ??= client ? null : new QueryClient();
   const { data } = useQuery({ ...todosQuery(), enabled: Boolean(client) }, client || inertClient);
+  return data;
+}
+export function useTodoCount() {
+  const data = useNavTodos();
   const count = data?.counts?.total || 0;
   // The number on the installed app's icon (phones and desktops that support it).
   useEffect(() => {

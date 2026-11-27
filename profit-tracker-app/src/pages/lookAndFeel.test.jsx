@@ -28,6 +28,7 @@ vi.mock('../hooks/useApi', () => ({
   useInvalidate: () => ({}),
   useTodos: () => ({ data: undefined }),
   useTodoCount: () => 0,
+  useNavTodos: () => undefined,
   apiFetch: vi.fn(),
 }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { username: 'tester' }, logout: vi.fn() }) }));

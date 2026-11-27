@@ -53,10 +53,10 @@ describe('Sidebar active marker', () => {
   it('hides the marker while the active item sits in a folded section', async () => {
     const { container } = renderSidebar({ path: '/transactions' });
 
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /sell & buy/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^stock$/i })); });
     expect(shown(marker(container))).toBe(false);
 
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /sell & buy/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^stock$/i })); });
     expect(shown(marker(container))).toBe(true);
     expect(marker(container)).toHaveAttribute('data-active-href', '/transactions');
   });

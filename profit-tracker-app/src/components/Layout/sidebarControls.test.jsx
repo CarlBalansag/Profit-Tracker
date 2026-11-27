@@ -8,7 +8,11 @@ const { logout } = vi.hoisted(() => ({ logout: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({ user: { username: 'tester' }, logout }),
 }));
-vi.mock('../../hooks/useApi', async (orig) => ({ ...(await orig()), useTodoCount: () => 16 }));
+vi.mock('../../hooks/useApi', async (orig) => ({
+  ...(await orig()),
+  useTodoCount: () => 16,
+  useNavTodos: () => ({ counts: { total: 16 }, items: [{ type: 'ship', urgency: 'soon' }], waiting_payments: [{ total: 3626.6, overdue_total: 0 }] }),
+}));
 
 afterEach(() => { cleanup(); localStorage.clear(); });
 
@@ -82,38 +86,38 @@ describe('Sidebar as the phone drawer', () => {
 describe('Sidebar sections', () => {
   it('a folded section that holds the current page says so', async () => {
     renderSidebar({ path: '/transactions' });
-    const core = screen.getByRole('button', { name: /^sell & buy$/i });
+    const core = screen.getByRole('button', { name: /^stock$/i });
     expect(core).not.toHaveAttribute('aria-current');
     await act(async () => { fireEvent.click(core); });
     expect(core).toHaveAttribute('aria-current', 'true');
     expect(core.querySelector('[data-current-dot]')).not.toBeNull();
-    expect(screen.getByRole('button', { name: /^ship$/i })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', { name: /^money$/i })).not.toHaveAttribute('aria-current');
   });
 
   it('say whether they are folded and remember it on the next visit', async () => {
     renderSidebar();
-    const core = screen.getByRole('button', { name: /^sell & buy$/i });
+    const core = screen.getByRole('button', { name: /^stock$/i });
     expect(core).toHaveAttribute('aria-expanded', 'true');
     await act(async () => { fireEvent.click(core); });
     expect(core).toHaveAttribute('aria-expanded', 'false');
 
     cleanup();
     renderSidebar();
-    expect(screen.getByRole('button', { name: /^sell & buy$/i })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /^stock$/i })).toHaveAttribute('aria-expanded', 'false');
   });
 });
 
 describe('Collapsed sidebar', () => {
   it('names each icon, keeps the to-do count, and shows a label on hover', () => {
     const { container } = renderSidebar({ isCollapsed: true });
-    const todo = screen.getByRole('link', { name: 'To-Do, 16 items' });
+    const todo = screen.getByRole('link', { name: 'To-Do, 16 open' });
     expect(todo).toHaveTextContent('16');
-    expect(screen.getByRole('link', { name: 'Shipping' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Shipping/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
 
-    fireEvent.pointerOver(screen.getByRole('link', { name: 'Shipping' }));
+    fireEvent.pointerOver(screen.getByRole('link', { name: /^Shipping/ }));
     expect(container.querySelector('[data-sidebar-tooltip]')).toHaveTextContent('Shipping');
-    fireEvent.pointerOut(screen.getByRole('link', { name: 'Shipping' }));
+    fireEvent.pointerOut(screen.getByRole('link', { name: /^Shipping/ }));
     expect(container.querySelector('[data-sidebar-tooltip]')).toBeNull();
   });
 });
@@ -139,7 +143,7 @@ describe('Sidebar groups', () => {
   it('groups pages by how you work, with Books folded until you open it', async () => {
     renderSidebar();
     expect(screen.queryByRole('button', { name: /^today$/i })).toBeNull(); // Today can't be folded away
-    for (const name of [/^sell & buy$/i, /^ship$/i, /^money$/i]) {
+    for (const name of [/^stock$/i, /^money$/i]) {
       expect(screen.getByRole('button', { name })).toHaveAttribute('aria-expanded', 'true');
     }
     const books = screen.getByRole('button', { name: /^books$/i });
@@ -162,7 +166,7 @@ describe('Where you are', () => {
 
   it('clicking the current page does nothing, but it still gets a collapsed label', () => {
     const { container } = renderSidebar({ path: '/cashflow', isCollapsed: true });
-    const here = screen.getByRole('link', { name: 'Cash Flow' });
+    const here = screen.getByRole('link', { name: /^Cash Flow/ });
     expect(fireEvent.click(here)).toBe(false); // default prevented
     fireEvent.pointerOver(here);
     expect(container.querySelector('[data-sidebar-tooltip]')).toHaveTextContent('Cash Flow');
@@ -183,7 +187,9 @@ describe('Phone drawer contents', () => {
         expect(screen.queryByRole('link', { name })).toBeNull();
       }
       expect(screen.getByRole('link', { name: /^To-Do/ })).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Record Sale' })).toBeInTheDocument();
+      // Log a buy / Record sale are on the bottom bar's + on phones.
+      expect(screen.queryByRole('link', { name: /Log a buy/ })).toBeNull();
+      expect(screen.getByRole('link', { name: /^Shipping/ })).toBeInTheDocument();
     } finally {
       window.matchMedia = original;
     }
@@ -205,5 +211,17 @@ describe('Round 4 fixes', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sign Out' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Sign Out' })).toHaveFocus());
+  });
+});
+
+describe('Ledger', () => {
+  it('puts the two daily actions on top and a live figure on rows that need you', () => {
+    renderSidebar({ path: '/cashflow' });
+    expect(screen.getByRole('link', { name: /Log a buy/ })).toHaveAttribute('href', '/add-transaction');
+    expect(screen.getByRole('link', { name: /Record sale/ })).toHaveAttribute('href', '/add-sale');
+    expect(screen.getByRole('link', { name: 'Shipping, 1 to ship' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Cash Flow, $3.6k owed' })).toBeInTheDocument();
+    // Rows with nothing to say carry no figure.
+    expect(screen.getByRole('link', { name: 'Goals' })).toBeInTheDocument();
   });
 });

@@ -61,8 +61,8 @@ export const TUTORIAL_STEPS = [
     id: 'sidebar-core',
     target: 'sidebar-section-core',
     placement: 'right',
-    title: 'Sell & Buy — Your Daily Workflow',
-    body: 'Everything you do day-to-day lives here. This is where you log purchases, record sales, review your transaction history and see the stock you have on hand.',
+    title: 'Log a Buy, Record a Sale',
+    body: 'Your two everyday actions sit at the top of the sidebar. Below them, every page shows the one number that says whether it needs you: what is owed, what is due, what is waiting to ship.',
   },
   {
     id: 'sidebar-add-transaction',

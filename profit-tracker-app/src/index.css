@@ -1509,6 +1509,13 @@ nav[aria-label="Main"] :is(a, button):focus-visible {
   mask-image: linear-gradient(to bottom, transparent, #000 32px, #000 calc(100% - 32px), transparent);
 }
 
+/* Ledger figures: neutral, a step quieter than the row's label; the
+   current row's figure follows its white/accent text. */
+.dp-nav-figure-muted { color: var(--dp-text-label); }
+.dp-sidebar a[aria-current="page"] .dp-nav-figure-muted { color: inherit; opacity: 0.85; }
+/* Log a buy: the one filled red control in the sidebar. */
+.dp-action-primary { background: var(--dp-accent-gradient, var(--dp-accent-solid)); }
+
 /* The rail is only 72px wide: no visible scrollbar (it still scrolls). */
 .dp-rail { scrollbar-width: none; }
 .dp-rail::-webkit-scrollbar { display: none; }
