@@ -36,7 +36,43 @@ describe('Sidebar account menu', () => {
   });
 });
 
+describe('Sidebar as the phone drawer', () => {
+  const renderDrawer = (isOpen, setIsOpen = () => {}) => render(
+    <MemoryRouter initialEntries={['/']}>
+      <Sidebar isOpen={isOpen} setIsOpen={setIsOpen} isCollapsed={false} setIsCollapsed={() => {}} />
+    </MemoryRouter>
+  );
+
+  it('is inert while closed, so its links are out of the Tab order', () => {
+    const { container } = renderDrawer(false);
+    expect(container.querySelector('aside')).toHaveAttribute('inert');
+    cleanup();
+    const open = renderDrawer(true);
+    expect(open.container.querySelector('aside')).not.toHaveAttribute('inert');
+  });
+
+  it('one Escape in the account menu closes only the menu, not the drawer', () => {
+    const setIsOpen = vi.fn();
+    renderDrawer(true, setIsOpen);
+    const account = screen.getByRole('button', { name: /tester/ });
+    fireEvent.click(account);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(account).toHaveAttribute('aria-expanded', 'false');
+    expect(setIsOpen).not.toHaveBeenCalledWith(false);
+  });
+});
+
 describe('Sidebar sections', () => {
+  it('a folded section that holds the current page says so', async () => {
+    renderSidebar();
+    const core = screen.getByRole('button', { name: /^core$/i });
+    expect(core).not.toHaveAttribute('aria-current');
+    await act(async () => { fireEvent.click(core); });
+    expect(core).toHaveAttribute('aria-current', 'true');
+    expect(core.querySelector('[data-current-dot]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: /^operations$/i })).not.toHaveAttribute('aria-current');
+  });
+
   it('say whether they are folded and remember it on the next visit', async () => {
     renderSidebar();
     const core = screen.getByRole('button', { name: /^core$/i });

@@ -18,6 +18,7 @@ import AnimatedLogo from '../UI/AnimatedLogo';
 import { useCashoutProviders } from '../../hooks/useCashoutProviders';
 import { usePrefetchProps } from '../../hooks/usePrefetchPage';
 import { useTodoCount } from '../../hooks/useApi';
+import { useMatchMedia } from '../../hooks/useMatchMedia';
 
 const MotionDiv = motion.div;
 
@@ -38,6 +39,10 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
   const profileMenuId = useId();
   useProfileMenu(isProfileMenuOpen, setIsProfileMenuOpen, profileRootRef, profileButtonRef);
   const drawerRef = useMobileDrawer(isOpen, () => setIsOpen(false));
+  // Below 1024px the closed drawer is only slid off-screen; inert keeps its
+  // links out of the Tab order and away from screen readers.
+  const isDesktop = useMatchMedia('(min-width: 1024px)');
+  const offscreen = !isOpen && !isDesktop;
   const tooltip = useCollapsedTooltip(drawerRef, isCollapsed && !isGlass);
 
   if (isGlass) {
@@ -52,6 +57,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
 
         <aside
           ref={drawerRef}
+          inert={offscreen}
           className={clsx(
             "fixed left-4 top-1/2 z-50 -translate-y-1/2 transition-transform duration-300 lg:translate-x-0",
             isOpen ? "translate-x-0" : "-translate-x-24 lg:translate-x-0"
@@ -112,6 +118,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
       
       <aside
         ref={drawerRef}
+        inert={offscreen}
         className={clsx(
           "fixed inset-y-0 left-0 z-50 flex flex-col transition-[width,translate] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:duration-150 lg:static lg:translate-x-0 border-r border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] dp-elevated dp-sidebar",
           isOpen ? "translate-x-0" : "-translate-x-full",
@@ -323,6 +330,20 @@ function useNavMarker(containerRef, deps) {
     });
   }, [containerRef]);
 
+  // The current page's row is scrolled into view inside the nav on load, on
+  // navigation and when the phone drawer opens (only the nav scrolls).
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const link = container?.querySelector('a[aria-current="page"]');
+    if (!link || link.closest('[data-folded="true"]')) return;
+    const c = container.getBoundingClientRect();
+    const l = link.getBoundingClientRect();
+    const pad = 8;
+    if (l.top < c.top + pad) container.scrollTop -= c.top + pad - l.top;
+    else if (l.bottom > c.bottom - pad) container.scrollTop += l.bottom - (c.bottom - pad);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, ...deps]);
+
   useLayoutEffect(() => {
     const routeChanged = lastPath.current !== null && lastPath.current !== pathname;
     lastPath.current = pathname;
@@ -381,7 +402,12 @@ const readFolds = () => {
   try { return JSON.parse(localStorage.getItem(FOLDS_KEY)) || {}; } catch { return {}; }
 };
 
+// Whether a nav item's link is the current page (as NavLink decides it).
+const isCurrent = (to, pathname) => (to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`));
+
 const SidebarSection = ({ title, children, isCollapsed, tutorialId }) => {
+  const { pathname } = useLocation();
+  const holdsCurrent = React.Children.toArray(children).some((child) => child?.props?.to && isCurrent(child.props.to, pathname));
   const [isSectionOpen, setIsSectionOpenState] = useState(() => !readFolds()[title]);
   const setIsSectionOpen = (open) => {
     setIsSectionOpenState(open);
@@ -399,10 +425,15 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId }) => {
         <button
           type="button"
           aria-expanded={isSectionOpen}
+          aria-current={!isSectionOpen && holdsCurrent ? 'true' : undefined}
           onClick={() => setIsSectionOpen(!isSectionOpen)}
           className="w-full flex items-center justify-between px-3 py-1 text-[11px] font-medium uppercase tracking-[1.2px] text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] transition-colors"
         >
-          <span>{title}</span>
+          <span className="flex items-center gap-1.5">
+            {title}
+            {/* Folded, but the page you're on is inside. */}
+            {!isSectionOpen && holdsCurrent && <span aria-hidden="true" data-current-dot="" className="h-1.5 w-1.5 rounded-full bg-[var(--dp-accent-solid)]" />}
+          </span>
           <ChevronDown size={12} aria-hidden="true" className={clsx("transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]", !isSectionOpen && "-rotate-90")} />
         </button>
       )}
@@ -539,11 +570,13 @@ function useProfileMenu(isOpen, setOpen, rootRef, buttonRef) {
       buttonRef.current?.focus();
     };
     const onPointer = (e) => { if (!rootRef.current?.contains(e.target)) setOpen(false); };
-    // Capture, so Escape closes the menu before it closes the phone drawer.
-    document.addEventListener('keydown', onKey, true);
+    // On window in the capture phase, so it runs before the phone drawer's
+    // own Escape (a capture listener on document) and stops it: one Escape
+    // closes only the menu.
+    window.addEventListener('keydown', onKey, true);
     document.addEventListener('pointerdown', onPointer);
     return () => {
-      document.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('keydown', onKey, true);
       document.removeEventListener('pointerdown', onPointer);
     };
   }, [isOpen, setOpen, rootRef, buttonRef]);
