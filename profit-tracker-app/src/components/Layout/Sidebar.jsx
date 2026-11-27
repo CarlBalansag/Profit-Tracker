@@ -56,7 +56,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
     return () => window.removeEventListener('keydown', onKey);
   }, []);
   const pages = pageList({ hasCashoutAccess, scheduleC: SCHEDULE_C_ENABLED });
-  const searchKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘K' : 'Ctrl K';
+  const searchKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘K' : 'Ctrl+K';
   const openSearch = () => { setIsOpen(false); setSearchOpen(true); };
   const search = <PageSearch open={searchOpen} onClose={() => setSearchOpen(false)} pages={pages} />;
   const navRef = useRef(null);
@@ -70,13 +70,13 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
   // links out of the Tab order and away from screen readers.
   const isDesktop = useMatchMedia('(min-width: 1024px)');
   const offscreen = !isOpen && !isDesktop;
-  const tooltip = useCollapsedTooltip(drawerRef, isCollapsed && !isGlass);
+  const tooltip = useCollapsedTooltip(drawerRef, !isGlass, isCollapsed);
   // In the phone drawer, Dashboard, Transactions and Inventory are already on
   // the bottom bar, so the drawer leaves them out (the guided tour still
   // points at them, so they stay while it runs).
   const touring = Boolean(useTutorial()?.active);
   const inBar = isNarrow && !touring;
-  const moreBelow = useMoreBelow(navRef, [isCollapsed, isOpen, hasCashoutAccess]);
+  const { above: moreAbove, below: moreBelow } = useMoreBelow(navRef, [isCollapsed, isOpen, hasCashoutAccess]);
 
   if (isGlass) {
     return (
@@ -154,7 +154,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
         ref={drawerRef}
         inert={offscreen}
         className={clsx(
-          "fixed inset-y-0 left-0 z-50 flex flex-col transition-[width,translate] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none lg:static lg:translate-x-0 border-r border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] dp-elevated dp-sidebar",
+          "fixed inset-y-0 left-0 z-50 flex shrink-0 flex-col transition-[width,translate] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none lg:static lg:translate-x-0 border-r border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] dp-elevated dp-sidebar",
           isOpen ? "translate-x-0" : "-translate-x-full",
           isCollapsed ? "w-[72px]" : "w-[min(85vw,320px)] lg:w-60"
         )}
@@ -211,7 +211,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
           </button>
         </div>
 
-        <nav ref={navRef} className={clsx("relative flex-1 py-3 px-2 space-y-3 overflow-y-auto overflow-x-hidden dp-scrollbar", isCollapsed && "dp-rail", moreBelow && "dp-nav-more")}>
+        <nav ref={navRef} className={clsx("relative flex-1 py-3 px-2 space-y-3 overflow-y-auto overflow-x-hidden dp-scrollbar", isCollapsed && "dp-rail", moreBelow && "dp-nav-more", moreAbove && "dp-nav-less")}>
           <NavMarker marker={marker} className="!mt-0 rounded-md bg-[var(--dp-accent-bg)]" />
           {/* Grouped by how a reseller works: today's work, buying and selling,
               shipping, money, then the bookkeeping (folded by default). */}
@@ -251,32 +251,40 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
           </SidebarSection>
         </nav>
 
-        <div className="hidden lg:block p-2 border-t border-[color:var(--dp-border)]">
+        {/* Desktop footer: one row of icons (each named, with a label on hover
+            and focus) so the pages above get the room. On phones these live in
+            the account menu. */}
+        <div data-footer-tips="" className={clsx("hidden lg:flex border-t border-[color:var(--dp-border)] p-2", isCollapsed ? "flex-col items-center gap-1" : "items-center gap-1")}>
           <button
+            type="button"
             onClick={() => setShowChangelog(true)}
-            aria-label={isCollapsed ? `v${CURRENT_VERSION}, What's New` : undefined}
-            data-tip={isCollapsed ? `v${CURRENT_VERSION} · What's New` : undefined}
-            className={clsx("flex items-center rounded-md border-l-2 border-transparent text-[12px] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-2.5 py-2 px-3")}>
-            <Sparkles size={14} />
-            {!isCollapsed && (
-              <>
-                <span className="truncate">What&apos;s New</span>
-                <span className="ml-auto text-[11px] tabular-nums text-[var(--dp-text-label)]">v{CURRENT_VERSION}</span>
-              </>
-            )}
+            aria-label={`What's New, v${CURRENT_VERSION}`}
+            data-tip={`What's New · v${CURRENT_VERSION}`}
+            className={clsx("flex h-8 items-center gap-1.5 rounded-md text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors", isCollapsed ? "w-8 justify-center" : "px-2")}
+          >
+            <Sparkles size={14} aria-hidden="true" />
+            {!isCollapsed && <span aria-hidden="true" className="text-[11px] tabular-nums">v{CURRENT_VERSION}</span>}
           </button>
           <button
+            type="button"
             data-tutorial-id="sidebar-datasetup"
-            aria-label={isCollapsed ? 'Data Setup' : undefined}
-            data-tip={isCollapsed ? 'Data Setup' : undefined}
+            aria-label="Data Setup"
+            data-tip="Data Setup"
             onClick={() => navigate('/settings', { state: { tab: 'datasetup' } })}
-            className={clsx("flex items-center rounded-md border-l-2 border-transparent text-[12px] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-2.5 py-2 px-3")}>
-            <Database size={14} />
-            {!isCollapsed && <span className="truncate">Data Setup</span>}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors"
+          >
+            <Database size={14} aria-hidden="true" />
           </button>
-          <NavItem icon={BookOpen} label="Guide" to="/guide" isCollapsed={isCollapsed} tutorialId="sidebar-guide" />
-          <div data-tip={isCollapsed ? 'Theme' : undefined} className={clsx("flex items-center py-1.5", isCollapsed ? "justify-center" : "justify-between px-3")}>
-            {!isCollapsed && <span className="text-[12px] text-[var(--dp-text-secondary)]">Theme</span>}
+          <NavLink
+            to="/guide"
+            aria-label="Guide"
+            data-tip="Guide"
+            data-tutorial-id="sidebar-guide"
+            className={({ isActive }) => clsx("flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-[var(--dp-hover-bg)]", isActive ? "text-[var(--dp-accent-text)] bg-[var(--dp-accent-bg)]" : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]")}
+          >
+            <BookOpen size={14} aria-hidden="true" />
+          </NavLink>
+          <div data-tip="Theme" className={clsx("flex items-center", isCollapsed ? "py-1" : "ml-auto pr-1")}>
             <ThemeSwitch inline />
           </div>
         </div>
@@ -299,7 +307,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
               <>
                 <div className="flex-1 min-w-0">
                   <p className="text-[12px] font-medium text-[var(--dp-text-primary)] truncate">{user?.username || 'Account'}</p>
-                  <p className="text-[11px] text-[var(--dp-text-label)]">Online</p>
+                  <p className="text-[11px] text-[var(--dp-text-label)]">Account &amp; settings</p>
                 </div>
                 <ChevronDown size={14} className={clsx("text-[var(--dp-text-label)] transition-transform", isProfileMenuOpen ? "rotate-180" : "")} />
               </>
@@ -315,26 +323,26 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
               exit={reduceMotion ? { opacity: 0, transition: { duration: 0.1 } } : { opacity: 0, y: 4, scale: 0.98, transition: { duration: 0.1, ease: 'easeIn' } }}
               style={{ transformOrigin: 'bottom center' }}
               id={profileMenuId} className="absolute bottom-full left-2 right-2 mb-2 bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated-hover rounded-lg py-2 z-50 overflow-hidden">
-               <NavLink to="/settings" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
+               <NavLink to="/settings" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[15px] lg:text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
                  <Settings size={14} className="text-[var(--dp-text-secondary)]" /> Settings
                </NavLink>
-               <NavLink to="/activity" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
+               <NavLink to="/activity" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[15px] lg:text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
                  <History size={14} className="text-[var(--dp-text-secondary)]" /> Activity
                </NavLink>
                {/* Phone drawer only: the items the desktop sidebar keeps in its footer. */}
                <div className="lg:hidden">
                  <div className="h-px w-full bg-[var(--dp-border)] my-1"></div>
-                 <button type="button" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); setShowChangelog(true); }}>
+                 <button type="button" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[15px] lg:text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); setShowChangelog(true); }}>
                    <Sparkles size={14} className="text-[var(--dp-text-secondary)]" /> What's New <span className="ml-auto text-[11px] text-[var(--dp-text-label)]">v{CURRENT_VERSION}</span>
                  </button>
-                 <button type="button" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); setIsOpen(false); navigate('/settings', { state: { tab: 'datasetup' } }); }}>
+                 <button type="button" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[15px] lg:text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); setIsOpen(false); navigate('/settings', { state: { tab: 'datasetup' } }); }}>
                    <Database size={14} className="text-[var(--dp-text-secondary)]" /> Data Setup
                  </button>
-                 <NavLink to="/guide" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
+                 <NavLink to="/guide" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[15px] lg:text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
                    <BookOpen size={14} className="text-[var(--dp-text-secondary)]" /> Guide
                  </NavLink>
                  <div className="flex items-center justify-between px-4 py-1.5 pointer-coarse:min-h-[44px]">
-                   <span className="text-[12px] font-medium text-[var(--dp-text-secondary)]">Theme</span>
+                   <span className="text-[15px] lg:text-[12px] font-medium text-[var(--dp-text-secondary)]">Theme</span>
                    <ThemeSwitch inline />
                  </div>
                </div>
@@ -401,11 +409,15 @@ function useNavMarker(containerRef, deps) {
   useLayoutEffect(() => {
     const reveal = () => {
       const container = containerRef.current;
-      const link = container?.querySelector('a[aria-current="page"]');
-      if (!link || link.closest('[data-folded="true"]')) return;
+      const current = container?.querySelector('a[aria-current="page"]');
+      if (!current) return;
+      const folded = current.closest('[data-folded="true"]');
+      const link = folded ? folded.closest('[data-section]')?.querySelector('.dp-sidebar-group') : current;
+      if (!link) return;
       const c = container.getBoundingClientRect();
       const l = link.getBoundingClientRect();
-      const pad = 8;
+      // Clear of the 32px fades at the top and bottom edges.
+      const pad = 40;
       if (l.top < c.top + pad) container.scrollTop -= c.top + pad - l.top;
       else if (l.bottom > c.bottom - pad) container.scrollTop += l.bottom - (c.bottom - pad);
     };
@@ -485,7 +497,7 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId, foldable = t
   const touring = Boolean(useTutorial()?.active);
   const holdsCurrent = React.Children.toArray(children).some((child) => child?.props?.to && isCurrent(child.props.to, pathname));
   const [isSectionOpen, setIsSectionOpenState] = useState(() => {
-    if (!foldable) return true;
+    if (!foldable || holdsCurrent) return true; // the page you're on is never hidden
     const saved = readFolds()[title];
     return saved === undefined ? !defaultFolded : !saved;
   });
@@ -497,6 +509,13 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId, foldable = t
       localStorage.setItem(FOLDS_KEY, JSON.stringify(folds));
     } catch { /* storage unavailable: the fold just isn't remembered */ }
   };
+  // Going to a page inside a folded section opens it, so you can see where
+  // you are; that isn't saved as your choice.
+  const [seenPath, setSeenPath] = useState(pathname);
+  if (seenPath !== pathname) {
+    setSeenPath(pathname);
+    if (holdsCurrent && !isSectionOpen) setIsSectionOpenState(true);
+  }
   const showsItems = isSectionOpen || isCollapsed || touring;
 
   return (
@@ -515,6 +534,7 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId, foldable = t
           <span className="flex items-center gap-1.5">
             {title}
             {/* Folded, but the page you're on is inside. */}
+            {!isSectionOpen && <span aria-hidden="true" className="font-normal normal-case tracking-normal opacity-80">· {React.Children.toArray(children).filter(Boolean).length}</span>}
             {!isSectionOpen && holdsCurrent && <span aria-hidden="true" data-current-dot="" className="h-1.5 w-1.5 rounded-full bg-[var(--dp-accent-solid)]" />}
           </span>
           <ChevronDown size={12} aria-hidden="true" className={clsx("transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]", !isSectionOpen && "-rotate-90")} />
@@ -540,10 +560,15 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId, foldable = t
 // once before signing out. Closing the menu forgets the question.
 function SignOutRow({ onSignOut }) {
   const [asking, setAsking] = useState(false);
-  const row = 'flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[12px] font-medium w-full text-left transition-colors';
+  const signOutRef = useRef(null);
+  const cancel = () => {
+    setAsking(false);
+    requestAnimationFrame(() => signOutRef.current?.focus());
+  };
+  const row = 'flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[15px] lg:text-[12px] font-medium w-full text-left transition-colors';
   if (!asking) {
     return (
-      <button type="button" className={`${row} text-[var(--dp-red-text)] hover:bg-[var(--dp-red-bg)]`} onClick={() => setAsking(true)}>
+      <button ref={signOutRef} type="button" className={`${row} text-[var(--dp-red-text)] hover:bg-[var(--dp-red-bg)]`} onClick={() => setAsking(true)}>
         <LogOut size={14} aria-hidden="true" className="text-[var(--dp-red-text)] opacity-80" /> Sign Out
       </button>
     );
@@ -552,7 +577,7 @@ function SignOutRow({ onSignOut }) {
     <div role="group" aria-label="Sign out?" className="px-4 py-2">
       <p className="text-[12px] font-medium text-[var(--dp-text-primary)]">Sign out of Profit Tracker?</p>
       <div className="mt-2 flex gap-2">
-        <button type="button" autoFocus onClick={() => setAsking(false)} className="flex-1 rounded-md bg-[var(--dp-hover-bg)] px-3 py-1.5 pointer-coarse:min-h-[44px] text-[12px] font-medium text-[var(--dp-text-primary)]">Cancel</button>
+        <button type="button" autoFocus onClick={cancel} className="flex-1 rounded-md bg-[var(--dp-hover-bg)] px-3 py-1.5 pointer-coarse:min-h-[44px] text-[15px] lg:text-[12px] font-medium text-[var(--dp-text-primary)]">Cancel</button>
         <button type="button" onClick={onSignOut} className="flex-1 rounded-md bg-[var(--dp-red-bg)] px-3 py-1.5 pointer-coarse:min-h-[44px] text-[12px] font-semibold text-[var(--dp-red-text)]">Sign out</button>
       </div>
     </div>
@@ -580,7 +605,7 @@ function BadgeCount({ count, className }) {
 const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, badge = 0 }) => (
   <NavLink
     to={to}
-    aria-label={badge ? `${label}, ${badge} to do` : isCollapsed ? label : undefined}
+    aria-label={badge ? `${label}, ${badge} ${badge === 1 ? 'item' : 'items'}` : isCollapsed ? label : undefined}
     data-tip={isCollapsed ? (badge ? `${label} · ${badgeText(badge)}` : label) : undefined}
     data-tutorial-id={tutorialId}
     {...usePrefetchProps(to)}
@@ -668,11 +693,14 @@ const GlassBranchLabel = ({ label }) => (
 // Whether the nav has more rows below what's showing; the nav then fades out
 // at the bottom so it's clear there's more to scroll to.
 function useMoreBelow(navRef, deps) {
-  const [more, setMore] = useState(false);
+  const [more, setMore] = useState({ above: false, below: false });
   useEffect(() => {
     const nav = navRef.current;
     if (!nav) return undefined;
-    const check = () => setMore(nav.scrollTop + nav.clientHeight < nav.scrollHeight - 4);
+    const check = () => {
+      const next = { above: nav.scrollTop > 4, below: nav.scrollTop + nav.clientHeight < nav.scrollHeight - 4 };
+      setMore((prev) => (prev.above === next.above && prev.below === next.below ? prev : next));
+    };
     check();
     nav.addEventListener('scroll', check, { passive: true });
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(check) : null;
@@ -711,7 +739,7 @@ function useProfileMenu(isOpen, setOpen, rootRef, buttonRef) {
 // Collapsed sidebar: one label beside the icon on hover and on keyboard
 // focus (a native title shows on neither touch nor focus). It's fixed, so
 // the nav's scroll box doesn't clip it.
-function useCollapsedTooltip(containerRef, enabled) {
+function useCollapsedTooltip(containerRef, enabled, collapsed) {
   const [tip, setTip] = useState(null);
   useEffect(() => {
     const root = containerRef.current;
@@ -719,9 +747,14 @@ function useCollapsedTooltip(containerRef, enabled) {
     const show = (e) => {
       const el = e.target.closest?.('[data-tip]');
       if (!el || !root.contains(el)) return;
+      // Expanded, only the footer's icons need labels; collapsed, everything.
+      if (!collapsed && !el.closest('[data-footer-tips]')) return;
       if (e.type === 'focusin' && !e.target.matches(':focus-visible')) return;
       const r = el.getBoundingClientRect();
-      setTip({ text: el.getAttribute('data-tip'), top: r.top + r.height / 2, left: r.right + 10 });
+      // Beside the icon on the rail; above it in the expanded footer row.
+      setTip(collapsed
+        ? { text: el.getAttribute('data-tip'), top: r.top + r.height / 2, left: r.right + 10, side: 'right' }
+        : { text: el.getAttribute('data-tip'), top: r.top - 8, left: r.left + r.width / 2, side: 'top' });
     };
     const hide = (e) => {
       const el = e.target.closest?.('[data-tip]');
@@ -741,13 +774,14 @@ function useCollapsedTooltip(containerRef, enabled) {
       root.removeEventListener('focusout', hide);
       root.removeEventListener('scroll', clear, true);
     };
-  }, [containerRef, enabled]);
+  }, [containerRef, enabled, collapsed]);
   return enabled && tip ? (
     <span
       aria-hidden="true"
       data-sidebar-tooltip=""
-      className="pt-tooltip-in pointer-events-none fixed z-[60] -translate-y-1/2 whitespace-nowrap rounded-md bg-[var(--dp-text-primary)] px-2 py-1 text-[12px] font-medium text-[var(--dp-card-bg)] shadow-[0_4px_12px_rgba(0,0,0,0.25)]"
-      style={{ top: tip.top, left: tip.left }}
+      data-side={tip.side}
+      className="pt-tooltip-in pointer-events-none fixed z-[60] whitespace-nowrap rounded-md bg-[var(--dp-text-primary)] px-2 py-1 text-[12px] font-medium text-[var(--dp-card-bg)] shadow-[0_4px_12px_rgba(0,0,0,0.25)]"
+      style={{ top: tip.top, left: tip.left, transform: tip.side === 'top' ? 'translate(-50%, -100%)' : 'translateY(-50%)' }}
     >
       {tip.text}
     </span>

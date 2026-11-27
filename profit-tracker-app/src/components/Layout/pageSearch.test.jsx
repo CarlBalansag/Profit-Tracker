@@ -37,10 +37,13 @@ describe('Page search', () => {
     fireEvent.click(screen.getByRole('button', { name: /Search pages/ }));
     const input = screen.getByRole('combobox', { name: 'Page name' });
     fireEvent.change(input, { target: { value: 'tax' } });
+    expect(screen.getAllByRole('option').map((o) => o.textContent).some((t) => t.startsWith('Expenses'))).toBe(true);
     expect(screen.getAllByRole('option')[0]).toHaveAttribute('aria-selected', 'true');
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     expect(screen.getAllByRole('option')[1]).toHaveAttribute('aria-selected', 'true');
     fireEvent.change(input, { target: { value: 'zzz' } });
-    expect(screen.getByText('No page called “zzz”.')).toBeInTheDocument();
+    expect(screen.getByText(/No page called “zzz”/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show all pages' }));
+    expect(screen.getAllByRole('option').length).toBeGreaterThan(15);
   });
 });

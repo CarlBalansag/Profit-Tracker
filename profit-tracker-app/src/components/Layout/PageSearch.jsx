@@ -59,7 +59,12 @@ export default function PageSearch({ open, onClose, pages }) {
           <kbd className="hidden rounded border border-[color:var(--dp-border)] px-1.5 text-[11px] text-[var(--dp-text-label)] sm:inline">Esc</kbd>
         </div>
         <ul id="page-search-results" role="listbox" aria-label="Pages" className="max-h-[min(60vh,420px)] overflow-y-auto p-2">
-          {results.length === 0 && <li className="px-3 py-6 text-center text-[13px] text-[var(--dp-text-secondary)]">No page called “{query}”.</li>}
+          {results.length === 0 && (
+            <li className="px-3 py-6 text-center text-[13px] text-[var(--dp-text-secondary)]">
+              No page called “{query}”.{' '}
+              <button type="button" onClick={() => { setQuery(''); inputRef.current?.focus(); }} className="font-medium text-[var(--dp-accent-text)] underline underline-offset-2">Show all pages</button>
+            </li>
+          )}
           {results.map((page, i) => (
             <li
               key={`${page.to}-${page.label}`}

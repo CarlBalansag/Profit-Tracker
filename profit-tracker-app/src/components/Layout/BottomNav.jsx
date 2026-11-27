@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
-import { ArrowLeftRight, CirclePlus, DollarSign, LayoutDashboard, Menu, Package, Plus } from 'lucide-react';
+import { ArrowLeftRight, Boxes, CirclePlus, DollarSign, LayoutDashboard, Menu, Plus } from 'lucide-react';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 import { usePrefetchProps } from '../../hooks/usePrefetchPage';
 import { useTodoCount } from '../../hooks/useApi';
@@ -106,7 +106,7 @@ const BottomNav = ({ onMoreClick, isGlass }) => {
             <Plus size={20} className={clsx('transition-transform', addOpen && 'rotate-45')} aria-hidden="true" />
           </span>
         </button>
-        <Tab to="/inventory" label="Inventory" icon={Package} colors={colors} />
+        <Tab to="/inventory" label="Inventory" icon={Boxes} colors={colors} />
         <button
           type="button"
           aria-haspopup="dialog"

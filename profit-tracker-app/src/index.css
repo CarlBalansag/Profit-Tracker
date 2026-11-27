@@ -1496,6 +1496,19 @@ nav[aria-label="Main"] :is(a, button):focus-visible {
   mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
 }
 
+/* On the dark theme's red pill the accent ring is too faint, so it's white. */
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar a[aria-current="page"]:focus-visible {
+  outline-color: #ffffff;
+}
+.dp-nav-less {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 32px);
+  mask-image: linear-gradient(to bottom, transparent, #000 32px);
+}
+.dp-nav-less.dp-nav-more {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+}
+
 /* Collapsed rail: a hairline between groups, since their names are hidden. */
 .dp-rail > [data-section] + [data-section] {
   margin-top: 10px;

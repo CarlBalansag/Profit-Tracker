@@ -106,7 +106,7 @@ describe('Sidebar sections', () => {
 describe('Collapsed sidebar', () => {
   it('names each icon, keeps the to-do count, and shows a label on hover', () => {
     const { container } = renderSidebar({ isCollapsed: true });
-    const todo = screen.getByRole('link', { name: 'To-Do, 16 to do' });
+    const todo = screen.getByRole('link', { name: 'To-Do, 16 items' });
     expect(todo).toHaveTextContent('16');
     expect(screen.getByRole('link', { name: 'Shipping' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
@@ -187,5 +187,23 @@ describe('Phone drawer contents', () => {
     } finally {
       window.matchMedia = original;
     }
+  });
+});
+
+describe('Round 4 fixes', () => {
+  it('going to a page inside folded Books opens it, without saving that as your choice', async () => {
+    renderSidebar({ path: '/cashflow' });
+    expect(screen.getByRole('button', { name: /^books$/i })).toHaveAttribute('aria-expanded', 'false');
+    await act(async () => { fireEvent.click(screen.getByRole('link', { name: 'Expenses' })); });
+    expect(screen.getByRole('button', { name: /^books$/i })).toHaveAttribute('aria-expanded', 'true');
+    expect(localStorage.getItem('pt-sidebar-folds')).toBeNull();
+  });
+
+  it('Cancel on the sign-out question puts focus back on Sign Out', async () => {
+    renderSidebar();
+    fireEvent.click(screen.getByRole('button', { name: /tester/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign Out' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign Out' })).toHaveFocus());
   });
 });
