@@ -17,12 +17,12 @@ import { CHART_SERIES_REGISTRY } from '../../data/dashboardRegistry';
 // A theme can set --dp-chart-* (the Dashboard's dark theme does); otherwise
 // each series falls back to the general palette tokens.
 const SERIES_STYLE = {
-  totalRevenue: { color: 'var(--dp-chart-revenue, var(--dp-accent-light))', fillOpacity: 0.3 },
+  totalRevenue: { color: 'var(--dp-chart-revenue, var(--dp-text-primary))', fillOpacity: 0.16 },
   totalCost: { color: 'var(--dp-chart-spend, var(--dp-accent))', fillOpacity: 0.3 },
-  grossProfit: { color: 'var(--dp-chart-gross, var(--dp-text-primary))', fillOpacity: 0.16 },
-  cashback: { color: 'var(--dp-chart-cashback, var(--dp-green-text))', fillOpacity: 0.5 },
+  grossProfit: { color: 'var(--dp-chart-gross, var(--dp-warning-text))', fillOpacity: 0.16 },
+  cashback: { color: 'var(--dp-chart-cashback, var(--dp-green-text))', fillOpacity: 0.3 },
   netProfit: { color: 'var(--dp-chart-net, var(--dp-info-text))', fillOpacity: 0.16 },
-  totalTax: { color: 'var(--dp-chart-tax, var(--dp-warning-text))', fillOpacity: 0.16 },
+  totalTax: { color: 'var(--dp-chart-tax, var(--dp-accent-light))', fillOpacity: 0.16 },
   soldCost: { color: 'var(--dp-chart-soldcost, var(--dp-text-muted))', fillOpacity: 0.16 },
 };
 
@@ -285,7 +285,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
                 onClick={() => onTrendModeChange(val)}
                 className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] ${
                   trendMode === val
-                    ? 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]'
+                    ? 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent-text)]'
                     : 'text-[var(--dp-text-muted)] hover:text-[var(--dp-text-primary)]'
                 }`}
               >
@@ -464,8 +464,8 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
 
         {isEmpty && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="rounded-lg border border-[var(--dp-border)] bg-[var(--dp-card-bg)] px-4 py-2 text-xs text-[var(--dp-text-muted)]">
-              Profit lines appear after sales data is recorded.
+            <div className="rounded-lg border border-[var(--dp-border)] bg-[var(--dp-card-bg)] px-4 py-2 text-[13px] text-[var(--dp-text-secondary)]">
+              No sales or purchases in this period.
             </div>
           </div>
         )}

@@ -84,7 +84,7 @@ describe('Dashboard KPI cards', () => {
   it('show the mode tag small on the title line, never wrapping, and no tag in All', () => {
     mount('premium');
     expect(screen.queryByText(/sold via/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Cashout' }));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Sales type' })).getByRole('button', { name: 'Cashout' }));
     const tag = screen.getAllByText('sold via Cashout')[0];
     expect(tag).toHaveClass('truncate', 'text-[9px]');
     const titleLine = tag.parentElement;
@@ -105,7 +105,7 @@ describe('Dashboard KPI cards', () => {
   it('opens the Status Pipeline on All, the first tab, showing every step', () => {
     mount('premium');
     const tabs = within(screen.getByRole('group', { name: 'Pipeline view' })).getAllByRole('button');
-    expect(tabs.map((t) => t.textContent)).toEqual(['All', 'Cash-out', 'Marketplace']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['All', 'Cashout', 'Marketplace']);
     expect(tabs[0]).toHaveAttribute('aria-pressed', 'true');
     const onHand = screen.getByRole('button', { name: /^On Hand/ });
     expect(within(onHand).getByText('1234', { selector: '.sr-only' })).toBeInTheDocument();
@@ -114,12 +114,53 @@ describe('Dashboard KPI cards', () => {
 
   it('switches the pipeline to the workflow the dashboard filter picks, and back to All', () => {
     mount('premium');
-    fireEvent.click(screen.getByRole('button', { name: 'Cashout' }));
+    const salesType = within(screen.getByRole('group', { name: 'Sales type' }));
+    fireEvent.click(salesType.getByRole('button', { name: 'Cashout' }));
+    expect(salesType.getByRole('button', { name: 'Cashout' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /^Scanned In/ })).toBeInTheDocument();
-    // The dashboard filter's button comes before the pipeline's own tab.
-    fireEvent.click(screen.getAllByRole('button', { name: 'Marketplace' })[0]);
+    fireEvent.click(salesType.getByRole('button', { name: 'Marketplace' }));
     expect(screen.getByRole('button', { name: /^Outbound/ })).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole('button', { name: 'All' })[0]);
+    fireEvent.click(salesType.getByRole('button', { name: 'All' }));
     expect(screen.getByRole('button', { name: /^On Hand/ })).toBeInTheDocument();
+  });
+
+  it('lets a KPI card be opened from the keyboard and its formula closed with Escape', () => {
+    mount('premium');
+    expect(screen.getByRole('button', { name: 'Net Profit: see these transactions' })).toBeInTheDocument();
+    const info = screen.getByRole('button', { name: 'How Net Profit is calculated' });
+    fireEvent.click(info);
+    expect(screen.getByRole('dialog', { name: 'How Net Profit is calculated' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'How Net Profit is calculated' })).not.toBeInTheDocument();
+  });
+
+  it('has no dead Share button and names the settings button', () => {
+    mount('premium');
+    expect(screen.queryByText(/Generate Share Card/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Dashboard settings' })).toBeInTheDocument();
+  });
+
+  it('uses h2 for section titles under the page h1', () => {
+    mount('premium');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Welcome back/);
+    expect(screen.getByRole('heading', { level: 2, name: 'Status Pipeline' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Recent Sales' })).toBeInTheDocument();
+    expect(screen.queryAllByRole('heading', { level: 3 })).toHaveLength(0);
+  });
+});
+
+describe('Dashboard empty period', () => {
+  it('says the period has no sales and offers All Time', () => {
+    const saved = data.recentTransactions;
+    data.recentTransactions = [];
+    try {
+      mount('premium');
+      expect(screen.getByText('No sales in the last 30 days.')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Show All Time' }));
+      expect(within(screen.getByRole('group', { name: 'Date range' })).getByRole('button', { name: 'All Time' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByText('No sales recorded yet.')).toBeInTheDocument();
+    } finally {
+      data.recentTransactions = saved;
+    }
   });
 });
