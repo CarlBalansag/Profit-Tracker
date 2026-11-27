@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Sidebar from './Sidebar';
@@ -18,7 +18,7 @@ const renderSidebar = ({ isCollapsed = false } = {}) => render(
 );
 
 describe('Sidebar account menu', () => {
-  it('says whether it is open, and closes on Escape (focus back on the button) or a click outside', () => {
+  it('says whether it is open, and closes on Escape (focus back on the button) or a click outside', async () => {
     renderSidebar();
     const account = screen.getByRole('button', { expanded: false, name: /tester/ });
     fireEvent.click(account);
@@ -26,12 +26,13 @@ describe('Sidebar account menu', () => {
     expect(screen.getByText('Sign Out')).toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByText('Sign Out')).not.toBeInTheDocument();
+    expect(account).toHaveAttribute('aria-expanded', 'false');
     expect(account).toHaveFocus();
+    await waitFor(() => expect(screen.queryByText('Sign Out')).not.toBeInTheDocument());
 
     fireEvent.click(account);
     fireEvent.pointerDown(document.body);
-    expect(screen.queryByText('Sign Out')).not.toBeInTheDocument();
+    expect(account).toHaveAttribute('aria-expanded', 'false');
   });
 });
 

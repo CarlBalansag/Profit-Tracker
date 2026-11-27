@@ -3,12 +3,12 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, ArrowLeftRight, Boxes,
   ReceiptText, FileText, ChartLine, Wallet, CreditCard as CreditCardIcon,
-  Settings, History, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins, ListChecks, Zap
+  Settings, History, ChevronDown, PanelLeftClose, PanelLeft, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins, ListChecks, Zap
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
-import { useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useAuth } from '../../context/AuthContext';
 import { SCHEDULE_C_ENABLED } from '../../config/features';
 import { CURRENT_VERSION } from '../../data/changelog';
@@ -19,6 +19,8 @@ import { useCashoutProviders } from '../../hooks/useCashoutProviders';
 import { usePrefetchProps } from '../../hooks/usePrefetchPage';
 import { useTodoCount } from '../../hooks/useApi';
 
+const MotionDiv = motion.div;
+
 const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'neon-dark' }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
@@ -28,6 +30,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
   const hasCashoutAccess = Array.isArray(cashoutProviders) && cashoutProviders.length > 0;
   const todoCount = useTodoCount();
   const isGlass = uiStyle === 'glassmorphism-brown';
+  const reduceMotion = useReducedMotion();
   const navRef = useRef(null);
   const marker = useNavMarker(navRef, [isCollapsed, isGlass, hasCashoutAccess, isOpen]);
   const profileRootRef = useRef(null);
@@ -62,8 +65,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
               title="Profit Tracker"
               aria-label="Profit Tracker dashboard"
             >
-              {/* Keyed on open state so the intro replays when the menu opens or closes. */}
-              <AnimatedLogo key={isOpen ? 'open' : 'closed'} size={28} label={null} />
+              <AnimatedLogo size={28} label={null} />
             </button>
 
             <NavMarker marker={marker} className="rounded-xl bg-[#d8a65a]/10" />
@@ -111,7 +113,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
       <aside
         ref={drawerRef}
         className={clsx(
-          "fixed inset-y-0 left-0 z-50 flex flex-col transition-all duration-300 ease-in-out lg:static lg:translate-x-0 border-r border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] dp-elevated dp-sidebar",
+          "fixed inset-y-0 left-0 z-50 flex flex-col transition-[width,translate] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:duration-150 lg:static lg:translate-x-0 border-r border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] dp-elevated dp-sidebar",
           isOpen ? "translate-x-0" : "-translate-x-full",
           isCollapsed ? "w-[72px]" : "w-64 lg:w-60"
         )}
@@ -119,10 +121,8 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
       >
         <div className={clsx("flex items-center py-5 border-b border-[color:var(--dp-border)]", isCollapsed ? "justify-center px-0 flex-col gap-2" : "gap-3 px-4")}>
           <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center">
-            {/* Keyed on the sidebar's state so the intro replays when it is
-                collapsed or expanded, or opened or closed on mobile. */}
+            {/* Draws once when the app loads, not on every collapse or drawer open. */}
             <AnimatedLogo
-              key={`${isCollapsed ? 'collapsed' : 'expanded'}-${isOpen ? 'open' : 'closed'}`}
               size={30}
               label={isCollapsed ? 'Profit Tracker' : null}
             />
@@ -232,8 +232,15 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             )}
           </button>
 
+          <AnimatePresence>
           {isProfileMenuOpen && (
-            <div id={profileMenuId} className="absolute bottom-full left-2 right-2 mb-2 bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated-hover rounded-lg py-2 z-50 overflow-hidden">
+            <MotionDiv
+              key="profile-menu"
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] } }}
+              exit={reduceMotion ? { opacity: 0, transition: { duration: 0.1 } } : { opacity: 0, y: 4, scale: 0.98, transition: { duration: 0.1, ease: 'easeIn' } }}
+              style={{ transformOrigin: 'bottom center' }}
+              id={profileMenuId} className="absolute bottom-full left-2 right-2 mb-2 bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated-hover rounded-lg py-2 z-50 overflow-hidden">
                <NavLink to="/settings" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-11 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
                  <Settings size={14} className="text-[var(--dp-text-secondary)]" /> Settings
                </NavLink>
@@ -261,8 +268,9 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
                <button className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-11 text-[12px] font-medium text-[var(--dp-red-text)] hover:bg-[var(--dp-red-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); logout(); }}>
                  <PanelLeftClose size={14} className="rotate-180 text-[var(--dp-red-text)] opacity-80" /> Sign Out
                </button>
-            </div>
+            </MotionDiv>
           )}
+          </AnimatePresence>
         </div>
         {tooltip}
       </aside>
@@ -274,12 +282,12 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
 
 // The active-item highlight is ONE element per sidebar that glides to the
 // active link: it measures the link (NavLink marks it aria-current="page")
-// inside the nav and moves there with a springy CSS transition. A route
+// inside the nav and moves there with a decelerating CSS transition. A route
 // change animates; everything else that moves the link (collapsing the
 // sidebar, folding a section, resizing) just follows it with no animation.
-// With reduced motion the glide is a short ease with no overshoot. No marker
+// With reduced motion the glide is a short, plain ease. No marker
 // shows when the active page has no item, or its section is folded.
-const MARKER_GLIDE = 'cubic-bezier(.3,1.35,.5,1)';
+const MARKER_GLIDE = 'cubic-bezier(0.16,1,0.3,1)';
 
 function useNavMarker(containerRef, deps) {
   const { pathname } = useLocation();
@@ -290,7 +298,7 @@ function useNavMarker(containerRef, deps) {
     const container = containerRef.current;
     if (!container) return;
     const link = container.querySelector('a[aria-current="page"]');
-    if (!link || link.closest('.hidden')) {
+    if (!link || link.closest('.hidden, [data-folded="true"]')) {
       setBox((prev) => (prev ? { ...prev, show: false, href: null, animate: false } : prev));
       return;
     }
@@ -336,7 +344,7 @@ function useNavMarker(containerRef, deps) {
     }
     // Folding a section flips a class without resizing the nav.
     const mo = new MutationObserver(follow);
-    mo.observe(container, { attributes: true, attributeFilter: ['class'], subtree: true });
+    mo.observe(container, { attributes: true, attributeFilter: ['class', 'data-folded'], subtree: true });
     return () => { ro?.disconnect(); mo.disconnect(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [measure, ...deps]);
@@ -346,7 +354,7 @@ function useNavMarker(containerRef, deps) {
 
 const NavMarker = ({ marker, className }) => {
   const reduceMotion = useReducedMotion();
-  const glide = reduceMotion ? '0.15s ease-out' : `0.45s ${MARKER_GLIDE}`;
+  const glide = reduceMotion ? '0.15s ease-out' : `0.35s ${MARKER_GLIDE}`;
   return (
     <span
       aria-hidden="true"
@@ -395,11 +403,20 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId }) => {
           className="w-full flex items-center justify-between px-3 py-1 text-[11px] font-medium uppercase tracking-[1.2px] text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] transition-colors"
         >
           <span>{title}</span>
-          {isSectionOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          <ChevronDown size={12} aria-hidden="true" className={clsx("transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]", !isSectionOpen && "-rotate-90")} />
         </button>
       )}
-      <div data-section-body="" className={clsx("space-y-0.5", showsItems ? "block" : "hidden")}>
-        {children}
+      {/* The rows slide open and shut (grid 0fr <-> 1fr); folded rows are inert. */}
+      <div
+        data-section-body=""
+        data-folded={showsItems ? 'false' : 'true'}
+        inert={!showsItems}
+        className="grid transition-[grid-template-rows,opacity] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none"
+        style={{ gridTemplateRows: showsItems ? '1fr' : '0fr', opacity: showsItems ? 1 : 0 }}
+      >
+        <div className="-mx-1 min-h-0 overflow-hidden px-1">
+          <div className="space-y-0.5 py-px">{children}</div>
+        </div>
       </div>
     </div>
   );
@@ -407,6 +424,21 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId }) => {
 
 // A count on a nav item (the To-Do list). Hidden at zero; 99+ past that.
 const badgeText = (count) => (count > 99 ? '99+' : String(count));
+
+// The count pops once when it changes (a to-do done or added), never on load.
+function BadgeCount({ count, className }) {
+  const [shown, setShown] = useState(count);
+  const [ticks, setTicks] = useState(0);
+  if (shown !== count) {
+    setShown(count);
+    setTicks((t) => t + 1);
+  }
+  return (
+    <span key={ticks} aria-hidden="true" data-ticks={ticks} className={clsx(className, ticks > 0 && 'pt-badge-tick')}>
+      {badgeText(count)}
+    </span>
+  );
+}
 
 const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, badge = 0 }) => (
   <NavLink
@@ -428,8 +460,8 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, badge = 0 }) 
     <Icon size={16} className="flex-shrink-0" />
     {!isCollapsed && <span className="truncate flex-1 disabled-link">{label}</span>}
     {badge > 0 && (isCollapsed
-      ? <span aria-hidden="true" className="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-[var(--dp-accent-solid)] px-1 text-center text-[10px] font-semibold leading-4 text-white tabular-nums">{badgeText(badge)}</span>
-      : <span aria-hidden="true" className="min-w-[20px] rounded-full bg-[var(--dp-accent-solid)] px-1.5 text-center text-[11px] font-semibold leading-5 text-white tabular-nums">{badgeText(badge)}</span>)}
+      ? <BadgeCount count={badge} className="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-[var(--dp-accent-solid)] px-1 text-center text-[10px] font-semibold leading-4 text-white tabular-nums" />
+      : <BadgeCount count={badge} className="min-w-[20px] rounded-full bg-[var(--dp-accent-solid)] px-1.5 text-center text-[11px] font-semibold leading-5 text-white tabular-nums" />)}
   </NavLink>
 );
 
@@ -555,7 +587,7 @@ function useCollapsedTooltip(containerRef, enabled) {
     <span
       aria-hidden="true"
       data-sidebar-tooltip=""
-      className="pointer-events-none fixed z-[60] -translate-y-1/2 whitespace-nowrap rounded-md bg-[var(--dp-text-primary)] px-2 py-1 text-[12px] font-medium text-[var(--dp-card-bg)] shadow-[0_4px_12px_rgba(0,0,0,0.25)]"
+      className="pt-tooltip-in pointer-events-none fixed z-[60] -translate-y-1/2 whitespace-nowrap rounded-md bg-[var(--dp-text-primary)] px-2 py-1 text-[12px] font-medium text-[var(--dp-card-bg)] shadow-[0_4px_12px_rgba(0,0,0,0.25)]"
       style={{ top: tip.top, left: tip.left }}
     >
       {tip.text}
