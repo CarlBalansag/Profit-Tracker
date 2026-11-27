@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, ArrowLeftRight, Boxes,
   ReceiptText, FileText, ChartLine, Wallet, CreditCard as CreditCardIcon,
-  Settings, History, ChevronDown, PanelLeftClose, PanelLeft, Database, LogOut, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins, ListChecks, Zap
+  Settings, History, ChevronDown, PanelLeftClose, PanelLeft, Database, LogOut, Search, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins, ListChecks, Zap
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
@@ -15,6 +15,8 @@ import { CURRENT_VERSION } from '../../data/changelog';
 import VersionHistoryModal from '../VersionHistoryModal';
 import ThemeSwitch from '../UI/ThemeSwitch';
 import AnimatedLogo from '../UI/AnimatedLogo';
+import PageSearch from './PageSearch';
+import { pageList } from './pageList';
 import { useCashoutProviders } from '../../hooks/useCashoutProviders';
 import { usePrefetchProps } from '../../hooks/usePrefetchPage';
 import { useTodoCount } from '../../hooks/useApi';
@@ -41,6 +43,22 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
   const todoCount = useTodoCount();
   const isGlass = uiStyle === 'glassmorphism-brown';
   const reduceMotion = useReducedMotion();
+  // Ctrl+K / ⌘K opens page search from anywhere.
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const pages = pageList({ hasCashoutAccess, scheduleC: SCHEDULE_C_ENABLED });
+  const searchKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘K' : 'Ctrl K';
+  const openSearch = () => { setIsOpen(false); setSearchOpen(true); };
+  const search = <PageSearch open={searchOpen} onClose={() => setSearchOpen(false)} pages={pages} />;
   const navRef = useRef(null);
   const marker = useNavMarker(navRef, [isCollapsed, isGlass, hasCashoutAccess, isOpen]);
   const profileRootRef = useRef(null);
@@ -117,6 +135,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
             <GlassNavButton icon={Settings} label="Settings" onClick={() => navigate('/settings')} />
           </div>
         </aside>
+        {search}
       </>
     );
   }
@@ -167,6 +186,28 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
             aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {isCollapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
+          </button>
+        </div>
+
+        <div className={clsx("px-2 pt-3", isCollapsed && "flex justify-center")}>
+          <button
+            type="button"
+            onClick={openSearch}
+            aria-label={isCollapsed ? 'Search pages' : undefined}
+            aria-keyshortcuts="Control+K Meta+K"
+            data-tip={isCollapsed ? `Search pages · ${searchKey}` : undefined}
+            className={clsx(
+              "flex items-center rounded-md border border-[color:var(--dp-border)] text-[var(--dp-text-label)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors",
+              isCollapsed ? "h-9 w-9 justify-center" : "w-full gap-2.5 px-3 py-1.5 pointer-coarse:min-h-[44px] text-[13px] lg:text-[12px]"
+            )}
+          >
+            <Search size={14} aria-hidden="true" />
+            {!isCollapsed && (
+              <>
+                <span className="flex-1 text-left">Search pages</span>
+                <kbd className="hidden rounded border border-[color:var(--dp-border)] px-1 text-[10px] lg:inline">{searchKey}</kbd>
+              </>
+            )}
           </button>
         </div>
 
@@ -305,6 +346,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
         </div>
         {tooltip}
       </aside>
+      {search}
 
       <VersionHistoryModal open={showChangelog} onClose={() => setShowChangelog(false)} />
     </>
