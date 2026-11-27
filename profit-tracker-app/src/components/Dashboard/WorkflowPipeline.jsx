@@ -96,6 +96,7 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
   // so the strip fits what's actually going on; otherwise every step of the
   // workflow, 0 or not. Always in workflow order.
   const stages = (pipeline?.stages || []).filter((stage) => !hideEmpty || stage.count > 0);
+  const hiddenCount = (pipeline?.stages || []).length - stages.length;
   const open = stages.find((stage) => stage.status === openStatus);
 
   // Which steps just arrived (to bring them in left to right) and whether any
@@ -167,7 +168,11 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
                   }`}
                 >
                   {/* Room for two lines, so a long step name never makes its card taller. */}
-                  <span className="dp-card-title line-clamp-2 min-h-[32px] text-[11px] font-medium uppercase leading-4 tracking-[0.08em] text-[var(--dp-text-label)] transition-colors duration-300">{displayLabel(stage.status)}</span>
+                  <span className="dp-card-title line-clamp-2 min-h-[32px] text-[11px] font-medium uppercase leading-4 tracking-[0.08em] text-[var(--dp-text-label)] transition-colors duration-300">
+                    {/* Phones lose the arrows between steps, so the order is numbered. */}
+                    {isPhone && <span aria-hidden="true">{index + 1}. </span>}
+                    {displayLabel(stage.status)}
+                  </span>
                   <span className={`dp-card-value mt-1.5 text-[28px] font-bold leading-none tabular-nums transition-colors duration-300 ${empty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-primary)]'}`}>
                     <CountUp value={stage.count} pending={pending} />
                   </span>
@@ -180,6 +185,12 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
           })}
         </AnimatePresence>
       </div>
+
+      {hideEmpty && hiddenCount > 0 && stages.length > 0 && (
+        <p className="-mt-2 text-[12px] text-[var(--dp-text-secondary)]">
+          {hiddenCount} {hiddenCount === 1 ? 'step has' : 'steps have'} nothing in {hiddenCount === 1 ? 'it' : 'them'} right now and {hiddenCount === 1 ? 'is' : 'are'} hidden.
+        </p>
+      )}
 
       {/* The item list opens and closes by growing and shrinking, not a jump. */}
       <AnimatePresence initial={false}>

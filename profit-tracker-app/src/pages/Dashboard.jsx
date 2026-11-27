@@ -344,7 +344,9 @@ const Dashboard = () => {
             pipeline={workflowPipelines[pipelineView]}
             pending={refreshing}
             onNavigate={navigate}
-            hideEmpty={pipelineView === 'all'}
+            // Every view shows only the steps with something in them; the
+            // pipeline says how many empty ones it left out.
+            hideEmpty
           />
         </div>
       );

@@ -37,10 +37,11 @@ describe('WorkflowPipeline', () => {
     expect(within(steps[2]).getByText('$12,345', { selector: '.sr-only' })).toBeInTheDocument();
   });
 
-  it('leaves out steps at 0 when asked (the All tab)', () => {
+  it('leaves out steps at 0 when asked, and says so', () => {
     render(<WorkflowPipeline pipeline={pipeline} hideEmpty />);
     expect(screen.queryByRole('button', { name: /^Outbound/ })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Paid/ })).toBeInTheDocument();
+    expect(screen.getByText('1 step has nothing in it right now and is hidden.')).toBeInTheDocument();
   });
 
   it('lists a step\'s items when clicked, and closes on a second click', async () => {
