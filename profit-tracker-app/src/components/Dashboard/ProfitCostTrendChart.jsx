@@ -154,9 +154,12 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
   const compact = width > 0 && width < 460;
 
   const geo = useMemo(() => {
-    const allValues = points.flatMap(p => activeSeries.map(s => p[s.id]));
-    // Amounts are never shown below $0, so the axis always starts at zero.
-    const ticks = niceTicks(0, Math.max(0, ...allValues), 5);
+    // Scale to the lines actually showing (switching Revenue off lets the
+    // profit line fill the chart), and go below $0 when there is a loss so
+    // a losing day never looks like breaking even.
+    const shown = activeSeries.filter(s => !hidden.has(s.id));
+    const allValues = points.flatMap(p => (shown.length ? shown : activeSeries).map(s => p[s.id] || 0));
+    const ticks = niceTicks(Math.min(0, ...allValues), Math.max(0, ...allValues), 5);
     const yMin = ticks[0];
     const yMax = ticks[ticks.length - 1];
     const left = compact ? 44 : 60;
@@ -167,7 +170,7 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
     const xAt = asBars
       ? i => plot.left + step * (i + 0.5)
       : i => (n > 1 ? plot.left + i * step : plot.left + plot.width / 2);
-    const yAt = v => plot.top + plot.height - ((Math.max(0, v) - yMin) / (yMax - yMin || 1)) * plot.height;
+    const yAt = v => plot.top + plot.height - (((v || 0) - yMin) / (yMax - yMin || 1)) * plot.height;
     const baseline = yAt(0);
     const groupW = Math.min(64, step * 0.78);
     const barW = groupW / Math.max(1, activeSeries.length);
@@ -178,13 +181,14 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
         ? `${linePath}L${pts[pts.length - 1][0]},${baseline}L${pts[0][0]},${baseline}Z`
         : '';
       const bars = asBars
-        ? pts.map(([x, y]) => [x - groupW / 2 + k * barW + barW * 0.08, y, Math.max(1, barW * 0.84), Math.max(0, baseline - y)])
+        // A loss hangs below the zero line.
+        ? pts.map(([x, y]) => [x - groupW / 2 + k * barW + barW * 0.08, Math.min(y, baseline), Math.max(1, barW * 0.84), Math.abs(baseline - y)])
         : null;
       return { ...s, pts, linePath, areaPath, bars };
     });
     const labelEvery = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(plot.width / (compact ? 58 : 56)))));
     return { ticks, plot, xAt, yAt, step, series, labelEvery, n };
-  }, [points, width, height, compact, activeSeries, asBars]);
+  }, [points, width, height, compact, activeSeries, asBars, hidden]);
 
   // ---- animation ----
   const stopAll = useCallback(() => {
