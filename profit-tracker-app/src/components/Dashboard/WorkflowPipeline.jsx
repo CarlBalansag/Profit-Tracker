@@ -198,7 +198,7 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
       </div>
 
       {hideEmpty && hiddenCount > 0 && stages.length > 0 && (
-        <p className="-mt-2 text-[12px] text-[var(--dp-text-secondary)]">
+        <p className="-mt-2 text-[12px] text-[var(--dp-text-secondary)] [text-wrap:pretty]">
           {hiddenCount} {hiddenCount === 1 ? 'step has' : 'steps have'} nothing in {hiddenCount === 1 ? 'it' : 'them'} right now and {hiddenCount === 1 ? 'is' : 'are'} hidden.
         </p>
       )}
