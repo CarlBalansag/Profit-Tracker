@@ -4,4 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| redesign | Impeccable critique + fixes for the Dashboard | profit-tracker-app/src/pages/Dashboard.jsx, profit-tracker-app/src/components/Dashboard/, Dashboard styles in profit-tracker-app/src/index.css | In progress | 2026-11-26 |
+| redesign | Impeccable critique + fixes for the Dashboard and sidebar, plus motion | profit-tracker-app/src/pages/Dashboard.jsx, profit-tracker-app/src/components/Dashboard/, profit-tracker-app/src/components/Layout/Sidebar.jsx, Shell.jsx, sidebar tests, profit-tracker-app/src/components/UI/CountUp.jsx, Dashboard + sidebar styles in profit-tracker-app/src/index.css | In progress | 2026-11-26 |
