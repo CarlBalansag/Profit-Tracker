@@ -160,7 +160,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
         )}
         onClick={(e) => { if (e.target.closest('a')) setIsOpen(false); }}
       >
-        <div className={clsx("flex items-center py-5 border-b border-[color:var(--dp-border)]", isCollapsed ? "justify-center px-0 flex-col gap-2" : "gap-3 px-4")}>
+        <div className={clsx("flex items-center py-3 lg:py-3.5 border-b border-[color:var(--dp-border)]", isCollapsed ? "justify-center px-0 flex-col gap-2" : "gap-3 px-4")}>
           <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center">
             {/* Draws once when the app loads, not on every collapse or drawer open. */}
             <AnimatedLogo
@@ -189,7 +189,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
           </button>
         </div>
 
-        <div className={clsx("px-2 pt-3", isCollapsed && "flex justify-center")}>
+        <div className={clsx("px-2 pt-2", isCollapsed && "flex justify-center")}>
           <button
             type="button"
             onClick={openSearch}
@@ -211,7 +211,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
           </button>
         </div>
 
-        <nav ref={navRef} className={clsx("relative flex-1 py-3 px-2 space-y-3 overflow-y-auto overflow-x-hidden dp-scrollbar", isCollapsed && "dp-rail", moreBelow && "dp-nav-more", moreAbove && "dp-nav-less")}>
+        <nav ref={navRef} aria-label="Pages" className={clsx("relative flex-1 py-1.5 px-2 space-y-2 overflow-y-auto overflow-x-hidden dp-scrollbar", isCollapsed && "dp-rail", moreBelow && "dp-nav-more", moreAbove && "dp-nav-less")}>
           <NavMarker marker={marker} className="!mt-0 rounded-md bg-[var(--dp-accent-bg)]" />
           {/* Grouped by how a reseller works: today's work, buying and selling,
               shipping, money, then the bookkeeping (folded by default). */}
@@ -322,14 +322,13 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
               animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] } }}
               exit={reduceMotion ? { opacity: 0, transition: { duration: 0.1 } } : { opacity: 0, y: 4, scale: 0.98, transition: { duration: 0.1, ease: 'easeIn' } }}
               style={{ transformOrigin: 'bottom center' }}
-              id={profileMenuId} className="absolute bottom-full left-2 right-2 mb-2 bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated-hover rounded-lg py-2 z-50 overflow-hidden">
+              id={profileMenuId} className={clsx("absolute bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated-hover rounded-lg py-2 z-50 overflow-hidden", isCollapsed ? "bottom-0 left-full ml-2 w-56" : "bottom-full left-2 right-2 mb-2")} data-menu-box="">
                <NavLink to="/settings" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[15px] lg:text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
                  <Settings size={14} className="text-[var(--dp-text-secondary)]" /> Settings
                </NavLink>
                <NavLink to="/activity" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[15px] lg:text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
                  <History size={14} className="text-[var(--dp-text-secondary)]" /> Activity
                </NavLink>
-               {/* Phone drawer only: the items the desktop sidebar keeps in its footer. */}
                {/* On phones and on the collapsed rail: the tools the desktop footer shows. */}
                <div className={isCollapsed ? undefined : 'lg:hidden'}>
                  <div className="h-px w-full bg-[var(--dp-border)] my-1"></div>
@@ -632,7 +631,7 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, badge = 0 }) 
     <Icon size={16} className={clsx("flex-shrink-0", !isCollapsed && "max-lg:size-[18px]")} />
     {!isCollapsed && <span className="truncate flex-1 disabled-link">{label}</span>}
     {badge > 0 && (isCollapsed
-      ? <BadgeCount count={badge} className="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-[var(--dp-text-primary)] px-1 text-center text-[10px] font-semibold leading-4 text-[var(--dp-card-bg)] tabular-nums" />
+      ? <BadgeCount count={badge} className="absolute -right-1 -top-1 min-w-[16px] rounded-full bg-[var(--dp-text-primary)] px-1 text-center text-[10px] font-semibold leading-4 text-[var(--dp-card-bg)] tabular-nums" />
       : <BadgeCount count={badge} className="min-w-[20px] rounded-full bg-[var(--dp-text-primary)] px-1.5 text-center text-[11px] font-semibold leading-5 text-[var(--dp-card-bg)] tabular-nums" />)}
   </NavLink>
 );

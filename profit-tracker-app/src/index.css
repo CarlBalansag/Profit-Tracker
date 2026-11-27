@@ -1509,6 +1509,10 @@ nav[aria-label="Main"] :is(a, button):focus-visible {
   mask-image: linear-gradient(to bottom, transparent, #000 32px, #000 calc(100% - 32px), transparent);
 }
 
+/* The rail is only 72px wide: no visible scrollbar (it still scrolls). */
+.dp-rail { scrollbar-width: none; }
+.dp-rail::-webkit-scrollbar { display: none; }
+
 /* Collapsed rail: a hairline between groups, since their names are hidden. */
 .dp-rail > [data-section] + [data-section] {
   margin-top: 10px;
