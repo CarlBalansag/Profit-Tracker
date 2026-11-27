@@ -279,7 +279,7 @@ const Dashboard = () => {
         <div key="statCards">
         <div ref={statsRowRef} data-tutorial-id="dashboard-stats" className={isGlass
           ? `grid grid-cols-2 ${statColClass} gap-3 3xl:gap-4 max-sm:[&>*:first-child]:col-span-2 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both`
-          : "grid min-w-0 grid-cols-2 gap-3 sm:gap-4 pb-4 lg:grid-cols-[repeat(auto-fit,minmax(180px,1fr))] max-sm:[&>*:first-child]:col-span-2 animate-in fade-in duration-300 fill-mode-both"
+          : "pt-tiles-in grid min-w-0 grid-cols-2 gap-3 sm:gap-4 pb-4 lg:grid-cols-[repeat(auto-fit,minmax(180px,1fr))] max-sm:[&>*:first-child]:col-span-2"
         }>
           {visibleStatCards.map(cardConfig => {
             const base = STAT_CARD_REGISTRY[cardConfig.id];
@@ -1568,10 +1568,10 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], b
               tabIndex={-1}
               role="dialog"
               aria-label={`How ${title} is calculated`}
-              className={`fixed w-[280px] rounded-2xl outline-none ${isGlass ? 'bg-[#1a1c23] border-white/10 shadow-2xl' : 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] dp-elevated'} border p-4 z-[9999] animate-in fade-in duration-150 ${
-                popoverPosition === 'bottom' ? 'slide-in-from-top-1' : 'slide-in-from-bottom-1'
-              }`}
+              className={`fixed w-[280px] rounded-2xl outline-none ${isGlass ? 'bg-[#1a1c23] border-white/10 shadow-2xl' : 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] dp-elevated'} border p-4 z-[9999] pt-pop-in`}
               style={{
+                // Grows out of the (i) at the card's bottom-right corner.
+                transformOrigin: popoverPosition === 'bottom' ? 'top right' : 'bottom right',
                 left: popoverCoords.left,
                 top: popoverCoords.top,
                 bottom: popoverCoords.bottom,

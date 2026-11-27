@@ -1303,11 +1303,34 @@ body,
 }
 .pt-tooltip-in { animation: pt-tooltip-in 140ms cubic-bezier(0.16, 1, 0.3, 1); }
 
+/* Dashboard: KPI tiles rise in order on first load (40ms apart, 280ms at
+   most), and a tile's (i) explanation grows out of the icon. `translate` and
+   fill-mode backwards leave the tiles' own hover transform alone. */
+@keyframes pt-rise {
+  from { opacity: 0; translate: 0 8px; }
+  to { opacity: 1; translate: 0 0; }
+}
+.pt-tiles-in > * { animation: pt-rise 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+.pt-tiles-in > :nth-child(2) { animation-delay: 40ms; }
+.pt-tiles-in > :nth-child(3) { animation-delay: 80ms; }
+.pt-tiles-in > :nth-child(4) { animation-delay: 120ms; }
+.pt-tiles-in > :nth-child(5) { animation-delay: 160ms; }
+.pt-tiles-in > :nth-child(6) { animation-delay: 200ms; }
+.pt-tiles-in > :nth-child(7) { animation-delay: 240ms; }
+.pt-tiles-in > :nth-child(n+8) { animation-delay: 280ms; }
+@keyframes pt-pop-in {
+  from { opacity: 0; scale: 0.94; }
+  to { opacity: 1; scale: 1; }
+}
+.pt-pop-in { animation: pt-pop-in 160ms cubic-bezier(0.16, 1, 0.3, 1); }
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
 
   .pt-badge-tick { animation: none; }
   .pt-tooltip-in { animation-name: fadeIn; }
+  .pt-tiles-in > * { animation-name: fadeIn; animation-delay: 0s !important; }
+  .pt-pop-in { animation-name: fadeIn; }
 
   .stagger-children > *,
   .page-transition {

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Check, ChevronRight, ListChecks, X } from 'lucide-react';
 import { useTodos } from '../../hooks/useApi';
@@ -10,6 +11,8 @@ import WaitingPayments from '../Todos/WaitingPayments';
 import { URGENCIES, money } from '../Todos/todoMeta';
 
 const ROWS = 4;
+const MotionLi = motion.li;
+const EASE = [0.16, 1, 0.3, 1];
 
 // The most urgent to-dos as rows, with repeats of the same thing ("Add
 // tracking to commit" x3) folded into one row that names each.
@@ -99,6 +102,17 @@ export default function TodoSummary({ isGlass = false }) {
 function SummaryCard({ items, payers, isGlass }) {
   const navigate = useNavigate();
   const { act, busy } = useTodoActions();
+  const reduceMotion = useReducedMotion();
+  // Done/Dismiss folds the row away and the next one slides up into its
+  // place (Undo slides it back). With reduced motion rows only fade.
+  const rowMotion = reduceMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: { duration: 0.15 } }
+    : {
+      initial: { opacity: 0, height: 0, overflow: 'hidden' },
+      animate: { opacity: 1, height: 'auto', transitionEnd: { overflow: 'visible' } },
+      exit: { opacity: 0, height: 0, overflow: 'hidden', transition: { duration: 0.2, ease: 'easeIn' } },
+      transition: { duration: 0.28, ease: EASE },
+    };
   // The email to-do whose window is open; it closes when the item clears.
   const [reviewingKey, setReviewingKey] = useState(null);
   const reviewing = items.find((entry) => entry.key === reviewingKey && entry.email_attention);
@@ -157,8 +171,9 @@ function SummaryCard({ items, payers, isGlass }) {
       <div className={`mt-3 grid gap-4 ${payers.length && rows.length ? 'lg:grid-cols-[minmax(0,1fr)_280px] lg:gap-6' : ''}`}>
         {rows.length > 0 && (
           <ul className={`min-w-0 divide-y ${isGlass ? 'divide-white/[0.06]' : 'divide-[color:var(--dp-border)]'}`}>
+            <AnimatePresence initial={false}>
             {rows.map((row) => (
-              <li key={row.id} className="flex items-center gap-2 sm:gap-3">
+              <MotionLi key={row.id} {...rowMotion} className="flex items-center gap-2 sm:gap-3">
                 <button
                   type="button"
                   onClick={() => open(row)}
@@ -183,8 +198,9 @@ function SummaryCard({ items, payers, isGlass }) {
                   <ChevronRight className={`h-4 w-4 shrink-0 ${muted}`} aria-hidden="true" />
                 </button>
                 <RowActions row={row} busy={busy} onAct={act} muted={muted} />
-              </li>
+              </MotionLi>
             ))}
+            </AnimatePresence>
           </ul>
         )}
         <WaitingPayments
