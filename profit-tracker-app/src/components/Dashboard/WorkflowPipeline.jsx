@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronRight, ArrowRight } from 'lucide-react';
 import CountUp from '../UI/CountUp';
@@ -90,6 +90,7 @@ const PHONE_GRID_CLASS = 'grid grid-cols-2 gap-2 pb-1';
  */
 export default function WorkflowPipeline({ pipeline, pending = false, onNavigate, hideEmpty = false }) {
   const [openStatus, setOpenStatus] = useState(null);
+  const itemsId = useId();
   const isPhone = useMatchMedia('(max-width: 639px)');
   // With hideEmpty (the All tab), only the steps that have something in them,
   // so the strip fits what's actually going on; otherwise every step of the
@@ -151,13 +152,17 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
                 {index > 0 && !isPhone && <ChevronRight size={14} aria-hidden="true" className="mx-0.5 flex-shrink-0 self-center text-[var(--dp-text-label)]" />}
                 <button
                   type="button"
-                  aria-pressed={active}
+                  // Opens the item list below: announced as expanded/collapsed.
+                  aria-expanded={active}
+                  aria-controls={active ? itemsId : undefined}
                   onClick={() => setOpenStatus(active ? null : stage.status)}
                   // Raised and clickable like the KPI cards: card surface, their
                   // shadow, and the same hover (lift, accent tint, accent number).
                   className={`flex min-w-0 flex-1 flex-col justify-center rounded-[18px] border p-4 text-left cursor-pointer dp-elevated dp-clickable-card focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] ${
+                    // Selected gets a solid ring as well, so it never looks
+                    // like the hover tint.
                     active
-                      ? 'border-[color:var(--dp-accent)] bg-[var(--dp-accent-bg)]'
+                      ? 'border-[color:var(--dp-accent)] bg-[var(--dp-accent-bg)] ring-2 ring-[var(--dp-accent)]'
                       : 'border-[color:var(--dp-border)] bg-[var(--dp-card-bg)]'
                   }`}
                 >
@@ -187,7 +192,7 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
             transition={{ duration: 0.3, ease: EASE }}
             className="overflow-hidden"
           >
-            <div className="rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-bg)] p-4">
+            <div id={itemsId} className="rounded-xl border border-[color:var(--dp-border)] bg-[var(--dp-bg)] p-4">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <p className="text-[13px] font-semibold text-[var(--dp-text-primary)]">
                   {displayLabel(open.status)}

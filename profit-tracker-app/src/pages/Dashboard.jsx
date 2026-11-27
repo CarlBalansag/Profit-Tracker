@@ -365,7 +365,7 @@ const Dashboard = () => {
                   <h2 className={isGlass ? "text-lg font-normal tracking-tight text-[#e8e2d6]" : "text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--dp-text-primary)]"}>
                     Profit & Cost Trend
                   </h2>
-                  <p className={isGlass ? "text-[11px] text-white/20 mt-1" : "text-[12px] text-[var(--dp-text-secondary)] mt-1"}>
+                  <p className={isGlass ? "text-[11px] text-white/20 mt-1" : "text-[12px] text-[var(--dp-text-secondary)] mt-1 [text-wrap:pretty]"}>
                     {trendMode === 'cumulative'
                       ? 'Running totals across the selected period'
                       : 'Amounts as they happened across the selected period'}
@@ -537,7 +537,7 @@ const Dashboard = () => {
                 <thead>
                   <tr className={isGlass ? "border-b border-white/10 text-xs font-semibold text-gray-500 uppercase tracking-wider" : "dp-neutral-head border-b border-[color:var(--dp-border)] text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>
                     {salesColumns.map(column => (
-                      <th key={column.id} className={`${column.id === 'product' ? 'pb-3 pr-4' : column.id === 'date' ? 'pb-3 pl-4' : 'pb-3 px-4'} font-medium`}>
+                      <th key={column.id} scope="col" className={`${column.id === 'product' ? 'pb-3 pr-4' : column.id === 'date' ? 'pb-3 pl-4' : 'pb-3 px-4'} font-medium`}>
                         {DEFAULT_DASHBOARD_SETTINGS.recentSalesColumns.find(c => c.id === column.id) && {
                           product: 'Product',
                           platform: 'Place Sold',
@@ -549,7 +549,7 @@ const Dashboard = () => {
                         }[column.id]}
                       </th>
                     ))}
-                    {!isGlass && <th className="pb-3 px-4 font-medium">Profit</th>}
+                    {!isGlass && <th scope="col" className="pb-3 px-4 font-medium">Profit</th>}
                   </tr>
                 </thead>
                 <tbody className={isGlass ? "text-sm divide-y divide-white/5" : "text-sm divide-y divide-[color:var(--dp-border)]"}>
@@ -1526,7 +1526,7 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], b
               one, up or down. Nothing fades or locks in between. */}
           <div aria-busy={loading || undefined}>
             <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 ${lead ? 'text-[34px] leading-[1.1] tracking-[-0.02em] max-[359px]:text-[28px]' : 'text-[22px] max-[359px]:text-[17px]'} text-[var(--dp-text-primary)]`}><CountUp value={value} pending={loading} /></p>
-            <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 ${formula.length > 0 ? 'pr-5' : ''} dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
+            <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[12px] leading-snug mt-1 ${formula.length > 0 ? 'pr-5' : ''} dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
           </div>
         </div>
         {isGlass && (
