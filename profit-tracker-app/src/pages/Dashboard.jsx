@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, MotionConfig } from 'motion/react';
 import { useDashboard, useGoals } from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
 import { createPortal } from 'react-dom';
@@ -68,6 +69,8 @@ const EMPTY_STATS = {
 const CARBON_KPI_ORDER = ['profit', 'totalRevenue', 'grossProfit', 'totalCost', 'totalCashback'];
 
 const FILTERS_KEY = 'pt-dashboard-filters';
+const MotionSpan = motion.span;
+const FILTER_GLIDE = { duration: 0.35, ease: [0.16, 1, 0.3, 1] };
 const DATE_FILTERS = ['7 Days', '30 Days', 'YTD', 'All Time'];
 const MODE_FILTERS = ['All', 'Cashout', 'Marketplace'];
 function readSavedFilters() {
@@ -1053,6 +1056,9 @@ const Dashboard = () => {
 
         <div className="col-span-2 flex flex-wrap items-center gap-2 sm:ml-auto">
           {/* Mode Filters */}
+          {/* The tint glides to the picked filter (one per group), the same
+              motion as the sidebar's active pill. */}
+          <MotionConfig reducedMotion="user" transition={FILTER_GLIDE}>
           <div role="group" aria-label="Sales type" data-tutorial-id="dashboard-filters" className="flex items-center gap-1 rounded-full bg-[var(--dp-card-bg)] p-1 dp-elevated">
             {['All', 'Cashout', 'Marketplace'].map((mode) => (
               <button
@@ -1060,12 +1066,15 @@ const Dashboard = () => {
                 type="button"
                 aria-pressed={modeFilter === mode}
                 onClick={() => chooseMode(mode)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-full transition-colors ${modeFilter === mode ? 'bg-[var(--dp-accent-bg)] font-semibold text-[var(--dp-text-primary)]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
+                className={`relative flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-full transition-colors ${modeFilter === mode ? 'font-semibold text-[var(--dp-text-primary)]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
               >
-                {mode === 'All' && <Layers className="w-3.5 h-3.5" />}
-                {mode === 'Cashout' && <Zap className="w-3.5 h-3.5" />}
-                {mode === 'Marketplace' && <Store className="w-3.5 h-3.5" />}
-                {mode}
+                {modeFilter === mode && <MotionSpan layoutId="dashboard-mode-pill" aria-hidden="true" data-filter-pill="" className="absolute inset-0 rounded-full bg-[var(--dp-accent-bg)]" />}
+                <span className="relative flex items-center gap-1.5">
+                  {mode === 'All' && <Layers className="w-3.5 h-3.5" />}
+                  {mode === 'Cashout' && <Zap className="w-3.5 h-3.5" />}
+                  {mode === 'Marketplace' && <Store className="w-3.5 h-3.5" />}
+                  {mode}
+                </span>
               </button>
             ))}
           </div>
@@ -1081,12 +1090,14 @@ const Dashboard = () => {
                 type="button"
                 aria-pressed={dateFilter === f}
                 onClick={() => setDateFilter(f)}
-                className={`px-[10px] py-1 text-[12px] font-medium rounded-full transition-colors ${dateFilter === f ? 'bg-[var(--dp-accent-bg)] font-semibold text-[var(--dp-text-primary)]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
+                className={`relative px-[10px] py-1 text-[12px] font-medium rounded-full transition-colors ${dateFilter === f ? 'font-semibold text-[var(--dp-text-primary)]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
               >
-                {f}
+                {dateFilter === f && <MotionSpan layoutId="dashboard-date-pill" aria-hidden="true" data-filter-pill="" className="absolute inset-0 rounded-full bg-[var(--dp-accent-bg)]" />}
+                <span className="relative">{f}</span>
               </button>
             ))}
           </div>
+          </MotionConfig>
         </div>
       </div>
 
@@ -1277,7 +1288,7 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate, r
 
             {/* Current value */}
             <p className={`text-[20px] font-bold tabular-nums leading-tight ${isGlass ? 'text-[#e8e2d6]' : 'text-[var(--dp-text-primary)]'}`}>
-              <CountUp value={fmt(current)} pending={refreshing} />
+              <CountUp value={fmt(current)} pending={refreshing} drift={false} />
             </p>
 
             {/* Target */}
@@ -1507,7 +1518,7 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], b
               when the new ones arrive they count from the old value to the new
               one, up or down. Nothing fades or locks in between. */}
           <div aria-busy={loading || undefined}>
-            <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] max-[359px]:text-[17px] text-[var(--dp-text-primary)]`}><CountUp value={value} pending={loading} /></p>
+            <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] max-[359px]:text-[17px] text-[var(--dp-text-primary)]`}><CountUp value={value} pending={loading} drift={false} /></p>
             <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[12px] leading-snug mt-1 ${formula.length > 0 ? 'pr-5' : ''} dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
           </div>
         </div>
