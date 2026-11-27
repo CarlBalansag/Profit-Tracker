@@ -26,7 +26,8 @@ describe('Sidebar version history', () => {
 
     fireEvent.click(versionButton);
 
-    expect(await screen.findByText("What's New")).toBeInTheDocument();
+    // The sidebar row now also reads "What's New", so look for the window's heading.
+    expect(await screen.findByRole('heading', { name: /What's New/ })).toBeInTheDocument();
     // The notes are unique text, unlike "v0.50" which also appears on the
     // still-mounted sidebar button -- asserting on the notes avoids that
     // ambiguity while still proving the matching entry rendered.

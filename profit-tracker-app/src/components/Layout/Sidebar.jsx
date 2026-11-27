@@ -198,7 +198,12 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             data-tip={isCollapsed ? `v${CURRENT_VERSION} · What's New` : undefined}
             className={clsx("flex items-center rounded-md border-l-2 border-transparent text-[12px] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-2.5 py-2 px-3")}>
             <Sparkles size={14} />
-            {!isCollapsed && <span className="truncate">v{CURRENT_VERSION}</span>}
+            {!isCollapsed && (
+              <>
+                <span className="truncate">What&apos;s New</span>
+                <span className="ml-auto text-[11px] tabular-nums text-[var(--dp-text-label)]">v{CURRENT_VERSION}</span>
+              </>
+            )}
           </button>
           <button
             data-tutorial-id="sidebar-datasetup"
@@ -331,14 +336,22 @@ function useNavMarker(containerRef, deps) {
   // The current page's row is scrolled into view inside the nav on load, on
   // navigation and when the phone drawer opens (only the nav scrolls).
   useLayoutEffect(() => {
-    const container = containerRef.current;
-    const link = container?.querySelector('a[aria-current="page"]');
-    if (!link || link.closest('[data-folded="true"]')) return;
-    const c = container.getBoundingClientRect();
-    const l = link.getBoundingClientRect();
-    const pad = 8;
-    if (l.top < c.top + pad) container.scrollTop -= c.top + pad - l.top;
-    else if (l.bottom > c.bottom - pad) container.scrollTop += l.bottom - (c.bottom - pad);
+    const reveal = () => {
+      const container = containerRef.current;
+      const link = container?.querySelector('a[aria-current="page"]');
+      if (!link || link.closest('[data-folded="true"]')) return;
+      const c = container.getBoundingClientRect();
+      const l = link.getBoundingClientRect();
+      const pad = 8;
+      if (l.top < c.top + pad) container.scrollTop -= c.top + pad - l.top;
+      else if (l.bottom > c.bottom - pad) container.scrollTop += l.bottom - (c.bottom - pad);
+    };
+    reveal();
+    // Again once the drawer's rows have grown to their 44px touch height
+    // (that happens just after it opens).
+    let second = 0;
+    const first = requestAnimationFrame(() => { second = requestAnimationFrame(reveal); });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, ...deps]);
 
@@ -425,7 +438,7 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId }) => {
           aria-expanded={isSectionOpen}
           aria-current={!isSectionOpen && holdsCurrent ? 'true' : undefined}
           onClick={() => setIsSectionOpen(!isSectionOpen)}
-          className="w-full flex items-center justify-between px-3 py-1 text-[11px] font-medium uppercase tracking-[1.2px] text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] transition-colors"
+          className="dp-sidebar-group w-full flex items-center justify-between px-3 py-1 text-[11px] font-medium uppercase tracking-[1.2px] text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] transition-colors"
         >
           <span className="flex items-center gap-1.5">
             {title}
@@ -504,7 +517,7 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, badge = 0 }) 
         "relative flex items-center rounded-md border-l-2 border-l-transparent transition-colors",
         isCollapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5 lg:py-1 text-[12px] font-medium",
         isActive
-          ? "text-[var(--dp-accent)] pointer-events-none"
+          ? "text-[var(--dp-accent)] font-semibold pointer-events-none"
           : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)]"
       )
     }

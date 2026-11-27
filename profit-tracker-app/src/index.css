@@ -1474,6 +1474,19 @@ body,
   background-color: var(--dp-text-primary);
 }
 
+/* Light theme: the current page gets a clearer pill (a stronger tint with a
+   hairline edge) and the group labels step back behind the items. */
+:root:not([data-theme="dark"]):not([data-ui-style="glassmorphism-brown"]) .dp-sidebar [data-nav-marker] {
+  background: rgba(var(--accent-rgb), 0.14);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.22);
+}
+:root:not([data-theme="dark"]):not([data-ui-style="glassmorphism-brown"]) .dp-sidebar .dp-sidebar-group {
+  color: rgba(22, 22, 26, 0.58);
+}
+:root:not([data-theme="dark"]):not([data-ui-style="glassmorphism-brown"]) .dp-sidebar .dp-sidebar-group:hover {
+  color: rgba(22, 22, 26, 0.85);
+}
+
 /* Typeface: Nunito Sans on every page in dark mode (Glassmorphism keeps its
    own type; light mode keeps Inter). .dp-dashboard sets Inter itself. */
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) body,
