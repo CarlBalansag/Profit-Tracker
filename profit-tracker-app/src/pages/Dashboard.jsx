@@ -1102,6 +1102,24 @@ const Dashboard = () => {
 
       {/* "Needs attention": first on a phone; on wider screens right under
           the Status Pipeline, or at the top when the pipeline is hidden. */}
+      {/* Phone: the headline number stays on the first screen, above the to-dos. */}
+      {isPhone && showStatCards && (
+        <button
+          type="button"
+          onClick={() => statsRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          className="flex w-full items-center justify-between gap-3 rounded-[20px] bg-[var(--dp-card-bg)] px-4 py-3 text-left dp-elevated"
+        >
+          <span className="min-w-0">
+            <span className="block text-[12px] text-[var(--dp-text-secondary)]">Net profit · {PERIOD_LABELS[dateFilter] || dateFilter}</span>
+            <span className={`block text-[22px] font-bold tabular-nums ${stats.profit < 0 ? 'text-[var(--dp-red-text)]' : 'text-[var(--dp-text-primary)]'}`}>
+              {STAT_CARD_REGISTRY.profit.getValue(stats)}
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center gap-1 text-[12px] text-[var(--dp-text-secondary)]">
+            All numbers <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        </button>
+      )}
       {(isPhone || !showPipeline) && <TodoSummary />}
       {dashboardSections.map(section => (
         <React.Fragment key={section.id}>

@@ -63,10 +63,12 @@ function RowActions({ row, busy, onAct, muted }) {
   const complete = count === 1 && COMPLETE.find(([has]) => first.actions?.includes(has));
   const canDismiss = entries.every((entry) => entry.actions?.includes('dismiss'));
   if (!complete && !canDismiss) return null;
-  const button = `page-btn page-btn-secondary !h-8 !px-2.5 !text-xs sm:max-xl:!w-8 sm:max-xl:!px-0 sm:max-xl:pointer-coarse:!w-11 ${muted}`;
-  const word = 'sm:max-xl:hidden';
+  // Icons beside the row below xl (phones included), so Dismiss stays a small
+  // secondary target instead of a full button under every to-do.
+  const button = `page-btn page-btn-secondary !h-8 !px-2.5 !text-xs max-xl:!w-8 max-xl:!px-0 max-xl:pointer-coarse:!w-11 ${muted}`;
+  const word = 'max-xl:hidden';
   return (
-    <div className="flex shrink-0 items-center gap-2 pb-2.5 pl-12 sm:pb-0 sm:pl-0">
+    <div className="flex shrink-0 items-center gap-2">
       {complete && (
         <button type="button" disabled={busy} onClick={() => onAct(first, complete[1])} className={button}>
           <Check className="h-3.5 w-3.5" aria-hidden="true" /><span aria-hidden="true" className={word}>{complete[2]}</span>
@@ -156,11 +158,11 @@ function SummaryCard({ items, payers, isGlass }) {
         {rows.length > 0 && (
           <ul className={`min-w-0 divide-y ${isGlass ? 'divide-white/[0.06]' : 'divide-[color:var(--dp-border)]'}`}>
             {rows.map((row) => (
-              <li key={row.id} className="sm:flex sm:items-center sm:gap-3">
+              <li key={row.id} className="flex items-center gap-2 sm:gap-3">
                 <button
                   type="button"
                   onClick={() => open(row)}
-                  className={`-mx-2 flex w-[calc(100%+1rem)] min-w-0 items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors sm:mr-0 sm:w-auto sm:flex-1 ${hover}`}
+                  className={`-ml-2 flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors ${hover}`}
                 >
                   <GroupIcon group={row.first.group} urgency={row.first.urgency} />
                   <span className="min-w-0 flex-1">
