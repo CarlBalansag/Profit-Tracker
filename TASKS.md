@@ -4,4 +4,4 @@ Shared ledger for agents/developers working on different branches at the same ti
 
 | Branch | Task | Files / folders owned | Status | Started |
 |---|---|---|---|---|
-| feat-sync-times-per-cashout | Cashout page: show each cashout's last sync time under Sync now | profit-tracker-app/src/pages/Cashout.jsx, profit-tracker-app/src/utils/cashoutDeals.js, profit-tracker-app/src/pages/Cashout.test.jsx | Ready for batch push | 2026-11-26 |
+| feat-sync-times-per-cashout | Cashout page: show each cashout's last sync time under Sync now; fit the tabs on a 320px phone | profit-tracker-app/src/pages/Cashout.jsx, profit-tracker-app/src/utils/cashoutDeals.js, profit-tracker-app/src/pages/Cashout.test.jsx | Ready for batch push | 2026-11-26 |

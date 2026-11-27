@@ -395,6 +395,18 @@ describe('Cashout Page', () => {
     expect(screen.getByText('Live Deals')).toBeInTheDocument();
   });
 
+  it('shortens the Live Deals tab to "Live" under 360px so all three tabs fit one row', () => {
+    window.matchMedia = (query) => ({ matches: query === '(max-width: 359px)', addEventListener: vi.fn(), removeEventListener: vi.fn() });
+    render(
+      <MemoryRouter>
+        <Cashout />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('tab', { name: /^Live\s*\d+$/ })).toBeInTheDocument();
+    expect(screen.queryByText('Live Deals')).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /New deals/ })).toBeInTheDocument();
+  });
+
   it('lists each cashout with its own sync time in the viewer time zone', () => {
     const providers = [{ id: 'eb', name: 'ElectronicsBuyer' }, { id: 'la', name: 'LA' }, { id: 'p4d', name: 'Points4Days' }];
     const now = new Date('2026-11-27T00:59:00Z'); // Nov 26, 4:59 PM in Los Angeles

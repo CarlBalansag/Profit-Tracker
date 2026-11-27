@@ -100,6 +100,9 @@ export default function Cashout() {
     localStorage.setItem(VIEW_MODE_KEY, mode);
   };
   const screenForcesCards = useMatchMedia(DEAL_CARDS_QUERY);
+  // Under 360px the Live Deals tab says just "Live", so all three tabs fit one
+  // row even with a two- or three-digit deal count.
+  const tinyPhone = useMatchMedia('(max-width: 359px)');
   const showCards = screenForcesCards || viewMode === 'card';
 
   // Cooldown timer state for manual sync
@@ -437,55 +440,59 @@ export default function Cashout() {
         </div>
       )}
 
-      {/* Tabs: Live Deals / Commitments */}
-      <div role="tablist" className="flex items-center gap-0.5 sm:gap-1 border-b border-[color:var(--dp-border)]">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={showLive}
-          onClick={() => setShowCommitments(false)}
-          className={`flex shrink-0 items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2.5 -mb-px whitespace-nowrap text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
-            showLive
-              ? 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] text-[var(--dp-text-primary)]'
-              : 'bg-transparent border-transparent text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'
-          }`}
-        >
-          <Layers size={15} className={`hidden sm:block ${showLive ? 'text-[var(--dp-accent)]' : ''}`} />
-          <span>Live Deals</span>
-          <span className="text-xs px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)]">
-            {liveProductCount}
-          </span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={showCommitments}
-          onClick={() => setShowCommitments(true)}
-          className={`flex shrink-0 items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2.5 -mb-px whitespace-nowrap text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
-            showCommitments
-              ? 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] text-[var(--dp-text-primary)]'
-              : 'bg-transparent border-transparent text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'
-          }`}
-        >
-          <span>Commitments</span>
-          <span className="text-xs px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)]">{activeCommitmentCount}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={showNewDeals}
-          onClick={() => setTab('new-deals')}
-          className={`flex shrink-0 items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2.5 -mb-px whitespace-nowrap text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
-            showNewDeals
-              ? 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] text-[var(--dp-text-primary)]'
-              : 'bg-transparent border-transparent text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'
-          }`}
-        >
-          <BellRing size={15} className={`hidden sm:block ${showNewDeals ? 'text-[var(--dp-accent)]' : ''}`} />
-          <span>New deals</span>
-        </button>
+      {/* Tabs: Live Deals / Commitments / New deals stay on one row (shorter and
+          tighter under 360px so all three fit a 320px phone); Show expired drops to its own line
+          when it can't fit beside them. */}
+      <div className="flex flex-wrap items-end border-b border-[color:var(--dp-border)]">
+        <div role="tablist" className="flex items-end min-[360px]:gap-0.5 sm:gap-1">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={showLive}
+            onClick={() => setShowCommitments(false)}
+            className={`flex shrink-0 items-center gap-1 min-[360px]:gap-1.5 sm:gap-2 px-1.5 min-[360px]:px-2.5 sm:px-3.5 py-2.5 -mb-px whitespace-nowrap text-[13px] min-[360px]:text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
+              showLive
+                ? 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] text-[var(--dp-text-primary)]'
+                : 'bg-transparent border-transparent text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'
+            }`}
+          >
+            <Layers size={15} className={`hidden sm:block ${showLive ? 'text-[var(--dp-accent)]' : ''}`} />
+            <span>{tinyPhone ? 'Live' : 'Live Deals'}</span>
+            <span className="text-xs px-1 min-[360px]:px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)]">
+              {liveProductCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={showCommitments}
+            onClick={() => setShowCommitments(true)}
+            className={`flex shrink-0 items-center gap-1 min-[360px]:gap-1.5 sm:gap-2 px-1.5 min-[360px]:px-2.5 sm:px-3.5 py-2.5 -mb-px whitespace-nowrap text-[13px] min-[360px]:text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
+              showCommitments
+                ? 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] text-[var(--dp-text-primary)]'
+                : 'bg-transparent border-transparent text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'
+            }`}
+          >
+            <span>Commitments</span>
+            <span className="text-xs px-1 min-[360px]:px-1.5 py-0.2 rounded-full bg-[var(--dp-hover-bg)]">{activeCommitmentCount}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={showNewDeals}
+            onClick={() => setTab('new-deals')}
+            className={`flex shrink-0 items-center gap-1 min-[360px]:gap-1.5 sm:gap-2 px-1.5 min-[360px]:px-2.5 sm:px-3.5 py-2.5 -mb-px whitespace-nowrap text-[13px] min-[360px]:text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
+              showNewDeals
+                ? 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] text-[var(--dp-text-primary)]'
+                : 'bg-transparent border-transparent text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'
+            }`}
+          >
+            <BellRing size={15} className={`hidden sm:block ${showNewDeals ? 'text-[var(--dp-accent)]' : ''}`} />
+            <span>New deals</span>
+          </button>
+        </div>
         {showLive && expiredCount > 0 && (
-          <label className="ml-auto flex items-center gap-1.5 text-xs font-normal text-[var(--dp-text-secondary)] cursor-pointer">
+          <label className="ml-auto flex items-center gap-1.5 py-2 text-xs font-normal text-[var(--dp-text-secondary)] cursor-pointer">
             <input
               type="checkbox"
               checked={showExpired}
