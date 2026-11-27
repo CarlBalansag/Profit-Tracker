@@ -49,3 +49,24 @@ describe('Page search', () => {
     expect(screen.getAllByRole('option').length).toBeGreaterThan(15);
   });
 });
+
+describe('Page search with live figures', () => {
+  it("shows each page's figure and finds pages by it", async () => {
+    const { default: PageSearch } = await import('./PageSearch');
+    const pages = [
+      { label: 'Cash Flow', to: '/cashflow', group: 'Money', words: 'owed' },
+      { label: 'Goals', to: '/goals', group: 'Money', words: 'targets' },
+    ];
+    render(
+      <MemoryRouter>
+        <PageSearch open onClose={() => {}} pages={pages} figures={{ '/cashflow': { text: '10 late', problem: true } }} />
+      </MemoryRouter>
+    );
+    const input = screen.getByRole('combobox', { name: 'Page name' });
+    fireEvent.change(input, { target: { value: 'late' } });
+    const options = screen.getAllByRole('option');
+    expect(options).toHaveLength(1);
+    expect(options[0]).toHaveTextContent('Cash Flow');
+    expect(options[0]).toHaveTextContent('10 late');
+  });
+});

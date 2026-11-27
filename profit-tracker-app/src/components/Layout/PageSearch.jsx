@@ -16,10 +16,10 @@ function rank(page, query) {
   return 3;
 }
 
-function matches(page, query) {
+function matches(page, query, figure) {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  const hay = `${page.label} ${page.group} ${page.words}`.toLowerCase();
+  const hay = `${page.label} ${page.group} ${page.words} ${figure?.text ?? ''}`.toLowerCase();
   return q.split(/\s+/).every((word) => hay.includes(word));
 }
 
@@ -27,7 +27,7 @@ function matches(page, query) {
  * Jump to any page by typing its name (Ctrl+K or ⌘K, or "Search pages" in
  * the sidebar). Arrow keys move, Enter goes, Escape closes.
  */
-export default function PageSearch({ open, onClose, pages }) {
+export default function PageSearch({ open, onClose, pages, figures = {} }) {
   const navigate = useNavigate();
   const inputRef = useRef(null);
   const [query, setQuery] = useState('');
@@ -35,10 +35,10 @@ export default function PageSearch({ open, onClose, pages }) {
   const close = () => { setQuery(''); setActive(0); onClose(); };
   const ref = useModalKeyboard(open, close, inputRef);
   const results = useMemo(() => pages
-    .filter((page) => matches(page, query))
+    .filter((page) => matches(page, query, figures[page.to]))
     .map((page, i) => ({ page, i, rank: rank(page, query) }))
     .sort((a, b) => a.rank - b.rank || a.i - b.i)
-    .map(({ page }) => page), [pages, query]);
+    .map(({ page }) => page), [pages, query, figures]);
   const current = Math.min(active, Math.max(results.length - 1, 0));
 
   if (!open) return null;
@@ -95,7 +95,10 @@ export default function PageSearch({ open, onClose, pages }) {
             >
               <span className="min-w-0 truncate font-medium">{page.label}</span>
               <span className="flex shrink-0 items-center gap-2 text-[11px] text-[var(--dp-text-label)]">
-                {page.group}
+                {/* The page's live figure (as in the sidebar), else its group. */}
+                {figures[page.to] && !page.state
+                  ? <span className={figures[page.to].problem ? 'font-semibold text-[var(--dp-red-text)]' : 'tabular-nums'}>{figures[page.to].text}</span>
+                  : page.group}
                 {i === current && <CornerDownLeft size={12} aria-hidden="true" />}
               </span>
             </li>

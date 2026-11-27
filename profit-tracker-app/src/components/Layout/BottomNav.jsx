@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import { ArrowLeftRight, Boxes, CirclePlus, DollarSign, LayoutDashboard, Menu, Plus } from 'lucide-react';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 import { usePrefetchProps } from '../../hooks/usePrefetchPage';
-import { useNavTodos, useTodoCount } from '../../hooks/useApi';
+import { useNavCashFlow, useNavTodos, useTodoCount } from '../../hooks/useApi';
 import { navFigures } from './navFigures';
 
 const ITEM = 'flex flex-1 flex-col items-center justify-center gap-0.5 h-14 min-w-0 px-0.5 text-[11px] max-[359px]:text-[10.5px] max-[359px]:tracking-tight font-medium';
@@ -58,7 +58,8 @@ const BottomNav = ({ onMoreClick, isGlass }) => {
   const { pathname } = useLocation();
   const moreIsHere = inMore(pathname);
   const navTodos = useNavTodos();
-  const figures = React.useMemo(() => navFigures(navTodos), [navTodos]);
+  const navCash = useNavCashFlow();
+  const figures = React.useMemo(() => navFigures(navTodos, navCash), [navTodos, navCash]);
   // The bar marks Inventory with a hollow ring for a plain state (aging)
   // and a red dot for a problem, so it doesn't read as an unread alert.
   const todoFigure = figures['/todos'];

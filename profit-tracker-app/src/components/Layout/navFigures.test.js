@@ -14,7 +14,8 @@ describe('navFigures', () => {
       ],
     }, { summary: { owedTotal: 4232.92, lateCount: 3 } });
     // Late work says "late" in words, not only in red.
-    expect(f['/todos']).toEqual({ text: '1 late', count: 1, problem: true });
+    // 1 overdue to-do + Cash Flow's 3 late payouts.
+    expect(f['/todos']).toEqual({ text: '4 late', count: 4, problem: true });
     expect(f['/shipping']).toEqual({ text: '1 late', count: 1, problem: true });
     // Same summary as the Cash Flow page: 3 late payments.
     expect(f['/cashflow']).toEqual({ text: '3 late', count: 3, problem: true });

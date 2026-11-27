@@ -17,11 +17,16 @@ export function navFigures(data, cashFlow) {
   const figures = {};
 
   const total = data?.counts?.total ?? items.length;
-  if (total > 0) {
-    // Late work is named in words, so red is never the only sign.
-    const overdue = count((entry) => entry.urgency === 'overdue');
-    figures['/todos'] = overdue > 0
-      ? { text: `${overdue} late`, count: overdue, problem: true }
+  // Late payouts as the Cash Flow page counts them (per payer's usual timing).
+  const cashLate = Number(cashFlow?.summary?.lateCount) || 0;
+  if (total > 0 || cashLate > 0) {
+    // Late work is named in words, so red is never the only sign. To-Do's
+    // late count includes Cash Flow's late payouts (its own payout items are
+    // left out so nothing counts twice), so the two rows always agree.
+    const overdue = count((entry) => entry.urgency === 'overdue' && !(cashLate && entry.type === 'payout_late'));
+    const late = overdue + cashLate;
+    figures['/todos'] = late > 0
+      ? { text: `${late} late`, count: late, problem: true }
       : { text: `${total} open`, count: total };
   }
 

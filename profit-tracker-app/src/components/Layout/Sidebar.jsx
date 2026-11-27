@@ -68,7 +68,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
   const pages = pageList({ hasCashoutAccess, scheduleC: SCHEDULE_C_ENABLED });
   const searchKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘K' : 'Ctrl+K';
   const openSearch = () => { setIsOpen(false); setSearchOpen(true); };
-  const search = <PageSearch open={searchOpen} onClose={() => setSearchOpen(false)} pages={pages} />;
+  const search = <PageSearch open={searchOpen} onClose={() => setSearchOpen(false)} pages={pages} figures={figures} />;
   const navRef = useRef(null);
   const marker = useNavMarker(navRef, [isCollapsed, isGlass, hasCashoutAccess, isOpen]);
   const profileRootRef = useRef(null);
@@ -220,7 +220,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
               aria-label={isCollapsed ? 'Record sale' : undefined}
               data-tip={isCollapsed ? 'Record sale' : undefined}
               {...recordSalePrefetch}
-              className={({ isActive }) => clsx("flex items-center justify-center gap-1 rounded-lg border font-semibold transition-colors", isActive ? "border-[color:var(--dp-accent-text)] text-[var(--dp-accent-text)] bg-[var(--dp-accent-bg)]" : "border-[color:var(--dp-border)] text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)]", isCollapsed ? "h-9 w-9" : "h-9 whitespace-nowrap px-1.5 text-[13px] lg:text-[12px] pointer-coarse:h-11")}
+              className={({ isActive }) => clsx("flex items-center justify-center gap-1 rounded-lg border font-semibold transition-colors", isActive ? "border-[color:var(--dp-accent-text)] text-[var(--dp-accent-text)] bg-[var(--dp-accent-bg)]" : "dp-action-secondary text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)]", isCollapsed ? "h-9 w-9" : "h-9 whitespace-nowrap px-1.5 text-[13px] lg:text-[12px] pointer-coarse:h-11")}
             >
               <DollarSign size={15} aria-hidden="true" />
               {!isCollapsed && <span>Record sale</span>}
@@ -693,7 +693,7 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, figure }) => 
     {figure && !isCollapsed && (
       <span className={clsx("dp-nav-figure flex shrink-0 items-center gap-1", figure.problem ? "dp-nav-figure-problem" : "dp-nav-figure-muted")}>
         {figure.problem && <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />}
-        <BadgeCount text={figure.text} data-figure="" className="text-right text-[13px] lg:text-[12px] font-semibold tabular-nums" />
+        <BadgeCount text={figure.text} data-figure="" className={clsx("text-right text-[13px] lg:text-[12px] tabular-nums", figure.problem ? "font-semibold" : "font-medium")} />
       </span>
     )}
   </NavLink>
