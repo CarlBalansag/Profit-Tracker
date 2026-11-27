@@ -6,7 +6,7 @@ import {
   Settings, History, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins, ListChecks, Zap
 } from 'lucide-react';
 import clsx from 'clsx';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 import { useReducedMotion } from 'motion/react';
 import { useAuth } from '../../context/AuthContext';
@@ -29,8 +29,13 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
   const todoCount = useTodoCount();
   const isGlass = uiStyle === 'glassmorphism-brown';
   const navRef = useRef(null);
-  const marker = useNavMarker(navRef, [isCollapsed, isGlass, hasCashoutAccess]);
+  const marker = useNavMarker(navRef, [isCollapsed, isGlass, hasCashoutAccess, isOpen]);
+  const profileRootRef = useRef(null);
+  const profileButtonRef = useRef(null);
+  const profileMenuId = useId();
+  useProfileMenu(isProfileMenuOpen, setIsProfileMenuOpen, profileRootRef, profileButtonRef);
   const drawerRef = useMobileDrawer(isOpen, () => setIsOpen(false));
+  const tooltip = useCollapsedTooltip(drawerRef, isCollapsed && !isGlass);
 
   if (isGlass) {
     return (
@@ -137,7 +142,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
           <button
             className="hidden lg:block p-1.5 text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] rounded-md hover:bg-[var(--dp-hover-bg)]"
             onClick={() => setIsCollapsed(!isCollapsed)}
-            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {isCollapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
           </button>
@@ -182,13 +187,16 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
         <div className="hidden lg:block p-2 border-t border-[color:var(--dp-border)]">
           <button
             onClick={() => setShowChangelog(true)}
-            title={isCollapsed ? `v${CURRENT_VERSION} — What's New` : undefined}
+            aria-label={isCollapsed ? `v${CURRENT_VERSION}, What's New` : undefined}
+            data-tip={isCollapsed ? `v${CURRENT_VERSION} · What's New` : undefined}
             className={clsx("flex items-center rounded-md border-l-2 border-transparent text-[12px] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-2.5 py-2 px-3")}>
             <Sparkles size={14} />
             {!isCollapsed && <span className="truncate">v{CURRENT_VERSION}</span>}
           </button>
           <button
             data-tutorial-id="sidebar-datasetup"
+            aria-label={isCollapsed ? 'Data Setup' : undefined}
+            data-tip={isCollapsed ? 'Data Setup' : undefined}
             onClick={() => navigate('/settings', { state: { tab: 'datasetup' } })}
             className={clsx("flex items-center rounded-md border-l-2 border-transparent text-[12px] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-2.5 py-2 px-3")}>
             <Settings size={14} />
@@ -201,8 +209,14 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
           </div>
         </div>
 
-        <div className="p-2 border-t border-[color:var(--dp-border)] relative">
+        <div ref={profileRootRef} className="p-2 border-t border-[color:var(--dp-border)] relative">
           <button
+            ref={profileButtonRef}
+            type="button"
+            aria-haspopup="true"
+            aria-expanded={isProfileMenuOpen}
+            aria-controls={profileMenuId}
+            aria-label={isCollapsed ? `Account: ${user?.username || 'Account'}` : undefined}
             className={clsx("flex items-center rounded-md hover:bg-[var(--dp-hover-bg)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-3 py-2 px-3 text-left")}
             onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
           >
@@ -219,37 +233,38 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
           </button>
 
           {isProfileMenuOpen && (
-            <div className="absolute bottom-full left-2 right-2 mb-2 bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated-hover rounded-lg py-2 z-50 overflow-hidden">
-               <NavLink to="/settings" className="flex items-center gap-3 px-4 py-2.5 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
+            <div id={profileMenuId} className="absolute bottom-full left-2 right-2 mb-2 bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated-hover rounded-lg py-2 z-50 overflow-hidden">
+               <NavLink to="/settings" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-11 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
                  <Settings size={14} className="text-[var(--dp-text-secondary)]" /> Settings
                </NavLink>
-               <NavLink to="/activity" className="flex items-center gap-3 px-4 py-2.5 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
+               <NavLink to="/activity" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-11 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
                  <History size={14} className="text-[var(--dp-text-secondary)]" /> Activity
                </NavLink>
                {/* Phone drawer only: the items the desktop sidebar keeps in its footer. */}
                <div className="lg:hidden">
                  <div className="h-px w-full bg-[var(--dp-border)] my-1"></div>
-                 <button type="button" className="flex items-center gap-3 px-4 py-2.5 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); setShowChangelog(true); }}>
+                 <button type="button" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-11 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); setShowChangelog(true); }}>
                    <Sparkles size={14} className="text-[var(--dp-text-secondary)]" /> What's New <span className="ml-auto text-[11px] text-[var(--dp-text-label)]">v{CURRENT_VERSION}</span>
                  </button>
-                 <button type="button" className="flex items-center gap-3 px-4 py-2.5 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); setIsOpen(false); navigate('/settings', { state: { tab: 'datasetup' } }); }}>
+                 <button type="button" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-11 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); setIsOpen(false); navigate('/settings', { state: { tab: 'datasetup' } }); }}>
                    <Settings size={14} className="text-[var(--dp-text-secondary)]" /> Data Setup
                  </button>
-                 <NavLink to="/guide" className="flex items-center gap-3 px-4 py-2.5 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
+                 <NavLink to="/guide" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-11 text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
                    <BookOpen size={14} className="text-[var(--dp-text-secondary)]" /> Guide
                  </NavLink>
-                 <div className="flex items-center justify-between px-4 py-1.5">
+                 <div className="flex items-center justify-between px-4 py-1.5 pointer-coarse:min-h-11">
                    <span className="text-[12px] font-medium text-[var(--dp-text-secondary)]">Theme</span>
                    <ThemeSwitch inline />
                  </div>
                </div>
                <div className="h-px w-full bg-[var(--dp-border)] my-1"></div>
-               <button className="flex items-center gap-3 px-4 py-2.5 text-[12px] font-medium text-[var(--dp-red-text)] hover:bg-[var(--dp-red-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); logout(); }}>
+               <button className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-11 text-[12px] font-medium text-[var(--dp-red-text)] hover:bg-[var(--dp-red-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); logout(); }}>
                  <PanelLeftClose size={14} className="rotate-180 text-[var(--dp-red-text)] opacity-80" /> Sign Out
                </button>
             </div>
           )}
         </div>
+        {tooltip}
       </aside>
 
       <VersionHistoryModal open={showChangelog} onClose={() => setShowChangelog(false)} />
@@ -315,7 +330,9 @@ function useNavMarker(containerRef, deps) {
     if (typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(follow);
       ro.observe(container);
-      container.querySelectorAll('a').forEach((a) => ro.observe(a));
+      // Links, section headers and section bodies: opening the phone drawer
+      // makes the headers taller (44px touch rows), which moves every link.
+      container.querySelectorAll('a, button, [data-section-body]').forEach((el) => ro.observe(el));
     }
     // Folding a section flips a class without resizing the nav.
     const mo = new MutationObserver(follow);
@@ -350,14 +367,30 @@ const NavMarker = ({ marker, className }) => {
   );
 };
 
+// Folded sections are remembered between visits.
+const FOLDS_KEY = 'pt-sidebar-folds';
+const readFolds = () => {
+  try { return JSON.parse(localStorage.getItem(FOLDS_KEY)) || {}; } catch { return {}; }
+};
+
 const SidebarSection = ({ title, children, isCollapsed, tutorialId }) => {
-  const [isSectionOpen, setIsSectionOpen] = useState(true);
+  const [isSectionOpen, setIsSectionOpenState] = useState(() => !readFolds()[title]);
+  const setIsSectionOpen = (open) => {
+    setIsSectionOpenState(open);
+    try {
+      const folds = readFolds();
+      if (open) delete folds[title]; else folds[title] = true;
+      localStorage.setItem(FOLDS_KEY, JSON.stringify(folds));
+    } catch { /* storage unavailable: the fold just isn't remembered */ }
+  };
   const showsItems = isSectionOpen || isCollapsed;
 
   return (
     <div data-tutorial-id={tutorialId} className={clsx("space-y-0.5", isCollapsed ? "mt-4 first:mt-0" : "")}>
       {!isCollapsed && (
         <button
+          type="button"
+          aria-expanded={isSectionOpen}
           onClick={() => setIsSectionOpen(!isSectionOpen)}
           className="w-full flex items-center justify-between px-3 py-1 text-[11px] font-medium uppercase tracking-[1.2px] text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] transition-colors"
         >
@@ -365,7 +398,7 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId }) => {
           {isSectionOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         </button>
       )}
-      <div className={clsx("space-y-0.5", showsItems ? "block" : "hidden")}>
+      <div data-section-body="" className={clsx("space-y-0.5", showsItems ? "block" : "hidden")}>
         {children}
       </div>
     </div>
@@ -378,8 +411,8 @@ const badgeText = (count) => (count > 99 ? '99+' : String(count));
 const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, badge = 0 }) => (
   <NavLink
     to={to}
-    title={isCollapsed ? (badge ? `${label} (${badge})` : label) : undefined}
-    aria-label={badge ? `${label}, ${badge} to do` : undefined}
+    aria-label={badge ? `${label}, ${badge} to do` : isCollapsed ? label : undefined}
+    data-tip={isCollapsed ? (badge ? `${label} · ${badgeText(badge)}` : label) : undefined}
     data-tutorial-id={tutorialId}
     {...usePrefetchProps(to)}
     className={({ isActive }) =>
@@ -395,7 +428,7 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, badge = 0 }) 
     <Icon size={16} className="flex-shrink-0" />
     {!isCollapsed && <span className="truncate flex-1 disabled-link">{label}</span>}
     {badge > 0 && (isCollapsed
-      ? <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[var(--dp-accent-solid)]" />
+      ? <span aria-hidden="true" className="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-[var(--dp-accent-solid)] px-1 text-center text-[10px] font-semibold leading-4 text-white tabular-nums">{badgeText(badge)}</span>
       : <span aria-hidden="true" className="min-w-[20px] rounded-full bg-[var(--dp-accent-solid)] px-1.5 text-center text-[11px] font-semibold leading-5 text-white tabular-nums">{badgeText(badge)}</span>)}
   </NavLink>
 );
@@ -461,6 +494,74 @@ const GlassBranchLabel = ({ label }) => (
   </>
 );
 
+
+// The account menu: Escape or a click/tap outside closes it, and Escape
+// puts focus back on the account button.
+function useProfileMenu(isOpen, setOpen, rootRef, buttonRef) {
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setOpen(false);
+      buttonRef.current?.focus();
+    };
+    const onPointer = (e) => { if (!rootRef.current?.contains(e.target)) setOpen(false); };
+    // Capture, so Escape closes the menu before it closes the phone drawer.
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('pointerdown', onPointer);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('pointerdown', onPointer);
+    };
+  }, [isOpen, setOpen, rootRef, buttonRef]);
+}
+
+// Collapsed sidebar: one label beside the icon on hover and on keyboard
+// focus (a native title shows on neither touch nor focus). It's fixed, so
+// the nav's scroll box doesn't clip it.
+function useCollapsedTooltip(containerRef, enabled) {
+  const [tip, setTip] = useState(null);
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!enabled || !root) return undefined;
+    const show = (e) => {
+      const el = e.target.closest?.('[data-tip]');
+      if (!el || !root.contains(el)) return;
+      if (e.type === 'focusin' && !el.matches(':focus-visible')) return;
+      const r = el.getBoundingClientRect();
+      setTip({ text: el.getAttribute('data-tip'), top: r.top + r.height / 2, left: r.right + 10 });
+    };
+    const hide = (e) => {
+      const el = e.target.closest?.('[data-tip]');
+      if (el && e.relatedTarget && el.contains(e.relatedTarget)) return;
+      setTip(null);
+    };
+    const clear = () => setTip(null);
+    root.addEventListener('pointerover', show);
+    root.addEventListener('pointerout', hide);
+    root.addEventListener('focusin', show);
+    root.addEventListener('focusout', hide);
+    root.addEventListener('scroll', clear, true);
+    return () => {
+      root.removeEventListener('pointerover', show);
+      root.removeEventListener('pointerout', hide);
+      root.removeEventListener('focusin', show);
+      root.removeEventListener('focusout', hide);
+      root.removeEventListener('scroll', clear, true);
+    };
+  }, [containerRef, enabled]);
+  return enabled && tip ? (
+    <span
+      aria-hidden="true"
+      data-sidebar-tooltip=""
+      className="pointer-events-none fixed z-[60] -translate-y-1/2 whitespace-nowrap rounded-md bg-[var(--dp-text-primary)] px-2 py-1 text-[12px] font-medium text-[var(--dp-card-bg)] shadow-[0_4px_12px_rgba(0,0,0,0.25)]"
+      style={{ top: tip.top, left: tip.left }}
+    >
+      {tip.text}
+    </span>
+  ) : null;
+}
 
 // The sidebar doubles as the phone's "More" drawer. While it is open as a
 // drawer it behaves like a modal: announced as a dialog, Escape closes it,

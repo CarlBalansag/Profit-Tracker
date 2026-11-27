@@ -25,7 +25,14 @@ const Header = ({ isGlass }) => {
 
 const Shell = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  // The collapsed sidebar stays collapsed on the next visit.
+  const [isSidebarCollapsed, setIsSidebarCollapsedState] = useState(() => {
+    try { return localStorage.getItem('pt-sidebar-collapsed') === '1'; } catch { return false; }
+  });
+  const setIsSidebarCollapsed = (collapsed) => {
+    setIsSidebarCollapsedState(collapsed);
+    try { localStorage.setItem('pt-sidebar-collapsed', collapsed ? '1' : '0'); } catch { /* not remembered */ }
+  };
   const { preferences } = useUiPreferences();
   const { user } = useAuth();
   const { start, active: tutorialActive, currentStep: tutorialStep } = useTutorial();

@@ -8,7 +8,7 @@ vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({ user: { username: 'tester' }, logout: vi.fn() }),
 }));
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); localStorage.clear(); });
 
 const renderSidebar = ({ path = '/transactions', uiStyle, isCollapsed = false } = {}) => render(
   <MemoryRouter initialEntries={[path]}>
