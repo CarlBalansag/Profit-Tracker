@@ -41,6 +41,17 @@ function topRows(items) {
   });
 }
 
+// What a row's amount is, so it isn't mistaken for profit or for the
+// pipeline's totals.
+const AMOUNT_LABELS = {
+  sales: 'sale value',
+  cashout: 'sale value',
+  purchases: 'at cost',
+  cards: 'due',
+  bookkeeping: 'due',
+  reminders: 'amount',
+};
+
 // How a to-do is marked complete from the row, when it can be: the reminder is
 // done, the card bill is paid, the store's email is dealt with. Everything else
 // clears once its record is fixed.
@@ -160,7 +171,12 @@ function SummaryCard({ items, payers, isGlass }) {
                     <span className={`block truncate text-xs ${muted}`}>{row.detail}</span>
                   </span>
                   {row.amount != null && (
-                    <span className={`shrink-0 text-[13px] font-semibold tabular-nums ${strong}`}>{money(row.amount)}</span>
+                    <span className="shrink-0 text-right">
+                      <span className={`block text-[13px] font-semibold tabular-nums ${strong}`}>{money(row.amount)}</span>
+                      {AMOUNT_LABELS[row.first.group] && (
+                        <span className={`block text-[12px] ${muted}`}>{AMOUNT_LABELS[row.first.group]}</span>
+                      )}
+                    </span>
                   )}
                   <ChevronRight className={`h-4 w-4 shrink-0 ${muted}`} aria-hidden="true" />
                 </button>

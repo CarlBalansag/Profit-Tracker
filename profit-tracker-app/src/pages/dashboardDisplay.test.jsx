@@ -13,7 +13,7 @@ const data = {
     inventoryValue: 12345.67, totalCashback: 1500, totalTax: 2100, roi: 12.5,
   },
   recentTransactions: [
-    { id: 'sale-1', product: 'Big TV', cost: 1234.5, revenue: 2345.6, profit: 1111.1, status: 'SHIPPED_IN', buyer: 'Unknown', date: '2026-11-01', quantity: 1 },
+    { id: 'sale-1', product: 'Big TV', cost: 1234.5, revenue: 2345.6, profit: 1111.1, status: 'SHIPPED_IN', buyer: 'Unknown', date: '2026-11-01', quantity: 2 },
     { id: 'sale-2', product: 'Old Row', cost: 10, revenue: 20, profit: 0.4, status: null, buyer: 'Unknown', date: '2026-11-01', quantity: 1 },
   ],
   pipelineCounts: { 'Pre Order': 1234 },
@@ -170,13 +170,24 @@ describe('Dashboard Recent Sales and chart', () => {
   it('opens a sale from its row and from the keyboard, and links to all sales', () => {
     navigateSpy.mockClear();
     mount('premium');
-    fireEvent.click(screen.getByRole('button', { name: 'Big TV' }));
+    expect(screen.getByRole('button', { name: 'Big TV ×2' })).toBeInTheDocument();
+    expect(screen.getByText('Profit includes the card cashback on each sale.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Big TV ×2' }));
     expect(navigateSpy).toHaveBeenLastCalledWith('/transactions', { state: { openTransaction: { saleId: 'sale-1' } } });
     fireEvent.click(screen.getByText('Old Row').closest('tr'));
     expect(navigateSpy).toHaveBeenLastCalledWith('/transactions', { state: { openTransaction: { saleId: 'sale-2' } } });
     fireEvent.click(screen.getByRole('button', { name: /View all sales/ }));
     expect(navigateSpy.mock.lastCall[0]).toBe('/transactions');
     expect(navigateSpy.mock.lastCall[1].state.cardScope).toBe('sold');
+  });
+
+  it('renames the purchase tiles in a channel view so they never look bigger than All', () => {
+    mount('premium');
+    expect(screen.getByText('Purchase Spend')).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole('group', { name: 'Sales type' })).getByRole('button', { name: 'Marketplace' }));
+    expect(screen.getByText('Cost of Units Sold')).toBeInTheDocument();
+    expect(screen.getByText('Cashback on Units Sold')).toBeInTheDocument();
+    expect(screen.queryByText('Purchase Spend')).not.toBeInTheDocument();
   });
 
   it('hides the Buyer column when no sale has a buyer and shows small profits to the cent', () => {

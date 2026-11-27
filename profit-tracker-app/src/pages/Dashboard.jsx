@@ -518,7 +518,7 @@ const Dashboard = () => {
                     className="flex w-full items-center justify-between gap-3 py-2.5 text-left rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)]"
                   >
                     <span className="min-w-0">
-                      <span className={isGlass ? "block truncate text-sm font-medium text-gray-200" : "block truncate text-sm font-medium text-[var(--dp-text-primary)]"}>{txn.product}</span>
+                      <span className={isGlass ? "block truncate text-sm font-medium text-gray-200" : "block truncate text-sm font-medium text-[var(--dp-text-primary)]"}>{txn.product}{txn.quantity > 1 && <span className="font-normal text-[var(--dp-text-secondary)]"> ×{txn.quantity}</span>}</span>
                       <span className={isGlass ? "block text-xs text-gray-500" : "block text-xs text-[var(--dp-text-secondary)]"}>
                         {formatShortDate(txn.date)} · {recordStatusLabel(txn.status || 'SOLD')}
                       </span>
@@ -566,6 +566,7 @@ const Dashboard = () => {
                                 className="block max-w-full truncate rounded text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)]"
                               >
                                 {txn.product}
+                                {txn.quantity > 1 && <span className="font-normal text-[var(--dp-text-secondary)]"> ×{txn.quantity}</span>}
                               </button>
                             </td>
                           );
@@ -624,13 +625,17 @@ const Dashboard = () => {
             </div>
             )}
             {!isGlass && (
-              <button
-                type="button"
-                onClick={() => navigate('/transactions', { state: { dateFilter, cardScope: 'sold', platformMode: modeFilter !== 'All' ? modeFilter : undefined } })}
-                className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium text-[var(--dp-text-primary)] hover:underline"
-              >
-                View all sales <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <button
+                  type="button"
+                  onClick={() => navigate('/transactions', { state: { dateFilter, cardScope: 'sold', platformMode: modeFilter !== 'All' ? modeFilter : undefined } })}
+                  className="inline-flex items-center gap-1 text-[13px] font-medium text-[var(--dp-text-primary)] hover:underline"
+                >
+                  View all sales <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                {/* Why a sale under cost can still show a small profit. */}
+                <p className="text-[12px] text-[var(--dp-text-secondary)]">Profit includes the card cashback on each sale.</p>
+              </div>
             )}
             </>
           )}

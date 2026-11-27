@@ -671,6 +671,8 @@ router.get('/dashboard', isAuthenticated, validateQuery(analyticsDashboardQuery)
       commission: money(decimal(s.commission_fee)),
       refunded: money(decimal(s.refunded_amount || 0)),
       refunded_units: s.refunded_qty || 0,
+      // Units in the sale, so the Dashboard can show "×2".
+      quantity: s.quantity || 1,
       cashback: money(saleCashback),
       profit: money(saleRevenue.minus(saleCost).plus(saleCashback)),
       // workflow_status (set by the mark_paid action) takes precedence over
