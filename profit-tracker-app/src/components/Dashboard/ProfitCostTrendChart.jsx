@@ -46,9 +46,10 @@ function resolveSeries(chartSeries) {
 }
 
 const EASE_IN_OUT_CUBIC = [0.645, 0.045, 0.355, 1];
-const REVEAL = { duration: 1.5, stagger: 0.65 };
-const HIDE_DURATION = 0.8;
-const SHOW_DURATION = 1.3;
+// Quick enough that the chart never looks empty: all lines are in within ~0.8s.
+const REVEAL = { duration: 0.5, stagger: 0.1 };
+const HIDE_DURATION = 0.35;
+const SHOW_DURATION = 0.45;
 
 const MotionRect = motion.rect;
 
@@ -125,7 +126,11 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
   // ---- data ----
   const rawPoints = useMemo(() => normalizeTrendPoints(trend), [trend]);
   const points = useMemo(
-    () => (trendMode === 'cumulative' ? toCumulative(rawPoints) : fillDailyWindow(rawPoints, trendMeta)),
+    // Fill every day first, so running totals sit on a real time axis
+    // instead of only the days that had activity.
+    () => (trendMode === 'cumulative'
+      ? toCumulative(fillDailyWindow(rawPoints, trendMeta))
+      : fillDailyWindow(rawPoints, trendMeta)),
     [rawPoints, trendMeta, trendMode],
   );
   const isEmpty = points.length === 0 || points.every(p => activeSeries.every(s => !p[s.id]));
@@ -308,17 +313,18 @@ export default function ProfitCostTrendChart({ trend, trendMeta = null, chartSer
     <div className="relative flex h-full min-h-[280px] w-full flex-col">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-4 pb-5">
         {onTrendModeChange ? (
-          <div className={`flex gap-0.5 p-0.5 rounded-lg ${isGlass ? 'bg-white/[0.04] border border-white/[0.06]' : 'bg-[var(--dp-card-bg)] dp-elevated'}`}>
-            {[['period', 'Period'], ['cumulative', 'Cumulative']].map(([val, label]) => (
+          // Same pill toggle as Line / Bar above it.
+          <div role="group" aria-label="Totals" className={`flex gap-0.5 p-0.5 rounded-full ${isGlass ? 'bg-white/[0.04] border border-white/[0.06]' : 'border border-[color:var(--dp-border)]'}`}>
+            {[['cumulative', 'Running total'], ['period', 'Per day']].map(([val, label]) => (
               <button
                 key={val}
                 type="button"
                 aria-pressed={trendMode === val}
                 onClick={() => onTrendModeChange(val)}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] ${
+                className={`px-2.5 py-1 rounded-full text-[12px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] ${
                   trendMode === val
-                    ? 'bg-[var(--dp-accent-bg)] font-semibold text-[var(--dp-text-primary)]'
-                    : 'text-[var(--dp-text-muted)] hover:text-[var(--dp-text-primary)]'
+                    ? 'bg-[var(--dp-card-bg)] font-semibold text-[var(--dp-text-primary)] dp-elevated'
+                    : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'
                 }`}
               >
                 {label}

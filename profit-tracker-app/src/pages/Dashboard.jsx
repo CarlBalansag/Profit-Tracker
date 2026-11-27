@@ -179,7 +179,8 @@ const Dashboard = () => {
   useEffect(() => { writeSavedFilters({ date: dateFilter, mode: modeFilter }); }, [dateFilter, modeFilter]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [trendMode, setTrendMode] = useState('period'); // 'period' | 'cumulative'
+  // Running totals first: they show where the period is heading.
+  const [trendMode, setTrendMode] = useState('cumulative'); // 'period' | 'cumulative'
   const [chartView, setChartView] = useState('line'); // 'line' | 'bar'
   // The Status Pipeline follows the dashboard filter: All shows every step,
   // Cashout/Marketplace (which only have sales of that kind) their workflow.
