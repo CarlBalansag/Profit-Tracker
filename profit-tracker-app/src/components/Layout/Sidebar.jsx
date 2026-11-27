@@ -27,6 +27,10 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
   // Collapsing is a desktop choice: below 1024px the sidebar is the phone
   // drawer, which always shows its labels (and has no expand button).
   const isNarrow = useMatchMedia('(max-width: 1023px)');
+  // Settings and Activity live in the account menu, so the account button
+  // marks them as the current page.
+  const { pathname: currentPath } = useLocation();
+  const onAccountPage = currentPath.startsWith('/settings') || currentPath.startsWith('/activity');
   const isCollapsed = collapsedPref && !isNarrow;
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
@@ -160,7 +164,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
           </button>
         </div>
 
-        <nav ref={navRef} className="relative flex-1 py-3 px-2 space-y-3 overflow-y-auto overflow-x-hidden dp-scrollbar">
+        <nav ref={navRef} className={clsx("relative flex-1 py-3 px-2 space-y-3 overflow-y-auto overflow-x-hidden dp-scrollbar", isCollapsed && "dp-rail")}>
           <NavMarker marker={marker} className="!mt-0 rounded-md bg-[var(--dp-accent-bg)]" />
           {/* Grouped by how a reseller works: today's work, buying and selling,
               shipping, money, then the bookkeeping (folded by default). */}
@@ -224,7 +228,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
             {!isCollapsed && <span className="truncate">Data Setup</span>}
           </button>
           <NavItem icon={BookOpen} label="Guide" to="/guide" isCollapsed={isCollapsed} tutorialId="sidebar-guide" />
-          <div className={clsx("flex items-center py-1.5", isCollapsed ? "justify-center" : "justify-between px-3")}>
+          <div data-tip={isCollapsed ? 'Theme' : undefined} className={clsx("flex items-center py-1.5", isCollapsed ? "justify-center" : "justify-between px-3")}>
             {!isCollapsed && <span className="text-[12px] text-[var(--dp-text-secondary)]">Theme</span>}
             <ThemeSwitch inline />
           </div>
@@ -238,7 +242,9 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
             aria-expanded={isProfileMenuOpen}
             aria-controls={profileMenuId}
             aria-label={isCollapsed ? `Account: ${user?.username || 'Account'}` : undefined}
-            className={clsx("flex items-center rounded-md hover:bg-[var(--dp-hover-bg)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-3 py-2 px-3 text-left")}
+            data-tip={isCollapsed ? `${user?.username || 'Account'}${onAccountPage ? ' · Settings' : ''}` : undefined}
+            aria-current={onAccountPage ? 'page' : undefined}
+            className={clsx("flex items-center rounded-md hover:bg-[var(--dp-hover-bg)] transition-colors", onAccountPage && "bg-[var(--dp-accent-bg)] ring-1 ring-inset ring-[color:var(--dp-accent-text)]/30", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-3 py-2 px-3 text-left")}
             onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
           >
             <div className="w-7 h-7 rounded-full bg-[var(--dp-bg)] flex-shrink-0 text-[var(--dp-accent)] flex items-center justify-center text-[11px] font-semibold">{(user?.username || '?').slice(0, 2).toUpperCase()}</div>
@@ -446,7 +452,7 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId, foldable = t
   const showsItems = isSectionOpen || isCollapsed || touring;
 
   return (
-    <div data-tutorial-id={tutorialId} className={clsx("space-y-0.5", isCollapsed ? "mt-4 first:mt-0" : "")}>
+    <div data-section="" data-tutorial-id={tutorialId} className="space-y-0.5">
       {!isCollapsed && !foldable && (
         <p className="dp-sidebar-group px-3 py-1 text-[11px] font-medium uppercase tracking-[1.2px] text-[var(--dp-text-label)]">{title}</p>
       )}
@@ -530,12 +536,13 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, badge = 0 }) 
     data-tip={isCollapsed ? (badge ? `${label} · ${badgeText(badge)}` : label) : undefined}
     data-tutorial-id={tutorialId}
     {...usePrefetchProps(to)}
+    onClick={(e) => { if (e.currentTarget.getAttribute('aria-current') === 'page') e.preventDefault(); }}
     className={({ isActive }) =>
       clsx(
         "relative flex items-center rounded-md border-l-2 border-l-transparent transition-colors",
         isCollapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5 lg:py-1 text-[12px] font-medium",
         isActive
-          ? "text-[var(--dp-accent)] font-semibold pointer-events-none"
+          ? "text-[var(--dp-accent)] font-semibold cursor-default"
           : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)]"
       )
     }
@@ -645,7 +652,7 @@ function useCollapsedTooltip(containerRef, enabled) {
     const show = (e) => {
       const el = e.target.closest?.('[data-tip]');
       if (!el || !root.contains(el)) return;
-      if (e.type === 'focusin' && !el.matches(':focus-visible')) return;
+      if (e.type === 'focusin' && !e.target.matches(':focus-visible')) return;
       const r = el.getBoundingClientRect();
       setTip({ text: el.getAttribute('data-tip'), top: r.top + r.height / 2, left: r.right + 10 });
     };

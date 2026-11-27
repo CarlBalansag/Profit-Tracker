@@ -1,3 +1,4 @@
+import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
@@ -20,6 +21,14 @@ describe('BottomNav', () => {
     expect(screen.getByRole('link', { name: 'Inventory' }).getAttribute('href')).toBe('/inventory');
     expect(screen.getByRole('link', { name: 'Transactions' }).getAttribute('aria-current')).toBe('page');
     expect(screen.getByRole('link', { name: 'Dashboard' }).getAttribute('aria-current')).toBeNull();
+  });
+
+  it('lights up More on pages that live in the More drawer', () => {
+    mount(vi.fn(), '/cashflow');
+    expect(screen.getByRole('button', { name: 'More' })).toHaveAttribute('data-here', 'true');
+    cleanup();
+    mount(vi.fn(), '/inventory');
+    expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('data-here');
   });
 
   it('opens the full menu from More', () => {

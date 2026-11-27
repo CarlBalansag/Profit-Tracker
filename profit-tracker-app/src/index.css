@@ -1452,7 +1452,8 @@ body,
   background-color: var(--dp-hover-bg);
   color: var(--dp-text-primary);
 }
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar a.border-l-2[aria-current="page"] {
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar a.border-l-2[aria-current="page"],
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar a.border-l-2[aria-current="page"]:hover {
   background: transparent;
   color: #ffffff;
 }
@@ -1472,6 +1473,20 @@ body,
 }
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar .theme-switch[aria-checked="true"] .theme-switch__knob {
   background-color: var(--dp-text-primary);
+}
+
+/* Navigation focus: a 2px ring in the readable accent, drawn inside the
+   control so folded sections' clipping can't cut it off. */
+.dp-sidebar :is(a, button, [role="switch"]):focus-visible,
+nav[aria-label="Main"] :is(a, button):focus-visible {
+  outline: 2px solid var(--dp-accent-text);
+  outline-offset: -2px;
+}
+/* Collapsed rail: a hairline between groups, since their names are hidden. */
+.dp-rail > [data-section] + [data-section] {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--dp-border);
 }
 
 /* Light theme: the current page gets a clearer pill (a stronger tint with a

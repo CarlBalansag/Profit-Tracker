@@ -150,3 +150,21 @@ describe('Sidebar groups', () => {
     expect(screen.getByRole('button', { name: /^books$/i })).toHaveAttribute('aria-expanded', 'true');
   });
 });
+
+describe('Where you are', () => {
+  it('marks the account button on Settings and Activity, which live in its menu', () => {
+    renderSidebar({ path: '/settings' });
+    expect(screen.getByRole('button', { name: /tester/ })).toHaveAttribute('aria-current', 'page');
+    cleanup();
+    renderSidebar({ path: '/cashflow' });
+    expect(screen.getByRole('button', { name: /tester/ })).not.toHaveAttribute('aria-current');
+  });
+
+  it('clicking the current page does nothing, but it still gets a collapsed label', () => {
+    const { container } = renderSidebar({ path: '/cashflow', isCollapsed: true });
+    const here = screen.getByRole('link', { name: 'Cash Flow' });
+    expect(fireEvent.click(here)).toBe(false); // default prevented
+    fireEvent.pointerOver(here);
+    expect(container.querySelector('[data-sidebar-tooltip]')).toHaveTextContent('Cash Flow');
+  });
+});

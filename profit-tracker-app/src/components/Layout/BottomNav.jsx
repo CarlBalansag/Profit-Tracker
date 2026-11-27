@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
 import { ArrowLeftRight, CirclePlus, DollarSign, LayoutDashboard, Menu, Package, Plus } from 'lucide-react';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
@@ -44,7 +44,14 @@ const QuickAddLink = ({ to, label, icon, onClick, isGlass }) => {
 };
 
 // Phone navigation: the places used most, one tap away, with the full menu under More.
+// Pages with their own tab; every other page lives in the More drawer, so
+// More lights up there to say where you are.
+const TAB_PATHS = ['/transactions', '/inventory'];
+const inMore = (pathname) => pathname !== '/' && !TAB_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+
 const BottomNav = ({ onMoreClick, isGlass }) => {
+  const { pathname } = useLocation();
+  const moreIsHere = inMore(pathname);
   // The To-Do list lives in the menu, so its count shows on More.
   const todoCount = useTodoCount();
   const [addOpen, setAddOpen] = useState(false);
@@ -104,8 +111,9 @@ const BottomNav = ({ onMoreClick, isGlass }) => {
           type="button"
           aria-haspopup="dialog"
           aria-label={todoCount ? `More, ${todoCount} to do` : undefined}
+          data-here={moreIsHere || undefined}
           onClick={onMoreClick}
-          className={clsx(ITEM, colors.idle)}
+          className={clsx(ITEM, moreIsHere ? colors.active : colors.idle)}
         >
           <span className="relative">
             <Menu size={20} aria-hidden="true" />
