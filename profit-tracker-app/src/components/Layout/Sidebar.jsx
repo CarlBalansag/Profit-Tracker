@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, ArrowLeftRight, Boxes,
   ReceiptText, FileText, ChartLine, Wallet, CreditCard as CreditCardIcon,
-  Settings, History, ChevronDown, PanelLeftClose, PanelLeft, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins, ListChecks, Zap
+  Settings, History, ChevronDown, PanelLeftClose, PanelLeft, Database, LogOut, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins, ListChecks, Zap
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
@@ -142,7 +142,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             </div>
           )}
 
-          <button aria-label="Close menu" className="lg:hidden p-1.5 text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] rounded-md hover:bg-[var(--dp-hover-bg)]" onClick={() => setIsOpen(false)}>
+          <button type="button" aria-label="Close menu" className="flex items-center justify-center lg:hidden p-1.5 pointer-coarse:min-h-[44px] pointer-coarse:min-w-[44px] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] rounded-md hover:bg-[var(--dp-hover-bg)]" onClick={() => setIsOpen(false)}>
             <X size={18} />
           </button>
 
@@ -206,7 +206,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
             data-tip={isCollapsed ? 'Data Setup' : undefined}
             onClick={() => navigate('/settings', { state: { tab: 'datasetup' } })}
             className={clsx("flex items-center rounded-md border-l-2 border-transparent text-[12px] text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] transition-colors", isCollapsed ? "p-2 justify-center w-full" : "w-full gap-2.5 py-2 px-3")}>
-            <Settings size={14} />
+            <Database size={14} />
             {!isCollapsed && <span className="truncate">Data Setup</span>}
           </button>
           <NavItem icon={BookOpen} label="Guide" to="/guide" isCollapsed={isCollapsed} tutorialId="sidebar-guide" />
@@ -261,7 +261,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
                    <Sparkles size={14} className="text-[var(--dp-text-secondary)]" /> What's New <span className="ml-auto text-[11px] text-[var(--dp-text-label)]">v{CURRENT_VERSION}</span>
                  </button>
                  <button type="button" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); setIsOpen(false); navigate('/settings', { state: { tab: 'datasetup' } }); }}>
-                   <Settings size={14} className="text-[var(--dp-text-secondary)]" /> Data Setup
+                   <Database size={14} className="text-[var(--dp-text-secondary)]" /> Data Setup
                  </button>
                  <NavLink to="/guide" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
                    <BookOpen size={14} className="text-[var(--dp-text-secondary)]" /> Guide
@@ -272,9 +272,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
                  </div>
                </div>
                <div className="h-px w-full bg-[var(--dp-border)] my-1"></div>
-               <button className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[12px] font-medium text-[var(--dp-red-text)] hover:bg-[var(--dp-red-bg)] w-full text-left transition-colors" onClick={() => { setIsProfileMenuOpen(false); logout(); }}>
-                 <PanelLeftClose size={14} className="rotate-180 text-[var(--dp-red-text)] opacity-80" /> Sign Out
-               </button>
+               <SignOutRow onSignOut={() => { setIsProfileMenuOpen(false); logout(); }} />
             </MotionDiv>
           )}
           </AnimatePresence>
@@ -452,6 +450,29 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId }) => {
     </div>
   );
 };
+
+// Sign Out sits last in the menu, right under a thumb on a phone, so it asks
+// once before signing out. Closing the menu forgets the question.
+function SignOutRow({ onSignOut }) {
+  const [asking, setAsking] = useState(false);
+  const row = 'flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[12px] font-medium w-full text-left transition-colors';
+  if (!asking) {
+    return (
+      <button type="button" className={`${row} text-[var(--dp-red-text)] hover:bg-[var(--dp-red-bg)]`} onClick={() => setAsking(true)}>
+        <LogOut size={14} aria-hidden="true" className="text-[var(--dp-red-text)] opacity-80" /> Sign Out
+      </button>
+    );
+  }
+  return (
+    <div role="group" aria-label="Sign out?" className="px-4 py-2">
+      <p className="text-[12px] font-medium text-[var(--dp-text-primary)]">Sign out of Profit Tracker?</p>
+      <div className="mt-2 flex gap-2">
+        <button type="button" autoFocus onClick={() => setAsking(false)} className="flex-1 rounded-md bg-[var(--dp-hover-bg)] px-3 py-1.5 pointer-coarse:min-h-[44px] text-[12px] font-medium text-[var(--dp-text-primary)]">Cancel</button>
+        <button type="button" onClick={onSignOut} className="flex-1 rounded-md bg-[var(--dp-red-bg)] px-3 py-1.5 pointer-coarse:min-h-[44px] text-[12px] font-semibold text-[var(--dp-red-text)]">Sign out</button>
+      </div>
+    </div>
+  );
+}
 
 // A count on a nav item (the To-Do list). Hidden at zero; 99+ past that.
 const badgeText = (count) => (count > 99 ? '99+' : String(count));

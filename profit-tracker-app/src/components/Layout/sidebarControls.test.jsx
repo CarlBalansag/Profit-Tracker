@@ -4,8 +4,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Sidebar from './Sidebar';
 
+const { logout } = vi.hoisted(() => ({ logout: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({ user: { username: 'tester' }, logout: vi.fn() }),
+  useAuth: () => ({ user: { username: 'tester' }, logout }),
 }));
 vi.mock('../../hooks/useApi', async (orig) => ({ ...(await orig()), useTodoCount: () => 16 }));
 
@@ -33,6 +34,22 @@ describe('Sidebar account menu', () => {
     fireEvent.click(account);
     fireEvent.pointerDown(document.body);
     expect(account).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+describe('Sign Out', () => {
+  it('asks once before signing out, and Cancel keeps you signed in', () => {
+    logout.mockClear();
+    renderSidebar();
+    fireEvent.click(screen.getByRole('button', { name: /tester/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign Out' }));
+    expect(logout).not.toHaveBeenCalled();
+    expect(screen.getByText('Sign out of Profit Tracker?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Sign Out' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign Out' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(logout).toHaveBeenCalledTimes(1);
   });
 });
 
