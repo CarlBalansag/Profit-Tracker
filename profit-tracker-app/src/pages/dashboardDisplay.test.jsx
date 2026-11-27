@@ -84,12 +84,11 @@ describe('Dashboard amounts', () => {
 });
 
 describe('Dashboard KPI cards', () => {
-  it('says the period and sales type once above the tiles instead of tagging every card', () => {
+  it('has no scope line above the tiles and no per-card tags', () => {
     mount('premium');
-    expect(screen.getByText('Last 30 days')).toBeInTheDocument();
-    expect(screen.getByText(/· all sales/)).toBeInTheDocument();
+    expect(screen.queryByText(/· all sales/)).not.toBeInTheDocument();
     fireEvent.click(within(screen.getByRole('group', { name: 'Sales type' })).getByRole('button', { name: 'Cashout' }));
-    expect(screen.getByText(/· Cashout sales only/)).toBeInTheDocument();
+    expect(screen.queryByText(/Cashout sales only/)).not.toBeInTheDocument();
     expect(screen.queryByText(/sold via/)).not.toBeInTheDocument();
   });
 

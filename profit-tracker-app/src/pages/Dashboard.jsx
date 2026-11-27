@@ -66,8 +66,6 @@ const EMPTY_STATS = {
 // Sold-item results first (Net, Revenue, Gross), then purchase-side money
 // (Spend, Cashback), so related tiles sit together.
 const CARBON_KPI_ORDER = ['profit', 'totalRevenue', 'grossProfit', 'totalCost', 'totalCashback'];
-const PERIOD_LABELS = { '7 Days': 'Last 7 days', '30 Days': 'Last 30 days', YTD: 'This year', 'All Time': 'All time' };
-const MODE_LABELS = { All: 'all sales', Cashout: 'Cashout sales only', Marketplace: 'Marketplace sales only' };
 
 const FILTERS_KEY = 'pt-dashboard-filters';
 const DATE_FILTERS = ['7 Days', '30 Days', 'YTD', 'All Time'];
@@ -270,17 +268,12 @@ const Dashboard = () => {
   function renderDashboardSection(sectionId) {
     if (sectionId === 'statCards') {
       if (!showStatCards || visibleStatCards.length === 0) return null;
-      // Glass keeps its per-card tag; the default style says the scope once.
+      // Glass keeps its per-card tag; the filters above say the scope.
       const modeTag = isGlass && modeFilter !== 'All'
         ? `sold via ${modeFilter}`
         : null;
       return (
         <div key="statCards">
-        {!isGlass && (
-          <p className="mb-2 text-[12px] text-[var(--dp-text-secondary)]">
-            <span className="font-medium text-[var(--dp-text-primary)]">{PERIOD_LABELS[dateFilter] || dateFilter}</span> · {MODE_LABELS[modeFilter] || modeFilter}
-          </p>
-        )}
         <div ref={statsRowRef} data-tutorial-id="dashboard-stats" className={isGlass
           ? `grid grid-cols-2 ${statColClass} gap-3 3xl:gap-4 max-sm:[&>*:first-child]:col-span-2 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both`
           : "grid min-w-0 grid-cols-2 gap-3 sm:gap-4 pb-4 lg:grid-cols-[repeat(auto-fit,minmax(180px,1fr))] max-sm:[&>*:first-child]:col-span-2 animate-in fade-in duration-300 fill-mode-both"
