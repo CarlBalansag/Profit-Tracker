@@ -24,7 +24,16 @@ export const STAT_CARD_REGISTRY = {
     formula: ['(Item Price × Quantity) + Purchase Tax + Shipping to You + Purchase Fees', '− Gift Cards'],
     description: 'How much you spent to buy inventory during the selected period. It includes item cost, purchase tax, shipping to you, and purchase fees, then subtracts gift cards.',
     getValue: (s) => `$${formatMoney(s.totalCost)}`,
-    getSubtext: (s) => `${s.transactionCount} purchases`,
+    getSubtext: (s) => `${s.transactionCount} ${s.transactionCount === 1 ? 'purchase' : 'purchases'}`,
+    // In a sales-channel view the API counts the cost of the units sold
+    // there, not purchases, so the tile says so instead of keeping a label
+    // that would suggest Marketplace spent more than All.
+    channel: {
+      label: 'Cost of Units Sold',
+      formula: ['Cost of Each Unit Sold Through This Channel × Quantity'],
+      description: 'What the units you sold through this channel cost you, for sales in the selected period. It is not your total purchase spend, which only the All view shows.',
+      getSubtext: (s) => `${s.unitsSold ?? 0} ${s.unitsSold === 1 ? 'unit' : 'units'} sold here`,
+    },
   },
   totalCashback: {
     label: 'Cashback Earned',
@@ -35,6 +44,12 @@ export const STAT_CARD_REGISTRY = {
     description: 'Cashback earned on inventory you bought in the selected period, sold or not, so it can differ from the cashback inside Net Profit, which counts only the units you sold. A sales-channel view includes only the cashback connected to units sold there.',
     getValue: (s) => `$${formatMoney(s.totalCashback)}`,
     getSubtext: (s) => `on purchases · ${s.avgCashbackRate.toFixed(2)}% avg`,
+    channel: {
+      label: 'Cashback on Units Sold',
+      formula: ['Cashback Earned on the Units Sold Through This Channel'],
+      description: 'The card cashback earned on the units you sold through this channel in the selected period. This is the same cashback that Net Profit adds.',
+      getSubtext: (s) => `${s.avgCashbackRate.toFixed(2)}% avg rate`,
+    },
   },
   totalTax: {
     label: 'Total Tax Paid',

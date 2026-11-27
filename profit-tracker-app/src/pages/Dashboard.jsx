@@ -286,8 +286,11 @@ const Dashboard = () => {
           : "grid min-w-0 grid-cols-2 gap-3 sm:gap-4 pb-4 lg:grid-cols-[repeat(auto-fit,minmax(180px,1fr))] max-sm:[&>*:first-child]:col-span-2 animate-in fade-in duration-300 fill-mode-both"
         }>
           {visibleStatCards.map(cardConfig => {
-            const def = STAT_CARD_REGISTRY[cardConfig.id];
-            if (!def) return null;
+            const base = STAT_CARD_REGISTRY[cardConfig.id];
+            if (!base) return null;
+            // A channel view (Cashout / Marketplace) uses the card's channel
+            // wording where the number means something different there.
+            const def = modeFilter !== 'All' && base.channel ? { ...base, ...base.channel } : base;
             const colorOverride = cardConfig.id === 'profit' && stats.profit < 0 ? 'red' : def.color;
             return (
               <StatCard
