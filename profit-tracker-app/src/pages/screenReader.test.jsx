@@ -33,6 +33,7 @@ vi.mock('../hooks/useApi', () => ({
   useTodoCount: () => 0,
   useNavTodos: () => undefined,
   useNavTodosQuery: () => ({ data: undefined }),
+  useNavCashFlow: () => undefined,
   useInventory: () => ({ data: inventory, isLoading: false, refetch: vi.fn() }),
   useSales: () => ({ data: [], isLoading: false, refetch: vi.fn() }),
   usePlatforms: () => ({ data: [] }),

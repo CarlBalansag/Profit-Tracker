@@ -1468,9 +1468,11 @@ body,
 /* The filled pill is the one gliding marker, so it travels between pages
    instead of jumping (the link above stays clear on top of it). */
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar [data-nav-marker] {
-  background: var(--dp-accent-gradient);
+  /* A tinted pill, not the filled gradient: the fill belongs to Log a buy,
+     and red text to late work, so "you are here" reads differently. */
+  background: rgba(var(--accent-rgb), 0.24);
   border-radius: 12px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 10px 22px -14px rgba(var(--accent-deep-rgb), 0.9);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.55);
 }
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar a.border-l-2[aria-current="page"] svg {
   color: #ffffff;

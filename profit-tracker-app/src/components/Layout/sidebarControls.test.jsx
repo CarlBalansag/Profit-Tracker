@@ -11,6 +11,7 @@ vi.mock('../../context/AuthContext', () => ({
 vi.mock('../../hooks/useApi', async (orig) => ({
   ...(await orig()),
   useTodoCount: () => 16,
+  useNavCashFlow: () => ({ summary: { owedTotal: 3626.6, lateCount: 0 } }),
   useNavTodosQuery: () => ({ data: { counts: { total: 16 }, items: [{ type: 'ship', urgency: 'soon' }], waiting_payments: [{ total: 3626.6, overdue_total: 0 }] } }),
 }));
 

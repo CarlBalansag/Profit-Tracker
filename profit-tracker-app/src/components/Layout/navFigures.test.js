@@ -12,12 +12,14 @@ describe('navFigures', () => {
         { type: 'aging_stock', urgency: 'info' },
         { type: 'recurring_expense', urgency: 'info' },
       ],
-      waiting_payments: [{ total: 1344, overdue_total: 0 }, { total: 230, overdue_total: 230 }],
-    });
+    }, { summary: { owedTotal: 4232.92, lateCount: 3 } });
     // Late work says "late" in words, not only in red.
     expect(f['/todos']).toEqual({ text: '1 late', count: 1, problem: true });
     expect(f['/shipping']).toEqual({ text: '1 late', count: 1, problem: true });
-    expect(f['/cashflow']).toEqual({ text: '$230 late', problem: true });
+    // Same summary as the Cash Flow page: 3 late payments.
+    expect(f['/cashflow']).toEqual({ text: '3 late', count: 3, problem: true });
+    expect(navFigures({}, { summary: { owedTotal: 4232.92, lateCount: 0 } })['/cashflow']).toEqual({ text: '$4.2k owed' });
+    expect(navFigures({})['/cashflow']).toBeUndefined();
     expect(f['/creditcard']).toEqual({ text: '1 due', count: 1 });
     expect(f['/inventory']).toEqual({ text: '1 aging', count: 1 });
     expect(f['/cashout'].text).toBe('1 open');

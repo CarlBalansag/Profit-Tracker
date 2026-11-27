@@ -22,7 +22,7 @@ const Tab = ({ to, label, icon, end, colors, figure }) => {
       <span className="relative">
         <Icon size={20} aria-hidden="true" />
         {/* The sidebar's live figure for this page, as a dot (its words are in the label). */}
-        {figure && <span aria-hidden="true" data-figure-dot="" className={clsx('absolute -right-1 -top-0.5 h-2 w-2 rounded-full', figure.problem ? 'bg-[var(--dp-red-text)]' : 'bg-[var(--dp-text-primary)]')} />}
+        {figure && <span aria-hidden="true" data-figure-dot="" className={clsx('absolute -right-1 -top-0.5 h-2 w-2 rounded-full', figure.problem ? 'bg-[var(--dp-red-text)]' : 'border border-current')} />}
       </span>
       <span className="truncate">{label}</span>
     </NavLink>
@@ -59,6 +59,8 @@ const BottomNav = ({ onMoreClick, isGlass }) => {
   const moreIsHere = inMore(pathname);
   const navTodos = useNavTodos();
   const figures = React.useMemo(() => navFigures(navTodos), [navTodos]);
+  // The bar marks Inventory with a hollow ring for a plain state (aging)
+  // and a red dot for a problem, so it doesn't read as an unread alert.
   const todoFigure = figures['/todos'];
   // The To-Do list lives in the menu, so its count shows on More.
   const todoCount = useTodoCount();

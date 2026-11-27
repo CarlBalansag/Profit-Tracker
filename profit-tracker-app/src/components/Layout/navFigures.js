@@ -10,7 +10,7 @@ const compactMoney = (value) => {
   return `$${Math.round(n).toLocaleString('en-US')}`;
 };
 
-export function navFigures(data) {
+export function navFigures(data, cashFlow) {
   const items = data?.items ?? [];
   const count = (pred) => items.filter(pred).length;
   const has = (...types) => (entry) => types.includes(entry.type);
@@ -30,11 +30,14 @@ export function navFigures(data) {
   if (lateShip) figures['/shipping'] = { text: `${lateShip} late`, count: lateShip, problem: true };
   else if (toShip) figures['/shipping'] = { text: `${toShip} to ship`, count: toShip };
 
-  const owed = (data?.waiting_payments ?? []).reduce((sum, payer) => sum + (Number(payer.total) || 0), 0);
+  // Owed money comes from the Cash Flow page's own summary, so the sidebar and
+  // the page always say the same thing; nothing shows until it has loaded.
+  const summary = cashFlow?.summary;
+  const owed = Number(summary?.owedTotal) || 0;
   if (owed > 0) {
-    const late = (data?.waiting_payments ?? []).reduce((sum, payer) => sum + (Number(payer.overdue_total) || 0), 0);
+    const late = Number(summary.lateCount) || 0;
     figures['/cashflow'] = late > 0
-      ? { text: `${compactMoney(late)} late`, problem: true }
+      ? { text: `${late} late`, count: late, problem: true }
       : { text: `${compactMoney(owed)} owed` };
   }
 

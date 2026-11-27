@@ -19,7 +19,7 @@ import PageSearch from './PageSearch';
 import { pageList } from './pageList';
 import { useCashoutProviders } from '../../hooks/useCashoutProviders';
 import { usePrefetchProps } from '../../hooks/usePrefetchPage';
-import { useNavTodosQuery, useTodoCount } from '../../hooks/useApi';
+import { useNavCashFlow, useNavTodosQuery, useTodoCount } from '../../hooks/useApi';
 import { navFigures } from './navFigures';
 import { useMatchMedia } from '../../hooks/useMatchMedia';
 import { useTutorial } from '../../context/TutorialContext';
@@ -46,7 +46,8 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
   // Each row's live figure (owed, due, to ship...), from the same to-do list.
   const navQuery = useNavTodosQuery();
   const navTodos = navQuery.data;
-  const figures = React.useMemo(() => navFigures(navTodos), [navTodos]);
+  const navCash = useNavCashFlow();
+  const figures = React.useMemo(() => navFigures(navTodos, navCash), [navTodos, navCash]);
   const fig = (to) => figures[to];
   const addBuyPrefetch = usePrefetchProps('/add-transaction');
   const recordSalePrefetch = usePrefetchProps('/add-sale');
@@ -366,7 +367,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
               animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] } }}
               exit={reduceMotion ? { opacity: 0, transition: { duration: 0.1 } } : { opacity: 0, y: 4, scale: 0.98, transition: { duration: 0.1, ease: 'easeIn' } }}
               style={{ transformOrigin: 'bottom center' }}
-              id={profileMenuId} className={clsx("absolute bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated-hover rounded-lg py-2 z-50 overflow-hidden", isCollapsed ? "bottom-0 left-full ml-2 w-56" : "bottom-full left-2 right-2 mb-2")} data-menu-box="">
+              id={profileMenuId} className={clsx("absolute bg-[var(--dp-card-bg)] border border-[color:var(--dp-border)] dp-elevated-hover rounded-lg py-2 z-50 overflow-hidden", isCollapsed ? "bottom-1 left-full ml-2 w-56" : "bottom-full left-2 right-2 mb-2")} data-menu-box="">
                <NavLink to="/settings" className="flex items-center gap-3 px-4 py-2.5 pointer-coarse:min-h-[44px] text-[15px] lg:text-[12px] font-medium text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)] w-full text-left transition-colors" onClick={() => setIsProfileMenuOpen(false)}>
                  <Settings size={14} className="text-[var(--dp-text-secondary)]" /> Settings
                </NavLink>
@@ -691,10 +692,10 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, figure }) => 
     {/* Collapsed rail: To-Do keeps its count; every other figure is a dot
         (red when late), with its words in the label. */}
     {figure?.count > 0 && isCollapsed && (
-      <BadgeCount count={figure.count} className={clsx("absolute -right-1 -top-1 min-w-[16px] rounded-full px-1 text-center text-[10px] font-semibold leading-4 tabular-nums", figure.problem ? "bg-[var(--dp-red-text)] text-white" : "bg-[var(--dp-text-primary)] text-[var(--dp-card-bg)]")} />
+      <BadgeCount count={figure.count} className={clsx("absolute -right-1 -top-1 min-w-[16px] rounded-full px-1 text-center text-[10px] font-semibold leading-[14px] tabular-nums", figure.problem ? "border border-transparent bg-[var(--dp-red-text)] text-white" : "border border-[color:var(--dp-text-label)] bg-[var(--dp-card-bg)] text-[var(--dp-text-secondary)]")} />
     )}
     {figure && !(figure.count > 0) && isCollapsed && (
-      <span aria-hidden="true" data-figure-dot="" className={clsx("absolute right-1 top-1 h-2 w-2 rounded-full", figure.problem ? "bg-[var(--dp-red-text)]" : "bg-[var(--dp-text-primary)]")} />
+      <span aria-hidden="true" data-figure-dot="" className={clsx("absolute right-1 top-1 h-2 w-2 rounded-full", figure.problem ? "bg-[var(--dp-red-text)]" : "border border-[color:var(--dp-text-label)]")} />
     )}
   </NavLink>
 );
