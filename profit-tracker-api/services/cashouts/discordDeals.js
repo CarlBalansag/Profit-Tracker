@@ -1,6 +1,7 @@
-// New LA and Points4Days deals from their Discord announcement channels, so
-// deal alerts for them don't wait for the once-a-day check (signing in to their
-// websites more often got a warning).
+// New LA deals from LA's Discord announcement channels (#above-cost-deals,
+// #close-to-cost-deals), so deal alerts for them don't wait for the once-a-day
+// check (signing in to the website more often got a warning). Points4Days has
+// no deals channel today; its links are recognised in case it adds one.
 //
 // The user follows each cashout's deals channel (e.g. #above-cost-deals) into a
 // channel of their own Discord server, and adds our bot to that server. Every
