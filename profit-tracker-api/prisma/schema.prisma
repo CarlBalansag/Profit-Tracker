@@ -999,6 +999,14 @@ model NotificationSettings {
 // by all users (deals are the same for everyone). Filled from whichever
 // user's connection syncs that provider. Used to tell a new deal from one
 // already seen; see services/cashouts/dealAlerts.js.
+// Where the Discord deal reader (services/cashouts/discordDeals.js) has read up
+// to in each channel: the newest message ID it handled.
+model DiscordDealCursor {
+  channel_id      String   @id
+  last_message_id String
+  updated_at      DateTime @updatedAt
+}
+
 model CashoutDeal {
   id               String             @id @default(uuid())
   provider         String

@@ -151,6 +151,14 @@ async function runScheduledSync() {
       }
     }
 
+    // New LA / Points4Days deals posted to Discord since the last run
+    // (discordDeals.js; off unless the bot is set up). Best effort.
+    try {
+      summary.discord = await require('./discordDeals').pullDiscordDeals();
+    } catch (err) {
+      console.error('[discord-deals] read failed:', err.message);
+    }
+
     // Push the new deals this sync found (dealAlerts.js). Best effort.
     try {
       summary.dealAlerts = await require('./dealAlerts').dispatchDealAlerts();

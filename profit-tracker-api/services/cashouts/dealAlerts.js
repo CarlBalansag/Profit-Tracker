@@ -98,7 +98,9 @@ const isUniqueError = (err) => err?.code === 'P2002' || /Unique constraint/i.tes
 // Records one provider's current deals and creates alerts for what's new.
 // Returns how many alerts it created. Safe to run from two syncs at once: the
 // unique key and the conditional updates make only one of them win.
-async function recordDealsSeen(provider, deals, { now = new Date() } = {}) {
+// keepKnown (the Discord reader, whose posts have no store names or picture):
+// an empty value never replaces one the daily check saved.
+async function recordDealsSeen(provider, deals, { now = new Date(), keepKnown = false } = {}) {
   const live = (Array.isArray(deals) ? deals : []).filter(isLive);
   const seeding = (await prisma.cashoutDeal.count({ where: { provider } })) === 0;
   if (!live.length) return { created: 0, seeding };
@@ -113,8 +115,15 @@ async function recordDealsSeen(provider, deals, { now = new Date() } = {}) {
     const externalId = String(deal.id);
     if (done.has(externalId)) continue;
     done.add(externalId);
-    const fields = dealFields(deal, now);
     const row = byId.get(externalId);
+    const fields = dealFields(deal, now);
+    if (keepKnown && row) {
+      if (!fields.stores.length && Array.isArray(row.stores) && row.stores.length) fields.stores = row.stores;
+      if (!fields.image_url && row.image_url) fields.image_url = row.image_url;
+      if (fields.retail === null && row.retail !== null) fields.retail = num(row.retail);
+      if (fields.vendor_limit === null && row.vendor_limit !== null) fields.vendor_limit = row.vendor_limit;
+      if (!fields.expires_at && row.expires_at) fields.expires_at = row.expires_at;
+    }
 
     if (!row) {
       try {

@@ -156,7 +156,7 @@ TOOLS -- READ ONLY
 - list_refunds: refunds on one purchase or sale.
 - list_notes, list_attachments: notes and attached links on purchases and sales.
 - list_cashout_connections, list_cashout_deals, get_cashout_deal, get_cashout_opportunity_summary, list_cashout_commitments, list_cashout_tracking_submissions: cashout services, live deals (look one up with get_cashout_deal right before buying), commitments and submitted tracking.
-- Deal freshness: EB deals refresh about once a minute on their own; LA and Points4Days once a day (they asked to be checked less), so theirs can be up to a day old. No tool forces a refresh: only the user can, with Sync now on the Cashout page. Check last_synced_at, say how old the deals are, and ask the user to press Sync now if they need fresher ones.
+- Deal freshness: EB deals refresh about once a minute on their own. LA and Points4Days are checked once a day (they asked to be checked less), but when the user has set up their Discord deal posts, new LA and Points4Days deals show up within about a minute; until the next daily check those have no store links, and price changes or ended deals still wait for it. No tool forces a refresh: only the user can, with Sync now on the Cashout page. Check last_synced_at, say how old the deals are, and ask the user to press Sync now if they need fresher ones.
 
 TOOLS -- CHANGE DATA (confirm with the user first)
 - add_purchase, update_purchase: log or edit a purchase. The store is created if new; the card must already exist.
