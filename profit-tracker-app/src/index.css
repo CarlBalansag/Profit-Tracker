@@ -1511,7 +1511,7 @@ nav[aria-label="Main"] :is(a, button):focus-visible {
 
 /* Ledger figures: neutral, a step quieter than the row's label; the
    current row's figure follows its white/accent text. */
-.dp-nav-figure-muted { color: var(--dp-text-label); }
+.dp-nav-figure-muted { color: var(--dp-text-secondary); }
 .dp-nav-figure-problem { color: var(--dp-red-text); }
 :root:not([data-theme="dark"]) .dp-nav-figure-muted { color: rgba(22, 22, 26, 0.62); }
 /* On the current row the figure takes the row's own colour (white on the
@@ -1717,6 +1717,9 @@ nav[aria-label="Main"] :is(a, button):focus-visible {
     position: absolute;
     inset: -8px;
   }
+  /* The bottom bar's buttons already fill their 53px cells; a hit zone there
+     stuck out past the screen edge and let the page shift sideways. */
+  nav[aria-label="Main"] button::after { content: none; }
   [role="tablist"] > [role="tab"],
   [role="radiogroup"] > [role="radio"] {
     min-height: 40px;

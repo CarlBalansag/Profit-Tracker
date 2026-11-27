@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, ArrowLeftRight, Boxes,
   ReceiptText, FileText, ChartLine, Wallet, CreditCard as CreditCardIcon,
-  Settings, History, ChevronDown, PanelLeftClose, PanelLeft, Database, LogOut, Search, Plus, DollarSign, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins, ListChecks, Zap
+  Settings, History, ChevronDown, PanelLeftClose, PanelLeft, Database, LogOut, Search, Plus, DollarSign, RefreshCw, X, BadgeDollarSign, BadgePercent, BookOpen, Target, CalendarDays, Truck, Sparkles, ClipboardList, BanknoteArrowDown, Landmark, HandCoins, ListChecks, Zap
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
@@ -30,6 +30,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
   // Collapsing is a desktop choice: below 1024px the sidebar is the phone
   // drawer, which always shows its labels (and has no expand button).
   const isNarrow = useMatchMedia('(max-width: 1023px)');
+  const isShort = useMatchMedia('(max-height: 860px)');
   // Settings and Activity live in the account menu, so the account button
   // marks them as the current page.
   const { pathname: currentPath } = useLocation();
@@ -248,12 +249,16 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
           </button>
         </div>
 
-        {navQuery.isError && !navTodos && !isCollapsed && (
+        {navQuery.isError && !navTodos && (isCollapsed ? (
+          <button type="button" onClick={() => navQuery.refetch()} aria-label="Live numbers didn't load. Retry" data-tip="Live numbers didn't load · Retry" className="mx-auto mt-2 flex h-8 w-8 items-center justify-center rounded-md text-[var(--dp-red-text)] hover:bg-[var(--dp-hover-bg)]">
+            <RefreshCw size={14} aria-hidden="true" />
+          </button>
+        ) : (
           <p role="status" className="mx-3 mt-2 flex items-center justify-between gap-2 text-[12px] text-[var(--dp-text-label)]">
             Live numbers didn&apos;t load.
             <button type="button" onClick={() => navQuery.refetch()} className="font-semibold text-[var(--dp-accent-text)] underline underline-offset-2">Retry</button>
           </p>
-        )}
+        ))}
 
         <nav ref={navRef} aria-label="Pages" className={clsx("relative flex-1 py-1.5 px-2 space-y-2 overflow-y-auto overflow-x-hidden dp-scrollbar", isCollapsed && "dp-rail", moreBelow && "dp-nav-more", moreAbove && "dp-nav-less")}>
           <NavMarker marker={marker} className="!mt-0 rounded-md bg-[var(--dp-accent-bg)]" />
@@ -281,7 +286,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
             <NavItem icon={Target} label="Goals" to="/goals" isCollapsed={isCollapsed} />
           </SidebarSection>
 
-          <SidebarSection title="Books" isCollapsed={isCollapsed} tutorialId="sidebar-section-operations" defaultFolded={isNarrow}>
+          <SidebarSection title="Books" isCollapsed={isCollapsed} tutorialId="sidebar-section-operations" defaultFolded={isNarrow || isShort}>
             <NavItem icon={BanknoteArrowDown} label="Expenses" to="/expenses" isCollapsed={isCollapsed} tutorialId="sidebar-expenses" figure={fig('/expenses')} />
             <NavItem icon={ReceiptText} label="Receipts" to="/receipts" isCollapsed={isCollapsed} tutorialId="sidebar-receipts" />
             <NavItem icon={FileText} label="Invoices" to="/invoices" isCollapsed={isCollapsed} />
@@ -551,8 +556,11 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId, foldable = t
     const saved = readFolds()[title];
     return saved === undefined ? !defaultFolded : !saved;
   });
+  const sectionRef = useRef(null);
   const setIsSectionOpen = (open) => {
     setIsSectionOpenState(open);
+    // Once it has slid open, bring its rows into view in the nav.
+    if (open) setTimeout(() => sectionRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }), 220);
     try {
       const folds = readFolds();
       folds[title] = !open;
@@ -569,7 +577,7 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId, foldable = t
   const showsItems = isSectionOpen || isCollapsed || touring;
 
   return (
-    <div data-section="" data-tutorial-id={tutorialId} className="space-y-0.5">
+    <div ref={sectionRef} data-section="" data-tutorial-id={tutorialId} className="space-y-0.5">
       {!isCollapsed && !foldable && (
         <p className="dp-sidebar-group px-3 py-1 text-[11px] font-medium uppercase tracking-[1.2px] text-[var(--dp-text-label)]">{title}</p>
       )}
@@ -677,7 +685,7 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, figure }) => 
     {figure && !isCollapsed && (
       <span className={clsx("dp-nav-figure flex shrink-0 items-center gap-1", figure.problem ? "dp-nav-figure-problem" : "dp-nav-figure-muted")}>
         {figure.problem && <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />}
-        <BadgeCount text={figure.text} data-figure="" className="text-right text-[13px] lg:text-[11px] font-semibold tabular-nums" />
+        <BadgeCount text={figure.text} data-figure="" className="text-right text-[13px] lg:text-[12px] font-semibold tabular-nums" />
       </span>
     )}
     {/* Collapsed rail: To-Do keeps its count; every other figure is a dot
@@ -685,7 +693,7 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, figure }) => 
     {figure?.count > 0 && isCollapsed && (
       <BadgeCount count={figure.count} className={clsx("absolute -right-1 -top-1 min-w-[16px] rounded-full px-1 text-center text-[10px] font-semibold leading-4 tabular-nums", figure.problem ? "bg-[var(--dp-red-text)] text-white" : "bg-[var(--dp-text-primary)] text-[var(--dp-card-bg)]")} />
     )}
-    {figure && !figure.count && isCollapsed && (
+    {figure && !(figure.count > 0) && isCollapsed && (
       <span aria-hidden="true" data-figure-dot="" className={clsx("absolute right-1 top-1 h-2 w-2 rounded-full", figure.problem ? "bg-[var(--dp-red-text)]" : "bg-[var(--dp-text-primary)]")} />
     )}
   </NavLink>

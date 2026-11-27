@@ -21,14 +21,14 @@ export function navFigures(data) {
     // Late work is named in words, so red is never the only sign.
     const overdue = count((entry) => entry.urgency === 'overdue');
     figures['/todos'] = overdue > 0
-      ? { text: `${overdue} late`, count: total, problem: true }
+      ? { text: `${overdue} late`, count: overdue, problem: true }
       : { text: `${total} open`, count: total };
   }
 
   const toShip = count(has('ship', 'deal_closed_unshipped', 'send_tracking'));
   const lateShip = count((e) => has('ship', 'deal_closed_unshipped')(e) && e.urgency === 'overdue');
-  if (lateShip) figures['/shipping'] = { text: `${lateShip} late`, problem: true };
-  else if (toShip) figures['/shipping'] = { text: `${toShip} to ship` };
+  if (lateShip) figures['/shipping'] = { text: `${lateShip} late`, count: lateShip, problem: true };
+  else if (toShip) figures['/shipping'] = { text: `${toShip} to ship`, count: toShip };
 
   const owed = (data?.waiting_payments ?? []).reduce((sum, payer) => sum + (Number(payer.total) || 0), 0);
   if (owed > 0) {
@@ -40,22 +40,22 @@ export function navFigures(data) {
 
   const overdueBills = count(has('card_overdue'));
   const dueBills = count(has('card_due'));
-  if (overdueBills) figures['/creditcard'] = { text: `${overdueBills} overdue`, problem: true };
-  else if (dueBills) figures['/creditcard'] = { text: `${dueBills} due` };
+  if (overdueBills) figures['/creditcard'] = { text: `${overdueBills} overdue`, count: overdueBills, problem: true };
+  else if (dueBills) figures['/creditcard'] = { text: `${dueBills} due`, count: dueBills };
 
   const aging = count(has('aging_stock'));
-  if (aging) figures['/inventory'] = { text: `${aging} aging` };
+  if (aging) figures['/inventory'] = { text: `${aging} aging`, count: aging };
 
   const cashout = count((entry) => entry.group === 'cashout');
   const lateCashout = count((e) => e.group === 'cashout' && e.urgency === 'overdue');
-  if (lateCashout) figures['/cashout'] = { text: `${lateCashout} late`, problem: true };
-  else if (cashout) figures['/cashout'] = { text: `${cashout} open` };
+  if (lateCashout) figures['/cashout'] = { text: `${lateCashout} late`, count: lateCashout, problem: true };
+  else if (cashout) figures['/cashout'] = { text: `${cashout} open`, count: cashout };
 
   const review = count(has('email_review', 'email_add_purchase'));
-  if (review) figures['/automation'] = { text: `${review} new` };
+  if (review) figures['/automation'] = { text: `${review} new`, count: review };
 
   const coming = count(has('recurring_expense'));
-  if (coming) figures['/expenses'] = { text: `${coming} coming` };
+  if (coming) figures['/expenses'] = { text: `${coming} coming`, count: coming };
 
   return figures;
 }

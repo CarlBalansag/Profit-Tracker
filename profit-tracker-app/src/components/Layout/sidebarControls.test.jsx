@@ -228,8 +228,8 @@ describe('Ledger', () => {
 describe('Ledger in every layout', () => {
   it('the collapsed rail keeps a dot for each figure, and a folded group says what waits inside', async () => {
     const { container } = renderSidebar({ isCollapsed: true });
-    // Shipping and Cash Flow have figures: each gets a dot, words in the label.
-    expect(container.querySelectorAll('[data-figure-dot]').length).toBe(2);
+    // Countable figures get a number (Shipping 1); money gets a dot (Cash Flow).
+    expect(container.querySelectorAll('[data-figure-dot]').length).toBe(1);
     expect(screen.getByRole('link', { name: 'Cash Flow, $3.6k owed' })).toBeInTheDocument();
     cleanup();
     renderSidebar();

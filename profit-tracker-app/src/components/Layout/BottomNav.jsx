@@ -59,8 +59,10 @@ const BottomNav = ({ onMoreClick, isGlass }) => {
   const moreIsHere = inMore(pathname);
   const navTodos = useNavTodos();
   const figures = React.useMemo(() => navFigures(navTodos), [navTodos]);
+  const todoFigure = figures['/todos'];
   // The To-Do list lives in the menu, so its count shows on More.
   const todoCount = useTodoCount();
+  const moreCount = todoFigure?.count ?? todoCount;
   const [addOpen, setAddOpen] = useState(false);
   const close = () => setAddOpen(false);
   const menuRef = useModalKeyboard(addOpen, close);
@@ -117,7 +119,7 @@ const BottomNav = ({ onMoreClick, isGlass }) => {
         <button
           type="button"
           aria-haspopup="dialog"
-          aria-label={todoCount ? `More, ${todoCount} to do` : undefined}
+          aria-label={todoFigure ? `More, To-Do ${todoFigure.text}` : todoCount ? `More, ${todoCount} to do` : undefined}
           data-here={moreIsHere || undefined}
           aria-current={moreIsHere ? 'page' : undefined}
           onClick={onMoreClick}
@@ -125,15 +127,15 @@ const BottomNav = ({ onMoreClick, isGlass }) => {
         >
           <span className="relative">
             <Menu size={20} aria-hidden="true" />
-            {todoCount > 0 && (
+            {moreCount > 0 && (
               <span
                 aria-hidden="true"
                 className={clsx(
                   'absolute -right-2.5 -top-1.5 min-w-[16px] rounded-full px-1 text-center text-[10px] font-semibold leading-4 tabular-nums',
-                  isGlass ? 'bg-[#d8a65a] text-[#111315]' : 'bg-[var(--dp-text-primary)] text-[var(--dp-card-bg)]',
+                  isGlass ? 'bg-[#d8a65a] text-[#111315]' : todoFigure?.problem ? 'bg-[var(--dp-red-text)] text-white' : 'bg-[var(--dp-text-primary)] text-[var(--dp-card-bg)]',
                 )}
               >
-                {todoCount > 99 ? '99+' : todoCount}
+                {moreCount > 99 ? '99+' : moreCount}
               </span>
             )}
           </span>
