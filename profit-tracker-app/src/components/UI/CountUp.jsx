@@ -3,8 +3,8 @@ import { animate } from 'framer-motion';
 
 // First count from 0, and the count to a new value once it's known.
 const SETTLE_S = 0.8;
-// While new data loads (unless `drift` is off): a slow climb that keeps
-// slowing down, so the number is already moving the moment a filter changes.
+// While new data loads: a slow climb that keeps slowing down, so the number
+// is already moving the moment a filter changes.
 const DRIFT_S = 10;
 const DRIFT_SHARE = 0.3; // climbs up to 30% past where it was
 const NUMBER = /-?\d[\d,]*(?:\.\d+)?/;
@@ -39,15 +39,14 @@ function formatLike(parsed, number) {
  * Shows a formatted number ("$2,313.27") counting with framer-motion:
  * - first time: from 0 up to the value;
  * - `pending` (new data is loading): starts climbing slowly right away, from
- *   wherever it is, slowing down as it goes; with `drift={false}` it holds
- *   still on the last number instead;
+ *   wherever it is, slowing down as it goes;
  * - new value: counts from wherever it is to the real number, quickly, up or
  *   down (so a climb that went past it comes back down).
  * It plays even when the device asks for reduced motion (a short number
  * count, by choice). Screen readers get only the final value. Text without a
  * number is shown as-is.
  */
-export default function CountUp({ value, pending = false, drift = true }) {
+export default function CountUp({ value, pending = false }) {
   const text = String(value ?? '');
   const target = parseValue(text);
   const currentRef = useRef(0);
@@ -59,7 +58,6 @@ export default function CountUp({ value, pending = false, drift = true }) {
   useEffect(() => {
     const parsed = parseValue(text);
     if (!parsed) return undefined;
-    if (pending && !drift) return undefined;
     const from = currentRef.current;
     const show = (latest) => {
       currentRef.current = latest;
@@ -82,7 +80,7 @@ export default function CountUp({ value, pending = false, drift = true }) {
         },
       });
     return () => controls.stop();
-  }, [text, pending, drift]);
+  }, [text, pending]);
 
   if (!target) return <>{text}</>;
   const shown = frame ?? text;

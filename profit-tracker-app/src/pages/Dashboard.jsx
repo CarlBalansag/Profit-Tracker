@@ -1288,7 +1288,7 @@ function DashboardGoalsWidget({ goals, stats, isGlass, dateFilter, onNavigate, r
 
             {/* Current value */}
             <p className={`text-[20px] font-bold tabular-nums leading-tight ${isGlass ? 'text-[#e8e2d6]' : 'text-[var(--dp-text-primary)]'}`}>
-              <CountUp value={fmt(current)} pending={refreshing} drift={false} />
+              <CountUp value={fmt(current)} pending={refreshing} />
             </p>
 
             {/* Target */}
@@ -1518,7 +1518,7 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], b
               when the new ones arrive they count from the old value to the new
               one, up or down. Nothing fades or locks in between. */}
           <div aria-busy={loading || undefined}>
-            <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] max-[359px]:text-[17px] text-[var(--dp-text-primary)]`}><CountUp value={value} pending={loading} drift={false} /></p>
+            <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] max-[359px]:text-[17px] text-[var(--dp-text-primary)]`}><CountUp value={value} pending={loading} /></p>
             <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[12px] leading-snug mt-1 ${formula.length > 0 ? 'pr-5' : ''} dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
           </div>
         </div>

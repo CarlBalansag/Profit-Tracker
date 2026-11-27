@@ -49,19 +49,6 @@ describe('CountUp', () => {
     expect(visible(container)).toBe('$140.00');
   });
 
-  it('with drift off, holds the last number while loading, then counts from it to the new one', () => {
-    const { container, rerender } = render(<CountUp value="$100.00" drift={false} />);
-    finish(lastRun());
-    const before = runs.length;
-    rerender(<CountUp value="$100.00" pending drift={false} />);
-    expect(runs.length).toBe(before);
-    expect(visible(container)).toBe('$100.00');
-    rerender(<CountUp value="$60.00" drift={false} />);
-    const settle = lastRun();
-    expect(settle.from).toBe(100);
-    expect(settle.to).toBe(60);
-  });
-
   it('counts back down from where the climb got to when the new value arrives', () => {
     const { container, rerender } = render(<CountUp value="$100.00" />);
     finish(lastRun());

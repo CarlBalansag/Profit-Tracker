@@ -184,10 +184,10 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
                     {displayLabel(stage.status)}
                   </span>
                   <span className={`dp-card-value mt-1.5 text-[28px] font-bold leading-none tabular-nums transition-colors duration-300 ${empty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-primary)]'}`}>
-                    <CountUp value={stage.count} pending={pending} drift={false} />
+                    <CountUp value={stage.count} pending={pending} />
                   </span>
                   <span className={`dp-card-subtext mt-1.5 text-[13px] font-semibold tabular-nums transition-colors duration-300 ${empty ? 'text-[var(--dp-text-label)]' : 'text-[var(--dp-text-primary)] opacity-80'}`}>
-                    <CountUp value={dollars(stage.value)} pending={pending} drift={false} />
+                    <CountUp value={dollars(stage.value)} pending={pending} />
                   </span>
                 </button>
               </MotionDiv>
