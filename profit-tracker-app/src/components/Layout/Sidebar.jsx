@@ -19,6 +19,7 @@ import { useCashoutProviders } from '../../hooks/useCashoutProviders';
 import { usePrefetchProps } from '../../hooks/usePrefetchPage';
 import { useTodoCount } from '../../hooks/useApi';
 import { useMatchMedia } from '../../hooks/useMatchMedia';
+import { useTutorial } from '../../context/TutorialContext';
 
 const MotionDiv = motion.div;
 
@@ -81,24 +82,24 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
             <NavMarker marker={marker} className="rounded-xl bg-[#d8a65a]/10" />
 
             <GlassNavItem icon={LayoutDashboard} label="Dashboard" to="/" />
+            <GlassNavItem icon={ListChecks} label="To-Do" to="/todos" badge={todoCount} />
+            <GlassNavItem icon={CalendarDays} label="Calendar" to="/calendar" />
             <GlassNavItem icon={ShoppingCart} label="Add Transaction" to="/add-transaction" />
             <GlassNavItem icon={BadgeDollarSign} label="Record Sale" to="/add-sale" />
             <GlassNavItem icon={ArrowLeftRight} label="Transactions" to="/transactions" />
-            <GlassNavItem icon={ListChecks} label="To-Do" to="/todos" badge={todoCount} />
             <GlassNavItem icon={Boxes} label="Inventory" to="/inventory" />
             <GlassNavItem icon={Truck} label="Shipping" to="/shipping" />
             <GlassNavItem icon={ClipboardList} label="Statuses" to="/statuses" />
+            <GlassNavItem icon={Wallet} label="Cash Flow" to="/cashflow" />
+            <GlassNavItem icon={CreditCardIcon} label="Credit Card" to="/creditcard" />
+            {hasCashoutAccess && <GlassNavItem icon={HandCoins} label="Cashout" to="/cashout" />}
+            <GlassNavItem icon={ChartLine} label="Analytics" to="/analytics" />
+            <GlassNavItem icon={Target} label="Goals" to="/goals" />
             <GlassNavItem icon={BanknoteArrowDown} label="Expenses" to="/expenses" />
-            {SCHEDULE_C_ENABLED && <GlassNavItem icon={Landmark} label="Schedule C" to="/schedule-c" />}
             <GlassNavItem icon={ReceiptText} label="Receipts" to="/receipts" />
             <GlassNavItem icon={FileText} label="Invoices" to="/invoices" />
             <GlassNavItem icon={BadgePercent} label="Tax Exempt" to="/tax-exempt" />
-            <GlassNavItem icon={ChartLine} label="Analytics" to="/analytics" />
-            <GlassNavItem icon={Wallet} label="Cash Flow" to="/cashflow" />
-            <GlassNavItem icon={CreditCardIcon} label="Credit Card" to="/creditcard" />
-            <GlassNavItem icon={Target} label="Goals" to="/goals" />
-            <GlassNavItem icon={CalendarDays} label="Calendar" to="/calendar" />
-            {hasCashoutAccess && <GlassNavItem icon={HandCoins} label="Cashout" to="/cashout" />}
+            {SCHEDULE_C_ENABLED && <GlassNavItem icon={Landmark} label="Schedule C" to="/schedule-c" />}
 
             <div className="my-2 h-px w-7 bg-white/[0.07]" />
 
@@ -161,38 +162,42 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
 
         <nav ref={navRef} className="relative flex-1 py-3 px-2 space-y-3 overflow-y-auto overflow-x-hidden dp-scrollbar">
           <NavMarker marker={marker} className="!mt-0 rounded-md bg-[var(--dp-accent-bg)]" />
-          <SidebarSection title="Core" isCollapsed={isCollapsed} tutorialId="sidebar-section-core">
+          {/* Grouped by how a reseller works: today's work, buying and selling,
+              shipping, money, then the bookkeeping (folded by default). */}
+          <SidebarSection title="Today" isCollapsed={isCollapsed} foldable={false}>
             <NavItem icon={LayoutDashboard} label="Dashboard" to="/" isCollapsed={isCollapsed} />
+            <NavItem icon={ListChecks} label="To-Do" to="/todos" isCollapsed={isCollapsed} badge={todoCount} />
+            <NavItem icon={CalendarDays} label="Calendar" to="/calendar" isCollapsed={isCollapsed} />
+          </SidebarSection>
+
+          <SidebarSection title="Sell & Buy" isCollapsed={isCollapsed} tutorialId="sidebar-section-core">
             <NavItem icon={ShoppingCart} label="Add Transaction" to="/add-transaction" isCollapsed={isCollapsed} tutorialId="sidebar-add-transaction" />
             <NavItem icon={BadgeDollarSign} label="Record Sale" to="/add-sale" isCollapsed={isCollapsed} tutorialId="sidebar-record-sale" />
             <NavItem icon={ArrowLeftRight} label="Transactions" to="/transactions" isCollapsed={isCollapsed} tutorialId="sidebar-transactions" />
-            <NavItem icon={ListChecks} label="To-Do" to="/todos" isCollapsed={isCollapsed} badge={todoCount} />
+            <NavItem icon={Boxes} label="Inventory" to="/inventory" isCollapsed={isCollapsed} tutorialId="sidebar-inventory" />
+            <NavItem icon={Zap} label="Email Automation" to="/automation" isCollapsed={isCollapsed} />
           </SidebarSection>
 
-          <SidebarSection title="Operations" isCollapsed={isCollapsed} tutorialId="sidebar-section-operations">
-            <NavItem icon={Boxes} label="Inventory On Hand" to="/inventory" isCollapsed={isCollapsed} tutorialId="sidebar-inventory" />
+          <SidebarSection title="Ship" isCollapsed={isCollapsed}>
             <NavItem icon={Truck} label="Shipping" to="/shipping" isCollapsed={isCollapsed} />
             <NavItem icon={ClipboardList} label="Statuses" to="/statuses" isCollapsed={isCollapsed} />
+          </SidebarSection>
+
+          <SidebarSection title="Money" isCollapsed={isCollapsed} tutorialId="sidebar-section-insights">
+            <NavItem icon={Wallet} label="Cash Flow" to="/cashflow" isCollapsed={isCollapsed} tutorialId="sidebar-cashflow" />
+            <NavItem icon={CreditCardIcon} label="Credit Card" to="/creditcard" isCollapsed={isCollapsed} tutorialId="sidebar-creditcard" />
+            {hasCashoutAccess && <NavItem icon={HandCoins} label="Cashout" to="/cashout" isCollapsed={isCollapsed} />}
+            <NavItem icon={ChartLine} label="Analytics" to="/analytics" isCollapsed={isCollapsed} tutorialId="sidebar-analytics" />
+            <NavItem icon={Target} label="Goals" to="/goals" isCollapsed={isCollapsed} />
+          </SidebarSection>
+
+          <SidebarSection title="Books" isCollapsed={isCollapsed} tutorialId="sidebar-section-operations" defaultFolded>
             <NavItem icon={BanknoteArrowDown} label="Expenses" to="/expenses" isCollapsed={isCollapsed} tutorialId="sidebar-expenses" />
-            {SCHEDULE_C_ENABLED && <NavItem icon={Landmark} label="Schedule C" to="/schedule-c" isCollapsed={isCollapsed} />}
             <NavItem icon={ReceiptText} label="Receipts" to="/receipts" isCollapsed={isCollapsed} tutorialId="sidebar-receipts" />
             <NavItem icon={FileText} label="Invoices" to="/invoices" isCollapsed={isCollapsed} />
             <NavItem icon={BadgePercent} label="Tax Exempt" to="/tax-exempt" isCollapsed={isCollapsed} tutorialId="sidebar-tax-exempt" />
+            {SCHEDULE_C_ENABLED && <NavItem icon={Landmark} label="Schedule C" to="/schedule-c" isCollapsed={isCollapsed} />}
           </SidebarSection>
-
-          <SidebarSection title="Insights" isCollapsed={isCollapsed} tutorialId="sidebar-section-insights">
-            <NavItem icon={ChartLine} label="Analytics & Insights" to="/analytics" isCollapsed={isCollapsed} tutorialId="sidebar-analytics" />
-            <NavItem icon={Wallet} label="Cash Flow" to="/cashflow" isCollapsed={isCollapsed} tutorialId="sidebar-cashflow" />
-            <NavItem icon={CreditCardIcon} label="Credit Card" to="/creditcard" isCollapsed={isCollapsed} tutorialId="sidebar-creditcard" />
-            <NavItem icon={Target} label="Goals" to="/goals" isCollapsed={isCollapsed} />
-            <NavItem icon={CalendarDays} label="Calendar" to="/calendar" isCollapsed={isCollapsed} />
-            {hasCashoutAccess && <NavItem icon={HandCoins} label="Cashout" to="/cashout" isCollapsed={isCollapsed} />}
-          </SidebarSection>
-
-          <SidebarSection title="Automation" isCollapsed={isCollapsed}>
-            <NavItem icon={Zap} label="Email automation" to="/automation" isCollapsed={isCollapsed} />
-          </SidebarSection>
-
         </nav>
 
         <div className="hidden lg:block p-2 border-t border-[color:var(--dp-border)]">
@@ -420,23 +425,32 @@ const readFolds = () => {
 // Whether a nav item's link is the current page (as NavLink decides it).
 const isCurrent = (to, pathname) => (to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`));
 
-const SidebarSection = ({ title, children, isCollapsed, tutorialId }) => {
+const SidebarSection = ({ title, children, isCollapsed, tutorialId, foldable = true, defaultFolded = false }) => {
   const { pathname } = useLocation();
+  // The guided tour points at items inside sections, so they're open during it.
+  const touring = Boolean(useTutorial()?.active);
   const holdsCurrent = React.Children.toArray(children).some((child) => child?.props?.to && isCurrent(child.props.to, pathname));
-  const [isSectionOpen, setIsSectionOpenState] = useState(() => !readFolds()[title]);
+  const [isSectionOpen, setIsSectionOpenState] = useState(() => {
+    if (!foldable) return true;
+    const saved = readFolds()[title];
+    return saved === undefined ? !defaultFolded : !saved;
+  });
   const setIsSectionOpen = (open) => {
     setIsSectionOpenState(open);
     try {
       const folds = readFolds();
-      if (open) delete folds[title]; else folds[title] = true;
+      folds[title] = !open;
       localStorage.setItem(FOLDS_KEY, JSON.stringify(folds));
     } catch { /* storage unavailable: the fold just isn't remembered */ }
   };
-  const showsItems = isSectionOpen || isCollapsed;
+  const showsItems = isSectionOpen || isCollapsed || touring;
 
   return (
     <div data-tutorial-id={tutorialId} className={clsx("space-y-0.5", isCollapsed ? "mt-4 first:mt-0" : "")}>
-      {!isCollapsed && (
+      {!isCollapsed && !foldable && (
+        <p className="dp-sidebar-group px-3 py-1 text-[11px] font-medium uppercase tracking-[1.2px] text-[var(--dp-text-label)]">{title}</p>
+      )}
+      {!isCollapsed && foldable && (
         <button
           type="button"
           aria-expanded={isSectionOpen}

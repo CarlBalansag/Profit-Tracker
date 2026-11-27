@@ -12,8 +12,8 @@ vi.mock('../../hooks/useApi', async (orig) => ({ ...(await orig()), useTodoCount
 
 afterEach(() => { cleanup(); localStorage.clear(); });
 
-const renderSidebar = ({ isCollapsed = false } = {}) => render(
-  <MemoryRouter initialEntries={['/']}>
+const renderSidebar = ({ isCollapsed = false, path = '/' } = {}) => render(
+  <MemoryRouter initialEntries={[path]}>
     <Sidebar isOpen={false} setIsOpen={() => {}} isCollapsed={isCollapsed} setIsCollapsed={() => {}} />
   </MemoryRouter>
 );
@@ -81,25 +81,25 @@ describe('Sidebar as the phone drawer', () => {
 
 describe('Sidebar sections', () => {
   it('a folded section that holds the current page says so', async () => {
-    renderSidebar();
-    const core = screen.getByRole('button', { name: /^core$/i });
+    renderSidebar({ path: '/transactions' });
+    const core = screen.getByRole('button', { name: /^sell & buy$/i });
     expect(core).not.toHaveAttribute('aria-current');
     await act(async () => { fireEvent.click(core); });
     expect(core).toHaveAttribute('aria-current', 'true');
     expect(core.querySelector('[data-current-dot]')).not.toBeNull();
-    expect(screen.getByRole('button', { name: /^operations$/i })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', { name: /^ship$/i })).not.toHaveAttribute('aria-current');
   });
 
   it('say whether they are folded and remember it on the next visit', async () => {
     renderSidebar();
-    const core = screen.getByRole('button', { name: /^core$/i });
+    const core = screen.getByRole('button', { name: /^sell & buy$/i });
     expect(core).toHaveAttribute('aria-expanded', 'true');
     await act(async () => { fireEvent.click(core); });
     expect(core).toHaveAttribute('aria-expanded', 'false');
 
     cleanup();
     renderSidebar();
-    expect(screen.getByRole('button', { name: /^core$/i })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /^sell & buy$/i })).toHaveAttribute('aria-expanded', 'false');
   });
 });
 
@@ -132,5 +132,21 @@ describe('Collapse on narrow screens', () => {
     } finally {
       window.matchMedia = original;
     }
+  });
+});
+
+describe('Sidebar groups', () => {
+  it('groups pages by how you work, with Books folded until you open it', async () => {
+    renderSidebar();
+    expect(screen.queryByRole('button', { name: /^today$/i })).toBeNull(); // Today can't be folded away
+    for (const name of [/^sell & buy$/i, /^ship$/i, /^money$/i]) {
+      expect(screen.getByRole('button', { name })).toHaveAttribute('aria-expanded', 'true');
+    }
+    const books = screen.getByRole('button', { name: /^books$/i });
+    expect(books).toHaveAttribute('aria-expanded', 'false');
+    await act(async () => { fireEvent.click(books); });
+    cleanup();
+    renderSidebar();
+    expect(screen.getByRole('button', { name: /^books$/i })).toHaveAttribute('aria-expanded', 'true');
   });
 });
