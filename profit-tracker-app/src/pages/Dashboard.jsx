@@ -221,8 +221,11 @@ const Dashboard = () => {
     .filter(c => c.visible)
     .sort((a, b) => a.order - b.order);
 
+  // In a channel view the purchase-side lines would not match the renamed
+  // "Cost of Sales" / "Cashback on Sales" cards, so the chart leaves them out.
+  const CHANNEL_HIDDEN_SERIES = ['totalCost', 'cashback', 'totalTax'];
   const visibleChartSeries = (settings.chartSeries || [])
-    .filter(c => c.visible)
+    .filter(c => c.visible && (modeFilter === 'All' || !CHANNEL_HIDDEN_SERIES.includes(c.id)))
     .sort((a, b) => a.order - b.order);
   const showTrendChart = visibleChartSeries.length > 0;
   const visibleRecentSalesColumns = (settings.recentSalesColumns || DEFAULT_DASHBOARD_SETTINGS.recentSalesColumns)
