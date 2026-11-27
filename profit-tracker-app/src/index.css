@@ -1720,8 +1720,9 @@ nav[aria-label="Main"] :is(a, button):focus-visible {
     inset: -8px;
   }
   /* The bottom bar's buttons already fill their 53px cells; a hit zone there
-     stuck out past the screen edge and let the page shift sideways. */
-  nav[aria-label="Main"] button::after { content: none; }
+     stuck out past the screen edge and let the page shift sideways (this
+     selector out-ranks the shared hit-zone rule above). */
+  nav[aria-label="Main"] :is(button[aria-label], button[title])::after { content: none; }
   [role="tablist"] > [role="tab"],
   [role="radiogroup"] > [role="radio"] {
     min-height: 40px;

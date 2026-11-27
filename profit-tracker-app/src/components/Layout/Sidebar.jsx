@@ -692,7 +692,7 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, figure }) => 
     {/* Collapsed rail: To-Do keeps its count; every other figure is a dot
         (red when late), with its words in the label. */}
     {figure?.count > 0 && isCollapsed && (
-      <BadgeCount count={figure.count} className={clsx("absolute -right-1 -top-1 min-w-[16px] rounded-full px-1 text-center text-[10px] font-semibold leading-[14px] tabular-nums", figure.problem ? "border border-transparent bg-[var(--dp-red-text)] text-white" : "border border-[color:var(--dp-text-label)] bg-[var(--dp-card-bg)] text-[var(--dp-text-secondary)]")} />
+      <BadgeCount count={figure.count} className={clsx("absolute -right-1 -top-1 min-w-[16px] rounded-full px-1 text-center text-[10px] font-semibold leading-[14px] tabular-nums", figure.problem ? "border border-transparent bg-[var(--dp-red-text)] text-[#2a0a0e]" : "border border-[color:var(--dp-text-label)] bg-[var(--dp-card-bg)] text-[var(--dp-text-secondary)]")} />
     )}
     {figure && !(figure.count > 0) && isCollapsed && (
       <span aria-hidden="true" data-figure-dot="" className={clsx("absolute right-1 top-1 h-2 w-2 rounded-full", figure.problem ? "bg-[var(--dp-red-text)]" : "border border-[color:var(--dp-text-label)]")} />
