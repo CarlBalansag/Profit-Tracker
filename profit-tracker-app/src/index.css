@@ -938,6 +938,14 @@ body,
   background: var(--dp-scroll-thumb-hover, color-mix(in srgb, var(--dp-accent) 60%, #000000));
 }
 
+/* Navigation scrollbars are neutral: red is kept for the current page and
+   for problems (losses, late), not for chrome. */
+.dp-sidebar .dp-scrollbar {
+  scrollbar-color: color-mix(in srgb, var(--dp-text-secondary) 30%, transparent) transparent;
+  --dp-scroll-thumb: color-mix(in srgb, var(--dp-text-secondary) 30%, transparent);
+  --dp-scroll-thumb-hover: color-mix(in srgb, var(--dp-text-secondary) 55%, transparent);
+}
+
 /* Modal Scrollbar Optimization */
 .modal-scrollbar {
   scrollbar-width: thin;

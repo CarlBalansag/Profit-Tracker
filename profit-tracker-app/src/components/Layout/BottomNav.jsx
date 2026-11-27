@@ -122,7 +122,7 @@ const BottomNav = ({ onMoreClick, isGlass }) => {
                 aria-hidden="true"
                 className={clsx(
                   'absolute -right-2.5 -top-1.5 min-w-[16px] rounded-full px-1 text-center text-[10px] font-semibold leading-4 tabular-nums',
-                  isGlass ? 'bg-[#d8a65a] text-[#111315]' : 'bg-[var(--dp-accent-solid)] text-white',
+                  isGlass ? 'bg-[#d8a65a] text-[#111315]' : 'bg-[var(--dp-text-primary)] text-[var(--dp-card-bg)]',
                 )}
               >
                 {todoCount > 99 ? '99+' : todoCount}

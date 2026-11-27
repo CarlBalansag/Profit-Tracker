@@ -556,8 +556,8 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, badge = 0 }) 
     <Icon size={16} className={clsx("flex-shrink-0", !isCollapsed && "max-lg:size-[18px]")} />
     {!isCollapsed && <span className="truncate flex-1 disabled-link">{label}</span>}
     {badge > 0 && (isCollapsed
-      ? <BadgeCount count={badge} className="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-[var(--dp-accent-solid)] px-1 text-center text-[10px] font-semibold leading-4 text-white tabular-nums" />
-      : <BadgeCount count={badge} className="min-w-[20px] rounded-full bg-[var(--dp-accent-solid)] px-1.5 text-center text-[11px] font-semibold leading-5 text-white tabular-nums" />)}
+      ? <BadgeCount count={badge} className="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-[var(--dp-text-primary)] px-1 text-center text-[10px] font-semibold leading-4 text-[var(--dp-card-bg)] tabular-nums" />
+      : <BadgeCount count={badge} className="min-w-[20px] rounded-full bg-[var(--dp-text-primary)] px-1.5 text-center text-[11px] font-semibold leading-5 text-[var(--dp-card-bg)] tabular-nums" />)}
   </NavLink>
 );
 
