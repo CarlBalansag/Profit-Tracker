@@ -22,7 +22,11 @@ import { useMatchMedia } from '../../hooks/useMatchMedia';
 
 const MotionDiv = motion.div;
 
-const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'neon-dark' }) => {
+const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed, uiStyle = 'neon-dark' }) => {
+  // Collapsing is a desktop choice: below 1024px the sidebar is the phone
+  // drawer, which always shows its labels (and has no expand button).
+  const isNarrow = useMatchMedia('(max-width: 1023px)');
+  const isCollapsed = collapsedPref && !isNarrow;
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const navigate = useNavigate();
@@ -120,7 +124,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed, setIsCollapsed, uiStyle = 'ne
         ref={drawerRef}
         inert={offscreen}
         className={clsx(
-          "fixed inset-y-0 left-0 z-50 flex flex-col transition-[width,translate] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:duration-150 lg:static lg:translate-x-0 border-r border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] dp-elevated dp-sidebar",
+          "fixed inset-y-0 left-0 z-50 flex flex-col transition-[width,translate] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none lg:static lg:translate-x-0 border-r border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] dp-elevated dp-sidebar",
           isOpen ? "translate-x-0" : "-translate-x-full",
           isCollapsed ? "w-[72px]" : "w-64 lg:w-60"
         )}

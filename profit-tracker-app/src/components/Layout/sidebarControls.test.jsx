@@ -117,3 +117,20 @@ describe('Collapsed sidebar', () => {
     expect(container.querySelector('[data-sidebar-tooltip]')).toBeNull();
   });
 });
+
+describe('Collapse on narrow screens', () => {
+  it('the phone drawer keeps its labels even when the desktop sidebar is collapsed', () => {
+    const original = window.matchMedia;
+    window.matchMedia = (query) => ({ matches: query === '(max-width: 1023px)', addEventListener() {}, removeEventListener() {} });
+    try {
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <Sidebar isOpen setIsOpen={() => {}} isCollapsed setIsCollapsed={() => {}} />
+        </MemoryRouter>
+      );
+      expect(screen.getByText('Shipping')).toBeInTheDocument();
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+});
