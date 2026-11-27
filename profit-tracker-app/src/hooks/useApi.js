@@ -472,11 +472,13 @@ export const useTodos = () => useQuery(todosQuery());
 let inertClient = null;
 // The to-do list for the navigation (sidebar figures and badges); undefined
 // where there's no QueryClientProvider.
-export function useNavTodos() {
+export function useNavTodosQuery() {
   const client = useOptionalQueryClient();
   inertClient ??= client ? null : new QueryClient();
-  const { data } = useQuery({ ...todosQuery(), enabled: Boolean(client) }, client || inertClient);
-  return data;
+  return useQuery({ ...todosQuery(), enabled: Boolean(client) }, client || inertClient);
+}
+export function useNavTodos() {
+  return useNavTodosQuery().data;
 }
 export function useTodoCount() {
   const data = useNavTodos();

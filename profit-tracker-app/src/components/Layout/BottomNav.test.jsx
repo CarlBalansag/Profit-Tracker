@@ -44,15 +44,15 @@ describe('BottomNav', () => {
     expect(add.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(add);
     expect(add.getAttribute('aria-expanded')).toBe('true');
-    fireEvent.click(screen.getByRole('link', { name: 'Record Sale' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Record sale' }));
     expect(screen.getByTestId('path').textContent).toBe('/add-sale');
-    expect(screen.queryByRole('link', { name: 'Add Transaction' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Log a buy' })).toBeNull();
   });
 
   it('closes quick add when tapping outside', () => {
     mount();
     fireEvent.click(screen.getByRole('button', { name: 'Quick add' }));
     fireEvent.click(screen.getByRole('button', { name: 'Close quick add' }));
-    expect(screen.queryByRole('link', { name: 'Add Transaction' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Log a buy' })).toBeNull();
   });
 });

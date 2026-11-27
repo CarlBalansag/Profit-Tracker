@@ -11,7 +11,7 @@ vi.mock('../../context/AuthContext', () => ({
 vi.mock('../../hooks/useApi', async (orig) => ({
   ...(await orig()),
   useTodoCount: () => 16,
-  useNavTodos: () => ({ counts: { total: 16 }, items: [{ type: 'ship', urgency: 'soon' }], waiting_payments: [{ total: 3626.6, overdue_total: 0 }] }),
+  useNavTodosQuery: () => ({ data: { counts: { total: 16 }, items: [{ type: 'ship', urgency: 'soon' }], waiting_payments: [{ total: 3626.6, overdue_total: 0 }] } }),
 }));
 
 afterEach(() => { cleanup(); localStorage.clear(); });
@@ -140,18 +140,16 @@ describe('Collapse on narrow screens', () => {
 });
 
 describe('Sidebar groups', () => {
-  it('groups pages by how you work, with Books folded until you open it', async () => {
+  it('groups pages by how you work; Books starts open on desktop and remembers a fold', async () => {
     renderSidebar();
     expect(screen.queryByRole('button', { name: /^today$/i })).toBeNull(); // Today can't be folded away
-    for (const name of [/^stock$/i, /^money$/i]) {
+    for (const name of [/^stock$/i, /^money$/i, /^books$/i]) {
       expect(screen.getByRole('button', { name })).toHaveAttribute('aria-expanded', 'true');
     }
-    const books = screen.getByRole('button', { name: /^books$/i });
-    expect(books).toHaveAttribute('aria-expanded', 'false');
-    await act(async () => { fireEvent.click(books); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^books$/i })); });
     cleanup();
     renderSidebar();
-    expect(screen.getByRole('button', { name: /^books$/i })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: /^books$/i })).toHaveAttribute('aria-expanded', 'false');
   });
 });
 
@@ -198,11 +196,12 @@ describe('Phone drawer contents', () => {
 
 describe('Round 4 fixes', () => {
   it('going to a page inside folded Books opens it, without saving that as your choice', async () => {
+    localStorage.setItem('pt-sidebar-folds', JSON.stringify({ Books: true }));
     renderSidebar({ path: '/cashflow' });
     expect(screen.getByRole('button', { name: /^books$/i })).toHaveAttribute('aria-expanded', 'false');
     await act(async () => { fireEvent.click(screen.getByRole('link', { name: 'Expenses' })); });
     expect(screen.getByRole('button', { name: /^books$/i })).toHaveAttribute('aria-expanded', 'true');
-    expect(localStorage.getItem('pt-sidebar-folds')).toBeNull();
+    expect(JSON.parse(localStorage.getItem('pt-sidebar-folds'))).toEqual({ Books: true });
   });
 
   it('Cancel on the sign-out question puts focus back on Sign Out', async () => {
@@ -223,5 +222,18 @@ describe('Ledger', () => {
     expect(screen.getByRole('link', { name: 'Cash Flow, $3.6k owed' })).toBeInTheDocument();
     // Rows with nothing to say carry no figure.
     expect(screen.getByRole('link', { name: 'Goals' })).toBeInTheDocument();
+  });
+});
+
+describe('Ledger in every layout', () => {
+  it('the collapsed rail keeps a dot for each figure, and a folded group says what waits inside', async () => {
+    const { container } = renderSidebar({ isCollapsed: true });
+    // Shipping and Cash Flow have figures: each gets a dot, words in the label.
+    expect(container.querySelectorAll('[data-figure-dot]').length).toBe(2);
+    expect(screen.getByRole('link', { name: 'Cash Flow, $3.6k owed' })).toBeInTheDocument();
+    cleanup();
+    renderSidebar();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^money$/i })); });
+    expect(screen.getByRole('button', { name: /^money$/i })).toHaveTextContent('· $3.6k owed');
   });
 });

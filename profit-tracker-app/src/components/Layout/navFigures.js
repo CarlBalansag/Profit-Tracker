@@ -18,17 +18,24 @@ export function navFigures(data) {
 
   const total = data?.counts?.total ?? items.length;
   if (total > 0) {
+    // Late work is named in words, so red is never the only sign.
     const overdue = count((entry) => entry.urgency === 'overdue');
-    figures['/todos'] = { text: `${total} open`, count: total, problem: overdue > 0 };
+    figures['/todos'] = overdue > 0
+      ? { text: `${overdue} late`, count: total, problem: true }
+      : { text: `${total} open`, count: total };
   }
 
   const toShip = count(has('ship', 'deal_closed_unshipped', 'send_tracking'));
-  if (toShip) figures['/shipping'] = { text: `${toShip} to ship`, problem: count((e) => has('ship', 'deal_closed_unshipped')(e) && e.urgency === 'overdue') > 0 };
+  const lateShip = count((e) => has('ship', 'deal_closed_unshipped')(e) && e.urgency === 'overdue');
+  if (lateShip) figures['/shipping'] = { text: `${lateShip} late`, problem: true };
+  else if (toShip) figures['/shipping'] = { text: `${toShip} to ship` };
 
   const owed = (data?.waiting_payments ?? []).reduce((sum, payer) => sum + (Number(payer.total) || 0), 0);
   if (owed > 0) {
-    const late = (data?.waiting_payments ?? []).some((payer) => Number(payer.overdue_total) > 0);
-    figures['/cashflow'] = { text: `${compactMoney(owed)} owed`, problem: late };
+    const late = (data?.waiting_payments ?? []).reduce((sum, payer) => sum + (Number(payer.overdue_total) || 0), 0);
+    figures['/cashflow'] = late > 0
+      ? { text: `${compactMoney(late)} late`, problem: true }
+      : { text: `${compactMoney(owed)} owed` };
   }
 
   const overdueBills = count(has('card_overdue'));
@@ -40,7 +47,9 @@ export function navFigures(data) {
   if (aging) figures['/inventory'] = { text: `${aging} aging` };
 
   const cashout = count((entry) => entry.group === 'cashout');
-  if (cashout) figures['/cashout'] = { text: `${cashout} open`, problem: count((e) => e.group === 'cashout' && e.urgency === 'overdue') > 0 };
+  const lateCashout = count((e) => e.group === 'cashout' && e.urgency === 'overdue');
+  if (lateCashout) figures['/cashout'] = { text: `${lateCashout} late`, problem: true };
+  else if (cashout) figures['/cashout'] = { text: `${cashout} open` };
 
   const review = count(has('email_review', 'email_add_purchase'));
   if (review) figures['/automation'] = { text: `${review} new` };

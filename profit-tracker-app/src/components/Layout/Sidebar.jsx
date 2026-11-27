@@ -19,7 +19,7 @@ import PageSearch from './PageSearch';
 import { pageList } from './pageList';
 import { useCashoutProviders } from '../../hooks/useCashoutProviders';
 import { usePrefetchProps } from '../../hooks/usePrefetchPage';
-import { useNavTodos, useTodoCount } from '../../hooks/useApi';
+import { useNavTodosQuery, useTodoCount } from '../../hooks/useApi';
 import { navFigures } from './navFigures';
 import { useMatchMedia } from '../../hooks/useMatchMedia';
 import { useTutorial } from '../../context/TutorialContext';
@@ -43,7 +43,8 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
   const hasCashoutAccess = Array.isArray(cashoutProviders) && cashoutProviders.length > 0;
   const todoCount = useTodoCount();
   // Each row's live figure (owed, due, to ship...), from the same to-do list.
-  const navTodos = useNavTodos();
+  const navQuery = useNavTodosQuery();
+  const navTodos = navQuery.data;
   const figures = React.useMemo(() => navFigures(navTodos), [navTodos]);
   const fig = (to) => figures[to];
   const addBuyPrefetch = usePrefetchProps('/add-transaction');
@@ -163,7 +164,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
         className={clsx(
           "fixed inset-y-0 left-0 z-50 flex shrink-0 flex-col transition-[width,translate] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none lg:static lg:translate-x-0 border-r border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] dp-elevated dp-sidebar",
           isOpen ? "translate-x-0" : "-translate-x-full",
-          isCollapsed ? "w-[72px]" : "w-[min(85vw,320px)] lg:w-60"
+          isCollapsed ? "w-[72px]" : "w-[min(85vw,320px)] lg:w-[248px]"
         )}
         onClick={(e) => { if (e.target.closest('a')) setIsOpen(false); }}
       >
@@ -247,6 +248,13 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
           </button>
         </div>
 
+        {navQuery.isError && !navTodos && !isCollapsed && (
+          <p role="status" className="mx-3 mt-2 flex items-center justify-between gap-2 text-[12px] text-[var(--dp-text-label)]">
+            Live numbers didn&apos;t load.
+            <button type="button" onClick={() => navQuery.refetch()} className="font-semibold text-[var(--dp-accent-text)] underline underline-offset-2">Retry</button>
+          </p>
+        )}
+
         <nav ref={navRef} aria-label="Pages" className={clsx("relative flex-1 py-1.5 px-2 space-y-2 overflow-y-auto overflow-x-hidden dp-scrollbar", isCollapsed && "dp-rail", moreBelow && "dp-nav-more", moreAbove && "dp-nav-less")}>
           <NavMarker marker={marker} className="!mt-0 rounded-md bg-[var(--dp-accent-bg)]" />
           {/* A ledger: each place carries the one live figure that says whether
@@ -273,7 +281,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
             <NavItem icon={Target} label="Goals" to="/goals" isCollapsed={isCollapsed} />
           </SidebarSection>
 
-          <SidebarSection title="Books" isCollapsed={isCollapsed} tutorialId="sidebar-section-operations" defaultFolded>
+          <SidebarSection title="Books" isCollapsed={isCollapsed} tutorialId="sidebar-section-operations" defaultFolded={isNarrow}>
             <NavItem icon={BanknoteArrowDown} label="Expenses" to="/expenses" isCollapsed={isCollapsed} tutorialId="sidebar-expenses" figure={fig('/expenses')} />
             <NavItem icon={ReceiptText} label="Receipts" to="/receipts" isCollapsed={isCollapsed} tutorialId="sidebar-receipts" />
             <NavItem icon={FileText} label="Invoices" to="/invoices" isCollapsed={isCollapsed} />
@@ -535,6 +543,9 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId, foldable = t
   // The guided tour points at items inside sections, so they're open during it.
   const touring = Boolean(useTutorial()?.active);
   const holdsCurrent = React.Children.toArray(children).some((child) => child?.props?.to && isCurrent(child.props.to, pathname));
+  // Folded: the heading says what's waiting inside (a late one first).
+  const inside = React.Children.toArray(children).map((child) => child?.props?.figure).filter(Boolean);
+  const foldedSummary = inside.find((f) => f.problem) || inside[0];
   const [isSectionOpen, setIsSectionOpenState] = useState(() => {
     if (!foldable || holdsCurrent) return true; // the page you're on is never hidden
     const saved = readFolds()[title];
@@ -573,7 +584,7 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId, foldable = t
           <span className="flex items-center gap-1.5">
             {title}
             {/* Folded, but the page you're on is inside. */}
-            {!isSectionOpen && <span aria-hidden="true" className="font-normal normal-case tracking-normal opacity-80">· {React.Children.toArray(children).filter(Boolean).length}</span>}
+            {!isSectionOpen && foldedSummary && <span aria-hidden="true" className={clsx("font-normal normal-case tracking-normal", foldedSummary.problem ? "text-[var(--dp-red-text)]" : "opacity-80")}>· {foldedSummary.text}</span>}
             {!isSectionOpen && holdsCurrent && <span aria-hidden="true" data-current-dot="" className="h-1.5 w-1.5 rounded-full bg-[var(--dp-accent-solid)]" />}
           </span>
           <ChevronDown size={12} aria-hidden="true" className={clsx("transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]", !isSectionOpen && "-rotate-90")} />
@@ -664,14 +675,18 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, figure }) => 
     {!isCollapsed && <span className="truncate flex-1 disabled-link">{label}</span>}
     {/* The ledger column: one live figure, right-aligned in tabular numbers. */}
     {figure && !isCollapsed && (
-      <BadgeCount
-        text={figure.text}
-        data-figure=""
-        className={clsx("dp-nav-figure shrink-0 text-right text-[13px] lg:text-[11px] font-semibold tabular-nums", figure.problem ? "text-[var(--dp-red-text)]" : "dp-nav-figure-muted")}
-      />
+      <span className={clsx("dp-nav-figure flex shrink-0 items-center gap-1", figure.problem ? "dp-nav-figure-problem" : "dp-nav-figure-muted")}>
+        {figure.problem && <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />}
+        <BadgeCount text={figure.text} data-figure="" className="text-right text-[13px] lg:text-[11px] font-semibold tabular-nums" />
+      </span>
     )}
+    {/* Collapsed rail: To-Do keeps its count; every other figure is a dot
+        (red when late), with its words in the label. */}
     {figure?.count > 0 && isCollapsed && (
-      <BadgeCount count={figure.count} className="absolute -right-1 -top-1 min-w-[16px] rounded-full bg-[var(--dp-text-primary)] px-1 text-center text-[10px] font-semibold leading-4 text-[var(--dp-card-bg)] tabular-nums" />
+      <BadgeCount count={figure.count} className={clsx("absolute -right-1 -top-1 min-w-[16px] rounded-full px-1 text-center text-[10px] font-semibold leading-4 tabular-nums", figure.problem ? "bg-[var(--dp-red-text)] text-white" : "bg-[var(--dp-text-primary)] text-[var(--dp-card-bg)]")} />
+    )}
+    {figure && !figure.count && isCollapsed && (
+      <span aria-hidden="true" data-figure-dot="" className={clsx("absolute right-1 top-1 h-2 w-2 rounded-full", figure.problem ? "bg-[var(--dp-red-text)]" : "bg-[var(--dp-text-primary)]")} />
     )}
   </NavLink>
 );

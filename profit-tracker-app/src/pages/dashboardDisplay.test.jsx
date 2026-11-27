@@ -37,6 +37,7 @@ vi.mock('../hooks/useApi', () => ({
   useTodos: () => ({ data: undefined }),
   useTodoCount: () => 0,
   useNavTodos: () => undefined,
+  useNavTodosQuery: () => ({ data: undefined }),
 }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'u1', username: 'Test' } }) }));
 vi.mock('../hooks/useUiPreferences', () => ({ useUiPreferences: () => ({ preferences: { style: uiStyle } }) }));

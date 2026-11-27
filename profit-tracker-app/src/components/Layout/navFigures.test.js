@@ -14,9 +14,10 @@ describe('navFigures', () => {
       ],
       waiting_payments: [{ total: 1344, overdue_total: 0 }, { total: 230, overdue_total: 230 }],
     });
-    expect(f['/todos']).toEqual({ text: '5 open', count: 5, problem: true });
-    expect(f['/shipping']).toEqual({ text: '2 to ship', problem: true });
-    expect(f['/cashflow']).toEqual({ text: '$1.6k owed', problem: true });
+    // Late work says "late" in words, not only in red.
+    expect(f['/todos']).toEqual({ text: '1 late', count: 5, problem: true });
+    expect(f['/shipping']).toEqual({ text: '1 late', problem: true });
+    expect(f['/cashflow']).toEqual({ text: '$230 late', problem: true });
     expect(f['/creditcard']).toEqual({ text: '1 due' });
     expect(f['/inventory']).toEqual({ text: '1 aging' });
     expect(f['/cashout'].text).toBe('1 open');

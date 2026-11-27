@@ -4,21 +4,26 @@ import clsx from 'clsx';
 import { ArrowLeftRight, Boxes, CirclePlus, DollarSign, LayoutDashboard, Menu, Plus } from 'lucide-react';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 import { usePrefetchProps } from '../../hooks/usePrefetchPage';
-import { useTodoCount } from '../../hooks/useApi';
+import { useNavTodos, useTodoCount } from '../../hooks/useApi';
+import { navFigures } from './navFigures';
 
 const ITEM = 'flex flex-1 flex-col items-center justify-center gap-0.5 h-14 min-w-0 px-0.5 text-[11px] max-[359px]:text-[10.5px] max-[359px]:tracking-tight font-medium';
 
 const QUICK_ADD = [
-  { to: '/add-transaction', label: 'Add Transaction', icon: CirclePlus },
-  { to: '/add-sale', label: 'Record Sale', icon: DollarSign },
+  { to: '/add-transaction', label: 'Log a buy', icon: CirclePlus },
+  { to: '/add-sale', label: 'Record sale', icon: DollarSign },
 ];
 
-const Tab = ({ to, label, icon, end, colors }) => {
+const Tab = ({ to, label, icon, end, colors, figure }) => {
   const Icon = icon;
   const prefetch = usePrefetchProps(to);
   return (
-    <NavLink to={to} end={end} {...prefetch} className={({ isActive }) => clsx(ITEM, isActive ? colors.active : colors.idle)}>
-      <Icon size={20} aria-hidden="true" />
+    <NavLink to={to} end={end} {...prefetch} aria-label={figure ? `${label}, ${figure.text}` : undefined} className={({ isActive }) => clsx(ITEM, isActive ? colors.active : colors.idle)}>
+      <span className="relative">
+        <Icon size={20} aria-hidden="true" />
+        {/* The sidebar's live figure for this page, as a dot (its words are in the label). */}
+        {figure && <span aria-hidden="true" data-figure-dot="" className={clsx('absolute -right-1 -top-0.5 h-2 w-2 rounded-full', figure.problem ? 'bg-[var(--dp-red-text)]' : 'bg-[var(--dp-text-primary)]')} />}
+      </span>
       <span className="truncate">{label}</span>
     </NavLink>
   );
@@ -52,6 +57,8 @@ const inMore = (pathname) => pathname !== '/' && !TAB_PATHS.some((p) => pathname
 const BottomNav = ({ onMoreClick, isGlass }) => {
   const { pathname } = useLocation();
   const moreIsHere = inMore(pathname);
+  const navTodos = useNavTodos();
+  const figures = React.useMemo(() => navFigures(navTodos), [navTodos]);
   // The To-Do list lives in the menu, so its count shows on More.
   const todoCount = useTodoCount();
   const [addOpen, setAddOpen] = useState(false);
@@ -106,7 +113,7 @@ const BottomNav = ({ onMoreClick, isGlass }) => {
             <Plus size={20} className={clsx('transition-transform', addOpen && 'rotate-45')} aria-hidden="true" />
           </span>
         </button>
-        <Tab to="/inventory" label="Inventory" icon={Boxes} colors={colors} />
+        <Tab to="/inventory" label="Inventory" icon={Boxes} colors={colors} figure={figures['/inventory']} />
         <button
           type="button"
           aria-haspopup="dialog"
