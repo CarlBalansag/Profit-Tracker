@@ -162,7 +162,8 @@ describe('Dashboard KPI cards', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Welcome back/);
     expect(screen.getByRole('heading', { level: 2, name: 'Status Pipeline' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Recent Sales' })).toBeInTheDocument();
-    expect(screen.queryAllByRole('heading', { level: 3 })).toHaveLength(0);
+    // The chart card keeps its original h3 title.
+    expect(screen.queryAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Profit & Cost Trend']);
   });
 });
 
@@ -195,14 +196,6 @@ describe('Dashboard Recent Sales and chart', () => {
     expect(screen.queryByRole('columnheader', { name: 'Buyer' })).not.toBeInTheDocument();
     expect(screen.getByText('+$0.40')).toBeInTheDocument();
     expect(screen.queryByText('+$0')).not.toBeInTheDocument();
-  });
-
-  it('draws Line and Bar with the same chart, only the marks change', () => {
-    mount('premium');
-    expect(screen.getByTestId('trend-chart')).toHaveTextContent('line');
-    fireEvent.click(within(screen.getByRole('group', { name: 'Chart type' })).getByRole('button', { name: 'Bar' }));
-    expect(screen.getByTestId('trend-chart')).toHaveTextContent('bar');
-    expect(screen.getByRole('heading', { level: 2, name: 'Profit & Cost Trend' })).toBeInTheDocument();
   });
 });
 

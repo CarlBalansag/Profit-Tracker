@@ -105,7 +105,6 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
   // so the strip fits what's actually going on; otherwise every step of the
   // workflow, 0 or not. Always in workflow order.
   const stages = (pipeline?.stages || []).filter((stage) => !hideEmpty || stage.count > 0);
-  const hiddenCount = (pipeline?.stages || []).length - stages.length;
   const open = stages.find((stage) => stage.status === openStatus);
 
   // Which steps just arrived (to bring them in left to right) and whether any
@@ -197,11 +196,6 @@ export default function WorkflowPipeline({ pipeline, pending = false, onNavigate
         </AnimatePresence>
       </div>
 
-      {hideEmpty && hiddenCount > 0 && stages.length > 0 && (
-        <p className="-mt-2 text-[12px] text-[var(--dp-text-secondary)] [text-wrap:pretty]">
-          {hiddenCount} {hiddenCount === 1 ? 'step has' : 'steps have'} nothing in {hiddenCount === 1 ? 'it' : 'them'} right now and {hiddenCount === 1 ? 'is' : 'are'} hidden.
-        </p>
-      )}
 
       {/* The item list opens and closes by growing and shrinking, not a jump. */}
       <AnimatePresence initial={false}>

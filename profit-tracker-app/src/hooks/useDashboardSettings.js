@@ -3,7 +3,7 @@ import { apiFetch } from './useApi';
 import { DEFAULT_DASHBOARD_SETTINGS, PIPELINE_CARD_ID_ALIASES } from '../data/dashboardRegistry';
 
 const STORAGE_KEY_PREFIX = 'dashboard_settings';
-const SETTINGS_VERSION = 7;
+const SETTINGS_VERSION = 6;
 const DEFAULT_GLASS_SETTINGS = {
   metricPanelCount: 1,
   metricPanels: [
@@ -64,20 +64,8 @@ export function mergeDashboardSettings(stored, defaults = DEFAULT_DASHBOARD_SETT
     },
   };
 
-  // v7: the chart shows Net Profit in place of Gross Profit, once, for
-  // settings saved before it; later choices in Settings are kept.
-  if ((stored.version ?? 1) < 7) {
-    merged.chartSeries = merged.chartSeries.map(series => (
-      series.id === 'netProfit' ? { ...series, visible: true }
-        : series.id === 'grossProfit' ? { ...series, visible: false }
-          : series
-    ));
-  }
-
-  if ((stored.version ?? 1) < SETTINGS_VERSION) merged.version = SETTINGS_VERSION;
-
-  // v6 reset the KPI cards once; it must not run again for later versions.
-  if ((stored.version ?? 1) < 6) {
+  if ((stored.version ?? 1) < SETTINGS_VERSION) {
+    merged.version = SETTINGS_VERSION;
     merged.statCards = merged.statCards.map(card => {
       if (Object.prototype.hasOwnProperty.call(DEFAULT_STAT_CARD_ORDER, card.id)) {
         return {

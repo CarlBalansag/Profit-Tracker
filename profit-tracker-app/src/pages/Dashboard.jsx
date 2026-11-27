@@ -179,8 +179,7 @@ const Dashboard = () => {
   useEffect(() => { writeSavedFilters({ date: dateFilter, mode: modeFilter }); }, [dateFilter, modeFilter]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
-  // Running totals first: they show where the period is heading.
-  const [trendMode, setTrendMode] = useState('cumulative'); // 'period' | 'cumulative'
+  const [trendMode, setTrendMode] = useState('period'); // 'period' | 'cumulative'
   const [chartView, setChartView] = useState('line'); // 'line' | 'bar'
   // The Status Pipeline follows the dashboard filter: All shows every step,
   // Cashout/Marketplace (which only have sales of that kind) their workflow.
@@ -221,11 +220,8 @@ const Dashboard = () => {
     .filter(c => c.visible)
     .sort((a, b) => a.order - b.order);
 
-  // In a channel view the purchase-side lines would not match the renamed
-  // "Cost of Sales" / "Cashback on Sales" cards, so the chart leaves them out.
-  const CHANNEL_HIDDEN_SERIES = ['totalCost', 'cashback', 'totalTax'];
   const visibleChartSeries = (settings.chartSeries || [])
-    .filter(c => c.visible && (modeFilter === 'All' || !CHANNEL_HIDDEN_SERIES.includes(c.id)))
+    .filter(c => c.visible)
     .sort((a, b) => a.order - b.order);
   const showTrendChart = visibleChartSeries.length > 0;
   const visibleRecentSalesColumns = (settings.recentSalesColumns || DEFAULT_DASHBOARD_SETTINGS.recentSalesColumns)
@@ -300,7 +296,6 @@ const Dashboard = () => {
               <StatCard
                 key={cardConfig.id}
                 id={cardConfig.id}
-                lead={!isGlass && cardConfig.id === 'profit' && visibleStatCards[0]?.id === 'profit'}
                 title={def.label}
                 modeTag={modeTag}
                 loading={refreshing}
@@ -349,7 +344,7 @@ const Dashboard = () => {
             onNavigate={navigate}
             // Every view shows only the steps with something in them; the
             // pipeline says how many empty ones it left out.
-            hideEmpty
+            hideEmpty={pipelineView === 'all'}
           />
         </div>
       );
@@ -359,7 +354,7 @@ const Dashboard = () => {
 
     if (sectionId === 'trendChart') {
       return (
-        <div key="trendChart" data-tutorial-id="dashboard-chart" className={`grid grid-cols-1 ${dashboardMiddleGridClass} gap-4 animate-in fade-in duration-300 fill-mode-both`}>
+        <div key="trendChart" data-tutorial-id="dashboard-chart" className={`grid grid-cols-1 ${dashboardMiddleGridClass} gap-4 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-500 fill-mode-both`}>
           {showTrendChart && (
             <div className={isGlass
               ? "lg:col-span-2 rounded-[20px] p-5 bg-[#181a1c]/72 border border-white/[0.06] shadow-[0_10px_30px_rgba(0,0,0,0.22)] min-h-[360px] flex flex-col overflow-hidden"
@@ -367,29 +362,26 @@ const Dashboard = () => {
             }>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-3">
                 <div>
-                  <h2 className={isGlass ? "text-lg font-normal tracking-tight text-[#e8e2d6]" : "text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--dp-text-primary)]"}>
-                    Profit & Cost Trend
-                  </h2>
-                  <p className={isGlass ? "text-[11px] text-white/20 mt-1" : "text-[12px] text-[var(--dp-text-secondary)] mt-1 [text-wrap:pretty]"}>
-                    {trendMode === 'cumulative'
-                      ? 'Running totals across the selected period'
-                      : 'Amounts as they happened across the selected period'}
+                  <h3 className={isGlass ? "text-lg font-normal tracking-tight text-[#e8e2d6]" : "text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--dp-text-primary)]"}>
+                    {chartView === 'bar' ? 'Monthly Profit vs Spending' : 'Profit & Cost Trend'}
+                  </h3>
+                  <p className={isGlass ? "text-[11px] text-white/20 mt-1" : "text-[12px] text-[var(--dp-text-secondary)] mt-1"}>
+                    {chartView === 'bar' ? 'Net profit and total spending grouped by month' : 'Cumulative movement across selected dashboard metrics'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   {/* Line / Bar tab switcher */}
-                  <div role="group" aria-label="Chart type" className={`flex gap-0.5 p-0.5 rounded-full ${isGlass ? 'bg-white/[0.04] border border-white/[0.06]' : 'bg-[var(--dp-bg)]'}`}>
+                  <div className={`flex gap-0.5 p-0.5 rounded-full ${isGlass ? 'bg-white/[0.04] border border-white/[0.06]' : 'bg-[var(--dp-bg)]'}`}>
                     {[['line', 'Line'], ['bar', 'Bar']].map(([val, label]) => (
                       <button
                         key={val}
                         type="button"
-                        aria-pressed={chartView === val}
                         onClick={() => setChartView(val)}
                         className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${
                           chartView === val
                             ? isGlass
                               ? 'bg-white/[0.08] text-[#e8e2d6] border border-white/[0.10]'
-                              : 'bg-[var(--dp-card-bg)] font-semibold text-[var(--dp-text-primary)] dp-elevated'
+                              : 'bg-[var(--dp-card-bg)] text-[var(--dp-accent)] dp-elevated'
                             : isGlass
                               ? 'text-white/25 hover:text-white/50 border border-transparent'
                               : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] border border-transparent'
@@ -399,13 +391,21 @@ const Dashboard = () => {
                       </button>
                     ))}
                   </div>
+                  <div className={isGlass ? "flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-white/25" : "flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>
+                    <span className={isGlass ? "rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-1" : "rounded-full px-2 py-1 bg-[var(--dp-bg)]"}>{modeFilter}</span>
+                    <span className={isGlass ? "rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-1" : "rounded-full px-2 py-1 bg-[var(--dp-bg)]"}>{dateFilter}</span>
+                  </div>
                 </div>
               </div>
               <div className={isGlass ? "flex-1 rounded-2xl bg-black/10" : "flex-1 rounded-2xl bg-[var(--dp-bg)]"}>
                 {isLoading ? (
                   <div className={isGlass ? "flex h-full min-h-[280px] items-center justify-center text-sm text-gray-500" : "flex h-full min-h-[280px] items-center justify-center text-sm text-[var(--dp-text-secondary)]"}>Loading trend...</div>
+                ) : chartView === 'bar' ? (
+                  <MonthlyProfitSpendChart
+                    trend={trend}
+                    uiStyle={preferences.style}
+                  />
                 ) : (
-                  // Line and Bar are the same data and colours; only the marks change.
                   <ProfitCostTrendChart
                     trend={trend}
                     trendMeta={trendMeta}
@@ -413,7 +413,6 @@ const Dashboard = () => {
                     uiStyle={preferences.style}
                     trendMode={trendMode}
                     onTrendModeChange={setTrendMode}
-                    markType={chartView}
                   />
                 )}
               </div>
@@ -1107,24 +1106,6 @@ const Dashboard = () => {
 
       {/* "Needs attention": first on a phone; on wider screens right under
           the Status Pipeline, or at the top when the pipeline is hidden. */}
-      {/* Phone: the headline number stays on the first screen, above the to-dos. */}
-      {isPhone && showStatCards && (
-        <button
-          type="button"
-          onClick={() => statsRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-          className="flex w-full items-center justify-between gap-3 rounded-[20px] bg-[var(--dp-card-bg)] px-4 py-3 text-left dp-elevated"
-        >
-          <span className="min-w-0">
-            <span className="block text-[12px] text-[var(--dp-text-secondary)]">Net profit · {PERIOD_LABELS[dateFilter] || dateFilter}</span>
-            <span className={`block text-[22px] font-bold tabular-nums ${stats.profit < 0 ? 'text-[var(--dp-red-text)]' : 'text-[var(--dp-text-primary)]'}`}>
-              {STAT_CARD_REGISTRY.profit.getValue(stats)}
-            </span>
-          </span>
-          <span className="flex shrink-0 items-center gap-1 text-[12px] text-[var(--dp-text-secondary)]">
-            All numbers <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-          </span>
-        </button>
-      )}
       {(isPhone || !showPipeline) && <TodoSummary />}
       {dashboardSections.map(section => (
         <React.Fragment key={section.id}>
@@ -1449,7 +1430,7 @@ function GlassCircularPipeline({ cards, overflowCards = [], pipeline, onNavigate
   );
 }
 
-function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], breakdown, description, onClick, uiStyle = 'neon-dark', loading = false, lead = false }) {
+function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], breakdown, description, onClick, uiStyle = 'neon-dark', loading = false }) {
   const [open, setOpen] = useState(false);
   const [popoverPosition, setPopoverPosition] = useState('bottom');
   const [popoverCoords, setPopoverCoords] = useState(null);
@@ -1533,7 +1514,7 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], b
               when the new ones arrive they count from the old value to the new
               one, up or down. Nothing fades or locks in between. */}
           <div aria-busy={loading || undefined}>
-            <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 ${lead ? 'text-[34px] leading-[1.1] tracking-[-0.02em] max-[359px]:text-[28px]' : 'text-[22px] max-[359px]:text-[17px]'} text-[var(--dp-text-primary)]`}><CountUp value={value} pending={loading} /></p>
+            <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] max-[359px]:text-[17px] text-[var(--dp-text-primary)]`}><CountUp value={value} pending={loading} /></p>
             <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[12px] leading-snug mt-1 ${formula.length > 0 ? 'pr-5' : ''} dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
           </div>
         </div>

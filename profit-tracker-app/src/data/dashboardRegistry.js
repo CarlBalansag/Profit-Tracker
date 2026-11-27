@@ -221,8 +221,7 @@ export const CHART_SERIES_REGISTRY = {
     description: 'Your Net Profit (Gross Profit plus cashback earned on sold items), added up across the selected period.',
   },
   cashback: {
-    // Same name as the KPI tile it matches.
-    label: 'Cashback Earned',
+    label: 'Cashback',
     icon: Tag,
     color: '#ec4899',
     formula: ['Running Total of Cashback Earned on Purchases'],
@@ -319,10 +318,9 @@ export const DEFAULT_DASHBOARD_SETTINGS = {
   chartSeries: [
     { id: 'totalRevenue', visible: true,  order: 0 },
     { id: 'totalCost',    visible: true,  order: 1 },
-    // Net Profit, the headline number, is on the chart by default.
-    { id: 'netProfit',    visible: true,  order: 2 },
+    { id: 'grossProfit',  visible: true,  order: 2 },
     { id: 'cashback',     visible: true,  order: 3 },
-    { id: 'grossProfit',  visible: false, order: 4 },
+    { id: 'netProfit',    visible: false, order: 4 },
     { id: 'totalTax',     visible: false, order: 5 },
     { id: 'soldCost',     visible: false, order: 6 },
   ],
