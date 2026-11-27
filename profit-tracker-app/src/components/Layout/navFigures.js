@@ -26,14 +26,14 @@ export function navFigures(data, cashFlow) {
     const overdue = count((entry) => entry.urgency === 'overdue' && !(cashLate && entry.type === 'payout_late'));
     const late = overdue + cashLate;
     figures['/todos'] = late > 0
-      ? { text: `${late} late`, count: late, problem: true }
-      : { text: `${total} open`, count: total };
+      ? { text: `${late} late`, count: late, problem: true, hint: 'Overdue to-dos, plus payouts past the payer\'s usual timing' }
+      : { text: `${total} open`, count: total, hint: 'Everything on your to-do list' };
   }
 
   const toShip = count(has('ship', 'deal_closed_unshipped', 'send_tracking'));
   const lateShip = count((e) => has('ship', 'deal_closed_unshipped')(e) && e.urgency === 'overdue');
-  if (lateShip) figures['/shipping'] = { text: `${lateShip} late`, count: lateShip, problem: true };
-  else if (toShip) figures['/shipping'] = { text: `${toShip} to ship`, count: toShip };
+  if (lateShip) figures['/shipping'] = { text: `${lateShip} late`, count: lateShip, problem: true, hint: 'Sold 7+ days ago and not shipped yet' };
+  else if (toShip) figures['/shipping'] = { text: `${toShip} to ship`, count: toShip, hint: 'Sold 3+ days ago and not shipped, or tracking to send' };
 
   // Owed money comes from the Cash Flow page's own summary, so the sidebar and
   // the page always say the same thing; nothing shows until it has loaded.
@@ -42,28 +42,28 @@ export function navFigures(data, cashFlow) {
   if (owed > 0) {
     const late = Number(summary.lateCount) || 0;
     figures['/cashflow'] = late > 0
-      ? { text: `${late} late`, count: late, problem: true }
-      : { text: `${compactMoney(owed)} owed` };
+      ? { text: `${late} late`, count: late, problem: true, hint: `Payouts past the payer's usual timing (${compactMoney(owed)} owed in all)` }
+      : { text: `${compactMoney(owed)} owed`, hint: 'Sold and not paid yet' };
   }
 
   const overdueBills = count(has('card_overdue'));
   const dueBills = count(has('card_due'));
-  if (overdueBills) figures['/creditcard'] = { text: `${overdueBills} overdue`, count: overdueBills, problem: true };
-  else if (dueBills) figures['/creditcard'] = { text: `${dueBills} due`, count: dueBills };
+  if (overdueBills) figures['/creditcard'] = { text: `${overdueBills} late`, count: overdueBills, problem: true, hint: 'Card bills past their due date and not marked paid' };
+  else if (dueBills) figures['/creditcard'] = { text: `${dueBills} due`, count: dueBills, hint: 'Card bills due in the next 3 days' };
 
   const aging = count(has('aging_stock'));
-  if (aging) figures['/inventory'] = { text: `${aging} aging`, count: aging };
+  if (aging) figures['/inventory'] = { text: `${aging} aging`, count: aging, hint: 'On hand 30+ days and not listed' };
 
   const cashout = count((entry) => entry.group === 'cashout');
   const lateCashout = count((e) => e.group === 'cashout' && e.urgency === 'overdue');
-  if (lateCashout) figures['/cashout'] = { text: `${lateCashout} late`, count: lateCashout, problem: true };
-  else if (cashout) figures['/cashout'] = { text: `${cashout} open`, count: cashout };
+  if (lateCashout) figures['/cashout'] = { text: `${lateCashout} late`, count: lateCashout, problem: true, hint: 'Cashout items past their deadline' };
+  else if (cashout) figures['/cashout'] = { text: `${cashout} open`, count: cashout, hint: 'Cashout items that need a step from you' };
 
   const review = count(has('email_review', 'email_add_purchase'));
-  if (review) figures['/automation'] = { text: `${review} new`, count: review };
+  if (review) figures['/automation'] = { text: `${review} new`, count: review, hint: 'Store emails waiting for you to review' };
 
   const coming = count(has('recurring_expense'));
-  if (coming) figures['/expenses'] = { text: `${coming} coming`, count: coming };
+  if (coming) figures['/expenses'] = { text: `${coming} due soon`, count: coming, hint: 'Recurring expenses due in the next 3 days' };
 
   return figures;
 }

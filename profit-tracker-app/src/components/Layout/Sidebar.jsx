@@ -19,7 +19,7 @@ import PageSearch from './PageSearch';
 import { pageList } from './pageList';
 import { useCashoutProviders } from '../../hooks/useCashoutProviders';
 import { usePrefetchProps } from '../../hooks/usePrefetchPage';
-import { useNavCashFlow, useNavTodosQuery, useTodoCount } from '../../hooks/useApi';
+import { useNavCashFlowQuery, useNavTodosQuery, useTodoCount } from '../../hooks/useApi';
 import { navFigures } from './navFigures';
 import { useMatchMedia } from '../../hooks/useMatchMedia';
 import { useTutorial } from '../../context/TutorialContext';
@@ -46,7 +46,10 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
   // Each row's live figure (owed, due, to ship...), from the same to-do list.
   const navQuery = useNavTodosQuery();
   const navTodos = navQuery.data;
-  const navCash = useNavCashFlow();
+  const navCashQuery = useNavCashFlowQuery();
+  const navCash = navCashQuery.data;
+  const figuresFailed = (navQuery.isError && !navTodos) || (navCashQuery.isError && !navCash);
+  const retryFigures = () => { if (navQuery.isError) navQuery.refetch(); if (navCashQuery.isError) navCashQuery.refetch(); };
   const figures = React.useMemo(() => navFigures(navTodos, navCash), [navTodos, navCash]);
   const fig = (to) => figures[to];
   const addBuyPrefetch = usePrefetchProps('/add-transaction');
@@ -250,14 +253,14 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
           </button>
         </div>
 
-        {navQuery.isError && !navTodos && (isCollapsed ? (
-          <button type="button" onClick={() => navQuery.refetch()} aria-label="Live numbers didn't load. Retry" data-tip="Live numbers didn't load · Retry" className="mx-auto mt-2 flex h-8 w-8 items-center justify-center rounded-md text-[var(--dp-red-text)] hover:bg-[var(--dp-hover-bg)]">
+        {figuresFailed && (isCollapsed ? (
+          <button type="button" onClick={retryFigures} aria-label="Live numbers didn't load. Retry" data-tip="Live numbers didn't load · Retry" className="mx-auto mt-2 flex h-8 w-8 items-center justify-center rounded-md text-[var(--dp-red-text)] hover:bg-[var(--dp-hover-bg)]">
             <RefreshCw size={14} aria-hidden="true" />
           </button>
         ) : (
           <p role="status" className="mx-3 mt-2 flex items-center justify-between gap-2 text-[12px] text-[var(--dp-text-label)]">
             Live numbers didn&apos;t load.
-            <button type="button" onClick={() => navQuery.refetch()} className="font-semibold text-[var(--dp-accent-text)] underline underline-offset-2">Retry</button>
+            <button type="button" onClick={retryFigures} className="font-semibold text-[var(--dp-accent-text)] underline underline-offset-2">Retry</button>
           </p>
         ))}
 
@@ -568,6 +571,13 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId, foldable = t
       localStorage.setItem(FOLDS_KEY, JSON.stringify(folds));
     } catch { /* storage unavailable: the fold just isn't remembered */ }
   };
+  // A default that depends on the screen (Books on short screens) follows a
+  // resize until you fold or open the section yourself.
+  const [seenDefault, setSeenDefault] = useState(defaultFolded);
+  if (seenDefault !== defaultFolded) {
+    setSeenDefault(defaultFolded);
+    if (foldable && !holdsCurrent && readFolds()[title] === undefined) setIsSectionOpenState(!defaultFolded);
+  }
   // Going to a page inside a folded section opens it, so you can see where
   // you are; that isn't saved as your choice.
   const [seenPath, setSeenPath] = useState(pathname);
@@ -665,15 +675,16 @@ function BadgeCount({ count, text, className, ...rest }) {
 const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, figure }) => (
   <NavLink
     to={to}
-    aria-label={figure ? `${label}, ${figure.text}` : isCollapsed ? label : undefined}
-    data-tip={isCollapsed ? (figure ? `${label} · ${figure.text}` : label) : undefined}
+    aria-label={figure ? `${label}, ${figure.text}${figure.hint ? `. ${figure.hint}` : ''}` : isCollapsed ? label : undefined}
+    data-tip={isCollapsed ? (figure ? `${label} · ${figure.text}${figure.hint ? ` · ${figure.hint}` : ''}` : label) : figure?.hint ? `${figure.text}: ${figure.hint}` : undefined}
+    data-hint={!isCollapsed && figure?.hint ? '' : undefined}
     data-tutorial-id={tutorialId}
     {...usePrefetchProps(to)}
     onClick={(e) => { if (e.currentTarget.getAttribute('aria-current') === 'page') e.preventDefault(); }}
     className={({ isActive }) =>
       clsx(
         "relative flex items-center rounded-md border-l-2 border-l-transparent transition-colors",
-        isCollapsed ? "justify-center p-2.5 !border-l-0" : "gap-3 px-3 py-2.5 lg:py-1 text-[15px] lg:text-[12px] font-medium",
+        isCollapsed ? "justify-center p-2.5 !border-l-0 pointer-coarse:min-h-[44px]" : "gap-3 px-3 py-2.5 lg:py-1 pointer-coarse:min-h-[44px] text-[15px] lg:text-[12px] font-medium",
         isActive
           ? "text-[var(--dp-accent)] font-semibold cursor-default"
           : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)]"
@@ -692,7 +703,7 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, figure }) => 
     {/* The ledger column: one live figure, right-aligned in tabular numbers. */}
     {figure && !isCollapsed && (
       <span className={clsx("dp-nav-figure flex shrink-0 items-center gap-1", figure.problem ? "dp-nav-figure-problem" : "dp-nav-figure-muted")}>
-        {figure.problem && <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />}
+        {figure.problem && <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[var(--dp-red-text)]" />}
         <BadgeCount text={figure.text} data-figure="" className={clsx("text-right text-[13px] lg:text-[12px] tabular-nums", figure.problem ? "font-semibold" : "font-medium")} />
       </span>
     )}
@@ -818,15 +829,16 @@ function useCollapsedTooltip(containerRef, enabled, collapsed) {
     const show = (e) => {
       const el = e.target.closest?.('[data-tip]');
       if (!el || !root.contains(el)) return;
-      // Expanded, only the footer's icons need labels; collapsed, everything.
-      if (!collapsed && !el.closest('[data-footer-tips]')) return;
+      // Expanded: the footer's icons and what each figure means; collapsed: everything.
+      const hint = el.hasAttribute('data-hint');
+      if (!collapsed && !hint && !el.closest('[data-footer-tips]')) return;
       if (e.type === 'focusin' && !e.target.matches(':focus-visible')) return;
       // Beside the icon on the rail; above it in the expanded footer row.
       const focus = e.type === 'focusin';
       // A focused icon can scroll the rail first, so measure a frame later.
       const place = () => {
         const r2 = el.getBoundingClientRect();
-        setTip(collapsed
+        setTip(collapsed || hint
           ? { text: el.getAttribute('data-tip'), top: r2.top + r2.height / 2, left: r2.right + 10, side: 'right', focus }
           : { text: el.getAttribute('data-tip'), top: r2.top - 8, left: r2.left + r2.width / 2, side: 'top', focus });
       };

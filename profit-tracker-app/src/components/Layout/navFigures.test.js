@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { navFigures } from './navFigures';
+import { navFigures as raw } from './navFigures';
+
+// The shown parts (the hint is checked separately).
+const navFigures = (...args) => Object.fromEntries(Object.entries(raw(...args)).map(([k, v]) => {
+  const shown = { ...v };
+  delete shown.hint;
+  return [k, shown];
+}));
 
 describe('navFigures', () => {
   it('turns the to-do list into one figure per page, only where there is something to say', () => {
@@ -24,12 +31,20 @@ describe('navFigures', () => {
     expect(f['/creditcard']).toEqual({ text: '1 due', count: 1 });
     expect(f['/inventory']).toEqual({ text: '1 aging', count: 1 });
     expect(f['/cashout'].text).toBe('1 open');
-    expect(f['/expenses']).toEqual({ text: '1 coming', count: 1 });
+    expect(f['/expenses']).toEqual({ text: '1 due soon', count: 1 });
     expect(f['/goals']).toBeUndefined();
   });
 
   it('is empty with no data, and says overdue bills', () => {
     expect(navFigures(undefined)).toEqual({});
-    expect(navFigures({ items: [{ type: 'card_overdue' }, { type: 'card_due' }] })['/creditcard']).toEqual({ text: '1 overdue', count: 1, problem: true });
+    expect(navFigures({ items: [{ type: 'card_overdue' }, { type: 'card_due' }] })['/creditcard']).toEqual({ text: '1 late', count: 1, problem: true });
+  });
+});
+
+describe('navFigures hints', () => {
+  it('every figure says what it counts', () => {
+    const f = raw({ counts: { total: 2 }, items: [{ type: 'aging_stock', urgency: 'info' }, { type: 'ship', urgency: 'soon' }] });
+    for (const figure of Object.values(f)) expect(figure.hint).toMatch(/\w/);
+    expect(f['/inventory'].hint).toBe('On hand 30+ days and not listed');
   });
 });

@@ -31,6 +31,7 @@ vi.mock('../hooks/useApi', () => ({
   useNavTodos: () => undefined,
   useNavTodosQuery: () => ({ data: undefined }),
   useNavCashFlow: () => undefined,
+  useNavCashFlowQuery: () => ({ data: undefined }),
   apiFetch: vi.fn(),
 }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { username: 'tester' }, logout: vi.fn() }) }));

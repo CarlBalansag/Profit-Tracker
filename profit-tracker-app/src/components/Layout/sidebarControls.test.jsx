@@ -12,6 +12,7 @@ vi.mock('../../hooks/useApi', async (orig) => ({
   ...(await orig()),
   useTodoCount: () => 16,
   useNavCashFlow: () => ({ summary: { owedTotal: 3626.6, lateCount: 0 } }),
+  useNavCashFlowQuery: () => ({ data: { summary: { owedTotal: 3626.6, lateCount: 0 } } }),
   useNavTodosQuery: () => ({ data: { counts: { total: 16 }, items: [{ type: 'ship', urgency: 'soon' }], waiting_payments: [{ total: 3626.6, overdue_total: 0 }] } }),
 }));
 
@@ -111,7 +112,7 @@ describe('Sidebar sections', () => {
 describe('Collapsed sidebar', () => {
   it('names each icon, keeps the to-do count, and shows a label on hover', () => {
     const { container } = renderSidebar({ isCollapsed: true });
-    expect(screen.getByRole('link', { name: 'To-Do, 16 open' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^To-Do, 16 open/ })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /^Shipping/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
 
@@ -218,8 +219,8 @@ describe('Ledger', () => {
     renderSidebar({ path: '/cashflow' });
     expect(screen.getByRole('link', { name: /Log a buy/ })).toHaveAttribute('href', '/add-transaction');
     expect(screen.getByRole('link', { name: /Record sale/ })).toHaveAttribute('href', '/add-sale');
-    expect(screen.getByRole('link', { name: 'Shipping, 1 to ship' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Cash Flow, $3.6k owed' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Shipping, 1 to ship/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Cash Flow, \$3\.6k owed/ })).toBeInTheDocument();
     // Rows with nothing to say carry no figure.
     expect(screen.getByRole('link', { name: 'Goals' })).toBeInTheDocument();
   });
@@ -230,10 +231,23 @@ describe('Ledger in every layout', () => {
     const { container } = renderSidebar({ isCollapsed: true });
     // The rail stays quiet: no badges for plain figures (words are in the label).
     expect(container.querySelectorAll('[data-figure-dot]').length).toBe(0);
-    expect(screen.getByRole('link', { name: 'Cash Flow, $3.6k owed' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Cash Flow, \$3\.6k owed/ })).toBeInTheDocument();
     cleanup();
     renderSidebar();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^money$/i })); });
     expect(screen.getByRole('button', { name: /^money$/i })).toHaveTextContent('· $3.6k owed');
+  });
+});
+
+describe('Figures explain themselves', () => {
+  it('hovering a row with a figure says what it counts, and the name includes it', () => {
+    const { container } = renderSidebar();
+    const shipping = screen.getByRole('link', { name: /^Shipping, 1 to ship\. Sold 3\+ days ago/ });
+    fireEvent.pointerOver(shipping);
+    expect(container.querySelector('[data-sidebar-tooltip]')).toHaveTextContent('1 to ship: Sold 3+ days ago');
+    // Rows without a figure get no tooltip when expanded.
+    fireEvent.pointerOut(shipping);
+    fireEvent.pointerOver(screen.getByRole('link', { name: 'Goals' }));
+    expect(container.querySelector('[data-sidebar-tooltip]')).toBeNull();
   });
 });

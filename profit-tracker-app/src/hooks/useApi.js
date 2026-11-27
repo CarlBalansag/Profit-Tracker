@@ -480,10 +480,13 @@ export function useNavTodosQuery() {
 // The Cash Flow page's own summary, so the sidebar's "owed" figure is the
 // same number the page shows (cached 10 minutes like the page).
 let inertCashClient = null;
-export function useNavCashFlow() {
+export function useNavCashFlowQuery() {
   const client = useOptionalQueryClient();
   inertCashClient ??= client ? null : new QueryClient();
-  return useQuery({ ...cashFlowQuery(), enabled: Boolean(client) }, client || inertCashClient).data;
+  return useQuery({ ...cashFlowQuery(), enabled: Boolean(client) }, client || inertCashClient);
+}
+export function useNavCashFlow() {
+  return useNavCashFlowQuery().data;
 }
 export function useNavTodos() {
   return useNavTodosQuery().data;
