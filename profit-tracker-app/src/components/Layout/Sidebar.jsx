@@ -53,6 +53,12 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
   const isDesktop = useMatchMedia('(min-width: 1024px)');
   const offscreen = !isOpen && !isDesktop;
   const tooltip = useCollapsedTooltip(drawerRef, isCollapsed && !isGlass);
+  // In the phone drawer, Dashboard, Transactions and Inventory are already on
+  // the bottom bar, so the drawer leaves them out (the guided tour still
+  // points at them, so they stay while it runs).
+  const touring = Boolean(useTutorial()?.active);
+  const inBar = isNarrow && !touring;
+  const moreBelow = useMoreBelow(navRef, [isCollapsed, isOpen, hasCashoutAccess]);
 
   if (isGlass) {
     return (
@@ -131,7 +137,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
         className={clsx(
           "fixed inset-y-0 left-0 z-50 flex flex-col transition-[width,translate] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none lg:static lg:translate-x-0 border-r border-[color:var(--dp-border)] bg-[var(--dp-card-bg)] dp-elevated dp-sidebar",
           isOpen ? "translate-x-0" : "-translate-x-full",
-          isCollapsed ? "w-[72px]" : "w-64 lg:w-60"
+          isCollapsed ? "w-[72px]" : "w-[min(85vw,320px)] lg:w-60"
         )}
         onClick={(e) => { if (e.target.closest('a')) setIsOpen(false); }}
       >
@@ -164,12 +170,12 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
           </button>
         </div>
 
-        <nav ref={navRef} className={clsx("relative flex-1 py-3 px-2 space-y-3 overflow-y-auto overflow-x-hidden dp-scrollbar", isCollapsed && "dp-rail")}>
+        <nav ref={navRef} className={clsx("relative flex-1 py-3 px-2 space-y-3 overflow-y-auto overflow-x-hidden dp-scrollbar", isCollapsed && "dp-rail", moreBelow && "dp-nav-more")}>
           <NavMarker marker={marker} className="!mt-0 rounded-md bg-[var(--dp-accent-bg)]" />
           {/* Grouped by how a reseller works: today's work, buying and selling,
               shipping, money, then the bookkeeping (folded by default). */}
           <SidebarSection title="Today" isCollapsed={isCollapsed} foldable={false}>
-            <NavItem icon={LayoutDashboard} label="Dashboard" to="/" isCollapsed={isCollapsed} />
+            {!inBar && <NavItem icon={LayoutDashboard} label="Dashboard" to="/" isCollapsed={isCollapsed} />}
             <NavItem icon={ListChecks} label="To-Do" to="/todos" isCollapsed={isCollapsed} badge={todoCount} />
             <NavItem icon={CalendarDays} label="Calendar" to="/calendar" isCollapsed={isCollapsed} />
           </SidebarSection>
@@ -177,8 +183,8 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: collapsedPref, setIsCollapsed
           <SidebarSection title="Sell & Buy" isCollapsed={isCollapsed} tutorialId="sidebar-section-core">
             <NavItem icon={ShoppingCart} label="Add Transaction" to="/add-transaction" isCollapsed={isCollapsed} tutorialId="sidebar-add-transaction" />
             <NavItem icon={BadgeDollarSign} label="Record Sale" to="/add-sale" isCollapsed={isCollapsed} tutorialId="sidebar-record-sale" />
-            <NavItem icon={ArrowLeftRight} label="Transactions" to="/transactions" isCollapsed={isCollapsed} tutorialId="sidebar-transactions" />
-            <NavItem icon={Boxes} label="Inventory" to="/inventory" isCollapsed={isCollapsed} tutorialId="sidebar-inventory" />
+            {!inBar && <NavItem icon={ArrowLeftRight} label="Transactions" to="/transactions" isCollapsed={isCollapsed} tutorialId="sidebar-transactions" />}
+            {!inBar && <NavItem icon={Boxes} label="Inventory" to="/inventory" isCollapsed={isCollapsed} tutorialId="sidebar-inventory" />}
             <NavItem icon={Zap} label="Email Automation" to="/automation" isCollapsed={isCollapsed} />
           </SidebarSection>
 
@@ -462,7 +468,7 @@ const SidebarSection = ({ title, children, isCollapsed, tutorialId, foldable = t
           aria-expanded={isSectionOpen}
           aria-current={!isSectionOpen && holdsCurrent ? 'true' : undefined}
           onClick={() => setIsSectionOpen(!isSectionOpen)}
-          className="dp-sidebar-group w-full flex items-center justify-between px-3 py-1 text-[11px] font-medium uppercase tracking-[1.2px] text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] transition-colors"
+          className="dp-sidebar-group w-full flex items-center justify-between px-3 py-1 text-[12px] lg:text-[11px] font-medium uppercase tracking-[1.2px] text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] transition-colors"
         >
           <span className="flex items-center gap-1.5">
             {title}
@@ -540,14 +546,14 @@ const NavItem = ({ icon: Icon, label, to, isCollapsed, tutorialId, badge = 0 }) 
     className={({ isActive }) =>
       clsx(
         "relative flex items-center rounded-md border-l-2 border-l-transparent transition-colors",
-        isCollapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5 lg:py-1 text-[12px] font-medium",
+        isCollapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5 lg:py-1 text-[15px] lg:text-[12px] font-medium",
         isActive
           ? "text-[var(--dp-accent)] font-semibold cursor-default"
           : "text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)] hover:bg-[var(--dp-hover-bg)]"
       )
     }
   >
-    <Icon size={16} className="flex-shrink-0" />
+    <Icon size={16} className={clsx("flex-shrink-0", !isCollapsed && "max-lg:size-[18px]")} />
     {!isCollapsed && <span className="truncate flex-1 disabled-link">{label}</span>}
     {badge > 0 && (isCollapsed
       ? <BadgeCount count={badge} className="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-[var(--dp-accent-solid)] px-1 text-center text-[10px] font-semibold leading-4 text-white tabular-nums" />
@@ -616,6 +622,25 @@ const GlassBranchLabel = ({ label }) => (
   </>
 );
 
+
+// Whether the nav has more rows below what's showing; the nav then fades out
+// at the bottom so it's clear there's more to scroll to.
+function useMoreBelow(navRef, deps) {
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return undefined;
+    const check = () => setMore(nav.scrollTop + nav.clientHeight < nav.scrollHeight - 4);
+    check();
+    nav.addEventListener('scroll', check, { passive: true });
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(check) : null;
+    ro?.observe(nav);
+    nav.querySelectorAll('[data-section-body]').forEach((el) => ro?.observe(el));
+    return () => { nav.removeEventListener('scroll', check); ro?.disconnect(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navRef, ...deps]);
+  return more;
+}
 
 // The account menu: Escape or a click/tap outside closes it, and Escape
 // puts focus back on the account button.

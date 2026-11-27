@@ -168,3 +168,24 @@ describe('Where you are', () => {
     expect(container.querySelector('[data-sidebar-tooltip]')).toHaveTextContent('Cash Flow');
   });
 });
+
+describe('Phone drawer contents', () => {
+  it('leaves out what the bottom bar already has', () => {
+    const original = window.matchMedia;
+    window.matchMedia = (query) => ({ matches: query === '(max-width: 1023px)', addEventListener() {}, removeEventListener() {} });
+    try {
+      render(
+        <MemoryRouter initialEntries={['/cashflow']}>
+          <Sidebar isOpen setIsOpen={() => {}} isCollapsed={false} setIsCollapsed={() => {}} />
+        </MemoryRouter>
+      );
+      for (const name of ['Dashboard', 'Transactions', 'Inventory']) {
+        expect(screen.queryByRole('link', { name })).toBeNull();
+      }
+      expect(screen.getByRole('link', { name: /^To-Do/ })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Record Sale' })).toBeInTheDocument();
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+});

@@ -1482,6 +1482,12 @@ nav[aria-label="Main"] :is(a, button):focus-visible {
   outline: 2px solid var(--dp-accent-text);
   outline-offset: -2px;
 }
+/* The sidebar nav fades out at the bottom while more rows are below. */
+.dp-nav-more {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+}
+
 /* Collapsed rail: a hairline between groups, since their names are hidden. */
 .dp-rail > [data-section] + [data-section] {
   margin-top: 10px;
@@ -1681,7 +1687,7 @@ nav[aria-label="Main"] :is(a, button):focus-visible {
   /* Text buttons (segment controls, Columns, Export, Add…) and the drawer's
      links reach 44px. Icon-only buttons are left to the hit zone above so
      card headers don't grow; switches keep their drawn size. */
-  :is(main, [role="dialog"]) button:not([role="switch"]):not(.page-dot):not([aria-label]):not([title]):not([role="tab"]),
+  :is(main, [role="dialog"]) button:not([role="switch"]):not(.page-dot):not([aria-label]):not([title]):not([role="tab"]):not(.dp-sidebar-group),
   aside nav a {
     min-height: 44px;
   }
@@ -1693,6 +1699,10 @@ nav[aria-label="Main"] :is(a, button):focus-visible {
     padding-block: 13px;
     margin-block: -13px;
   }
+  /* Sidebar group headings stay short in the phone drawer (more rows fit) but
+     keep a 44px tap area. */
+  .dp-sidebar-group { position: relative; }
+  .dp-sidebar-group::after { content: ""; position: absolute; inset: -10px 0; }
   /* The sidebar's theme switch keeps its drawn 25px size but gets a 45px tap
      area (its row is 44px tall). */
   .theme-switch-inline .theme-switch { position: relative; }
