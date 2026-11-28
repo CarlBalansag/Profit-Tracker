@@ -25,7 +25,7 @@ const pipeline = {
 describe('WorkflowPipeline', () => {
   it('shows every step with its units and money, 0 included, in workflow order', () => {
     render(<WorkflowPipeline pipeline={pipeline} />);
-    const steps = screen.getAllByRole('button', { pressed: false });
+    const steps = screen.getAllByRole('button', { expanded: false });
     expect(steps.map((b) => b.textContent)).toEqual([
       expect.stringContaining('Sold — Waiting to Ship'),
       expect.stringContaining('Outbound'),
@@ -37,7 +37,7 @@ describe('WorkflowPipeline', () => {
     expect(within(steps[2]).getByText('$12,345', { selector: '.sr-only' })).toBeInTheDocument();
   });
 
-  it('leaves out steps at 0 when asked (the All tab)', () => {
+  it('leaves out steps at 0 when asked', () => {
     render(<WorkflowPipeline pipeline={pipeline} hideEmpty />);
     expect(screen.queryByRole('button', { name: /^Outbound/ })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Paid/ })).toBeInTheDocument();
@@ -48,7 +48,7 @@ describe('WorkflowPipeline', () => {
     render(<WorkflowPipeline pipeline={pipeline} onNavigate={onNavigate} />);
     const step = screen.getByRole('button', { name: /Sold — Waiting to Ship/ });
     fireEvent.click(step);
-    expect(step).toHaveAttribute('aria-pressed', 'true');
+    expect(step).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('PS5 Pro ×2')).toBeInTheDocument();
     expect(screen.getByText('Points4Days')).toBeInTheDocument();
 
@@ -56,7 +56,7 @@ describe('WorkflowPipeline', () => {
     expect(onNavigate).toHaveBeenCalledWith('/statuses');
 
     fireEvent.click(step);
-    expect(step).toHaveAttribute('aria-pressed', 'false');
+    expect(step).toHaveAttribute('aria-expanded', 'false');
     // The list shrinks away rather than vanishing at once.
     await waitFor(() => expect(screen.queryByText('PS5 Pro ×2')).not.toBeInTheDocument());
   });

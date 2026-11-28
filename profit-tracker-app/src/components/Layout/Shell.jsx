@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import BottomNav from './BottomNav';
 import clsx from 'clsx';
+import { useMatchMedia } from '../../hooks/useMatchMedia';
 import { useUiPreferences } from '../../hooks/useUiPreferences';
 import { useAuth } from '../../context/AuthContext';
 import { useTutorial } from '../../context/TutorialContext';
@@ -25,11 +26,22 @@ const Header = ({ isGlass }) => {
 
 const Shell = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  // The collapsed sidebar stays collapsed on the next visit.
+  const [isSidebarCollapsed, setIsSidebarCollapsedState] = useState(() => {
+    try { return localStorage.getItem('pt-sidebar-collapsed') === '1'; } catch { return false; }
+  });
+  const setIsSidebarCollapsed = (collapsed) => {
+    setIsSidebarCollapsedState(collapsed);
+    try { localStorage.setItem('pt-sidebar-collapsed', collapsed ? '1' : '0'); } catch { /* not remembered */ }
+  };
   const { preferences } = useUiPreferences();
   const { user } = useAuth();
   const { start, active: tutorialActive, currentStep: tutorialStep } = useTutorial();
   const isGlass = preferences.style === 'glassmorphism-brown';
+  // While the phone drawer is open, the page behind it is out of reach for
+  // the keyboard and screen readers (the drawer is a modal dialog).
+  const isNarrow = useMatchMedia('(max-width: 1023px)');
+  const drawerOpen = isSidebarOpen && isNarrow;
 
   // Auto-start tutorial on first login
   useEffect(() => {
@@ -78,7 +90,7 @@ const Shell = ({ children }) => {
 
       {/* Main content column — flex-1 so it takes remaining width;
           min-w-0 prevents flex children from overflowing their container. */}
-      <main id="main-content" tabIndex={-1} className={clsx(
+      <main id="main-content" tabIndex={-1} inert={drawerOpen} className={clsx(
         "flex flex-col flex-1 min-w-0 overflow-hidden outline-none",
         isGlass
           ? "relative bg-[radial-gradient(ellipse_at_20%_20%,rgba(216,166,90,0.035)_0%,transparent_42%),radial-gradient(ellipse_at_80%_80%,rgba(125,140,160,0.035)_0%,transparent_42%),#111315] lg:pl-[76px]"

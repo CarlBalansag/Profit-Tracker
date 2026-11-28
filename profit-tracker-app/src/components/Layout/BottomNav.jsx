@@ -1,24 +1,29 @@
 import React, { useState } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
-import { ArrowLeftRight, CirclePlus, DollarSign, LayoutDashboard, Menu, Package, Plus } from 'lucide-react';
+import { ArrowLeftRight, Boxes, CirclePlus, DollarSign, LayoutDashboard, Menu, Plus } from 'lucide-react';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 import { usePrefetchProps } from '../../hooks/usePrefetchPage';
-import { useTodoCount } from '../../hooks/useApi';
+import { useNavCashFlow, useNavTodos, useTodoCount } from '../../hooks/useApi';
+import { navFigures } from './navFigures';
 
 const ITEM = 'flex flex-1 flex-col items-center justify-center gap-0.5 h-14 min-w-0 px-0.5 text-[11px] max-[359px]:text-[10.5px] max-[359px]:tracking-tight font-medium';
 
 const QUICK_ADD = [
-  { to: '/add-transaction', label: 'Add Transaction', icon: CirclePlus },
-  { to: '/add-sale', label: 'Record Sale', icon: DollarSign },
+  { to: '/add-transaction', label: 'Log a buy', icon: CirclePlus },
+  { to: '/add-sale', label: 'Record sale', icon: DollarSign },
 ];
 
-const Tab = ({ to, label, icon, end, colors }) => {
+const Tab = ({ to, label, icon, end, colors, figure }) => {
   const Icon = icon;
   const prefetch = usePrefetchProps(to);
   return (
-    <NavLink to={to} end={end} {...prefetch} className={({ isActive }) => clsx(ITEM, isActive ? colors.active : colors.idle)}>
-      <Icon size={20} aria-hidden="true" />
+    <NavLink to={to} end={end} {...prefetch} aria-label={figure ? `${label}, ${figure.text}` : undefined} className={({ isActive }) => clsx(ITEM, isActive ? colors.active : colors.idle)}>
+      <span className="relative">
+        <Icon size={20} aria-hidden="true" />
+        {/* The sidebar's live figure for this page, as a dot (its words are in the label). */}
+        {figure && <span aria-hidden="true" data-figure-dot="" className={clsx('absolute -right-1 -top-0.5 h-2 w-2 rounded-full', figure.problem ? 'bg-[var(--dp-red-text)]' : 'border border-current')} />}
+      </span>
       <span className="truncate">{label}</span>
     </NavLink>
   );
@@ -44,9 +49,23 @@ const QuickAddLink = ({ to, label, icon, onClick, isGlass }) => {
 };
 
 // Phone navigation: the places used most, one tap away, with the full menu under More.
+// Pages with their own tab; every other page lives in the More drawer, so
+// More lights up there to say where you are.
+const TAB_PATHS = ['/transactions', '/inventory'];
+const inMore = (pathname) => pathname !== '/' && !TAB_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+
 const BottomNav = ({ onMoreClick, isGlass }) => {
+  const { pathname } = useLocation();
+  const moreIsHere = inMore(pathname);
+  const navTodos = useNavTodos();
+  const navCash = useNavCashFlow();
+  const figures = React.useMemo(() => navFigures(navTodos, navCash), [navTodos, navCash]);
+  // The bar marks Inventory with a hollow ring for a plain state (aging)
+  // and a red dot for a problem, so it doesn't read as an unread alert.
+  const todoFigure = figures['/todos'];
   // The To-Do list lives in the menu, so its count shows on More.
   const todoCount = useTodoCount();
+  const moreCount = todoFigure?.count ?? todoCount;
   const [addOpen, setAddOpen] = useState(false);
   const close = () => setAddOpen(false);
   const menuRef = useModalKeyboard(addOpen, close);
@@ -99,25 +118,27 @@ const BottomNav = ({ onMoreClick, isGlass }) => {
             <Plus size={20} className={clsx('transition-transform', addOpen && 'rotate-45')} aria-hidden="true" />
           </span>
         </button>
-        <Tab to="/inventory" label="Inventory" icon={Package} colors={colors} />
+        <Tab to="/inventory" label="Inventory" icon={Boxes} colors={colors} figure={figures['/inventory']} />
         <button
           type="button"
           aria-haspopup="dialog"
-          aria-label={todoCount ? `More, ${todoCount} to do` : undefined}
+          aria-label={todoFigure ? `More, To-Do ${todoFigure.text}` : todoCount ? `More, ${todoCount} to do` : undefined}
+          data-here={moreIsHere || undefined}
+          aria-current={moreIsHere ? 'page' : undefined}
           onClick={onMoreClick}
-          className={clsx(ITEM, colors.idle)}
+          className={clsx(ITEM, moreIsHere ? colors.active : colors.idle)}
         >
           <span className="relative">
             <Menu size={20} aria-hidden="true" />
-            {todoCount > 0 && (
+            {moreCount > 0 && (
               <span
                 aria-hidden="true"
                 className={clsx(
                   'absolute -right-2.5 -top-1.5 min-w-[16px] rounded-full px-1 text-center text-[10px] font-semibold leading-4 tabular-nums',
-                  isGlass ? 'bg-[#d8a65a] text-[#111315]' : 'bg-[var(--dp-accent-solid)] text-white',
+                  isGlass ? 'bg-[#d8a65a] text-[#111315]' : todoFigure?.problem ? 'bg-[var(--dp-red-text)] text-[#2a0a0e]' : 'bg-[var(--dp-text-primary)] text-[var(--dp-card-bg)]',
                 )}
               >
-                {todoCount > 99 ? '99+' : todoCount}
+                {moreCount > 99 ? '99+' : moreCount}
               </span>
             )}
           </span>

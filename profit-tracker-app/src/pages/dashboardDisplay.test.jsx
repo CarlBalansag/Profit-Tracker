@@ -9,12 +9,12 @@ globalThis.ResizeObserver ??= class { observe() {} disconnect() {} };
 
 const data = {
   stats: {
-    totalCost: 23097.2, totalRevenue: 31250.5, profit: 8153.3, soldCost: 20000, unitsSold: 40,
+    totalCost: 23097.2, totalRevenue: 31250.5, profit: 8153.3, soldCost: 20000, grossProfit: 6653.3, unitsSold: 40,
     inventoryValue: 12345.67, totalCashback: 1500, totalTax: 2100, roi: 12.5,
   },
   recentTransactions: [
-    { product: 'Big TV', cost: 1234.5, revenue: 2345.6, profit: 1111.1, status: 'SHIPPED_IN', date: '2026-11-01', quantity: 1 },
-    { product: 'Old Row', cost: 10, revenue: 20, profit: 10, status: null, date: '2026-11-01', quantity: 1 },
+    { id: 'sale-1', product: 'Big TV', cost: 1234.5, revenue: 2345.6, profit: 1111.1, status: 'SHIPPED_IN', buyer: 'Unknown', date: '2026-11-01', quantity: 2 },
+    { id: 'sale-2', product: 'Old Row', cost: 10, revenue: 20, profit: 0.4, status: null, buyer: 'Unknown', date: '2026-11-01', quantity: 1 },
   ],
   pipelineCounts: { 'Pre Order': 1234 },
   workflowPipelines: {
@@ -36,13 +36,19 @@ vi.mock('../hooks/useApi', () => ({
   useGoals: () => ({ data: [] }),
   useTodos: () => ({ data: undefined }),
   useTodoCount: () => 0,
+  useNavTodos: () => undefined,
+  useNavTodosQuery: () => ({ data: undefined }),
+  useNavCashFlow: () => undefined,
+  useNavCashFlowQuery: () => ({ data: undefined }),
 }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'u1', username: 'Test' } }) }));
 vi.mock('../hooks/useUiPreferences', () => ({ useUiPreferences: () => ({ preferences: { style: uiStyle } }) }));
 vi.mock('../hooks/useDashboardSettings', () => ({
   useDashboardSettings: () => ({ settings: DEFAULT_DASHBOARD_SETTINGS, saveSettings: vi.fn() }),
 }));
-vi.mock('../components/Dashboard/ProfitCostTrendChart', () => ({ default: () => null }));
+vi.mock('../components/Dashboard/ProfitCostTrendChart', () => ({ default: ({ markType }) => <div data-testid="trend-chart">{markType}</div> }));
+const navigateSpy = vi.fn();
+vi.mock('react-router-dom', async (importOriginal) => ({ ...(await importOriginal()), useNavigate: () => navigateSpy }));
 vi.mock('../components/Dashboard/MonthlyProfitSpendChart', () => ({ default: () => null }));
 
 const mount = (style) => {
@@ -53,6 +59,7 @@ const mount = (style) => {
 afterEach(() => {
   cleanup();
   placeholder = false;
+  localStorage.clear();
 });
 
 describe.each(['premium', 'glass'])('Dashboard display in the %s style', (style) => {
@@ -81,15 +88,29 @@ describe('Dashboard amounts', () => {
 });
 
 describe('Dashboard KPI cards', () => {
-  it('show the mode tag small on the title line, never wrapping, and no tag in All', () => {
+  it('has no scope line above the tiles and no per-card tags', () => {
     mount('premium');
+    expect(screen.queryByText(/· all sales/)).not.toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole('group', { name: 'Sales type' })).getByRole('button', { name: 'Cashout' }));
+    expect(screen.queryByText(/Cashout sales only/)).not.toBeInTheDocument();
     expect(screen.queryByText(/sold via/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Cashout' }));
-    const tag = screen.getAllByText('sold via Cashout')[0];
-    expect(tag).toHaveClass('truncate', 'text-[9px]');
-    const titleLine = tag.parentElement;
-    expect(titleLine).toHaveClass('whitespace-nowrap');
-    expect(titleLine).toHaveTextContent(/^Net Profitsold via Cashout$|^.+sold via Cashout$/);
+  });
+
+  it('shows Net Profit as Gross plus cashback so the cards add up, with live numbers in its popover', () => {
+    mount('premium');
+    // Net 8,153.30 = Gross 6,653.30 + 1,500.00 cashback on sold items
+    expect(screen.getByText('$6,653.30 gross + $1,500.00 cashback')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'How Net Profit is calculated' }));
+    const dialog = screen.getByRole('dialog', { name: 'How Net Profit is calculated' });
+    expect(within(dialog).getByText('$6,653.30 + $1,500.00 cashback on sold items = $8,153.30')).toBeInTheDocument();
+  });
+
+  it('remembers the chosen filters after a reload', () => {
+    const first = mount('premium');
+    fireEvent.click(within(screen.getByRole('group', { name: 'Date range' })).getByRole('button', { name: 'YTD' }));
+    first.unmount();
+    mount('premium');
+    expect(within(screen.getByRole('group', { name: 'Date range' })).getByRole('button', { name: 'YTD' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('keeps the page and the last numbers up, not faded or locked, while another filter loads', () => {
@@ -102,11 +123,10 @@ describe('Dashboard KPI cards', () => {
     expect(screen.getByText(/Welcome back/)).toBeInTheDocument();
   });
 
-  it('opens the Status Pipeline on All, the first tab, showing every step', () => {
+  it('opens the Status Pipeline on All with every step and no second filter of its own', () => {
     mount('premium');
-    const tabs = within(screen.getByRole('group', { name: 'Pipeline view' })).getAllByRole('button');
-    expect(tabs.map((t) => t.textContent)).toEqual(['All', 'Cash-out', 'Marketplace']);
-    expect(tabs[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('group', { name: 'Pipeline view' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Unsold stock right now, at cost\. Sold items from this period/)).toBeInTheDocument();
     const onHand = screen.getByRole('button', { name: /^On Hand/ });
     expect(within(onHand).getByText('1234', { selector: '.sr-only' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Paid/ })).toBeInTheDocument();
@@ -114,12 +134,86 @@ describe('Dashboard KPI cards', () => {
 
   it('switches the pipeline to the workflow the dashboard filter picks, and back to All', () => {
     mount('premium');
-    fireEvent.click(screen.getByRole('button', { name: 'Cashout' }));
+    const salesType = within(screen.getByRole('group', { name: 'Sales type' }));
+    fireEvent.click(salesType.getByRole('button', { name: 'Cashout' }));
+    expect(salesType.getByRole('button', { name: 'Cashout' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /^Scanned In/ })).toBeInTheDocument();
-    // The dashboard filter's button comes before the pipeline's own tab.
-    fireEvent.click(screen.getAllByRole('button', { name: 'Marketplace' })[0]);
+    fireEvent.click(salesType.getByRole('button', { name: 'Marketplace' }));
     expect(screen.getByRole('button', { name: /^Outbound/ })).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole('button', { name: 'All' })[0]);
+    fireEvent.click(salesType.getByRole('button', { name: 'All' }));
     expect(screen.getByRole('button', { name: /^On Hand/ })).toBeInTheDocument();
+  });
+
+  it('lets a KPI card be opened from the keyboard and its formula closed with Escape', () => {
+    mount('premium');
+    expect(screen.getByRole('button', { name: 'Net Profit: see these transactions' })).toBeInTheDocument();
+    const info = screen.getByRole('button', { name: 'How Net Profit is calculated' });
+    fireEvent.click(info);
+    expect(screen.getByRole('dialog', { name: 'How Net Profit is calculated' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'How Net Profit is calculated' })).not.toBeInTheDocument();
+  });
+
+  it('has no dead Share button and names the settings button', () => {
+    mount('premium');
+    expect(screen.queryByText(/Generate Share Card/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Dashboard settings' })).toBeInTheDocument();
+  });
+
+  it('uses h2 for section titles under the page h1', () => {
+    mount('premium');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Welcome back/);
+    expect(screen.getByRole('heading', { level: 2, name: 'Status Pipeline' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Recent Sales' })).toBeInTheDocument();
+    // The chart card keeps its original h3 title.
+    expect(screen.queryAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Profit & Cost Trend']);
+  });
+});
+
+describe('Dashboard Recent Sales and chart', () => {
+  it('opens a sale from its row and from the keyboard, and links to all sales', () => {
+    navigateSpy.mockClear();
+    mount('premium');
+    expect(screen.getByRole('button', { name: 'Big TV ×2' })).toBeInTheDocument();
+    expect(screen.getByText('Profit includes the card cashback on each sale.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Big TV ×2' }));
+    expect(navigateSpy).toHaveBeenLastCalledWith('/transactions', { state: { openTransaction: { saleId: 'sale-1' } } });
+    fireEvent.click(screen.getByText('Old Row').closest('tr'));
+    expect(navigateSpy).toHaveBeenLastCalledWith('/transactions', { state: { openTransaction: { saleId: 'sale-2' } } });
+    fireEvent.click(screen.getByRole('button', { name: /View all sales/ }));
+    expect(navigateSpy.mock.lastCall[0]).toBe('/transactions');
+    expect(navigateSpy.mock.lastCall[1].state.cardScope).toBe('sold');
+  });
+
+  it('renames the purchase tiles in a channel view so they never look bigger than All', () => {
+    mount('premium');
+    expect(screen.getByText('Purchase Spend')).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole('group', { name: 'Sales type' })).getByRole('button', { name: 'Marketplace' }));
+    expect(screen.getByText('Cost of Sales')).toBeInTheDocument();
+    expect(screen.getByText('Cashback on Sales')).toBeInTheDocument();
+    expect(screen.queryByText('Purchase Spend')).not.toBeInTheDocument();
+  });
+
+  it('hides the Buyer column when no sale has a buyer and shows small profits to the cent', () => {
+    mount('premium');
+    expect(screen.queryByRole('columnheader', { name: 'Buyer' })).not.toBeInTheDocument();
+    expect(screen.getByText('+$0.40')).toBeInTheDocument();
+    expect(screen.queryByText('+$0')).not.toBeInTheDocument();
+  });
+});
+
+describe('Dashboard empty period', () => {
+  it('says the period has no sales and offers All Time', () => {
+    const saved = data.recentTransactions;
+    data.recentTransactions = [];
+    try {
+      mount('premium');
+      expect(screen.getByText('No sales in the last 30 days.')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Show All Time' }));
+      expect(within(screen.getByRole('group', { name: 'Date range' })).getByRole('button', { name: 'All Time' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByText('No sales recorded yet.')).toBeInTheDocument();
+    } finally {
+      data.recentTransactions = saved;
+    }
   });
 });

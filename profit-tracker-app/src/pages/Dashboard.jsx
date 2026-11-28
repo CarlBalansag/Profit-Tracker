@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, MotionConfig } from 'motion/react';
 import { useDashboard, useGoals } from '../hooks/useApi';
 import { PageLoader } from '../components/PageLoader';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
-  Clock, Layers, Zap, Store, Calendar, Share2, Settings,
-  CreditCard, Info, TrendingUp, Target, DollarSign, ShoppingBag, Flame
+  Clock, Layers, Zap, Store, Calendar, Settings,
+  CreditCard, Info, TrendingUp, ChevronRight, Target, DollarSign, ShoppingBag, Flame
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useDashboardSettings } from '../hooks/useDashboardSettings';
@@ -24,10 +25,11 @@ import HScrollbar from '../components/UI/HScrollbar';
 import CountUp from '../components/UI/CountUp';
 import WorkflowPipeline from '../components/Dashboard/WorkflowPipeline';
 import TodoSummary from '../components/Dashboard/TodoSummary';
+import { useMatchMedia } from '../hooks/useMatchMedia';
 
 // Status Pipeline views: every step, stock through paid ("All", the default),
 // or one sale workflow's own steps.
-const PIPELINE_VIEWS = [['all', 'All'], ['cashout', 'Cash-out'], ['marketplace', 'Marketplace']];
+const PIPELINE_VIEWS = [['all', 'All'], ['cashout', 'Cashout'], ['marketplace', 'Marketplace']];
 import { formatMoney, formatWholeMoney, formatWholeDollars } from '../utils/money';
 import { recordStatusLabel } from '../data/statusWorkflow';
 
@@ -62,11 +64,63 @@ const EMPTY_STATS = {
   salesVelocity: 0,
 };
 
-const CARBON_KPI_ORDER = ['profit', 'totalCost', 'totalRevenue', 'totalCashback'];
+// Sold-item results first (Net, Revenue, Gross), then purchase-side money
+// (Spend, Cashback), so related tiles sit together.
+const CARBON_KPI_ORDER = ['profit', 'totalRevenue', 'grossProfit', 'totalCost', 'totalCashback'];
+
+const FILTERS_KEY = 'pt-dashboard-filters';
+const MotionSpan = motion.span;
+const FILTER_GLIDE = { duration: 0.35, ease: [0.16, 1, 0.3, 1] };
+const DATE_FILTERS = ['7 Days', '30 Days', 'YTD', 'All Time'];
+const MODE_FILTERS = ['All', 'Cashout', 'Marketplace'];
+function readSavedFilters() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(FILTERS_KEY) || '{}');
+    return {
+      date: DATE_FILTERS.includes(saved.date) ? saved.date : null,
+      mode: MODE_FILTERS.includes(saved.mode) ? saved.mode : null,
+    };
+  } catch { return {}; }
+}
+function writeSavedFilters(filters) {
+  try { localStorage.setItem(FILTERS_KEY, JSON.stringify(filters)); } catch { /* private mode: nothing to keep */ }
+}
 
 function formatShortDate(dateValue) {
   if (!dateValue) return '';
   return new Date(dateValue).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// Row profit includes the card's cashback, so it is shown to the cent: whole
+// dollars turned small losses and gains into a misleading "+$0".
+const isZeroMoney = (v) => Math.abs(v) < 0.005;
+function signedMoney(v) {
+  if (isZeroMoney(v)) return '$0.00';
+  return `${v > 0 ? '+' : '−'}$${formatMoney(Math.abs(v))}`;
+}
+const profitTextClass = (v) => (isZeroMoney(v) ? 'text-[var(--dp-text-secondary)]' : v > 0 ? 'text-[var(--dp-green-text)]' : 'text-[var(--dp-red-text)]');
+const profitPillClass = (v) => (isZeroMoney(v)
+  ? 'bg-[var(--dp-bg)] text-[var(--dp-text-secondary)]'
+  : v > 0 ? 'bg-[var(--dp-green-bg)] text-[var(--dp-green-text)]' : 'bg-[var(--dp-red-bg)] text-[var(--dp-red-text)]');
+// Status pills move from "waiting" (amber) through "on its way" (blue) to
+// "paid" (green); red only for problems.
+const STATUS_TONES = {
+  waiting: 'bg-[var(--dp-warning-bg)] text-[var(--dp-warning-text)]',
+  moving: 'bg-[var(--dp-info-bg)] text-[var(--dp-info-text)]',
+  done: 'bg-[var(--dp-green-bg)] text-[var(--dp-green-text)]',
+  problem: 'bg-[var(--dp-red-bg)] text-[var(--dp-red-text)]',
+  neutral: 'bg-[var(--dp-bg)] text-[var(--dp-text-secondary)]',
+};
+const TONE_BY_STATUS = {
+  done: ['PAID', 'COMPLETED'],
+  problem: ['RETURNED', 'RETURN_IN_PROGRESS', 'DISPUTED', 'CANCELLED', 'REFUNDED', 'AUTHENTICATION_FAILED'],
+  waiting: ['SOLD', 'LISTED', 'PENDING', 'AWAITING_SHIPMENT', 'AWAITING_HANDOFF', 'WAITING_FOR_PAYMENT', 'PENDING_PAYMENT'],
+  moving: ['SHIPPED_OUT', 'OUTBOUND', 'IN_TRANSIT_OUT', 'HANDED_OVER', 'DELIVERED', 'DELIVERED_TO_PROVIDER',
+    'DELIVERED_TO_AUTHENTICATOR', 'WAITING_FOR_SCAN_IN', 'SCANNED_IN', 'ACCEPTED', 'AUTHENTICATION', 'AUTHENTICATING', 'SHIPPED_IN'],
+};
+function statusToneClass(status) {
+  const tone = Object.keys(TONE_BY_STATUS).find(key => TONE_BY_STATUS[key].includes(status));
+  return STATUS_TONES[tone || 'neutral'];
 }
 
 function getRowProfit(txn) {
@@ -117,19 +171,21 @@ const Dashboard = () => {
   const { preferences } = useUiPreferences();
   const { settings, saveSettings } = useDashboardSettings(preferences.style);
   const isGlass = preferences.style === 'glassmorphism-brown';
-  const [dateFilter, setDateFilter] = useState(settings.defaultDateFilter || '30 Days');
-  const [modeFilter, setModeFilter] = useState('All');
+  // On a phone (in a store), what needs doing comes before the numbers.
+  const isPhone = useMatchMedia('(max-width: 639px)');
+  // The last filters you picked come back after a reload or a visit elsewhere.
+  const [savedFilters] = useState(readSavedFilters);
+  const [dateFilter, setDateFilter] = useState(savedFilters.date || settings.defaultDateFilter || '30 Days');
+  const [modeFilter, setModeFilter] = useState(savedFilters.mode || 'All');
+  useEffect(() => { writeSavedFilters({ date: dateFilter, mode: modeFilter }); }, [dateFilter, modeFilter]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [trendMode, setTrendMode] = useState('period'); // 'period' | 'cumulative'
   const [chartView, setChartView] = useState('line'); // 'line' | 'bar'
-  const [pipelineView, setPipelineView] = useState('all'); // 'all' | 'cashout' | 'marketplace'
   // The Status Pipeline follows the dashboard filter: All shows every step,
   // Cashout/Marketplace (which only have sales of that kind) their workflow.
-  const chooseMode = (mode) => {
-    setModeFilter(mode);
-    setPipelineView(mode === 'Cashout' ? 'cashout' : mode === 'Marketplace' ? 'marketplace' : 'all');
-  };
+  const pipelineView = modeFilter === 'Cashout' ? 'cashout' : modeFilter === 'Marketplace' ? 'marketplace' : 'all';
+  const chooseMode = (mode) => setModeFilter(mode);
   const [topCardsPage, setTopCardsPage] = useState(0); // Top Cards pagination (3 per page, all breakpoints)
   const statsRowRef = useRef(null); // KPI row, driven by the drawn scrollbar below it
 
@@ -173,6 +229,11 @@ const Dashboard = () => {
     .filter(c => c.visible)
     .sort((a, b) => a.order - b.order);
   const showRecentSales = visibleRecentSalesColumns.length > 0;
+  // Buyer is dropped while none of the listed sales has one.
+  const salesColumns = visibleRecentSalesColumns.filter(c => c.id !== 'buyer' || recent.some(t => t.buyer && t.buyer !== 'Unknown'));
+  const openSale = (txn) => {
+    if (txn.id) navigate('/transactions', { state: { openTransaction: { saleId: txn.id } } });
+  };
 
   const colClasses = { 1: 'lg:grid-cols-1', 2: 'lg:grid-cols-2', 3: 'lg:grid-cols-3', 4: 'lg:grid-cols-4', 5: 'lg:grid-cols-5' };
   const statColClass = colClasses[visibleStatCards.length] || 'lg:grid-cols-5';
@@ -210,18 +271,22 @@ const Dashboard = () => {
   function renderDashboardSection(sectionId) {
     if (sectionId === 'statCards') {
       if (!showStatCards || visibleStatCards.length === 0) return null;
-      const modeTag = modeFilter !== 'All'
+      // Glass keeps its per-card tag; the filters above say the scope.
+      const modeTag = isGlass && modeFilter !== 'All'
         ? `sold via ${modeFilter}`
         : null;
       return (
         <div key="statCards">
         <div ref={statsRowRef} data-tutorial-id="dashboard-stats" className={isGlass
           ? `grid grid-cols-2 ${statColClass} gap-3 3xl:gap-4 max-sm:[&>*:first-child]:col-span-2 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both`
-          : "grid min-w-0 grid-cols-2 gap-3 sm:gap-4 pb-4 lg:grid-cols-[repeat(auto-fit,minmax(180px,1fr))] max-sm:[&>*:first-child]:col-span-2 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-100 fill-mode-both"
+          : "pt-tiles-in grid min-w-0 grid-cols-2 gap-3 sm:gap-4 pb-4 lg:grid-cols-[repeat(auto-fit,minmax(180px,1fr))] max-sm:[&>*:first-child]:col-span-2"
         }>
           {visibleStatCards.map(cardConfig => {
-            const def = STAT_CARD_REGISTRY[cardConfig.id];
-            if (!def) return null;
+            const base = STAT_CARD_REGISTRY[cardConfig.id];
+            if (!base) return null;
+            // A channel view (Cashout / Marketplace) uses the card's channel
+            // wording where the number means something different there.
+            const def = modeFilter !== 'All' && base.channel ? { ...base, ...base.channel } : base;
             const colorOverride = cardConfig.id === 'profit' && stats.profit < 0 ? 'red' : def.color;
             return (
               <StatCard
@@ -235,9 +300,10 @@ const Dashboard = () => {
                 icon={def.icon}
                 color={colorOverride}
                 formula={def.formula}
+                breakdown={def.getBreakdown?.(stats)}
                 description={def.description}
                 uiStyle={preferences.style}
-                onClick={() => navigate('/transactions', { state: { dateFilter, cardScope: def.scope, platformMode: modeFilter !== 'All' ? modeFilter : undefined } })}
+                onClick={() => navigate('/transactions', { state: { dateFilter, cardScope: modeFilter !== 'All' && base.channel ? 'sold' : def.scope, platformMode: modeFilter !== 'All' ? modeFilter : undefined } })}
               />
             );
           })}
@@ -252,29 +318,19 @@ const Dashboard = () => {
       return (
         <div key="pipeline" data-tutorial-id="dashboard-pipeline" className={isGlass
           ? "rounded-[20px] border border-white/[0.06] bg-[#181a1c]/72 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.22)] animate-in fade-in duration-300 fill-mode-both"
-          : "rounded-[24px] p-6 bg-[var(--dp-card-bg)] dp-elevated animate-in slide-in-from-bottom-4 duration-500 fade-in delay-300 fill-mode-both"
+          : "rounded-[24px] p-6 bg-[var(--dp-card-bg)] dp-elevated animate-in fade-in duration-300 fill-mode-both"
         }>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <h3 className={isGlass ? "mb-1 px-0.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/24" : "text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)] mb-1"}>Status Pipeline</h3>
-            <div role="group" aria-label="Pipeline view" className="flex gap-0.5 rounded-full bg-[var(--dp-bg)] p-0.5">
-              {PIPELINE_VIEWS.map(([view, label]) => (
-                <button
-                  key={view}
-                  type="button"
-                  aria-pressed={pipelineView === view}
-                  onClick={() => setPipelineView(view)}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${pipelineView === view ? 'bg-[var(--dp-card-bg)] text-[var(--dp-accent)] dp-elevated' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {/* One line, whichever tab, so the card's height doesn't shift. */}
-          <p className={isGlass ? "mb-3 hidden truncate px-0.5 text-[11px] text-white/18 sm:block" : "mb-4 hidden truncate text-[12px] text-[var(--dp-text-secondary)] sm:block"}>
+          {/* Follows the page's All / Cashout / Marketplace filter; no second filter here. */}
+          <h2 className={isGlass ? "mb-1 px-0.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/24" : "mb-1 text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)]"}>
+            Status Pipeline
+            {pipelineView !== 'all' && <span className="normal-case tracking-normal"> · {PIPELINE_VIEWS.find(([v]) => v === pipelineView)?.[1]}</span>}
+          </h2>
+          {/* Up to two lines on a phone, one on wider screens; the same length
+              on every tab so the card's height doesn't shift. */}
+          <p className={isGlass ? "mb-3 hidden truncate px-0.5 text-[11px] text-white/18 sm:block" : "mb-4 line-clamp-2 min-h-[2lh] text-[12px] text-[var(--dp-text-secondary)] sm:min-h-0 sm:truncate"}>
             {pipelineView === 'all'
-              ? 'Units in each step right now: unsold stock at cost, sold items at their sale price. Click a step to see its items.'
-              : 'Units in each step of this workflow right now, at their sale price. Click a step to see its items.'}
+              ? 'Unsold stock right now, at cost. Sold items from this period, at sale price.'
+              : `${PIPELINE_VIEWS.find(([v]) => v === pipelineView)?.[1]} sales from this period, at sale price, by step.`}
           </p>
 
           {/* Not remounted per tab: the same steps slide between tabs. */}
@@ -282,6 +338,8 @@ const Dashboard = () => {
             pipeline={workflowPipelines[pipelineView]}
             pending={refreshing}
             onNavigate={navigate}
+            // Every view shows only the steps with something in them; the
+            // pipeline says how many empty ones it left out.
             hideEmpty={pipelineView === 'all'}
           />
         </div>
@@ -382,11 +440,11 @@ const Dashboard = () => {
                     <div className="flex min-w-0 items-center gap-3">
                       <CreditCard className={isGlass ? "w-4 h-4 text-[#d8a65a]" : "w-4 h-4 text-[var(--dp-text-secondary)]"} />
                       <div className="min-w-0">
-                        <p className={isGlass ? "text-sm text-[#e8e2d6]" : `text-[12px] font-medium truncate max-w-[160px] ${i === 0 ? 'text-[var(--dp-text-primary)]' : 'text-[var(--dp-text-secondary)]'}`}>{card.name}</p>
-                        <p className={isGlass ? "text-xs text-white/20" : "text-[11px] text-[var(--dp-text-label)]"}>{card.txns} txns</p>
+                        <p title={card.name} className={isGlass ? "text-sm text-[#e8e2d6]" : "text-[12px] font-medium line-clamp-2 [overflow-wrap:anywhere] text-[var(--dp-text-primary)]"}>{card.name}</p>
+                        <p className={isGlass ? "text-xs text-white/20" : "text-[11px] text-[var(--dp-text-label)]"}>{card.txns} {card.txns === 1 ? 'purchase' : 'purchases'}</p>
                       </div>
                     </div>
-                    <p className={isGlass ? "shrink-0 whitespace-nowrap text-sm font-medium text-[#d8a65a]" : `text-[12px] font-semibold tabular-nums ${i === 0 ? 'text-[var(--dp-accent)]' : 'text-[var(--dp-text-secondary)]'}`}>${formatWholeMoney(card.amount)}</p>
+                    <p className={isGlass ? "shrink-0 whitespace-nowrap text-sm font-medium text-[#d8a65a]" : "shrink-0 text-[12px] font-semibold tabular-nums text-[var(--dp-text-primary)]"}>${formatWholeMoney(card.amount)}</p>
                   </div>
                 );
                 return (
@@ -394,9 +452,9 @@ const Dashboard = () => {
                     ? "rounded-[20px] p-5 bg-[#181a1c]/72 border border-white/[0.06] shadow-[0_10px_30px_rgba(0,0,0,0.22)]"
                     : "rounded-[24px] p-6 bg-[var(--dp-card-bg)] dp-elevated"
                   }>
-                    <h3 className={isGlass ? "mb-4 text-[11px] font-medium uppercase tracking-[0.22em] text-white/25" : "text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)] mb-3"}>{isGlass ? 'Payment Methods' : 'Top Cards'}</h3>
+                    <h2 className={isGlass ? "mb-4 text-[11px] font-medium uppercase tracking-[0.22em] text-white/25" : "text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--dp-text-label)] mb-3"}>{isGlass ? 'Payment Methods' : 'Top Credit Cards'}</h2>
                     {sourceCards.length === 0 ? (
-                      <p className={isGlass ? "text-xs text-white/20" : "text-xs text-[var(--dp-text-secondary)]"}>No payment data yet.</p>
+                      <p className={isGlass ? "text-xs text-white/20" : "text-[13px] text-[var(--dp-text-secondary)]"}>{dateFilter === 'All Time' ? 'No card spending recorded yet.' : 'No card spending in this period.'}</p>
                     ) : (
                       <>
                         {/* 3 cards at a time, paginated — same on every breakpoint
@@ -428,38 +486,58 @@ const Dashboard = () => {
       return (
         <div key="recentSales" className={isGlass
           ? "rounded-[20px] p-5 bg-[#181a1c]/72 border border-white/[0.06] shadow-[0_10px_30px_rgba(0,0,0,0.22)] pb-10 animate-in fade-in duration-300 fill-mode-both"
-          : "rounded-[24px] p-6 bg-[var(--dp-card-bg)] dp-elevated pb-8 animate-in slide-in-from-bottom-4 duration-500 fade-in delay-[700ms] fill-mode-both"
+          : "rounded-[24px] p-6 bg-[var(--dp-card-bg)] dp-elevated pb-8 animate-in fade-in duration-300 fill-mode-both"
         }>
-          <h3 className={isGlass ? "mb-4 text-[11px] font-medium uppercase tracking-[0.22em] text-white/25" : "text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--dp-text-primary)] mb-4"}>Recent Sales</h3>
+          <h2 className={isGlass ? "mb-4 text-[11px] font-medium uppercase tracking-[0.22em] text-white/25" : "text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--dp-text-primary)] mb-4"}>Recent Sales</h2>
           {recent.length === 0 ? (
-            <p className={isGlass ? "text-white/20 text-sm text-center py-6" : "text-[var(--dp-text-secondary)] text-sm text-center py-6"}>No recent sales found.</p>
+            <div className="flex flex-col items-center gap-3 py-6 text-center">
+              <p className={isGlass ? "text-white/20 text-sm" : "text-[var(--dp-text-secondary)] text-sm"}>
+                {dateFilter === 'All Time' ? 'No sales recorded yet.' : dateFilter === 'YTD' ? 'No sales so far this year.' : `No sales in the last ${dateFilter.toLowerCase()}.`}
+              </p>
+              {dateFilter !== 'All Time' && (
+                <button
+                  type="button"
+                  onClick={() => setDateFilter('All Time')}
+                  className={isGlass ? "rounded-full border border-white/[0.08] px-4 py-2 text-xs font-medium text-[#d8a65a] hover:bg-white/[0.05]" : "rounded-full bg-[var(--dp-bg)] px-4 py-2 text-[13px] font-medium text-[var(--dp-accent-text)] hover:bg-[var(--dp-hover-bg)] transition-colors"}
+                >
+                  Show All Time
+                </button>
+              )}
+            </div>
           ) : (
             <>
-            {/* Phones: one line per sale instead of a table that scrolls sideways */}
-            <ul className={isGlass ? "divide-y divide-white/5 sm:hidden" : "divide-y divide-[color:var(--dp-border)] sm:hidden"}>
+            {/* One layout per screen size: a list on phones, a table from sm up.
+                Each sale opens in Transactions. */}
+            {isPhone ? (
+            <ul className={isGlass ? "divide-y divide-white/5" : "divide-y divide-[color:var(--dp-border)]"}>
               {recent.map((txn, i) => (
-                <li key={i} className="flex items-center justify-between gap-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className={isGlass ? "truncate text-sm font-medium text-gray-200" : "truncate text-sm font-medium text-[var(--dp-text-primary)]"}>{txn.product}</p>
-                    <p className={isGlass ? "text-xs text-gray-500" : "text-xs text-[var(--dp-text-secondary)]"}>
-                      {formatShortDate(txn.date)} · {recordStatusLabel(txn.status || 'SOLD')}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className={isGlass ? "text-sm tabular-nums text-green-400" : "text-sm font-medium tabular-nums text-[var(--dp-text-primary)]"}>${formatMoney(txn.revenue ?? 0)} <span className="text-[11px] font-normal text-[var(--dp-text-secondary)]">payout</span></p>
-                    <p className={`text-xs tabular-nums ${getRowProfit(txn) >= 0 ? 'text-[var(--dp-green-text)]' : 'text-[var(--dp-red-text)]'}`}>
-                      {getRowProfit(txn) >= 0 ? '+' : '-'}${formatWholeMoney(Math.abs(getRowProfit(txn)))}
-                    </p>
-                  </div>
+                <li key={txn.id || i}>
+                  <button
+                    type="button"
+                    onClick={() => openSale(txn)}
+                    className="flex w-full items-center justify-between gap-3 py-2.5 text-left rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)]"
+                  >
+                    <span className="min-w-0">
+                      <span className={isGlass ? "block truncate text-sm font-medium text-gray-200" : "block truncate text-sm font-medium text-[var(--dp-text-primary)]"}>{txn.product}{txn.quantity > 1 && <span className="font-normal text-[var(--dp-text-secondary)]"> ×{txn.quantity}</span>}</span>
+                      <span className={isGlass ? "block text-xs text-gray-500" : "block text-xs text-[var(--dp-text-secondary)]"}>
+                        {formatShortDate(txn.date)} · {recordStatusLabel(txn.status || 'SOLD')}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className={isGlass ? "block text-sm tabular-nums text-green-400" : "block text-sm font-medium tabular-nums text-[var(--dp-text-primary)]"}>${formatMoney(txn.revenue ?? 0)} <span className="text-[11px] font-normal text-[var(--dp-text-secondary)]">payout</span></span>
+                      <span className={`block text-xs tabular-nums ${profitTextClass(getRowProfit(txn))}`}>{signedMoney(getRowProfit(txn))}</span>
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>
-            <div className={isGlass ? "hidden overflow-x-auto pb-4 sm:block" : "hidden overflow-x-auto dp-scrollbar pb-4 sm:block"}>
+            ) : (
+            <div className={isGlass ? "overflow-x-auto pb-4" : "overflow-x-auto dp-scrollbar pb-4"}>
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className={isGlass ? "border-b border-white/10 text-xs font-semibold text-gray-500 uppercase tracking-wider" : "border-b border-[color:var(--dp-border)] text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>
-                    {visibleRecentSalesColumns.map(column => (
-                      <th key={column.id} className={`${column.id === 'product' ? 'pb-3 pr-4' : column.id === 'date' ? 'pb-3 pl-4' : 'pb-3 px-4'} font-medium`}>
+                  <tr className={isGlass ? "border-b border-white/10 text-xs font-semibold text-gray-500 uppercase tracking-wider" : "dp-neutral-head border-b border-[color:var(--dp-border)] text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>
+                    {salesColumns.map(column => (
+                      <th key={column.id} scope="col" className={`${column.id === 'product' ? 'pb-3 pr-4' : column.id === 'date' ? 'pb-3 pl-4' : 'pb-3 px-4'} font-medium`}>
                         {DEFAULT_DASHBOARD_SETTINGS.recentSalesColumns.find(c => c.id === column.id) && {
                           product: 'Product',
                           platform: 'Place Sold',
@@ -471,17 +549,25 @@ const Dashboard = () => {
                         }[column.id]}
                       </th>
                     ))}
-                    {!isGlass && <th className="pb-3 px-4 font-medium">Profit</th>}
+                    {!isGlass && <th scope="col" className="pb-3 px-4 font-medium">Profit</th>}
                   </tr>
                 </thead>
                 <tbody className={isGlass ? "text-sm divide-y divide-white/5" : "text-sm divide-y divide-[color:var(--dp-border)]"}>
                   {recent.map((txn, i) => (
-                    <tr key={i} className={isGlass ? "hover:bg-white/[0.02] transition-colors" : "hover:bg-[var(--dp-hover-bg)] transition-[background] duration-150"}>
-                      {visibleRecentSalesColumns.map(column => {
+                    <tr key={txn.id || i} onClick={() => openSale(txn)} className={isGlass ? "cursor-pointer hover:bg-white/[0.02] transition-colors" : "cursor-pointer hover:bg-[var(--dp-hover-bg)] transition-[background] duration-150"}>
+                      {salesColumns.map(column => {
                         if (column.id === 'product') {
                           return (
                             <td key={column.id} className={isGlass ? "py-3 pr-4 font-medium text-gray-200 max-w-[220px]" : "py-3 pr-4 font-semibold text-[var(--dp-text-primary)] max-w-[220px]"}>
-                              <span className="truncate block">{txn.product}</span>
+                              {/* The row is clickable; this button is how a keyboard reaches it. */}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); openSale(txn); }}
+                                className="block max-w-full truncate rounded text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)]"
+                              >
+                                {txn.product}
+                                {txn.quantity > 1 && <span className="font-normal text-[var(--dp-text-secondary)]"> ×{txn.quantity}</span>}
+                              </button>
                             </td>
                           );
                         }
@@ -508,12 +594,9 @@ const Dashboard = () => {
                           };
                           const st = (txn.status || 'SOLD').toUpperCase();
                           const cls = statusColorMap[st] || statusColorMap.SOLD;
-                          const premiumStatusClass = st === 'SHIPPED_IN'
-                            ? 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]'
-                            : 'bg-[var(--dp-green-bg)] text-[var(--dp-green-text)]';
                           return (
                             <td key={column.id} className="py-3 px-4">
-                              <span className={isGlass ? `inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wider uppercase border ${cls}` : `inline-flex items-center rounded-full px-2.5 py-[3px] text-[11px] font-semibold uppercase tracking-[0.04em] ${premiumStatusClass}`}>
+                              <span className={isGlass ? `inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wider uppercase border ${cls}` : `inline-flex items-center rounded-full px-2.5 py-[3px] text-[11px] font-semibold uppercase tracking-[0.04em] ${statusToneClass(st)}`}>
                                 {recordStatusLabel(txn.status || 'SOLD')}
                               </span>
                             </td>
@@ -530,8 +613,8 @@ const Dashboard = () => {
                       })}
                       {!isGlass && (
                         <td className="py-3 px-4">
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-[3px] text-[11px] font-semibold tabular-nums ${getRowProfit(txn) >= 0 ? 'bg-[var(--dp-green-bg)] text-[var(--dp-green-text)]' : 'bg-[var(--dp-red-bg)] text-[var(--dp-red-text)]'}`}>
-                            {getRowProfit(txn) >= 0 ? '+' : '-'}${formatWholeMoney(Math.abs(getRowProfit(txn)))}
+                          <span title={txn.cashback ? `Includes $${formatMoney(txn.cashback)} cashback` : undefined} className={`inline-flex items-center rounded-full px-2.5 py-[3px] text-[11px] font-semibold tabular-nums ${profitPillClass(getRowProfit(txn))}`}>
+                            {signedMoney(getRowProfit(txn))}
                           </span>
                         </td>
                       )}
@@ -540,6 +623,20 @@ const Dashboard = () => {
                 </tbody>
               </table>
             </div>
+            )}
+            {!isGlass && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <button
+                  type="button"
+                  onClick={() => navigate('/transactions', { state: { dateFilter, cardScope: 'sold', platformMode: modeFilter !== 'All' ? modeFilter : undefined } })}
+                  className="inline-flex items-center gap-1 text-[13px] font-medium text-[var(--dp-text-primary)] hover:underline"
+                >
+                  View all sales <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                {/* Why a sale under cost can still show a small profit. */}
+                <p className="text-[12px] text-[var(--dp-text-secondary)]">Profit includes the card cashback on each sale.</p>
+              </div>
+            )}
             </>
           )}
         </div>
@@ -869,11 +966,8 @@ const Dashboard = () => {
               ))}
             </div>
 
-            <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all text-[#d8a65a] hover:text-[#e8e2d6] hover:bg-white/[0.05] border border-[#d8a65a]/20">
-              <Share2 className="w-3.5 h-3.5" /> Generate Share Card
-            </button>
-
             <button
+              aria-label="Dashboard settings"
               onClick={() => setSettingsOpen(true)}
               className="flex items-center justify-center w-9 h-9 rounded-xl text-white/30 hover:text-[#d8a65a] hover:bg-white/[0.06] border border-white/[0.06] transition-all"
               title="Dashboard Settings"
@@ -916,7 +1010,9 @@ const Dashboard = () => {
 
   if (isLoading) return <PageLoader variant="dashboard" />;
 
-  if (isError) {
+  // A failed refresh keeps the last good numbers on screen (see the bar below);
+  // only a first load with nothing to show gets the full error card.
+  if (isError && !data) {
     return (
       <div className="flex h-full items-center justify-center p-6 bg-[var(--dp-bg)]">
         <div className="max-w-sm text-center text-sm rounded-[24px] bg-[var(--dp-card-bg)] dp-elevated p-8">
@@ -937,73 +1033,88 @@ const Dashboard = () => {
       <div className="px-4 py-6 sm:px-6 w-full max-w-[1800px] 4xl:max-w-[2100px] mx-auto space-y-6">
 
       {/* Welcome Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-in fade-in duration-300">
-        <div className="shrink-0">
-          <h1 className={isGlass ? "text-3xl 3xl:text-4xl font-light tracking-tight text-[#e8e2d6]" : "text-[22px] font-semibold tracking-[-0.3px] text-[var(--dp-text-primary)]"}>Welcome back, {user?.username || 'User'}</h1>
-          <p className={isGlass ? "text-white/25 text-[11px] mt-1 flex items-center gap-1" : "text-[var(--dp-text-secondary)] text-[12px] mt-1 flex items-center gap-1"}>
-            <Clock className="w-3 h-3" /> {lastUpdated ? `Updated at ${lastUpdated.toLocaleTimeString()}` : 'Loading...'}
+      {/* Phone: title and settings on one row, filters wrap underneath.
+          Wider: title left, filters then settings on the right. */}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 animate-in fade-in duration-300">
+        <div className="min-w-0">
+          <h1 className="text-[22px] font-semibold tracking-[-0.3px] text-[var(--dp-text-primary)] [overflow-wrap:anywhere]">Welcome back, {user?.username || 'User'}</h1>
+          <p className="text-[var(--dp-text-secondary)] text-[12px] mt-1 flex items-center gap-1">
+            <Clock className="w-3 h-3" aria-hidden="true" /> {lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Loading...'}
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2">
+        <button
+          type="button"
+          data-tutorial-id="dashboard-settings-btn"
+          onClick={() => setSettingsOpen(true)}
+          aria-label="Dashboard settings"
+          title="Dashboard settings"
+          className="flex items-center justify-center w-9 h-9 rounded-full bg-[var(--dp-card-bg)] text-[var(--dp-text-secondary)] dp-elevated hover:text-[var(--dp-text-primary)] transition-colors sm:order-last"
+        >
+          <Settings className="w-4 h-4" aria-hidden="true" />
+        </button>
 
-          {/* Share Card + Settings — shown first on mobile (order-first), normal order on desktop */}
-          <div className="flex items-center gap-2 order-first sm:order-last">
-            <button className={isGlass ? "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all text-[#d8a65a] hover:text-[#e8e2d6] hover:bg-white/[0.05] border border-[#d8a65a]/20" : "flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-medium transition-colors bg-[var(--dp-card-bg)] text-[var(--dp-text-secondary)] dp-elevated hover:text-[var(--dp-text-primary)]"}>
-              <Share2 className="w-3.5 h-3.5" /> Generate Share Card
-            </button>
-            <button
-              data-tutorial-id="dashboard-settings-btn"
-              onClick={() => setSettingsOpen(true)}
-              className={isGlass ? "flex items-center justify-center w-9 h-9 rounded-xl text-white/30 hover:text-[#d8a65a] hover:bg-white/[0.06] border border-white/[0.06] transition-all" : "flex items-center justify-center w-9 h-9 rounded-full bg-[var(--dp-card-bg)] text-[var(--dp-text-secondary)] dp-elevated hover:text-[var(--dp-text-primary)] transition-colors"}
-              title="Dashboard Settings"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-          </div>
-
+        <div className="col-span-2 flex flex-wrap items-center gap-2 sm:ml-auto">
           {/* Mode Filters */}
-          <div data-tutorial-id="dashboard-filters" className={isGlass ? "flex items-center gap-1 p-1 rounded-xl bg-[#181a1c]/78 border border-white/[0.05]" : "flex items-center gap-1 rounded-full bg-[var(--dp-card-bg)] p-1 dp-elevated"}>
+          {/* The tint glides to the picked filter (one per group), the same
+              motion as the sidebar's active pill. */}
+          <MotionConfig reducedMotion="user" transition={FILTER_GLIDE}>
+          <div role="group" aria-label="Sales type" data-tutorial-id="dashboard-filters" className="flex items-center gap-1 rounded-full bg-[var(--dp-card-bg)] p-1 dp-elevated">
             {['All', 'Cashout', 'Marketplace'].map((mode) => (
               <button
                 key={mode}
+                type="button"
+                aria-pressed={modeFilter === mode}
                 onClick={() => chooseMode(mode)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-full transition-colors ${modeFilter === mode ? (isGlass ? 'bg-[#d8a65a]/12 text-[#d8a65a] ring-1 ring-[#d8a65a]/25' : 'bg-[var(--dp-accent-bg)] text-[var(--dp-accent)]') : (isGlass ? 'text-white/30 hover:text-[#e8e2d6] hover:bg-white/[0.04]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]')}`}
+                className={`relative flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-full transition-colors ${modeFilter === mode ? 'font-semibold text-[var(--dp-text-primary)]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
               >
-                {mode === 'All' && <Layers className="w-3.5 h-3.5" />}
-                {mode === 'Cashout' && <Zap className="w-3.5 h-3.5" />}
-                {mode === 'Marketplace' && <Store className="w-3.5 h-3.5" />}
-                {mode}
+                {modeFilter === mode && <MotionSpan layoutId="dashboard-mode-pill" aria-hidden="true" data-filter-pill="" className="absolute inset-0 rounded-full bg-[var(--dp-accent-bg)]" />}
+                <span className="relative flex items-center gap-1.5">
+                  {mode === 'All' && <Layers className="w-3.5 h-3.5" />}
+                  {mode === 'Cashout' && <Zap className="w-3.5 h-3.5" />}
+                  {mode === 'Marketplace' && <Store className="w-3.5 h-3.5" />}
+                  {mode}
+                </span>
               </button>
             ))}
           </div>
 
-          {!isGlass && <div className="hidden h-[14px] w-px bg-[var(--dp-border)] sm:block" />}
+          <div className="hidden h-[14px] w-px bg-[var(--dp-border)] sm:block" />
 
           {/* Date Filters */}
-          <div className={isGlass ? "flex items-center gap-1 p-1 rounded-xl bg-[#181a1c]/78 border border-white/[0.05]" : "flex items-center gap-1 rounded-full bg-[var(--dp-card-bg)] p-1 dp-elevated"}>
-            <Calendar className={isGlass ? "w-3.5 h-3.5 text-white/25 ml-1.5" : "w-3.5 h-3.5 text-[var(--dp-text-label)] ml-1.5"} />
+          <div role="group" aria-label="Date range" className="flex items-center gap-1 rounded-full bg-[var(--dp-card-bg)] p-1 dp-elevated">
+            <Calendar className="w-3.5 h-3.5 text-[var(--dp-text-label)] ml-1.5" aria-hidden="true" />
             {['7 Days', '30 Days', 'YTD', 'All Time'].map((f) => (
               <button
                 key={f}
+                type="button"
+                aria-pressed={dateFilter === f}
                 onClick={() => setDateFilter(f)}
-                className={`px-[10px] py-1 text-[12px] font-medium rounded-full transition-colors ${dateFilter === f ? (isGlass ? 'bg-[#d8a65a]/12 text-[#d8a65a] ring-1 ring-[#d8a65a]/25' : 'bg-[var(--dp-accent)] text-[#ffffff]') : (isGlass ? 'text-white/30 hover:text-[#e8e2d6] hover:bg-white/[0.04]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]')}`}
+                className={`relative px-[10px] py-1 text-[12px] font-medium rounded-full transition-colors ${dateFilter === f ? 'font-semibold text-[var(--dp-text-primary)]' : 'text-[var(--dp-text-secondary)] hover:text-[var(--dp-text-primary)]'}`}
               >
-                {f}
+                {dateFilter === f && <MotionSpan layoutId="dashboard-date-pill" aria-hidden="true" data-filter-pill="" className="absolute inset-0 rounded-full bg-[var(--dp-accent-bg)]" />}
+                <span className="relative">{f}</span>
               </button>
             ))}
           </div>
-
+          </MotionConfig>
         </div>
       </div>
 
-      {/* "Needs attention" goes right under the Status Pipeline, or at the
-          top when the pipeline is hidden. */}
-      {!showPipeline && <TodoSummary />}
+      {isError && data && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[color:var(--dp-border)] bg-[var(--dp-red-bg)] px-4 py-3 text-[13px] text-[var(--dp-text-primary)]">
+          <span>Couldn&apos;t refresh. These are the last numbers that loaded.</span>
+          <button type="button" onClick={() => refetch()} className="rounded-full bg-[var(--dp-card-bg)] px-4 py-1.5 font-medium dp-elevated">Retry</button>
+        </div>
+      )}
+
+      {/* "Needs attention": first on a phone; on wider screens right under
+          the Status Pipeline, or at the top when the pipeline is hidden. */}
+      {(isPhone || !showPipeline) && <TodoSummary />}
       {dashboardSections.map(section => (
         <React.Fragment key={section.id}>
           {renderDashboardSection(section.id)}
-          {section.id === 'pipeline' && showPipeline && <TodoSummary />}
+          {section.id === 'pipeline' && showPipeline && !isPhone && <TodoSummary />}
         </React.Fragment>
       ))}
 
@@ -1323,12 +1434,13 @@ function GlassCircularPipeline({ cards, overflowCards = [], pipeline, onNavigate
   );
 }
 
-function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], description, onClick, uiStyle = 'neon-dark', loading = false }) {
+function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], breakdown, description, onClick, uiStyle = 'neon-dark', loading = false }) {
   const [open, setOpen] = useState(false);
   const [popoverPosition, setPopoverPosition] = useState('bottom');
   const [popoverCoords, setPopoverCoords] = useState(null);
   const ref = useRef(null);
   const popoverRef = useRef(null);
+  const infoRef = useRef(null);
   const isGlass = uiStyle === 'glassmorphism-brown';
   const IconComponent = icon;
 
@@ -1344,25 +1456,29 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
         setPopoverCoords(null);
       }
     };
+    // Focus moves into the explanation so a screen reader reads it next.
+    requestAnimationFrame(() => popoverRef.current?.focus());
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      setOpen(false);
+      setPopoverCoords(null);
+      infoRef.current?.focus();
+    };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', onKey);
+    };
   }, [open]);
 
   const colors = {
-    blue:    'text-blue-400 from-blue-500/20 to-blue-600/5',
-    green:   'text-green-400 from-green-500/20 to-green-600/5',
-    pink:    'text-pink-400 from-pink-500/20 to-pink-600/5',
-    emerald: 'text-emerald-400 from-emerald-500/20 to-emerald-600/5',
-    purple:  'text-purple-400 from-purple-500/20 to-purple-600/5',
-    cyan:    'text-cyan-400 from-cyan-500/20 to-cyan-600/5',
-    orange:  'text-orange-400 from-orange-500/20 to-orange-600/5',
-    red:     'text-red-400 from-red-500/20 to-red-600/5',
-    violet:  'text-violet-400 from-violet-500/20 to-violet-600/5',
-    sky:     'text-sky-400 from-sky-500/20 to-sky-600/5',
-    yellow:  'text-yellow-400 from-yellow-500/20 to-yellow-600/5',
+    blue: 'text-blue-400', green: 'text-green-400', pink: 'text-pink-400',
+    emerald: 'text-emerald-400', purple: 'text-purple-400', cyan: 'text-cyan-400',
+    orange: 'text-orange-400', red: 'text-red-400', violet: 'text-violet-400',
+    sky: 'text-sky-400', yellow: 'text-yellow-400',
   };
-  const colorClass = colors[color] || colors.purple;
-  const textColor = isGlass ? colorClass.split(' ')[0] : 'text-[var(--dp-accent)]';
+  const textColor = isGlass ? (colors[color] || colors.purple) : 'text-[var(--dp-accent-text)]';
   const calculation = formula.join(' ');
   const glassTextColor = title === 'Net Profit' || title === 'Gross Profit' || title === 'Cashback'
     ? 'text-[#d8a65a]'
@@ -1373,13 +1489,25 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
       ? `relative overflow-visible rounded-[20px] bg-[#181a1c]/72 border border-white/[0.06] p-5 sm:p-6 shadow-[0_8px_24px_rgba(0,0,0,0.18)] transition-colors duration-200 hover:bg-[#1d1f21]/78 hover:border-white/[0.09] group${onClick ? ' cursor-pointer' : ''}`
       : `relative ${open ? 'z-[80]' : 'z-0'} overflow-visible rounded-[24px] p-6 group dp-elevated bg-[var(--dp-card-bg)] text-[var(--dp-text-primary)] border border-[color:var(--dp-border)] ${onClick ? 'dp-clickable-card cursor-pointer' : 'dp-elevated-hover'}`
     }>
+      {/* A real button under the content so the card can be reached with Tab
+          and opened with Enter/Space; pointer taps go to the card itself. */}
+      {onClick && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onClick(); }}
+          className="absolute inset-0 z-0 rounded-[inherit] outline-none focus-visible:ring-2 focus-visible:ring-[var(--dp-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dp-bg)]"
+        >
+          <span className="sr-only">{title}: see these transactions</span>
+        </button>
+      )}
       <div className="relative z-10 flex items-start justify-between">
         <div className="min-w-0">
           {/* One line, never wrapping: the mode tag sits small beside the title
               and is cut short if it doesn't fit, so the card keeps its height
               in All, Cashout and Marketplace. */}
           <p className={isGlass ? "flex items-baseline gap-1.5 min-w-0 whitespace-nowrap text-[11px] text-white/25 font-medium uppercase tracking-[0.2em]" : `flex items-baseline gap-1.5 min-w-0 whitespace-nowrap text-[11px] max-[359px]:tracking-normal font-medium uppercase tracking-[0.08em] dp-card-title transition-colors duration-300 text-[var(--dp-text-label)]`}>
-            <span className="shrink-0">{title}</span>
+            {/* Cut short with an ellipsis rather than spilling out of a narrow card. */}
+            <span title={title} className="min-w-0 truncate">{title}</span>
             {modeTag && (
               <span title={modeTag} className={isGlass ? "min-w-0 truncate text-[9px] font-normal normal-case tracking-normal text-[var(--text-muted)]" : `min-w-0 truncate text-[9px] font-normal normal-case tracking-normal dp-card-tag transition-colors duration-300 text-[var(--dp-text-label)]`}>
                 {modeTag}
@@ -1391,7 +1519,7 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
               one, up or down. Nothing fades or locks in between. */}
           <div aria-busy={loading || undefined}>
             <p className={isGlass ? `text-2xl 3xl:text-3xl font-light mt-2 ${glassTextColor}` : `mt-2 tabular-nums font-bold dp-card-value transition-colors duration-300 text-[22px] max-[359px]:text-[17px] text-[var(--dp-text-primary)]`}><CountUp value={value} pending={loading} /></p>
-            <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[11px] mt-1 dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
+            <p className={isGlass ? "text-[11px] 3xl:text-xs text-white/18 mt-2" : `text-[12px] leading-snug mt-1 ${formula.length > 0 ? 'pr-5' : ''} dp-card-subtext transition-colors duration-300 text-[var(--dp-text-secondary)]`}>{subtext}</p>
           </div>
         </div>
         {isGlass && (
@@ -1422,21 +1550,28 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
               }
               setOpen(v => !v);
             }}
+            ref={infoRef}
+            aria-label={`How ${title} is calculated`}
+            aria-expanded={open}
             title="How this is calculated"
             className={isGlass
               ? "absolute bottom-2 right-2 z-20 w-5 h-5 flex items-center justify-center rounded-full text-gray-600 hover:text-gray-300 hover:bg-white/10 transition-colors"
-              : `absolute bottom-3 right-3 z-20 w-5 h-5 flex items-center justify-center rounded-full transition-colors dp-card-info-btn text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] hover:bg-[var(--dp-bg)]`
+              // A 44px invisible tap zone around the small icon.
+              : `absolute bottom-3 right-3 z-20 w-5 h-5 flex items-center justify-center rounded-full transition-colors dp-card-info-btn text-[var(--dp-text-label)] hover:text-[var(--dp-text-secondary)] hover:bg-[var(--dp-bg)] after:absolute after:-inset-3 after:content-['']`
             }
           >
-            <Info className="w-3 h-3" />
+            <Info className="w-3 h-3" aria-hidden="true" />
           </button>
           {open && popoverCoords && createPortal(
             <div
               ref={popoverRef}
-              className={`fixed w-[280px] rounded-2xl ${isGlass ? 'bg-[#1a1c23] border-white/10 shadow-2xl' : 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] dp-elevated'} border p-4 z-[9999] animate-in fade-in duration-150 ${
-                popoverPosition === 'bottom' ? 'slide-in-from-top-1' : 'slide-in-from-bottom-1'
-              }`}
+              tabIndex={-1}
+              role="dialog"
+              aria-label={`How ${title} is calculated`}
+              className={`fixed w-[280px] rounded-2xl outline-none ${isGlass ? 'bg-[#1a1c23] border-white/10 shadow-2xl' : 'bg-[var(--dp-card-bg)] border-[color:var(--dp-border)] dp-elevated'} border p-4 z-[9999] pt-pop-in`}
               style={{
+                // Grows out of the (i) at the card's bottom-right corner.
+                transformOrigin: popoverPosition === 'bottom' ? 'top right' : 'bottom right',
                 left: popoverCoords.left,
                 top: popoverCoords.top,
                 bottom: popoverCoords.bottom,
@@ -1454,6 +1589,12 @@ function StatCard({ title, modeTag, value, subtext, icon, color, formula = [], d
                   <p className={isGlass ? "text-[11px] font-medium uppercase tracking-[0.7px] text-[var(--text-muted)]" : "text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>Calculation</p>
                   <p className={isGlass ? "mt-1 text-xs font-semibold leading-relaxed text-[var(--text-primary)]" : "mt-1 text-xs font-semibold leading-relaxed text-[var(--dp-text-primary)]"}>{calculation}</p>
                 </div>
+                {breakdown && (
+                  <div>
+                    <p className={isGlass ? "text-[11px] font-medium uppercase tracking-[0.7px] text-[var(--text-muted)]" : "text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>This period</p>
+                    <p className={isGlass ? "mt-1 text-xs font-semibold tabular-nums leading-relaxed text-[var(--text-primary)]" : "mt-1 text-xs font-semibold tabular-nums leading-relaxed text-[var(--dp-text-primary)]"}>{breakdown}</p>
+                  </div>
+                )}
                 <div>
                   <p className={isGlass ? "text-[11px] font-medium uppercase tracking-[0.7px] text-[var(--text-muted)]" : "text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--dp-text-label)]"}>Meaning</p>
                   <p className={isGlass ? "mt-1 text-xs leading-relaxed text-[var(--text-secondary)]" : "mt-1 text-xs leading-relaxed text-[var(--dp-text-secondary)]"}>{description || `${title} is available in the selected dashboard view.`}</p>

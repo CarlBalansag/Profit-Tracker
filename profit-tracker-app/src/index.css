@@ -524,6 +524,10 @@
     font-size: 11px !important;
     letter-spacing: 0.7px !important;
   }
+  /* Dashboard Recent Sales: neutral labels, so red only marks losses and alerts. */
+  .carbon-workspace thead tr.dp-neutral-head {
+    color: var(--dp-text-label) !important;
+  }
 
   .carbon-workspace thead th,
   .carbon-workspace thead th[class] {
@@ -934,6 +938,14 @@ body,
   background: var(--dp-scroll-thumb-hover, color-mix(in srgb, var(--dp-accent) 60%, #000000));
 }
 
+/* Navigation scrollbars are neutral: red is kept for the current page and
+   for problems (losses, late), not for chrome. */
+.dp-sidebar .dp-scrollbar {
+  scrollbar-color: color-mix(in srgb, var(--dp-text-secondary) 30%, transparent) transparent;
+  --dp-scroll-thumb: color-mix(in srgb, var(--dp-text-secondary) 30%, transparent);
+  --dp-scroll-thumb-hover: color-mix(in srgb, var(--dp-text-secondary) 55%, transparent);
+}
+
 /* Modal Scrollbar Optimization */
 .modal-scrollbar {
   scrollbar-width: thin;
@@ -1286,8 +1298,47 @@ body,
   to { opacity: 1; }
 }
 
+/* Sidebar: a nav count pops when it changes; the collapsed-rail label fades in. */
+@keyframes pt-badge-tick {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.28); }
+  100% { transform: scale(1); }
+}
+.pt-badge-tick { animation: pt-badge-tick 360ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes pt-tooltip-in {
+  from { opacity: 0; translate: -4px -50%; }
+  to { opacity: 1; translate: 0 -50%; }
+}
+.pt-tooltip-in { animation: pt-tooltip-in 140ms cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* Dashboard: KPI tiles rise in order on first load (40ms apart, 280ms at
+   most), and a tile's (i) explanation grows out of the icon. `translate` and
+   fill-mode backwards leave the tiles' own hover transform alone. */
+@keyframes pt-rise {
+  from { opacity: 0; translate: 0 8px; }
+  to { opacity: 1; translate: 0 0; }
+}
+.pt-tiles-in > * { animation: pt-rise 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+.pt-tiles-in > :nth-child(2) { animation-delay: 40ms; }
+.pt-tiles-in > :nth-child(3) { animation-delay: 80ms; }
+.pt-tiles-in > :nth-child(4) { animation-delay: 120ms; }
+.pt-tiles-in > :nth-child(5) { animation-delay: 160ms; }
+.pt-tiles-in > :nth-child(6) { animation-delay: 200ms; }
+.pt-tiles-in > :nth-child(7) { animation-delay: 240ms; }
+.pt-tiles-in > :nth-child(n+8) { animation-delay: 280ms; }
+@keyframes pt-pop-in {
+  from { opacity: 0; scale: 0.94; }
+  to { opacity: 1; scale: 1; }
+}
+.pt-pop-in { animation: pt-pop-in 160ms cubic-bezier(0.16, 1, 0.3, 1); }
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
+
+  .pt-badge-tick { animation: none; }
+  .pt-tooltip-in { animation-name: fadeIn; }
+  .pt-tiles-in > * { animation-name: fadeIn; animation-delay: 0s !important; }
+  .pt-pop-in { animation-name: fadeIn; }
 
   .stagger-children > *,
   .page-transition {
@@ -1409,10 +1460,19 @@ body,
   background-color: var(--dp-hover-bg);
   color: var(--dp-text-primary);
 }
-:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar a.border-l-2[aria-current="page"] {
-  background: var(--dp-accent-gradient);
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar a.border-l-2[aria-current="page"],
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar a.border-l-2[aria-current="page"]:hover {
+  background: transparent;
   color: #ffffff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 10px 22px -14px rgba(var(--accent-deep-rgb), 0.9);
+}
+/* The filled pill is the one gliding marker, so it travels between pages
+   instead of jumping (the link above stays clear on top of it). */
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar [data-nav-marker] {
+  /* A tinted pill, not the filled gradient: the fill belongs to Log a buy,
+     and red text to late work, so "you are here" reads differently. */
+  background: rgba(var(--accent-rgb), 0.24);
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.55);
 }
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar a.border-l-2[aria-current="page"] svg {
   color: #ffffff;
@@ -1423,6 +1483,76 @@ body,
 }
 :root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar .theme-switch[aria-checked="true"] .theme-switch__knob {
   background-color: var(--dp-text-primary);
+}
+
+/* Navigation focus: a 2px ring in the readable accent, drawn inside the
+   control so folded sections' clipping can't cut it off. */
+.dp-sidebar :is(a, button, [role="switch"]):focus-visible,
+nav[aria-label="Main"] :is(a, button):focus-visible {
+  outline: 2px solid var(--dp-accent-text);
+  outline-offset: -2px;
+}
+/* The sidebar nav fades out at the bottom while more rows are below. */
+.dp-nav-more {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+}
+
+/* On the dark theme's red pill the accent ring is too faint, so it's white. */
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar a[aria-current="page"]:focus-visible {
+  outline-color: #ffffff;
+}
+.dp-nav-less {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 32px);
+  mask-image: linear-gradient(to bottom, transparent, #000 32px);
+}
+.dp-nav-less.dp-nav-more {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+}
+
+/* Ledger figures: neutral, a step quieter than the row's label; the
+   current row's figure follows its white/accent text. */
+.dp-nav-figure-muted { color: var(--dp-text-label); }
+.dp-nav-figure-problem { color: var(--dp-red-text); }
+:root:not([data-theme="dark"]) .dp-nav-figure-muted { color: rgba(22, 22, 26, 0.62); }
+/* On the current row the figure takes the row's own colour (white on the
+   dark red pill), so a late figure never sits red on red. */
+.dp-sidebar a[aria-current="page"] .dp-nav-figure { color: inherit; }
+.dp-sidebar a[aria-current="page"] .dp-nav-figure-muted { opacity: 0.85; }
+/* Record sale: a neutral button with an edge you can see in both themes. */
+.dp-action-secondary { border-color: color-mix(in srgb, var(--dp-text-label) 45%, transparent); }
+/* Log a buy: the one filled red control in the sidebar. */
+.dp-action-primary { background: var(--dp-accent-gradient, var(--dp-accent-solid)); }
+
+/* The rail's late dot is cut out of whatever is behind it (sidebar or pill). */
+:root[data-theme="dark"]:not([data-ui-style="glassmorphism-brown"]) .dp-sidebar .dp-rail-dot { --tw-ring-color: var(--dp-dash-sidebar); }
+
+/* The rail is only 72px wide: no visible scrollbar (it still scrolls). */
+/* !important: the shared .dp-scrollbar rules would otherwise keep a gutter
+   that pushes every rail icon off-centre. */
+.dp-rail { scrollbar-width: none !important; }
+.dp-rail::-webkit-scrollbar { display: none !important; width: 0 !important; }
+
+/* Collapsed rail: a hairline between groups, since their names are hidden. */
+.dp-rail > [data-section] + [data-section] {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--dp-border);
+}
+
+/* Light theme: the current page gets a clearer pill (a stronger tint with a
+   hairline edge) and the group labels step back behind the items. */
+:root:not([data-theme="dark"]):not([data-ui-style="glassmorphism-brown"]) .dp-sidebar [data-nav-marker] {
+  background: rgba(var(--accent-rgb), 0.14);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.22);
+}
+:root:not([data-theme="dark"]):not([data-ui-style="glassmorphism-brown"]) .dp-sidebar .dp-sidebar-group {
+  /* 0.66 keeps 11px labels above 4.5:1 on white (0.58 measured 4.41:1). */
+  color: rgba(22, 22, 26, 0.66);
+}
+:root:not([data-theme="dark"]):not([data-ui-style="glassmorphism-brown"]) .dp-sidebar .dp-sidebar-group:hover {
+  color: rgba(22, 22, 26, 0.85);
 }
 
 /* Typeface: Nunito Sans on every page in dark mode (Glassmorphism keeps its
@@ -1596,6 +1726,10 @@ body,
     position: absolute;
     inset: -8px;
   }
+  /* The bottom bar's buttons already fill their 53px cells; a hit zone there
+     stuck out past the screen edge and let the page shift sideways (this
+     selector out-ranks the shared hit-zone rule above). */
+  nav[aria-label="Main"] :is(button[aria-label], button[title])::after { content: none; }
   [role="tablist"] > [role="tab"],
   [role="radiogroup"] > [role="radio"] {
     min-height: 40px;
@@ -1603,7 +1737,7 @@ body,
   /* Text buttons (segment controls, Columns, Export, Add…) and the drawer's
      links reach 44px. Icon-only buttons are left to the hit zone above so
      card headers don't grow; switches keep their drawn size. */
-  :is(main, [role="dialog"]) button:not([role="switch"]):not(.page-dot):not([aria-label]):not([title]):not([role="tab"]),
+  :is(main, [role="dialog"]) button:not([role="switch"]):not(.page-dot):not([aria-label]):not([title]):not([role="tab"]):not(.dp-sidebar-group),
   aside nav a {
     min-height: 44px;
   }
@@ -1615,6 +1749,14 @@ body,
     padding-block: 13px;
     margin-block: -13px;
   }
+  /* Sidebar group headings stay short in the phone drawer (more rows fit) but
+     keep a 44px tap area. */
+  .dp-sidebar-group { position: relative; }
+  .dp-sidebar-group::after { content: ""; position: absolute; inset: -10px 0; }
+  /* The sidebar's theme switch keeps its drawn 25px size but gets a 45px tap
+     area (its row is 44px tall). */
+  .theme-switch-inline .theme-switch { position: relative; }
+  .theme-switch-inline .theme-switch::after { content: ""; position: absolute; inset: -10px -4px !important; }
   .schedule-c-page a.tap-target { display: inline-block; }
   .schedule-c-page a.tap-box { display: inline-flex; align-items: center; min-height: 44px; }
   main :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]), select),

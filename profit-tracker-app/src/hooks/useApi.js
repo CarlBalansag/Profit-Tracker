@@ -470,10 +470,29 @@ export const useTodos = () => useQuery(todosQuery());
 // The open to-do count for the nav badges. The sidebar and bottom bar also
 // render without a QueryClientProvider (their unit tests), where this is 0.
 let inertClient = null;
-export function useTodoCount() {
+// The to-do list for the navigation (sidebar figures and badges); undefined
+// where there's no QueryClientProvider.
+export function useNavTodosQuery() {
   const client = useOptionalQueryClient();
   inertClient ??= client ? null : new QueryClient();
-  const { data } = useQuery({ ...todosQuery(), enabled: Boolean(client) }, client || inertClient);
+  return useQuery({ ...todosQuery(), enabled: Boolean(client) }, client || inertClient);
+}
+// The Cash Flow page's own summary, so the sidebar's "owed" figure is the
+// same number the page shows (cached 10 minutes like the page).
+let inertCashClient = null;
+export function useNavCashFlowQuery() {
+  const client = useOptionalQueryClient();
+  inertCashClient ??= client ? null : new QueryClient();
+  return useQuery({ ...cashFlowQuery(), enabled: Boolean(client) }, client || inertCashClient);
+}
+export function useNavCashFlow() {
+  return useNavCashFlowQuery().data;
+}
+export function useNavTodos() {
+  return useNavTodosQuery().data;
+}
+export function useTodoCount() {
+  const data = useNavTodos();
   const count = data?.counts?.total || 0;
   // The number on the installed app's icon (phones and desktops that support it).
   useEffect(() => {
